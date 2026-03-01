@@ -42,16 +42,13 @@ def _classify_types(types_str: str) -> tuple[list[str], list[str], list[str]]:
     return supertypes, card_types, subtypes
 
 
-def parse_forge_file(path: Path) -> Card | None:
-    """Parse a single Forge card script file into a Card entity.
+def parse_forge_text(text: str) -> Card:
+    """Parse a Forge card script string into a Card entity.
 
-    Returns None if the file cannot be parsed.
+    Raises ValueError if the text is empty or cannot be parsed into a valid Card.
     """
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError as e:
-        logger.warning("Failed to read %s: %s", path, e)
-        return None
+    if not text or not text.strip():
+        raise ValueError("Card script text is empty")
 
     # Split on ALTERNATE section — use only front face
     parts = text.split("\nALTERNATE\n", maxsplit=1)
@@ -92,18 +89,15 @@ def parse_forge_file(path: Path) -> Card | None:
 
     name = fields.get("Name", "").strip()
     if not name:
-        logger.warning("No Name field in %s", path)
-        return None
+        raise ValueError("No Name field found in card script")
 
     types_str = fields.get("Types", "")
     if not types_str:
-        logger.warning("No Types field in %s", path)
-        return None
+        raise ValueError("No Types field found in card script")
 
     supertypes, card_types, subtypes = _classify_types(types_str)
     if not card_types:
-        logger.warning("No recognized card types in %s: %s", path, types_str)
-        return None
+        raise ValueError(f"No recognized card types in Types line: {types_str}")
 
     # Mana cost
     mana_cost_raw = fields.get("ManaCost", "").strip()
@@ -131,23 +125,37 @@ def parse_forge_file(path: Path) -> Card | None:
     if alternate_mode and alternate_mode in ALTERNATE_MODE_TO_LAYOUT:
         layout = ALTERNATE_MODE_TO_LAYOUT[alternate_mode]
 
+    return Card(
+        name=name,
+        types=card_types,
+        supertypes=supertypes,
+        subtypes=subtypes,
+        mana_cost=mana_cost,
+        oracle_text=oracle_text,
+        keywords=keywords,
+        power=power,
+        toughness=toughness,
+        loyalty=loyalty,
+        layout=layout,
+        ability_count=ability_count,
+    )
+
+
+def parse_forge_file(path: Path) -> Card | None:
+    """Parse a single Forge card script file into a Card entity.
+
+    Returns None if the file cannot be parsed.
+    """
     try:
-        return Card(
-            name=name,
-            types=card_types,
-            supertypes=supertypes,
-            subtypes=subtypes,
-            mana_cost=mana_cost,
-            oracle_text=oracle_text,
-            keywords=keywords,
-            power=power,
-            toughness=toughness,
-            loyalty=loyalty,
-            layout=layout,
-            ability_count=ability_count,
-        )
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        logger.warning("Failed to read %s: %s", path, e)
+        return None
+
+    try:
+        return parse_forge_text(text)
     except (ValueError, TypeError) as e:
-        logger.warning("Failed to create Card from %s: %s", path, e)
+        logger.warning("Failed to parse %s: %s", path, e)
         return None
 
 

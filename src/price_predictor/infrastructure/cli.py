@@ -70,7 +70,43 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--random-seed", type=int, default=42)
     eval_parser.add_argument("--output-csv", type=str, default=None)
 
+    # serve subcommand
+    serve_parser = subparsers.add_parser("serve", help="Start the prediction REST service")
+    serve_parser.add_argument(
+        "--model-path", type=str, default="models/latest.joblib"
+    )
+    serve_parser.add_argument("--host", type=str, default="0.0.0.0")
+    serve_parser.add_argument("--port", type=int, default=8000)
+
     return parser
+
+
+def run_serve(args: argparse.Namespace) -> int:
+    """Execute the serve command."""
+    import uvicorn
+
+    from price_predictor.infrastructure.model_store import ModelNotFoundError, load_model
+    from price_predictor.infrastructure.server import create_app
+
+    model_path = Path(args.model_path)
+    print(f"Loading model from {model_path}...", file=sys.stderr)
+
+    try:
+        artifact = load_model(model_path)
+    except ModelNotFoundError:
+        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
+        return 2
+
+    # Extract model version from filename
+    model_version = model_path.stem
+    if model_version == "latest":
+        model_version = "latest"
+    artifact["model_version"] = model_version
+
+    app = create_app(artifact)
+    print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    return 0
 
 
 def _parse_comma_list(value: str | None) -> list[str]:

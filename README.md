@@ -138,6 +138,62 @@ Options: `--forge-cards-path`, `--prices-path`, `--printings-path`,
 `--test-split`, `--random-seed`, `--output-csv`. See full options
 with `python -m price_predictor evaluate --help`.
 
+### Serve the prediction API
+
+Starts a REST service that exposes the trained model over HTTP. This is the
+network-accessible counterpart to the `predict` command — instead of CLI flags,
+callers send a Forge card script as the request body and receive JSON back.
+
+**Relationship to `predict`**: The `serve` command loads the same trained model
+and uses the same prediction pipeline. Results are identical (FR-011).
+
+**Inputs**: A trained model file (from `train`).
+
+**Processing**:
+1. Load the model from `--model-path`.
+2. If the model file does not exist, print an error and exit with code 2.
+3. Start a FastAPI/uvicorn HTTP server on `--host`:`--port`.
+4. Accept `POST /api/v1/evaluate` with a Forge card script as `text/plain` body.
+5. Parse the card script, run prediction, return JSON response.
+
+**Output**: HTTP JSON responses. Server logs go to stderr.
+
+```bash
+python -m price_predictor serve
+```
+
+Options: `--model-path` (default: `models/latest.joblib`), `--host` (default:
+`0.0.0.0`), `--port` (default: `8000`).
+
+Test with curl:
+```bash
+curl -X POST http://localhost:8000/api/v1/evaluate \
+  -H "Content-Type: text/plain" \
+  -d "Name:Lightning Bolt
+ManaCost:R
+Types:Instant
+Oracle:Lightning Bolt deals 3 damage to any target."
+```
+
+Response:
+```json
+{"predicted_price_eur": 2.35, "model_version": "20260301-143000"}
+```
+
+### Java Connector (forge-connector)
+
+A zero-dependency Java 17+ library that lets MTG Forge (or any Java application)
+get price predictions from the running service with 5 lines of code. See
+[`forge-connector/README.md`](forge-connector/README.md) for full documentation.
+
+```java
+var client = new PricePredictorClient();
+var estimate = client.predict(CardAttributes.builder()
+    .types("Creature").manaCost("1 G G")
+    .power("2").toughness("2").build());
+System.out.println(estimate.predictedPriceEur());
+```
+
 ## ML Approach
 
 ### Why Gradient Boosted Trees
@@ -259,17 +315,20 @@ card name, actual price (EUR), predicted price (EUR), absolute error.
 ## Running Tests
 
 ```bash
-# Fast unit tests (default)
+# Python: Fast unit tests (default)
 pytest
 
-# Integration tests only
+# Python: Integration tests only
 pytest tests/integration/
 
-# All tests
+# Python: All tests
 pytest tests/
 
-# Linting
+# Python: Linting
 ruff check src/ tests/
+
+# Java: Connector tests
+cd forge-connector && mvn test
 ```
 
 ## Project Structure
@@ -285,13 +344,17 @@ src/price_predictor/
     evaluate.py     EvaluateModelUseCase
     feature_engineering.py  Card -> numeric feature vector
   infrastructure/   External integrations (depends on application)
-    cli.py          argparse CLI (train, predict, evaluate subcommands)
-    forge_parser.py Forge card script parser
+    cli.py          argparse CLI (train, predict, evaluate, serve subcommands)
+    server.py       FastAPI app, POST /api/v1/evaluate endpoint
+    forge_parser.py Forge card script parser (file + text)
     mtgjson_loader.py AllPrintings/AllPricesToday loaders
     model_store.py  Model save/load (joblib)
+forge-connector/    Java Maven library for Forge integration
+  src/main/java/    PricePredictorClient, CardAttributes, ForgeScriptSerializer
+  src/test/java/    JUnit 5 tests (unit + graceful degradation)
 tests/
   unit/             Fast unit tests (fixture-based)
-  integration/      End-to-end pipeline tests
+  integration/      End-to-end pipeline + server integration tests
   fixtures/         Sample card scripts and JSON data
 models/             Trained model artifacts (.gitignored)
 resources/          Frozen MTGJSON data files

@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from price_predictor.domain.entities import Card
-from price_predictor.infrastructure.forge_parser import parse_forge_cards, parse_forge_file
+from price_predictor.infrastructure.forge_parser import (
+    parse_forge_cards,
+    parse_forge_file,
+    parse_forge_text,
+)
 
 
 @pytest.fixture
@@ -136,6 +140,58 @@ class TestParseForgeFile:
         bad_file.write_text("This is not a valid card file\nNo Name field here")
         card = parse_forge_file(bad_file)
         assert card is None
+
+
+class TestParseForgeText:
+    """Tests for parse_forge_text() — parses Forge card script strings."""
+
+    def test_parse_complete_card_script(self, forge_cards_dir: Path) -> None:
+        text = (forge_cards_dir / "ragavan_nimble_pilferer.txt").read_text()
+        card = parse_forge_text(text)
+        assert card.name == "Ragavan, Nimble Pilferer"
+        assert "Legendary" in card.supertypes
+        assert "Creature" in card.types
+        assert "Monkey" in card.subtypes
+        assert "Pirate" in card.subtypes
+        assert "Dash" in card.keywords
+        assert card.mana_cost is not None
+        assert card.mana_cost.r == 1
+        assert card.power == "2"
+        assert card.toughness == "1"
+
+    def test_parse_instant_script(self, forge_cards_dir: Path) -> None:
+        text = (forge_cards_dir / "lightning_bolt.txt").read_text()
+        card = parse_forge_text(text)
+        assert card.name == "Lightning Bolt"
+        assert "Instant" in card.types
+        assert card.mana_cost is not None
+        assert card.mana_cost.r == 1
+
+    def test_parse_partial_script_only_types(self) -> None:
+        text = "Name:Minimal Card\nTypes:Instant\n"
+        card = parse_forge_text(text)
+        assert card.name == "Minimal Card"
+        assert "Instant" in card.types
+        assert card.mana_cost is None
+
+    def test_empty_string_raises_error(self) -> None:
+        with pytest.raises(ValueError, match="(?i)empty"):
+            parse_forge_text("")
+
+    def test_malformed_string_no_types_raises_error(self) -> None:
+        with pytest.raises(ValueError, match="(?i)types"):
+            parse_forge_text("Name:Bad Card\nManaCost:R\n")
+
+    def test_matches_parse_forge_file(self, forge_cards_dir: Path) -> None:
+        """parse_forge_text(file.read_text()) produces same result as parse_forge_file(file)."""
+        path = forge_cards_dir / "grizzly_bears.txt"
+        from_file = parse_forge_file(path)
+        from_text = parse_forge_text(path.read_text())
+        assert from_file is not None
+        assert from_text.name == from_file.name
+        assert from_text.types == from_file.types
+        assert from_text.power == from_file.power
+        assert from_text.toughness == from_file.toughness
 
 
 class TestParseForgeCards:

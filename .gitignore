@@ -39,3 +39,9 @@ htmlcov/
 /resources/AllPrintings.json
 /resources/AllPricesToday.json
 /resources/Meta.json
+
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
