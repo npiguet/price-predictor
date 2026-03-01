@@ -152,3 +152,4 @@ Task T005: "Run full test suite"
 - No new modules, dependencies, or domain entity changes
 - Existing `TrainingExample` entity validation (`actual_price_eur > 0`) is compatible with the €0.01 floor — no change needed
 - The `get_cheapest_price()` standalone function gets the floor but NOT the logging (per research R-004)
+- SC-004 (≤30s for 30k cards): Covered by O(n) iteration design; no explicit benchmark test needed for fixture-scale data

@@ -30,7 +30,7 @@ When a card has multiple printings with different prices, the system must select
 | Principle | Status | Justification |
 |-----------|--------|---------------|
 | I. Fast Automated Tests | PASS | All new behavior covered by unit tests. No slow integration tests added. Existing test suite runs in seconds. |
-| II. Simplicity First | PASS | Minimal changes to 2 existing files (`mtgjson_loader.py`, `train.py`). No new abstractions, no new modules. Logging added inline where data is already available. |
+| II. Simplicity First | PASS | Minimal changes to 1 existing file (`mtgjson_loader.py`). No new abstractions, no new modules. Logging added inline where data is already available. |
 | III. Data Integrity | PASS | Price floor at €0.01 is deterministic and prevents log(0). Zero-price handling is explicitly defined. Selection is reproducible given same input. |
 | IV. Domain-Driven Design | PASS | Price floor is a domain rule applied in the infrastructure layer at the data loading boundary (appropriate — it's a data normalization step applied at ingestion, not a domain entity rule). No new cross-layer dependencies. |
 | V. MTG Forge Interoperability | N/A | This feature modifies the training pipeline only. No changes to the prediction API, Java stub, or any external interface. |
@@ -71,7 +71,7 @@ src/price_predictor/
 ├── domain/
 │   └── entities.py              # TrainingExample (no change — 0.01 > 0 satisfies existing validation)
 ├── application/
-│   └── train.py                 # Minor: no changes needed (logging moves to mtgjson_loader)
+│   └── train.py                 # No changes needed (consumes price map transparently)
 └── infrastructure/
     └── mtgjson_loader.py        # PRIMARY CHANGE: price floor + transparency logging
 
