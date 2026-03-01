@@ -11,6 +11,9 @@
 ### Session 2026-03-01
 
 - Q: Currency consistency — spec referenced USD but features 001/002 now use EUR/Cardmarket. → A: Updated to EUR throughout, consistent with the project-wide decision to use Cardmarket EUR prices from MTGJSON.
+- Q: €0.00 price handling — spec says €0.00 is valid but existing TrainingExample requires price > 0 (and log-transform fails on zero). Which wins? → A: Allow price >= 0 but apply a floor of €0.01. Prices below €0.01 are clamped to €0.01 before use as a training label.
+- Q: Where should FR-007/FR-008 multi-printing reporting go (JSON stdout, stderr logs, or both)? → A: Stderr logging only. Summary and per-card details as INFO log messages during training, consistent with the existing progress logging pattern.
+- Q: Are non-English printings considered for cheapest-price selection? → A: No. Only English-language printings are considered. Printings in other languages are ignored (consistent with feature 001's English-only filter).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -52,7 +55,7 @@ When the system processes multi-printing cards during training data preparation,
 ### Edge Cases
 
 - What happens when a card has multiple printings but all printings have the same price? The system selects that price (trivially the cheapest); no special handling needed.
-- What happens when the cheapest printing has a price of €0.00 or effectively free? The system uses €0.00 as the training label. This is a valid data point (some cards are genuinely near-worthless).
+- What happens when the cheapest printing has a price of €0.00 or effectively free? The system applies a floor of €0.01 — prices below €0.01 are clamped to €0.01 before use as a training label. This avoids log-domain errors during training (log(0) is undefined) while still representing near-worthless cards.
 - What happens when one printing's price is missing or null but others have valid prices? The system ignores printings with missing prices and selects the cheapest among valid prices.
 - What happens when ALL printings of a card have missing/null prices? The card is excluded from the training set entirely (consistent with feature 001's FR-004a: only cards with a confirmed price are used).
 - What happens when a card has an extremely cheap promo printing (e.g., €0.01) that is far below all other printings? The system still uses €0.01 as the cheapest price. The rule is unconditional — no outlier filtering is applied at the price selection step.
@@ -63,13 +66,13 @@ When the system processes multi-printing cards during training data preparation,
 ### Functional Requirements
 
 - **FR-001**: When a card has multiple printings with different prices, the system MUST select the single cheapest price across all available versions as the training label for that card.
-- **FR-002**: The cheapest-price selection MUST consider all printing variants, including different sets, foil/non-foil, different rarities, and promo versions. No variant type is excluded from comparison.
+- **FR-002**: The cheapest-price selection MUST consider all English-language, paper printing variants, including different sets, foil/non-foil, different rarities, and promo versions. Non-English printings are excluded before comparison (per feature 001's English-only filter).
 - **FR-003**: When a card has only one printing (or all printings share the same price), the system MUST use that price without any special handling.
 - **FR-004**: Printings with missing or null prices MUST be ignored during price selection. The cheapest valid price is used.
 - **FR-005**: If all printings of a card have missing or null prices, the card MUST be excluded from the training set (no training label can be assigned).
-- **FR-006**: The cheapest-price rule MUST apply unconditionally — no outlier filtering or minimum price threshold is applied during price selection.
-- **FR-007**: The system MUST report, during training data preparation, how many cards had multiple printings and required price selection.
-- **FR-008**: For each card where price selection occurred, the system MUST make the selected price and the number of alternative prices available for inspection (e.g., in a log or summary report).
+- **FR-006**: The cheapest-price rule MUST apply unconditionally — no outlier filtering is applied during price selection. However, a minimum price floor of €0.01 MUST be enforced: if the cheapest price is below €0.01 (including €0.00), it is clamped to €0.01 before use as a training label. This prevents log-domain errors during model training.
+- **FR-007**: The system MUST log to stderr, during training data preparation, how many cards had multiple printings and required price selection (as an INFO-level progress message, consistent with existing train logging).
+- **FR-008**: For each card where price selection occurred, the system MUST log the selected price and the number of alternative prices to stderr at INFO level during training.
 
 ### Key Entities
 
@@ -81,7 +84,7 @@ When the system processes multi-printing cards during training data preparation,
 
 - "Cheapest" means the lowest numeric EUR Cardmarket paper market price across all printings (sourced from MTGJSON). Ties are resolved arbitrarily (any printing with the minimum price is acceptable).
 - This rule applies only to the training data pipeline. It does not affect how the model makes predictions at inference time — predictions are based on card attributes, not printing information.
-- The paper-only filter from feature 001 is applied before this rule. Digital-only printings are not considered.
+- The paper-only and English-only filters from feature 001 are applied before this rule. Digital-only printings and non-English printings are not considered.
 - The price data source (MTGJSON AllPricesToday.json) provides per-printing prices keyed by UUID. Multiple UUIDs may map to the same card name; the cheapest price among those UUIDs is selected.
 - Foil and non-foil printings are treated equally — a foil's price is compared on the same basis as a non-foil's price.
 - This rule supersedes the vague "representative price (e.g., cheapest normal printing or median across printings)" assumption in feature 001. The definitive rule is: always use the cheapest.
