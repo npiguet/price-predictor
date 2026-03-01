@@ -19,7 +19,7 @@
 
 **Purpose**: Add a fixture card that passes name-to-UUID filters but has no price entry, enabling FR-006 and FR-008 testing.
 
-- [ ] T001 Add a "No Price Card" to test fixtures: add a card entry (`name: "No Price Card"`, `uuid: "ffffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa"`) to `tests/fixtures/allprintings_sample.json` in a new set block `"NPC"` with `availability: ["paper"]`, `isFunny: false`, `isOnlineOnly: false`, `language: "English"`. Do NOT add a corresponding entry to `tests/fixtures/allprices_sample.json` — this card intentionally has no price data.
+- [x] T001 Add a "No Price Card" to test fixtures: add a card entry (`name: "No Price Card"`, `uuid: "ffffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa"`) to `tests/fixtures/allprintings_sample.json` in a new set block `"NPC"` with `availability: ["paper"]`, `isFunny: false`, `isOnlineOnly: false`, `language: "English"`. Do NOT add a corresponding entry to `tests/fixtures/allprices_sample.json` — this card intentionally has no price data.
 
 **Checkpoint**: Fixtures updated — both JSON files parse correctly, existing tests still pass.
 
@@ -33,7 +33,7 @@
 
 **Covers**: FR-001, FR-002, FR-003, FR-004, FR-005
 
-- [ ] T002 [US1] Run existing test suite (`cd src && pytest ../tests/unit/infrastructure/test_mtgjson_loader.py -v`) and verify that `TestGetCheapestPrice` and `TestBuildPriceMapFloor` tests pass — these tests exercise the `paper → cardmarket → retail` extraction path against EUR fixture data, confirming FR-001 through FR-005 are already implemented. No new tests or code changes needed.
+- [x] T002 [US1] Run existing test suite (`cd src && pytest ../tests/unit/infrastructure/test_mtgjson_loader.py -v`) and verify that `TestGetCheapestPrice` and `TestBuildPriceMapFloor` tests pass — these tests exercise the `paper → cardmarket → retail` extraction path against EUR fixture data, confirming FR-001 through FR-005 are already implemented. No new tests or code changes needed.
 
 **Checkpoint**: Existing CardMarket EUR behavior verified by existing tests.
 
@@ -47,7 +47,7 @@
 
 **Covers**: FR-009, FR-010
 
-- [ ] T003 [US2] Verify EUR output fields: confirm `src/price_predictor/application/predict.py` returns `predicted_price_eur` and `src/price_predictor/application/evaluate.py` uses `mean_absolute_error_eur`. Run `cd src && pytest` to confirm all existing tests pass. No new tests or code changes needed.
+- [x] T003 [US2] Verify EUR output fields: confirm `src/price_predictor/application/predict.py` returns `predicted_price_eur` and `src/price_predictor/application/evaluate.py` uses `mean_absolute_error_eur`. Run `cd src && pytest` to confirm all existing tests pass. No new tests or code changes needed.
 
 **Checkpoint**: EUR prediction output verified by existing field names and tests.
 
@@ -65,13 +65,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T004 [P] [US3] Write test for missing card exclusion (FR-006) in `tests/unit/infrastructure/test_mtgjson_loader.py`: call `build_name_to_uuids()` then `build_price_map()` with fixtures, verify "No Price Card" is NOT in the returned price map (it has no price data)
-- [ ] T005 [P] [US3] Write test for exclusion count logging (FR-008) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog` at `logging.INFO` level for logger `price_predictor.infrastructure.mtgjson_loader`, call `build_price_map()` with fixtures, verify (a) an INFO log message containing "exclusion" (case-insensitive) is emitted, (b) the message contains the correct count of excluded cards (cards in `name_to_uuids` with no price in the price map)
+- [x] T004 [P] [US3] Write test for missing card exclusion (FR-006) in `tests/unit/infrastructure/test_mtgjson_loader.py`: call `build_name_to_uuids()` then `build_price_map()` with fixtures, verify "No Price Card" is NOT in the returned price map (it has no price data)
+- [x] T005 [P] [US3] Write test for exclusion count logging (FR-008) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog` at `logging.INFO` level for logger `price_predictor.infrastructure.mtgjson_loader`, call `build_price_map()` with fixtures, verify (a) an INFO log message containing "exclusion" (case-insensitive) is emitted, (b) the message contains the correct count of excluded cards (cards in `name_to_uuids` with no price in the price map)
 
 ### Implementation for User Story 3
 
-- [ ] T006 [US3] Add exclusion count log line in `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: after the existing `for name, uuids` loop and after the "Price selection summary" log, compute `excluded_count = len(name_to_uuids) - len(result)` and add `logger.info("Price exclusion: %d of %d cards excluded (no CardMarket price available)", excluded_count, len(name_to_uuids))` before the existing "Loaded price data" log line
-- [ ] T007 [US3] Run full test suite (`cd src && pytest`) — verify T004/T005 tests pass and all existing tests in `test_mtgjson_loader.py`, `test_train.py`, `test_train_logging.py`, and `test_end_to_end.py` still pass with no regressions
+- [x] T006 [US3] Add exclusion count log line in `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: after the existing `for name, uuids` loop and after the "Price selection summary" log, compute `excluded_count = len(name_to_uuids) - len(result)` and add `logger.info("Price exclusion: %d of %d cards excluded (no CardMarket price available)", excluded_count, len(name_to_uuids))` before the existing "Loaded price data" log line
+- [x] T007 [US3] Run full test suite (`cd src && pytest`) — verify T004/T005 tests pass and all existing tests in `test_mtgjson_loader.py`, `test_train.py`, `test_train_logging.py`, and `test_end_to_end.py` still pass with no regressions
 
 **Checkpoint**: Exclusion count logging working. Cards without CardMarket prices excluded and counted.
 
@@ -81,9 +81,9 @@
 
 **Purpose**: Final validation and cleanup across all changes
 
-- [ ] T008 [P] Run ruff linting (`cd src && ruff check .`) and fix any style or lint issues introduced by this feature
-- [ ] T009 [P] Run end-to-end integration tests (`cd src && pytest tests/integration/`) to verify the full train → predict → evaluate pipeline works with updated logging
-- [ ] T010 [P] Validate that `specs/004-cardmarket-eur-pricing/quickstart.md` log format examples match the actual log output format implemented in T006
+- [x] T008 [P] Run ruff linting (`cd src && ruff check .`) and fix any style or lint issues introduced by this feature
+- [x] T009 [P] Run end-to-end integration tests (`cd src && pytest tests/integration/`) to verify the full train → predict → evaluate pipeline works with updated logging
+- [x] T010 [P] Validate that `specs/004-cardmarket-eur-pricing/quickstart.md` log format examples match the actual log output format implemented in T006
 
 ---
 

@@ -211,3 +211,33 @@ class TestBuildPriceMapSummaryLogging:
         ]
         count = len(per_card_msgs)
         assert str(count) in summary_msgs[0]
+
+
+class TestBuildPriceMapExclusion:
+    """FR-006/FR-008: Missing CardMarket price exclusion and reporting."""
+
+    def test_no_price_card_excluded_from_map(
+        self, allprintings_path: Path, allprices_path: Path
+    ) -> None:
+        name_to_uuids = build_name_to_uuids(allprintings_path)
+        assert "No Price Card" in name_to_uuids  # passes name-to-UUID filter
+        price_map = build_price_map(allprices_path, name_to_uuids)
+        assert "No Price Card" not in price_map  # excluded — no price data
+
+    def test_exclusion_count_logged(
+        self,
+        allprintings_path: Path,
+        allprices_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        name_to_uuids = build_name_to_uuids(allprintings_path)
+        with caplog.at_level(
+            logging.INFO, logger="price_predictor.infrastructure.mtgjson_loader"
+        ):
+            price_map = build_price_map(allprices_path, name_to_uuids)
+
+        exclusion_msgs = [m for m in caplog.messages if "exclusion" in m.lower()]
+        assert len(exclusion_msgs) == 1
+        excluded_count = len(name_to_uuids) - len(price_map)
+        assert str(excluded_count) in exclusion_msgs[0]
+        assert str(len(name_to_uuids)) in exclusion_msgs[0]

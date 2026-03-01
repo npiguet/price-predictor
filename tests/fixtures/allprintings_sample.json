@@ -219,6 +219,18 @@
           "language": "English"
         }
       ]
+    },
+    "NPC": {
+      "cards": [
+        {
+          "name": "No Price Card",
+          "uuid": "ffffffff-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
     }
   }
 }

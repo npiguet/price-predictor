@@ -128,5 +128,11 @@ def build_price_map(
         multi_printing_count,
         len(result),
     )
+    excluded_count = len(name_to_uuids) - len(result)
+    logger.info(
+        "Price exclusion: %d of %d cards excluded (no CardMarket price available)",
+        excluded_count,
+        len(name_to_uuids),
+    )
     logger.info("Loaded price data (%d cards with prices)", len(result))
     return result
