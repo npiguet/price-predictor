@@ -2,7 +2,7 @@
 
 **Feature Branch**: `005-card-eval-endpoints`
 **Created**: 2026-02-27
-**Status**: Draft
+**Status**: Implemented
 **Input**: User description: "Users of the application can get an evaluation of a card by passing its description in the CardForge script syntax to both a REST API Endpoint, or to a CLI tool by passing a the path of a file. The CLI tool should just call the REST API endpoint."
 **Depends on**: `001-card-price-predictor` (prediction model), `004-cardmarket-eur-pricing` (EUR pricing)
 

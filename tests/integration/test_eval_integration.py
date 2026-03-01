@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -96,11 +97,13 @@ class TestEvalIntegration:
             endpoint="http://localhost:8000/api/v1/evaluate",
         )
 
+        start = time.monotonic()
         with patch(
             "price_predictor.infrastructure.cli.urlopen",
             side_effect=_fake_urlopen(integration_client),
         ):
             exit_code = run_eval(args)
+        elapsed = time.monotonic() - start
 
         assert exit_code == 0
         out = capsys.readouterr().out
@@ -110,6 +113,8 @@ class TestEvalIntegration:
         price_line = [l for l in out.splitlines() if "Predicted price:" in l][0]
         price_str = price_line.split("€")[1].strip()
         assert float(price_str) > 0
+        # SC-002: Full eval cycle must complete within 5 seconds
+        assert elapsed < 5.0
 
     def test_malformed_file_relays_endpoint_error(
         self,
