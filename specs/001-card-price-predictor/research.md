@@ -277,4 +277,58 @@ and aligns with Simplicity First.
 **Error handling**: Cards that fail parsing are logged with the
 filename and error reason, then skipped. Training continues with
 valid cards (FR-007).
-/o  
+
+## R8: Progress Logging Strategy
+
+### Decision: Python `logging` module to stderr with stage-level messages
+
+**Rationale**: The application already uses `logging.getLogger(__name__)`
+in every module (train.py, evaluate.py, forge_parser.py, mtgjson_loader.py)
+but never configures a handler — so no messages are visible. The fix is
+to configure `logging.basicConfig` in the CLI entry point to send
+`INFO`-level messages to stderr. This satisfies FR-010 through FR-012
+with zero new dependencies and minimal code changes.
+
+**Why stderr**: The CLI commands output structured JSON to stdout.
+Progress messages MUST go to stderr so that
+`python -m price_predictor train ... > result.json` captures clean JSON
+while the user sees progress on the console (FR-011, SC-007).
+
+**Stage messages** (training pipeline):
+
+| Step | Logger location | Message |
+|------|----------------|---------|
+| 1 | cli.py (train entry) | "Starting training pipeline..." |
+| 2 | train.py (after parse) | "Parsed N cards (M parse errors)" |
+| 3 | train.py (after mapping) | "Built name-to-UUID mapping (N card names)" |
+| 4 | train.py (after prices) | "Loaded price data (N cards with prices)" |
+| 5 | train.py (after join) | "Matched N cards to prices, skipped M" |
+| 6 | train.py (after fit/transform) | "Feature engineering complete (N features)" |
+| 7 | train.py (after model.fit) | "Model training complete" |
+| 8 | train.py (after save) | "Model saved: version" |
+
+**Stage messages** (evaluation pipeline): Similar pattern —
+load model, parse cards, build mapping, match prices, predict,
+compute metrics.
+
+**Periodic progress for bulk operations**: The Forge card parsing
+stage (32,000+ files) and JSON loading stages are the slowest.
+The parser can log every 5,000 cards parsed. The JSON loader can
+log after loading each large file.
+
+**Configuration**: A single `logging.basicConfig` call in
+`__main__.py` for `train` and `evaluate` commands. No configuration
+for `predict` (near-instantaneous, FR-012 acceptance scenario 4).
+
+**Log format**: Simple human-readable format:
+`[stage] message` — no timestamps or level names needed since this
+is ephemeral console output, not persistent logs.
+
+**Alternatives considered**:
+- Third-party progress bars (tqdm, rich) — adds dependencies, violates
+  Simplicity First. Python logging is sufficient. Rejected.
+- Print statements to stderr — works but bypasses the existing logging
+  infrastructure and is harder to test. Rejected.
+- Structured JSON progress events — over-engineered for console
+  feedback. Users need human-readable text, not machine-parseable
+  events. Rejected.

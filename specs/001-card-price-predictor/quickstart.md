@@ -40,8 +40,10 @@ python -m price_predictor train \
   --printings-path resources/AllPrintings.json
 ```
 
-Expected output: a trained model saved in `models/` and a JSON summary
-showing how many cards were used, skipped, and the price range.
+You will see progress messages on the console as each stage completes
+(parsing cards, loading prices, training, etc.). The final JSON summary
+is printed to stdout showing how many cards were used, skipped, and the
+price range. To capture just the JSON: `... > result.json`.
 
 ## Predict a card price
 
@@ -81,7 +83,9 @@ pytest tests/integration/
 ## Validation checklist
 
 - [ ] `train` command completes without errors
+- [ ] `train` shows progress messages on the console during execution
 - [ ] `predict` command returns a JSON price estimate in EUR
 - [ ] `evaluate` reports median percentage error <= 50%
 - [ ] `pytest` passes all tests
 - [ ] Predictions are reproducible (same input → same output)
+- [ ] `train ... > result.json` captures clean JSON (no progress text in file)

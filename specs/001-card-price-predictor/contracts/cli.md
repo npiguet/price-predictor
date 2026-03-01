@@ -9,6 +9,15 @@ The system exposes its functionality as a Python CLI tool. All three
 user stories (predict, train, evaluate) are accessible as subcommands.
 All prices are in EUR (Cardmarket).
 
+## Output Channels
+
+- **stdout**: Structured JSON result only. Clean for piping/redirection.
+- **stderr**: Human-readable progress messages during long-running
+  operations (train, evaluate). Error messages for all commands.
+
+This separation ensures `python -m price_predictor train ... > result.json`
+captures clean JSON while progress is visible on the console.
+
 ## Commands
 
 ### `predict` — Predict price for a card
@@ -91,6 +100,21 @@ python -m price_predictor train [OPTIONS]
 }
 ```
 
+**Progress messages** (stderr):
+```
+Parsing Forge card scripts...
+Parsed 32145 cards (169 parse errors)
+Loading AllPrintings.json — building name-to-UUID mapping...
+Built name-to-UUID mapping (28500 card names)
+Loading AllPricesToday.json — building price map...
+Loaded price data (22000 cards with prices)
+Matched 24531 cards to prices, skipped 7614
+Feature engineering complete (576 features)
+Training model...
+Model training complete
+Model saved: 20260301-143000
+```
+
 **Exit codes**:
 - 0: Success
 - 1: Input path not found or unreadable
@@ -130,6 +154,14 @@ python -m price_predictor evaluate [OPTIONS]
   "top_20_overlap": 0.64,
   "sample_count": 6132
 }
+```
+
+**Progress messages** (stderr): Same stage messages as `train`
+(parsing, mapping, pricing, matching), plus evaluation-specific:
+```
+Loading model from models/latest.joblib...
+Computing predictions on test set (6132 cards)...
+Evaluation complete
 ```
 
 **Exit codes**:
