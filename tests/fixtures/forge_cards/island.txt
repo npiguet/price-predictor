@@ -1,0 +1,4 @@
+Name:Island
+Types:Basic Land Island
+A:AB$ Mana | Cost$ T | Produced$ U | SpellDescription$ {T}: Add {U}.
+Oracle:{T}: Add {U}.

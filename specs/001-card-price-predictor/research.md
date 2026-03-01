@@ -128,7 +128,7 @@ Cards with no price across any printing are excluded from training
 
 ## R4: Technology Stack
 
-### Decision: Python 3.11+ with scikit-learn
+### Decision: Python 3.14+ with scikit-learn
 
 **Rationale**: Python is the standard language for tabular ML. The
 project is a price prediction tool with a CLI interface. scikit-learn
@@ -178,6 +178,7 @@ are the standard first choice for tabular regression.
 | 2 | `ManaCost` → colors | multi-hot | W, U, B, R, G → 5 binary columns |
 | 3 | `ManaCost` → color count | numeric | Number of distinct colors |
 | 4 | `ManaCost` → generic mana | numeric | Generic mana component |
+| 4a | `ManaCost` → colorless mana | numeric | Colorless mana component ({C} pips — distinct from generic) |
 | 5 | `Types` → card types | multi-hot | Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Land, Battle |
 | 6 | `Types` → supertypes | multi-hot | Legendary, Basic, Snow, etc. |
 | 7 | `Types` → subtypes | numeric | Count of subtypes |
@@ -264,8 +265,11 @@ and aligns with Simplicity First.
 
 **ManaCost parsing** (Forge format):
 - Space-separated shards: `2 W W` → CMC 4, W=2
+- Colorless: `C` → 1 CMC, no color (distinct from generic mana)
 - Hybrid: `WU` → 0.5 W + 0.5 U for color, 1 CMC
 - Phyrexian: `WP` → W color, 1 CMC
+- Snow: `S` → 1 CMC, no color
+- Two-or-colored hybrid: `W2`, `U2` → 1 CMC
 - X: `X` → 0 for CMC calculation, flag X-present
 - `no cost` → CMC 0, no colors
 

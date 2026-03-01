@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.14+
 - pip
 - MTG Forge repository checkout at `../forge` (sibling directory)
 

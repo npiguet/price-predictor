@@ -1,0 +1,9 @@
+Name:Jace, the Mind Sculptor
+ManaCost:2 U U
+Types:Legendary Planeswalker Jace
+Loyalty:3
+A:AB$ Scry | Cost$ AddCounter<2/LOYALTY> | ScryNum$ 1 | PrecostDesc$ Plus 2 | SpellDescription$ Look at the top card of target player's library. You may put that card on the bottom of that player's library.
+A:AB$ Draw | Cost$ AddCounter<0/LOYALTY> | NumCards$ 3 | DestinationZone2$ Hand | PrecostDesc$ Zero | SpellDescription$ Draw three cards, then put two cards from your hand on top of your library in any order.
+A:AB$ ChangeZone | Cost$ SubCounter<1/LOYALTY> | ValidTgts$ Creature | TgtPrompt$ Select target creature | Origin$ Battlefield | Destination$ Hand | PrecostDesc$ Minus 1 | SpellDescription$ Return target creature to its owner's hand.
+A:AB$ ChangeZoneAll | Cost$ SubCounter<12/LOYALTY> | ValidCards$ Card.OwnedBy(TargetedPlayer) | Origin$ Library | Destination$ Exile | ChangeType$ All | PrecostDesc$ Minus 12 | ValidTgts$ Player | TgtPrompt$ Select target player | SpellDescription$ Exile all cards from target player's library, then that player shuffles their hand into their library.
+Oracle:+2: Look at the top card of target player's library. You may put that card on the bottom of that player's library.\n0: Draw three cards, then put two cards from your hand on top of your library in any order.\n-1: Return target creature to its owner's hand.\n-12: Exile all cards from target player's library, then that player shuffles their hand into their library.

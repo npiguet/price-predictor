@@ -1,0 +1,7 @@
+Name:Ragavan, Nimble Pilferer
+ManaCost:R
+Types:Legendary Creature Monkey Pirate
+PT:2/1
+K:Dash:1 R
+T:Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player | CombatDamage$ True | Execute$ TrigExileAndTreasure | TriggerDescription$ Whenever CARDNAME deals combat damage to a player, create a Treasure token and exile the top card of that player's library. Until end of turn, you may cast that card.
+Oracle:Whenever Ragavan, Nimble Pilferer deals combat damage to a player, create a Treasure token and exile the top card of that player's library. Until end of turn, you may cast that card.\nDash {1}{R}

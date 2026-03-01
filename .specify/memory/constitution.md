@@ -1,37 +1,34 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.2.0 → 2.0.0
-  Modified principles:
-    - V. JVM Interoperability (MTG Forge) →
-      V. MTG Forge Interoperability (Java Stub + Remote API)
-      Fundamental redefinition: removed JVM-only constraint on
-      main application; interop now achieved via a Java stub
-      library that calls the application's remote API.
-  Added sections: None
+  Version change: 2.0.0 → 2.1.0
+  Modified principles: None
+  Added sections:
+    - VI. Documentation (new principle requiring README,
+      workflow descriptions, ML process rationale, and
+      artifact documentation)
   Removed sections: None
   Templates requiring updates:
     - .specify/templates/plan-template.md — ✅ No change needed
-      (Technical Context section is dynamic placeholder)
+      (Documentation deliverables can be captured in the
+      existing Deliverables section of any plan.)
     - .specify/templates/spec-template.md — ✅ No change needed
+      (Specs already have a scope section that can include
+      documentation deliverables.)
     - .specify/templates/tasks-template.md — ✅ No change needed
-  Feature plans requiring re-evaluation:
-    - ⚠️ specs/001-card-price-predictor/plan.md — RE-EVALUATE
-      Previous VIOLATION (Python vs JVM) is now RESOLVED.
-      Python 3.11+ with scikit-learn is acceptable for the main
-      application. Plan SHOULD be updated to include the Java
-      stub library and remote API as additional deliverables.
-    - ⚠️ specs/001-card-price-predictor/research.md — RE-EVALUATE
-      R2 (Technology Stack) chose Python, which is now valid.
-      Research SHOULD be extended to cover stub library design
-      and API contract with MTG Forge.
-    - ⚠️ CLAUDE.md — RE-EVALUATE
-      Python 3.11+ is now valid again. Java 17+ should be added
-      for the stub library component.
+      (Documentation tasks can be added as a Polish phase
+      task using existing categories.)
+  Quality Gates updated:
+    - ✅ Added documentation completeness gate
   Follow-up TODOs:
-    - Update plan.md to include Java stub library deliverable
-    - Define API contract between price predictor and stub
-    - Add Java 17+ / Maven to CLAUDE.md for stub library
+    - Create README.md covering executables, workflows, ML
+      rationale, and artifacts for feature 001
+    - Carry forward from v2.0.0: Update plan.md to include
+      Java stub library deliverable
+    - Carry forward from v2.0.0: Define API contract between
+      price predictor and stub
+    - Carry forward from v2.0.0: Add Java 17+ / Maven to
+      CLAUDE.md for stub library
 -->
 # Price Predictor Constitution
 
@@ -153,6 +150,33 @@ scikit-learn). The remote API approach cleanly separates the
 prediction service from the game client, enabling independent
 deployment, scaling, and technology evolution.
 
+### VI. Documentation
+
+The project MUST include documentation that enables users and
+contributors to understand, operate, and extend the system
+without reading the source code.
+
+- A README file MUST exist at the project root explaining how
+  to launch all executables and run all workflows (training,
+  prediction, evaluation).
+- A textual description of each application workflow MUST be
+  provided, covering inputs, processing steps, and outputs.
+- A textual description of the ML processes chosen during
+  implementation MUST be included, with explicit rationale for
+  why each approach was selected over alternatives.
+- A description of all artifacts produced by the application
+  MUST be maintained (trained model files, evaluation reports,
+  prediction output formats, etc.).
+- Documentation MUST be kept up to date: when a feature changes
+  behavior, its documentation MUST be updated in the same
+  commit or pull request.
+
+**Rationale**: Code without documentation is accessible only to
+its authors. A price predictor combines domain-specific ML
+pipelines with data ingestion and CLI tooling; without clear
+documentation, onboarding is slow, workflows are opaque, and
+users cannot evaluate whether the system meets their needs.
+
 ## Quality Gates
 
 Every pull request and feature delivery MUST satisfy these gates:
@@ -164,6 +188,8 @@ Every pull request and feature delivery MUST satisfy these gates:
 - Main application code MUST pass all tests in its native stack.
 - Java stub library MUST compile and pass tests on Java 17+.
 - Remote API contract tests MUST pass for both stub and server.
+- Documentation MUST be complete for any new or changed
+  workflows, CLI commands, artifacts, or ML processes.
 - Code has been reviewed by at least one other contributor (or
   self-reviewed with a structured checklist for solo work).
 
@@ -196,4 +222,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 2.0.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-03-01
+**Version**: 2.1.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-03-01

@@ -1,0 +1,15 @@
+Name:Fire
+ManaCost:1 R
+Types:Instant
+A:SP$ DealDamage | ValidTgts$ Creature,Player | TgtPrompt$ Select any target | NumDmg$ 2 | DivideEvenly$ True | SpellDescription$ Fire deals 2 damage divided as you choose among one or two targets.
+AlternateMode:Split
+Oracle:Fire deals 2 damage divided as you choose among one or two targets.
+
+ALTERNATE
+
+Name:Ice
+ManaCost:1 U
+Types:Instant
+A:SP$ Tap | ValidTgts$ Permanent | TgtPrompt$ Select target permanent | SpellDescription$ Tap target permanent.
+A:SP$ Draw | NumCards$ 1 | SpellDescription$ Draw a card.
+Oracle:Tap target permanent.\nDraw a card.

@@ -111,6 +111,7 @@ Parsed representation of a mana cost string in Forge format
 (space-separated shards like `2 W W`). Extracts:
 - Total mana value (numeric CMC)
 - Generic mana component
+- Colorless mana component (count of {C} pips — distinct from generic)
 - Per-color mana counts (W, U, B, R, G)
 - Color count (number of distinct colors)
 - Presence of X cost

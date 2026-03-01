@@ -1,0 +1,6 @@
+Name:Breeding Pool
+Types:Land Forest Island
+S:Mode$ ETB | Execute$ TrigShockLandETB | TriggerDescription$ As CARDNAME enters the battlefield, you may pay 2 life. If you don't, it enters the battlefield tapped.
+A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ {T}: Add {G}.
+A:AB$ Mana | Cost$ T | Produced$ U | SpellDescription$ {T}: Add {U}.
+Oracle:({T}: Add {G} or {U}.)\nAs Breeding Pool enters the battlefield, you may pay 2 life. If you don't, it enters the battlefield tapped.

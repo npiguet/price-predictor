@@ -12,6 +12,7 @@
 - Q: Which representative price to use for cards with multiple printings? → A: Cheapest across all printings (including foil and special). Use the overall lowest price regardless of printing type.
 - Q: Should rarity be used as a model input feature? → A: No. Rarity is excluded — the model predicts from game characteristics only (what's visible on the card). Rarity is a printing attribute, not a game attribute, and made-up cards have no rarity.
 - Q: What currency and price source should the model use? → A: EUR from Cardmarket prices as exposed by MTGJSON files. The model is trained natively on EUR prices. No currency conversion needed. Cardmarket is the authoritative price source as it is less volatile than alternatives. MTGJSON remains the data file source.
+- Q: How should the system handle colorless mana ({C}) vs generic mana ({1}–{N})? → A: Colorless mana and generic mana are distinct concepts and must be tracked separately. Generic mana (denoted {1} to {N} in card text) appears only in mana costs and means "any color or colorless mana can pay this." Colorless mana (denoted {C}) is a specific type of mana — it is not a color, but some costs require specifically colorless mana (e.g., mana produced by Sol Ring). Colored mana cannot pay colorless costs. The system must distinguish colorless mana pips from generic mana in mana cost parsing and feature engineering.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -82,7 +83,7 @@ A user wants to understand how accurate the prediction model is. They provide a 
 
 ### Functional Requirements
 
-- **FR-001**: System MUST accept card attributes as input, including: mana cost, card type(s), permanent type(s), oracle text, power, toughness, and keyword abilities.
+- **FR-001**: System MUST accept card attributes as input, including: mana cost (with distinct handling of generic, colored, and colorless mana components), card type(s), permanent type(s), oracle text, power, toughness, and keyword abilities.
 - **FR-002**: System MUST return a numeric EUR price estimate for any valid combination of input attributes.
 - **FR-003**: System MUST handle partial input gracefully — not all attributes are required for every card (e.g., non-creature cards have no power/toughness).
 - **FR-004**: System MUST support training on a dataset of paper cards with known attributes and market prices. Digital-only cards (e.g., MTG Arena exclusives, Alchemy cards) MUST be excluded from the training set.
@@ -96,7 +97,7 @@ A user wants to understand how accurate the prediction model is. They provide a 
 
 ### Key Entities
 
-- **Card**: A Magic: The Gathering card described by its game attributes. Key attributes: mana cost (string, e.g., "{2}{W}{W}"), card types (list, e.g., ["Creature", "Enchantment"]), permanent types (list, e.g., ["Angel"]), oracle text (string), power (numeric or null), toughness (numeric or null), keyword abilities (list, e.g., ["Flying", "Vigilance"]).
+- **Card**: A Magic: The Gathering card described by its game attributes. Key attributes: mana cost (string, e.g., "{2}{W}{W}" or "{3}{C}{C}"), card types (list, e.g., ["Creature", "Enchantment"]), permanent types (list, e.g., ["Angel"]), oracle text (string), power (numeric or null), toughness (numeric or null), keyword abilities (list, e.g., ["Flying", "Vigilance"]). Mana costs may contain generic mana ({1}–{N}, payable by any color or colorless), colored mana ({W}, {U}, {B}, {R}, {G}), and colorless mana ({C}, payable only by colorless mana — distinct from generic).
 - **Price Estimate**: The system's predicted EUR market price for a given card. Attributes: predicted price (numeric, EUR), model version used (identifier).
 - **Training Dataset**: A collection of paper-only cards with known market prices used to train the model. Each entry pairs a Card's attributes with its actual EUR Cardmarket price. Cards without a price and digital-only cards are excluded.
 - **Trained Model**: The prediction model artifact produced by training. Attributes: model version/identifier, training date, training dataset summary (number of cards, price range).
@@ -108,6 +109,7 @@ A user wants to understand how accurate the prediction model is. They provide a 
 - **Made-up cards are a first-class use case.** The system's primary purpose is to predict what a card *would* cost based on its characteristics. The prediction input does not need to match any real card.
 - "Price" means the current EUR paper market price from Cardmarket, as provided by MTGJSON data files.
 - Input is structured card attributes (individual fields), not freeform natural language text that needs parsing.
+- **Colorless mana ({C}) is distinct from generic mana ({1}–{N}).** Generic mana in a cost means "pay with any type of mana." Colorless mana in a cost means "pay only with colorless mana" (such as mana produced by Sol Ring). The system must track these separately — colorless mana pips contribute to the mana value but do not add any color to the card.
 - **Card attribute data** is sourced from MTG Forge card scripts — plain text files stored in the local Forge repository checkout at `../forge`. Each card is a `.txt` file containing key-value pairs (Name, ManaCost, Types, PT, keywords, oracle text, abilities, etc.). There are 32,000+ card scripts available.
 - **Price data** is sourced from MTGJSON's AllPricesToday.json, downloaded once and frozen in the resources folder. This file is keyed by UUID, so a name-to-UUID mapping is needed to join card attributes to prices.
 - Forge card scripts are oracle-level data (one file per card, not per printing). They do NOT contain rarity, set code, or other printing-specific attributes. Rarity is explicitly excluded as a model input — the model predicts from game characteristics only. This keeps the model consistent with the made-up card use case where rarity is undefined.

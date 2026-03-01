@@ -44,3 +44,7 @@
   with `/speckit.plan` to reflect the JVM stack (Constitution
   Principle V), Forge card script data source, and paper-only
   filtering.
+- Spec updated 2026-03-01: Added colorless mana ({C}) vs generic
+  mana ({1}–{N}) distinction. Updated FR-001, Card entity, and
+  assumptions to clarify that colorless mana is tracked separately
+  from generic mana. Data model already handled this correctly.

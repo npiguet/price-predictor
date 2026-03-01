@@ -1,0 +1,200 @@
+{
+  "meta": {
+    "date": "2026-02-26",
+    "version": "5.3.0+20260226"
+  },
+  "data": {
+    "10E": {
+      "cards": [
+        {
+          "name": "Grizzly Bears",
+          "uuid": "aaaaaaaa-1111-1111-1111-111111111111",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        },
+        {
+          "name": "Serra Angel",
+          "uuid": "aaaaaaaa-2222-2222-2222-222222222222",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        },
+        {
+          "name": "Island",
+          "uuid": "aaaaaaaa-cccc-cccc-cccc-cccccccccccc",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "7ED": {
+      "cards": [
+        {
+          "name": "Grizzly Bears",
+          "uuid": "bbbbbbbb-1111-1111-1111-111111111111",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "A25": {
+      "cards": [
+        {
+          "name": "Lightning Bolt",
+          "uuid": "aaaaaaaa-3333-3333-3333-333333333333",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        },
+        {
+          "name": "Jace, the Mind Sculptor",
+          "uuid": "aaaaaaaa-5555-5555-5555-555555555555",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "2XM": {
+      "cards": [
+        {
+          "name": "Lightning Bolt",
+          "uuid": "bbbbbbbb-3333-3333-3333-333333333333",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "WWK": {
+      "cards": [
+        {
+          "name": "Jace, the Mind Sculptor",
+          "uuid": "bbbbbbbb-5555-5555-5555-555555555555",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "ISD": {
+      "cards": [
+        {
+          "name": "Delver of Secrets",
+          "uuid": "aaaaaaaa-6666-6666-6666-666666666666",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "C21": {
+      "cards": [
+        {
+          "name": "Sol Ring",
+          "uuid": "aaaaaaaa-7777-7777-7777-777777777777",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "C20": {
+      "cards": [
+        {
+          "name": "Sol Ring",
+          "uuid": "bbbbbbbb-7777-7777-7777-777777777777",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "MH2": {
+      "cards": [
+        {
+          "name": "Ragavan, Nimble Pilferer",
+          "uuid": "aaaaaaaa-8888-8888-8888-888888888888",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "RNA": {
+      "cards": [
+        {
+          "name": "Breeding Pool",
+          "uuid": "aaaaaaaa-9999-9999-9999-999999999999",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "MH1": {
+      "cards": [
+        {
+          "name": "Fire // Ice",
+          "uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "OGW": {
+      "cards": [
+        {
+          "name": "Matter Reshaper",
+          "uuid": "aaaaaaaa-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "UNH": {
+      "cards": [
+        {
+          "name": "AWOL",
+          "uuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+          "availability": ["paper"],
+          "isFunny": true,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "PRM": {
+      "cards": [
+        {
+          "name": "Swords to Plowshares",
+          "uuid": "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+          "availability": ["mtgo"],
+          "isFunny": false,
+          "isOnlineOnly": true,
+          "language": "English"
+        }
+      ]
+    }
+  }
+}
