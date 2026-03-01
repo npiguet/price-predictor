@@ -6,6 +6,14 @@
 **Input**: User description: "Prices come from the MTGJSON dataset and use the CardMarket price in EUR."
 **Refines**: `001-card-price-predictor` (replaces USD/TCGPlayer assumption with EUR/CardMarket)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: FR-007/US3-AC3 says €0.00 cards get a 0.00 label, but feature 003 clamps all prices below €0.01 to €0.01. Which takes precedence? → A: Feature 003's €0.01 floor takes precedence. Zero-priced cards are *included* in training (not excluded as missing), but the final training label is €0.01 after the floor is applied.
+- Q: The codebase already uses CardMarket EUR prices and ignores TCGPlayer. Is this feature primarily formalization of existing behavior plus FR-008 exclusion count? → A: Yes. FR-001–FR-006, FR-009, FR-010 formalize existing behavior. FR-008 (exclusion count reporting) is the only new code change.
+- Q: Should FR-008's exclusion count use stderr INFO log (like feature 003), WARNING, or both? → A: Stderr INFO log in `build_price_map()`, consistent with feature 003's logging pattern.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Training Data Uses CardMarket EUR Prices (Priority: P1)
@@ -53,7 +61,7 @@ Some cards in the MTGJSON dataset may have prices from other vendors (e.g., TCGP
 
 1. **Given** a card has a TCGPlayer USD price but no CardMarket EUR price in the MTGJSON data, **When** the system prepares training data, **Then** the card is excluded from the training set.
 2. **Given** some cards lack CardMarket prices, **When** training data preparation completes, **Then** the system reports the count of cards excluded due to missing CardMarket prices.
-3. **Given** a card has a CardMarket price of €0.00 (explicitly zero), **When** the system prepares training data, **Then** the card is included with a training label of 0.00 EUR (zero is a valid price, not the same as missing).
+3. **Given** a card has a CardMarket price of €0.00 (explicitly zero), **When** the system prepares training data, **Then** the card is included in the training set (zero is a valid price, not the same as missing) with a training label of €0.01 after the price floor from feature 003 is applied.
 
 ---
 
@@ -75,8 +83,8 @@ Some cards in the MTGJSON dataset may have prices from other vendors (e.g., TCGP
 - **FR-004**: When the MTGJSON data contains multiple CardMarket price snapshots, the system MUST use the most recent available snapshot.
 - **FR-005**: When CardMarket provides both retail and buylist prices, the system MUST use the retail price.
 - **FR-006**: Cards with no CardMarket EUR price (missing, null, or absent from the CardMarket section) MUST be excluded from the training set.
-- **FR-007**: Cards with a CardMarket EUR price of exactly 0.00 MUST be included in the training set (zero is a valid price).
-- **FR-008**: The system MUST report the count of cards excluded due to missing CardMarket prices during training data preparation.
+- **FR-007**: Cards with a CardMarket EUR price of exactly 0.00 MUST be included in the training set (zero is a valid price, not treated as missing). The €0.01 price floor from feature 003 applies — the final training label is €0.01, not €0.00.
+- **FR-008**: The system MUST report the count of cards excluded due to missing CardMarket prices during training data preparation, as an INFO-level log message to stderr in `build_price_map()`, consistent with feature 003's logging pattern.
 - **FR-009**: All price predictions output by the system MUST be denominated in EUR, consistent with the training data currency.
 - **FR-010**: The system MUST NOT perform any currency conversion at any stage — training, prediction, or evaluation.
 
@@ -94,6 +102,7 @@ Some cards in the MTGJSON dataset may have prices from other vendors (e.g., TCGP
 - This decision means the model is trained on European market pricing, which may differ from US (TCGPlayer) pricing for the same cards. This is an intentional choice — the system targets the European market.
 - The MTGJSON data structure nests prices under vendor > card UUID > price type. The system navigates this structure to extract CardMarket retail prices.
 - This feature supersedes the feature 001 assumption that prices are "USD paper market price (e.g., TCGPlayer market price or similar)." The definitive source is CardMarket in EUR.
+- The existing codebase already implements CardMarket EUR price extraction (FR-001–FR-006, FR-009, FR-010). This feature formalizes that behavior as explicit requirements. The only new code change is FR-008 (exclusion count reporting).
 
 ## Success Criteria *(mandatory)*
 
