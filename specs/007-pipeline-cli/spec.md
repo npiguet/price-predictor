@@ -6,6 +6,14 @@
 **Input**: User description: "The application has several different stages in its lifecycle. All stages can be invoked by the user manually via the CLI: (1) Dataset preparation, (2) Pre-Training, (3) Training, (4) Prediction."
 **Depends on**: `001-card-price-predictor` (model and training concepts), `006-card-script-parsing` (card script extraction)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: How should model artifacts be handled on retrain? → A: Timestamped artifacts — each training run saves with a timestamp. A "latest" pointer is updated. Prediction loads "latest" by default.
+- Q: Should external paths (Forge dir, price data URL) be configurable? → A: Yes, via CLI flags with sensible defaults. Each stage accepts optional path overrides (e.g., `--forge-dir`, `--price-url`) with the current assumed paths as defaults.
+- Q: What train/validation split ratio should be used? → A: 80/20 — 80% training, 20% validation.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Prepare Dataset (Priority: P1)
@@ -55,7 +63,7 @@ A user wants to train the price prediction model. They run a CLI command that us
 1. **Given** prepared datasets and a token list exist, **When** the user runs the training command, **Then** the system trains the model and saves a model artifact to disk.
 2. **Given** training is in progress, **When** the user observes the CLI output, **Then** the system displays progress information including training metrics (e.g., loss, validation performance) at regular intervals.
 3. **Given** the token list or datasets are missing, **When** the user runs the training command, **Then** the system reports an error indicating which prerequisite is missing.
-4. **Given** a previous model artifact already exists, **When** the user retrains, **Then** a new model artifact is produced (the previous one is preserved or explicitly replaced, at the user's discretion).
+4. **Given** a previous model artifact already exists, **When** the user retrains, **Then** a new timestamped model artifact is saved alongside the previous one, and the "latest" pointer is updated to the new artifact.
 
 ---
 
@@ -89,17 +97,17 @@ A user wants to use the trained model to evaluate cards. They run a CLI command 
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST provide a CLI interface with distinct commands for each pipeline stage: dataset preparation, pre-training, training, and prediction.
+- **FR-001**: The system MUST provide a CLI interface with distinct commands for each pipeline stage: dataset preparation, pre-training, training, and prediction. Each stage MUST accept optional CLI flags to override default paths (e.g., `--forge-dir` for the card scripts directory, `--price-url` for the price data download URL). When flags are omitted, the system uses the default paths from the Assumptions section.
 - **FR-002**: The dataset preparation stage MUST download required data files (price data) if they are not already present locally.
 - **FR-003**: The dataset preparation stage MUST read card scripts from the Forge card folder, convert them to structured card data (per feature 006), match them to price records, and produce a training dataset and a validation dataset.
 - **FR-004**: The dataset preparation stage MUST report the number of cards successfully processed, the number of cards skipped (with reasons), and the sizes of the resulting datasets.
 - **FR-005**: The pre-training stage MUST scan the training and validation datasets and produce a token list containing all distinct tokens found in the card data fields.
-- **FR-006**: The training stage MUST use the prepared training dataset and token list to train embeddings and the main prediction model, producing a model artifact saved to disk.
+- **FR-006**: The training stage MUST use the prepared training dataset and token list to train embeddings and the main prediction model, producing a timestamped model artifact saved to disk. Each training run preserves previous artifacts and updates a "latest" pointer to the newest artifact.
 - **FR-007**: The training stage MUST display progress information during training, including training metrics at regular intervals.
-- **FR-008**: The prediction stage MUST start a service that exposes the card evaluation endpoint (per feature 005), using the trained model artifact for predictions.
+- **FR-008**: The prediction stage MUST start a service that exposes the card evaluation endpoint (per feature 005), using the "latest" model artifact by default for predictions.
 - **FR-009**: Each stage MUST validate that its prerequisites exist before executing. If prerequisites are missing, the stage MUST report a clear error naming the missing prerequisite.
 - **FR-010**: Each stage MUST handle interruption (e.g., Ctrl+C) gracefully without corrupting previously saved artifacts.
-- **FR-011**: The validation dataset MUST be a distinct subset of the overall data, separate from the training dataset, so it can be used for unbiased model evaluation.
+- **FR-011**: The validation dataset MUST be a distinct subset of the overall data, separate from the training dataset, using an 80/20 split (80% training, 20% validation), so it can be used for unbiased model evaluation.
 - **FR-012**: All pipeline artifacts (datasets, token list, model) MUST be saved to well-defined locations on disk, so each stage can locate the outputs of previous stages.
 
 ### Key Entities
@@ -107,14 +115,14 @@ A user wants to use the trained model to evaluate cards. They run a CLI command 
 - **Training Dataset**: A collection of structured card data records, each paired with a price value. Used to train the prediction model. Produced by the dataset preparation stage.
 - **Validation Dataset**: A smaller collection of structured card data records with prices, held out from training. Used to evaluate model performance during and after training.
 - **Token List**: A vocabulary of all distinct tokens extracted from the training and validation datasets. Used to train embeddings in the training stage. Produced by the pre-training stage.
-- **Model Artifact**: The trained prediction model saved to disk. Includes trained embeddings and the main model weights. Produced by the training stage, consumed by the prediction stage.
+- **Model Artifact**: The trained prediction model saved to disk with a timestamp identifier. Includes trained embeddings and the main model weights. Each training run produces a new timestamped artifact and updates a "latest" pointer. The prediction stage loads "latest" by default. Previous artifacts are preserved for comparison or rollback.
 - **Pipeline Stage**: A discrete step in the application lifecycle. Each stage has defined inputs (prerequisites), outputs (artifacts), and a CLI command to invoke it.
 
 ## Assumptions
 
-- The Forge card scripts are located at `../forge/forge-gui/res/cardsfolder/` and follow the format documented in `resources/CARD_SCRIPTING_REFERENCE.md`.
-- Price data is sourced from MTGJSON's AllPricesToday.json (consistent with feature 001). The download URL is well-known and stable.
-- The validation dataset is created by splitting the overall matched data, not by using a separate data source. A standard split ratio (e.g., 80/20 or 90/10) is used.
+- The Forge card scripts are located at `../forge/forge-gui/res/cardsfolder/` by default and follow the format documented in `resources/CARD_SCRIPTING_REFERENCE.md`. This path is overridable via CLI flag.
+- Price data is sourced from MTGJSON's AllPricesToday.json by default (consistent with feature 001). The download URL is overridable via CLI flag.
+- The validation dataset is created by splitting the overall matched data, not by using a separate data source. The split ratio is 80/20 (80% training, 20% validation).
 - All pipeline artifacts are stored in a single project-level output directory, with consistent naming conventions so stages can discover each other's outputs.
 - The prediction stage reuses the endpoint interface defined in feature 005 — this feature specifies how to start and stop that service via the CLI, not the endpoint contract itself.
 - Stages are run sequentially by the user. There is no automatic orchestration that chains all stages together (though the user could script this themselves).

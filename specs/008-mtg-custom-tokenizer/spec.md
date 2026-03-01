@@ -6,6 +6,15 @@
 **Input**: User description: "The AI model must use a custom tokenizer. MTG uses a relatively small and precise language. Domain-specific terms (card types, subtypes, keyword abilities, game zones, colors) should each be single tokens. The goal is a vocabulary smaller than a general-purpose LLM's, keeping memory requirements low."
 **Depends on**: `006-card-script-parsing` (card data extraction), `007-pipeline-cli` (pre-training stage produces the token list)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: What fallback mechanism should the tokenizer use for words not in the vocabulary? → A: Byte-Pair Encoding (BPE) subword fallback — learn subword units from the corpus
+- Q: Should the tokenizer be case-sensitive or case-insensitive? → A: Normalize all text to lowercase before tokenization (lossy — original casing not recoverable)
+- Q: What file format should be used for persisting the vocabulary to disk? → A: Two plain text files: `vocab.txt` (one token per line) + `merges.txt` (one BPE merge rule per line, ordered by priority)
+- Q: Should high-frequency non-domain English words from oracle text be included as whole tokens? → A: Yes — many of these (target, damage, draw, destroy, etc.) are game action keywords defined in the MTG comprehensive rules and should be treated as domain terms. Include words above a frequency threshold from the corpus as whole tokens.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Build Domain Vocabulary from Card Corpus (Priority: P1)
@@ -39,7 +48,7 @@ A model developer wants to convert a card's text fields into a sequence of token
 1. **Given** a card with oracle text "Flying, vigilance", **When** the text is tokenized, **Then** "Flying" and "vigilance" are each a single token in the output.
 2. **Given** a card with oracle text "When this creature enters the battlefield, draw a card", **When** the text is tokenized, **Then** "creature", "battlefield", and "draw" appear as single tokens (recognized domain terms), while common English words like "when", "this", "enters", "the", "a", "card" are also tokenized (either as single tokens if in vocabulary, or via the fallback mechanism).
 3. **Given** a card with type line "Legendary Creature — Human Wizard", **When** the type line is tokenized, **Then** "Legendary", "Creature", "Human", and "Wizard" are each single tokens.
-4. **Given** a token sequence produced from a card's text, **When** the tokens are decoded back to text, **Then** the original text is recoverable (round-trip integrity).
+4. **Given** a token sequence produced from a card's text, **When** the tokens are decoded back to text, **Then** the lowercase-normalized version of the original text is recoverable (round-trip integrity modulo casing).
 
 ---
 
@@ -60,7 +69,7 @@ A model developer wants to confirm that the custom tokenizer's vocabulary is sig
 
 ### Edge Cases
 
-- What happens when a card contains a word never seen in the training corpus (e.g., a new keyword from a future set)? The tokenizer uses a fallback mechanism (e.g., character-level or subword decomposition) so the word is still representable, just not as a single token.
+- What happens when a card contains a word never seen in the training corpus (e.g., a new keyword from a future set)? The tokenizer decomposes it into BPE subword units learned from the corpus, so the word is still representable, just not as a single token.
 - What happens when a domain term is also a common English word (e.g., "Flash", "Reach", "Menace")? The term is included in the vocabulary as a single token regardless — in the MTG context, these words carry domain-specific meaning.
 - What happens with multi-word keyword abilities (e.g., "First Strike", "Double Strike", "Split second")? Each multi-word keyword is treated as a single token because it represents one indivisible game concept.
 - What happens with mana cost symbols (e.g., "{W}", "{2}", "{U/B}")? Mana symbols are distinct domain tokens and each unique symbol is a single token in the vocabulary.
@@ -72,23 +81,24 @@ A model developer wants to confirm that the custom tokenizer's vocabulary is sig
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST build a domain-specific vocabulary by scanning prepared card datasets and extracting all distinct terms from the following categories: card types, subtypes, supertypes, keyword abilities (including multi-word keywords), game zone names, and color names.
+- **FR-001**: The system MUST build a domain-specific vocabulary by scanning prepared card datasets and extracting all distinct terms from the following categories: card types, subtypes, supertypes, keyword abilities (including multi-word keywords), game action keywords (e.g., target, damage, draw, destroy, sacrifice, exile, as defined in the MTG comprehensive rules), game zone names, and color names. Additionally, non-domain words that appear above a frequency threshold in the corpus MUST be included as whole tokens.
 - **FR-002**: Each identified MTG domain term MUST be represented as a single, indivisible token in the vocabulary, regardless of how many words it contains (e.g., "First Strike" is one token, not two).
 - **FR-003**: The system MUST include mana cost symbols as single tokens in the vocabulary (e.g., each unique mana symbol is one token).
 - **FR-004**: The system MUST include common structural tokens in the vocabulary: punctuation marks, number values that appear in card text, and a placeholder token for card self-references.
-- **FR-005**: The system MUST provide a fallback mechanism for words not in the vocabulary, so that any text can be tokenized even if it contains unknown terms. No input may cause the tokenizer to fail.
-- **FR-006**: The system MUST support tokenizing all card text fields: oracle text, ability descriptions, type lines, and any other text extracted from card data.
-- **FR-007**: The system MUST support decoding a token sequence back to the original text (round-trip conversion).
-- **FR-008**: The vocabulary MUST be saveable to disk and loadable from disk, so it can be produced during pre-training and reused during training and prediction.
+- **FR-005**: The system MUST use Byte-Pair Encoding (BPE) as the subword fallback mechanism for words not in the domain vocabulary. BPE merge rules are learned from the card corpus during vocabulary building. Any text can be tokenized even if it contains unknown terms — no input may cause the tokenizer to fail.
+- **FR-006**: The system MUST normalize all input text to lowercase before tokenization. All vocabulary entries are stored in lowercase. Original casing is not preserved or recoverable.
+- **FR-006a**: The system MUST support tokenizing all card text fields: oracle text, ability descriptions, type lines, and any other text extracted from card data.
+- **FR-007**: The system MUST support decoding a token sequence back to the lowercase-normalized text (round-trip conversion). Since casing is lost during normalization, decode output matches the lowercased input, not the original casing.
+- **FR-008**: The vocabulary MUST be persisted as two plain text files: `vocab.txt` (one token per line, line number implies token ID) and `merges.txt` (one BPE merge rule per line, ordered by priority). Both files are produced during pre-training and reused during training and prediction.
 - **FR-009**: The same vocabulary and tokenization logic MUST be used consistently across all pipeline stages (pre-training, training, and prediction) to ensure tokens have the same meaning everywhere.
 - **FR-010**: The system MUST report vocabulary statistics after building: total token count, number of domain-specific tokens, and corpus coverage percentage (what fraction of token occurrences in the dataset are covered by vocabulary tokens vs. fallback).
 
 ### Key Entities
 
-- **Vocabulary**: The complete set of tokens recognized by the tokenizer. Contains domain-specific tokens (MTG terms), structural tokens (punctuation, numbers, mana symbols), and optionally a small set of common English words. Has a fixed size after building. Saved to and loaded from disk.
-- **Domain Token**: A token representing an MTG-specific concept. Belongs to a category (card type, subtype/supertype, keyword ability, game zone, color, mana symbol). Always kept as a single indivisible unit during tokenization.
+- **Vocabulary**: The complete set of tokens recognized by the tokenizer. Contains domain-specific tokens (MTG terms including game action keywords), structural tokens (punctuation, numbers, mana symbols), high-frequency corpus words, and BPE subword units. Has a fixed size after building. Persisted as two plain text files: `vocab.txt` (token list, line number = token ID) and `merges.txt` (BPE merge rules in priority order).
+- **Domain Token**: A token representing an MTG-specific concept. Belongs to a category (card type, subtype/supertype, keyword ability, game action keyword, game zone, color, mana symbol). Always kept as a single indivisible unit during tokenization.
 - **Token Sequence**: An ordered list of token identifiers produced by tokenizing a piece of card text. Each identifier maps to exactly one entry in the vocabulary. This is the model's input format.
-- **Fallback Token**: A special token (or decomposition mechanism) used when a word is not found in the vocabulary. Ensures all text is representable even with an incomplete vocabulary.
+- **Fallback Token**: A BPE subword unit produced when a word is not found in the domain vocabulary. The BPE merge rules are learned from the corpus, enabling any unknown word to be decomposed into smaller subword pieces that are in the vocabulary.
 
 ## Assumptions
 
@@ -107,5 +117,5 @@ A model developer wants to confirm that the custom tokenizer's vocabulary is sig
 - **SC-001**: The custom vocabulary contains fewer than 10,000 tokens after building from the full card corpus.
 - **SC-002**: At least 95% of all token occurrences across the card corpus are covered by vocabulary tokens (less than 5% require fallback).
 - **SC-003**: All MTG keyword abilities, card types, supertypes, and subtypes present in the card corpus are represented as single tokens in the vocabulary (100% domain term coverage).
-- **SC-004**: Tokenizing and then decoding any card text from the dataset produces the original text (100% round-trip fidelity).
+- **SC-004**: Tokenizing and then decoding any card text from the dataset produces the lowercase-normalized version of the original text (100% round-trip fidelity modulo casing).
 - **SC-005**: The vocabulary can be built from the full card corpus (20,000+ cards) within 1 minute.

@@ -6,6 +6,12 @@
 **Input**: User description: "if a card has multiple printings (with different set, foiling, rarity, whatever) then only the price of the cheapest version is used for training."
 **Refines**: `001-card-price-predictor` (replaces the vague "representative price" assumption with a concrete rule)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: Currency consistency — spec referenced USD but features 001/002 now use EUR/Cardmarket. → A: Updated to EUR throughout, consistent with the project-wide decision to use Cardmarket EUR prices from MTGJSON.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Use Cheapest Printing Price for Training (Priority: P1)
@@ -20,8 +26,8 @@ This rule means the model learns to predict the floor price of a card based on i
 
 **Acceptance Scenarios**:
 
-1. **Given** a card exists with 3 printings priced at $1.50, $3.00, and $8.00, **When** the system prepares training data for this card, **Then** the training label is $1.50 (the cheapest).
-2. **Given** a card exists with both foil ($12.00) and non-foil ($2.00) printings, **When** the system prepares training data, **Then** the training label is $2.00 (the cheapest, regardless of foiling).
+1. **Given** a card exists with 3 printings priced at €1.50, €3.00, and €8.00, **When** the system prepares training data for this card, **Then** the training label is €1.50 (the cheapest).
+2. **Given** a card exists with both foil (€12.00) and non-foil (€2.00) printings, **When** the system prepares training data, **Then** the training label is €2.00 (the cheapest, regardless of foiling).
 3. **Given** a card exists with printings across 5 different sets at varying prices, **When** the system prepares training data, **Then** the cheapest price across all sets is selected.
 4. **Given** a card has only one printing with one price, **When** the system prepares training data, **Then** that single price is used (trivial case — no selection needed).
 
@@ -37,7 +43,7 @@ When the system processes multi-printing cards during training data preparation,
 
 **Acceptance Scenarios**:
 
-1. **Given** a card has 4 printings with prices $0.25, $1.00, $5.00, and $15.00, **When** training data is prepared, **Then** the system reports that $0.25 was selected from 4 available prices.
+1. **Given** a card has 4 printings with prices €0.25, €1.00, €5.00, and €15.00, **When** training data is prepared, **Then** the system reports that €0.25 was selected from 4 available prices.
 2. **Given** all cards in the dataset have only one printing, **When** training data is prepared, **Then** no multi-printing selection events are reported.
 3. **Given** training data preparation completes, **When** the user reviews the output, **Then** a summary shows how many cards had multiple printings and required price selection.
 
@@ -46,10 +52,10 @@ When the system processes multi-printing cards during training data preparation,
 ### Edge Cases
 
 - What happens when a card has multiple printings but all printings have the same price? The system selects that price (trivially the cheapest); no special handling needed.
-- What happens when the cheapest printing has a price of $0.00 or effectively free? The system uses $0.00 as the training label. This is a valid data point (some cards are genuinely near-worthless).
+- What happens when the cheapest printing has a price of €0.00 or effectively free? The system uses €0.00 as the training label. This is a valid data point (some cards are genuinely near-worthless).
 - What happens when one printing's price is missing or null but others have valid prices? The system ignores printings with missing prices and selects the cheapest among valid prices.
 - What happens when ALL printings of a card have missing/null prices? The card is excluded from the training set entirely (consistent with feature 001's FR-004a: only cards with a confirmed price are used).
-- What happens when a card has an extremely cheap promo printing (e.g., $0.01) that is far below all other printings? The system still uses $0.01 as the cheapest price. The rule is unconditional — no outlier filtering is applied at the price selection step.
+- What happens when a card has an extremely cheap promo printing (e.g., €0.01) that is far below all other printings? The system still uses €0.01 as the cheapest price. The rule is unconditional — no outlier filtering is applied at the price selection step.
 - How does the system handle the same card name appearing with both paper and digital-only printings? Digital-only printings are already excluded from the price data (per feature 001's paper-only rule). The cheapest-price selection applies only to paper printings.
 
 ## Requirements *(mandatory)*
@@ -73,7 +79,7 @@ When the system processes multi-printing cards during training data preparation,
 
 ## Assumptions
 
-- "Cheapest" means the lowest numeric USD paper market price across all printings. Ties are resolved arbitrarily (any printing with the minimum price is acceptable).
+- "Cheapest" means the lowest numeric EUR Cardmarket paper market price across all printings (sourced from MTGJSON). Ties are resolved arbitrarily (any printing with the minimum price is acceptable).
 - This rule applies only to the training data pipeline. It does not affect how the model makes predictions at inference time — predictions are based on card attributes, not printing information.
 - The paper-only filter from feature 001 is applied before this rule. Digital-only printings are not considered.
 - The price data source (MTGJSON AllPricesToday.json) provides per-printing prices keyed by UUID. Multiple UUIDs may map to the same card name; the cheapest price among those UUIDs is selected.

@@ -1,10 +1,18 @@
-# Feature Specification: Transformer Model Architecture
+C# Feature Specification: Transformer Model Architecture
 
 **Feature Branch**: `009-transformer-model-arch`
 **Created**: 2026-03-01
 **Status**: Draft
 **Input**: User description: "The AI model should be built based on a transformer model with attention, following the architecture of modern LLMs. Training must be possible on a GeForce RTX 3060 Ti with 8GB VRAM."
 **Depends on**: `001-card-price-predictor` (prediction requirements and accuracy targets), `008-mtg-custom-tokenizer` (tokenized input format)
+
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: What format should the trained model artifact be saved in? → A: PyTorch native (`.pt` file with state dict + config)
+- Q: Should the model input include special tokens? → A: Yes — `[CLS]` token at sequence start for aggregation (BERT-style) and `[PAD]` for batching. No `[SEP]` token (single card input, no segment pairs).
+- Q: Should the model predict raw EUR prices or log-transformed prices? → A: Log-transformed prices — model predicts log(price) during training, output is exponentiated back to EUR for display. Standard approach for skewed price distributions.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -72,30 +80,30 @@ A model developer wants to evaluate how well the transformer architecture perfor
 
 - **FR-001**: The prediction model MUST use a transformer architecture with attention mechanisms, following the general design patterns of modern language models.
 - **FR-002**: The model MUST be trainable on a GPU with 8GB VRAM (GeForce RTX 3060 Ti). Peak GPU memory consumption during training MUST NOT exceed 8GB.
-- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers from the custom tokenizer, feature 008) as input and produce a single numeric price prediction as output.
+- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers from the custom tokenizer, feature 008) as input, prepended with a `[CLS]` token and padded with `[PAD]` tokens for batching, and produce a single numeric price prediction as output. Internally, the model predicts in log-price space (trained on log-transformed EUR prices); the output is exponentiated back to EUR for the final prediction. The prediction is derived from the transformer's output at the `[CLS]` position.
 - **FR-004**: The model MUST handle variable-length input sequences. Cards with different amounts of text produce token sequences of different lengths, and the model must process all of them without requiring manual padding decisions from the user.
 - **FR-005**: The model MUST define a maximum input sequence length. Inputs exceeding this length MUST be truncated rather than causing errors.
 - **FR-006**: The model MUST use the embedding layer trained alongside the model (using the custom vocabulary from feature 008) to convert token identifiers into dense vector representations that the transformer layers process.
 - **FR-007**: Inference (producing a prediction from a single card) MUST be fast enough to support the prediction service response time requirements from feature 005 (price estimate within 3 seconds).
 - **FR-008**: The model MUST produce deterministic predictions — the same input with the same model version MUST always yield the same output.
-- **FR-009**: The trained model MUST be saveable to and loadable from disk as a self-contained artifact, including all weights and configuration needed to run inference.
+- **FR-009**: The trained model MUST be saveable to and loadable from disk as a PyTorch native `.pt` file containing the model state dict and all configuration needed to reconstruct the model and run inference.
 - **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss and meeting the accuracy targets defined in feature 001 (median percentage error ≤ 50%).
 
 ### Key Entities
 
 - **Transformer Model**: The core prediction model. Uses attention mechanisms to process sequences of card tokens and produce a price prediction. Sized to fit within the 8GB VRAM constraint during training. Saved as a model artifact after training.
-- **Embedding Layer**: Converts token identifiers from the custom vocabulary into dense vector representations. Trained alongside the transformer model. The vocabulary size is determined by the custom tokenizer (feature 008).
+- **Embedding Layer**: Converts token identifiers from the custom vocabulary into dense vector representations. Trained alongside the transformer model. The vocabulary size is determined by the custom tokenizer (feature 008) and includes special tokens (`[CLS]`, `[PAD]`).
 - **Attention Mechanism**: The component within each transformer layer that allows the model to weigh relationships between different tokens in the input sequence (e.g., how a keyword ability relates to the mana cost to influence predicted price).
-- **Model Artifact**: The complete trained model saved to disk. Contains all weights (embeddings, transformer layers, output layer) and the configuration needed to load and run inference. Produced by the training stage, consumed by the prediction stage.
+- **Model Artifact**: The complete trained model saved to disk as a PyTorch native `.pt` file. Contains all weights (embeddings, transformer layers, output layer) as a state dict, plus the model configuration needed to reconstruct the architecture and run inference. Produced by the training stage, consumed by the prediction stage.
 
 ## Assumptions
 
 - The model is an encoder-only (or encoder-style) transformer, since the task is regression (input sequence → single number), not text generation. The architecture does not need a decoder or autoregressive generation capabilities.
-- The custom tokenizer (feature 008) produces token sequences that are the direct input to the model. No additional preprocessing is needed between tokenization and model input beyond padding/truncation to the maximum sequence length.
+- The custom tokenizer (feature 008) produces token sequences that are the direct input to the model. The model pipeline prepends a `[CLS]` token, truncates to the maximum sequence length if needed, and pads with `[PAD]` tokens for batching. The `[CLS]` and `[PAD]` tokens must be reserved entries in the tokenizer vocabulary (feature 008).
 - The 8GB VRAM budget must accommodate the model parameters, the batch of training examples, gradients, and optimizer state simultaneously during training. The model size must be chosen accordingly.
 - The maximum input sequence length will be determined during implementation based on the distribution of tokenized card lengths in the dataset. Typical cards are expected to produce sequences of a few dozen to a few hundred tokens.
 - Mixed precision training and gradient accumulation are acceptable techniques to fit within the VRAM budget and improve effective batch size, but these are implementation choices — the requirement is simply that training completes within 8GB.
-- The model output is a single scalar value (predicted price). The output layer maps the transformer's representation to this scalar.
+- The model internally predicts log-transformed prices (log(EUR price)). The output layer maps the transformer's `[CLS]` representation to a single scalar in log-price space. During inference, the output is exponentiated back to EUR for display. This log-transform approach ensures the model treats proportional errors equally across the full price range (bulk commons to chase mythics).
 - Training uses the training dataset from feature 007's dataset preparation stage. The validation dataset is used to monitor overfitting and report accuracy.
 
 ## Success Criteria *(mandatory)*

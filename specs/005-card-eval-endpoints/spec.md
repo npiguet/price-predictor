@@ -6,6 +6,16 @@
 **Input**: User description: "Users of the application can get an evaluation of a card by passing its description in the CardForge script syntax to both a REST API Endpoint, or to a CLI tool by passing a the path of a file. The CLI tool should just call the REST API endpoint."
 **Depends on**: `001-card-price-predictor` (prediction model), `004-cardmarket-eur-pricing` (EUR pricing)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: Does the endpoint require authentication? → A: No authentication (open endpoint, local/internal use only)
+- Q: What HTTP method and content type should the evaluation endpoint use? → A: `POST /api/v1/evaluate` with `text/plain` body (raw Forge script text), JSON response (versioned path)
+- Q: How should the CLI tool determine the endpoint URL? → A: Command-line flag (`--endpoint`) with hardcoded default as fallback
+- Q: What level of request logging should the endpoint provide? → A: Full request logging — timestamp, status code, latency, parsed card attributes, and prediction result (verbose)
+- Q: Should the JSON response include parsed card attributes? → A: No. The response contains only the price estimate and model version. Parsed attributes are never returned.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Get Price Evaluation via Network Endpoint (Priority: P1)
@@ -80,23 +90,24 @@ When a script contains fields the model does not use, those fields are ignored. 
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST provide a network-accessible endpoint that accepts card descriptions in Forge card script syntax and returns a price evaluation.
+- **FR-001**: The system MUST provide a REST API endpoint at `POST /api/v1/evaluate` that accepts card descriptions in Forge card script syntax as `text/plain` request body and returns a JSON response containing the price evaluation. The endpoint requires no authentication and is designed for local/internal use only.
 - **FR-002**: The endpoint MUST parse the Forge card script syntax, extract card attributes (name, mana cost, card types, subtypes, power/toughness, oracle text, keyword abilities), and use them as input to the prediction model.
 - **FR-003**: The endpoint MUST return the price estimate in EUR (consistent with feature 004) along with the model version that produced the estimate.
 - **FR-004**: The endpoint MUST return descriptive error messages for malformed, unparseable, or empty input, indicating which part of the script could not be processed.
 - **FR-005**: The endpoint MUST handle partial Forge scripts gracefully — missing fields are treated as absent attributes, and prediction proceeds with whatever attributes are available.
 - **FR-006**: The endpoint MUST ignore Forge script fields that are not relevant to price prediction (e.g., set information, art references, alternate card faces).
-- **FR-007**: The system MUST provide a command-line tool that accepts a file path as its argument, reads the Forge card script from that file, and sends its contents to the network endpoint for evaluation.
+- **FR-007**: The system MUST provide a command-line tool that accepts a file path as its argument and an optional `--endpoint` flag to specify the endpoint URL (defaulting to `http://localhost:8000/api/v1/evaluate`). The tool reads the Forge card script from the file and sends its contents to the endpoint for evaluation.
 - **FR-008**: The CLI tool MUST NOT contain prediction logic. It MUST delegate all evaluation to the network endpoint.
 - **FR-009**: The CLI tool MUST display the price estimate and model version returned by the endpoint.
 - **FR-010**: The CLI tool MUST display clear error messages when: the file does not exist, the file is unreadable, the endpoint is unreachable, or the endpoint returns an error.
 - **FR-011**: The endpoint MUST validate the Forge script content before passing it to the prediction model and MUST reject clearly invalid input (e.g., empty body, binary data) with an appropriate error.
+- **FR-012**: The endpoint MUST log each request with: timestamp, HTTP status code, response latency, parsed card attributes, and prediction result. Logs MUST be structured (e.g., JSON-formatted) to support debugging and usage monitoring.
 
 ### Key Entities
 
 - **Forge Card Script**: A plain-text description of a card in MTG Forge's key-value script format. Contains fields like Name, ManaCost, Types, SubTypes, PT, Oracle, Keywords, among others. This is the input format for both the endpoint and the CLI tool.
-- **Evaluation Request**: A submission of Forge card script content to the network endpoint for price prediction. Contains the raw script text.
-- **Evaluation Response**: The result returned by the network endpoint. Contains: predicted price (numeric, EUR), model version (identifier), and optionally the parsed attributes used for prediction.
+- **Evaluation Request**: An HTTP `POST` to `/api/v1/evaluate` with `Content-Type: text/plain` body containing the raw Forge card script text.
+- **Evaluation Response**: A JSON response from the endpoint. Contains: predicted price (numeric, EUR) and model version (identifier).
 - **CLI Tool**: A command-line utility that reads a Forge card script from a file and delegates evaluation to the network endpoint. It is a thin client with no prediction logic.
 
 ## Assumptions

@@ -6,13 +6,19 @@
 **Input**: User description: "The interoperability with MTG forge does not mean that the whole project must be able run within the forge process. It is acceptable to have a library on the MTG forge classpath that make a remote call (for example, via a REST API) to a remote server that hosts the application."
 **Depends on**: `001-card-price-predictor` (trained prediction model)
 
+## Clarifications
+
+### Session 2026-03-01
+
+- Q: Should the service return USD or EUR? → A: EUR. The model is trained on EUR prices from Cardmarket (updated in feature 001). No currency conversion needed — EUR is the native currency throughout.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Price Prediction Available as a Network Service (Priority: P1)
 
 The card price prediction capability (trained model from feature 001) is exposed as an independent, network-accessible service. External applications can request price predictions by sending card attributes over the network and receiving price estimates in response, without needing to embed the prediction model or its dependencies in their own process.
 
-This is the foundational capability that enables all integration scenarios. The service accepts the same card attributes defined in feature 001 (mana cost, card types, permanent types, oracle text, power/toughness, keyword abilities) and returns a USD price estimate.
+This is the foundational capability that enables all integration scenarios. The service accepts the same card attributes defined in feature 001 (mana cost, card types, permanent types, oracle text, power/toughness, keyword abilities) and returns an EUR price estimate.
 
 **Why this priority**: Without a network-accessible prediction service, no external application can integrate with the price predictor. This is the prerequisite for all integration stories.
 
@@ -20,7 +26,7 @@ This is the foundational capability that enables all integration scenarios. The 
 
 **Acceptance Scenarios**:
 
-1. **Given** a trained prediction model exists and the service is started, **When** an external client sends a valid set of card attributes over the network, **Then** the service returns a numeric USD price estimate.
+1. **Given** a trained prediction model exists and the service is started, **When** an external client sends a valid set of card attributes over the network, **Then** the service returns a numeric EUR price estimate.
 2. **Given** the service is running, **When** a client sends a request with partial card attributes (e.g., only card type and mana cost), **Then** the service returns a price estimate using the available information, consistent with feature 001 behavior.
 3. **Given** the service is running, **When** a client sends a request with attributes for a made-up card, **Then** the service returns a price estimate (same behavior as feature 001 — made-up cards are supported).
 4. **Given** the service is running, **When** a client sends an invalid or malformed request, **Then** the service returns a clear error message indicating what was wrong with the request.
@@ -76,7 +82,7 @@ When the prediction service is not running, unreachable, or experiencing errors,
 ### Functional Requirements
 
 - **FR-001**: System MUST expose the card price prediction capability as an independent network-accessible service, separate from any consuming application's process.
-- **FR-002**: The prediction service MUST accept card attributes as input (mana cost, card types, permanent types, oracle text, power, toughness, keyword abilities) and return a numeric USD price estimate, consistent with the prediction behavior defined in feature 001.
+- **FR-002**: The prediction service MUST accept card attributes as input (mana cost, card types, permanent types, oracle text, power, toughness, keyword abilities) and return a numeric EUR price estimate, consistent with the prediction behavior defined in feature 001.
 - **FR-003**: System MUST provide a lightweight connector module that consuming applications can include on their classpath to communicate with the prediction service.
 - **FR-004**: The connector MUST NOT require the consuming application to include the prediction model, training data, or heavyweight dependencies (e.g., machine learning libraries). It must depend only on standard runtime libraries.
 - **FR-005**: The connector MUST support single-card prediction requests (one set of card attributes in, one price estimate out).
