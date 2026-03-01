@@ -39,7 +39,7 @@ This is the foundational capability that enables all integration scenarios. The 
 ---
 
 ### User Story 2 - MTG Forge Accesses Price Predictions via Lightweight Connector (Priority: P2)
-<
+
 MTG Forge users can access card price predictions from within the Forge application. A lightweight connector module — compatible with Forge's classpath and extension mechanism — handles communication with the prediction service. The connector is a thin layer that sends card attributes to the prediction service and returns results; it does not include the prediction model itself or any of its heavyweight dependencies.
 
 This architecture means Forge's startup time, memory usage, and dependency tree are minimally affected. The connector is designed to be dropped into Forge's classpath without requiring modifications to Forge's core codebase.
@@ -75,7 +75,6 @@ When the prediction service is not running, unreachable, or experiencing errors,
 ### Edge Cases
 
 - What happens when no trained model exists? The `serve` command fails fast at startup with a clear error message. The service never enters a running state without a loaded model.
-- ~~Batch requests~~: Out of scope — connector supports single-card requests only.
 - What happens when the prediction service is running but returns unexpectedly slow responses (e.g., due to system load)?
 - How does the connector behave when the prediction service version changes (e.g., a new model version with different capabilities)?
 - What happens when the network connection between connector and service is intermittent (e.g., dropping packets)?
@@ -91,6 +90,7 @@ When the prediction service is not running, unreachable, or experiencing errors,
 - **FR-003**: System MUST provide a lightweight connector module that consuming applications can include on their classpath to communicate with the prediction service.
 - **FR-004**: The connector MUST NOT require the consuming application to include the prediction model, training data, or heavyweight dependencies (e.g., machine learning libraries). It must depend only on standard runtime libraries.
 - **FR-005**: The connector MUST support single-card prediction requests only (one set of card attributes in, one price estimate out). Batch prediction is out of scope, consistent with feature 005's single-card endpoint.
+- *(FR-006 removed — batch support out of scope per clarification)*
 - **FR-007**: The connector MUST return a clear error indication when the prediction service is unreachable, within a configurable timeout (default: 5 seconds). It MUST NOT block indefinitely.
 - **FR-008**: The connector MUST NOT cause the host application to crash or enter an unrecoverable state, regardless of prediction service availability.
 - **FR-009**: The prediction service MUST handle concurrent requests from multiple consumers without data corruption or incorrect results.
@@ -125,5 +125,5 @@ When the prediction service is not running, unreachable, or experiencing errors,
 - **SC-003**: When the prediction service is unavailable, the connector returns an error indication within 5 seconds — the host application never hangs or crashes due to prediction service unavailability.
 - **SC-004**: The prediction service handles at least 10 concurrent requests without degradation in response time or accuracy.
 - **SC-005**: Predictions returned through the service are identical to predictions made directly through the standalone model (100% consistency).
-- ~~**SC-006**~~: Removed — batch support is out of scope.
+- *(SC-006 removed — batch support out of scope per clarification)*
 - **SC-007**: The connector can be added to a consuming application's classpath and used to retrieve a prediction with no more than 5 lines of setup code.
