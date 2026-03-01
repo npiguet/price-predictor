@@ -194,6 +194,103 @@ class TestParseForgeText:
         assert from_text.toughness == from_file.toughness
 
 
+class TestParseForgeTextAcceptanceScenarios:
+    """US3 acceptance scenarios: verify parser against spec requirements."""
+
+    def test_complete_script_all_fields_extracted(self) -> None:
+        """US3-AS1: Complete script with all fields correctly extracted."""
+        text = (
+            "Name:Serra Angel\n"
+            "ManaCost:3 W W\n"
+            "Types:Creature Angel\n"
+            "PT:4/4\n"
+            "Oracle:Flying, vigilance\n"
+            "K:Flying\n"
+            "K:Vigilance\n"
+        )
+        card = parse_forge_text(text)
+        assert card.name == "Serra Angel"
+        assert card.mana_cost is not None
+        assert card.mana_cost.total_mana_value == 5.0
+        assert card.mana_cost.w == 2
+        assert "Creature" in card.types
+        assert "Angel" in card.subtypes
+        assert card.power == "4"
+        assert card.toughness == "4"
+        assert card.oracle_text == "Flying, vigilance"
+        assert "Flying" in card.keywords
+        assert "Vigilance" in card.keywords
+
+    def test_extra_irrelevant_fields_ignored(self) -> None:
+        """US3-AS2: Extra fields not relevant to prediction are ignored."""
+        text = (
+            "Name:Test Card\n"
+            "ManaCost:1 R\n"
+            "Types:Creature Human\n"
+            "PT:2/1\n"
+            "SetInfo:M21\n"
+            "ArtCredit:John Doe\n"
+            "Rarity:Common\n"
+            "DeckNeeds:R\n"
+        )
+        card = parse_forge_text(text)
+        assert card.name == "Test Card"
+        assert "Creature" in card.types
+        assert card.power == "2"
+        assert card.toughness == "1"
+
+    def test_land_no_mana_cost(self) -> None:
+        """US3-AS3: Land with no ManaCost parses with mana_cost=None."""
+        text = "Name:Forest\nTypes:Basic Land Forest\n"
+        card = parse_forge_text(text)
+        assert card.name == "Forest"
+        assert "Land" in card.types
+        assert "Basic" in card.supertypes
+        assert card.mana_cost is None
+
+    def test_non_forge_json_content_raises_error(self) -> None:
+        """US3-AS4: JSON content raises descriptive ValueError."""
+        with pytest.raises(ValueError):
+            parse_forge_text('{"name": "Lightning Bolt", "type": "Instant"}')
+
+    def test_non_forge_random_text_raises_error(self) -> None:
+        """US3-AS4: Random text raises descriptive ValueError."""
+        with pytest.raises(ValueError):
+            parse_forge_text("This is just random text with no structure at all.")
+
+    def test_multi_face_alternate_front_only(self) -> None:
+        """Edge case: Multi-face card with ALTERNATE section uses front face only."""
+        text = (
+            "Name:Delver of Secrets\n"
+            "ManaCost:U\n"
+            "Types:Creature Human Wizard\n"
+            "PT:1/1\n"
+            "AlternateMode:DoubleFaced\n"
+            "\nALTERNATE\n\n"
+            "Name:Insectile Aberration\n"
+            "ManaCost:no cost\n"
+            "Types:Creature Human Insect\n"
+            "PT:3/2\n"
+            "K:Flying\n"
+        )
+        card = parse_forge_text(text)
+        assert card.name == "Delver of Secrets"
+        assert card.power == "1"
+        assert card.toughness == "1"
+        assert card.layout == "doublefaced"
+        assert "Flying" not in card.keywords
+
+    def test_empty_input_raises_descriptive_error(self) -> None:
+        """Edge case: Empty string input raises ValueError with descriptive message."""
+        with pytest.raises(ValueError, match="Card script text is empty"):
+            parse_forge_text("")
+
+    def test_whitespace_only_raises_error(self) -> None:
+        """Edge case: Whitespace-only input raises ValueError."""
+        with pytest.raises(ValueError, match="(?i)empty"):
+            parse_forge_text("   \n\n  ")
+
+
 class TestParseForgeCards:
     def test_parses_all_valid_cards(self, forge_cards_dir: Path) -> None:
         cards, errors = parse_forge_cards(forge_cards_dir)

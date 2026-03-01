@@ -5,6 +5,7 @@ import sys
 
 from price_predictor.infrastructure.cli import (
     build_parser,
+    run_eval,
     run_evaluate,
     run_predict,
     run_serve,
@@ -40,6 +41,8 @@ def main() -> int:
     elif args.command == "serve":
         _configure_logging()
         return run_serve(args)
+    elif args.command == "eval":
+        return run_eval(args)
     else:
         parser.print_help()
         return 1

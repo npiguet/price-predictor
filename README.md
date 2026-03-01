@@ -180,6 +180,56 @@ Response:
 {"predicted_price_eur": 2.35, "model_version": "20260301-143000"}
 ```
 
+### Evaluate a card from a file
+
+Reads a Forge card script file from disk and sends it to the running prediction
+service for evaluation. This is a thin client — all prediction logic runs at
+the endpoint.
+
+**Inputs**: A Forge card script `.txt` file and (optionally) the endpoint URL.
+
+**Processing**:
+1. Read the file contents.
+2. Send the contents as a `POST` request to the prediction endpoint.
+3. Display the price estimate and model version from the response.
+
+**Output**: Human-readable price estimate and model version on stdout. Errors
+on stderr.
+
+```bash
+python -m price_predictor eval path/to/card.txt
+```
+
+Options: `--endpoint` (default: `http://localhost:8000/api/v1/evaluate`).
+
+Example output:
+```
+Predicted price: €2.35
+Model version:   latest
+```
+
+Error examples:
+```bash
+# File not found
+python -m price_predictor eval missing.txt
+# Error: File not found: missing.txt
+
+# Service not running
+python -m price_predictor eval card.txt
+# Error: Could not connect to prediction service at http://localhost:8000/api/v1/evaluate
+```
+
+### Structured request logging
+
+When the prediction service is running (`serve`), every request to
+`POST /api/v1/evaluate` is logged to stderr as a single-line JSON object
+containing: event type, ISO timestamp, HTTP status code, response latency
+(ms), parsed card attributes, and prediction result.
+
+```json
+{"event": "evaluate_request", "timestamp": "2026-03-01T14:30:00.123456+00:00", "status_code": 200, "latency_ms": 42.5, "card_name": "Lightning Bolt", "card_types": ["Instant"], "card_mana_cost": "R", "predicted_price_eur": 2.35, "model_version": "latest"}
+```
+
 ### Java Connector (forge-connector)
 
 A zero-dependency Java 17+ library that lets MTG Forge (or any Java application)
@@ -344,7 +394,7 @@ src/price_predictor/
     evaluate.py     EvaluateModelUseCase
     feature_engineering.py  Card -> numeric feature vector
   infrastructure/   External integrations (depends on application)
-    cli.py          argparse CLI (train, predict, evaluate, serve subcommands)
+    cli.py          argparse CLI (train, predict, evaluate, serve, eval subcommands)
     server.py       FastAPI app, POST /api/v1/evaluate endpoint
     forge_parser.py Forge card script parser (file + text)
     mtgjson_loader.py AllPrintings/AllPricesToday loaders

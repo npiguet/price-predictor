@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import ManaCost
@@ -78,7 +79,75 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--host", type=str, default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8000)
 
+    # eval subcommand
+    eval_card_parser = subparsers.add_parser(
+        "eval",
+        help="Evaluate a card from a Forge script file via the prediction service",
+    )
+    eval_card_parser.add_argument(
+        "file", type=str, help="Path to a Forge card script file"
+    )
+    eval_card_parser.add_argument(
+        "--endpoint",
+        type=str,
+        default="http://localhost:8000/api/v1/evaluate",
+        help="Prediction service endpoint URL",
+    )
+
     return parser
+
+
+def run_eval(args: argparse.Namespace) -> int:
+    """Execute the eval command — send a card file to the prediction endpoint."""
+    from urllib.error import HTTPError, URLError
+
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        return 1
+    if not file_path.is_file():
+        print(f"Error: Path is not a file: {file_path}", file=sys.stderr)
+        return 1
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"Error: Could not read file: {e}", file=sys.stderr)
+        return 1
+
+    req = Request(
+        args.endpoint,
+        data=content.encode("utf-8"),
+        headers={"Content-Type": "text/plain"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        try:
+            error_data = json.loads(e.read().decode("utf-8"))
+            msg = error_data.get("error", str(e))
+        except Exception:
+            msg = str(e)
+        print(
+            f"Error: Prediction service returned error ({e.code}): {msg}",
+            file=sys.stderr,
+        )
+        return 2
+    except URLError:
+        print(
+            f"Error: Could not connect to prediction service at {args.endpoint}",
+            file=sys.stderr,
+        )
+        return 2
+
+    price = data["predicted_price_eur"]
+    version = data["model_version"]
+    print(f"Predicted price: \u20ac{price}")
+    print(f"Model version:   {version}")
+    return 0
 
 
 def run_serve(args: argparse.Namespace) -> int:
