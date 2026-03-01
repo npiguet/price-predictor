@@ -114,6 +114,23 @@ class TestParseForgeFile:
         assert card.mana_cost is not None
         assert card.mana_cost.generic_mana == 1
 
+    def test_parse_scheme(self, forge_cards_dir: Path) -> None:
+        card = parse_forge_file(forge_cards_dir / "your_puny_minds_cannot_fathom.txt")
+        assert card is not None
+        assert card.name == "Your Puny Minds Cannot Fathom"
+        assert "Scheme" in card.types
+        assert card.mana_cost is None
+        assert card.oracle_text is not None
+
+    def test_parse_plane(self, forge_cards_dir: Path) -> None:
+        card = parse_forge_file(forge_cards_dir / "academy_at_tolaria_west.txt")
+        assert card is not None
+        assert card.name == "Academy at Tolaria West"
+        assert "Plane" in card.types
+        assert "Dominaria" in card.subtypes
+        assert card.mana_cost is None
+        assert card.oracle_text is not None
+
     def test_malformed_file_returns_none(self, tmp_path: Path) -> None:
         bad_file = tmp_path / "bad_card.txt"
         bad_file.write_text("This is not a valid card file\nNo Name field here")

@@ -10,8 +10,9 @@ from price_predictor.domain.entities import Card
 CARD_TYPES = [
     "Creature", "Instant", "Sorcery", "Enchantment",
     "Artifact", "Planeswalker", "Land", "Battle",
+    "Scheme", "Plane", "Conspiracy", "Vanguard", "Phenomenon",
 ]
-SUPERTYPES = ["Legendary", "Basic", "Snow"]
+SUPERTYPES = ["Legendary", "Basic", "Snow", "World", "Ongoing", "Host"]
 LAYOUTS = ["normal", "doublefaced", "split", "adventure", "modal", "flip"]
 
 
@@ -150,11 +151,11 @@ class FeatureEngineering:
 
     def get_feature_count(self) -> int:
         """Return the total number of features produced by transform."""
-        # Dense features: 12 (mana) + 8 (types) + 3 (supertypes) + 1 (subtypes count)
+        # Dense features: 12 (mana) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
         #   + 30 (keywords) + 1 (kw count) + 1 (text len)
         #   + 2 (power/toughness) + 2 (star indicators) + 1 (loyalty) + 1 (ability count)
         #   + 6 (layout)
-        dense = 12 + 8 + 3 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6
+        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6
         if self._is_fitted and hasattr(self._tfidf, "vocabulary_"):
             tfidf = len(self._tfidf.vocabulary_)
         else:

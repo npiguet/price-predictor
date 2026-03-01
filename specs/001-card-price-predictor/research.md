@@ -179,7 +179,7 @@ are the standard first choice for tabular regression.
 | 3 | `ManaCost` → color count | numeric | Number of distinct colors |
 | 4 | `ManaCost` → generic mana | numeric | Generic mana component |
 | 4a | `ManaCost` → colorless mana | numeric | Colorless mana component ({C} pips — distinct from generic) |
-| 5 | `Types` → card types | multi-hot | Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Land, Battle |
+| 5 | `Types` → card types | multi-hot | Creature, Instant, Sorcery, Enchantment, Artifact, Planeswalker, Land, Battle, Scheme, Plane, Conspiracy, Vanguard, Phenomenon |
 | 6 | `Types` → supertypes | multi-hot | Legendary, Basic, Snow, etc. |
 | 7 | `Types` → subtypes | numeric | Count of subtypes |
 | 8 | `K:` → keywords | multi-hot | Top-30 most common keywords |
@@ -260,7 +260,8 @@ and aligns with Simplicity First.
 **Known type classification**:
 - Supertypes: `Legendary`, `Basic`, `Snow`, `World`, `Ongoing`, `Host`
 - Card types: `Creature`, `Instant`, `Sorcery`, `Enchantment`,
-  `Artifact`, `Planeswalker`, `Land`, `Battle`, `Tribal`, `Kindred`
+  `Artifact`, `Planeswalker`, `Land`, `Battle`, `Tribal`, `Kindred`,
+  `Scheme`, `Plane`, `Conspiracy`, `Vanguard`, `Phenomenon`
 - Everything else in `Types` line → subtypes
 
 **ManaCost parsing** (Forge format):

@@ -14,6 +14,7 @@ KNOWN_SUPERTYPES = frozenset({"Legendary", "Basic", "Snow", "World", "Ongoing", 
 KNOWN_CARD_TYPES = frozenset({
     "Creature", "Instant", "Sorcery", "Enchantment", "Artifact",
     "Planeswalker", "Land", "Battle", "Tribal", "Kindred",
+    "Scheme", "Plane", "Conspiracy", "Vanguard", "Phenomenon",
 })
 
 ALTERNATE_MODE_TO_LAYOUT = {

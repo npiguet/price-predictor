@@ -164,10 +164,10 @@ class TestFeatureEngineeringTransform:
         )
         result = fitted_fe.transform([card])
         # Types start at index 12: Creature, Instant, Sorcery, Enchantment, ...
-        assert result[0, 12] == 1.0  # Creature
-        assert result[0, 13] == 0.0  # Instant
-        assert result[0, 14] == 0.0  # Sorcery
-        assert result[0, 15] == 1.0  # Enchantment
+        assert result[0, 12] == 1.0   # Creature
+        assert result[0, 13] == 0.0   # Instant
+        assert result[0, 14] == 0.0   # Sorcery
+        assert result[0, 15] == 1.0   # Enchantment
 
     def test_supertype_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -179,10 +179,10 @@ class TestFeatureEngineeringTransform:
             toughness="2",
         )
         result = fitted_fe.transform([card])
-        # Supertypes at index 20: Legendary, Basic, Snow
-        assert result[0, 20] == 1.0  # Legendary
-        assert result[0, 21] == 0.0  # Basic
-        assert result[0, 22] == 0.0  # Snow
+        # Supertypes at index 25: Legendary, Basic, Snow, World, Ongoing, Host
+        assert result[0, 25] == 1.0  # Legendary
+        assert result[0, 26] == 0.0  # Basic
+        assert result[0, 27] == 0.0  # Snow
 
     def test_colorless_mana_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -232,6 +232,20 @@ class TestFeatureEngineeringTransform:
         result = fitted_fe.transform([card])
         assert result.shape == (1, fitted_fe.get_feature_count())
         assert not np.any(np.isnan(result))
+
+    def test_scheme_type_encoding(self, fitted_fe: FeatureEngineering) -> None:
+        card = Card(
+            name="Your Puny Minds Cannot Fathom",
+            types=["Scheme"],
+            mana_cost=None,
+            oracle_text="Draw four cards.",
+        )
+        result = fitted_fe.transform([card])
+        # Types at index 12+: Creature(12)..Battle(19), Scheme(20)
+        assert result[0, 20] == 1.0  # Scheme
+        # All other types should be 0
+        for i in range(12, 20):
+            assert result[0, i] == 0.0
 
     def test_layout_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
