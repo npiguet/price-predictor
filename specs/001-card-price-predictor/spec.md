@@ -13,6 +13,7 @@
 - Q: Should rarity be used as a model input feature? → A: No. Rarity is excluded — the model predicts from game characteristics only (what's visible on the card). Rarity is a printing attribute, not a game attribute, and made-up cards have no rarity.
 - Q: What currency and price source should the model use? → A: EUR from Cardmarket prices as exposed by MTGJSON files. The model is trained natively on EUR prices. No currency conversion needed. Cardmarket is the authoritative price source as it is less volatile than alternatives. MTGJSON remains the data file source.
 - Q: How should the system handle colorless mana ({C}) vs generic mana ({1}–{N})? → A: Colorless mana and generic mana are distinct concepts and must be tracked separately. Generic mana (denoted {1} to {N} in card text) appears only in mana costs and means "any color or colorless mana can pay this." Colorless mana (denoted {C}) is a specific type of mana — it is not a color, but some costs require specifically colorless mana (e.g., mana produced by Sol Ring). Colored mana cannot pay colorless costs. The system must distinguish colorless mana pips from generic mana in mana cost parsing and feature engineering.
+- Q: Should the system provide progress logging during long-running operations? → A: Yes. Training and evaluation involve multiple slow stages (parsing 32,000+ card scripts, loading large JSON files, building mappings, training the model). The user must see human-readable progress messages on the console so they know the system is working and can estimate how long it will take.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -67,6 +68,24 @@ A user wants to understand how accurate the prediction model is. They provide a 
 
 ---
 
+### User Story 4 - See Progress During Long-Running Operations (Priority: P4)
+
+A user initiates model training or evaluation and wants to see that the system is actively working. Long-running operations — parsing thousands of card scripts, loading large JSON files, building name-to-UUID mappings, and training the model — should display human-readable progress messages on the console so the user is never left staring at a blank screen wondering if the system is stuck.
+
+**Why this priority**: Without progress feedback, the user has no way to distinguish "working" from "frozen." This is a usability concern, not a functional one — the system works correctly without it, but the experience is poor. Depends on P2 and P3 operations existing first.
+
+**Independent Test**: Can be tested by running the train or evaluate command and verifying that progress messages appear on the console before the final JSON result is printed.
+
+**Acceptance Scenarios**:
+
+1. **Given** the user initiates model training, **When** each major stage begins (parsing card scripts, loading price data, building name-to-UUID mapping, matching cards to prices, training the model, saving the model), **Then** the system prints a human-readable progress message to the console identifying the current stage.
+2. **Given** the user initiates model training, **When** a stage that processes many items is in progress (e.g., parsing 32,000+ card scripts or loading a large JSON file), **Then** the system provides periodic progress updates (e.g., item counts or completion indicators) so the user can estimate how long the operation will take.
+3. **Given** the user initiates model evaluation, **When** each major stage begins, **Then** progress messages are displayed in the same manner as training.
+4. **Given** the user initiates a single-card prediction (which is fast), **When** prediction completes, **Then** progress messages are not required because the operation is near-instantaneous.
+5. **Given** the user runs training or evaluation, **When** progress messages are printed, **Then** the messages appear on stderr (not stdout) so they do not interfere with the structured JSON output on stdout.
+
+---
+
 ### Edge Cases
 
 - What happens when the user provides card attributes that don't correspond to any realistic card (e.g., a 0-mana planeswalker with power/toughness)?
@@ -78,6 +97,7 @@ A user wants to understand how accurate the prediction model is. They provide a 
 - How does the system handle multi-face cards (transform, split, adventure) where a single Forge script defines multiple faces with different attributes?
 - How does the system distinguish paper-only cards from digital-only cards when filtering the training set?
 - What happens when a user submits a made-up card with attributes far outside the range seen in training data (e.g., a creature with power 100)?
+- What happens if progress logging is redirected or piped — does it still appear on the console (stderr) without corrupting the JSON output (stdout)?
 
 ## Requirements *(mandatory)*
 
@@ -94,6 +114,9 @@ A user wants to understand how accurate the prediction model is. They provide a 
 - **FR-007**: System MUST report training errors and data quality issues (skipped rows, invalid entries) without silently dropping data.
 - **FR-008**: System MUST support model evaluation against a test dataset, reporting mean absolute error and median percentage error.
 - **FR-009**: System MUST treat the trained model as a versioned artifact — each training run produces a distinct model that can be identified.
+- **FR-010**: System MUST display human-readable progress messages during long-running operations (training and evaluation) so the user can see that the system is actively working.
+- **FR-011**: System MUST display progress messages on stderr, separate from the structured JSON result on stdout, so that piping or redirecting output does not mix progress text with machine-readable results.
+- **FR-012**: System MUST identify each major processing stage in its progress messages (e.g., parsing cards, loading prices, building mappings, training, saving). For stages that process many items, periodic progress updates (e.g., counts or completion indicators) MUST be provided.
 
 ### Key Entities
 
@@ -126,3 +149,5 @@ A user wants to understand how accurate the prediction model is. They provide a 
 - **SC-003**: The model correctly distinguishes price tiers — cards predicted in the top 20% by price should overlap with at least 60% of actual top-20% cards.
 - **SC-004**: Training on a dataset of 10,000+ cards completes within 10 minutes on a standard workstation.
 - **SC-005**: Predictions are reproducible — running the same input through the same model version yields identical results 100% of the time.
+- **SC-006**: During training, the user sees at least one progress message within the first 5 seconds of execution — before any long-running stage has completed — confirming the system has started working.
+- **SC-007**: Progress messages are written to stderr only and never appear in stdout, so that `python -m price_predictor train ... > result.json` captures clean JSON while the user sees progress on the console.

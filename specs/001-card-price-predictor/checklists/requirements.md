@@ -48,3 +48,8 @@
   mana ({1}–{N}) distinction. Updated FR-001, Card entity, and
   assumptions to clarify that colorless mana is tracked separately
   from generic mana. Data model already handled this correctly.
+- Spec amended 2026-03-01: Added User Story 4 (progress logging),
+  FR-010 through FR-012 (progress messages on stderr, stage
+  identification, periodic updates), SC-006 and SC-007 (first
+  message within 5s, stderr-only output), and a new edge case
+  for piped/redirected output. No NEEDS CLARIFICATION markers.
