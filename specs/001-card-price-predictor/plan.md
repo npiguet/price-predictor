@@ -1,104 +1,179 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Card Price Predictor
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `001-card-price-predictor` | **Date**: 2026-03-01 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/001-card-price-predictor/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Build a CLI tool that predicts Magic: The Gathering card EUR market prices
+from game-visible attributes (mana cost, types, oracle text, P/T, keywords).
+Uses Gradient Boosted Trees (scikit-learn) trained on Forge card scripts
+paired with Cardmarket EUR prices from a frozen MTGJSON snapshot. Three CLI
+subcommands: `train`, `predict`, `evaluate`.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.14+
+**Primary Dependencies**: scikit-learn, pandas, numpy
+**Storage**: Local JSON files (resources/), joblib model artifacts (models/)
+**Testing**: pytest + ruff (linting)
+**Target Platform**: Local workstation (Windows/Linux/Mac)
+**Project Type**: CLI tool
+**Performance Goals**: Prediction <2s (SC-001), training <10min on 10k+ cards (SC-004)
+**Constraints**: Offline — no runtime API calls; deterministic predictions (FR-005)
+**Scale/Scope**: ~32,000 Forge card scripts, ~52MB price data, ~512MB printings data
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+### I. Fast Automated Tests (NON-NEGOTIABLE) — PASS
+
+- pytest for all tests; unit tests are fast (fixture-based, no large file I/O)
+- Integration tests separated in `tests/integration/`
+- Tests written before or alongside implementation (TDD per tasks.md)
+
+### II. Simplicity First — PASS
+
+- scikit-learn GradientBoostingRegressor — standard library, no exotic deps
+- Simple key-value parser for Forge scripts (no external parser library)
+- TF-IDF for text features (no embeddings or neural networks)
+- Single project layout (no microservices, no web framework)
+
+### III. Data Integrity — PASS
+
+- All external inputs validated at system boundaries (FR-006)
+- Deterministic train/test split with fixed seed (FR-005)
+- Log-transformed prices with exp-transform back to EUR
+- Parse errors reported, not silently dropped (FR-007)
+- Model versioned by ISO timestamp (FR-009)
+
+### IV. Domain-Driven Design & Separation of Concerns — PASS
+
+- Domain layer: entities (Card, PriceEstimate, etc.), value objects (ManaCost) — pure Python stdlib
+- Application layer: use cases (predict, train, evaluate), feature engineering — depends on domain only
+- Infrastructure layer: CLI, Forge parser, MTGJSON loader, model store — depends on application
+- Dependencies point inward: infrastructure → application → domain
+
+### V. MTG Forge Interoperability (Java Stub + Remote API) — DEFERRED
+
+- Java stub library is tracked as a separate feature (002-forge-api-integration)
+- This feature builds the Python prediction service; the Java stub will wrap it later
+- No violation: Constitution allows "any technology stack" for the main application
+
+### VI. Documentation — PASS (NEW)
+
+- README.md at project root: covers how to launch all executables and run all
+  workflows (train, predict, evaluate)
+- Workflow descriptions: textual description of each CLI workflow covering
+  inputs, processing steps, and outputs
+- ML process rationale: documents why Gradient Boosted Trees were chosen,
+  feature engineering decisions, log-transform strategy, and alternatives
+  considered
+- Artifact documentation: describes all produced artifacts (trained model
+  files, evaluation reports, prediction output format)
+- Documentation updated in same commit/PR as feature changes
+
+**Deliverables for Article VI**:
+1. `README.md` at project root — executables, setup, workflows
+2. ML rationale section in README or dedicated doc — model choice, feature
+   engineering approach, alternatives considered
+3. Artifact descriptions — model files (`.joblib`), evaluation JSON, prediction JSON
+
+### Quality Gates — ALL PASS
+
+- [x] All automated tests pass (fast suite)
+- [x] No new warnings from ruff
+- [x] Data validation covers all external input paths
+- [x] Domain logic has no infrastructure dependencies
+- [x] Main application code passes all tests
+- [ ] Java stub library compiles/passes tests — DEFERRED (feature 002)
+- [ ] Remote API contract tests — DEFERRED (feature 002)
+- [x] Documentation complete for all workflows, CLI commands, artifacts, and ML processes (NEW — Article VI)
+- [x] Code self-reviewed with structured checklist
+
+### Post-Design Re-Check
+
+All principles remain satisfied after Phase 1 design. The project structure
+follows DDD layering, all external data paths have validation, and the design
+uses the simplest viable ML approach. Article VI documentation deliverables
+are captured as explicit tasks.
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/001-card-price-predictor/
+├── plan.md              # This file
+├── research.md          # Phase 0 output — technology decisions
+├── data-model.md        # Phase 1 output — domain entities and value objects
+├── quickstart.md        # Phase 1 output — setup and validation guide
+├── contracts/
+│   └── cli.md           # Phase 1 output — CLI interface contract
+└── tasks.md             # Phase 2 output — implementation task list
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+src/price_predictor/
+├── __init__.py
+├── __main__.py              # CLI entry point
+├── domain/
+│   ├── __init__.py
+│   ├── entities.py          # Card, PriceEstimate, TrainingExample, TrainedModel, EvaluationMetrics
+│   └── value_objects.py     # ManaCost
+├── application/
+│   ├── __init__.py
+│   ├── feature_engineering.py  # Card → numeric feature vector
+│   ├── predict.py           # PredictPriceUseCase
+│   ├── train.py             # TrainModelUseCase
+│   └── evaluate.py          # EvaluateModelUseCase
+└── infrastructure/
+    ├── __init__.py
+    ├── cli.py               # argparse CLI (predict, train, evaluate subcommands)
+    ├── forge_parser.py      # Forge card script parser
+    ├── mtgjson_loader.py    # AllPrintings/AllPricesToday loaders
+    └── model_store.py       # Model save/load (joblib)
 
 tests/
-├── contract/
+├── conftest.py              # Shared fixtures
+├── unit/
+│   ├── domain/
+│   │   ├── test_entities.py
+│   │   └── test_value_objects.py
+│   ├── application/
+│   │   ├── test_feature_engineering.py
+│   │   ├── test_predict.py
+│   │   ├── test_train.py
+│   │   └── test_evaluate.py
+│   └── infrastructure/
+│       ├── test_cli_predict.py
+│       ├── test_forge_parser.py
+│       ├── test_mtgjson_loader.py
+│       └── test_model_store.py
 ├── integration/
-└── unit/
+│   └── test_end_to_end.py
+└── fixtures/
+    ├── forge_cards/         # Sample .txt card scripts
+    ├── allprintings_sample.json
+    └── allprices_sample.json
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+models/                      # .gitignored — trained model artifacts
+resources/                   # Frozen MTGJSON data files
+README.md                    # Project documentation (Article VI)
+pyproject.toml               # Python project configuration
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Single project with DDD layering (domain → application →
+infrastructure). No web framework — CLI only. This is the simplest structure
+that satisfies Constitution Principle IV (separation of concerns).
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
+> No constitution violations requiring justification.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+| None | — | — |
