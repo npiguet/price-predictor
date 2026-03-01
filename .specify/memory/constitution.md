@@ -1,10 +1,14 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 1.1.0 → 1.2.0
-  Modified principles: None
-  Added sections:
-    - Core Principles: V. JVM Interoperability (MTG Forge)
+  Version change: 1.2.0 → 2.0.0
+  Modified principles:
+    - V. JVM Interoperability (MTG Forge) →
+      V. MTG Forge Interoperability (Java Stub + Remote API)
+      Fundamental redefinition: removed JVM-only constraint on
+      main application; interop now achieved via a Java stub
+      library that calls the application's remote API.
+  Added sections: None
   Removed sections: None
   Templates requiring updates:
     - .specify/templates/plan-template.md — ✅ No change needed
@@ -12,20 +16,22 @@
     - .specify/templates/spec-template.md — ✅ No change needed
     - .specify/templates/tasks-template.md — ✅ No change needed
   Feature plans requiring re-evaluation:
-    - ⚠️ specs/001-card-price-predictor/plan.md — VIOLATION
-      Plan currently specifies Python 3.11+ with scikit-learn.
-      Principle V requires Java 17+ / JVM. Plan MUST be revised
-      to use JVM-based technologies (Java, Kotlin, or Scala)
-      with JVM ML libraries (Smile, Tribuo, DL4J, or similar).
-    - ⚠️ specs/001-card-price-predictor/research.md — STALE
-      R2 (Technology Stack) chose Python. Must be re-researched
-      for JVM alternatives.
-    - ⚠️ CLAUDE.md — STALE
-      Lists Python 3.11+ as active technology. Must be updated
-      after plan revision.
+    - ⚠️ specs/001-card-price-predictor/plan.md — RE-EVALUATE
+      Previous VIOLATION (Python vs JVM) is now RESOLVED.
+      Python 3.11+ with scikit-learn is acceptable for the main
+      application. Plan SHOULD be updated to include the Java
+      stub library and remote API as additional deliverables.
+    - ⚠️ specs/001-card-price-predictor/research.md — RE-EVALUATE
+      R2 (Technology Stack) chose Python, which is now valid.
+      Research SHOULD be extended to cover stub library design
+      and API contract with MTG Forge.
+    - ⚠️ CLAUDE.md — RE-EVALUATE
+      Python 3.11+ is now valid again. Java 17+ should be added
+      for the stub library component.
   Follow-up TODOs:
-    - Re-run /speckit.plan for 001-card-price-predictor with
-      JVM stack
+    - Update plan.md to include Java stub library deliverable
+    - Define API contract between price predictor and stub
+    - Add Java 17+ / Maven to CLAUDE.md for stub library
 -->
 # Price Predictor Constitution
 
@@ -113,30 +119,39 @@ boundaries between layers.
 Without strict separation, changes in one area leak into others,
 making the system fragile and hard to test in isolation.
 
-### V. JVM Interoperability (MTG Forge)
+### V. MTG Forge Interoperability (Java Stub + Remote API)
 
-All code MUST target the Java Virtual Machine to ensure
-interoperability with MTG Forge
-(https://github.com/Card-Forge/forge).
+Interoperability with MTG Forge
+(https://github.com/Card-Forge/forge) MUST be achieved by
+providing a Java "Stub" library that calls the price predictor
+application's remote API.
 
-- Code MUST be written in Java 17+ (preferred), Kotlin, or
-  another JVM language that produces standard JVM bytecode.
-- Build tooling MUST use Maven or Gradle to align with Forge's
-  Maven-based build system.
-- Libraries and dependencies MUST be available as JVM artifacts
-  (Maven Central, JitPack, or similar repositories).
-- The price predictor MUST be packageable as a JAR that Forge
-  can consume as a dependency or module without requiring a
-  separate runtime (no Python, no subprocess calls).
-- Public interfaces MUST use standard Java types and collections
-  so Forge code can call them directly without adapters or
-  serialization layers.
+- The price predictor application itself MAY use any technology
+  stack (e.g., Python, JVM, or other) for its core logic,
+  provided it exposes a well-defined remote API.
+- A Java 17+ stub library MUST be provided that MTG Forge can
+  consume as a standard Maven/Gradle dependency.
+- The stub library MUST use standard Java types and collections
+  in its public API so Forge code can call it directly without
+  adapters.
+- The stub library MUST handle all remote communication details
+  (HTTP calls, serialization, error handling) internally; Forge
+  code MUST NOT need to know about the underlying remote API.
+- The remote API contract MUST be versioned. Breaking changes
+  to the API MUST be accompanied by a corresponding stub
+  library update and a migration guide.
+- The stub library MUST include graceful error handling for
+  network failures, timeouts, and service unavailability so
+  that Forge remains stable even when the price predictor
+  service is unreachable.
 
-**Rationale**: The price predictor will be integrated into MTG
-Forge, a Java 17 Maven multi-module application. Using non-JVM
-technologies would require inter-process communication, adding
-complexity, latency, and deployment friction that violates both
-Simplicity First and the goal of seamless integration.
+**Rationale**: MTG Forge is a Java 17 Maven application. A Java
+stub library provides seamless integration from Forge's
+perspective while allowing the price predictor to use the most
+appropriate technology for ML workloads (e.g., Python with
+scikit-learn). The remote API approach cleanly separates the
+prediction service from the game client, enabling independent
+deployment, scaling, and technology evolution.
 
 ## Quality Gates
 
@@ -146,7 +161,9 @@ Every pull request and feature delivery MUST satisfy these gates:
 - No new warnings from linting or static analysis tools.
 - Data validation covers all new external input paths.
 - Domain logic MUST NOT introduce infrastructure dependencies.
-- Code MUST compile and pass tests on Java 17+.
+- Main application code MUST pass all tests in its native stack.
+- Java stub library MUST compile and pass tests on Java 17+.
+- Remote API contract tests MUST pass for both stub and server.
 - Code has been reviewed by at least one other contributor (or
   self-reviewed with a structured checklist for solo work).
 
@@ -179,4 +196,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 1.2.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-02-26
+**Version**: 2.0.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-03-01
