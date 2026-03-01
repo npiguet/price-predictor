@@ -1,4 +1,4 @@
-# price-predictor Development Guidelines
+﻿# price-predictor Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-03-01
 
@@ -6,6 +6,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - Local JSON files (resources/), Forge card scripts (001-card-price-predictor)
 - Python 3.14+ + scikit-learn, pandas, numpy, joblib, ijson (001-card-price-predictor)
 - Local JSON files (resources/), joblib model files (models/) (001-card-price-predictor)
+- Python 3.14+ (service), Java 17+ (connector) + FastAPI, uvicorn (Python); no external deps (Java — uses java.net.http) (002-forge-api-integration)
+- Same as feature 001 — joblib model files in `models/` (002-forge-api-integration)
 
 ## Project Structure
 
@@ -23,6 +25,7 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 002-forge-api-integration: Added Python 3.14+ (service), Java 17+ (connector) + FastAPI, uvicorn (Python); no external deps (Java — uses java.net.http)
 - 001-card-price-predictor: Added progress logging requirements (FR-010–012)
 - 001-card-price-predictor: Revised plan for Forge card scripts + Cardmarket EUR prices
 
