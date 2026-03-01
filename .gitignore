@@ -36,3 +36,6 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+/resources/AllPrintings.json
+/resources/AllPricesToday.json
+/resources/Meta.json
