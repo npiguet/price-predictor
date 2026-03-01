@@ -120,7 +120,34 @@
 
 ---
 
-## Phase 6: Polish & Cross-Cutting Concerns
+## Phase 6: User Story 4 — See Progress During Long-Running Operations (Priority: P4)
+
+**Goal**: Display human-readable progress messages on stderr during training and evaluation so the user can see the system is actively working and estimate how long it will take. No progress for prediction (near-instantaneous).
+
+**Independent Test**: Run `train` or `evaluate` and verify progress messages appear on stderr before the final JSON result on stdout. Verify `> result.json` captures clean JSON only.
+
+**Depends on**: Phase 4 (US2) and Phase 5 (US3) — the train and evaluate pipelines must exist before adding progress logging to them.
+
+### Tests for User Story 4 (MANDATORY per Constitution)
+
+- [ ] T036 [P] [US4] Write tests for logging configuration in `tests/unit/infrastructure/test_cli_logging.py` — cover: (1) running `train` command configures logging to stderr at INFO level, (2) running `predict` command does NOT configure logging (no progress messages), (3) progress messages do NOT appear on stdout (stdout contains only JSON), (4) progress messages DO appear on stderr. Use `capsys`/`capfd` or subprocess capture to verify stream separation (FR-011, SC-007)
+- [ ] T037 [P] [US4] Write tests for train progress messages in `tests/unit/application/test_train_logging.py` — cover: (1) training emits stage-level log messages for each major step (parsing, mapping, prices, matching, feature engineering, training, saving), (2) log messages include counts (e.g., number of cards parsed, number matched). Use `caplog` fixture to capture log records from `price_predictor.application.train` logger
+- [ ] T038 [P] [US4] Write tests for evaluate progress messages in `tests/unit/application/test_evaluate_logging.py` — cover: (1) evaluation emits stage-level log messages (loading model, parsing, mapping, prices, matching, predicting, computing metrics), (2) log messages include counts. Use `caplog` fixture to capture log records from `price_predictor.application.evaluate` logger
+
+### Implementation for User Story 4
+
+- [ ] T039 [US4] Configure logging in `src/price_predictor/__main__.py` — add `logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(message)s")` for `train` and `evaluate` commands only. Do NOT configure logging for `predict` command (near-instantaneous, no progress needed per US4 acceptance scenario 4). This single change activates all existing `logger.info()` calls in the codebase and satisfies SC-006 (first message within 5 seconds)
+- [ ] T040 [US4] Add stage-level progress logging to `src/price_predictor/application/train.py` — ensure `logger.info()` calls exist at each major stage: (1) after parsing Forge cards ("Parsed N cards (M parse errors)"), (2) after building name-to-UUID mapping ("Built name-to-UUID mapping (N card names)"), (3) after building price map ("Loaded price data (N cards with prices)"), (4) after joining cards to prices ("Matched N cards to prices, skipped M"), (5) after feature engineering ("Feature engineering complete (N features)"), (6) after model training ("Model training complete"), (7) after saving ("Model saved: version"). Some of these already exist — verify all 7 stages are covered and messages include relevant counts
+- [ ] T041 [P] [US4] Add stage-level progress logging to `src/price_predictor/application/evaluate.py` — add `logger.info()` calls at each major stage: (1) after loading model ("Loading model from path..."), (2) after parsing cards, (3) after building mapping, (4) after matching cards to prices, (5) after predicting ("Computing predictions on test set (N cards)..."), (6) after computing metrics ("Evaluation complete")
+- [ ] T042 [P] [US4] Add periodic progress logging to `src/price_predictor/infrastructure/forge_parser.py` — in `parse_forge_cards()`, log progress every 5,000 cards parsed (e.g., "Parsing Forge cards... 5000 parsed", "Parsing Forge cards... 10000 parsed", etc.) so the user sees activity during the longest single stage (~32,000 files). Add a final summary log ("Parsed N cards total, M errors")
+- [ ] T043 [P] [US4] Add progress logging to `src/price_predictor/infrastructure/mtgjson_loader.py` — add `logger.info()` at entry of `build_name_to_uuids()` ("Loading AllPrintings.json — building name-to-UUID mapping...") and `build_price_map()` ("Loading AllPricesToday.json — building price map..."). Log completion with counts after each function finishes
+- [ ] T044 [US4] Update `README.md` to document progress output — add a note in the Train and Evaluate workflow sections that progress messages appear on stderr, and that `> result.json` captures clean JSON. Per Constitution Article VI, documentation must be updated when behavior changes
+
+**Checkpoint**: `python -m price_predictor train` now shows human-readable progress messages on stderr at each stage. `python -m price_predictor train > result.json` captures only clean JSON in the file while progress appears on the console. `python -m price_predictor predict ...` produces no progress messages. All 109+ existing tests still pass, plus 3 new test files for US4.
+
+---
+
+## Phase 7: Polish & Cross-Cutting Concerns
 
 **Purpose**: Integration testing, end-to-end validation, documentation, cleanup
 
@@ -141,13 +168,15 @@
 - **User Story 1 (Phase 3)**: Depends on Foundational (Phase 2)
 - **User Story 2 (Phase 4)**: Depends on Foundational (Phase 2)
 - **User Story 3 (Phase 5)**: Depends on Foundational (Phase 2)
-- **Polish (Phase 6)**: Depends on all user stories being complete
+- **User Story 4 (Phase 6)**: Depends on Phase 4 (US2) and Phase 5 (US3) — needs train and evaluate pipelines to exist
+- **Polish (Phase 7)**: Depends on all user stories being complete
 
 ### User Story Dependencies
 
 - **User Story 1 (P1)**: Can start after Phase 2. Needs a pre-trained fixture model for testing (created in conftest.py T005). No dependency on US2 for testing, but needs US2 for production use with real data.
 - **User Story 2 (P2)**: Can start after Phase 2. Independent of US1. Produces the trained model that US1 consumes in production.
 - **User Story 3 (P3)**: Can start after Phase 2. Independent of US1/US2 for unit testing. Needs US2's data pipeline in production (reuses Forge parser + MTGJSON loader).
+- **User Story 4 (P4)**: Can start after Phase 4 and Phase 5. Adds logging to existing train/evaluate pipelines. Does not change any existing behavior or outputs — only adds stderr messages.
 
 ### Recommended Execution Order (Solo Developer)
 
@@ -155,7 +184,8 @@
 2. Phase 4 (US2 — Train) — build the data pipeline first since it produces the model US1 needs
 3. Phase 3 (US1 — Predict) — now has both fixture model (tests) and real model (from US2)
 4. Phase 5 (US3 — Evaluate)
-5. Phase 6 (Polish)
+5. Phase 6 (US4 — Progress Logging) — adds progress messages to train and evaluate
+6. Phase 7 (Polish)
 
 ### Within Each User Story
 
@@ -171,6 +201,8 @@
 - T010, T011, T013 can run in parallel (Foundational implementation, different files)
 - T014 and T015 can run in parallel (US1 tests)
 - T019, T020, T021 can all run in parallel (US2 tests)
+- T036, T037, T038 can all run in parallel (US4 tests — different test files)
+- T041, T042, T043 can run in parallel (US4 implementation — different source files)
 - T034 and T035 can run in parallel (Polish documentation tasks)
 - User stories 1, 2, 3 can run in parallel after Phase 2 (if staffed)
 
@@ -192,7 +224,8 @@
 2. Add US2 (Train) → Can produce models from Forge + MTGJSON data
 3. Add US1 (Predict) → Can predict card prices (MVP!)
 4. Add US3 (Evaluate) → Can measure model accuracy
-5. Polish → End-to-end validation + documentation (Article VI)
+5. Add US4 (Progress Logging) → User sees progress during train/evaluate
+6. Polish → End-to-end validation + documentation (Article VI)
 
 ---
 
@@ -207,5 +240,6 @@
 - Forge card scripts are the card data source, not AllIdentifiers.json
 - AllPrintings.json provides name→UUID mapping only
 - AllPricesToday.json provides Cardmarket EUR prices only
+- Progress messages go to stderr only — stdout is reserved for JSON output
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
