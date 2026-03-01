@@ -1,6 +1,6 @@
-﻿# price-predictor Development Guidelines
+# price-predictor Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-02-26
+Auto-generated from all feature plans. Last updated: 2026-03-01
 
 ## Active Technologies
 
@@ -23,7 +23,7 @@ Python 3.11+: Follow standard conventions
 
 ## Recent Changes
 
-- 001-card-price-predictor: Added Python 3.11+ + scikit-learn, pandas, numpy
+- 001-card-price-predictor: Revised plan for Forge card scripts + Cardmarket EUR prices
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

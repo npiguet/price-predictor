@@ -4,6 +4,7 @@
 
 - Python 3.11+
 - pip
+- MTG Forge repository checkout at `../forge` (sibling directory)
 
 ## Setup
 
@@ -22,20 +23,25 @@ pip install -e ".[dev]"
 # 4. Download MTGJSON data files (one-time)
 mkdir -p resources
 # Download AllPricesToday.json from https://mtgjson.com/api/v5/AllPricesToday.json
-# Download AllIdentifiers.json from https://mtgjson.com/api/v5/AllIdentifiers.json
+# Download AllPrintings.json from https://mtgjson.com/api/v5/AllPrintings.json
 # Place both in resources/
+
+# 5. Ensure Forge checkout exists
+ls ../forge/forge-gui/res/cardsfolder/
+# Should show alphabetical subdirectories (a/ through z/)
 ```
 
 ## Train the model
 
 ```bash
 python -m price_predictor train \
+  --forge-cards-path ../forge/forge-gui/res/cardsfolder \
   --prices-path resources/AllPricesToday.json \
-  --cards-path resources/AllIdentifiers.json
+  --printings-path resources/AllPrintings.json
 ```
 
-Expected output: a trained model saved in `models/` and a summary
-showing how many cards were used.
+Expected output: a trained model saved in `models/` and a JSON summary
+showing how many cards were used, skipped, and the price range.
 
 ## Predict a card price
 
@@ -44,14 +50,14 @@ python -m price_predictor predict \
   --types "Creature" \
   --supertypes "Legendary" \
   --subtypes "Human,Wizard" \
-  --mana-cost "{1}{U}{R}" \
+  --mana-cost "1 U R" \
   --power "2" \
   --toughness "2" \
   --keywords "Prowess" \
-  --oracle-text "Whenever you cast a noncreature spell, draw a card." \
-  --rarity "mythic" \
-  --colors "U,R"
+  --oracle-text "Whenever you cast a noncreature spell, draw a card."
 ```
+
+Returns a JSON object with `predicted_price_eur` and `model_version`.
 
 ## Evaluate model accuracy
 
@@ -75,7 +81,7 @@ pytest tests/integration/
 ## Validation checklist
 
 - [ ] `train` command completes without errors
-- [ ] `predict` command returns a JSON price estimate
+- [ ] `predict` command returns a JSON price estimate in EUR
 - [ ] `evaluate` reports median percentage error <= 50%
 - [ ] `pytest` passes all tests
 - [ ] Predictions are reproducible (same input → same output)

@@ -1,60 +1,78 @@
 # Implementation Plan: Card Price Predictor
 
-**Branch**: `001-card-price-predictor` | **Date**: 2026-02-26 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-card-price-predictor` | **Date**: 2026-03-01 (revised)
+**Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/001-card-price-predictor/spec.md`
 
 ## Summary
 
 Build an ML-powered CLI tool that predicts Magic: The Gathering card
-prices from card attributes. The system loads frozen MTGJSON data files
-(AllPricesToday.json for prices, AllIdentifiers.json for card
-attributes), trains a gradient boosted tree model on the joined dataset,
+EUR prices from card attributes. The system parses Forge card scripts
+(~32,000 `.txt` files) for card game attributes, joins them to
+Cardmarket EUR prices via MTGJSON's AllPrintings/AllPricesToday UUID
+mapping, trains a gradient boosted tree model on the joined dataset,
 and exposes three CLI commands: `train`, `predict`, and `evaluate`.
 
 ## Technical Context
 
 **Language/Version**: Python 3.11+
 **Primary Dependencies**: scikit-learn, pandas, numpy
-**Storage**: Local JSON files (resources/), serialized model files (models/)
+**Storage**: Local JSON files (resources/), Forge card scripts
+(../forge/), serialized model files (models/)
 **Testing**: pytest
 **Target Platform**: Local workstation, CLI
 **Project Type**: CLI tool / library
-**Performance Goals**: Prediction < 2 seconds, training < 10 minutes on 10k+ cards
-**Constraints**: Must work fully offline after one-time data download
-**Scale/Scope**: ~70,000+ card printings in MTGJSON dataset
+**Performance Goals**: Prediction < 2 seconds, training < 10 minutes
+on 10k+ cards
+**Constraints**: Must work fully offline after one-time data download.
+Forge checkout at `../forge` required for training.
+**Scale/Scope**: ~32,000 Forge card scripts, ~512 MB AllPrintings.json,
+~52 MB AllPricesToday.json
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+*GATE: Must pass before Phase 0 research. Re-checked after Phase 1
+design. Evaluated against Constitution v2.0.0.*
 
 ### I. Fast Automated Tests (NON-NEGOTIABLE)
 
 - **PASS**: pytest as test framework. Unit tests for domain entities,
-  feature engineering, and prediction logic. Integration tests (using
-  small fixture data) separated into `tests/integration/`. Unit suite
-  targets < 30 seconds.
+  Forge script parsing, feature engineering, and prediction logic.
+  Integration tests (using small fixture data) separated into
+  `tests/integration/`. Unit suite targets < 30 seconds.
 
 ### II. Simplicity First
 
 - **PASS**: scikit-learn GradientBoostingRegressor — no deep learning,
   no external C++ dependencies (XGBoost/LightGBM deferred). Single
-  project structure. CLI with argparse (no web framework).
+  project structure. CLI with argparse (no web framework). Line-based
+  Forge parser (no complex grammar).
 
 ### III. Data Integrity
 
-- **PASS**: All MTGJSON data validated at the infrastructure boundary
-  (data loading layer). Deterministic feature engineering with fixed
-  random seed. Model versioned by timestamp. Log-transformed target
-  for reproducible predictions.
+- **PASS**: All external data validated at infrastructure boundary:
+  Forge scripts validated during parsing (malformed files reported and
+  skipped per FR-007), MTGJSON files validated during loading. Feature
+  engineering is deterministic with fixed random seed. Model versioned
+  by timestamp. Log-transformed target for reproducible predictions.
+  Cheapest-price-across-printings algorithm is deterministic.
 
 ### IV. Domain-Driven Design & Separation of Concerns
 
 - **PASS**: Three-layer architecture:
   - `domain/` — Card, PriceEstimate, TrainedModel entities; ManaCost
     value object; no pandas/sklearn imports
-  - `application/` — use cases (train, predict, evaluate); orchestrates
-    domain + infrastructure
-  - `infrastructure/` — MTGJSON file loading, model serialization, CLI
+  - `application/` — use cases (train, predict, evaluate); feature
+    engineering; orchestrates domain + infrastructure
+  - `infrastructure/` — Forge script parsing, MTGJSON file loading,
+    model serialization, CLI
+
+### V. MTG Forge Interoperability (Java Stub + Remote API)
+
+- **N/A for this feature**: This feature implements the core Python
+  prediction CLI. The Java stub library and remote API are covered by
+  feature 002-forge-api-integration. This feature's CLI interface will
+  serve as the foundation that the API layer wraps.
 
 ## Project Structure
 
@@ -63,7 +81,7 @@ and exposes three CLI commands: `train`, `predict`, and `evaluate`.
 ```text
 specs/001-card-price-predictor/
 ├── plan.md              # This file
-├── research.md          # MTGJSON format, ML approach decisions
+├── research.md          # Data sources, ML approach decisions
 ├── data-model.md        # Domain entities
 ├── quickstart.md        # Setup and usage guide
 ├── contracts/
@@ -91,16 +109,21 @@ src/
 │   │   └── feature_engineering.py  # Card → feature vector transform
 │   └── infrastructure/
 │       ├── __init__.py
-│       ├── mtgjson_loader.py    # Load/parse/validate MTGJSON files
+│       ├── forge_parser.py      # Parse Forge .txt card scripts
+│       ├── mtgjson_loader.py    # Load AllPrintings + AllPricesToday
 │       ├── model_store.py       # Save/load model artifacts (joblib)
 │       └── cli.py               # argparse CLI definition
 ├── resources/
 │   ├── AllPricesToday.json      # Downloaded once, frozen
-│   └── AllIdentifiers.json      # Downloaded once, frozen
+│   └── AllPrintings.json        # Downloaded once, frozen
 └── models/                      # Trained model artifacts (gitignored)
 
 tests/
 ├── conftest.py                  # Shared fixtures
+├── fixtures/
+│   ├── forge_cards/             # Sample .txt card scripts (~10 cards)
+│   ├── allprintings_sample.json # Minimal AllPrintings subset
+│   └── allprices_sample.json    # Minimal AllPricesToday subset
 ├── unit/
 │   ├── domain/
 │   │   ├── test_entities.py
@@ -111,6 +134,7 @@ tests/
 │   │   ├── test_predict.py
 │   │   └── test_evaluate.py
 │   └── infrastructure/
+│       ├── test_forge_parser.py
 │       ├── test_mtgjson_loader.py
 │       └── test_model_store.py
 └── integration/
@@ -120,9 +144,14 @@ tests/
 **Structure Decision**: Single project with DDD layering. The domain
 layer contains pure Python entities with no external dependencies.
 The application layer orchestrates use cases and feature engineering.
-The infrastructure layer handles MTGJSON file I/O, model persistence,
-and the CLI interface. Dependencies point inward per Constitution
-Principle IV.
+The infrastructure layer handles Forge script parsing, MTGJSON file
+I/O, model persistence, and the CLI interface. Dependencies point
+inward per Constitution Principle IV.
+
+Key change from prior plan: `forge_parser.py` replaces the previous
+reliance on AllIdentifiers.json for card attributes.
+`mtgjson_loader.py` now handles AllPrintings.json (for name→UUID
+mapping) and AllPricesToday.json (for prices).
 
 ## Complexity Tracking
 
@@ -132,27 +161,38 @@ Principle IV.
 
 ### I. Fast Automated Tests
 
-- **PASS**: Unit tests cover domain entities, value objects, feature
-  engineering, and each use case with mock/stub infrastructure. Small
-  JSON fixtures (~10 cards) used in unit tests — no large file I/O.
+- **PASS**: Unit tests cover domain entities, value objects, Forge
+  script parsing, feature engineering, and each use case with
+  mock/stub infrastructure. Small fixture data (~10 Forge card scripts,
+  tiny JSON subsets) used in unit tests — no large file I/O.
   Integration test uses a small fixture dataset.
 
 ### II. Simplicity First
 
 - **PASS**: Single model type (GradientBoostingRegressor). No
   hyperparameter tuning framework. No web UI. No database. argparse
-  for CLI (stdlib, no click/typer dependency).
+  for CLI (stdlib, no click/typer dependency). Line-based Forge parser
+  (no grammar library).
 
 ### III. Data Integrity
 
-- **PASS**: `mtgjson_loader.py` validates all fields at the boundary.
-  Cards with invalid data are reported and skipped (FR-007). Feature
+- **PASS**: `forge_parser.py` validates all parsed fields and reports
+  malformed scripts. `mtgjson_loader.py` validates JSON structure.
+  Cards with missing prices are reported and skipped (FR-007). Feature
   engineering is deterministic (fixed seed, sorted features). Model
-  versioned by ISO timestamp.
+  versioned by ISO timestamp. Cheapest-price algorithm is deterministic
+  (min across all printings).
 
 ### IV. DDD & Separation of Concerns
 
-- **PASS**: `domain/entities.py` imports only Python stdlib (dataclasses,
-  typing). Application layer depends on domain interfaces, not concrete
-  infrastructure. Infrastructure implements data loading behind
-  interfaces consumed by the application layer.
+- **PASS**: `domain/entities.py` imports only Python stdlib
+  (dataclasses, typing). Application layer depends on domain
+  interfaces, not concrete infrastructure. Infrastructure implements
+  Forge parsing and MTGJSON loading behind interfaces consumed by the
+  application layer.
+
+### V. MTG Forge Interoperability
+
+- **N/A**: This feature does not implement the Java stub or remote API.
+  The CLI output format (JSON to stdout) provides a natural interface
+  that feature 002 can wrap with an HTTP API layer.
