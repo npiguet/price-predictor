@@ -122,11 +122,13 @@
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-**Purpose**: Integration testing, end-to-end validation, cleanup
+**Purpose**: Integration testing, end-to-end validation, documentation, cleanup
 
 - [x] T031 Write end-to-end integration test in `tests/integration/test_end_to_end.py` — full pipeline: train on fixture data → predict a known card → evaluate on fixture test set. Verify: model file is created, prediction returns positive EUR, evaluation metrics are within expected ranges, predictions are reproducible across runs
 - [x] T032 Run quickstart.md validation — verify all commands in `specs/001-card-price-predictor/quickstart.md` work as documented (train, predict, evaluate, pytest)
 - [x] T033 [P] Add `.gitignore` entries for `models/`, `*.joblib`, `.venv/`, `__pycache__/`, `*.egg-info/`
+- [ ] T034 Create `README.md` at project root per Constitution Article VI — must include: (1) how to install dependencies and set up the environment, (2) how to launch each executable (`train`, `predict`, `evaluate`), (3) textual description of each workflow covering inputs, processing steps, and outputs, (4) description of the ML approach chosen (Gradient Boosted Trees on log-transformed EUR prices) with rationale for why it was selected over alternatives (Random Forest, linear regression, neural networks — see research.md R5), (5) description of the feature engineering pipeline (17 feature groups from card attributes — see research.md R5 feature table), (6) description of all artifacts produced (trained model `.joblib` files, evaluation JSON output, prediction JSON output, per-card CSV), (7) how to run tests (`pytest` for fast suite, `pytest tests/integration/` for integration)
+- [ ] T035 [P] Verify documentation quality gate — confirm `README.md` covers all workflows, CLI commands, artifacts, and ML processes as required by Constitution Article VI quality gate. Ensure documentation is consistent with contracts/cli.md and quickstart.md
 
 ---
 
@@ -169,6 +171,7 @@
 - T010, T011, T013 can run in parallel (Foundational implementation, different files)
 - T014 and T015 can run in parallel (US1 tests)
 - T019, T020, T021 can all run in parallel (US2 tests)
+- T034 and T035 can run in parallel (Polish documentation tasks)
 - User stories 1, 2, 3 can run in parallel after Phase 2 (if staffed)
 
 ---
@@ -189,7 +192,7 @@
 2. Add US2 (Train) → Can produce models from Forge + MTGJSON data
 3. Add US1 (Predict) → Can predict card prices (MVP!)
 4. Add US3 (Evaluate) → Can measure model accuracy
-5. Polish → End-to-end validation
+5. Polish → End-to-end validation + documentation (Article VI)
 
 ---
 
