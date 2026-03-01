@@ -51,7 +51,8 @@ def get_cheapest_price(
 ) -> float | None:
     """Get the cheapest Cardmarket EUR price across all given UUIDs.
 
-    Checks both normal and foil finishes. Returns None if no price found.
+    Checks both normal and foil finishes. Applies a €0.01 price floor.
+    Returns None if no price found.
     """
     with open(allprices_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -71,10 +72,10 @@ def get_cheapest_price(
                 # Get the most recent date's price
                 latest_date = max(finish_data.keys())
                 price = finish_data[latest_date]
-                if price and price > 0:
+                if price is not None and price >= 0:
                     all_prices.append(price)
 
-    return min(all_prices) if all_prices else None
+    return max(min(all_prices), 0.01) if all_prices else None
 
 
 def build_price_map(
@@ -83,7 +84,8 @@ def build_price_map(
     """Build a mapping of card name -> cheapest EUR price.
 
     Loads the prices file once and looks up all cards.
-    Returns only cards with a valid price > 0.
+    Applies a €0.01 price floor to all prices.
+    Returns only cards with a valid price >= 0.
     """
     logger.info("Loading AllPricesToday.json \u2014 building price map...")
     with open(allprices_path, encoding="utf-8") as f:
@@ -91,6 +93,7 @@ def build_price_map(
 
     prices_data = data.get("data", {})
     result: dict[str, float] = {}
+    multi_printing_count = 0
 
     for name, uuids in name_to_uuids.items():
         all_prices: list[float] = []
@@ -105,11 +108,25 @@ def build_price_map(
                 if finish_data:
                     latest_date = max(finish_data.keys())
                     price = finish_data[latest_date]
-                    if price and price > 0:
+                    if price is not None and price >= 0:
                         all_prices.append(price)
 
         if all_prices:
-            result[name] = min(all_prices)
+            selected_price = max(min(all_prices), 0.01)
+            result[name] = selected_price
+            if len(all_prices) > 1:
+                multi_printing_count += 1
+                logger.info(
+                    "  %s: selected \u20ac%.2f from %d prices",
+                    name,
+                    selected_price,
+                    len(all_prices),
+                )
 
+    logger.info(
+        "Price selection summary: %d of %d cards had multiple price points",
+        multi_printing_count,
+        len(result),
+    )
     logger.info("Loaded price data (%d cards with prices)", len(result))
     return result

@@ -374,6 +374,32 @@
         }
       }
     },
-    "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee": {}
+    "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee": {},
+    "ffffffff-0000-0000-0000-000000000000": {
+      "paper": {
+        "cardmarket": {
+          "currency": "EUR",
+          "buylist": {},
+          "retail": {
+            "normal": {
+              "2026-02-26": 0.00
+            }
+          }
+        }
+      }
+    },
+    "ffffffff-0001-0001-0001-000000000001": {
+      "paper": {
+        "cardmarket": {
+          "currency": "EUR",
+          "buylist": {},
+          "retail": {
+            "normal": {
+              "2026-02-26": 0.005
+            }
+          }
+        }
+      }
+    }
   }
 }

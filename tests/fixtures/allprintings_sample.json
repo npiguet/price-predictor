@@ -195,6 +195,30 @@
           "language": "English"
         }
       ]
+    },
+    "ZPC": {
+      "cards": [
+        {
+          "name": "Zero Price Card",
+          "uuid": "ffffffff-0000-0000-0000-000000000000",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
+    },
+    "SCC": {
+      "cards": [
+        {
+          "name": "Sub Cent Card",
+          "uuid": "ffffffff-0001-0001-0001-000000000001",
+          "availability": ["paper"],
+          "isFunny": false,
+          "isOnlineOnly": false,
+          "language": "English"
+        }
+      ]
     }
   }
 }

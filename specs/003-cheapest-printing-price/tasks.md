@@ -19,7 +19,7 @@
 
 **Purpose**: Add edge-case test data to existing fixtures so US1/US2 tests have the data they need.
 
-- [ ] T001 Add edge-case price entries to test fixtures: add a zero-price UUID (`ffffffff-0000-0000-0000-000000000000` with price `0.00`) and a sub-cent UUID (`ffffffff-0001-0001-0001-000000000001` with price `0.005`) to `tests/fixtures/allprices_sample.json`, and add corresponding card entries ("Zero Price Card" and "Sub Cent Card") to `tests/fixtures/allprintings_sample.json` in new set blocks with `availability: ["paper"]`, `isFunny: false`, `isOnlineOnly: false`, `language: "English"`
+- [x] T001 Add edge-case price entries to test fixtures: add a zero-price UUID (`ffffffff-0000-0000-0000-000000000000` with price `0.00`) and a sub-cent UUID (`ffffffff-0001-0001-0001-000000000001` with price `0.005`) to `tests/fixtures/allprices_sample.json`, and add corresponding card entries ("Zero Price Card" and "Sub Cent Card") to `tests/fixtures/allprintings_sample.json` in new set blocks with `availability: ["paper"]`, `isFunny: false`, `isOnlineOnly: false`, `language: "English"`
 
 **Checkpoint**: Fixtures updated — both JSON files parse correctly, existing tests still pass.
 
@@ -37,13 +37,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T002 [P] [US1] Write tests for price floor in `get_cheapest_price()` in `tests/unit/infrastructure/test_mtgjson_loader.py`: (a) zero-price UUID returns 0.01, (b) sub-cent price UUID returns 0.01, (c) normal price above 0.01 is unchanged, (d) existing `test_cheapest_across_printings` still returns 0.10 (unchanged — already above floor)
-- [ ] T003 [P] [US1] Write tests for price floor in `build_price_map()` in `tests/unit/infrastructure/test_mtgjson_loader.py`: (a) card with only a zero-price printing gets 0.01 in price map, (b) card with sub-cent printing gets 0.01 in price map, (c) card with mix of zero and normal prices gets the normal price (if it is the minimum above floor), (d) existing multi-printing cards (Grizzly Bears, Lightning Bolt) retain their current cheapest prices
+- [x] T002 [P] [US1] Write tests for price floor in `get_cheapest_price()` in `tests/unit/infrastructure/test_mtgjson_loader.py`: (a) zero-price UUID returns 0.01, (b) sub-cent price UUID returns 0.01, (c) normal price above 0.01 is unchanged, (d) existing `test_cheapest_across_printings` still returns 0.10 (unchanged — already above floor)
+- [x] T003 [P] [US1] Write tests for price floor in `build_price_map()` in `tests/unit/infrastructure/test_mtgjson_loader.py`: (a) card with only a zero-price printing gets 0.01 in price map, (b) card with sub-cent printing gets 0.01 in price map, (c) card with mix of zero and normal prices gets the normal price (if it is the minimum above floor), (d) existing multi-printing cards (Grizzly Bears, Lightning Bolt) retain their current cheapest prices
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Update `get_cheapest_price()` and `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: change the price filter from `if price and price > 0` to `if price is not None and price >= 0` in both functions' inner loops, and apply `max(min(all_prices), 0.01)` as the price floor before returning/storing the result. In `get_cheapest_price()` apply floor on line returning `min(all_prices)`. In `build_price_map()` apply floor on the line `result[name] = min(all_prices)`.
-- [ ] T005 [US1] Run full test suite (`cd src && pytest`) — verify T002/T003 tests pass and all existing tests in `test_mtgjson_loader.py`, `test_train.py`, `test_train_logging.py`, and `test_end_to_end.py` still pass with no regressions
+- [x] T004 [US1] Update `get_cheapest_price()` and `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: change the price filter from `if price and price > 0` to `if price is not None and price >= 0` in both functions' inner loops, and apply `max(min(all_prices), 0.01)` as the price floor before returning/storing the result. In `get_cheapest_price()` apply floor on line returning `min(all_prices)`. In `build_price_map()` apply floor on the line `result[name] = min(all_prices)`.
+- [x] T005 [US1] Run full test suite (`cd src && pytest`) — verify T002/T003 tests pass and all existing tests in `test_mtgjson_loader.py`, `test_train.py`, `test_train_logging.py`, and `test_end_to_end.py` still pass with no regressions
 
 **Checkpoint**: Price floor working. Zero-price printings included in comparison and clamped. All existing behavior for normal prices preserved.
 
@@ -61,13 +61,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T006 [P] [US2] Write tests for per-card price selection logging (FR-008) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog` at `logging.INFO` level for logger `price_predictor.infrastructure.mtgjson_loader`, call `build_price_map()` with fixtures, verify (a) a log message containing "Grizzly Bears" is emitted (multi-printing card), (b) the message includes the selected price and total price count, (c) no per-card log is emitted for single-printing cards like "Serra Angel"
-- [ ] T007 [P] [US2] Write tests for summary logging (FR-007) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog`, call `build_price_map()` with fixtures, verify (a) a summary log message is emitted containing the word "summary" (case-insensitive) and the count of cards that had multiple price points, (b) the count matches the actual number of multi-printing cards in the fixture data
+- [x] T006 [P] [US2] Write tests for per-card price selection logging (FR-008) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog` at `logging.INFO` level for logger `price_predictor.infrastructure.mtgjson_loader`, call `build_price_map()` with fixtures, verify (a) a log message containing "Grizzly Bears" is emitted (multi-printing card), (b) the message includes the selected price and total price count, (c) no per-card log is emitted for single-printing cards like "Serra Angel"
+- [x] T007 [P] [US2] Write tests for summary logging (FR-007) in `tests/unit/infrastructure/test_mtgjson_loader.py`: using `caplog`, call `build_price_map()` with fixtures, verify (a) a summary log message is emitted containing the word "summary" (case-insensitive) and the count of cards that had multiple price points, (b) the count matches the actual number of multi-printing cards in the fixture data
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Add per-card and summary logging in `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: inside the `for name, uuids` loop, after computing `all_prices`, when `len(all_prices) > 1` log `logger.info("  %s: selected €%.2f from %d prices", name, selected_price, len(all_prices))` and increment a `multi_printing_count` counter. After the loop, before the existing "Loaded price data" log, add `logger.info("Price selection summary: %d of %d cards had multiple price points", multi_printing_count, len(result))`
-- [ ] T009 [US2] Run full test suite (`cd src && pytest`) — verify T006/T007 tests pass and all existing tests (including `test_train_logging.py` and `test_end_to_end.py`) still pass with no regressions
+- [x] T008 [US2] Add per-card and summary logging in `build_price_map()` in `src/price_predictor/infrastructure/mtgjson_loader.py`: inside the `for name, uuids` loop, after computing `all_prices`, when `len(all_prices) > 1` log `logger.info("  %s: selected €%.2f from %d prices", name, selected_price, len(all_prices))` and increment a `multi_printing_count` counter. After the loop, before the existing "Loaded price data" log, add `logger.info("Price selection summary: %d of %d cards had multiple price points", multi_printing_count, len(result))`
+- [x] T009 [US2] Run full test suite (`cd src && pytest`) — verify T006/T007 tests pass and all existing tests (including `test_train_logging.py` and `test_end_to_end.py`) still pass with no regressions
 
 **Checkpoint**: Multi-printing transparency logging working. Per-card detail lines and summary line appear on stderr during training.
 
@@ -77,9 +77,9 @@
 
 **Purpose**: Final validation and cleanup across all changes
 
-- [ ] T010 Run ruff linting (`cd src && ruff check .`) and fix any style or lint issues introduced by this feature
-- [ ] T011 Run end-to-end integration tests (`cd src && pytest tests/integration/`) to verify the full train → predict → evaluate pipeline works with updated price logic
-- [ ] T012 Validate that `specs/003-cheapest-printing-price/quickstart.md` log format examples match the actual log output format implemented in T008
+- [x] T010 Run ruff linting (`cd src && ruff check .`) and fix any style or lint issues introduced by this feature
+- [x] T011 Run end-to-end integration tests (`cd src && pytest tests/integration/`) to verify the full train → predict → evaluate pipeline works with updated price logic
+- [x] T012 Validate that `specs/003-cheapest-printing-price/quickstart.md` log format examples match the actual log output format implemented in T008
 
 ---
 
