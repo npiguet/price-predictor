@@ -1,5 +1,6 @@
 """Entry point for python -m price_predictor."""
 
+import logging
 import sys
 
 from price_predictor.infrastructure.cli import (
@@ -8,6 +9,15 @@ from price_predictor.infrastructure.cli import (
     run_predict,
     run_train,
 )
+
+
+def _configure_logging() -> None:
+    """Configure logging to send INFO messages to stderr."""
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.INFO,
+        format="%(message)s",
+    )
 
 
 def main() -> int:
@@ -21,8 +31,10 @@ def main() -> int:
     if args.command == "predict":
         return run_predict(args)
     elif args.command == "train":
+        _configure_logging()
         return run_train(args)
     elif args.command == "evaluate":
+        _configure_logging()
         return run_evaluate(args)
     else:
         parser.print_help()

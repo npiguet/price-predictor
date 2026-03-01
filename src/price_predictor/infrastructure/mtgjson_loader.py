@@ -14,6 +14,7 @@ def build_name_to_uuids(allprintings_path: Path) -> dict[str, list[str]]:
 
     Filters to paper-available, English, non-funny, non-online-only cards.
     """
+    logger.info("Loading AllPrintings.json \u2014 building name-to-UUID mapping...")
     mapping: dict[str, list[str]] = {}
 
     with open(allprintings_path, encoding="utf-8") as f:
@@ -41,6 +42,7 @@ def build_name_to_uuids(allprintings_path: Path) -> dict[str, list[str]]:
                     mapping[name] = []
                 mapping[name].append(uuid)
 
+    logger.info("Built name-to-UUID mapping (%d card names)", len(mapping))
     return mapping
 
 
@@ -83,6 +85,7 @@ def build_price_map(
     Loads the prices file once and looks up all cards.
     Returns only cards with a valid price > 0.
     """
+    logger.info("Loading AllPricesToday.json \u2014 building price map...")
     with open(allprices_path, encoding="utf-8") as f:
         data = json.load(f)
 
@@ -108,4 +111,5 @@ def build_price_map(
         if all_prices:
             result[name] = min(all_prices)
 
+    logger.info("Loaded price data (%d cards with prices)", len(result))
     return result

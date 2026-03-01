@@ -164,11 +164,17 @@ def parse_forge_cards(
     if not cards_dir.exists():
         return cards, errors
 
+    logger.info("Parsing Forge card scripts...")
+    processed = 0
     for txt_file in sorted(cards_dir.rglob("*.txt")):
         card = parse_forge_file(txt_file)
         if card is not None:
             cards.append(card)
         else:
             errors.append(f"Failed to parse: {txt_file}")
+        processed += 1
+        if processed % 5000 == 0:
+            logger.info("Parsing Forge cards... %d parsed", processed)
 
+    logger.info("Parsed %d cards total, %d errors", len(cards), len(errors))
     return cards, errors

@@ -60,7 +60,10 @@ prices from MTGJSON data, and trains a prediction model.
 8. Save the trained model artifact to `models/`.
 
 **Output**: A `.joblib` model file and a JSON summary to stdout reporting
-cards used, cards skipped (with reasons), and price range.
+cards used, cards skipped (with reasons), and price range. Progress messages
+are printed to stderr so the user can follow each stage. To capture clean
+JSON only: `python -m price_predictor train ... > result.json` (progress
+remains visible on the console).
 
 ```bash
 python -m price_predictor train \
@@ -123,7 +126,8 @@ for training.
    top-20% price tier overlap.
 5. Optionally write per-card results to a CSV file.
 
-**Output**: JSON to stdout with accuracy metrics.
+**Output**: JSON to stdout with accuracy metrics. Progress messages appear
+on stderr (same behaviour as `train`).
 
 ```bash
 python -m price_predictor evaluate \

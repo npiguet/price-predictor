@@ -40,12 +40,14 @@ class EvaluateModelUseCase:
         random_seed: int = 42,
     ) -> EvaluateResult:
         # Load model
+        logger.info("Loading model from %s...", model_path)
         artifact = load_model(model_path)
         model = artifact["model"]
         fe: FeatureEngineering = artifact["feature_engineering"]
 
         # Re-derive the dataset (same pipeline as training)
-        cards, _ = parse_forge_cards(forge_cards_path)
+        cards, parse_errors = parse_forge_cards(forge_cards_path)
+        logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
         name_to_uuids = build_name_to_uuids(printings_path)
         price_map = build_price_map(prices_path, name_to_uuids)
 
@@ -61,6 +63,11 @@ class EvaluateModelUseCase:
             if card_name in price_map:
                 eval_cards.append(card)
                 eval_prices.append(price_map[card_name])
+
+        logger.info(
+            "Matched %d cards to prices, skipped %d",
+            len(eval_cards), len(cards) - len(eval_cards),
+        )
 
         if len(eval_cards) < 2:
             raise ValueError("Insufficient data for evaluation")
@@ -78,6 +85,7 @@ class EvaluateModelUseCase:
             raise ValueError("Test set is empty after split")
 
         # Predict
+        logger.info("Computing predictions on test set (%d cards)...", len(test_cards))
         X_test = fe.transform(test_cards)
         log_predicted = model.predict(X_test)
         predicted_prices = np.exp(log_predicted)
@@ -112,6 +120,8 @@ class EvaluateModelUseCase:
                 "predicted_price_eur": round(float(predicted_prices[i]), 2),
                 "absolute_error_eur": round(float(abs_errors[i]), 2),
             })
+
+        logger.info("Evaluation complete")
 
         model_version = model_path.stem
 

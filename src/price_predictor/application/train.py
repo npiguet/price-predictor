@@ -106,6 +106,8 @@ class TrainModelUseCase:
         X = fe.transform(training_cards)
         y = log_prices
 
+        logger.info("Feature engineering complete (%d features)", X.shape[1])
+
         # 8. Train/test split
         if len(training_cards) >= 5:
             X_train, _X_test, y_train, _y_test = train_test_split(
@@ -116,12 +118,14 @@ class TrainModelUseCase:
             X_train, y_train = X, y
 
         # 9. Train model
+        logger.info("Training model...")
         model = GradientBoostingRegressor(
             n_estimators=100,
             max_depth=5,
             random_state=random_seed,
         )
         model.fit(X_train, y_train)
+        logger.info("Model training complete")
 
         # 10. Save model + feature engineering
         output_path.mkdir(parents=True, exist_ok=True)
@@ -129,6 +133,7 @@ class TrainModelUseCase:
             {"model": model, "feature_engineering": fe},
             output_path,
         )
+        logger.info("Model saved: %s", version)
 
         # 11. Build metadata
         trained_model = TrainedModel(
