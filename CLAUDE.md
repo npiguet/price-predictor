@@ -13,6 +13,10 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - Python 3.14+ + No new dependencies (existing: scikit-learn, pandas, numpy, joblib) (004-cardmarket-eur-pricing)
 - Python 3.14+ + FastAPI, uvicorn (existing) — no new dependencies added (005-card-eval-endpoints)
 - N/A (no storage changes) (005-card-eval-endpoints)
+- Python 3.14+ (existing project stack) + None new — pure text parsing with stdlib only (006-card-script-parsing)
+- Local text files (input: Forge card scripts at `../forge/forge-gui/res/cardsfolder/`, output: `./output/`) (006-card-script-parsing)
+- Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5 (006-card-script-parsing)
+- Local text files (input: Forge card scripts, output: converted text files in `./output/`) (006-card-script-parsing)
 
 ## Project Structure
 
@@ -30,9 +34,9 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
+- 006-card-script-parsing: Added Python 3.14+ (existing project stack) + None new — pure text parsing with stdlib only
 - 005-card-eval-endpoints: Added Python 3.14+ + FastAPI, uvicorn (existing) — no new dependencies added
-- 004-cardmarket-eur-pricing: Added Python 3.14+ + No new dependencies (existing: scikit-learn, pandas, numpy, joblib)
-- 003-cheapest-printing-price: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib (no new dependencies)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
