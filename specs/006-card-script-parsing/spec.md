@@ -5,6 +5,13 @@
 **Status**: Draft
 **Input**: User description: "Convert Forge card scripts into an LLM-friendly format with English key names, Oracle-matching ability text, numbered player-actionable abilities, batch processing, and Python CLI integration."
 
+## Clarifications
+
+### Session 2026-03-05
+
+- Q: Should CARDNAME/NICKNAME be substituted with the actual card name or kept as literal uppercase placeholders? → A: Keep as literal uppercase placeholders. The card name is already in the `name:` property; CARDNAME provides a consistent self-reference token for the AI.
+- Q: Should non-standard card types (tokens, emblems, dungeons, planes, schemes, etc.) be included or skipped during batch processing? → A: Include all cards. Non-standard types (dungeons, planes, schemes, etc.) already have distinguishing card types for downstream filtering. No special marker needed.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Convert Single Card Script (Priority: P1)
@@ -108,13 +115,12 @@ A data scientist wants to trigger the conversion from the existing Python CLI so
 - **FR-011**: Modal spells and charms MUST present each choice on its own line as `option[N]: description`.
 - **FR-012**: All ability descriptions MUST read like the equivalent section of Oracle text. Reminder text (text within parentheses) MUST be omitted from the output.
 - **FR-013**: Engine-internal metadata (AI:, DeckHints:, DeckHas:, DeckNeeds:, SVar:, Oracle:, and AI-specific parameters like AILogic$, AITgts$) MUST be excluded from output. No remnants of the original script syntax may appear beyond the `keyName: descriptionText` format.
-- **FR-014**: CARDNAME and NICKNAME placeholders MUST be substituted with the actual card name in all extracted text descriptions.
-- **FR-015**: Multi-face cards (transform, split, adventure, modal double-faced, flip, room) MUST include all faces in the output, separated by the ALTERNATE marker. Each face carries its own properties, abilities, and independent action counter.
-- **FR-016**: All generated text and property names MUST be lowercase, except for the structural markers CARDNAME, NICKNAME, and ALTERNATE.
-- **FR-017**: The Oracle text property is NOT included in the output. The Oracle text MUST be reconstructable by concatenating the text descriptions of all keyword and ability lines on the card (whitespace, case, and bullet/formatting differences are acceptable).
-- **FR-018**: System MUST support batch processing of a directory tree of card scripts. The output directory structure MUST mirror the source directory structure. Default output location: `./output`.
-- **FR-019**: Malformed or unparseable card scripts MUST be logged with a warning including the card name in the format `[Card Name] message`. Processing MUST continue for remaining files.
-- **FR-020**: The existing Python CLI MUST provide a subcommand that launches the conversion process.
+- **FR-014**: Multi-face cards (transform, split, adventure, modal double-faced, flip, room) MUST include all faces in the output, separated by the ALTERNATE marker. Each face carries its own properties, abilities, and independent action counter.
+- **FR-015**: All generated text and property names MUST be lowercase, except for CARDNAME, NICKNAME, and ALTERNATE which MUST remain as uppercase placeholders/markers in the output.
+- **FR-016**: The Oracle text property is NOT included in the output. The Oracle text MUST be reconstructable by concatenating the text descriptions of all keyword and ability lines on the card (whitespace, case, and bullet/formatting differences are acceptable).
+- **FR-017**: System MUST support batch processing of a directory tree of card scripts, converting ALL scripts regardless of card type (including tokens, emblems, dungeons, planes, schemes, etc.). The output directory structure MUST mirror the source directory structure. Default output location: `./output`.
+- **FR-018**: Malformed or unparseable card scripts MUST be logged with a warning including the card name in the format `[Card Name] message`. Processing MUST continue for remaining files.
+- **FR-019**: The existing Python CLI MUST provide a subcommand that launches the conversion process.
 
 ### Key Entities
 
