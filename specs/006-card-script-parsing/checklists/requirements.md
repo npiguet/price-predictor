@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Card Script Data Extraction
+# Specification Quality Checklist: Card Script Conversion
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-02-28
+**Created**: 2026-03-04
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -32,4 +32,6 @@
 ## Notes
 
 - All items pass. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
-- The spec references Forge-specific file formats (card scripts, `K:` lines, `A:` lines, etc.) which are domain terminology, not implementation details — these describe the input data format, not how the system should be built.
+- Forge card script syntax terms (K:, A:, T:, S:, R:, ManaCost, etc.) are domain input-format terminology, not implementation details.
+- Implementation directives (Java connector module, Forge parser, Maven dependencies, Python CLI subprocess) are captured in Assumptions, not in functional requirements.
+- Output format examples are included as product requirements illustrating the desired conversion result.
