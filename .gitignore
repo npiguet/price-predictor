@@ -45,3 +45,7 @@ target/
 *.class
 *.jar
 *.war
+dependency-reduced-pom.xml
+
+# Conversion output
+output/

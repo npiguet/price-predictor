@@ -1,0 +1,294 @@
+package com.pricepredictor.connector;
+
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Integration tests for CardScriptConverter using Forge's CardRules.Reader.
+ * Requires the full Forge transitive dependency chain on the classpath.
+ * Run via: mvn test -Pintegration
+ */
+@Tag("integration")
+class CardScriptConverterTest {
+
+    private final CardScriptConverter converter = new CardScriptConverter();
+
+    private MultiCard convert(String... lines) {
+        return converter.convertCard(Arrays.asList(lines), "test.txt");
+    }
+
+    // --- US1: Basic card conversion ---
+
+    @Test
+    void vanillaCreature() {
+        MultiCard result = convert(
+                "Name:Grizzly Bears",
+                "ManaCost:1 G",
+                "Types:Creature Bear",
+                "PT:2/2",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        assertEquals("grizzly bears", card.name());
+        assertTrue(card.manaCost().contains("{G}"));
+        assertEquals("creature bear", card.types());
+        assertEquals("2/2", card.powerToughness());
+        assertTrue(card.abilities().isEmpty());
+        assertNull(card.loyalty());
+    }
+
+    @Test
+    void passiveKeywords() {
+        MultiCard result = convert(
+                "Name:Serra Angel",
+                "ManaCost:3 W W",
+                "Types:Creature Angel",
+                "PT:4/4",
+                "K:Flying",
+                "K:Vigilance",
+                "Oracle:Flying, vigilance");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> keywords = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
+        assertEquals(2, keywords.size());
+        assertEquals("keyword: flying", keywords.get(0).formatLine());
+        assertEquals("keyword: vigilance", keywords.get(1).formatLine());
+        assertNull(keywords.get(0).actionNumber());
+    }
+
+    @Test
+    void activatedAbility() {
+        MultiCard result = convert(
+                "Name:Llanowar Elves",
+                "ManaCost:G",
+                "Types:Creature Elf Druid",
+                "PT:1/1",
+                "A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ Add {G}.",
+                "Oracle:{T}: Add {G}.");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> activated = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ACTIVATED).toList();
+        assertEquals(1, activated.size());
+        String line = activated.get(0).formatLine();
+        assertTrue(line.startsWith("activated[1]:"), "Expected activated[1]: but got: " + line);
+        assertTrue(line.contains("{T}"), "Expected {T} in: " + line);
+        assertTrue(line.contains("add {G}"), "Expected 'add {G}' in: " + line);
+    }
+
+    @Test
+    void triggeredAbility() {
+        MultiCard result = convert(
+                "Name:Thragtusk",
+                "ManaCost:4 G",
+                "Types:Creature Beast",
+                "PT:5/3",
+                "T:Mode$ ChangesZone | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ Life | TriggerDescription$ When CARDNAME enters, you gain 5 life.",
+                "SVar:Life:DB$ GainLife | Defined$ You | LifeAmount$ 5",
+                "Oracle:When Thragtusk enters, you gain 5 life.");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> triggered = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.TRIGGERED).toList();
+        assertEquals(1, triggered.size());
+        String line = triggered.get(0).formatLine();
+        assertTrue(line.startsWith("triggered:"));
+        assertTrue(line.contains("CARDNAME"));
+        assertTrue(line.contains("gain 5 life"));
+    }
+
+    @Test
+    void staticAbility() {
+        MultiCard result = convert(
+                "Name:Blood Moon",
+                "ManaCost:2 R",
+                "Types:Enchantment",
+                "S:Mode$ Continuous | Affected$ Land.nonBasic | AddType$ Mountain | RemoveLandTypes$ True | Description$ Nonbasic lands are Mountains.",
+                "Oracle:Nonbasic lands are Mountains.");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> statics = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.STATIC).toList();
+        assertEquals(1, statics.size());
+        assertTrue(statics.get(0).formatLine().contains("nonbasic lands are mountains"));
+    }
+
+    @Test
+    void replacementEffect() {
+        MultiCard result = convert(
+                "Name:Rest in Peace",
+                "ManaCost:1 W",
+                "Types:Enchantment",
+                "R:Event$ Moved | ActiveZones$ Battlefield | Destination$ Graveyard | ValidCard$ Card | ReplaceWith$ Exile | Description$ If a card or token would be put into a graveyard from anywhere, exile it instead.",
+                "Oracle:If a card or token would be put into a graveyard from anywhere, exile it instead.");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> replacements = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.REPLACEMENT).toList();
+        assertEquals(1, replacements.size());
+        assertTrue(replacements.get(0).formatLine().startsWith("replacement:"));
+    }
+
+    @Test
+    void engineMetadataExcluded() {
+        MultiCard result = convert(
+                "Name:Test Card",
+                "ManaCost:1",
+                "Types:Creature Human",
+                "PT:1/1",
+                "AI:RemoveDeck:Random",
+                "DeckHints:Ability$LifeGain",
+                "SVar:AnotherSVar:DB$ Something",
+                "Oracle:");
+        String output = OutputFormatter.formatMultiCard(result);
+        assertFalse(output.contains("AI:"));
+        assertFalse(output.contains("DeckHints"));
+        assertFalse(output.contains("SVar"));
+    }
+
+    @Test
+    void actionCounterIncrementsAcrossMixedTypes() {
+        MultiCard result = convert(
+                "Name:Versatile Card",
+                "ManaCost:2 W",
+                "Types:Creature Human",
+                "PT:2/2",
+                "K:Cycling:2",
+                "A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> actionable = card.abilities().stream()
+                .filter(a -> a.actionNumber() != null).toList();
+        assertTrue(actionable.size() >= 2, "Expected at least 2 actionable abilities");
+        // Action numbers should be sequential
+        for (int i = 0; i < actionable.size() - 1; i++) {
+            assertTrue(actionable.get(i).actionNumber() < actionable.get(i + 1).actionNumber());
+        }
+    }
+
+    @Test
+    void textCasingCorrect() {
+        MultiCard result = convert(
+                "Name:Llanowar Elves",
+                "ManaCost:G",
+                "Types:Creature Elf Druid",
+                "PT:1/1",
+                "A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ Add {G}.",
+                "Oracle:{T}: Add {G}.");
+        String output = OutputFormatter.formatMultiCard(result);
+        assertTrue(output.contains("llanowar elves"), "Name should be lowercase");
+        assertTrue(output.contains("{G}"), "Brace symbols should be uppercase");
+        assertTrue(output.contains("{T}"), "Tap symbol should be uppercase");
+    }
+
+    @Test
+    void noCostCardOmitsManaCostLine() {
+        MultiCard result = convert(
+                "Name:Ancestral Vision",
+                "ManaCost:no cost",
+                "Types:Sorcery",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        assertNull(card.manaCost());
+        String output = OutputFormatter.formatCard(card);
+        assertFalse(output.contains("mana cost:"));
+    }
+
+    @Test
+    void textPropertyIncluded() {
+        MultiCard result = convert(
+                "Name:Test Card",
+                "ManaCost:1",
+                "Types:Creature Human",
+                "PT:1/1",
+                "Text:This is flavor text.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        assertNotNull(card.text());
+        String output = OutputFormatter.formatCard(card);
+        assertTrue(output.contains("text: this is flavor text."));
+    }
+
+    // --- US2: Complex card types ---
+
+    @Test
+    void planeswalkerAbilities() {
+        MultiCard result = convert(
+                "Name:Jace Beleren",
+                "ManaCost:1 U U",
+                "Types:Legendary Planeswalker Jace",
+                "Loyalty:3",
+                "A:AB$ Draw | Cost$ AddCounter<2/LOYALTY> | Defined$ Player | NumCards$ 1 | Planeswalker$ True | SpellDescription$ Each player draws a card.",
+                "A:AB$ Draw | Cost$ SubCounter<1/LOYALTY> | Defined$ Targeted | NumCards$ 1 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player draws a card.",
+                "A:AB$ Mill | Cost$ SubCounter<10/LOYALTY> | Defined$ Targeted | NumCards$ 20 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player mills twenty cards.",
+                "Oracle:[+2]: Each player draws a card.\\n[-1]: Target player draws a card.\\n[-10]: Target player mills twenty cards.");
+        ConvertedCard card = result.faces().get(0);
+        assertEquals("3", card.loyalty());
+        List<AbilityLine> pwAbilities = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.PLANESWALKER).toList();
+        assertEquals(3, pwAbilities.size());
+        assertTrue(pwAbilities.get(0).formatLine().contains("[+2]:"));
+        assertTrue(pwAbilities.get(1).formatLine().contains("[-1]:"));
+        assertTrue(pwAbilities.get(2).formatLine().contains("[-10]:"));
+        assertEquals(1, (int) pwAbilities.get(0).actionNumber());
+        assertEquals(2, (int) pwAbilities.get(1).actionNumber());
+        assertEquals(3, (int) pwAbilities.get(2).actionNumber());
+    }
+
+    @Test
+    void transformCard() {
+        MultiCard result = convert(
+                "Name:Daring Sleuth",
+                "ManaCost:1 U",
+                "Types:Creature Human Rogue",
+                "PT:2/1",
+                "AlternateMode:DoubleFaced",
+                "Oracle:",
+                "ALTERNATE",
+                "Name:Bearer of Overwhelming Truths",
+                "Types:Creature Human Wizard",
+                "PT:3/2",
+                "Oracle:");
+        assertEquals("transform", result.layout());
+        assertEquals(2, result.faces().size());
+        assertEquals("daring sleuth", result.faces().get(0).name());
+        assertEquals("bearer of overwhelming truths", result.faces().get(1).name());
+    }
+
+    @Test
+    void spellEffect() {
+        MultiCard result = convert(
+                "Name:Lightning Bolt",
+                "ManaCost:R",
+                "Types:Instant",
+                "A:SP$ DealDamage | ValidTgts$ Creature,Player,Planeswalker | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target.",
+                "Oracle:Lightning Bolt deals 3 damage to any target.");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size());
+        assertTrue(spells.get(0).formatLine().contains("CARDNAME deals 3 damage"));
+        assertEquals(1, (int) spells.get(0).actionNumber());
+    }
+
+    @Test
+    void layoutDetection() {
+        // Transform
+        MultiCard transform = convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",
+                "AlternateMode:DoubleFaced", "Oracle:", "ALTERNATE",
+                "Name:B", "Types:Creature Werewolf", "PT:2/2", "Oracle:");
+        assertEquals("transform", transform.layout());
+
+        // Split
+        MultiCard split = convert("Name:Fire", "ManaCost:1 R", "Types:Instant",
+                "AlternateMode:Split", "Oracle:", "ALTERNATE",
+                "Name:Ice", "ManaCost:1 U", "Types:Instant", "Oracle:");
+        assertEquals("split", split.layout());
+
+        // Adventure
+        MultiCard adv = convert("Name:Bonecrusher Giant", "ManaCost:2 R", "Types:Creature Giant",
+                "PT:4/3", "AlternateMode:Adventure", "Oracle:", "ALTERNATE",
+                "Name:Stomp", "ManaCost:1 R", "Types:Instant Adventure", "Oracle:");
+        assertEquals("adventure", adv.layout());
+    }
+}

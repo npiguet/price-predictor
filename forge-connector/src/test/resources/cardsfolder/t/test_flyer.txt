@@ -1,0 +1,7 @@
+Name:Test Flyer
+ManaCost:1 W
+Types:Creature Bird
+PT:1/1
+K:Flying
+A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.
+Oracle:Flying\n{T}: Gain 1 life.

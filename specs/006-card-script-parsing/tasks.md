@@ -17,7 +17,7 @@
 
 **Purpose**: Update forge-connector build configuration for card script conversion
 
-- [ ] T001 Update pom.xml to add forge-game dependency (provided scope), maven-shade-plugin with mainClass, and dependency-copy plugin in forge-connector/pom.xml
+- [X] T001 Update pom.xml to add forge-game dependency (provided scope), maven-shade-plugin with mainClass, and dependency-copy plugin in forge-connector/pom.xml
 
   **Details**: Add `forge.game:forge-game:2.0.10-SNAPSHOT` with `<scope>provided</scope>` (compile-time only, excluded from fat JAR). Add `forge.game:forge-core:2.0.10-SNAPSHOT` with `<scope>provided</scope>`. Add `com.googlecode:minlog:1.2` with `<scope>provided</scope>` (already on Forge's classpath at runtime — same logging framework used by Forge). Configure `maven-shade-plugin` to produce `forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar` with `mainClass` set to `com.pricepredictor.connector.ConvertMain`. Exclude all `forge.*` group artifacts from the shaded JAR. Update `maven-surefire-plugin` configuration to exclude `@Tag("integration")` tests by default (add `<excludedGroups>integration</excludedGroups>`), so `mvn test` runs only fast unit tests. Add a Maven profile `integration` that includes the integration-tagged tests (e.g., `mvn test -Pintegration`). Verify build compiles with `mvn compile`.
 
@@ -29,15 +29,15 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T002 [P] Create AbilityType enum in forge-connector/src/main/java/com/pricepredictor/connector/AbilityType.java
+- [X] T002 [P] Create AbilityType enum in forge-connector/src/main/java/com/pricepredictor/connector/AbilityType.java
 
   **Details**: Enum with 10 values: `KEYWORD_PASSIVE`, `KEYWORD_ACTIVE`, `ACTIVATED`, `TRIGGERED`, `STATIC`, `REPLACEMENT`, `SPELL`, `PLANESWALKER`, `OPTION`, `TEXT`. Each value stores: `outputPrefix` (String, e.g. `"keyword"`, `"activated"`), `actionable` (boolean). Provide `getOutputPrefix()` and `isActionable()` methods. See data-model.md AbilityType table for complete mapping.
 
-- [ ] T003 [P] Create AbilityLine record in forge-connector/src/main/java/com/pricepredictor/connector/AbilityLine.java
+- [X] T003 [P] Create AbilityLine record in forge-connector/src/main/java/com/pricepredictor/connector/AbilityLine.java
 
   **Details**: Java record (or immutable class) with fields: `AbilityType type`, `String description`, `Integer actionNumber` (nullable). Validation: description must not be null/empty; actionNumber must be >= 1 when present; actionNumber must be null for non-actionable types (check `type.isActionable()`). Provide a `formatLine()` method that returns the formatted output string (e.g., `"keyword: flying"`, `"activated[1]: {T}: add {G}."`). See data-model.md AbilityLine section.
 
-- [ ] T004 [P] Create ConvertedCard record in forge-connector/src/main/java/com/pricepredictor/connector/ConvertedCard.java
+- [X] T004 [P] Create ConvertedCard record in forge-connector/src/main/java/com/pricepredictor/connector/ConvertedCard.java
 
   **Details**: Immutable class with fields: `String name` (required), `String manaCost` (nullable), `String types` (required), `String powerToughness` (nullable), `String loyalty` (nullable), `String colors` (nullable), `String text` (nullable), `List<AbilityLine> abilities` (required, may be empty). Validation: name and types must not be null/empty. See data-model.md ConvertedCard section.
 
@@ -53,21 +53,21 @@
 
 ### Tests for User Story 1
 
-- [ ] T005 [P] [US1] Create KeywordClassifierTest in forge-connector/src/test/java/com/pricepredictor/connector/KeywordClassifierTest.java
+- [X] T005 [P] [US1] Create KeywordClassifierTest in forge-connector/src/test/java/com/pricepredictor/connector/KeywordClassifierTest.java
 
   **Details**: Test passive keyword classification (flying, trample, deathtouch, vigilance, first strike, double strike, haste, lifelink, reach, flash, indestructible, menace, hexproof, defender → returns false for `isActivatable`). Test activatable keyword classification (kicker, cycling, equip, ninjutsu, evoke, flashback, morph, bestow, dash, unearth, madness, foretell, escape, crew → returns true). Test unknown keywords default to passive. Use JUnit 5 `@ParameterizedTest` where appropriate. See research.md R-006 for full keyword lists.
 
-- [ ] T006 [P] [US1] Create CostTranslationTest in forge-connector/src/test/java/com/pricepredictor/connector/CostTranslationTest.java
+- [X] T006 [P] [US1] Create CostTranslationTest in forge-connector/src/test/java/com/pricepredictor/connector/CostTranslationTest.java
 
   **Details**: Test Forge's `Cost` class integration for key cost patterns: `T` → `{T}`, `Q` → `{Q}`, `2 W W` → `{2}{W}{W}`, `Sac<1/CARDNAME>` → contains `Sacrifice CARDNAME`, `Discard<1/Card>` → contains `Discard`, `PayLife<3>` → contains `Pay 3 life`, `PayEnergy<2>` → contains `{E}{E}`. Test `Cost.abilityToString()` produces human-readable output. Test multiple cost parts joined with `, `. See data-model.md Cost Translation table.
 
 ### Implementation for User Story 1
 
-- [ ] T007 [P] [US1] Create KeywordClassifier in forge-connector/src/main/java/com/pricepredictor/connector/KeywordClassifier.java
+- [X] T007 [P] [US1] Create KeywordClassifier in forge-connector/src/main/java/com/pricepredictor/connector/KeywordClassifier.java
 
   **Details**: Static utility class with method `boolean isActivatable(String keywordName)`. Maintains a `Set<String>` of activatable keyword names (lowercase): kicker, cycling, equip, ninjutsu, evoke, emerge, channel, flashback, morph, megamorph, bestow, dash, unearth, replicate, madness, foretell, suspend, mutate, level up, escape, encore, overload, retrace, disturb, boast, craft, prototype, prowl, spectacle, surge, entwine, buyback, crew, reconfigure, adapt, monstrosity, scavenge, embalm, eternalize, outlast, transfigure, transmute, forecast, fortify, reinforce, bloodrush. Returns true if keyword name (lowercased) is in the set, false otherwise. See research.md R-006.
 
-- [ ] T008 [US1] Create CardScriptConverter in forge-connector/src/main/java/com/pricepredictor/connector/CardScriptConverter.java
+- [X] T008 [US1] Create CardScriptConverter in forge-connector/src/main/java/com/pricepredictor/connector/CardScriptConverter.java
 
   **Details**: Core conversion class. Method: `ConvertedCard convertFace(ICardFace face, Map<String, String> svars)`. Implementation per data-model.md conversion pipeline:
 
@@ -81,7 +81,7 @@
   8. **Text casing**: Lowercase all text, then restore `CARDNAME`, `NICKNAME`, `ALTERNATE` to uppercase, and restore all brace-enclosed symbols (`{...}`) to uppercase. Strip reminder text (parenthesized text) from descriptions per FR-012.
   9. **Missing descriptions**: If an ability has no description parameter, log warning `[CardName] missing description for ability` and use placeholder text.
 
-- [ ] T009 [US1] Create OutputFormatter in forge-connector/src/main/java/com/pricepredictor/connector/OutputFormatter.java
+- [X] T009 [US1] Create OutputFormatter in forge-connector/src/main/java/com/pricepredictor/connector/OutputFormatter.java
 
   **Details**: Static utility class. Method: `String formatCard(ConvertedCard card)`. Outputs lines in order:
   1. `name: {value}` (always present)
@@ -95,7 +95,7 @@
 
   Each line is newline-separated. No trailing newline. See data-model.md Output Format section and spec.md output examples.
 
-- [ ] T010 [US1] Create CardScriptConverterTest in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
+- [X] T010 [US1] Create CardScriptConverterTest in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
 
   **Details**: Unit tests using inline card script strings parsed via `CardRules.Reader`. Test cases per US1 acceptance scenarios:
   1. Vanilla creature (Grizzly Bears-like): name, mana cost, types, P/T only, no abilities.
@@ -112,7 +112,7 @@
   12. Card with `Text:` property → `text:` line in output.
   13. Oracle text reconstructable (FR-016): for at least 2 representative cards, concatenate all ability description texts and verify the result matches the expected Oracle text (whitespace, case, formatting differences acceptable).
 
-- [ ] T011 [US1] Create OutputFormatterTest in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
+- [X] T011 [US1] Create OutputFormatterTest in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
 
   **Details**: Unit tests for output formatting. Build `ConvertedCard` objects programmatically and verify formatted output. Test cases:
   1. Vanilla creature: only property lines, no ability lines.
@@ -133,7 +133,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Extend CardScriptConverterTest for complex card types in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
+- [X] T015 [P] [US2] Extend CardScriptConverterTest for complex card types in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
 
   **Details**: Add test cases per US2 acceptance scenarios:
   1. Planeswalker: Jace Beleren-like script → `planeswalker[1]: [+2]: ...`, `planeswalker[2]: [-1]: ...`, `planeswalker[3]: [-10]: ...` with loyalty property.
@@ -145,7 +145,7 @@
   7. Layout detection: verify `DoubleFaced` → `transform`, `Split` → `split`, `Adventure` → `adventure`, `Modal` → `modal`, `Flip` → `flip`.
   8. Oracle text reconstructable (FR-016): for planeswalker and charm cards, concatenate ability descriptions and verify against expected Oracle text.
 
-- [ ] T016 [P] [US2] Extend OutputFormatterTest for multi-face output in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
+- [X] T016 [P] [US2] Extend OutputFormatterTest for multi-face output in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
 
   **Details**: Add test cases:
   1. Multi-face card: `layout: transform` line first, faces separated by blank line + `ALTERNATE` + blank line.
@@ -154,11 +154,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [P] [US2] Create MultiCard record in forge-connector/src/main/java/com/pricepredictor/connector/MultiCard.java
+- [X] T012 [P] [US2] Create MultiCard record in forge-connector/src/main/java/com/pricepredictor/connector/MultiCard.java
 
   **Details**: Immutable class with fields: `String layout` (nullable — null for single-face), `List<ConvertedCard> faces` (required, at least one entry). Layout values: `transform` (from `DoubleFaced`), `split` (from `Split`), `adventure` (from `Adventure`), `modal` (from `Modal`), `flip` (from `Flip`). Null for single-face cards. Provide static factory `singleFace(ConvertedCard)` and `multiFace(String layout, List<ConvertedCard>)`. See data-model.md MultiCard section.
 
-- [ ] T013 [US2] Extend CardScriptConverter to handle complex card types in forge-connector/src/main/java/com/pricepredictor/connector/CardScriptConverter.java
+- [X] T013 [US2] Extend CardScriptConverter to handle complex card types in forge-connector/src/main/java/com/pricepredictor/connector/CardScriptConverter.java
 
   **Details**: Add method `MultiCard convertCard(String scriptContent)` that parses the full script via `CardRules.Reader` and handles multi-face. Extend `convertFace()` with:
 
@@ -171,7 +171,7 @@
   7. **etbCounter** (`K:etbCounter:Type:N`): → `TRIGGERED` line ("enters with N Type counters").
   8. **Plaintext K:** (`K:CARDNAME ...`): → `STATIC` line with the text.
 
-- [ ] T014 [US2] Extend OutputFormatter for multi-face cards in forge-connector/src/main/java/com/pricepredictor/connector/OutputFormatter.java
+- [X] T014 [US2] Extend OutputFormatter for multi-face cards in forge-connector/src/main/java/com/pricepredictor/connector/OutputFormatter.java
 
   **Details**: Add method `String formatMultiCard(MultiCard card)`. If `layout` is non-null, output `layout: {value}` as the first line. Format each face via `formatCard()`. Separate faces with blank line + `ALTERNATE` + blank line. Single-face cards (layout null) just format the single face with no layout line. See data-model.md multi-face output format.
 
@@ -187,7 +187,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Create BatchConverter in forge-connector/src/main/java/com/pricepredictor/connector/BatchConverter.java
+- [X] T017 [US3] Create BatchConverter in forge-connector/src/main/java/com/pricepredictor/connector/BatchConverter.java
 
   **Details**: Class with method `BatchResult convert(Path cardsPath, Path outputPath)`. Implementation:
   1. Walk `cardsPath` recursively, finding all `.txt` files.
@@ -198,13 +198,13 @@
   6. Return `BatchResult` with: total files processed, files succeeded, files with warnings, list of warnings.
   7. Default output path: `./output` relative to working directory.
 
-- [ ] T018 [US3] Create ConvertMain CLI entry point in forge-connector/src/main/java/com/pricepredictor/connector/ConvertMain.java
+- [X] T018 [US3] Create ConvertMain CLI entry point in forge-connector/src/main/java/com/pricepredictor/connector/ConvertMain.java
 
   **Details**: `public static void main(String[] args)`. Parse CLI arguments: `--cards-path` (optional, default `../forge/forge-gui/res/cardsfolder/`), `--output-path` (optional, default `./output`). Create `BatchConverter`, call `convert()`, print summary (total/succeeded/warnings). Exit code 0 on success, 1 on fatal error. This is the `mainClass` for the shade plugin.
 
 ### Tests for User Story 3
 
-- [ ] T019 [US3] Create BatchConverterTest in forge-connector/src/test/java/com/pricepredictor/connector/BatchConverterTest.java
+- [X] T019 [US3] Create BatchConverterTest in forge-connector/src/test/java/com/pricepredictor/connector/BatchConverterTest.java
 
   **Details**: Integration test with fixture files in `src/test/resources/cardsfolder/`. Annotate the test class with `@Tag("integration")` (JUnit 5) so it can be excluded from the fast test suite via Maven Surefire configuration. Create 3-5 minimal card script fixtures covering: vanilla creature, creature with abilities, a malformed file. Test cases:
   1. Batch processes all fixture files, output files created in temp directory.
@@ -224,7 +224,7 @@
 
 ### Tests for User Story 4
 
-- [ ] T022 [US4] Create Python CLI integration test in src/tests/integration/test_convert_cli.py
+- [X] T022 [US4] Create Python CLI integration test in src/tests/integration/test_convert_cli.py
 
   **Details**: Integration test using pytest. Test cases:
   1. `convert` subcommand appears in CLI help output.
@@ -234,7 +234,7 @@
 
 ### Implementation for User Story 4
 
-- [ ] T020 [US4] Add 'convert' subcommand to Python CLI in src/price_predictor/infrastructure/cli.py
+- [X] T020 [US4] Add 'convert' subcommand to Python CLI in src/price_predictor/infrastructure/cli.py
 
   **Details**: Add a `convert` subparser with arguments: `--cards-path` (default `../forge/forge-gui/res/cardsfolder/`), `--output-path` (default `./output`). Create `run_convert(args)` function that:
   1. Locates the fat JAR at `forge-connector/target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar` (relative to project root).
@@ -244,7 +244,7 @@
   5. Returns the subprocess exit code.
   6. Prints errors to stderr if JAR not found or Java not available.
 
-- [ ] T021 [US4] Wire convert command dispatch in src/price_predictor/infrastructure/cli.py
+- [X] T021 [US4] Wire convert command dispatch in src/price_predictor/infrastructure/cli.py
 
   **Details**: In the existing command dispatch logic (likely in a `main()` function or `__main__.py`), add `elif args.command == "convert": return run_convert(args)`. Check `__main__.py` for the dispatch location and add the routing there if needed. Follow the existing pattern used by `run_predict`, `run_train`, `run_evaluate`, `run_serve`, `run_eval`.
 
@@ -256,7 +256,7 @@
 
 **Purpose**: Final validation and cleanup
 
-- [ ] T023 Run quickstart.md validation end-to-end (build, convert, verify output)
+- [X] T023 Run quickstart.md validation end-to-end (build, convert, verify output)
 
   **Details**: Follow quickstart.md steps end-to-end:
   1. Build: `mvn install` Forge deps, `mvn package` forge-connector, `mvn test` passes.
@@ -267,7 +267,7 @@
   6. **SC-003 verification**: Grep output files for script syntax remnants (e.g., `AB$`, `SP$`, `SVar:`, `AILogic$`). Confirm zero matches.
   7. Run `ruff check` on modified Python files (cli.py). Verify no new warnings.
 
-- [ ] T024 Verify existing forge-connector tests still pass (price prediction client unaffected)
+- [X] T024 Verify existing forge-connector tests still pass (price prediction client unaffected)
 
 ---
 

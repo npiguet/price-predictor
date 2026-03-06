@@ -1,0 +1,3 @@
+This is not a valid card script
+It has no Name: line
+Just random text
