@@ -1,16 +1,17 @@
 package com.pricepredictor.connector;
 
+import lombok.experimental.UtilityClass;
+
 /**
  * Formats ConvertedCard and MultiCard into text output.
  */
-public final class OutputFormatter {
-
-    private OutputFormatter() {}
+@UtilityClass
+public class OutputFormatter {
 
     /**
      * Format a single card face.
      */
-    public static String formatCard(ConvertedCard card) {
+    public String formatCard(ConvertedCard card) {
         StringBuilder sb = new StringBuilder();
         sb.append("name: ").append(card.name());
         if (card.manaCost() != null) {
@@ -38,7 +39,7 @@ public final class OutputFormatter {
     /**
      * Format a complete card (single or multi-face).
      */
-    public static String formatMultiCard(MultiCard card) {
+    public String formatMultiCard(MultiCard card) {
         if (card.layout() == null) {
             // Single-face card — no layout line
             return formatCard(card.faces().get(0));

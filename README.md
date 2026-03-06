@@ -291,7 +291,7 @@ get price predictions from the running service with 5 lines of code. See
 ```java
 var client = new PricePredictorClient();
 var estimate = client.predict(CardAttributes.builder()
-    .types("Creature").manaCost("1 G G")
+    .type("Creature").manaCost("1 G G")
     .power("2").toughness("2").build());
 System.out.println(estimate.predictedPriceEur());
 ```

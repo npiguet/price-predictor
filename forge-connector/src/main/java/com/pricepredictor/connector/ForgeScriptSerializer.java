@@ -1,16 +1,17 @@
 package com.pricepredictor.connector;
 
+import lombok.experimental.UtilityClass;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Serializes {@link CardAttributes} into Forge card script text format.
  */
-final class ForgeScriptSerializer {
+@UtilityClass
+class ForgeScriptSerializer {
 
-    private ForgeScriptSerializer() {}
-
-    static String serialize(CardAttributes card) {
+    String serialize(CardAttributes card) {
         var sb = new StringBuilder();
 
         if (card.getName() != null && !card.getName().isEmpty()) {

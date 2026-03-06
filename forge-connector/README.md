@@ -18,7 +18,7 @@ from the price prediction service. Zero external dependencies.
 ```java
 var client = new PricePredictorClient();
 var estimate = client.predict(CardAttributes.builder()
-    .types("Creature")
+    .type("Creature")
     .manaCost("1 G G")
     .power("2").toughness("2")
     .build());
@@ -63,11 +63,11 @@ PriceEstimate estimate = client.predict(cardAttributes);
 CardAttributes card = CardAttributes.builder()
     .name("Lightning Bolt")           // optional
     .manaCost("R")                    // optional
-    .types("Instant")                 // required (at least one)
-    .supertypes("Legendary")          // optional
-    .subtypes("Human", "Wizard")      // optional
+    .type("Instant")                  // required (at least one)
+    .supertype("Legendary")           // optional
+    .subtype("Human").subtype("Wizard") // optional
     .oracleText("Deals 3 damage.")    // optional
-    .keywords("Flying", "Haste")      // optional
+    .keyword("Flying").keyword("Haste") // optional
     .power("3").toughness("4")        // optional
     .loyalty("3")                     // optional
     .build();

@@ -21,7 +21,7 @@ class PricePredictorClientTest {
                     "http://localhost:" + server.getAddress().getPort());
             var card = CardAttributes.builder()
                     .name("Test Card")
-                    .types("Instant")
+                    .type("Instant")
                     .manaCost("R")
                     .build();
 
@@ -41,7 +41,7 @@ class PricePredictorClientTest {
         try {
             var client = new PricePredictorClient(
                     "http://localhost:" + server.getAddress().getPort());
-            var card = CardAttributes.builder().types("Instant").build();
+            var card = CardAttributes.builder().type("Instant").build();
 
             var ex = assertThrows(InvalidResponseException.class, () ->
                     client.predict(card));
@@ -59,7 +59,7 @@ class PricePredictorClientTest {
         try {
             var client = new PricePredictorClient(
                     "http://localhost:" + server.getAddress().getPort());
-            var card = CardAttributes.builder().types("Instant").build();
+            var card = CardAttributes.builder().type("Instant").build();
 
             assertThrows(InvalidResponseException.class, () -> client.predict(card));
         } finally {
@@ -88,7 +88,7 @@ class PricePredictorClientTest {
         try {
             var client = new PricePredictorClient(
                     "http://localhost:" + server.getAddress().getPort());
-            client.predict(CardAttributes.builder().types("Instant").build());
+            client.predict(CardAttributes.builder().type("Instant").build());
 
             assertEquals("text/plain", capturedContentType[0]);
             assertEquals("POST", capturedMethod[0]);

@@ -1,8 +1,13 @@
 package com.pricepredictor.connector;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+
 /**
  * Categories for ability lines in converted card output.
  */
+@Getter
+@RequiredArgsConstructor
 public enum AbilityType {
     KEYWORD_PASSIVE("keyword", false),
     KEYWORD_ACTIVE("keyword", true),
@@ -17,17 +22,4 @@ public enum AbilityType {
 
     private final String outputPrefix;
     private final boolean actionable;
-
-    AbilityType(String outputPrefix, boolean actionable) {
-        this.outputPrefix = outputPrefix;
-        this.actionable = actionable;
-    }
-
-    public String getOutputPrefix() {
-        return outputPrefix;
-    }
-
-    public boolean isActionable() {
-        return actionable;
-    }
 }

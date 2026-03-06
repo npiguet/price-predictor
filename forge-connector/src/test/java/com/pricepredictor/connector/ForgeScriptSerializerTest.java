@@ -13,11 +13,11 @@ class ForgeScriptSerializerTest {
         CardAttributes card = CardAttributes.builder()
                 .name("Serra Angel")
                 .manaCost("3 W W")
-                .supertypes("Legendary")
-                .types("Creature")
-                .subtypes("Angel")
+                .supertype("Legendary")
+                .type("Creature")
+                .subtype("Angel")
                 .oracleText("Flying, vigilance")
-                .keywords("Flying", "Vigilance")
+                .keyword("Flying").keyword("Vigilance")
                 .power("4").toughness("4")
                 .build();
 
@@ -35,7 +35,7 @@ class ForgeScriptSerializerTest {
     @Test
     void partialAttributesOnlyTypesProduceMinimalScript() {
         CardAttributes card = CardAttributes.builder()
-                .types("Instant")
+                .type("Instant")
                 .build();
 
         String script = ForgeScriptSerializer.serialize(card);
@@ -51,7 +51,7 @@ class ForgeScriptSerializerTest {
     void nullOptionalFieldsAreOmitted() {
         CardAttributes card = CardAttributes.builder()
                 .name("Test")
-                .types("Sorcery")
+                .type("Sorcery")
                 .build();
 
         String script = ForgeScriptSerializer.serialize(card);
@@ -68,8 +68,8 @@ class ForgeScriptSerializerTest {
     @Test
     void keywordsEachGetSeparateKLine() {
         CardAttributes card = CardAttributes.builder()
-                .types("Creature")
-                .keywords("Flying", "Trample", "Haste")
+                .type("Creature")
+                .keyword("Flying").keyword("Trample").keyword("Haste")
                 .power("3").toughness("3")
                 .build();
 
@@ -83,7 +83,7 @@ class ForgeScriptSerializerTest {
     @Test
     void powerToughnessSerializeAsPTLine() {
         CardAttributes card = CardAttributes.builder()
-                .types("Creature")
+                .type("Creature")
                 .power("2").toughness("3")
                 .build();
 
@@ -94,7 +94,7 @@ class ForgeScriptSerializerTest {
     @Test
     void loyaltySerializesAsLoyaltyLine() {
         CardAttributes card = CardAttributes.builder()
-                .types("Planeswalker")
+                .type("Planeswalker")
                 .loyalty("3")
                 .build();
 

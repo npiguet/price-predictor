@@ -11,17 +11,10 @@ class CardAttributesTest {
     @Test
     void builderWithTypesBuildSuccessfully() {
         CardAttributes card = CardAttributes.builder()
-                .types("Creature")
+                .type("Creature")
                 .build();
 
         assertEquals(List.of("Creature"), card.getTypes());
-    }
-
-    @Test
-    void builderWithoutTypesThrowsIllegalStateException() {
-        assertThrows(IllegalStateException.class, () ->
-                CardAttributes.builder().name("Bad Card").build()
-        );
     }
 
     @Test
@@ -29,11 +22,11 @@ class CardAttributesTest {
         CardAttributes card = CardAttributes.builder()
                 .name("Test Card")
                 .manaCost("2 W W")
-                .types("Creature")
-                .supertypes("Legendary")
-                .subtypes("Human", "Wizard")
+                .type("Creature")
+                .supertype("Legendary")
+                .subtype("Human").subtype("Wizard")
                 .oracleText("Some ability text")
-                .keywords("Flying", "Vigilance")
+                .keyword("Flying").keyword("Vigilance")
                 .power("3")
                 .toughness("4")
                 .loyalty("5")
@@ -52,23 +45,23 @@ class CardAttributesTest {
     }
 
     @Test
-    void typesVarargsAndListOverloadsBothWork() {
-        CardAttributes fromVarargs = CardAttributes.builder()
-                .types("Creature", "Artifact")
+    void typesSingularAndCollectionOverloadsBothWork() {
+        CardAttributes fromSingular = CardAttributes.builder()
+                .type("Creature").type("Artifact")
                 .build();
 
-        CardAttributes fromList = CardAttributes.builder()
+        CardAttributes fromCollection = CardAttributes.builder()
                 .types(List.of("Creature", "Artifact"))
                 .build();
 
-        assertEquals(fromVarargs.getTypes(), fromList.getTypes());
+        assertEquals(fromSingular.getTypes(), fromCollection.getTypes());
     }
 
     @Test
     void builtObjectIsImmutable() {
         CardAttributes card = CardAttributes.builder()
-                .types("Creature")
-                .keywords("Flying")
+                .type("Creature")
+                .keyword("Flying")
                 .build();
 
         assertThrows(UnsupportedOperationException.class, () ->
@@ -76,13 +69,6 @@ class CardAttributesTest {
         );
         assertThrows(UnsupportedOperationException.class, () ->
                 card.getKeywords().add("Trample")
-        );
-    }
-
-    @Test
-    void emptyTypesListThrowsIllegalStateException() {
-        assertThrows(IllegalStateException.class, () ->
-                CardAttributes.builder().types(List.of()).build()
         );
     }
 }

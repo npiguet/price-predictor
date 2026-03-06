@@ -19,7 +19,7 @@ class GracefulDegradationTest {
         // Find a port that is guaranteed closed
         int closedPort = findAvailablePort();
         var client = new PricePredictorClient("http://localhost:" + closedPort);
-        var card = CardAttributes.builder().types("Instant").build();
+        var card = CardAttributes.builder().type("Instant").build();
 
         long start = System.currentTimeMillis();
         var ex = assertThrows(ServiceUnavailableException.class, () -> client.predict(card));
@@ -38,7 +38,7 @@ class GracefulDegradationTest {
         try {
             // Client with 1 second timeout
             var client = new PricePredictorClient("http://localhost:" + port, 1000);
-            var card = CardAttributes.builder().types("Instant").build();
+            var card = CardAttributes.builder().type("Instant").build();
 
             long start = System.currentTimeMillis();
             var ex = assertThrows(ServiceUnavailableException.class, () -> client.predict(card));
@@ -62,7 +62,7 @@ class GracefulDegradationTest {
         try {
             // Client with 1 second timeout — should fail before server responds
             var client = new PricePredictorClient("http://localhost:" + port, 1000);
-            var card = CardAttributes.builder().types("Instant").build();
+            var card = CardAttributes.builder().type("Instant").build();
 
             long start = System.currentTimeMillis();
             assertThrows(ServiceUnavailableException.class, () -> client.predict(card));
@@ -78,7 +78,7 @@ class GracefulDegradationTest {
     void exceptionMessageContainsUsefulContext() {
         int closedPort = findAvailablePort();
         var client = new PricePredictorClient("http://localhost:" + closedPort);
-        var card = CardAttributes.builder().types("Instant").build();
+        var card = CardAttributes.builder().type("Instant").build();
 
         var ex = assertThrows(ServiceUnavailableException.class, () -> client.predict(card));
         String msg = ex.getMessage();
@@ -96,7 +96,7 @@ class GracefulDegradationTest {
         int port = server1.getAddress().getPort();
 
         var client = new PricePredictorClient("http://localhost:" + port, 2000);
-        var card = CardAttributes.builder().types("Instant").build();
+        var card = CardAttributes.builder().type("Instant").build();
 
         // 2. Client succeeds
         PriceEstimate estimate = client.predict(card);
@@ -127,7 +127,7 @@ class GracefulDegradationTest {
         int port = server.getAddress().getPort();
 
         var client = new PricePredictorClient("http://localhost:" + port, 2000);
-        var card = CardAttributes.builder().types("Instant").build();
+        var card = CardAttributes.builder().type("Instant").build();
 
         // Multiple successful calls
         client.predict(card);
