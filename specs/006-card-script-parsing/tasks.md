@@ -19,7 +19,7 @@
 
 - [ ] T001 Update pom.xml to add forge-game dependency (provided scope), maven-shade-plugin with mainClass, and dependency-copy plugin in forge-connector/pom.xml
 
-  **Details**: Add `forge.game:forge-game:2.0.10-SNAPSHOT` with `<scope>provided</scope>` (compile-time only, excluded from fat JAR). Add `forge.game:forge-core:2.0.10-SNAPSHOT` with `<scope>provided</scope>`. Configure `maven-shade-plugin` to produce `forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar` with `mainClass` set to `com.pricepredictor.connector.ConvertMain`. Exclude all `forge.*` group artifacts from the shaded JAR. Existing surefire plugin config stays unchanged. Verify build compiles with `mvn compile`.
+  **Details**: Add `forge.game:forge-game:2.0.10-SNAPSHOT` with `<scope>provided</scope>` (compile-time only, excluded from fat JAR). Add `forge.game:forge-core:2.0.10-SNAPSHOT` with `<scope>provided</scope>`. Add `com.googlecode:minlog:1.2` with `<scope>provided</scope>` (already on Forge's classpath at runtime — same logging framework used by Forge). Configure `maven-shade-plugin` to produce `forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar` with `mainClass` set to `com.pricepredictor.connector.ConvertMain`. Exclude all `forge.*` group artifacts from the shaded JAR. Update `maven-surefire-plugin` configuration to exclude `@Tag("integration")` tests by default (add `<excludedGroups>integration</excludedGroups>`), so `mvn test` runs only fast unit tests. Add a Maven profile `integration` that includes the integration-tagged tests (e.g., `mvn test -Pintegration`). Verify build compiles with `mvn compile`.
 
 ---
 
@@ -110,6 +110,7 @@
   10. Text casing: all lowercase except CARDNAME, brace symbols uppercase.
   11. `ManaCost:no cost` → mana cost line omitted.
   12. Card with `Text:` property → `text:` line in output.
+  13. Oracle text reconstructable (FR-016): for at least 2 representative cards, concatenate all ability description texts and verify the result matches the expected Oracle text (whitespace, case, formatting differences acceptable).
 
 - [ ] T011 [US1] Create OutputFormatterTest in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
 
@@ -129,6 +130,27 @@
 **Goal**: Correctly convert planeswalkers, modal/charm spells, multi-face cards (transform, split, adventure, MDFC, flip), instant/sorcery spells, sagas, and class cards.
 
 **Independent Test**: Convert representative cards of each complex type (Jace Beleren, Abzan Charm, Delver of Secrets, Fire // Ice, Bonecrusher Giant, Lightning Bolt) and verify output matches spec examples.
+
+### Tests for User Story 2
+
+- [ ] T015 [P] [US2] Extend CardScriptConverterTest for complex card types in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
+
+  **Details**: Add test cases per US2 acceptance scenarios:
+  1. Planeswalker: Jace Beleren-like script → `planeswalker[1]: [+2]: ...`, `planeswalker[2]: [-1]: ...`, `planeswalker[3]: [-10]: ...` with loyalty property.
+  2. Charm/modal: Abzan Charm-like → `spell[1]: choose one —`, `option[2]: ...`, `option[3]: ...`, `option[4]: ...`.
+  3. Transform: two-face card → two ConvertedCard entries with independent action counters.
+  4. Split card: two halves → both faces returned.
+  5. Adventure: creature + adventure → both faces returned.
+  6. Spell effect: Lightning Bolt-like → `spell[1]: CARDNAME deals 3 damage to any target.`
+  7. Layout detection: verify `DoubleFaced` → `transform`, `Split` → `split`, `Adventure` → `adventure`, `Modal` → `modal`, `Flip` → `flip`.
+  8. Oracle text reconstructable (FR-016): for planeswalker and charm cards, concatenate ability descriptions and verify against expected Oracle text.
+
+- [ ] T016 [P] [US2] Extend OutputFormatterTest for multi-face output in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
+
+  **Details**: Add test cases:
+  1. Multi-face card: `layout: transform` line first, faces separated by blank line + `ALTERNATE` + blank line.
+  2. Single-face card: no `layout:` line.
+  3. Each face independently formatted with correct properties and abilities.
 
 ### Implementation for User Story 2
 
@@ -153,24 +175,6 @@
 
   **Details**: Add method `String formatMultiCard(MultiCard card)`. If `layout` is non-null, output `layout: {value}` as the first line. Format each face via `formatCard()`. Separate faces with blank line + `ALTERNATE` + blank line. Single-face cards (layout null) just format the single face with no layout line. See data-model.md multi-face output format.
 
-- [ ] T015 [US2] Extend CardScriptConverterTest for complex card types in forge-connector/src/test/java/com/pricepredictor/connector/CardScriptConverterTest.java
-
-  **Details**: Add test cases per US2 acceptance scenarios:
-  1. Planeswalker: Jace Beleren-like script → `planeswalker[1]: [+2]: ...`, `planeswalker[2]: [-1]: ...`, `planeswalker[3]: [-10]: ...` with loyalty property.
-  2. Charm/modal: Abzan Charm-like → `spell[1]: choose one —`, `option[2]: ...`, `option[3]: ...`, `option[4]: ...`.
-  3. Transform: two-face card → two ConvertedCard entries with independent action counters.
-  4. Split card: two halves → both faces returned.
-  5. Adventure: creature + adventure → both faces returned.
-  6. Spell effect: Lightning Bolt-like → `spell[1]: CARDNAME deals 3 damage to any target.`
-  7. Layout detection: verify `DoubleFaced` → `transform`, `Split` → `split`, `Adventure` → `adventure`, `Modal` → `modal`, `Flip` → `flip`.
-
-- [ ] T016 [US2] Extend OutputFormatterTest for multi-face output in forge-connector/src/test/java/com/pricepredictor/connector/OutputFormatterTest.java
-
-  **Details**: Add test cases:
-  1. Multi-face card: `layout: transform` line first, faces separated by blank line + `ALTERNATE` + blank line.
-  2. Single-face card: no `layout:` line.
-  3. Each face independently formatted with correct properties and abilities.
-
 **Checkpoint**: All card types convert correctly. Run `mvn test` — all existing and new tests pass.
 
 ---
@@ -190,17 +194,19 @@
   2. For each file: read content, call `CardScriptConverter.convertCard()`, format via `OutputFormatter.formatMultiCard()`, write to mirrored path under `outputPath`.
   3. Mirror directory structure: `cardsPath/a/abzan_charm.txt` → `outputPath/a/abzan_charm.txt`.
   4. Error handling per FR-018: catch exceptions per file, log warning `[Card Name] message`, continue processing.
-  5. Use `java.util.logging` or SLF4J for warnings.
+  5. Use minlog (`com.esotericsoftware.minlog.Log`) for warnings — same logging framework used by Forge's game code. minlog is declared `provided` in pom.xml (already on Forge's classpath at runtime; for standalone CLI invocation, it's on the classpath via Forge JARs).
   6. Return `BatchResult` with: total files processed, files succeeded, files with warnings, list of warnings.
   7. Default output path: `./output` relative to working directory.
 
 - [ ] T018 [US3] Create ConvertMain CLI entry point in forge-connector/src/main/java/com/pricepredictor/connector/ConvertMain.java
 
-  **Details**: `public static void main(String[] args)`. Parse CLI arguments: `--cards-path` (required, default `../forge/forge-gui/res/cardsfolder/`), `--output-path` (optional, default `./output`). Create `BatchConverter`, call `convert()`, print summary (total/succeeded/warnings). Exit code 0 on success, 1 on fatal error. This is the `mainClass` for the shade plugin.
+  **Details**: `public static void main(String[] args)`. Parse CLI arguments: `--cards-path` (optional, default `../forge/forge-gui/res/cardsfolder/`), `--output-path` (optional, default `./output`). Create `BatchConverter`, call `convert()`, print summary (total/succeeded/warnings). Exit code 0 on success, 1 on fatal error. This is the `mainClass` for the shade plugin.
+
+### Tests for User Story 3
 
 - [ ] T019 [US3] Create BatchConverterTest in forge-connector/src/test/java/com/pricepredictor/connector/BatchConverterTest.java
 
-  **Details**: Integration test with fixture files in `src/test/resources/cardsfolder/`. Create 3-5 minimal card script fixtures covering: vanilla creature, creature with abilities, a malformed file. Test cases:
+  **Details**: Integration test with fixture files in `src/test/resources/cardsfolder/`. Annotate the test class with `@Tag("integration")` (JUnit 5) so it can be excluded from the fast test suite via Maven Surefire configuration. Create 3-5 minimal card script fixtures covering: vanilla creature, creature with abilities, a malformed file. Test cases:
   1. Batch processes all fixture files, output files created in temp directory.
   2. Output directory structure mirrors input.
   3. Malformed file logs warning and continues (other files still converted).
@@ -215,6 +221,16 @@
 **Goal**: Provide a Python CLI `convert` subcommand that launches the Java batch converter as a subprocess.
 
 **Independent Test**: Run `python -m price_predictor convert` and verify it produces output files.
+
+### Tests for User Story 4
+
+- [ ] T022 [US4] Create Python CLI integration test in src/tests/integration/test_convert_cli.py
+
+  **Details**: Integration test using pytest. Test cases:
+  1. `convert` subcommand appears in CLI help output.
+  2. Running `convert` with `--help` shows expected arguments (cards-path, output-path).
+  3. If Java/JARs are available: running convert on a small fixture produces output files.
+  Mark tests that require Java/JARs with `@pytest.mark.integration` so they can be skipped in CI without Forge. Verify `ruff check` passes on modified Python files.
 
 ### Implementation for User Story 4
 
@@ -232,14 +248,6 @@
 
   **Details**: In the existing command dispatch logic (likely in a `main()` function or `__main__.py`), add `elif args.command == "convert": return run_convert(args)`. Check `__main__.py` for the dispatch location and add the routing there if needed. Follow the existing pattern used by `run_predict`, `run_train`, `run_evaluate`, `run_serve`, `run_eval`.
 
-- [ ] T022 [US4] Create Python CLI integration test in src/tests/integration/test_convert_cli.py
-
-  **Details**: Integration test using pytest. Test cases:
-  1. `convert` subcommand appears in CLI help output.
-  2. Running `convert` with `--help` shows expected arguments (cards-path, output-path).
-  3. If Java/JARs are available: running convert on a small fixture produces output files.
-  Mark tests that require Java/JARs with `@pytest.mark.integration` so they can be skipped in CI without Forge.
-
 **Checkpoint**: Python CLI `convert` command works end-to-end.
 
 ---
@@ -249,6 +257,16 @@
 **Purpose**: Final validation and cleanup
 
 - [ ] T023 Run quickstart.md validation end-to-end (build, convert, verify output)
+
+  **Details**: Follow quickstart.md steps end-to-end:
+  1. Build: `mvn install` Forge deps, `mvn package` forge-connector, `mvn test` passes.
+  2. Batch convert: run on full Forge cardsfolder (32,000+ scripts).
+  3. **SC-001 verification**: Report total/succeeded/failed counts. Verify >= 99% success rate.
+  4. **SC-005 verification**: Confirm batch run completes without fatal errors.
+  5. **SC-002 spot-check**: Manually compare converted output for at least 10 diverse cards (vanilla creature, keyword creature, activated ability, planeswalker, charm, transform, split, adventure, spell, saga) against their Oracle text. Verify ability descriptions match.
+  6. **SC-003 verification**: Grep output files for script syntax remnants (e.g., `AB$`, `SP$`, `SVar:`, `AILogic$`). Confirm zero matches.
+  7. Run `ruff check` on modified Python files (cli.py). Verify no new warnings.
+
 - [ ] T024 Verify existing forge-connector tests still pass (price prediction client unaffected)
 
 ---
