@@ -25,16 +25,17 @@ dependencies to your local `~/.m2/repository`.
 ### 2. Build the converter
 
 ```bash
-cd forge-script-converter
+cd forge-connector
 mvn package -DskipTests
 ```
 
-This produces `forge-script-converter/target/forge-script-converter-1.0.0-SNAPSHOT-jar-with-dependencies.jar`.
+This produces `forge-connector/target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar`
+(fat JAR with non-Forge dependencies included; Forge classes excluded via `provided` scope).
 
 ### 3. Verify the build
 
 ```bash
-cd forge-script-converter
+cd forge-connector
 mvn test
 ```
 
@@ -58,8 +59,11 @@ python -m price_predictor convert \
 
 ### Batch Convert via Java directly
 
+Requires Forge JARs on the classpath (since they are excluded from the fat JAR):
+
 ```bash
-java -jar forge-script-converter/target/forge-script-converter-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
+java -cp "forge-connector/target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar:../forge/forge-game/target/forge-game-2.0.10-SNAPSHOT.jar:../forge/forge-core/target/forge-core-2.0.10-SNAPSHOT.jar:../forge/forge-game/target/dependency/*" \
+    com.pricepredictor.connector.ConvertMain \
     --cards-path ../forge/forge-gui/res/cardsfolder/ \
     --output-path ./output
 ```
@@ -105,7 +109,7 @@ spell[1]: CARDNAME deals 3 damage to any target.
 ### Java unit tests
 
 ```bash
-cd forge-script-converter
+cd forge-connector
 mvn test
 ```
 
@@ -119,24 +123,26 @@ pytest tests/integration/test_convert_cli.py -v
 ## Project Layout (new files for this feature)
 
 ```
-forge-script-converter/              # NEW Maven module
-├── pom.xml                          # Depends on forge-game (2.0.10-SNAPSHOT)
+forge-connector/                             # EXISTING — expanded with conversion code
+├── pom.xml                                  # MODIFIED: add forge-game (provided scope), shade plugin
 ├── src/
-│   ├── main/java/com/pricepredictor/converter/
-│   │   ├── CardScriptConverter.java     # Core conversion logic
-│   │   ├── ConvertedCard.java           # Output data model (one face)
-│   │   ├── AbilityLine.java             # Single ability line
-│   │   ├── AbilityType.java             # Enum: KEYWORD_PASSIVE, ACTIVATED, etc.
-│   │   ├── KeywordClassifier.java       # Passive vs activatable classification
-│   │   ├── OutputFormatter.java         # Formats ConvertedCard → text output
-│   │   ├── BatchConverter.java          # Directory traversal + batch conversion
-│   │   └── ConvertMain.java             # CLI entry point (main class)
-│   └── test/java/com/pricepredictor/converter/
-│       ├── CardScriptConverterTest.java # Unit tests: all ability types
-│       ├── CostTranslationTest.java     # Tests: Forge Cost class integration
-│       ├── KeywordClassifierTest.java   # Tests: keyword classification
-│       ├── OutputFormatterTest.java     # Tests: output format correctness
-│       └── BatchConverterTest.java      # Integration: batch processing
+│   ├── main/java/com/pricepredictor/connector/
+│   │   ├── (existing price prediction client classes)
+│   │   ├── CardScriptConverter.java         # NEW — Core conversion logic
+│   │   ├── ConvertedCard.java               # NEW — Output data model (one face)
+│   │   ├── AbilityLine.java                 # NEW — Single ability line
+│   │   ├── AbilityType.java                 # NEW — Enum: KEYWORD_PASSIVE, ACTIVATED, etc.
+│   │   ├── KeywordClassifier.java           # NEW — Passive vs activatable classification
+│   │   ├── OutputFormatter.java             # NEW — Formats ConvertedCard → text output
+│   │   ├── BatchConverter.java              # NEW — Directory traversal + batch conversion
+│   │   └── ConvertMain.java                 # NEW — CLI entry point (main class)
+│   └── test/java/com/pricepredictor/connector/
+│       ├── (existing price prediction client tests)
+│       ├── CardScriptConverterTest.java     # NEW — Unit tests: all ability types
+│       ├── CostTranslationTest.java         # NEW — Tests: Forge Cost class integration
+│       ├── KeywordClassifierTest.java       # NEW — Tests: keyword classification
+│       ├── OutputFormatterTest.java         # NEW — Tests: output format correctness
+│       └── BatchConverterTest.java          # NEW — Integration: batch processing
 
 src/price_predictor/
 ├── infrastructure/

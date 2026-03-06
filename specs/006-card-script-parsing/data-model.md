@@ -2,7 +2,7 @@
 
 **Feature Branch**: `006-card-script-parsing` | **Date**: 2026-03-05
 
-## Java Entities (forge-script-converter module)
+## Java Entities (forge-connector module)
 
 ### ConvertedCard
 
@@ -83,7 +83,7 @@ ICardFace (from CardRules.Reader)
     │
     ├─ Top-level properties:
     │   getName() → name (lowercase)
-    │   getManaCost() → ManaCost.getSimpleString() (lowercase)
+    │   getManaCost() → ManaCost.getSimpleString() (symbols stay uppercase)
     │   getType() → types (lowercase)
     │   getIntPower()/getIntToughness() → power toughness
     │   getInitialLoyalty() → loyalty

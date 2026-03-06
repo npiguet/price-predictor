@@ -27,7 +27,7 @@ A data scientist wants to convert a single Forge card script into a human-readab
 1. **Given** a vanilla creature script (e.g., Grizzly Bears: Name, ManaCost, Types, PT only), **When** converted, **Then** the output contains lowercase English key names (name, mana cost, types, power toughness) with correct values and no ability lines.
 2. **Given** a card with passive keywords (e.g., Flying, Trample), **When** converted, **Then** each passive keyword appears as "keyword: flying" without a number label.
 3. **Given** a card with activatable keywords (e.g., Kicker, Cycling, Equip), **When** converted, **Then** each appears as "keyword[N]: kicker {cost}" with a number from the global action counter, including cost parameters.
-4. **Given** a card with activated abilities (e.g., "{T}: Add {G}"), **When** converted, **Then** each ability appears as "activated[N]: {t}: add {g}." with cost and description matching Oracle text.
+4. **Given** a card with activated abilities (e.g., "{T}: Add {G}"), **When** converted, **Then** each ability appears as "activated[N]: {T}: add {G}." with cost and description matching Oracle text.
 5. **Given** a card with triggered abilities (e.g., an ETB trigger), **When** converted, **Then** the trigger appears as "triggered: when..." matching Oracle text, without a number label.
 6. **Given** a card with static abilities (e.g., "Other creatures you control get +1/+1"), **When** converted, **Then** each appears as "static: description" matching Oracle text, without a number label.
 7. **Given** a card with replacement effects (e.g., "CARDNAME enters tapped"), **When** converted, **Then** each appears as "replacement: description" matching Oracle text.
@@ -103,7 +103,7 @@ A data scientist wants to trigger the conversion from the existing Python CLI so
 ### Functional Requirements
 
 - **FR-001**: System MUST extract the following top-level properties from each card script and present them with lowercase English key names: `name`, `mana cost`, `types`, `power toughness`, `loyalty`, `colors`, `text`. Properties absent or empty in the source script MUST be omitted from output.
-- **FR-002**: System MUST convert mana costs from Forge internal syntax (e.g., `2 W W`) to human-readable paper-card format (e.g., `{2}{W}{W}`). Ability costs MUST likewise be converted (e.g., `T Sac<1/CARDNAME>` becomes `{t}, sacrifice CARDNAME:`). Cards with `ManaCost:no cost` MUST omit the mana cost line entirely.
+- **FR-002**: System MUST convert mana costs from Forge internal syntax (e.g., `2 W W`) to human-readable paper-card format (e.g., `{2}{W}{W}`). Ability costs MUST likewise be converted (e.g., `T Sac<1/CARDNAME>` becomes `{T}, sacrifice CARDNAME:`). Cards with `ManaCost:no cost` MUST omit the mana cost line entirely.
 - **FR-003**: System MUST extract keyword abilities. Passive keywords (e.g., flying, trample, deathtouch) appear as `keyword: name`. Keywords representing a player choice or action (e.g., kicker, cycling, equip, ninjutsu, evoke) appear as `keyword[N]: name cost` with a number from the global action counter. Keyword parameters (costs, amounts) MUST be included.
 - **FR-004**: System MUST extract activated abilities and present each as `activated[N]: cost: description` where cost and description match Oracle text.
 - **FR-005**: System MUST extract triggered abilities and present each as `triggered: description` matching Oracle text. Triggered abilities are automatic and do NOT receive a number label.
@@ -115,8 +115,8 @@ A data scientist wants to trigger the conversion from the existing Python CLI so
 - **FR-011**: Modal spells and charms MUST present each choice on its own line as `option[N]: description`.
 - **FR-012**: All ability descriptions MUST read like the equivalent section of Oracle text. Reminder text (text within parentheses) MUST be omitted from the output.
 - **FR-013**: Engine-internal metadata (AI:, DeckHints:, DeckHas:, DeckNeeds:, SVar:, Oracle:, and AI-specific parameters like AILogic$, AITgts$) MUST be excluded from output. No remnants of the original script syntax may appear beyond the `keyName: descriptionText` format.
-- **FR-014**: Multi-face cards (transform, split, adventure, modal double-faced, flip, room) MUST include all faces in the output, separated by the ALTERNATE marker. Each face carries its own properties, abilities, and independent action counter.
-- **FR-015**: All generated text and property names MUST be lowercase, except for CARDNAME, NICKNAME, and ALTERNATE which MUST remain as uppercase placeholders/markers in the output.
+- **FR-014**: Multi-face cards (transform, split, adventure, modal double-faced, flip, room) MUST include a `layout:` line before the first face (e.g., `layout: transform`) and all faces in the output, separated by the ALTERNATE marker. Each face carries its own properties, abilities, and independent action counter. Single-face cards omit the `layout:` line.
+- **FR-015**: All generated text and property names MUST be lowercase, except for CARDNAME, NICKNAME, ALTERNATE (uppercase placeholders/markers), and brace-enclosed symbols (`{W}`, `{U}`, `{B}`, `{R}`, `{G}`, `{C}`, `{S}`, `{X}`, `{T}`, `{Q}`, `{E}`, hybrid `{W/U}`, generic `{1}`, `{2}`, etc.) which MUST remain uppercase.
 - **FR-016**: The Oracle text property is NOT included in the output. The Oracle text MUST be reconstructable by concatenating the text descriptions of all keyword and ability lines on the card (whitespace, case, and bullet/formatting differences are acceptable).
 - **FR-017**: System MUST support batch processing of a directory tree of card scripts, converting ALL scripts regardless of card type (including tokens, emblems, dungeons, planes, schemes, etc.). The output directory structure MUST mirror the source directory structure. Default output location: `./output`.
 - **FR-018**: Malformed or unparseable card scripts MUST be logged with a warning including the card name in the format `[Card Name] message`. Processing MUST continue for remaining files.
@@ -143,7 +143,7 @@ name: llanowar elves
 mana cost: {G}
 types: creature elf druid
 power toughness: 1/1
-activated[1]: {t}: add {g}.
+activated[1]: {T}: add {G}.
 ```
 
 **Creature with kicker and triggered/static abilities** (Kangee-like):
@@ -182,6 +182,7 @@ option[4]: distribute two +1/+1 counters among one or two target creatures.
 
 **Transform card** (Daring Sleuth // Bearer of Overwhelming Truths):
 ```
+layout: transform
 name: daring sleuth
 mana cost: {1}{U}
 types: creature human rogue

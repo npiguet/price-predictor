@@ -27,24 +27,22 @@
   this is harder than it appears — costs "can be pretty much anything and never appear
   in human readable format on card scripts."
 
-## R-002: Module Structure — New Module vs Existing forge-connector
+## R-002: Module Structure — Conversion Code in forge-connector
 
-**Decision**: New Maven module `forge-script-converter/` alongside `forge-connector/`
+**Decision**: Add conversion code directly to the existing `forge-connector/` module
 
 **Rationale**:
-- `forge-connector/` is the lightweight Java stub library for Forge game integration
-  (Constitution V). It must remain consumable by Forge without pulling in Forge's own
-  modules as transitive dependencies.
-- Adding forge-core/forge-game to forge-connector would create a circular dependency:
-  Forge → forge-connector → forge-core/forge-game → (back to Forge).
-- A separate module keeps concerns cleanly separated:
-  - `forge-connector/` = price prediction client stub (consumed by Forge)
-  - `forge-script-converter/` = card script conversion tool (consumes Forge)
+- There is no circular dependency. Forge does not declare forge-connector as a Maven
+  dependency — the connector JAR is dropped into Forge's classpath at runtime.
+  forge-connector can freely depend on forge-core/forge-game as build-time Maven
+  dependencies without creating any cycle.
+- Keeping all Java code in one module avoids unnecessary project fragmentation.
+- The connector module already serves as the Java bridge between the price predictor
+  project and Forge. Card script conversion is another facet of that bridge.
 
 **Alternatives Considered**:
-- **Expand forge-connector**: Creates circular dependency with Forge. Violates the stub's
-  purpose as a lightweight client library.
-- **Maven profiles in forge-connector**: Adds complexity without solving the dependency issue.
+- **Separate `forge-script-converter/` module**: Unnecessary complexity. No circular
+  dependency exists to justify splitting the code.
 
 ## R-003: Forge Dependency Management
 
@@ -55,7 +53,12 @@
 - Build prerequisite: `cd ../forge && mvn install -DskipTests -pl forge-core,forge-game`
   installs the SNAPSHOTs to the local `.m2` repository.
 - Only `forge-game` is needed as a direct dependency (it transitively includes forge-core).
-- Maven shade plugin creates an executable fat JAR for Python CLI invocation.
+- Maven shade plugin creates a fat JAR in `forge-connector/` for Python CLI invocation.
+  Forge dependencies (forge-core, forge-game, and their transitive deps) are declared with
+  `<scope>provided</scope>` so they are available at compile time but excluded from the
+  fat JAR. At runtime inside Forge, these classes are already on the classpath. For
+  standalone CLI invocation (Python subprocess), the Java command must include both the
+  connector JAR and the Forge classpath.
 
 **Alternatives Considered**:
 - **Copying Forge source directly**: Maintenance nightmare, diverges from upstream.
