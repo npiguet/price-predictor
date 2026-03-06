@@ -1,4 +1,4 @@
-# Price Predictor
+REA# Price Predictor
 
 Predicts Magic: The Gathering card EUR market prices from game-visible
 attributes (mana cost, card types, oracle text, power/toughness, keywords).
@@ -230,6 +230,58 @@ containing: event type, ISO timestamp, HTTP status code, response latency
 {"event": "evaluate_request", "timestamp": "2026-03-01T14:30:00.123456+00:00", "status_code": 200, "latency_ms": 42.5, "card_name": "Lightning Bolt", "card_types": ["Instant"], "card_mana_cost": "R", "predicted_price_eur": 2.35, "model_version": "latest"}
 ```
 
+### Batch convert Forge card scripts
+
+Converts the entire Forge card script library (~32,000 `.txt` files) into
+LLM-friendly text format. Each output file contains lowercase property lines
+(name, mana cost, types, etc.) followed by classified ability lines with action
+counters.
+
+**Prerequisites**: Java 17+, Forge built (`cd ../forge && mvn install -DskipTests`),
+forge-connector fat JAR built (`cd forge-connector && mvn package -DskipTests`).
+
+```bash
+python -m price_predictor convert \
+  --cards-path ../forge/forge-gui/res/cardsfolder \
+  --output-path ./output
+```
+
+Options: `--cards-path` (default: `../forge/forge-gui/res/cardsfolder/`),
+`--output-path` (default: `./output`).
+
+The output mirrors the input directory structure. Example converted card:
+```
+name: lightning bolt
+mana cost: R
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target.
+```
+
+Multi-face cards include a `layout:` line and separate faces with `ALTERNATE`:
+```
+layout: transform
+name: delver of secrets
+mana cost: U
+types: creature human wizard
+power toughness: 1/1
+keyword[1]: transform
+
+ALTERNATE
+
+name: insectile aberration
+types: creature human insect
+power toughness: 3/2
+keyword: flying
+```
+
+You can also run the Java converter directly:
+```bash
+java -cp "forge-connector/target/forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar;../forge/forge-game/target/forge-game-2.0.10-SNAPSHOT.jar;../forge/forge-core/target/forge-core-2.0.10-SNAPSHOT.jar;../forge/forge-game/target/dependency/*" \
+  com.pricepredictor.connector.ConvertMain \
+  --cards-path ../forge/forge-gui/res/cardsfolder \
+  --output-path ./output
+```
+
 ### Java Connector (forge-connector)
 
 A zero-dependency Java 17+ library that lets MTG Forge (or any Java application)
@@ -394,14 +446,14 @@ src/price_predictor/
     evaluate.py     EvaluateModelUseCase
     feature_engineering.py  Card -> numeric feature vector
   infrastructure/   External integrations (depends on application)
-    cli.py          argparse CLI (train, predict, evaluate, serve, eval subcommands)
+    cli.py          argparse CLI (train, predict, evaluate, serve, eval, convert subcommands)
     server.py       FastAPI app, POST /api/v1/evaluate endpoint
     forge_parser.py Forge card script parser (file + text)
     mtgjson_loader.py AllPrintings/AllPricesToday loaders
     model_store.py  Model save/load (joblib)
-forge-connector/    Java Maven library for Forge integration
-  src/main/java/    PricePredictorClient, CardAttributes, ForgeScriptSerializer
-  src/test/java/    JUnit 5 tests (unit + graceful degradation)
+forge-connector/    Java Maven module for Forge integration
+  src/main/java/    PricePredictorClient, CardScriptConverter, BatchConverter, ConvertMain
+  src/test/java/    JUnit 5 tests (unit + @Tag("integration") for Forge-dependent tests)
 tests/
   unit/             Fast unit tests (fixture-based)
   integration/      End-to-end pipeline + server integration tests
