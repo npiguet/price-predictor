@@ -35,8 +35,8 @@ Python 3.14+: Follow standard conventions
 
 ## Recent Changes
 - 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
+- 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
 - 006-card-script-parsing: Added Python 3.14+ (existing project stack) + None new — pure text parsing with stdlib only
-- 005-card-eval-endpoints: Added Python 3.14+ + FastAPI, uvicorn (existing) — no new dependencies added
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
