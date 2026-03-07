@@ -6,6 +6,7 @@ import forge.card.CardSplitType;
 import forge.card.CardType;
 import forge.card.ICardFace;
 import forge.card.mana.ManaCost;
+import forge.game.CardTraitBase;
 import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
@@ -14,19 +15,12 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementHandler;
 import forge.game.spellability.SpellAbility;
-import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
-import forge.util.Lang;
-import forge.util.Localizer;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
-import java.util.ResourceBundle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,10 +32,6 @@ public class CardScriptConverter {
     private static final Pattern BRACE_SYMBOL = Pattern.compile("\\{[^}]+\\}");
     private static final Pattern REMINDER_TEXT = Pattern.compile("\\s*\\([^)]*\\)");
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
-
-    static {
-        ensureForgeInitialized();
-    }
 
     private final CardRules.Reader reader = new CardRules.Reader();
 
@@ -146,80 +136,45 @@ public class CardScriptConverter {
             }
         }
 
-        // --- Abilities (A: lines) ---
-        for (String ability : face.getAbilities()) {
-            try {
-                SpellAbility sa = AbilityFactory.getAbility(ability, card);
-                String spellDesc = sa.getParam("SpellDescription");
-                if (spellDesc == null || spellDesc.isEmpty()) {
-                    continue;
-                }
+        // --- Abilities (from A: lines, already parsed on the card) ---
+        for (SpellAbility sa : card.getSpellAbilities()) {
+            if (sa.getKeyword() != null) continue; // skip keyword-derived abilities
+            String spellDesc = sa.getParam("SpellDescription");
+            if (spellDesc == null || spellDesc.isEmpty()) continue;
 
-                if (sa.getApi() == ApiType.Charm) {
-                    actionCounter++;
-                    String desc = stripReminderText(sa.getDescription());
-                    abilities.add(new AbilityLine(AbilityType.SPELL,
-                            applyTextCasing(desc), actionCounter));
-                    var choices = sa.getAdditionalAbilityList("Choices");
-                    if (choices != null) {
-                        for (var choice : choices) {
-                            String choiceDesc = choice.getParam("SpellDescription");
-                            if (choiceDesc == null) choiceDesc = "(no description)";
-                            choiceDesc = stripReminderText(choiceDesc);
-                            actionCounter++;
-                            abilities.add(new AbilityLine(AbilityType.OPTION,
-                                    applyTextCasing(choiceDesc), actionCounter));
-                        }
+            if (sa.getApi() == ApiType.Charm) {
+                actionCounter++;
+                String desc = stripReminderText(sa.getDescription());
+                abilities.add(new AbilityLine(AbilityType.SPELL,
+                        applyTextCasing(desc), actionCounter));
+                var choices = sa.getAdditionalAbilityList("Choices");
+                if (choices != null) {
+                    for (var choice : choices) {
+                        String choiceDesc = choice.getParam("SpellDescription");
+                        if (choiceDesc == null) choiceDesc = "(no description)";
+                        choiceDesc = stripReminderText(choiceDesc);
+                        actionCounter++;
+                        abilities.add(new AbilityLine(AbilityType.OPTION,
+                                applyTextCasing(choiceDesc), actionCounter));
                     }
-                } else if (sa.isActivatedAbility()) {
-                    String desc = stripReminderText(sa.getDescription());
-                    actionCounter++;
-                    AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
-                    abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
-                } else if (sa.isSpell()) {
-                    actionCounter++;
-                    String desc = stripReminderText(sa.getDescription());
-                    abilities.add(new AbilityLine(AbilityType.SPELL,
-                            applyTextCasing(desc), actionCounter));
                 }
-            } catch (Throwable e) {
-                Log.warn("CardScriptConverter",
-                        "[" + face.getName() + "] failed to parse ability: " + e.getMessage());
+            } else if (sa.isActivatedAbility()) {
+                String desc = stripReminderText(sa.getDescription());
+                actionCounter++;
+                AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
+                abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
+            } else if (sa.isSpell()) {
+                actionCounter++;
+                String desc = stripReminderText(sa.getDescription());
+                abilities.add(new AbilityLine(AbilityType.SPELL,
+                        applyTextCasing(desc), actionCounter));
             }
         }
 
-        // --- Triggers (from T: lines, already parsed on the card) ---
-        for (Trigger t : card.getTriggers()) {
-            if ("True".equals(t.getParam("Secondary")) || "True".equals(t.getParam("Static"))) continue;
-            String desc = t.getParam("TriggerDescription");
-            if (desc == null || desc.isEmpty()) {
-                Log.warn("CardScriptConverter", "[" + face.getName() + "] missing description for triggered");
-                continue;
-            }
-            abilities.add(new AbilityLine(AbilityType.TRIGGERED, applyTextCasing(stripReminderText(desc)), null));
-        }
-
-        // --- Statics (from S: lines, already parsed on the card) ---
-        for (StaticAbility sa : card.getStaticAbilities()) {
-            if ("True".equals(sa.getParam("Secondary")) || "True".equals(sa.getParam("Static"))) continue;
-            String desc = sa.getParam("Description");
-            if (desc == null || desc.isEmpty()) {
-                Log.warn("CardScriptConverter", "[" + face.getName() + "] missing description for static");
-                continue;
-            }
-            abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(stripReminderText(desc)), null));
-        }
-
-        // --- Replacements (from R: lines, already parsed on the card) ---
-        for (ReplacementEffect re : card.getReplacementEffects()) {
-            if ("True".equals(re.getParam("Secondary")) || "True".equals(re.getParam("Static"))) continue;
-            String desc = re.getParam("Description");
-            if (desc == null || desc.isEmpty()) {
-                Log.warn("CardScriptConverter", "[" + face.getName() + "] missing description for replacement");
-                continue;
-            }
-            abilities.add(new AbilityLine(AbilityType.REPLACEMENT, applyTextCasing(stripReminderText(desc)), null));
-        }
+        // --- Triggers, Statics, Replacements (from T:/S:/R: lines, already parsed on the card) ---
+        addDescribedTraits(abilities, card.getTriggers(), "TriggerDescription", AbilityType.TRIGGERED, face.getName());
+        addDescribedTraits(abilities, card.getStaticAbilities(), "Description", AbilityType.STATIC, face.getName());
+        addDescribedTraits(abilities, card.getReplacementEffects(), "Description", AbilityType.REPLACEMENT, face.getName());
 
         // --- Build ConvertedCard ---
         String name = applyTextCasing(face.getName());
@@ -244,38 +199,25 @@ public class CardScriptConverter {
 
     // --- Helper methods ---
 
-    private static void ensureForgeInitialized() {
-        try {
-            Localizer localizer = Localizer.getInstance();
-            Field rbField = Localizer.class.getDeclaredField("resourceBundle");
-            rbField.setAccessible(true);
-            if (rbField.get(localizer) == null) {
-                ResourceBundle dummyBundle = new ResourceBundle() {
-                    @Override
-                    protected Object handleGetObject(String key) { return key; }
-                    @Override
-                    public Enumeration<String> getKeys() { return Collections.emptyEnumeration(); }
-                };
-                rbField.set(localizer, dummyBundle);
-                Field ebField = Localizer.class.getDeclaredField("englishBundle");
-                ebField.setAccessible(true);
-                if (ebField.get(localizer) == null) {
-                    ebField.set(localizer, dummyBundle);
-                }
+    private void addDescribedTraits(List<AbilityLine> abilities,
+                                    Iterable<? extends CardTraitBase> traits,
+                                    String descParam, AbilityType type,
+                                    String faceName) {
+        for (CardTraitBase trait : traits) {
+            if ("True".equals(trait.getParam("Secondary")) || "True".equals(trait.getParam("Static"))) continue;
+            String desc = trait.getParam(descParam);
+            if (desc == null || desc.isEmpty()) {
+                Log.warn("CardScriptConverter", "[" + faceName + "] missing description for " + type.name().toLowerCase());
+                continue;
             }
-        } catch (Exception ignored) {
-        }
-        try {
-            if (Lang.getInstance() == null) {
-                Lang.createInstance("en-US");
-            }
-        } catch (Exception ignored) {
+            abilities.add(new AbilityLine(type, applyTextCasing(stripReminderText(desc)), null));
         }
     }
 
     /**
-     * Build a fully-populated Card from an ICardFace, replicating the essential
-     * steps of CardFactory.readCardFace() + CardFactoryUtil.setupKeywordedAbilities().
+     * Build a Card from an ICardFace, replicating the essential steps of
+     * CardFactory.readCardFace() (forge-game, line ~346). Keep in sync when
+     * upgrading Forge.
      */
     private Card buildCard(ICardFace face) {
         Card card = new Card(0, null, null);
@@ -308,8 +250,9 @@ public class CardScriptConverter {
         for (String t : face.getTriggers())
             card.addTrigger(TriggerHandler.parseTrigger(t, card, true));
 
-        // Keywords after SVars (Forge requirement), no traits yet
+        // Keywords after SVars (Forge requirement)
         // Use CardState directly to avoid Card.updateKeywords() which triggers CardView updates
+        // that require StaticData to be initialized
         card.getCurrentState().addIntrinsicKeywords(face.getKeywords(), false);
         card.updateKeywordsCache();
 

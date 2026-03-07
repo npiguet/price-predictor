@@ -1,8 +1,5 @@
 package com.pricepredictor.connector;
 
-import forge.util.Lang;
-import forge.util.Localizer;
-
 import java.nio.file.Path;
 
 /**
@@ -27,9 +24,7 @@ public class ConvertMain {
         }
 
         try {
-            // Initialize Forge's Lang and Localizer — required by CardFace, Cost, ZoneType
-            Lang.createInstance("en-US");
-            Localizer.getInstance().initialize("en-US", forgeLangDir);
+            ForgeEnvironmentInitializer.initialize(forgeLangDir);
 
             BatchConverter batchConverter = new BatchConverter();
             BatchConverter.BatchResult result = batchConverter.convert(

@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -16,6 +17,11 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Tag("integration")
 class BatchConverterTest {
+
+    @BeforeAll
+    static void init() {
+        ForgeEnvironmentInitializer.initialize("../forge/forge-gui/res/languages/");
+    }
 
     @TempDir
     Path tempDir;

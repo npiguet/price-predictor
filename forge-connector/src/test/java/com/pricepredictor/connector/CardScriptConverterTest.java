@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +16,11 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Tag("integration")
 class CardScriptConverterTest {
+
+    @BeforeAll
+    static void init() {
+        ForgeEnvironmentInitializer.initialize("../forge/forge-gui/res/languages/");
+    }
 
     private final CardScriptConverter converter = new CardScriptConverter();
 
