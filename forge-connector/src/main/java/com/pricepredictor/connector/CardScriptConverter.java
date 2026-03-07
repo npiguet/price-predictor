@@ -9,11 +9,14 @@ import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardState;
+import forge.game.card.CounterType;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
+import forge.game.replacement.ReplacementEffect;
+import forge.game.replacement.ReplacementHandler;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
 import forge.util.FileSection;
@@ -151,8 +154,6 @@ public class CardScriptConverter {
                 } else if (sa.isActivatedAbility()) {
                     String desc = stripReminderText(sa.getDescription());
                     if (sa.isPwAbility()) {
-                        // Planeswalker: +N: desc → [+N]: desc
-                        desc = desc.replaceFirst("^([+-]?\\d+):", "[$1]:");
                         actionCounter++;
                         abilities.add(new AbilityLine(AbilityType.PLANESWALKER,
                                 applyTextCasing(desc), actionCounter));
@@ -221,17 +222,36 @@ public class CardScriptConverter {
 
         // --- Replacements (R: lines) ---
         for (String replacement : face.getReplacements()) {
-            Map<String, String> params = FileSection.parseToMap(replacement,
-                    FileSection.DOLLAR_SIGN_KV_SEPARATOR);
-            String description = params.get("Description");
-            if (description == null || description.isEmpty()) {
+            try {
+                String description;
+                boolean secondary;
+                try {
+                    ReplacementEffect re = ReplacementHandler.parseReplacement(
+                            replacement, hostCard, true);
+                    description = re.getParam("Description");
+                    secondary = "True".equals(re.getParam("Secondary"));
+                } catch (Throwable parseEx) {
+                    // Fallback: extract Description directly from the raw parameters
+                    Map<String, String> params = FileSection.parseToMap(replacement,
+                            FileSection.DOLLAR_SIGN_KV_SEPARATOR);
+                    description = params.get("Description");
+                    secondary = "True".equals(params.get("Secondary"));
+                }
+                if (secondary) {
+                    continue;
+                }
+                if (description == null || description.isEmpty()) {
+                    Log.warn("CardScriptConverter",
+                            "[" + face.getName() + "] missing description for replacement");
+                    continue;
+                }
+                description = stripReminderText(description);
+                abilities.add(new AbilityLine(AbilityType.REPLACEMENT,
+                        applyTextCasing(description), null));
+            } catch (Throwable e) {
                 Log.warn("CardScriptConverter",
-                        "[" + face.getName() + "] missing description for replacement");
-                continue;
+                        "[" + face.getName() + "] failed to parse replacement: " + e.getMessage());
             }
-            description = stripReminderText(description);
-            abilities.add(new AbilityLine(AbilityType.REPLACEMENT,
-                    applyTextCasing(description), null));
         }
 
         // --- Build ConvertedCard ---
@@ -316,16 +336,6 @@ public class CardScriptConverter {
         return typeStr.toLowerCase();
     }
 
-    private String formatCost(String costStr) {
-        if (costStr == null || costStr.isEmpty()) return "";
-        try {
-            Cost cost = new Cost(costStr, true);
-            return cost.toSimpleString();
-        } catch (Exception e) {
-            return costStr;
-        }
-    }
-
     private boolean isStandardKeyword(String kw) {
         // Standard keywords don't start with card-name-like patterns
         // They follow patterns like "Flying", "Equip:2", "Protection from red"
@@ -344,23 +354,30 @@ public class CardScriptConverter {
         List<AbilityLine> lines = new ArrayList<>();
 
         if (kw.startsWith("etbCounter:")) {
-            // K:etbCounter:Type:N → triggered line
+            // K:etbCounter:Type:N → replacement line using Forge's CounterType for proper names
             String[] parts = kw.split(":");
             if (parts.length >= 3) {
-                String counterType = parts[1].toLowerCase();
+                String counterName;
+                try {
+                    counterName = CounterType.getType(parts[1]).getName().toLowerCase();
+                } catch (Exception e) {
+                    counterName = parts[1].toLowerCase();
+                }
                 String count = parts.length >= 4 ? parts[2] : "1";
-                lines.add(new AbilityLine(AbilityType.TRIGGERED,
-                        applyTextCasing("enters with " + count + " " + counterType +
-                                (Integer.parseInt(count) > 1 ? " counters" : " counter")),
+                int n = Integer.parseInt(count);
+                lines.add(new AbilityLine(AbilityType.REPLACEMENT,
+                        applyTextCasing("CARDNAME enters with " + count + " " + counterName +
+                                (n > 1 ? " counters on it." : " counter on it.")),
                         null));
             }
         } else if (kw.startsWith("Chapter:")) {
-            // K:Chapter:N:SVar1,...,SvarN → triggered lines for each chapter
+            // K:Chapter:N:SVar1,...,SvarN → chapter lines with Roman numeral prefix
             String[] parts = kw.split(":");
             if (parts.length >= 3) {
                 String svarList = parts[2];
-                for (String svarName : svarList.split(",")) {
-                    svarName = svarName.trim();
+                String[] svarNames = svarList.split(",");
+                for (int i = 0; i < svarNames.length; i++) {
+                    String svarName = svarNames[i].trim();
                     String svarValue = svars.get(svarName);
                     if (svarValue != null) {
                         Map<String, String> svarParams = FileSection.parseToMap(svarValue,
@@ -369,8 +386,9 @@ public class CardScriptConverter {
                         if (desc == null) desc = svarParams.get("SpellDescription");
                         if (desc != null) {
                             desc = stripReminderText(desc);
-                            lines.add(new AbilityLine(AbilityType.TRIGGERED,
-                                    applyTextCasing(desc), null));
+                            String roman = toRoman(i + 1);
+                            lines.add(new AbilityLine(AbilityType.CHAPTER,
+                                    applyTextCasing(roman + " \u2014 " + desc), null));
                         }
                     }
                 }
@@ -386,7 +404,12 @@ public class CardScriptConverter {
                 String effect = parts.length >= 5 ? parts[3] : "";
                 if (!"1".equals(level)) {
                     startCounter++;
-                    String costDisplay = formatCost(cost);
+                    String costDisplay;
+                    try {
+                        costDisplay = new Cost(cost, true).toSimpleString();
+                    } catch (Exception e) {
+                        costDisplay = cost;
+                    }
                     lines.add(new AbilityLine(AbilityType.ACTIVATED,
                             applyTextCasing(costDisplay + ": level " + level),
                             startCounter));
@@ -431,6 +454,15 @@ public class CardScriptConverter {
         lowered = lowered.replace("alternate", "ALTERNATE");
 
         return lowered;
+    }
+
+    private static final String[] ROMAN_NUMERALS = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
+
+    private static String toRoman(int chapter) {
+        if (chapter >= 1 && chapter <= ROMAN_NUMERALS.length) {
+            return ROMAN_NUMERALS[chapter - 1];
+        }
+        return String.valueOf(chapter);
     }
 
     private String stripReminderText(String text) {

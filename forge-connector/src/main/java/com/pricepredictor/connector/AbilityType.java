@@ -15,6 +15,7 @@ public enum AbilityType {
     TRIGGERED("triggered", false),
     STATIC("static", false),
     REPLACEMENT("replacement", false),
+    CHAPTER("chapter", false),
     SPELL("spell", true),
     PLANESWALKER("planeswalker", true),
     OPTION("option", true),

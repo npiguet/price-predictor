@@ -107,9 +107,9 @@ class OutputFormatterTest {
         ConvertedCard card = new ConvertedCard(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null,
-                List.of(new AbilityLine(AbilityType.PLANESWALKER, "[+2]: each player draws a card.", 1)));
+                List.of(new AbilityLine(AbilityType.PLANESWALKER, "+2: each player draws a card.", 1)));
         String output = OutputFormatter.formatCard(card);
         assertTrue(output.contains("loyalty: 3"));
-        assertTrue(output.contains("planeswalker[1]: [+2]: each player draws a card."));
+        assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));
     }
 }

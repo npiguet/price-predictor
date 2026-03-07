@@ -221,18 +221,46 @@ class CardScriptConverterTest {
                 "A:AB$ Draw | Cost$ AddCounter<2/LOYALTY> | Defined$ Player | NumCards$ 1 | Planeswalker$ True | SpellDescription$ Each player draws a card.",
                 "A:AB$ Draw | Cost$ SubCounter<1/LOYALTY> | Defined$ Targeted | NumCards$ 1 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player draws a card.",
                 "A:AB$ Mill | Cost$ SubCounter<10/LOYALTY> | Defined$ Targeted | NumCards$ 20 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player mills twenty cards.",
-                "Oracle:[+2]: Each player draws a card.\\n[-1]: Target player draws a card.\\n[-10]: Target player mills twenty cards.");
+                "Oracle:+2: Each player draws a card.\\n-1: Target player draws a card.\\n-10: Target player mills twenty cards.");
         ConvertedCard card = result.faces().get(0);
         assertEquals("3", card.loyalty());
         List<AbilityLine> pwAbilities = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.PLANESWALKER).toList();
         assertEquals(3, pwAbilities.size());
-        assertTrue(pwAbilities.get(0).formatLine().contains("[+2]:"));
-        assertTrue(pwAbilities.get(1).formatLine().contains("[-1]:"));
-        assertTrue(pwAbilities.get(2).formatLine().contains("[-10]:"));
+        assertTrue(pwAbilities.get(0).formatLine().contains("+2:"), "Expected +2: but got: " + pwAbilities.get(0).formatLine());
+        assertTrue(pwAbilities.get(1).formatLine().contains("-1:"), "Expected -1: but got: " + pwAbilities.get(1).formatLine());
+        assertTrue(pwAbilities.get(2).formatLine().contains("-10:"), "Expected -10: but got: " + pwAbilities.get(2).formatLine());
+        assertFalse(pwAbilities.get(0).formatLine().contains("[+2]"), "Should not have brackets around loyalty cost");
+        assertFalse(pwAbilities.get(1).formatLine().contains("[-1]"), "Should not have brackets around loyalty cost");
         assertEquals(1, (int) pwAbilities.get(0).actionNumber());
         assertEquals(2, (int) pwAbilities.get(1).actionNumber());
         assertEquals(3, (int) pwAbilities.get(2).actionNumber());
+    }
+
+    @Test
+    void sagaChapterAbilities() {
+        MultiCard result = convert(
+                "Name:The Eldest Reborn",
+                "ManaCost:4 B",
+                "Types:Enchantment Saga",
+                "K:Chapter:3:ChI,ChII,ChIII",
+                "SVar:ChI:DB$ Sacrifice | Defined$ OpponentNonTgtAP | SacValid$ Creature.OppCtrl,Planeswalker.OppCtrl | SpellDescription$ Each opponent sacrifices a creature or planeswalker.",
+                "SVar:ChII:DB$ Discard | Defined$ OpponentNonTgtAP | NumCards$ 1 | SpellDescription$ Each opponent discards a card.",
+                "SVar:ChIII:DB$ ChangeZone | Origin$ Graveyard | Destination$ Battlefield | ChangeType$ Creature.inYourYard,Planeswalker.inYourYard | SpellDescription$ Put target creature or planeswalker card from a graveyard onto the battlefield under your control.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> chapters = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.CHAPTER).toList();
+        assertEquals(3, chapters.size(), "Expected 3 chapter abilities but got: " + card.abilities());
+        String ch1 = chapters.get(0).formatLine();
+        String ch2 = chapters.get(1).formatLine();
+        String ch3 = chapters.get(2).formatLine();
+        assertTrue(ch1.startsWith("chapter:"), "Expected chapter: prefix but got: " + ch1);
+        assertTrue(ch1.contains("i \u2014"), "Expected 'i \u2014' in: " + ch1);
+        assertTrue(ch2.contains("ii \u2014"), "Expected 'ii \u2014' in: " + ch2);
+        assertTrue(ch3.contains("iii \u2014"), "Expected 'iii \u2014' in: " + ch3);
+        assertTrue(ch1.contains("sacrifices"), "Expected sacrifice text in: " + ch1);
+        assertNull(chapters.get(0).actionNumber(), "Chapters should not have action numbers");
     }
 
     @Test
