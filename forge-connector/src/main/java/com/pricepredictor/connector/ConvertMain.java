@@ -10,7 +10,6 @@ public class ConvertMain {
     public static void main(String[] args) {
         String cardsPath = "../forge/forge-gui/res/cardsfolder/";
         String outputPath = "./output";
-        String forgeLangDir = "../forge/forge-gui/res/languages/";
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -24,7 +23,7 @@ public class ConvertMain {
         }
 
         try {
-            ForgeEnvironmentInitializer.initialize(forgeLangDir);
+            ForgeEnvironmentInitializer.initialize();
 
             BatchConverter batchConverter = new BatchConverter();
             BatchConverter.BatchResult result = batchConverter.convert(

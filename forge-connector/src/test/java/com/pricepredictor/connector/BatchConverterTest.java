@@ -20,7 +20,7 @@ class BatchConverterTest {
 
     @BeforeAll
     static void init() {
-        ForgeEnvironmentInitializer.initialize("../forge/forge-gui/res/languages/");
+        ForgeEnvironmentInitializer.initialize();
     }
 
     @TempDir

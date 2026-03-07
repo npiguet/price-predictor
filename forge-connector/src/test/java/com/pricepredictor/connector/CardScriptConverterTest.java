@@ -19,7 +19,7 @@ class CardScriptConverterTest {
 
     @BeforeAll
     static void init() {
-        ForgeEnvironmentInitializer.initialize("../forge/forge-gui/res/languages/");
+        ForgeEnvironmentInitializer.initialize();
     }
 
     private final CardScriptConverter converter = new CardScriptConverter();
