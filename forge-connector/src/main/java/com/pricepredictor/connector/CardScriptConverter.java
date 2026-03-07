@@ -5,15 +5,29 @@ import forge.card.CardRules;
 import forge.card.CardSplitType;
 import forge.card.ICardFace;
 import forge.card.mana.ManaCost;
+import forge.game.ability.AbilityFactory;
+import forge.game.ability.ApiType;
+import forge.game.card.Card;
+import forge.game.card.CardState;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
+import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerHandler;
 import forge.util.FileSection;
+import forge.util.Lang;
+import forge.util.Localizer;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ResourceBundle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +38,10 @@ public class CardScriptConverter {
 
     private static final Pattern BRACE_SYMBOL = Pattern.compile("\\{[^}]+\\}");
     private static final Pattern REMINDER_TEXT = Pattern.compile("\\s*\\([^)]*\\)");
+
+    static {
+        ensureForgeInitialized();
+    }
 
     private final CardRules.Reader reader = new CardRules.Reader();
 
@@ -65,6 +83,7 @@ public class CardScriptConverter {
     public ConvertedCard convertFace(ICardFace face, Map<String, String> svars) {
         int actionCounter = 0;
         List<AbilityLine> abilities = new ArrayList<>();
+        Card hostCard = createHostCard(face, svars);
 
         // --- Keywords ---
         for (String kw : face.getKeywords()) {
@@ -105,51 +124,23 @@ public class CardScriptConverter {
 
         // --- Abilities (A: lines) ---
         for (String ability : face.getAbilities()) {
-            Map<String, String> params = FileSection.parseToMap(ability,
-                    FileSection.DOLLAR_SIGN_KV_SEPARATOR);
-
-            boolean isPlaneswalker = "True".equals(params.get("Planeswalker"));
-            String costStr = params.get("Cost");
-            String description = params.get("SpellDescription");
-
-            if (description == null || description.isEmpty()) {
-                // SP$ PermanentCreature and similar engine-internal abilities have no description
-                // — skip them rather than producing placeholder output
-                continue;
-            }
-
-            description = stripReminderText(description);
-
-            if (ability.startsWith("AB$ ") || (ability.contains("AB$") && ability.indexOf("AB$") < 5)) {
-                if (isPlaneswalker && costStr != null) {
-                    // Planeswalker loyalty ability
-                    String loyaltyPrefix = extractLoyaltyPrefix(costStr);
-                    actionCounter++;
-                    abilities.add(new AbilityLine(AbilityType.PLANESWALKER,
-                            applyTextCasing(loyaltyPrefix + ": " + description), actionCounter));
-                } else {
-                    // Regular activated ability
-                    String costDisplay = formatCost(costStr);
-                    actionCounter++;
-                    abilities.add(new AbilityLine(AbilityType.ACTIVATED,
-                            applyTextCasing(costDisplay + ": " + description), actionCounter));
+            try {
+                SpellAbility sa = AbilityFactory.getAbility(ability, hostCard);
+                String spellDesc = sa.getParam("SpellDescription");
+                if (spellDesc == null || spellDesc.isEmpty()) {
+                    continue;
                 }
-            } else if (ability.startsWith("SP$ Charm") || ability.contains("SP$ Charm")) {
-                // Charm/modal spell — parent line
-                actionCounter++;
-                String chooseText = extractChooseText(params);
-                abilities.add(new AbilityLine(AbilityType.SPELL,
-                        applyTextCasing(chooseText), actionCounter));
-                // Resolve choices
-                String choices = params.get("Choices");
-                if (choices != null) {
-                    for (String svarName : choices.split(",")) {
-                        svarName = svarName.trim();
-                        String choiceSvar = svars.get(svarName);
-                        if (choiceSvar != null) {
-                            Map<String, String> choiceParams = FileSection.parseToMap(choiceSvar,
-                                    FileSection.DOLLAR_SIGN_KV_SEPARATOR);
-                            String choiceDesc = choiceParams.get("SpellDescription");
+
+                if (sa.getApi() == ApiType.Charm) {
+                    // Charm/modal spell — parent line + choices
+                    actionCounter++;
+                    String desc = stripReminderText(sa.getDescription());
+                    abilities.add(new AbilityLine(AbilityType.SPELL,
+                            applyTextCasing(desc), actionCounter));
+                    var choices = sa.getAdditionalAbilityList("Choices");
+                    if (choices != null) {
+                        for (var choice : choices) {
+                            String choiceDesc = choice.getParam("SpellDescription");
                             if (choiceDesc == null) choiceDesc = "(no description)";
                             choiceDesc = stripReminderText(choiceDesc);
                             actionCounter++;
@@ -157,49 +148,75 @@ public class CardScriptConverter {
                                     applyTextCasing(choiceDesc), actionCounter));
                         }
                     }
+                } else if (sa.isActivatedAbility()) {
+                    String desc = stripReminderText(sa.getDescription());
+                    if (sa.isPwAbility()) {
+                        // Planeswalker: +N: desc → [+N]: desc
+                        desc = desc.replaceFirst("^([+-]?\\d+):", "[$1]:");
+                        actionCounter++;
+                        abilities.add(new AbilityLine(AbilityType.PLANESWALKER,
+                                applyTextCasing(desc), actionCounter));
+                    } else {
+                        actionCounter++;
+                        abilities.add(new AbilityLine(AbilityType.ACTIVATED,
+                                applyTextCasing(desc), actionCounter));
+                    }
+                } else if (sa.isSpell()) {
+                    actionCounter++;
+                    String desc = stripReminderText(sa.getDescription());
+                    abilities.add(new AbilityLine(AbilityType.SPELL,
+                            applyTextCasing(desc), actionCounter));
                 }
-            } else if (ability.startsWith("SP$ ") || ability.contains("SP$")) {
-                // Spell effect
-                actionCounter++;
-                abilities.add(new AbilityLine(AbilityType.SPELL,
-                        applyTextCasing(description), actionCounter));
+            } catch (Throwable e) {
+                Log.warn("CardScriptConverter",
+                        "[" + face.getName() + "] failed to parse ability: " + e.getMessage());
             }
         }
 
         // --- Triggers (T: lines) ---
         for (String trigger : face.getTriggers()) {
-            Map<String, String> params = FileSection.parseToMap(trigger,
-                    FileSection.DOLLAR_SIGN_KV_SEPARATOR);
-            if ("True".equals(params.get("Static")) || "True".equals(params.get("Secondary"))) {
-                continue;
-            }
-            String description = params.get("TriggerDescription");
-            if (description == null || description.isEmpty()) {
+            try {
+                Trigger trig = TriggerHandler.parseTrigger(trigger, hostCard, true);
+                if ("True".equals(trig.getParam("Static"))
+                        || "True".equals(trig.getParam("Secondary"))) {
+                    continue;
+                }
+                String description = trig.getParam("TriggerDescription");
+                if (description == null || description.isEmpty()) {
+                    Log.warn("CardScriptConverter",
+                            "[" + face.getName() + "] missing description for trigger");
+                    continue;
+                }
+                description = stripReminderText(description);
+                abilities.add(new AbilityLine(AbilityType.TRIGGERED,
+                        applyTextCasing(description), null));
+            } catch (Throwable e) {
                 Log.warn("CardScriptConverter",
-                        "[" + face.getName() + "] missing description for trigger");
-                continue;
+                        "[" + face.getName() + "] failed to parse trigger: " + e.getMessage());
             }
-            description = stripReminderText(description);
-            abilities.add(new AbilityLine(AbilityType.TRIGGERED,
-                    applyTextCasing(description), null));
         }
 
         // --- Statics (S: lines) ---
         for (String staticAbility : face.getStaticAbilities()) {
-            Map<String, String> params = FileSection.parseToMap(staticAbility,
-                    FileSection.DOLLAR_SIGN_KV_SEPARATOR);
-            if ("True".equals(params.get("Secondary"))) {
-                continue;
-            }
-            String description = params.get("Description");
-            if (description == null || description.isEmpty()) {
+            try {
+                StaticAbility stab = StaticAbility.create(staticAbility, hostCard,
+                        hostCard.getCurrentState(), true);
+                if ("True".equals(stab.getParam("Secondary"))) {
+                    continue;
+                }
+                String description = stab.getParam("Description");
+                if (description == null || description.isEmpty()) {
+                    Log.warn("CardScriptConverter",
+                            "[" + face.getName() + "] missing description for static ability");
+                    continue;
+                }
+                description = stripReminderText(description);
+                abilities.add(new AbilityLine(AbilityType.STATIC,
+                        applyTextCasing(description), null));
+            } catch (Throwable e) {
                 Log.warn("CardScriptConverter",
-                        "[" + face.getName() + "] missing description for static ability");
-                continue;
+                        "[" + face.getName() + "] failed to parse static ability: " + e.getMessage());
             }
-            description = stripReminderText(description);
-            abilities.add(new AbilityLine(AbilityType.STATIC,
-                    applyTextCasing(description), null));
         }
 
         // --- Replacements (R: lines) ---
@@ -243,6 +260,47 @@ public class CardScriptConverter {
 
     // --- Helper methods ---
 
+    private static void ensureForgeInitialized() {
+        try {
+            // Initialize Localizer with a dummy ResourceBundle so ZoneType enum can load
+            Localizer localizer = Localizer.getInstance();
+            Field rbField = Localizer.class.getDeclaredField("resourceBundle");
+            rbField.setAccessible(true);
+            if (rbField.get(localizer) == null) {
+                ResourceBundle dummyBundle = new ResourceBundle() {
+                    @Override
+                    protected Object handleGetObject(String key) { return key; }
+                    @Override
+                    public Enumeration<String> getKeys() { return Collections.emptyEnumeration(); }
+                };
+                rbField.set(localizer, dummyBundle);
+                Field ebField = Localizer.class.getDeclaredField("englishBundle");
+                ebField.setAccessible(true);
+                if (ebField.get(localizer) == null) {
+                    ebField.set(localizer, dummyBundle);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            // Initialize Lang so AbilityFactory can format valid target descriptions
+            if (Lang.getInstance() == null) {
+                Lang.createInstance("en-US");
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private Card createHostCard(ICardFace face, Map<String, String> svars) {
+        Card card = new Card(0, null, null);
+        card.setName(face.getName());
+        CardState state = card.getCurrentState();
+        for (Map.Entry<String, String> entry : svars.entrySet()) {
+            state.setSVar(entry.getKey(), entry.getValue());
+        }
+        return card;
+    }
+
     private Map<String, String> buildSvarMap(ICardFace face) {
         Map<String, String> svars = new HashMap<>();
         for (Map.Entry<String, String> entry : face.getVariables()) {
@@ -266,47 +324,6 @@ public class CardScriptConverter {
         } catch (Exception e) {
             return costStr;
         }
-    }
-
-    private String extractLoyaltyPrefix(String costStr) {
-        // Parse loyalty cost: AddCounter<N/LOYALTY> -> [+N], SubCounter<N/LOYALTY> -> [-N]
-        if (costStr.contains("AddCounter<")) {
-            int start = costStr.indexOf("AddCounter<") + "AddCounter<".length();
-            int slash = costStr.indexOf('/', start);
-            if (slash > start) {
-                String n = costStr.substring(start, slash);
-                return "[+" + n + "]";
-            }
-        }
-        if (costStr.contains("SubCounter<")) {
-            int start = costStr.indexOf("SubCounter<") + "SubCounter<".length();
-            int slash = costStr.indexOf('/', start);
-            if (slash > start) {
-                String n = costStr.substring(start, slash);
-                return "[-" + n + "]";
-            }
-        }
-        // Fallback: try to format via Cost class
-        return "[0]";
-    }
-
-    private String extractChooseText(Map<String, String> params) {
-        // Default "choose one —"; could be "choose two —" etc.
-        String chooseNum = params.get("ChNum");
-        if (chooseNum != null) {
-            try {
-                int n = Integer.parseInt(chooseNum);
-                String word = switch (n) {
-                    case 1 -> "one";
-                    case 2 -> "two";
-                    case 3 -> "three";
-                    case 4 -> "four";
-                    default -> String.valueOf(n);
-                };
-                return "choose " + word + " —";
-            } catch (NumberFormatException ignored) {}
-        }
-        return "choose one —";
     }
 
     private boolean isStandardKeyword(String kw) {
