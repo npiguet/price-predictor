@@ -1,22 +1,21 @@
 package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
+import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
-import forge.card.CardType;
+import forge.card.CardStateName;
 import forge.card.ICardFace;
 import forge.card.mana.ManaCost;
 import forge.game.CardTraitBase;
-import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
-import forge.game.card.CardFactoryUtil;
+import forge.game.card.CardFactory;
 import forge.game.keyword.KeywordInterface;
 import forge.game.replacement.ReplacementEffect;
-import forge.game.replacement.ReplacementHandler;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
-import forge.game.trigger.TriggerHandler;
+import forge.item.PaperCard;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +33,7 @@ public class CardScriptConverter {
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
 
     private final CardRules.Reader reader = new CardRules.Reader();
+    private int nextCardId = 1;
 
     /**
      * Parse a card script and convert all faces.
@@ -50,30 +50,55 @@ public class CardScriptConverter {
 
     /**
      * Convert parsed CardRules into a MultiCard.
+     * Returns null for meld cards whose other part is not available (requires StaticData).
      */
     public MultiCard convertRules(CardRules rules) {
         CardSplitType splitType = rules.getSplitType();
 
+        // Meld cards without other part crash in CardFactory.readCard (StaticData not initialized)
+        if (splitType == CardSplitType.Meld && rules.getOtherPart() == null) {
+            Log.info("CardScriptConverter", "Skipping meld card without other part: " + rules.getName());
+            return null;
+        }
+
+        Card card = buildFullCard(rules);
+
         if (splitType == CardSplitType.None) {
-            ConvertedCard face = convertFace(rules.getMainPart());
-            return MultiCard.singleFace(face);
+            return MultiCard.singleFace(convertFace(card, rules.getMainPart()));
         }
 
         String layout = splitType.name().toLowerCase();
         List<ConvertedCard> faces = new ArrayList<>();
-        for (ICardFace face : rules.getAllFaces()) {
-            faces.add(convertFace(face));
+
+        // Main face state: LeftSplit for split cards, Original for everything else
+        CardStateName mainState = (splitType == CardSplitType.Split)
+                ? CardStateName.LeftSplit : CardStateName.Original;
+        card.setState(mainState, false);
+        faces.add(convertFace(card, rules.getMainPart()));
+
+        // Other face(s)
+        if (splitType == CardSplitType.Specialize) {
+            for (Map.Entry<CardStateName, ICardFace> e : rules.getSpecializeParts().entrySet()) {
+                if (e.getValue() != null) {
+                    card.setState(e.getKey(), false);
+                    faces.add(convertFace(card, e.getValue()));
+                }
+            }
+        } else if (rules.getOtherPart() != null) {
+            card.setState(splitType.getChangedStateName(), false);
+            faces.add(convertFace(card, rules.getOtherPart()));
         }
+
         return MultiCard.multiFace(layout, faces);
     }
 
     /**
      * Convert a single card face into a ConvertedCard.
+     * The Card must already be in the correct state for this face.
      */
-    public ConvertedCard convertFace(ICardFace face) {
+    public ConvertedCard convertFace(Card card, ICardFace face) {
         int actionCounter = 0;
         List<AbilityLine> abilities = new ArrayList<>();
-        Card card = buildCard(face);
 
         // --- Keywords (from parsed KeywordInterface objects) ---
         for (KeywordInterface ki : card.getKeywords()) {
@@ -215,65 +240,11 @@ public class CardScriptConverter {
     }
 
     /**
-     * Build a Card from an ICardFace, replicating the essential steps of
-     * CardFactory.readCardFace() (forge-game, line ~346). Keep in sync when
-     * upgrading Forge.
+     * Build a fully-parsed Card from CardRules using Forge's CardFactory.
      */
-    private Card buildCard(ICardFace face) {
-        Card card = new Card(0, null, null);
-        card.setName(face.getName());
-
-        // Type, mana cost, P/T, loyalty — needed for trait resolution
-        card.setType(new CardType(face.getType()));
-        card.setManaCost(face.getManaCost());
-        if (face.getIntPower() != Integer.MAX_VALUE) {
-            card.setBasePower(face.getIntPower());
-            card.setBasePowerString(face.getPower());
-        }
-        if (face.getIntToughness() != Integer.MAX_VALUE) {
-            card.setBaseToughness(face.getIntToughness());
-            card.setBaseToughnessString(face.getToughness());
-        }
-        card.getCurrentState().setBaseLoyalty(face.getInitialLoyalty());
-        card.getCurrentState().setBaseDefense(face.getDefense());
-
-        // SVars first — keywords and abilities reference them
-        for (Map.Entry<String, String> v : face.getVariables()) {
-            card.setSVar(v.getKey(), v.getValue());
-        }
-
-        // Parsed traits — same order as CardFactory.readCardFace()
-        for (String r : face.getReplacements())
-            card.addReplacementEffect(ReplacementHandler.parseReplacement(r, card, true));
-        for (String s : face.getStaticAbilities())
-            card.addStaticAbility(s);
-        for (String t : face.getTriggers())
-            card.addTrigger(TriggerHandler.parseTrigger(t, card, true));
-
-        // Keywords after SVars (Forge requirement)
-        // Use CardState directly to avoid Card.updateKeywords() which triggers CardView updates
-        // that require StaticData to be initialized
-        card.getCurrentState().addIntrinsicKeywords(face.getKeywords(), false);
-        card.updateKeywordsCache();
-
-        // Abilities (A: lines) — parse and add without triggering view updates
-        for (String rawAbility : face.getAbilities()) {
-            try {
-                SpellAbility sa = AbilityFactory.getAbility(rawAbility, card);
-                card.addSpellAbility(sa, false);
-                sa.setIntrinsic(true);
-                sa.setCardState(card.getCurrentState());
-            } catch (Exception e) {
-                Log.warn("CardScriptConverter",
-                        "[" + face.getName() + "] failed to parse ability in buildCard: " + e.getMessage());
-            }
-        }
-
-        // Create keyword traits (Chapter triggers, Cycling abilities, etbCounter replacements, etc.)
-        CardFactoryUtil.setupKeywordedAbilities(card);
-
-        card.setText(face.getNonAbilityText());
-        return card;
+    private Card buildFullCard(CardRules rules) {
+        PaperCard paperCard = new PaperCard(rules, "UNK", CardRarity.Common);
+        return CardFactory.getCard(paperCard, null, nextCardId++, null);
     }
 
     private String formatTypeLine(ICardFace face) {
