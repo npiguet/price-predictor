@@ -1,8 +1,8 @@
 package com.pricepredictor.connector;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.Arrays;
 import java.util.List;
@@ -15,12 +15,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Run via: mvn test -Pintegration
  */
 @Tag("integration")
+@ExtendWith(ForgeExtension.class)
 class CardScriptConverterTest {
-
-    @BeforeAll
-    static void init() {
-        ForgeEnvironmentInitializer.initialize();
-    }
 
     private final CardScriptConverter converter = new CardScriptConverter();
 

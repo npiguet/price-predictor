@@ -1,8 +1,8 @@
 package com.pricepredictor.connector;
 
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
@@ -16,12 +16,8 @@ import static org.junit.jupiter.api.Assertions.*;
  * Run via: mvn test -Pintegration
  */
 @Tag("integration")
+@ExtendWith(ForgeExtension.class)
 class BatchConverterTest {
-
-    @BeforeAll
-    static void init() {
-        ForgeEnvironmentInitializer.initialize();
-    }
 
     @TempDir
     Path tempDir;

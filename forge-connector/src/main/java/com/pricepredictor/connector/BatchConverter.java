@@ -44,11 +44,6 @@ public class BatchConverter {
                 List<String> lines = Files.readAllLines(scriptFile);
                 String filename = scriptFile.getFileName().toString();
                 MultiCard result = converter.convertCard(lines, filename);
-                if (result == null) {
-                    String cardName = scriptFile.getFileName().toString().replace(".txt", "");
-                    warnings.add("[" + cardName + "] skipped (unsupported card type)");
-                    continue;
-                }
                 String output = OutputFormatter.formatMultiCard(result);
 
                 // Mirror directory structure

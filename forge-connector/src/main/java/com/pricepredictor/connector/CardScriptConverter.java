@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
+import forge.StaticData;
 import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
@@ -50,17 +51,9 @@ public class CardScriptConverter {
 
     /**
      * Convert parsed CardRules into a MultiCard.
-     * Returns null for meld cards whose other part is not available (requires StaticData).
      */
     public MultiCard convertRules(CardRules rules) {
         CardSplitType splitType = rules.getSplitType();
-
-        // Meld cards without other part crash in CardFactory.readCard (StaticData not initialized)
-        if (splitType == CardSplitType.Meld && rules.getOtherPart() == null) {
-            Log.info("CardScriptConverter", "Skipping meld card without other part: " + rules.getName());
-            return null;
-        }
-
         Card card = buildFullCard(rules);
 
         if (splitType == CardSplitType.None) {
@@ -84,9 +77,17 @@ public class CardScriptConverter {
                     faces.add(convertFace(card, e.getValue()));
                 }
             }
-        } else if (rules.getOtherPart() != null) {
-            card.setState(splitType.getChangedStateName(), false);
-            faces.add(convertFace(card, rules.getOtherPart()));
+        } else {
+            ICardFace otherFace = rules.getOtherPart();
+            if (otherFace == null && !rules.getMeldWith().isEmpty()) {
+                // Meld half without inline back face — resolve via StaticData
+                otherFace = StaticData.instance().getCommonCards()
+                        .getRules(rules.getMeldWith()).getOtherPart();
+            }
+            if (otherFace != null) {
+                card.setState(splitType.getChangedStateName(), false);
+                faces.add(convertFace(card, otherFace));
+            }
         }
 
         return MultiCard.multiFace(layout, faces);
