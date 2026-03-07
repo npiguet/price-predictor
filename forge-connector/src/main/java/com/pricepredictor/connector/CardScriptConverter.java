@@ -12,15 +12,15 @@ import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
-import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
-import forge.game.trigger.Trigger;
 import forge.item.PaperCard;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,7 +42,9 @@ public class CardScriptConverter {
     public MultiCard convertCard(List<String> scriptLines, String filename) {
         reader.reset();
         for (String line : scriptLines) {
-            if (line.isEmpty() || line.charAt(0) == '#') continue;
+            if (line.isEmpty() || line.charAt(0) == '#') {
+                continue;
+            }
             reader.parseLine(line);
         }
         CardRules rules = reader.getCard();
@@ -103,55 +105,18 @@ public class CardScriptConverter {
 
         // --- Keywords (from parsed KeywordInterface objects) ---
         for (KeywordInterface ki : card.getKeywords()) {
-            String original = ki.getOriginal();
+            Keyword kw = ki.getKeyword();
 
-            // Plaintext K: lines starting with CARDNAME/NICKNAME are rules text, not keywords
-            if (original.startsWith("CARDNAME ") || original.startsWith("NICKNAME ")) {
-                abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(original), null));
+            if (kw == Keyword.UNDEFINED) {
+                actionCounter = handleUndefinedKeyword(ki, abilities, actionCounter);
                 continue;
             }
 
-            // Chapter keywords — emit trigger descriptions as chapter lines
-            if (original.startsWith("Chapter:")) {
-                for (Trigger t : ki.getTriggers()) {
-                    if ("True".equals(t.getParam("Secondary"))) continue;
-                    String desc = t.getParam("TriggerDescription");
-                    if (desc != null && !desc.isEmpty()) {
-                        desc = stripReminderText(desc);
-                        abilities.add(new AbilityLine(AbilityType.CHAPTER, applyTextCasing(desc), null));
-                    }
-                }
-                continue;
-            }
-
-            // Class keywords — emit level-up activated abilities (skip level 1)
-            if (original.startsWith("Class:")) {
-                for (SpellAbility sa : ki.getAbilities()) {
-                    String desc = stripReminderText(sa.getDescription());
-                    if (desc != null && !desc.isEmpty()) {
-                        actionCounter++;
-                        abilities.add(new AbilityLine(AbilityType.ACTIVATED, applyTextCasing(desc), actionCounter));
-                    }
-                }
-                continue;
-            }
-
-            // etbCounter keywords — emit replacement descriptions
-            if (original.startsWith("etbCounter:")) {
-                for (ReplacementEffect re : ki.getReplacements()) {
-                    String desc = re.getParam("Description");
-                    if (desc != null && !desc.isEmpty()) {
-                        abilities.add(new AbilityLine(AbilityType.REPLACEMENT, applyTextCasing(desc), null));
-                    }
-                }
-                continue;
-            }
-
-            // Regular keywords — use trait system to classify as active or passive
+            // Known keywords — classify as active or passive based on generated traits
             boolean activatable = !ki.getAbilities().isEmpty();
             String title = ki.getTitle();
             if (title == null || title.isEmpty()) {
-                title = original;
+                title = ki.getOriginal();
             }
 
             if (activatable) {
@@ -164,9 +129,13 @@ public class CardScriptConverter {
 
         // --- Abilities (from A: lines, already parsed on the card) ---
         for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getKeyword() != null) continue; // skip keyword-derived abilities
+            if (sa.getKeyword() != null) {
+                continue; // skip keyword-derived abilities
+            }
             String spellDesc = sa.getParam("SpellDescription");
-            if (spellDesc == null || spellDesc.isEmpty()) continue;
+            if (spellDesc == null || spellDesc.isEmpty()) {
+                continue;
+            }
 
             if (sa.getApi() == ApiType.Charm) {
                 actionCounter++;
@@ -177,7 +146,9 @@ public class CardScriptConverter {
                 if (choices != null) {
                     for (var choice : choices) {
                         String choiceDesc = choice.getParam("SpellDescription");
-                        if (choiceDesc == null) choiceDesc = "(no description)";
+                        if (choiceDesc == null) {
+                            choiceDesc = "(no description)";
+                        }
                         choiceDesc = stripReminderText(choiceDesc);
                         actionCounter++;
                         abilities.add(new AbilityLine(AbilityType.OPTION,
@@ -212,13 +183,19 @@ public class CardScriptConverter {
         String pt = (face.getPower() != null && face.getToughness() != null)
                 ? face.getPower() + "/" + face.getToughness() : null;
         String loyalty = face.getInitialLoyalty();
-        if (loyalty != null && loyalty.isEmpty()) loyalty = null;
+        if (loyalty != null && loyalty.isEmpty()) {
+            loyalty = null;
+        }
 
         String colors = null;
 
         String text = face.getNonAbilityText();
-        if (text != null && text.isEmpty()) text = null;
-        if (text != null) text = applyTextCasing(text);
+        if (text != null && text.isEmpty()) {
+            text = null;
+        }
+        if (text != null) {
+            text = applyTextCasing(text);
+        }
 
         return new ConvertedCard(name, manaCostStr, typeLine, pt, loyalty, colors, text, abilities);
     }
@@ -230,7 +207,9 @@ public class CardScriptConverter {
                                     String descParam, AbilityType type,
                                     String faceName) {
         for (CardTraitBase trait : traits) {
-            if ("True".equals(trait.getParam("Secondary")) || "True".equals(trait.getParam("Static"))) continue;
+            if ("True".equals(trait.getParam("Secondary")) || "True".equals(trait.getParam("Static"))) {
+                continue;
+            }
             String desc = trait.getParam(descParam);
             if (desc == null || desc.isEmpty()) {
                 Log.warn("CardScriptConverter", "[" + faceName + "] missing description for " + type.name().toLowerCase());
@@ -238,6 +217,71 @@ public class CardScriptConverter {
             }
             abilities.add(new AbilityLine(type, applyTextCasing(stripReminderText(desc)), null));
         }
+    }
+
+    /**
+     * Handle UNDEFINED keywords — Chapter, Class, etbCounter, and plaintext rules text.
+     * These are not recognized by the Keyword enum and require string-based classification.
+     * Returns the updated actionCounter.
+     */
+    private int handleUndefinedKeyword(KeywordInterface ki, List<AbilityLine> abilities, int actionCounter) {
+        String original = ki.getOriginal();
+
+        // Plaintext K: lines starting with CARDNAME/NICKNAME are rules text, not keywords
+        if (original.startsWith("CARDNAME ") || original.startsWith("NICKNAME ")) {
+            abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(original), null));
+            return actionCounter;
+        }
+
+        if (original.startsWith("Chapter:")) {
+            return emitKeywordTraits(ki.getTriggers(), t -> t.getParam("TriggerDescription"),
+                    AbilityType.CHAPTER, false, abilities, actionCounter);
+        }
+        if (original.startsWith("Class:")) {
+            return emitKeywordTraits(ki.getAbilities(), SpellAbility::getDescription,
+                    AbilityType.ACTIVATED, true, abilities, actionCounter);
+        }
+        if (original.startsWith("etbCounter:")) {
+            return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
+                    AbilityType.REPLACEMENT, false, abilities, actionCounter);
+        }
+
+        // Fallback: treat as regular keyword
+        boolean activatable = !ki.getAbilities().isEmpty();
+        String title = ki.getTitle();
+        if (title == null || title.isEmpty()) {
+            title = original;
+        }
+        if (activatable) {
+            actionCounter++;
+            abilities.add(new AbilityLine(AbilityType.KEYWORD_ACTIVE, applyTextCasing(title), actionCounter));
+        } else {
+            abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(title), null));
+        }
+        return actionCounter;
+    }
+
+    /**
+     * Emit ability lines from keyword-generated traits (triggers, abilities, replacements).
+     * Returns the updated actionCounter.
+     */
+    private <T extends CardTraitBase> int emitKeywordTraits(
+            Iterable<T> traits, Function<T, String> descExtractor,
+            AbilityType type, boolean numbered,
+            List<AbilityLine> abilities, int actionCounter) {
+        for (T trait : traits) {
+            if ("True".equals(trait.getParam("Secondary"))) {
+                continue;
+            }
+            String desc = descExtractor.apply(trait);
+            if (desc == null || desc.isEmpty()) {
+                continue;
+            }
+            desc = stripReminderText(desc);
+            Integer num = numbered ? ++actionCounter : null;
+            abilities.add(new AbilityLine(type, applyTextCasing(desc), num));
+        }
+        return actionCounter;
     }
 
     /**
@@ -259,7 +303,9 @@ public class CardScriptConverter {
      * and brace symbols to uppercase.
      */
     static String applyTextCasing(String text) {
-        if (text == null) return null;
+        if (text == null) {
+            return null;
+        }
 
         // Protect brace symbols by extracting them
         List<String> braceSymbols = new ArrayList<>();
@@ -289,7 +335,9 @@ public class CardScriptConverter {
     }
 
     private String stripReminderText(String text) {
-        if (text == null) return null;
+        if (text == null) {
+            return null;
+        }
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
     }
 }
