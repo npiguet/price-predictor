@@ -121,6 +121,7 @@ class CardScriptConverterTest {
                 "ManaCost:1 W",
                 "Types:Enchantment",
                 "R:Event$ Moved | ActiveZones$ Battlefield | Destination$ Graveyard | ValidCard$ Card | ReplaceWith$ Exile | Description$ If a card or token would be put into a graveyard from anywhere, exile it instead.",
+                "SVar:Exile:DB$ ChangeZone | Origin$ All | Destination$ Exile",
                 "Oracle:If a card or token would be put into a graveyard from anywhere, exile it instead.");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> replacements = card.abilities().stream()
