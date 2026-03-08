@@ -17,6 +17,8 @@ public enum AbilityType {
     REPLACEMENT("replacement", false),
     CHAPTER("chapter", false),
     LEVEL("level", true),
+    ALTERNATE_COST("alternate cost", false),
+    COST_REDUCTION("cost reduction", false),
     ADDITIONAL_COST("additional cost", false),
     SPELL("spell", true),
     PLANESWALKER("planeswalker", true),

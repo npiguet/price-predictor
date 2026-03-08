@@ -20,6 +20,7 @@ import forge.game.spellability.SpellAbility;
 import forge.item.PaperCard;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,55 @@ public class CardScriptConverter {
     private static final Pattern ROMAN_PREFIX = Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
     private static final Pattern LOYALTY_COST = Pattern.compile("^([+\\-](?:\\d+|X)): ", Pattern.CASE_INSENSITIVE);
     private static final String ADDITIONAL_COST_PREFIX = "As an additional cost to cast this spell, ";
+
+    // Keywords that represent alternate casting costs (replace the mana cost)
+    // or alternate deployment (put onto battlefield / create token from graveyard)
+    private static final Set<Keyword> ALTERNATE_COST_KEYWORDS = EnumSet.of(
+            Keyword.BESTOW, Keyword.BLITZ, Keyword.DASH, Keyword.DISTURB,
+            Keyword.EMERGE, Keyword.ESCAPE, Keyword.EVOKE, Keyword.FLASHBACK,
+            Keyword.FORETELL, Keyword.FREERUNNING, Keyword.MADNESS,
+            Keyword.MEGAMORPH, Keyword.MORPH, Keyword.DISGUISE,
+            Keyword.MORE_THAN_MEETS_THE_EYE, Keyword.MUTATE,
+            Keyword.OVERLOAD, Keyword.PLOT, Keyword.PROTOTYPE,
+            Keyword.PROWL, Keyword.RETRACE, Keyword.SNEAK,
+            Keyword.SPECTACLE, Keyword.SURGE,
+            Keyword.AWAKEN,       // cast for awaken cost → also animates a land
+            Keyword.EMBALM,       // create token copy from graveyard
+            Keyword.ENCORE,       // create token copies from graveyard
+            Keyword.ETERNALIZE,   // create 4/4 token copy from graveyard
+            Keyword.HARMONIZE,    // cast from graveyard for harmonize cost
+            Keyword.IMPENDING,    // cast for impending cost (enters with time counters)
+            Keyword.JUMP_START,   // cast from graveyard (discard a card)
+            Keyword.MIRACLE,      // cast for miracle cost when drawn
+            Keyword.NINJUTSU,     // put onto battlefield from hand
+            Keyword.OFFERING,     // sacrifice a [type] + pay the mana difference
+            Keyword.SUSPEND,      // pay cost to exile with time counters, then free-cast
+            Keyword.UNEARTH       // return from graveyard to battlefield
+    );
+
+    // Keywords that represent additional casting costs (paid on top of mana cost)
+    private static final Set<Keyword> ADDITIONAL_COST_KEYWORDS = EnumSet.of(
+            Keyword.BUYBACK, Keyword.ENTWINE, Keyword.KICKER,
+            Keyword.MULTIKICKER, Keyword.REPLICATE, Keyword.SQUAD,
+            Keyword.STRIVE, Keyword.CASUALTY, Keyword.OFFSPRING,
+            Keyword.BARGAIN,      // sacrifice artifact/enchantment/token
+            Keyword.CONSPIRE,     // tap two creatures that share a color
+            Keyword.ESCALATE,     // pay for each mode beyond the first
+            Keyword.MAYFLASHCOST, // pay extra to cast as though it had flash
+            Keyword.SPLICE,       // pay splice cost to add effects to another spell
+            Keyword.SPREE,        // choose one or more additional costs
+            Keyword.TIERED        // choose one additional cost
+    );
+
+    // Keywords that reduce the effective casting cost
+    private static final Set<Keyword> COST_REDUCTION_KEYWORDS = EnumSet.of(
+            Keyword.AFFINITY,     // costs {1} less per [type] you control
+            Keyword.ASSIST,       // another player can pay up to X
+            Keyword.CONVOKE,      // tap creatures to pay for {1} or colored mana
+            Keyword.DELVE,        // exile from graveyard to pay for {1} each
+            Keyword.IMPROVISE,    // tap artifacts to pay for {1} each
+            Keyword.UNDAUNTED     // costs {1} less per opponent
+    );
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -170,6 +220,35 @@ public class CardScriptConverter {
                 }
             }
 
+            // Affinity: Forge title is "Affinity <type>" but Oracle text reads "Affinity for <type>s"
+            if (kw == Keyword.AFFINITY) {
+                String[] affinityParts = ki.getOriginal().split(":", 3);
+                if (affinityParts.length >= 2) {
+                    // Third part is the display name (e.g. "outlaw"), otherwise use the type
+                    String typeName = affinityParts.length >= 3
+                            ? affinityParts[2] : affinityParts[1];
+                    title = "Affinity for " + typeName + "s";
+                }
+            }
+
+            // Reclassify casting-cost keywords
+            if (ALTERNATE_COST_KEYWORDS.contains(kw)) {
+                abilities.add(new AbilityLine(AbilityType.ALTERNATE_COST,
+                        applyTextCasing(title), null));
+                continue;
+            }
+            if (ADDITIONAL_COST_KEYWORDS.contains(kw)) {
+                abilities.add(new AbilityLine(AbilityType.ADDITIONAL_COST,
+                        applyTextCasing(title), null));
+                continue;
+            }
+            if (COST_REDUCTION_KEYWORDS.contains(kw)) {
+                abilities.add(new AbilityLine(AbilityType.COST_REDUCTION,
+                        applyTextCasing(title), null));
+                continue;
+            }
+
+            // Regular keywords — classify as active or passive
             if (activatable) {
                 actionCounter++;
                 abilities.add(new AbilityLine(AbilityType.KEYWORD_ACTIVE, applyTextCasing(title), actionCounter));
@@ -221,6 +300,17 @@ public class CardScriptConverter {
                         abilities.add(new AbilityLine(AbilityType.OPTION,
                                 applyTextCasing(choiceDesc), actionCounter));
                     }
+                }
+                continue;
+            }
+
+            // Skip additional cost extraction for alternate cost spells (e.g. Cleave)
+            if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
+                String precost = sa.getParam("PrecostDesc");
+                String costDesc = sa.getParam("CostDesc");
+                if (precost != null && costDesc != null) {
+                    abilities.add(new AbilityLine(AbilityType.ALTERNATE_COST,
+                            applyTextCasing(precost + " " + costDesc), null));
                 }
                 continue;
             }
@@ -305,10 +395,14 @@ public class CardScriptConverter {
             });
         }
 
-        // --- Move additional cost lines to the top ---
+        // --- Move cost lines to the top ---
         abilities.sort((a, b) -> {
-            boolean aCost = a.type() == AbilityType.ADDITIONAL_COST;
-            boolean bCost = b.type() == AbilityType.ADDITIONAL_COST;
+            boolean aCost = a.type() == AbilityType.ADDITIONAL_COST
+                    || a.type() == AbilityType.ALTERNATE_COST
+                    || a.type() == AbilityType.COST_REDUCTION;
+            boolean bCost = b.type() == AbilityType.ADDITIONAL_COST
+                    || b.type() == AbilityType.ALTERNATE_COST
+                    || b.type() == AbilityType.COST_REDUCTION;
             if (aCost == bCost) return 0;
             return aCost ? -1 : 1;
         });

@@ -397,8 +397,8 @@ class CardScriptConverterTest {
     }
 
     @Test
-    void spellWithReminderOnlyDescriptionIsSkipped() {
-        // Alchemist's Gambit: second SP$ has SpellDescription that is entirely reminder text
+    void cleaveEmittedAsAlternateCost() {
+        // Alchemist's Gambit: Cleave is a NonBasicSpell alternate cost
         MultiCard result = convert(
                 "Name:Alchemist's Gambit",
                 "ManaCost:1 R R",
@@ -415,15 +415,20 @@ class CardScriptConverterTest {
                 "Oracle:Cleave {4}{U}{U}{R} (You may cast this spell for its cleave cost. If you do, remove the words in square brackets.)\\nTake an extra turn after this one. During that turn, damage can't be prevented. [At the beginning of that turn's end step, you lose the game.]\\nExile Alchemist's Gambit.");
         ConvertedCard card = result.faces().get(0);
 
-        // The reminder-only spell (cleave line) should be skipped entirely
+        // Cleave should appear as alternate cost
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost line but got: " + card.abilities());
+        String altLine = altCosts.get(0).formatLine();
+        assertTrue(altLine.contains("cleave"), "Expected 'cleave' in: " + altLine);
+        assertTrue(altLine.contains("{4}{U}{U}{R}"), "Expected '{4}{U}{U}{R}' in: " + altLine);
+        // No buggy trailing characters
+        assertFalse(altLine.matches(".*\\{R\\}\\d.*"), "No trailing digits after cost in: " + altLine);
+
+        // Real spell lines should still have correct action numbers
         List<AbilityLine> spells = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.SPELL).toList();
-        // Only the real spell descriptions should remain, not the reminder-only cleave one
-        assertTrue(spells.stream().noneMatch(s -> s.description().contains("cleave")),
-                "Reminder-only cleave description should be skipped but got: " + spells);
         assertTrue(spells.size() >= 1, "Expected at least 1 spell line but got: " + spells);
-
-        // Action numbers should be sequential with no gaps from the skipped reminder
         List<Integer> actionNumbers = spells.stream()
                 .map(AbilityLine::actionNumber).toList();
         for (int i = 0; i < actionNumbers.size() - 1; i++) {
@@ -741,14 +746,15 @@ class CardScriptConverterTest {
                 "K:Lifelink",
                 "Oracle:");
         ConvertedCard card = result.faces().get(0);
-        List<AbilityLine> keywords = card.abilities().stream()
-                .filter(a -> a.type() == AbilityType.KEYWORD_ACTIVE
-                        || a.type() == AbilityType.KEYWORD_PASSIVE).toList();
-        // Kicker should include both costs
-        assertTrue(keywords.stream().anyMatch(k ->
-                        k.description().contains("kicker") && k.description().contains("{B}")
-                                && k.description().contains("{R}") && k.description().contains("and/or")),
-                "Expected kicker with both costs but got: " + keywords);
+        // Kicker should be reclassified as additional cost with both costs
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        String costLine = costs.get(0).formatLine();
+        assertTrue(costLine.contains("kicker"), "Expected 'kicker' in: " + costLine);
+        assertTrue(costLine.contains("{B}"), "Expected '{B}' in: " + costLine);
+        assertTrue(costLine.contains("{R}"), "Expected '{R}' in: " + costLine);
+        assertTrue(costLine.contains("and/or"), "Expected 'and/or' in: " + costLine);
     }
 
     @Test
@@ -768,6 +774,347 @@ class CardScriptConverterTest {
         // Gift should include its parameter
         assertTrue(keywords.stream().anyMatch(k -> k.description().contains("gift a card")),
                 "Expected 'gift a card' keyword but got: " + keywords);
+    }
+
+    // --- Alternate cost keyword classification ---
+
+    @Test
+    void ninjutsuClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Yuffie Materia Hunter",
+                "ManaCost:2 R",
+                "Types:Legendary Creature Human Ninja",
+                "PT:3/3",
+                "K:Ninjutsu:1 R",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Ninjutsu but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("ninjutsu"),
+                "Expected 'ninjutsu' in: " + altCosts.get(0).description());
+        assertTrue(altCosts.get(0).description().contains("{1}{R}"),
+                "Expected '{1}{R}' in: " + altCosts.get(0).description());
+    }
+
+    @Test
+    void embalmClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Vizier of Many Faces",
+                "ManaCost:2 U U",
+                "Types:Creature Shapeshifter Cleric",
+                "PT:0/0",
+                "K:ETBReplacement:Copy:DBCopy:Optional",
+                "SVar:DBCopy:DB$ Clone | Choices$ Creature.Other | Embalm$ True | RemoveCost$ True | SetColor$ White | AddTypes$ Zombie | SpellDescription$ You may have CARDNAME enter as a copy of any creature on the battlefield.",
+                "K:Embalm:3 U U",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Embalm but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("embalm"),
+                "Expected 'embalm' in: " + altCosts.get(0).description());
+        assertTrue(altCosts.get(0).description().contains("{3}{U}{U}"),
+                "Expected '{3}{U}{U}' in: " + altCosts.get(0).description());
+    }
+
+    @Test
+    void miracleClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Zephyrim",
+                "ManaCost:3 W",
+                "Types:Creature Human Warrior",
+                "PT:3/3",
+                "K:Squad:2",
+                "K:Flying",
+                "K:Vigilance",
+                "K:Miracle:1 W",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Miracle but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("miracle"),
+                "Expected 'miracle' in: " + altCosts.get(0).description());
+        // Squad should be additional cost, not alternate
+        List<AbilityLine> addCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, addCosts.size(), "Expected 1 additional cost for Squad");
+    }
+
+    @Test
+    void unearthClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Yotian Frontliner",
+                "ManaCost:1",
+                "Types:Artifact Creature Soldier",
+                "PT:1/1",
+                "T:Mode$ Attacks | ValidCard$ Card.Self | Execute$ TrigPump | TriggerDescription$ Whenever CARDNAME attacks, another target creature you control gets +1/+1 until end of turn.",
+                "SVar:TrigPump:DB$ Pump | ValidTgts$ Creature.YouCtrl+Other | TgtPrompt$ Select another target creature you control | NumAtt$ +1 | NumDef$ +1",
+                "K:Unearth:W",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Unearth but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("unearth"),
+                "Expected 'unearth' in: " + altCosts.get(0).description());
+    }
+
+    @Test
+    void awakenClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Sheer Drop",
+                "ManaCost:2 W",
+                "Types:Sorcery",
+                "A:SP$ Destroy | ValidTgts$ Creature.tapped | TgtPrompt$ Select target tapped creature | SpellDescription$ Destroy target tapped creature.",
+                "K:Awaken:3:5 W",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Awaken but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("awaken"),
+                "Expected 'awaken' in: " + altCosts.get(0).description());
+    }
+
+    @Test
+    void suspendClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Wheel of Fate",
+                "ManaCost:no cost",
+                "Colors:red",
+                "Types:Sorcery",
+                "K:Suspend:4:1 R",
+                "A:SP$ Discard | Mode$ Hand | Defined$ Player | SubAbility$ DBDraw | SpellDescription$ Each player discards their hand, then draws seven cards.",
+                "SVar:DBDraw:DB$ Draw | Defined$ Player | NumCards$ 7",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Suspend but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("suspend"),
+                "Expected 'suspend' in: " + altCosts.get(0).description());
+    }
+
+    @Test
+    void jumpStartClassifiedAsAlternateCost() {
+        MultiCard result = convert(
+                "Name:Surge of Acclaim",
+                "ManaCost:1 U",
+                "Types:Instant",
+                "K:Jump-start",
+                "A:SP$ Charm | CharmNum$ X | Choices$ DBSeek1,DBSeek2",
+                "SVar:DBSeek1:DB$ Seek | Type$ Card.nonLand | SpellDescription$ Seek a nonland card.",
+                "SVar:DBSeek2:DB$ Seek | Type$ Card.nonLand | SpellDescription$ Seek a nonland card.",
+                "SVar:X:Count$MaxSpeed.2.1",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> altCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
+        assertEquals(1, altCosts.size(), "Expected 1 alternate cost for Jump-start but got: " + card.abilities());
+        assertTrue(altCosts.get(0).description().contains("jump-start"),
+                "Expected 'jump-start' in: " + altCosts.get(0).description());
+    }
+
+    // --- Additional cost keyword classification ---
+
+    @Test
+    void bargainClassifiedAsAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Troublemaker Ouphe",
+                "ManaCost:1 G",
+                "Types:Creature Ouphe",
+                "PT:2/2",
+                "K:Bargain",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self+bargained | Execute$ TrigExile | TriggerDescription$ When CARDNAME enters, if it was bargained, exile target artifact or enchantment an opponent controls.",
+                "SVar:TrigExile:DB$ ChangeZone | IsCurse$ True | ValidTgts$ Artifact.OppCtrl,Enchantment.OppCtrl | TgtPrompt$ Select target artifact or enchantment an opponent controls | Origin$ Battlefield | Destination$ Exile",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> addCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, addCosts.size(), "Expected 1 additional cost for Bargain but got: " + card.abilities());
+        assertTrue(addCosts.get(0).description().contains("bargain"),
+                "Expected 'bargain' in: " + addCosts.get(0).description());
+    }
+
+    @Test
+    void conspireClassifiedAsAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Traitor's Roar",
+                "ManaCost:4 BR",
+                "Types:Sorcery",
+                "A:SP$ Tap | ValidTgts$ Creature.untapped | TgtPrompt$ Select target untapped creature | SubAbility$ DBDamage | SpellDescription$ Tap target untapped creature. It deals damage equal to its power to its controller.",
+                "SVar:DBDamage:DB$ DealDamage | Defined$ TargetedController | DamageSource$ Targeted | NumDmg$ X",
+                "SVar:X:Targeted$CardPower",
+                "K:Conspire",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> addCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, addCosts.size(), "Expected 1 additional cost for Conspire but got: " + card.abilities());
+        assertTrue(addCosts.get(0).description().contains("conspire"),
+                "Expected 'conspire' in: " + addCosts.get(0).description());
+    }
+
+    @Test
+    void spliceClassifiedAsAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Wear Away",
+                "ManaCost:G G",
+                "Types:Instant Arcane",
+                "K:Splice:Arcane:3 G",
+                "A:SP$ Destroy | ValidTgts$ Artifact,Enchantment | TgtPrompt$ Select target artifact or enchantment | SpellDescription$ Destroy target artifact or enchantment.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> addCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, addCosts.size(), "Expected 1 additional cost for Splice but got: " + card.abilities());
+        assertTrue(addCosts.get(0).description().contains("splice"),
+                "Expected 'splice' in: " + addCosts.get(0).description());
+    }
+
+    @Test
+    void spreeClassifiedAsAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Unfortunate Accident",
+                "ManaCost:B",
+                "Types:Instant",
+                "K:Spree",
+                "A:SP$ Charm | Choices$ DBMurder,DBRecruit | MinCharmNum$ 1 | CharmNum$ 2",
+                "SVar:DBMurder:DB$ Destroy | ModeCost$ 2 B | ValidTgts$ Creature | SpellDescription$ Destroy target creature.",
+                "SVar:DBRecruit:DB$ Token | ModeCost$ 1 | TokenScript$ r_1_1_mercenary_tappump | TokenOwner$ You | SpellDescription$ Create a 1/1 red Mercenary creature token.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> addCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, addCosts.size(), "Expected 1 additional cost for Spree but got: " + card.abilities());
+        assertTrue(addCosts.get(0).description().contains("spree"),
+                "Expected 'spree' in: " + addCosts.get(0).description());
+    }
+
+    // --- Cost reduction keyword classification ---
+
+    @Test
+    void affinityClassifiedAsCostReduction() {
+        MultiCard result = convert(
+                "Name:Sojourner's Companion",
+                "ManaCost:7",
+                "Types:Artifact Creature Salamander",
+                "PT:4/4",
+                "K:Affinity:Artifact",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> reductions = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
+        assertEquals(1, reductions.size(), "Expected 1 cost reduction for Affinity but got: " + card.abilities());
+        assertTrue(reductions.get(0).description().contains("affinity"),
+                "Expected 'affinity' in: " + reductions.get(0).description());
+        assertEquals("cost reduction: affinity for artifacts", reductions.get(0).formatLine());
+    }
+
+    @Test
+    void delveClassifiedAsCostReduction() {
+        MultiCard result = convert(
+                "Name:Will of the Naga",
+                "ManaCost:4 U U",
+                "Types:Instant",
+                "K:Delve",
+                "A:SP$ Tap | TargetMin$ 0 | TargetMax$ 2 | ValidTgts$ Creature | SpellDescription$ Tap up to two target creatures.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> reductions = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
+        assertEquals(1, reductions.size(), "Expected 1 cost reduction for Delve but got: " + card.abilities());
+        assertTrue(reductions.get(0).description().contains("delve"),
+                "Expected 'delve' in: " + reductions.get(0).description());
+    }
+
+    @Test
+    void improviseClassifiedAsCostReduction() {
+        MultiCard result = convert(
+                "Name:Whir of Invention",
+                "ManaCost:X U U U",
+                "Types:Instant",
+                "K:Improvise",
+                "A:SP$ ChangeZone | Origin$ Library | Destination$ Battlefield | ChangeType$ Artifact.cmcLEX | ChangeNum$ 1 | SpellDescription$ Search your library for an artifact card with mana value X or less, put it onto the battlefield, then shuffle.",
+                "SVar:X:Count$xPaid",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> reductions = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
+        assertEquals(1, reductions.size(), "Expected 1 cost reduction for Improvise but got: " + card.abilities());
+        assertTrue(reductions.get(0).description().contains("improvise"),
+                "Expected 'improvise' in: " + reductions.get(0).description());
+    }
+
+    @Test
+    void convokeClassifiedAsCostReduction() {
+        MultiCard result = convert(
+                "Name:Test Convoke Spell",
+                "ManaCost:3 W W",
+                "Types:Sorcery",
+                "K:Convoke",
+                "A:SP$ Destroy | ValidTgts$ Creature | SpellDescription$ Destroy target creature.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> reductions = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
+        assertEquals(1, reductions.size(), "Expected 1 cost reduction for Convoke but got: " + card.abilities());
+        assertTrue(reductions.get(0).description().contains("convoke"),
+                "Expected 'convoke' in: " + reductions.get(0).description());
+    }
+
+    // --- Cost lines sort to top ---
+
+    @Test
+    void costReductionSortsToTop() {
+        MultiCard result = convert(
+                "Name:Whir of Invention",
+                "ManaCost:X U U U",
+                "Types:Instant",
+                "K:Improvise",
+                "A:SP$ ChangeZone | Origin$ Library | Destination$ Battlefield | ChangeType$ Artifact.cmcLEX | ChangeNum$ 1 | SpellDescription$ Search your library for an artifact card with mana value X or less, put it onto the battlefield, then shuffle.",
+                "SVar:X:Count$xPaid",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        // Cost reduction should come before spell abilities
+        List<AbilityLine> abilities = card.abilities();
+        assertTrue(abilities.size() >= 2, "Expected at least 2 abilities");
+        assertEquals(AbilityType.COST_REDUCTION, abilities.get(0).type(),
+                "Cost reduction should be first ability but got: " + abilities);
+    }
+
+    @Test
+    void allCostTypesSortBeforeOtherAbilities() {
+        // Card with alternate cost, additional cost, cost reduction, and a spell
+        MultiCard result = convert(
+                "Name:Zephyrim",
+                "ManaCost:3 W",
+                "Types:Creature Human Warrior",
+                "PT:3/3",
+                "K:Flying",
+                "K:Squad:2",
+                "K:Miracle:1 W",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> abilities = card.abilities();
+        // Find the first non-cost ability
+        int firstNonCostIdx = -1;
+        int lastCostIdx = -1;
+        for (int i = 0; i < abilities.size(); i++) {
+            AbilityType t = abilities.get(i).type();
+            if (t == AbilityType.ALTERNATE_COST || t == AbilityType.ADDITIONAL_COST
+                    || t == AbilityType.COST_REDUCTION) {
+                lastCostIdx = i;
+            } else if (firstNonCostIdx == -1) {
+                firstNonCostIdx = i;
+            }
+        }
+        if (lastCostIdx >= 0 && firstNonCostIdx >= 0) {
+            assertTrue(lastCostIdx < firstNonCostIdx,
+                    "All cost lines should appear before non-cost lines but got: " + abilities);
+        }
     }
 
     @Test
