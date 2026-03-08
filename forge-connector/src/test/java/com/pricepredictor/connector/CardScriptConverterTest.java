@@ -617,6 +617,64 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void companionKeywordIncludesRestriction() {
+        MultiCard result = convert(
+                "Name:Gyruda Doom of Depths",
+                "ManaCost:4 U B",
+                "Types:Legendary Creature Demon Kraken",
+                "PT:6/6",
+                "K:Companion:Card.cmcM20:Your starting deck contains only cards with even mana value.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> keywords = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
+        assertTrue(keywords.stream().anyMatch(k ->
+                        k.description().contains("companion") && k.description().contains("even mana value")),
+                "Expected companion with deck restriction but got: " + keywords);
+    }
+
+    @Test
+    void doubleKickerIncludesBothCosts() {
+        MultiCard result = convert(
+                "Name:Archangel of Wrath",
+                "ManaCost:2 W W",
+                "Types:Creature Angel",
+                "PT:3/4",
+                "K:Kicker:B:R",
+                "K:Flying",
+                "K:Lifelink",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> keywords = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.KEYWORD_ACTIVE
+                        || a.type() == AbilityType.KEYWORD_PASSIVE).toList();
+        // Kicker should include both costs
+        assertTrue(keywords.stream().anyMatch(k ->
+                        k.description().contains("kicker") && k.description().contains("{B}")
+                                && k.description().contains("{R}") && k.description().contains("and/or")),
+                "Expected kicker with both costs but got: " + keywords);
+    }
+
+    @Test
+    void giftKeywordIncludesParameter() {
+        MultiCard result = convert(
+                "Name:Dawn's Truce",
+                "ManaCost:1 W",
+                "Types:Instant",
+                "K:Gift",
+                "SVar:GiftAbility:DB$ Draw | Defined$ Promised | GiftDescription$ a card",
+                "A:SP$ Pump | Defined$ You & Valid Permanent.YouCtrl | KW$ Hexproof | SubAbility$ DBPumpAll | SpellDescription$ You and permanents you control gain hexproof until end of turn.",
+                "SVar:DBPumpAll:DB$ PumpAll | ValidCards$ Permanent.YouCtrl | KW$ Indestructible | ConditionZone$ Stack | ConditionPresent$ Card.Self+PromisedGift | ConditionCompare$ EQ1",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        List<AbilityLine> keywords = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
+        // Gift should include its parameter
+        assertTrue(keywords.stream().anyMatch(k -> k.description().contains("gift a card")),
+                "Expected 'gift a card' keyword but got: " + keywords);
+    }
+
+    @Test
     void layoutDetection() {
         // Transform
         MultiCard transform = convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",

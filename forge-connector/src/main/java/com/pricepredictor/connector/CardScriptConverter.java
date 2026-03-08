@@ -13,6 +13,7 @@ import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.cost.Cost;
+import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
@@ -121,11 +122,52 @@ public class CardScriptConverter {
                 continue;
             }
 
+            // Gift keyword stores its description in the GiftAbility additional ability
+            // on the card's first spell ability (set up by CardFactoryUtil), not on the
+            // keyword itself (which uses SimpleKeyword).
+            if (kw == Keyword.GIFT) {
+                String giftTitle = ki.getTitle();
+                for (SpellAbility sa : card.getSpellAbilities()) {
+                    if (sa.hasAdditionalAbility("GiftAbility")) {
+                        String giftDesc = sa.getAdditionalAbility("GiftAbility")
+                                .getParam("GiftDescription");
+                        if (giftDesc != null && !giftDesc.isEmpty()) {
+                            giftTitle = giftTitle + " " + giftDesc;
+                        }
+                        break;
+                    }
+                }
+                abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(giftTitle), null));
+                continue;
+            }
+
+            // Companion stores deck restriction in a separate field, not in getTitle()
+            if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
+                String compDesc = comp.getDescription();
+                if (compDesc != null && !compDesc.isEmpty()) {
+                    compDesc = stripReminderText(compDesc);
+                }
+                String compTitle = (compDesc != null && !compDesc.isEmpty())
+                        ? ki.getTitle() + " \u2014 " + compDesc : ki.getTitle();
+                abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(compTitle), null));
+                continue;
+            }
+
             // Known keywords — classify as active or passive based on generated traits
             boolean activatable = !ki.getAbilities().isEmpty();
             String title = ki.getTitle();
             if (title == null || title.isEmpty()) {
                 title = ki.getOriginal();
+            }
+
+            // Kicker with two costs: getTitle() only includes the first cost.
+            // Parse the second cost from the original string (format: "Kicker:cost1:cost2")
+            if (kw == Keyword.KICKER) {
+                String[] kickerParts = ki.getOriginal().split(":", 3);
+                if (kickerParts.length >= 3) {
+                    Cost cost2 = new Cost(kickerParts[2], false);
+                    title = title + " and/or " + cost2.toSimpleString();
+                }
             }
 
             if (activatable) {
