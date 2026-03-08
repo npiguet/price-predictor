@@ -458,7 +458,9 @@ public class CardScriptConverter {
             }
             String desc = trait.getParam(descParam);
             if (desc == null || desc.isEmpty()) {
-                Log.warn("CardScriptConverter", "[" + faceName + "] missing description for " + type.name().toLowerCase());
+                // Expected for multi-line statics where only the first S: line carries the
+                // Description (e.g. Vow of Duty: Continuous + CantAttack), and for AI-only
+                // hint statics like AddSVar$ AITap (e.g. Well of Discovery).
                 continue;
             }
             desc = applyTextCasing(stripReminderText(desc));
