@@ -362,6 +362,44 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void pawprintCharmOptions() {
+        MultiCard result = convert(
+                "Name:Season of the Burrow",
+                "ManaCost:3 W W",
+                "Types:Sorcery",
+                "A:SP$ Charm | Choices$ DBToken,DBExile,DBReanimate | CharmNum$ 5 | MinCharmNum$ 0 | CanRepeatModes$ True | Pawprint$ 5",
+                "SVar:DBToken:DB$ Token | Pawprint$ 1 | TokenScript$ w_1_1_rabbit | SpellDescription$ Create a 1/1 white Rabbit creature token.",
+                "SVar:DBExile:DB$ ChangeZone | Pawprint$ 2 | Origin$ Battlefield | Destination$ Exile | ValidTgts$ Permanent.nonLand | RememberLKI$ True | SubAbility$ DBDraw | SpellDescription$ Exile target nonland permanent. Its controller draws a card.",
+                "SVar:DBDraw:DB$ Draw | Defined$ RememberedController | NumCards$ 1 | SubAbility$ DBCleanup",
+                "SVar:DBCleanup:DB$ Cleanup | ClearRemembered$ True",
+                "SVar:DBReanimate:DB$ ChangeZone | Pawprint$ 3 | ValidTgts$ Permanent.YouCtrl+cmcLE3 | Origin$ Graveyard | Destination$ Battlefield | WithCountersType$ Indestructible | SpellDescription$ Return target permanent card with mana value 3 or less from your graveyard to the battlefield with an indestructible counter on it.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // Charm generates a spell line from the combined choice descriptions
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size(), "Expected 1 spell line but got: " + card.abilities());
+
+        List<AbilityLine> options = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(3, options.size(), "Expected 3 options but got: " + card.abilities());
+
+        // Each option should have paw print cost prefix
+        String o1 = options.get(0).formatLine();
+        assertTrue(o1.contains("{P} \u2014"), "Expected {P} cost in: " + o1);
+        assertTrue(o1.contains("create a 1/1"), "Expected token text in: " + o1);
+
+        String o2 = options.get(1).formatLine();
+        assertTrue(o2.contains("{P}{P} \u2014"), "Expected {P}{P} cost in: " + o2);
+        assertTrue(o2.contains("exile target"), "Expected exile text in: " + o2);
+
+        String o3 = options.get(2).formatLine();
+        assertTrue(o3.contains("{P}{P}{P} \u2014"), "Expected {P}{P}{P} cost in: " + o3);
+        assertTrue(o3.contains("return target"), "Expected reanimate text in: " + o3);
+    }
+
+    @Test
     void classEnchantmentLevels() {
         MultiCard result = convert(
                 "Name:Artificer Class",

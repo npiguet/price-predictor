@@ -139,16 +139,27 @@ public class CardScriptConverter {
             if (sa.getKeyword() != null) {
                 continue; // skip keyword-derived abilities
             }
-            String spellDesc = sa.getParam("SpellDescription");
-            if (spellDesc == null || spellDesc.isEmpty()) {
-                continue;
-            }
 
             if (sa.getApi() == ApiType.Charm) {
-                actionCounter++;
-                String desc = stripReminderText(sa.getDescription());
-                abilities.add(new AbilityLine(AbilityType.SPELL,
-                        applyTextCasing(desc), actionCounter));
+                // Use SpellDescription (the main charm text only), not getDescription()
+                // which concatenates all choice descriptions into one long string.
+                String charmDesc = sa.getParam("SpellDescription");
+                if (charmDesc != null && !charmDesc.isEmpty()) {
+                    charmDesc = stripReminderText(charmDesc);
+                }
+                // Pawprint charms lack SpellDescription — synthesize from Pawprint$ + CanRepeatModes$
+                if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
+                    String total = sa.getParam("Pawprint");
+                    charmDesc = "Choose up to " + total + " {P} worth of modes.";
+                    if ("True".equals(sa.getParam("CanRepeatModes"))) {
+                        charmDesc += " You may choose the same mode more than once.";
+                    }
+                }
+                if (charmDesc != null && !charmDesc.isEmpty()) {
+                    actionCounter++;
+                    abilities.add(new AbilityLine(AbilityType.SPELL,
+                            applyTextCasing(charmDesc), actionCounter));
+                }
                 var choices = sa.getAdditionalAbilityList("Choices");
                 if (choices != null) {
                     for (var choice : choices) {
@@ -157,12 +168,25 @@ public class CardScriptConverter {
                             choiceDesc = "(no description)";
                         }
                         choiceDesc = stripReminderText(choiceDesc);
+                        String pawprint = choice.getParam("Pawprint");
+                        if (pawprint != null) {
+                            choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
+                                    + " \u2014 " + choiceDesc;
+                        }
                         actionCounter++;
                         abilities.add(new AbilityLine(AbilityType.OPTION,
                                 applyTextCasing(choiceDesc), actionCounter));
                     }
                 }
-            } else if (sa.isActivatedAbility()) {
+                continue;
+            }
+
+            String spellDesc = sa.getParam("SpellDescription");
+            if (spellDesc == null || spellDesc.isEmpty()) {
+                continue;
+            }
+
+            if (sa.isActivatedAbility()) {
                 String desc = stripReminderText(sa.getDescription());
                 actionCounter++;
                 AbilityType type;
