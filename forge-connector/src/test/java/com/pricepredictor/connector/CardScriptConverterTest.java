@@ -500,6 +500,29 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void raiseCostOnOtherSpellsRemainsStatic() {
+        // Aura of Silence: taxes opponent artifact/enchantment spells, not a self-cost
+        MultiCard result = convert(
+                "Name:Aura of Silence",
+                "ManaCost:1 W W",
+                "Types:Enchantment",
+                "S:Mode$ RaiseCost | ValidCard$ Artifact,Enchantment | Activator$ Opponent | Type$ Spell | Amount$ 2 | Description$ Artifact and enchantment spells your opponents cast cost {2} more to cast.",
+                "A:AB$ Destroy | Cost$ Sac<1/CARDNAME> | ValidTgts$ Enchantment,Artifact | TgtPrompt$ Select target artifact or enchantment | SpellDescription$ Destroy target artifact or enchantment.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // Should be static, NOT additional cost
+        List<AbilityLine> statics = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.STATIC).toList();
+        assertEquals(1, statics.size(), "RaiseCost on other spells should remain static");
+        assertTrue(statics.get(0).description().contains("cost {2} more to cast"));
+
+        long addCostCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).count();
+        assertEquals(0, addCostCount, "Should have no additional cost lines");
+    }
+
+    @Test
     void optionalAdditionalCost() {
         MultiCard result = convert(
                 "Name:Analyze the Pollen",

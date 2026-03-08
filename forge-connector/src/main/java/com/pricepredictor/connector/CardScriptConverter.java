@@ -465,14 +465,21 @@ public class CardScriptConverter {
             if (desc.isEmpty()) {
                 continue;
             }
-            // RaiseCost/OptionalCost statics are additional casting costs, not regular statics
+            // RaiseCost/OptionalCost statics are additional casting costs ONLY when they
+            // apply to this card itself (ValidCard$ Card.Self or Affected$ Card.Self).
+            // Otherwise they are static abilities that tax or modify other spells' costs.
             AbilityType effectiveType = type;
             String mode = trait.getParam("Mode");
             if (type == AbilityType.STATIC
                     && ("RaiseCost".equals(mode) || "OptionalCost".equals(mode))) {
-                effectiveType = AbilityType.ADDITIONAL_COST;
-                if (desc.startsWith(applyTextCasing(ADDITIONAL_COST_PREFIX))) {
-                    desc = desc.substring(applyTextCasing(ADDITIONAL_COST_PREFIX).length());
+                String validCard = trait.getParam("ValidCard");
+                String affected = trait.getParam("Affected");
+                boolean selfCost = "Card.Self".equals(validCard) || "Card.Self".equals(affected);
+                if (selfCost) {
+                    effectiveType = AbilityType.ADDITIONAL_COST;
+                    if (desc.startsWith(applyTextCasing(ADDITIONAL_COST_PREFIX))) {
+                        desc = desc.substring(applyTextCasing(ADDITIONAL_COST_PREFIX).length());
+                    }
                 }
             }
             abilities.add(new AbilityLine(effectiveType, desc, null));
