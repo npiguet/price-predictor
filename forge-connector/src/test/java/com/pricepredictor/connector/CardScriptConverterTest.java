@@ -303,6 +303,54 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void classEnchantmentLevels() {
+        MultiCard result = convert(
+                "Name:Artificer Class",
+                "ManaCost:1 U",
+                "Types:Enchantment Class",
+                "S:Mode$ ReduceCost | EffectZone$ Battlefield | ValidCard$ Card.Artifact | Activator$ You | Type$ Spell | OnlyFirstSpell$ True | Amount$ 1 | Description$ The first artifact spell you cast each turn costs {1} less to cast.",
+                "K:Class:2:1 U:AddTrigger$ TriggerClassLevel",
+                "SVar:TriggerClassLevel:Mode$ ClassLevelGained | ClassLevel$ 2 | ValidCard$ Card.Self | TriggerZones$ Battlefield | Execute$ TrigDigUntil | Secondary$ True | TriggerDescription$ When this Class becomes level 2, reveal cards from the top of your library until you reveal an artifact card. Put that card into your hand and the rest on the bottom of your library in a random order.",
+                "SVar:TrigDigUntil:DB$ DigUntil | Valid$ Artifact | FoundDestination$ Hand | RevealedDestination$ Library | RevealedLibraryPosition$ -1 | RevealRandomOrder$ True",
+                "K:Class:3:5 U:AddTrigger$ TriggerEndTurn",
+                "SVar:TriggerEndTurn:Mode$ Phase | Phase$ End of Turn | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ CopyArtifact | Secondary$ True | TriggerDescription$ At the beginning of your end step, create a token that's a copy of target artifact you control.",
+                "SVar:CopyArtifact:DB$ CopyPermanent | ValidTgts$ Artifact.YouCtrl | TgtPrompt$ Select target artifact you control to copy",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+        assertEquals("enchantment class", card.types());
+
+        List<AbilityLine> levels = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.LEVEL).toList();
+        assertEquals(3, levels.size(), "Expected 3 level abilities but got: " + card.abilities());
+
+        // Level 1: no cost prefix
+        String l1 = levels.get(0).formatLine();
+        assertTrue(l1.startsWith("level[1]:"), "Expected level[1]: but got: " + l1);
+        assertTrue(l1.contains("first artifact spell"), "Expected level 1 text in: " + l1);
+        assertFalse(l1.contains("{1}{U}:"), "Level 1 should not have a cost prefix");
+
+        // Level 2: cost prefix
+        String l2 = levels.get(1).formatLine();
+        assertTrue(l2.startsWith("level[2]:"), "Expected level[2]: but got: " + l2);
+        assertTrue(l2.contains("{1}{U}:"), "Expected cost {1}{U}: in: " + l2);
+        assertTrue(l2.contains("reveal cards"), "Expected level 2 text in: " + l2);
+
+        // Level 3: cost prefix
+        String l3 = levels.get(2).formatLine();
+        assertTrue(l3.startsWith("level[3]:"), "Expected level[3]: but got: " + l3);
+        assertTrue(l3.contains("{5}{U}:"), "Expected cost {5}{U}: in: " + l3);
+        assertTrue(l3.contains("create a token"), "Expected level 3 text in: " + l3);
+
+        // No activated or static lines should remain
+        long activatedCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ACTIVATED).count();
+        long staticCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.STATIC).count();
+        assertEquals(0, activatedCount, "No activated lines expected for Class card");
+        assertEquals(0, staticCount, "No static lines expected for Class card");
+    }
+
+    @Test
     void layoutDetection() {
         // Transform
         MultiCard transform = convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",

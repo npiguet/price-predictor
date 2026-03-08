@@ -18,8 +18,10 @@ import forge.game.spellability.SpellAbility;
 import forge.item.PaperCard;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -103,13 +105,15 @@ public class CardScriptConverter {
     public ConvertedCard convertFace(Card card, ICardFace face) {
         int actionCounter = 0;
         List<AbilityLine> abilities = new ArrayList<>();
+        boolean isClass = face.getType().toString().contains("Class");
+        Set<String> classLevelDescriptions = new HashSet<>();
 
         // --- Keywords (from parsed KeywordInterface objects) ---
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
 
             if (kw == Keyword.UNDEFINED) {
-                actionCounter = handleUndefinedKeyword(ki, abilities, actionCounter);
+                actionCounter = handleUndefinedKeyword(ki, abilities, actionCounter, classLevelDescriptions);
                 continue;
             }
 
@@ -174,6 +178,36 @@ public class CardScriptConverter {
         addDescribedTraits(abilities, card.getStaticAbilities(), "Description", AbilityType.STATIC, face.getName());
         addDescribedTraits(abilities, card.getReplacementEffects(), "Description", AbilityType.REPLACEMENT, face.getName());
 
+        // --- Class post-processing: merge level costs with effect descriptions ---
+        if (isClass) {
+            // Remove any statics/triggers/replacements that duplicate level 2+ descriptions
+            abilities.removeIf(a ->
+                    a.type() != AbilityType.LEVEL
+                    && classLevelDescriptions.contains(a.description()));
+
+            // Convert remaining non-keyword, non-level abilities to LEVEL[1]
+            for (int i = 0; i < abilities.size(); i++) {
+                AbilityLine a = abilities.get(i);
+                if (a.type() == AbilityType.STATIC || a.type() == AbilityType.TRIGGERED
+                        || a.type() == AbilityType.REPLACEMENT) {
+                    abilities.set(i, new AbilityLine(AbilityType.LEVEL, a.description(), 1));
+                }
+            }
+
+            // Sort LEVEL abilities by level number (level 1 first)
+            abilities.sort((a, b) -> {
+                boolean aLevel = a.type() == AbilityType.LEVEL;
+                boolean bLevel = b.type() == AbilityType.LEVEL;
+                if (aLevel && bLevel) {
+                    return Integer.compare(a.actionNumber(), b.actionNumber());
+                }
+                // LEVEL abilities come first, then any remaining non-level abilities
+                if (aLevel) return -1;
+                if (bLevel) return 1;
+                return 0;
+            });
+        }
+
         // --- Build ConvertedCard ---
         String name = applyTextCasing(face.getName());
         ManaCost manaCost = face.getManaCost();
@@ -233,7 +267,8 @@ public class CardScriptConverter {
      * These are not recognized by the Keyword enum and require string-based classification.
      * Returns the updated actionCounter.
      */
-    private int handleUndefinedKeyword(KeywordInterface ki, List<AbilityLine> abilities, int actionCounter) {
+    private int handleUndefinedKeyword(KeywordInterface ki, List<AbilityLine> abilities,
+                                       int actionCounter, Set<String> classLevelDescriptions) {
         String original = ki.getOriginal();
 
         // Plaintext K: lines starting with CARDNAME/NICKNAME are rules text, not keywords
@@ -247,8 +282,8 @@ public class CardScriptConverter {
                     AbilityType.CHAPTER, false, abilities, actionCounter);
         }
         if (original.startsWith("Class:")) {
-            return emitKeywordTraits(ki.getAbilities(), SpellAbility::getDescription,
-                    AbilityType.ACTIVATED, true, abilities, actionCounter);
+            emitClassLevel(ki, abilities, classLevelDescriptions);
+            return actionCounter;
         }
         if (original.startsWith("etbCounter:")) {
             return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
@@ -295,6 +330,64 @@ public class CardScriptConverter {
             abilities.add(new AbilityLine(type, desc, num));
         }
         return actionCounter;
+    }
+
+    /**
+     * Emit a single Class level ability line.
+     * Extracts the level number and Forge-formatted cost from the keyword's activated ability,
+     * then finds the effect description from the keyword's triggers, statics, or replacements.
+     */
+    private void emitClassLevel(KeywordInterface ki, List<AbilityLine> abilities,
+                                Set<String> classLevelDescriptions) {
+        String original = ki.getOriginal();
+        // Format: "Class:level:cost:params"
+        int level = Integer.parseInt(original.split(":", 3)[1]);
+
+        // Get the Forge-formatted cost string from the level-up activated ability.
+        // SpellAbility.getCostDescription() formats the Cost domain object properly,
+        // handling mana, tap, sacrifice, life payment, etc.
+        String cost = null;
+        for (SpellAbility sa : ki.getAbilities()) {
+            cost = sa.getCostDescription();
+            break;
+        }
+        if (cost == null || cost.isEmpty()) {
+            return;
+        }
+        // getCostDescription() appends ": " for ability costs — trim trailing whitespace
+        cost = cost.trim();
+        // Remove trailing colon if present (we add our own separator)
+        if (cost.endsWith(":")) {
+            cost = cost.substring(0, cost.length() - 1).trim();
+        }
+
+        // Find the effect description from the keyword's own traits
+        String desc = findFirstDescription(ki.getTriggers(), "TriggerDescription");
+        if (desc == null) {
+            desc = findFirstDescription(ki.getStaticAbilities(), "Description");
+        }
+        if (desc == null) {
+            desc = findFirstDescription(ki.getReplacements(), "Description");
+        }
+        if (desc == null) {
+            return;
+        }
+
+        desc = stripReminderText(desc);
+        desc = applyTextCasing(desc);
+        classLevelDescriptions.add(desc);
+        String fullDesc = cost + ": " + desc;
+        abilities.add(new AbilityLine(AbilityType.LEVEL, applyTextCasing(fullDesc), level));
+    }
+
+    private <T extends CardTraitBase> String findFirstDescription(Iterable<T> traits, String param) {
+        for (T trait : traits) {
+            String d = trait.getParam(param);
+            if (d != null && !d.isEmpty()) {
+                return d;
+            }
+        }
+        return null;
     }
 
     /**

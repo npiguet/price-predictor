@@ -96,7 +96,7 @@ A data scientist wants to trigger the conversion from the existing Python CLI so
 - What happens when a card has a `Text:` property containing non-ability rules text? The text is preserved as a "text:" line in the output.
 - What happens when the global action counter spans multiple ability types on one face? It increments across all player-actionable items on the same face (e.g., keyword[1], activated[2], activated[3]).
 - What happens with triggered abilities that involve a player choice (e.g., "choose one" on an ETB)? The trigger line itself has no number, but its options each receive "option[N]:" with numbers from the global counter.
-- What happens with saga, class, or room cards? Saga chapter abilities use `chapter:` prefix with the description following the Forge/Oracle convention (e.g., `chapter: I — draw a card.`). Class level and room entries follow their respective Oracle text format.
+- What happens with saga, class, or room cards? Saga chapter abilities use `chapter:` prefix with the description following the Forge/Oracle convention (e.g., `chapter: I — draw a card.`). Class enchantments use `level[N]:` prefix: level 1 has no cost prefix, levels 2+ include the level-up cost (e.g., `level[2]: {1}{U}: effect description`). The bracket number is the level number, not the global action counter. Room entries follow their respective Oracle text format.
 
 ## Requirements *(mandatory)*
 
@@ -178,6 +178,16 @@ spell[1]: choose one —
 option[2]: exile target creature with power 3 or greater.
 option[3]: you draw two cards and you lose 2 life.
 option[4]: distribute two +1/+1 counters among one or two target creatures.
+```
+
+**Class enchantment** (Artificer Class):
+```
+name: artificer class
+mana cost: {1}{U}
+types: enchantment class
+level[1]: the first artifact spell you cast each turn costs {1} less to cast.
+level[2]: {1}{U}: when this class becomes level 2, reveal cards from the top of your library until you reveal an artifact card. put that card into your hand and the rest on the bottom of your library in a random order.
+level[3]: {5}{U}: at the beginning of your end step, create a token that's a copy of target artifact you control.
 ```
 
 **Saga** (The Eldest Reborn-like):

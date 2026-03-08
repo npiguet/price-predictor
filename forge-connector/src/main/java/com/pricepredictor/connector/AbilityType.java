@@ -16,6 +16,7 @@ public enum AbilityType {
     STATIC("static", false),
     REPLACEMENT("replacement", false),
     CHAPTER("chapter", false),
+    LEVEL("level", true),
     SPELL("spell", true),
     PLANESWALKER("planeswalker", true),
     OPTION("option", true),
