@@ -259,9 +259,9 @@ class CardScriptConverterTest {
         String ch2 = chapters.get(1).formatLine();
         String ch3 = chapters.get(2).formatLine();
         assertTrue(ch1.startsWith("chapter:"), "Expected chapter: prefix but got: " + ch1);
-        assertTrue(ch1.contains("i \u2014"), "Expected 'i \u2014' in: " + ch1);
-        assertTrue(ch2.contains("ii \u2014"), "Expected 'ii \u2014' in: " + ch2);
-        assertTrue(ch3.contains("iii \u2014"), "Expected 'iii \u2014' in: " + ch3);
+        assertTrue(ch1.contains("I \u2014"), "Expected 'I \u2014' in: " + ch1);
+        assertTrue(ch2.contains("II \u2014"), "Expected 'II \u2014' in: " + ch2);
+        assertTrue(ch3.contains("III \u2014"), "Expected 'III \u2014' in: " + ch3);
         assertTrue(ch1.contains("sacrifices"), "Expected sacrifice text in: " + ch1);
         assertNull(chapters.get(0).actionNumber(), "Chapters should not have action numbers");
     }

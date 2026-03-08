@@ -32,6 +32,7 @@ public class CardScriptConverter {
     private static final Pattern BRACE_SYMBOL = Pattern.compile("\\{[^}]+\\}");
     private static final Pattern REMINDER_TEXT = Pattern.compile("\\s*\\([^)]*\\)");
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
+    private static final Pattern ROMAN_PREFIX = Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -207,6 +208,14 @@ public class CardScriptConverter {
                                     String descParam, AbilityType type,
                                     String faceName) {
         for (CardTraitBase trait : traits) {
+            if (trait.getKeyword() != null) {
+                // Keyword-generated traits are already emitted by the keyword loop
+                // and handleUndefinedKeyword. Without this skip, saga chapter triggers
+                // (e.g. "A Golden Opportunity") appear twice: once as chapter: from
+                // the K:Chapter handler, and again as triggered: from
+                // card.getTriggers() which includes the same Forge-generated objects.
+                continue;
+            }
             if ("True".equals(trait.getParam("Secondary")) || "True".equals(trait.getParam("Static"))) {
                 continue;
             }
@@ -278,8 +287,12 @@ public class CardScriptConverter {
                 continue;
             }
             desc = stripReminderText(desc);
+            desc = applyTextCasing(desc);
+            if (type == AbilityType.CHAPTER) {
+                desc = uppercaseRomanPrefix(desc);
+            }
             Integer num = numbered ? ++actionCounter : null;
-            abilities.add(new AbilityLine(type, applyTextCasing(desc), num));
+            abilities.add(new AbilityLine(type, desc, num));
         }
         return actionCounter;
     }
@@ -332,6 +345,17 @@ public class CardScriptConverter {
         lowered = PLACEHOLDER_WORD.matcher(lowered).replaceAll(mr -> mr.group().toUpperCase());
 
         return lowered;
+    }
+
+    /**
+     * Uppercase roman numeral prefix before an em dash (e.g. "i, ii — ..." → "I, II — ...").
+     */
+    static String uppercaseRomanPrefix(String text) {
+        Matcher m = ROMAN_PREFIX.matcher(text);
+        if (m.find()) {
+            return m.group(1).toUpperCase() + text.substring(m.group(1).length());
+        }
+        return text;
     }
 
     private String stripReminderText(String text) {
