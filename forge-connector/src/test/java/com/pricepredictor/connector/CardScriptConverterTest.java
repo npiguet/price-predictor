@@ -185,6 +185,26 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void variableXStaysUppercase() {
+        // Standalone X in various positions
+        assertEquals("-X: deal X damage", CardScriptConverter.applyTextCasing("-X: Deal X damage"));
+        assertEquals("+X/+0 until end of turn", CardScriptConverter.applyTextCasing("+X/+0 until end of turn"));
+        assertEquals("where X is the number", CardScriptConverter.applyTextCasing("Where X is the number"));
+
+        // X inside words must stay lowercase
+        assertEquals("exile target creature", CardScriptConverter.applyTextCasing("Exile target creature"));
+        assertEquals("next end step", CardScriptConverter.applyTextCasing("Next end step"));
+        assertEquals("tax each opponent", CardScriptConverter.applyTextCasing("Tax each opponent"));
+
+        // X inside braces handled separately
+        assertEquals("{X}{R}", CardScriptConverter.applyTextCasing("{X}{R}"));
+
+        // Mixed: brace X and standalone X in same text
+        assertEquals("pay {X}, where X is the number of counters",
+                CardScriptConverter.applyTextCasing("Pay {X}, where X is the number of counters"));
+    }
+
+    @Test
     void noCostCardOmitsManaCostLine() {
         MultiCard result = convert(
                 "Name:Ancestral Vision",
@@ -230,11 +250,9 @@ class CardScriptConverterTest {
         List<AbilityLine> pwAbilities = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.PLANESWALKER).toList();
         assertEquals(3, pwAbilities.size());
-        assertTrue(pwAbilities.get(0).formatLine().contains("+2:"), "Expected +2: but got: " + pwAbilities.get(0).formatLine());
-        assertTrue(pwAbilities.get(1).formatLine().contains("-1:"), "Expected -1: but got: " + pwAbilities.get(1).formatLine());
-        assertTrue(pwAbilities.get(2).formatLine().contains("-10:"), "Expected -10: but got: " + pwAbilities.get(2).formatLine());
-        assertFalse(pwAbilities.get(0).formatLine().contains("[+2]"), "Should not have brackets around loyalty cost");
-        assertFalse(pwAbilities.get(1).formatLine().contains("[-1]"), "Should not have brackets around loyalty cost");
+        assertTrue(pwAbilities.get(0).formatLine().contains("[+2]:"), "Expected [+2]: but got: " + pwAbilities.get(0).formatLine());
+        assertTrue(pwAbilities.get(1).formatLine().contains("[-1]:"), "Expected [-1]: but got: " + pwAbilities.get(1).formatLine());
+        assertTrue(pwAbilities.get(2).formatLine().contains("[-10]:"), "Expected [-10]: but got: " + pwAbilities.get(2).formatLine());
         assertEquals(1, (int) pwAbilities.get(0).actionNumber());
         assertEquals(2, (int) pwAbilities.get(1).actionNumber());
         assertEquals(3, (int) pwAbilities.get(2).actionNumber());

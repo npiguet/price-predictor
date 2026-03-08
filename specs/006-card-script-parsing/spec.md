@@ -47,7 +47,7 @@ A data scientist wants to correctly convert planeswalkers, modal/charm spells, m
 
 **Acceptance Scenarios**:
 
-1. **Given** a planeswalker script (e.g., Jace Beleren with +2, -1, -10 abilities), **When** converted, **Then** each loyalty ability appears as "planeswalker[N]: +2: each player draws a card." using the Forge/Oracle loyalty cost prefix (no square brackets).
+1. **Given** a planeswalker script (e.g., Jace Beleren with +2, -1, -10 abilities), **When** converted, **Then** each loyalty ability appears as "planeswalker[N]: [+2]: each player draws a card." with the loyalty cost enclosed in square brackets to match Oracle text format.
 2. **Given** a charm/modal spell (e.g., Abzan Charm: "Choose one —"), **When** converted, **Then** each mode appears on its own line as "option[N]: description".
 3. **Given** a transform card (e.g., Delver of Secrets // Insectile Aberration), **When** converted, **Then** both faces appear separated by ALTERNATE, each with its own properties, abilities, and independent action counter.
 4. **Given** a split card (e.g., Fire // Ice), **When** converted, **Then** both halves appear separated by ALTERNATE.
@@ -111,7 +111,7 @@ A data scientist wants to trigger the conversion from the existing Python CLI so
 - **FR-007**: System MUST extract replacement effects and present each as `replacement: description` matching Oracle text.
 - **FR-008**: System MUST extract instant and sorcery spell effects and present each as `spell[N]: description` with a number from the global action counter.
 - **FR-009**: All player-actionable abilities (activated abilities, activatable keywords, spell effects, planeswalker abilities, modal options) MUST be labeled with a unique incrementing number per card face. The counter starts at 1 for each face and increments across all actionable ability types on that face.
-- **FR-010**: Planeswalker loyalty abilities MUST be formatted as `planeswalker[N]: +X: description` using the Forge/Oracle text loyalty cost prefix (no square brackets around the loyalty cost). Forge's `CostPutCounter`/`CostRemoveCounter` already produce `+N`/`-N` natively.
+- **FR-010**: Planeswalker loyalty abilities MUST be formatted as `planeswalker[N]: [+X]: description` with the loyalty cost enclosed in square brackets to match Oracle text format. Forge's `CostPutCounter`/`CostRemoveCounter` produce `+N`/`-N` natively; the converter wraps them in brackets.
 - **FR-011**: Modal spells and charms MUST present each choice on its own line as `option[N]: description`.
 - **FR-012**: All ability descriptions MUST read like the equivalent section of Oracle text. Reminder text (text within parentheses) MUST be omitted from the output.
 - **FR-013**: Engine-internal metadata (AI:, DeckHints:, DeckHas:, DeckNeeds:, SVar:, Oracle:, and AI-specific parameters like AILogic$, AITgts$) MUST be excluded from output. No remnants of the original script syntax may appear beyond the `keyName: descriptionText` format.
@@ -164,9 +164,9 @@ name: jace beleren
 mana cost: {1}{U}{U}
 types: legendary planeswalker jace
 loyalty: 3
-planeswalker[1]: +2: each player draws a card.
-planeswalker[2]: -1: target player draws a card.
-planeswalker[3]: -10: target player mills twenty cards.
+planeswalker[1]: [+2]: each player draws a card.
+planeswalker[2]: [-1]: target player draws a card.
+planeswalker[3]: [-10]: target player mills twenty cards.
 ```
 
 **Modal spell / Charm** (Abzan Charm):

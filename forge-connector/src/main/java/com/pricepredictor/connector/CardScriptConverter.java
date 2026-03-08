@@ -34,7 +34,9 @@ public class CardScriptConverter {
     private static final Pattern BRACE_SYMBOL = Pattern.compile("\\{[^}]+\\}");
     private static final Pattern REMINDER_TEXT = Pattern.compile("\\s*\\([^)]*\\)");
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
+    private static final Pattern VARIABLE_X = Pattern.compile("(?<![a-z])x(?![a-z])");
     private static final Pattern ROMAN_PREFIX = Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
+    private static final Pattern LOYALTY_COST = Pattern.compile("^([+\\-](?:\\d+|X)): ", Pattern.CASE_INSENSITIVE);
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -163,7 +165,13 @@ public class CardScriptConverter {
             } else if (sa.isActivatedAbility()) {
                 String desc = stripReminderText(sa.getDescription());
                 actionCounter++;
-                AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
+                AbilityType type;
+                if (sa.isPwAbility()) {
+                    type = AbilityType.PLANESWALKER;
+                    desc = bracketLoyaltyCost(desc);
+                } else {
+                    type = AbilityType.ACTIVATED;
+                }
                 abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
             } else if (sa.isSpell()) {
                 actionCounter++;
@@ -437,6 +445,9 @@ public class CardScriptConverter {
         // Restore placeholders to uppercase (word-boundary-aware to avoid corrupting substrings)
         lowered = PLACEHOLDER_WORD.matcher(lowered).replaceAll(mr -> mr.group().toUpperCase());
 
+        // Restore variable X to uppercase (standalone X not inside words like "exile")
+        lowered = VARIABLE_X.matcher(lowered).replaceAll("X");
+
         return lowered;
     }
 
@@ -447,6 +458,18 @@ public class CardScriptConverter {
         Matcher m = ROMAN_PREFIX.matcher(text);
         if (m.find()) {
             return m.group(1).toUpperCase() + text.substring(m.group(1).length());
+        }
+        return text;
+    }
+
+    /**
+     * Wrap the loyalty cost prefix in square brackets to match Oracle text format.
+     * E.g. "+2: Each player draws a card." → "[+2]: Each player draws a card."
+     */
+    static String bracketLoyaltyCost(String text) {
+        Matcher m = LOYALTY_COST.matcher(text);
+        if (m.find()) {
+            return "[" + m.group(1) + "]: " + text.substring(m.end());
         }
         return text;
     }
