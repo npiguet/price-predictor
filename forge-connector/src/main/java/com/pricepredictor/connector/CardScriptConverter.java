@@ -12,6 +12,7 @@ import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
@@ -37,6 +38,7 @@ public class CardScriptConverter {
     private static final Pattern VARIABLE_X = Pattern.compile("(?<![a-z])x(?![a-z])");
     private static final Pattern ROMAN_PREFIX = Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
     private static final Pattern LOYALTY_COST = Pattern.compile("^([+\\-](?:\\d+|X)): ", Pattern.CASE_INSENSITIVE);
+    private static final String ADDITIONAL_COST_PREFIX = "As an additional cost to cast this spell, ";
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
@@ -181,6 +183,24 @@ public class CardScriptConverter {
                 continue;
             }
 
+            // For spell-type abilities, emit additional cost as a separate line.
+            // Strip the "As an additional cost to cast this spell, " prefix since
+            // the "additional cost:" label already conveys that meaning.
+            if (sa.isSpell()) {
+                String costDesc = sa.getCostDescription();
+                if (costDesc != null) {
+                    costDesc = costDesc.trim();
+                    if (costDesc.startsWith(ADDITIONAL_COST_PREFIX)) {
+                        costDesc = costDesc.substring(ADDITIONAL_COST_PREFIX.length());
+                    }
+                    costDesc = stripReminderText(costDesc);
+                }
+                if (costDesc != null && !costDesc.isEmpty()) {
+                    abilities.add(new AbilityLine(AbilityType.ADDITIONAL_COST,
+                            applyTextCasing(costDesc), null));
+                }
+            }
+
             String spellDesc = sa.getParam("SpellDescription");
             if (spellDesc == null || spellDesc.isEmpty()) {
                 continue;
@@ -199,7 +219,7 @@ public class CardScriptConverter {
                 abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
             } else if (sa.isSpell()) {
                 actionCounter++;
-                String desc = stripReminderText(sa.getDescription());
+                String desc = stripReminderText(spellDesc);
                 abilities.add(new AbilityLine(AbilityType.SPELL,
                         applyTextCasing(desc), actionCounter));
             }
@@ -239,6 +259,14 @@ public class CardScriptConverter {
                 return 0;
             });
         }
+
+        // --- Move additional cost lines to the top ---
+        abilities.sort((a, b) -> {
+            boolean aCost = a.type() == AbilityType.ADDITIONAL_COST;
+            boolean bCost = b.type() == AbilityType.ADDITIONAL_COST;
+            if (aCost == bCost) return 0;
+            return aCost ? -1 : 1;
+        });
 
         // --- Build ConvertedCard ---
         String name = applyTextCasing(face.getName());
@@ -298,7 +326,17 @@ public class CardScriptConverter {
             if (desc.isEmpty()) {
                 continue;
             }
-            abilities.add(new AbilityLine(type, desc, null));
+            // RaiseCost/OptionalCost statics are additional casting costs, not regular statics
+            AbilityType effectiveType = type;
+            String mode = trait.getParam("Mode");
+            if (type == AbilityType.STATIC
+                    && ("RaiseCost".equals(mode) || "OptionalCost".equals(mode))) {
+                effectiveType = AbilityType.ADDITIONAL_COST;
+                if (desc.startsWith(applyTextCasing(ADDITIONAL_COST_PREFIX))) {
+                    desc = desc.substring(applyTextCasing(ADDITIONAL_COST_PREFIX).length());
+                }
+            }
+            abilities.add(new AbilityLine(effectiveType, desc, null));
         }
     }
 
@@ -328,6 +366,26 @@ public class CardScriptConverter {
         if (original.startsWith("etbCounter:")) {
             return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
                     AbilityType.REPLACEMENT, false, abilities, actionCounter);
+        }
+        if (original.startsWith("AlternateAdditionalCost:")) {
+            String[] costParts = original.split(":", 2)[1].split(":");
+            StringBuilder desc = new StringBuilder();
+            for (int n = 0; n < costParts.length; n++) {
+                Cost cost = new Cost(costParts[n], false);
+                String costText = cost.toSimpleString();
+                if (cost.isOnlyManaCost()) {
+                    desc.append("pay ");
+                }
+                desc.append(costText.substring(0, 1).toLowerCase()).append(costText.substring(1));
+                if (n + 2 == costParts.length) {
+                    desc.append(costParts.length > 2 ? ", or " : " or ");
+                } else if (n + 1 < costParts.length) {
+                    desc.append(", ");
+                }
+            }
+            abilities.add(new AbilityLine(AbilityType.ADDITIONAL_COST,
+                    applyTextCasing(desc.toString()), null));
+            return actionCounter;
         }
 
         // Fallback: treat as regular keyword

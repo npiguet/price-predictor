@@ -359,6 +359,175 @@ class CardScriptConverterTest {
         assertEquals(1, spells.size());
         assertTrue(spells.get(0).formatLine().contains("CARDNAME deals 3 damage"));
         assertEquals(1, (int) spells.get(0).actionNumber());
+        // No additional cost for a simple spell
+        long additionalCosts = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).count();
+        assertEquals(0, additionalCosts, "Lightning Bolt should have no additional cost");
+    }
+
+    @Test
+    void spellWithAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Abandon Hope",
+                "ManaCost:X 1 B",
+                "Types:Sorcery",
+                "A:SP$ Discard | Cost$ X 1 B Discard<X/Card/card> | ValidTgts$ Opponent | Mode$ LookYouChoose | NumCards$ X | SpellDescription$ Look at target opponent's hand and choose X cards from it. That player discards those cards.",
+                "SVar:X:Count$xPaid",
+                "Oracle:As an additional cost to cast this spell, discard X cards.\\nLook at target opponent's hand and choose X cards from it. That player discards those cards.");
+        ConvertedCard card = result.faces().get(0);
+
+        // Additional cost on its own line
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        String costLine = costs.get(0).formatLine();
+        assertTrue(costLine.startsWith("additional cost:"),
+                "Expected 'additional cost:' prefix but got: " + costLine);
+        assertTrue(costLine.contains("discard X"),
+                "Expected discard text in: " + costLine);
+        assertFalse(costLine.contains("as an additional cost to cast"),
+                "Prefix should be stripped, but got: " + costLine);
+
+        // Spell effect on its own line
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size(), "Expected 1 spell line");
+        assertTrue(spells.get(0).formatLine().contains("look at target opponent's hand"),
+                "Expected spell text in: " + spells.get(0).formatLine());
+    }
+
+    @Test
+    void creatureWithAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Abhorrent Oculus",
+                "ManaCost:2 U",
+                "Types:Creature Eye",
+                "PT:5/5",
+                "A:SP$ PermanentCreature | Cost$ 2 U ExileFromGrave<6/Card>",
+                "K:Flying",
+                "T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ Opponent | TriggerZones$ Battlefield | Execute$ TrigDread | TriggerDescription$ At the beginning of each opponent's upkeep, manifest dread.",
+                "SVar:TrigDread:DB$ ManifestDread",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // Additional cost should appear even without SpellDescription
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        assertTrue(costs.get(0).formatLine().contains("exile"),
+                "Expected exile text in: " + costs.get(0).formatLine());
+    }
+
+    @Test
+    void additionalCostFromRaiseCostStatic() {
+        MultiCard result = convert(
+                "Name:Aether Tide",
+                "ManaCost:X U",
+                "Types:Sorcery",
+                "S:Mode$ RaiseCost | ValidCard$ Card.Self | Activator$ You | Type$ Spell | Cost$ Discard<X/Creature/creature(s)> | EffectZone$ All | Description$ As an additional cost to cast this spell, discard X creature cards.",
+                "A:SP$ ChangeZone | Cost$ X U | TargetMin$ X | TargetMax$ X | Origin$ Battlefield | Destination$ Hand | ValidTgts$ Creature | TgtPrompt$ Select X target creatures | SpellDescription$ Return X target creatures to their owners' hands.",
+                "SVar:X:Count$xPaid",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // RaiseCost static should become additional cost, not static
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        String costLine = costs.get(0).formatLine();
+        assertTrue(costLine.contains("discard X creature cards"),
+                "Expected discard text in: " + costLine);
+        assertFalse(costLine.contains("as an additional cost to cast"),
+                "Prefix should be stripped, but got: " + costLine);
+
+        // No static lines should remain
+        long staticCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.STATIC).count();
+        assertEquals(0, staticCount, "RaiseCost should not appear as static");
+
+        // Spell effect on its own line
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size(), "Expected 1 spell line");
+        assertTrue(spells.get(0).formatLine().contains("return X target creatures"),
+                "Expected spell text in: " + spells.get(0).formatLine());
+
+        // Additional cost should appear before spell in ability list
+        int costIdx = card.abilities().indexOf(costs.get(0));
+        int spellIdx = card.abilities().indexOf(spells.get(0));
+        assertTrue(costIdx < spellIdx, "Additional cost should appear before spell abilities");
+    }
+
+    @Test
+    void optionalAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Analyze the Pollen",
+                "ManaCost:G",
+                "Types:Sorcery",
+                "S:Mode$ OptionalCost | EffectZone$ All | ValidCard$ Card.Self | ValidSA$ Spell | Cost$ CollectEvidence<8> | Description$ As an additional cost to cast this spell, you may collect evidence 8. (Exile cards with total mana value 8 or greater from your graveyard.)",
+                "A:SP$ ChangeZone | Origin$ Library | Destination$ Hand | ChangeType$ Land.Basic | SpellDescription$ Search your library for a basic land card.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // OptionalCost static should become additional cost
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        String costLine = costs.get(0).formatLine();
+        assertTrue(costLine.contains("you may collect evidence 8"),
+                "Expected 'you may' description in: " + costLine);
+        assertFalse(costLine.contains("as an additional cost to cast"),
+                "Prefix should be stripped, but got: " + costLine);
+
+        // No static lines should remain
+        long staticCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.STATIC).count();
+        assertEquals(0, staticCount, "OptionalCost should not appear as static");
+
+        // Additional cost should appear before spell
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size());
+        int costIdx = card.abilities().indexOf(costs.get(0));
+        int spellIdx = card.abilities().indexOf(spells.get(0));
+        assertTrue(costIdx < spellIdx, "Additional cost should appear before spell abilities");
+    }
+
+    @Test
+    void alternateAdditionalCost() {
+        MultiCard result = convert(
+                "Name:Annihilating Glare",
+                "ManaCost:B",
+                "Types:Sorcery",
+                "K:AlternateAdditionalCost:Sac<1/Creature;Artifact/artifact or creature>:4",
+                "A:SP$ Destroy | ValidTgts$ Creature,Planeswalker | TgtPrompt$ Select target creature or planeswalker | SpellDescription$ Destroy target creature or planeswalker.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // AlternateAdditionalCost keyword should become additional cost line
+        List<AbilityLine> costs = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
+        assertEquals(1, costs.size(), "Expected 1 additional cost line but got: " + card.abilities());
+        String costLine = costs.get(0).formatLine();
+        assertTrue(costLine.contains("sacrifice"), "Expected sacrifice in: " + costLine);
+        assertTrue(costLine.contains("or"), "Expected 'or' joining alternatives in: " + costLine);
+
+        // No keyword lines should remain for this
+        long keywordCount = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE
+                        || a.type() == AbilityType.KEYWORD_ACTIVE).count();
+        assertEquals(0, keywordCount, "AlternateAdditionalCost should not appear as keyword");
+
+        // Spell effect present
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        assertEquals(1, spells.size());
+        assertTrue(spells.get(0).formatLine().contains("destroy target creature or planeswalker"));
+
+        // Additional cost before spell
+        int costIdx = card.abilities().indexOf(costs.get(0));
+        int spellIdx = card.abilities().indexOf(spells.get(0));
+        assertTrue(costIdx < spellIdx, "Additional cost should appear before spell abilities");
     }
 
     @Test
