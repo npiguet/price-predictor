@@ -12,7 +12,7 @@ class OutputFormatterTest {
     void vanillaCreatureFormatsCorrectly() {
         ConvertedCard card = new ConvertedCard(
                 "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, List.of());
+                "2/2", null, null, null, null, List.of());
         String output = OutputFormatter.formatCard(card);
         assertEquals("""
                 name: grizzly bears
@@ -25,12 +25,13 @@ class OutputFormatterTest {
     void nullOptionalFieldsOmitted() {
         ConvertedCard card = new ConvertedCard(
                 "lightning bolt", "{R}", "instant",
-                null, null, null, null,
+                null, null, null, null, null,
                 List.of(new AbilityLine(AbilityType.SPELL,
                         "CARDNAME deals 3 damage to any target.", 1)));
         String output = OutputFormatter.formatCard(card);
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
+        assertFalse(output.contains("defense:"));
         assertFalse(output.contains("colors:"));
         assertFalse(output.contains("text:"));
         assertTrue(output.contains("spell[1]: CARDNAME deals 3 damage to any target."));
@@ -40,7 +41,7 @@ class OutputFormatterTest {
     void abilitiesFormattedInOrder() {
         ConvertedCard card = new ConvertedCard(
                 "test card", "{W}", "creature human",
-                "1/1", null, null, null,
+                "1/1", null, null, null, null,
                 List.of(
                         new AbilityLine(AbilityType.KEYWORD_PASSIVE, "flying", null),
                         new AbilityLine(AbilityType.ACTIVATED, "{T}: add {W}.", 1),
@@ -79,10 +80,10 @@ class OutputFormatterTest {
     void multiFaceCardWithLayout() {
         ConvertedCard front = new ConvertedCard(
                 "daring sleuth", "{1}{U}", "creature human rogue",
-                "2/1", null, null, null, List.of());
+                "2/1", null, null, null, null, List.of());
         ConvertedCard back = new ConvertedCard(
                 "bearer of overwhelming truths", null, "creature human wizard",
-                "3/2", null, null, null, List.of());
+                "3/2", null, null, null, null, List.of());
         MultiCard multi = MultiCard.multiFace("transform", List.of(front, back));
         String output = OutputFormatter.formatMultiCard(multi);
 
@@ -96,7 +97,7 @@ class OutputFormatterTest {
     void singleFaceCardNoLayoutLine() {
         ConvertedCard card = new ConvertedCard(
                 "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, List.of());
+                "2/2", null, null, null, null, List.of());
         MultiCard single = MultiCard.singleFace(card);
         String output = OutputFormatter.formatMultiCard(single);
         assertFalse(output.contains("layout:"));
@@ -106,7 +107,7 @@ class OutputFormatterTest {
     void loyaltyFieldIncluded() {
         ConvertedCard card = new ConvertedCard(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
-                null, "3", null, null,
+                null, "3", null, null, null,
                 List.of(new AbilityLine(AbilityType.PLANESWALKER, "+2: each player draws a card.", 1)));
         String output = OutputFormatter.formatCard(card);
         assertTrue(output.contains("loyalty: 3"));

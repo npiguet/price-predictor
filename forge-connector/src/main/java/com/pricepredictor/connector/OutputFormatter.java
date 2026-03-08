@@ -24,6 +24,9 @@ public class OutputFormatter {
         if (card.loyalty() != null) {
             sb.append('\n').append("loyalty: ").append(card.loyalty());
         }
+        if (card.defense() != null) {
+            sb.append('\n').append("defense: ").append(card.defense());
+        }
         if (card.colors() != null) {
             sb.append('\n').append("colors: ").append(card.colors());
         }

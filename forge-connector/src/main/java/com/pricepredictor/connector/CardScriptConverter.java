@@ -229,6 +229,10 @@ public class CardScriptConverter {
         if (loyalty != null && loyalty.isEmpty()) {
             loyalty = null;
         }
+        String defense = face.getDefense();
+        if (defense != null && defense.isEmpty()) {
+            defense = null;
+        }
 
         String colors = null;
 
@@ -240,7 +244,7 @@ public class CardScriptConverter {
             text = applyTextCasing(text);
         }
 
-        return new ConvertedCard(name, manaCostStr, typeLine, pt, loyalty, colors, text, abilities);
+        return new ConvertedCard(name, manaCostStr, typeLine, pt, loyalty, defense, colors, text, abilities);
     }
 
     // --- Helper methods ---
@@ -266,7 +270,11 @@ public class CardScriptConverter {
                 Log.warn("CardScriptConverter", "[" + faceName + "] missing description for " + type.name().toLowerCase());
                 continue;
             }
-            abilities.add(new AbilityLine(type, applyTextCasing(stripReminderText(desc)), null));
+            desc = applyTextCasing(stripReminderText(desc));
+            if (desc.isEmpty()) {
+                continue;
+            }
+            abilities.add(new AbilityLine(type, desc, null));
         }
     }
 

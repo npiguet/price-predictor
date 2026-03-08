@@ -12,6 +12,7 @@ public record ConvertedCard(
         String types,
         String powerToughness,
         String loyalty,
+        String defense,
         String colors,
         String text,
         List<AbilityLine> abilities

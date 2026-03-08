@@ -285,6 +285,47 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void battleCardWithDefense() {
+        MultiCard result = convert(
+                "Name:Invasion of Kamigawa",
+                "ManaCost:3 U",
+                "Types:Battle Siege",
+                "Defense:4",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigTap | TriggerDescription$ When CARDNAME enters, tap target artifact or creature an opponent controls and put a stun counter on it.",
+                "SVar:TrigTap:DB$ Tap | ValidTgts$ Artifact.OppCtrl,Creature.OppCtrl | SubAbility$ DBCounter | TgtPrompt$ Select target artifact or creature an opponent controls",
+                "SVar:DBCounter:DB$ PutCounter | Defined$ Targeted | CounterType$ Stun | CounterNum$ 1",
+                "AlternateMode:DoubleFaced",
+                "Oracle:",
+                "ALTERNATE",
+                "Name:Rooftop Saboteurs",
+                "ManaCost:no cost",
+                "Colors:blue",
+                "Types:Creature Moonfolk Ninja",
+                "PT:2/3",
+                "K:Flying",
+                "T:Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player,Battle | CombatDamage$ True | Execute$ TrigDraw | TriggerDescription$ Whenever CARDNAME deals combat damage to a player or battle, draw a card.",
+                "SVar:TrigDraw:DB$ Draw",
+                "Oracle:");
+        assertEquals("transform", result.layout());
+        assertEquals(2, result.faces().size());
+
+        // Front face: Battle with defense
+        ConvertedCard front = result.faces().get(0);
+        assertEquals("invasion of kamigawa", front.name());
+        assertEquals("4", front.defense());
+        assertNull(front.powerToughness());
+        assertNull(front.loyalty());
+        String frontOutput = OutputFormatter.formatCard(front);
+        assertTrue(frontOutput.contains("defense: 4"), "Expected defense line in output");
+
+        // Back face: creature, no defense
+        ConvertedCard back = result.faces().get(1);
+        assertEquals("rooftop saboteurs", back.name());
+        assertNull(back.defense());
+        assertEquals("2/3", back.powerToughness());
+    }
+
+    @Test
     void transformCard() {
         MultiCard result = convert(
                 "Name:Daring Sleuth",
