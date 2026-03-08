@@ -397,6 +397,42 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void spellWithReminderOnlyDescriptionIsSkipped() {
+        // Alchemist's Gambit: second SP$ has SpellDescription that is entirely reminder text
+        MultiCard result = convert(
+                "Name:Alchemist's Gambit",
+                "ManaCost:1 R R",
+                "Types:Sorcery",
+                "A:SP$ AddTurn | NumTurns$ 1 | ExtraTurnDelayedTrigger$ DBDelTrig | ExtraTurnDelayedTriggerExcute$ TrigEffect | SubAbility$ DBExile | StackDescription$ {p:You} takes an extra turn after this one. During that turn, damage can't be prevented. At the beginning of that turn's end step, {p:You} loses the game. | SpellDescription$ Take an extra turn after this one. [At the beginning of that turn's end step, you lose the game.]",
+                "SVar:DBDelTrig:ThisTurn$ True | Static$ True | Mode$ Phase | Phase$ Upkeep | TriggerDescription$ During that turn, damage can't be prevented.",
+                "SVar:TrigEffect:DB$ Effect | Defined$ You | StaticAbilities$ STCantPrevent | Triggers$ EndLose",
+                "SVar:STCantPrevent:Mode$ CantPreventDamage | Description$ Damage can't be prevented.",
+                "SVar:EndLose:Mode$ Phase | Phase$ End of Turn | Execute$ TrigLose | TriggerDescription$ At the beginning of that turn's end step, you lose the game.",
+                "SVar:TrigLose:DB$ LosesGame | Defined$ You",
+                "A:SP$ AddTurn | Cost$ 4 U U R | NumTurns$ 1 | ExtraTurnDelayedTrigger$ DBDelTrig | ExtraTurnDelayedTriggerExcute$ TrigEffect2 | PrecostDesc$ Cleave | CostDesc$ {4}{U}{U}{R} | NonBasicSpell$ True | SubAbility$ DBExile | StackDescription$ {p:You} takes an extra turn after this one. During that turn, damage can't be prevented. | SpellDescription$ (You may cast this spell for its cleave cost. If you do, remove the words in square brackets.)",
+                "SVar:TrigEffect2:DB$ Effect | Defined$ You | StaticAbilities$ STCantPrevent",
+                "SVar:DBExile:DB$ ChangeZone | Origin$ Stack | Destination$ Exile | SpellDescription$ Exile CARDNAME.",
+                "Oracle:Cleave {4}{U}{U}{R} (You may cast this spell for its cleave cost. If you do, remove the words in square brackets.)\\nTake an extra turn after this one. During that turn, damage can't be prevented. [At the beginning of that turn's end step, you lose the game.]\\nExile Alchemist's Gambit.");
+        ConvertedCard card = result.faces().get(0);
+
+        // The reminder-only spell (cleave line) should be skipped entirely
+        List<AbilityLine> spells = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).toList();
+        // Only the real spell descriptions should remain, not the reminder-only cleave one
+        assertTrue(spells.stream().noneMatch(s -> s.description().contains("cleave")),
+                "Reminder-only cleave description should be skipped but got: " + spells);
+        assertTrue(spells.size() >= 1, "Expected at least 1 spell line but got: " + spells);
+
+        // Action numbers should be sequential with no gaps from the skipped reminder
+        List<Integer> actionNumbers = spells.stream()
+                .map(AbilityLine::actionNumber).toList();
+        for (int i = 0; i < actionNumbers.size() - 1; i++) {
+            assertEquals(actionNumbers.get(i) + 1, (int) actionNumbers.get(i + 1),
+                    "Action numbers should be sequential: " + actionNumbers);
+        }
+    }
+
+    @Test
     void creatureWithAdditionalCost() {
         MultiCard result = convert(
                 "Name:Abhorrent Oculus",
@@ -614,6 +650,66 @@ class CardScriptConverterTest {
                 .filter(a -> a.type() == AbilityType.STATIC).count();
         assertEquals(0, activatedCount, "No activated lines expected for Class card");
         assertEquals(0, staticCount, "No static lines expected for Class card");
+    }
+
+    @Test
+    void classWithEtbReplacementLevel1() {
+        MultiCard result = convert(
+                "Name:Bard Class",
+                "ManaCost:R G",
+                "Types:Enchantment Class",
+                "K:ETBReplacement:Other:AddExtraCounter:Mandatory:Battlefield:Creature.Legendary+YouCtrl+Other",
+                "SVar:AddExtraCounter:DB$ PutCounter | ETB$ True | Defined$ ReplacedCard | CounterType$ P1P1 | CounterNum$ 1 | SpellDescription$ Legendary creatures you control enter with an additional +1/+1 counter on them.",
+                "K:Class:2:R G:AddStaticAbility$ SReduceCost",
+                "SVar:SReduceCost:Mode$ ReduceCost | ValidCard$ Legendary | Type$ Spell | Activator$ You | Amount$ 1 | Color$ R G | IgnoreGeneric$ True | Secondary$ True | Description$ Legendary spells you cast cost {R}{G} less to cast.",
+                "K:Class:3:3 R G:AddTrigger$ TriggerCast",
+                "SVar:TriggerCast:Mode$ SpellCast | ValidCard$ Legendary | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigImpulsiveDraw | Secondary$ True | TriggerDescription$ Whenever you cast a legendary spell, exile the top two cards of your library. You may play them this turn.",
+                "SVar:TrigImpulsiveDraw:DB$ Dig",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        List<AbilityLine> levels = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.LEVEL).toList();
+        assertEquals(3, levels.size(), "Expected 3 level abilities but got: " + card.abilities());
+
+        // Level 1 comes from ETBReplacement (not a static)
+        String l1 = levels.get(0).formatLine();
+        assertTrue(l1.startsWith("level[1]:"), "Expected level[1]: but got: " + l1);
+        assertTrue(l1.contains("legendary creatures"), "Expected level 1 text in: " + l1);
+
+        // No raw ETBReplacement keyword lines
+        long rawKeywords = card.abilities().stream()
+                .filter(a -> (a.type() == AbilityType.KEYWORD_PASSIVE
+                        || a.type() == AbilityType.KEYWORD_ACTIVE)
+                        && a.description().contains("etbreplacement")).count();
+        assertEquals(0, rawKeywords, "ETBReplacement should not appear as raw keyword");
+    }
+
+    @Test
+    void etbReplacementOnNonClassCard() {
+        MultiCard result = convert(
+                "Name:Flickering Ward",
+                "ManaCost:W",
+                "Types:Enchantment Aura",
+                "K:Enchant creature",
+                "K:ETBReplacement:Other:ChooseColor",
+                "SVar:ChooseColor:DB$ ChooseColor | Defined$ You | SpellDescription$ As CARDNAME enters, choose a color.",
+                "A:AB$ ChangeZone | Cost$ W | Origin$ Battlefield | Destination$ Hand | SpellDescription$ Return CARDNAME to its owner's hand.",
+                "S:Mode$ Continuous | Affected$ Creature.EnchantedBy | AddKeyword$ Protection:ChosenColor | Description$ Enchanted creature has protection from the chosen color. This effect doesn't remove CARDNAME.",
+                "Oracle:");
+        ConvertedCard card = result.faces().get(0);
+
+        // ETBReplacement should be a replacement line, not a raw keyword
+        long rawKeywords = card.abilities().stream()
+                .filter(a -> (a.type() == AbilityType.KEYWORD_PASSIVE
+                        || a.type() == AbilityType.KEYWORD_ACTIVE)
+                        && a.description().contains("etbreplacement")).count();
+        assertEquals(0, rawKeywords, "ETBReplacement should not appear as raw keyword");
+
+        List<AbilityLine> replacements = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.REPLACEMENT).toList();
+        assertTrue(replacements.stream().anyMatch(r -> r.description().contains("choose a color")),
+                "Expected 'choose a color' replacement but got: " + replacements);
     }
 
     @Test

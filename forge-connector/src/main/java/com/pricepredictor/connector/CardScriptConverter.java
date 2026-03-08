@@ -260,8 +260,11 @@ public class CardScriptConverter {
                 }
                 abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
             } else if (sa.isSpell()) {
-                actionCounter++;
                 String desc = stripReminderText(spellDesc);
+                if (desc.isEmpty()) {
+                    continue;
+                }
+                actionCounter++;
                 abilities.add(new AbilityLine(AbilityType.SPELL,
                         applyTextCasing(desc), actionCounter));
             }
@@ -405,7 +408,7 @@ public class CardScriptConverter {
             emitClassLevel(ki, abilities, classLevelDescriptions);
             return actionCounter;
         }
-        if (original.startsWith("etbCounter:")) {
+        if (original.startsWith("etbCounter:") || original.startsWith("ETBReplacement:")) {
             return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
                     AbilityType.REPLACEMENT, false, abilities, actionCounter);
         }
