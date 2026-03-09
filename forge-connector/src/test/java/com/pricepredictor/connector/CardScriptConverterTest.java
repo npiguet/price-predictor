@@ -1159,5 +1159,52 @@ class CardScriptConverterTest {
                 "PT:4/3", "AlternateMode:Adventure", "Oracle:", "ALTERNATE",
                 "Name:Stomp", "ManaCost:1 R", "Types:Instant Adventure", "Oracle:");
         assertEquals("adventure", adv.layout());
+
+        // Meld (half without back face)
+        MultiCard meld = convert("Name:The Mightstone and Weakstone", "ManaCost:5",
+                "Types:Legendary Artifact Powerstone",
+                "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:");
+        assertEquals("meld", meld.layout());
+    }
+
+    // --- Meld-half cards (no inline back face) ---
+
+    @Test
+    void meldHalf_mightstoneAndWeakstone_doesNotThrow() {
+        MultiCard result = convert(
+                "Name:The Mightstone and Weakstone",
+                "ManaCost:5",
+                "Types:Legendary Artifact Powerstone",
+                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigCharm | TriggerDescription$ When CARDNAME enters, ABILITY",
+                "SVar:TrigCharm:DB$ Charm | Choices$ DBDraw,DBPump",
+                "SVar:DBDraw:DB$ Draw | Defined$ You | NumCards$ 2 | SpellDescription$ Draw two cards.",
+                "SVar:DBPump:DB$ Pump | IsCurse$ True | ValidTgts$ Creature | NumAtt$ -5 | NumDef$ -5 | SpellDescription$ Target creature gets -5/-5 until end of turn.",
+                "A:AB$ Mana | Cost$ T | Produced$ C | Amount$ 2 | RestrictValid$ CantCastNonArtifactSpells | SpellDescription$ Add {C}{C}. This mana can't be spent to cast nonartifact spells.",
+                "MeldPair:Urza, Lord Protector",
+                "AlternateMode:Meld",
+                "Oracle:When The Mightstone and Weakstone enters, choose one —\\n• Draw two cards.\\n• Target creature gets -5/-5 until end of turn.\\n{T}: Add {C}{C}. This mana can't be spent to cast nonartifact spells.\\n(Melds with Urza, Lord Protector.)");
+        assertEquals("meld", result.layout());
+        assertEquals(1, result.faces().size(), "Meld-half should have only the front face");
+        assertEquals("the mightstone and weakstone", result.faces().get(0).name());
+    }
+
+    @Test
+    void meldHalf_phyrexianDragonEngine_doesNotThrow() {
+        MultiCard result = convert(
+                "Name:Phyrexian Dragon Engine",
+                "ManaCost:3",
+                "Types:Artifact Creature Phyrexian Dragon",
+                "PT:2/2",
+                "K:Double Strike",
+                "T:Mode$ ChangesZone | Origin$ Graveyard | Destination$ Battlefield | TriggerZones$ Battlefield | ValidCard$ Card.Self+YouOwn | Execute$ TrigDraw | TriggerDescription$ When CARDNAME enters from your graveyard, you may discard your hand. If you do, draw three cards.",
+                "SVar:TrigDraw:AB$ Draw | Cost$ Discard<1/Hand> | Defined$ You | NumCards$ 3",
+                "K:Unearth:3 R R",
+                "MeldPair:Mishra, Claimed by Gix",
+                "AlternateMode:Meld",
+                "Oracle:Double strike\\nWhen Phyrexian Dragon Engine enters from your graveyard, you may discard your hand. If you do, draw three cards.\\nUnearth:{3}{R}{R}");
+        assertEquals("meld", result.layout());
+        assertEquals(1, result.faces().size(), "Meld-half should have only the front face");
+        assertEquals("phyrexian dragon engine", result.faces().get(0).name());
+        assertEquals("2/2", result.faces().get(0).powerToughness());
     }
 }

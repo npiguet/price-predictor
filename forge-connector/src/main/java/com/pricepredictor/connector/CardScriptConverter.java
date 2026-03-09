@@ -1,7 +1,6 @@
 package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
-import forge.StaticData;
 import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
@@ -139,11 +138,6 @@ public class CardScriptConverter {
             }
         } else {
             ICardFace otherFace = rules.getOtherPart();
-            if (otherFace == null && !rules.getMeldWith().isEmpty()) {
-                // Meld half without inline back face — resolve via StaticData
-                otherFace = StaticData.instance().getCommonCards()
-                        .getRules(rules.getMeldWith()).getOtherPart();
-            }
             if (otherFace != null) {
                 card.setState(splitType.getChangedStateName(), false);
                 faces.add(convertFace(card, otherFace));
@@ -370,7 +364,7 @@ public class CardScriptConverter {
             // Remove any statics/triggers/replacements that duplicate level 2+ descriptions
             abilities.removeIf(a ->
                     a.type() != AbilityType.LEVEL
-                    && classLevelDescriptions.contains(a.description()));
+                            && classLevelDescriptions.contains(a.description()));
 
             // Convert remaining non-keyword, non-level abilities to LEVEL[1]
             for (int i = 0; i < abilities.size(); i++) {

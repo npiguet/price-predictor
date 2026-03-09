@@ -1,12 +1,14 @@
 package com.pricepredictor.connector;
 
 import forge.CardStorageReader;
+import forge.ImageKeys;
 import forge.StaticData;
 import forge.util.Lang;
 import forge.util.Localizer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 
 /**
  * Shared Forge initialization — used by both ConvertMain and tests.
@@ -23,6 +25,7 @@ public class ForgeEnvironmentInitializer {
         Lang.createInstance("en-US");
         Path resDir = findForgeResDir();
         Localizer.getInstance().initialize("en-US", resDir.resolve("languages").toString() + "/");
+        ImageKeys.initializeDirs("", new HashMap<>(), "", "", "", "", "", "", "");
         initStaticData(resDir);
         initialized = true;
     }
@@ -32,7 +35,7 @@ public class ForgeEnvironmentInitializer {
         String editionsDir = resDir.resolve("editions").toString();
         String blockDataDir = resDir.resolve("blockdata").toString();
 
-        CardStorageReader cardReader = new CardStorageReader(cardsDir, null, true);
+        CardStorageReader cardReader = new CardStorageReader(cardsDir, null, false);
         new StaticData(cardReader, null, editionsDir, editionsDir, blockDataDir, "", true, true);
     }
 
