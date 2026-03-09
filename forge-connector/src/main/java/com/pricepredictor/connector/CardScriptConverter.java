@@ -286,9 +286,16 @@ public class CardScriptConverter {
                     for (var choice : choices) {
                         String choiceDesc = choice.getParam("SpellDescription");
                         if (choiceDesc == null) {
-                            choiceDesc = "(no description)";
+                            // Walk the sub-ability chain to find a SpellDescription
+                            SpellAbility sub = choice.getSubAbility();
+                            while (sub != null && choiceDesc == null) {
+                                choiceDesc = sub.getParam("SpellDescription");
+                                sub = sub.getSubAbility();
+                            }
                         }
-                        choiceDesc = stripReminderText(choiceDesc);
+                        if (choiceDesc != null) {
+                            choiceDesc = stripReminderText(choiceDesc);
+                        }
                         String pawprint = choice.getParam("Pawprint");
                         if (pawprint != null) {
                             choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))

@@ -1243,6 +1243,75 @@ class CardScriptConverterTest {
         assertEquals("0/0", result.faces().get(0).powerToughness());
     }
 
+    // --- Charm: sub-ability description walking ---
+
+    @Test
+    void whatMustBeDone_charmWithSubAbilityDescription() {
+        MultiCard result = convert(
+                "Name:What Must Be Done",
+                "ManaCost:3 W W",
+                "Types:Sorcery",
+                "A:SP$ Charm | Choices$ DBDestroyAll,DBConditionEffect",
+                "SVar:DBDestroyAll:DB$ DestroyAll | ValidCards$ Artifact,Creature | SpellDescription$ Let the World Burn — Destroy all artifacts and creatures.",
+                "SVar:DBConditionEffect:DB$ Effect | RememberObjects$ Targeted & Self | ReplacementEffects$ ETBCreat | ExileOnMoved$ Graveyard,Stack | SubAbility$ DBChangeZone",
+                "SVar:DBChangeZone:DB$ ChangeZone | Origin$ Graveyard | Destination$ Battlefield | ValidTgts$ Permanent.Historic+YouOwn | TgtPrompt$ Select target historic permanent card | SpellDescription$ Release Juno — Return target historic permanent card from your graveyard to the battlefield. It enters with two additional +1/+1 counters on it if it's a creature. (Artifacts, legendaries, and Sagas are historic.)",
+                "SVar:ETBCreat:Event$ Moved | ValidCard$ Creature.IsRemembered | Destination$ Battlefield | ReplaceWith$ DBPutP1P1 | ReplacementResult$ Updated | Description$ It enters with two additional +1/+1 counters on it if it's a creature.",
+                "SVar:DBPutP1P1:DB$ PutCounter | Defined$ ReplacedCard | CounterType$ P1P1 | ETB$ True | CounterNum$ 2",
+                "Oracle:Choose one —\\n• Let the World Burn — Destroy all artifacts and creatures.\\n• Release Juno — Return target historic permanent card from your graveyard to the battlefield. It enters with two additional +1/+1 counters on it if it's a creature. (Artifacts, legendaries, and Sagas are historic.)");
+        assertNotNull(result);
+        ConvertedCard card = result.faces().get(0);
+
+        List<AbilityLine> options = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(2, options.size(), "Expected 2 options but got: " + card.abilities());
+
+        String o1 = options.get(0).formatLine();
+        assertTrue(o1.contains("destroy all artifacts and creatures"), "Expected destroy text in: " + o1);
+
+        String o2 = options.get(1).formatLine();
+        assertTrue(o2.contains("release juno"), "Expected 'release juno' in: " + o2);
+        assertTrue(o2.contains("return target historic permanent card"), "Expected return text in: " + o2);
+        // Reminder text should be stripped
+        assertFalse(o2.contains("Artifacts, legendaries, and Sagas are historic"), "Reminder text should be stripped: " + o2);
+    }
+
+    @Test
+    void charm_choiceWithNoDescriptionAnywhere_throws() {
+        assertThrows(Exception.class, () -> convert(
+                "Name:Bad Charm",
+                "ManaCost:1 U",
+                "Types:Sorcery",
+                "A:SP$ Charm | Choices$ DBNoop,DBDraw",
+                "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0",
+                "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card.",
+                "Oracle:"));
+    }
+
+    @Test
+    void charm_choiceDescriptionOnSubAbility() {
+        MultiCard result = convert(
+                "Name:Chain Charm",
+                "ManaCost:1 G",
+                "Types:Sorcery",
+                "A:SP$ Charm | Choices$ DBChainTop,DBDirect",
+                "SVar:DBChainTop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0 | SubAbility$ DBChainDesc",
+                "SVar:DBChainDesc:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card from the chain.",
+                "SVar:DBDirect:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
+                "Oracle:");
+        assertNotNull(result);
+        ConvertedCard card = result.faces().get(0);
+
+        List<AbilityLine> options = card.abilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(2, options.size(), "Expected 2 options but got: " + card.abilities());
+
+        String o1 = options.get(0).formatLine();
+        assertTrue(o1.contains("draw a card from the chain"), "Expected sub-ability description in: " + o1);
+
+        String o2 = options.get(1).formatLine();
+        assertTrue(o2.contains("gain 3 life"), "Expected direct description in: " + o2);
+    }
+
     @Test
     void tarnationVista_doesNotThrow() {
         MultiCard result = convert(
