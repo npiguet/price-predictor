@@ -108,6 +108,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory for converted files",
     )
 
+    # check-convert subcommand
+    check_parser = subparsers.add_parser(
+        "check-convert",
+        help="Check converted files against Oracle text from Forge scripts",
+    )
+    check_parser.add_argument(
+        "--cards-path", type=str,
+        default="../forge/forge-gui/res/cardsfolder/",
+        help="Path to Forge cardsfolder directory",
+    )
+    check_parser.add_argument(
+        "--output-path", type=str, default="./output",
+        help="Path to converted output directory",
+    )
+    check_parser.add_argument(
+        "--threshold", type=float, default=0.5,
+        help="Similarity threshold below which cards are flagged (0.0-1.0)",
+    )
+    check_parser.add_argument(
+        "--limit", type=int, default=0,
+        help="Max number of results to show (0 = all)",
+    )
+
     return parser
 
 
@@ -396,4 +419,31 @@ def run_evaluate(args: argparse.Namespace) -> int:
         "sample_count": result.metrics.sample_count,
     }
     print(json.dumps(output, indent=2))
+    return 0
+
+
+def run_check_convert(args: argparse.Namespace) -> int:
+    """Execute the check-convert command."""
+    from price_predictor.application.check_convert import check_all, format_report
+
+    output_dir = Path(args.output_path)
+    cards_dir = Path(args.cards_path)
+
+    if not output_dir.exists():
+        print(f"Error: Output directory not found: {output_dir}", file=sys.stderr)
+        return 1
+    if not cards_dir.exists():
+        print(f"Error: Cards directory not found: {cards_dir}", file=sys.stderr)
+        return 1
+
+    print(f"Checking converted files in {output_dir} against {cards_dir}...",
+          file=sys.stderr)
+
+    results = check_all(output_dir, cards_dir, threshold=args.threshold)
+
+    report_path = output_dir / "check_report.txt"
+    report_path.write_text(format_report(results), encoding="utf-8")
+    print(f"Report written to {report_path} ({len(results)} cards with issues)",
+          file=sys.stderr)
+    print(format_report(results, limit=args.limit))
     return 0

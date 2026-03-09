@@ -5,6 +5,7 @@ import sys
 
 from price_predictor.infrastructure.cli import (
     build_parser,
+    run_check_convert,
     run_convert,
     run_eval,
     run_evaluate,
@@ -46,6 +47,8 @@ def main() -> int:
         return run_eval(args)
     elif args.command == "convert":
         return run_convert(args)
+    elif args.command == "check-convert":
+        return run_check_convert(args)
     else:
         parser.print_help()
         return 1
