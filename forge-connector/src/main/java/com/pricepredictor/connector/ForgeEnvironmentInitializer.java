@@ -39,6 +39,10 @@ public class ForgeEnvironmentInitializer {
         new StaticData(cardReader, null, editionsDir, editionsDir, blockDataDir, "", true, true);
     }
 
+    public static Path findCardsFolder() {
+        return findForgeResDir().resolve("cardsfolder");
+    }
+
     private static Path findForgeResDir() {
         Path dir = Path.of("").toAbsolutePath();
         while (dir != null) {
