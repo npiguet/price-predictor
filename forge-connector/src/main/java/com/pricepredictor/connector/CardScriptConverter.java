@@ -16,6 +16,10 @@ import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.item.PaperCard;
 
 import java.util.ArrayList;
@@ -630,12 +634,25 @@ public class CardScriptConverter {
         return null;
     }
 
+    private static Game dummyGame;
+
+    private static Game getDummyGame() {
+        if (dummyGame == null) {
+            GameRules rules = new GameRules(GameType.Constructed);
+            Match match = new Match(rules, List.of(), "DummyMatch");
+            dummyGame = new Game(List.of(), rules, match);
+        }
+        return dummyGame;
+    }
+
     /**
      * Build a fully-parsed Card from CardRules using Forge's CardFactory.
+     * Uses a dummy Game instance so that SVar evaluation (e.g. Count$Valid)
+     * does not NPE when calling game.getCardsIn().
      */
     private Card buildFullCard(CardRules rules) {
         PaperCard paperCard = new PaperCard(rules, "UNK", CardRarity.Common);
-        return CardFactory.getCard(paperCard, null, nextCardId++, null);
+        return CardFactory.getCard(paperCard, null, nextCardId++, getDummyGame());
     }
 
     private String formatTypeLine(ICardFace face) {

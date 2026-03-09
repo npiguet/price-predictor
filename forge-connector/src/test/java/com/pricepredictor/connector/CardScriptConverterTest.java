@@ -1207,4 +1207,56 @@ class CardScriptConverterTest {
         assertEquals("phyrexian dragon engine", result.faces().get(0).name());
         assertEquals("2/2", result.faces().get(0).powerToughness());
     }
+
+    // --- Cards with Count$Valid SVars (previously caused NPE) ---
+
+    @Test
+    void bloomTender_doesNotThrow() {
+        MultiCard result = convert(
+                "Name:Bloom Tender",
+                "ManaCost:1 G",
+                "Types:Creature Elf Druid",
+                "PT:1/1",
+                "A:AB$ Mana | Cost$ T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl | SpellDescription$ For each color among permanents you control, add one mana of that color.",
+                "AI:RemoveDeck:All",
+                "Oracle:{T}: For each color among permanents you control, add one mana of that color.");
+        assertNotNull(result);
+        assertEquals("bloom tender", result.faces().get(0).name());
+        assertEquals("1/1", result.faces().get(0).powerToughness());
+    }
+
+    @Test
+    void faeburrowElder_doesNotThrow() {
+        MultiCard result = convert(
+                "Name:Faeburrow Elder",
+                "ManaCost:1 G W",
+                "Types:Creature Treefolk Druid",
+                "PT:0/0",
+                "K:Vigilance",
+                "S:Mode$ Continuous | Affected$ Card.Self | AddPower$ X | AddToughness$ X | Description$ CARDNAME gets +1/+1 for each color among permanents you control.",
+                "SVar:X:Count$Valid Permanent.YouCtrl$Colors",
+                "A:AB$ Mana | Cost$ T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl | SpellDescription$ For each color among permanents you control, add one mana of that color.",
+                "SVar:NoZeroToughnessAI:True",
+                "Oracle:Vigilance\\nFaeburrow Elder gets +1/+1 for each color among permanents you control.\\n{T}: For each color among permanents you control, add one mana of that color.");
+        assertNotNull(result);
+        assertEquals("faeburrow elder", result.faces().get(0).name());
+        assertEquals("0/0", result.faces().get(0).powerToughness());
+    }
+
+    @Test
+    void tarnationVista_doesNotThrow() {
+        MultiCard result = convert(
+                "Name:Tarnation Vista",
+                "ManaCost:no cost",
+                "Types:Land Cave",
+                "R:Event$ Moved | ValidCard$ Card.Self | Destination$ Battlefield | ReplaceWith$ ETBTapped | ReplacementResult$ Updated | Description$ CARDNAME enters tapped.",
+                "SVar:ETBTapped:DB$ Tap | Defined$ Self | ETB$ True",
+                "K:ETBReplacement:Other:ChooseColor",
+                "SVar:ChooseColor:DB$ ChooseColor | Defined$ You | AILogic$ MostProminentInComputerDeck | SpellDescription$ As CARDNAME enters, choose a color.",
+                "A:AB$ Mana | Cost$ T | Produced$ Chosen | SpellDescription$ Add one mana of the chosen color.",
+                "A:AB$ Mana | Cost$ 1 T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl+MonoColor | SpellDescription$ For each color among monocolored permanents you control, add one mana of that color.",
+                "Oracle:Tarnation Vista enters tapped. As it enters, choose a color.\\n{T}: Add one mana of the chosen color.\\n{1}, {T}: For each color among monocolored permanents you control, add one mana of that color.");
+        assertNotNull(result);
+        assertEquals("tarnation vista", result.faces().get(0).name());
+    }
 }
