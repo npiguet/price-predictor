@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
@@ -18,22 +22,41 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class CardScriptConverterTest {
 
+    private static final Path CARDS_FOLDER = findCardsFolder();
+
+    private static Path findCardsFolder() {
+        Path dir = Path.of("").toAbsolutePath();
+        while (dir != null) {
+            Path candidate = dir.resolve("forge").resolve("forge-gui").resolve("res").resolve("cardsfolder");
+            if (Files.isDirectory(candidate)) return candidate;
+            dir = dir.getParent();
+        }
+        throw new IllegalStateException(
+                "Could not find forge/forge-gui/res/cardsfolder in any parent of " + Path.of("").toAbsolutePath());
+    }
+
     private final CardScriptConverter converter = new CardScriptConverter();
 
     private MultiCard convert(String... lines) {
         return converter.convertCard(Arrays.asList(lines), "test.txt");
     }
 
+    /** Load a real card script from the Forge cardsfolder by relative path. */
+    private MultiCard convertFromFile(String relativePath) {
+        try {
+            Path file = CARDS_FOLDER.resolve(relativePath);
+            List<String> lines = Files.readAllLines(file);
+            return converter.convertCard(lines, file.getFileName().toString());
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
     // --- US1: Basic card conversion ---
 
     @Test
     void vanillaCreature() {
-        MultiCard result = convert(
-                "Name:Grizzly Bears",
-                "ManaCost:1 G",
-                "Types:Creature Bear",
-                "PT:2/2",
-                "Oracle:");
+        MultiCard result = convertFromFile("g/grizzly_bears.txt");
         ConvertedCard card = result.faces().get(0);
         assertEquals("grizzly bears", card.name());
         assertTrue(card.manaCost().contains("{G}"));
@@ -45,14 +68,7 @@ class CardScriptConverterTest {
 
     @Test
     void passiveKeywords() {
-        MultiCard result = convert(
-                "Name:Serra Angel",
-                "ManaCost:3 W W",
-                "Types:Creature Angel",
-                "PT:4/4",
-                "K:Flying",
-                "K:Vigilance",
-                "Oracle:Flying, vigilance");
+        MultiCard result = convertFromFile("s/serra_angel.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> keywords = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
@@ -64,13 +80,7 @@ class CardScriptConverterTest {
 
     @Test
     void activatedAbility() {
-        MultiCard result = convert(
-                "Name:Llanowar Elves",
-                "ManaCost:G",
-                "Types:Creature Elf Druid",
-                "PT:1/1",
-                "A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ Add {G}.",
-                "Oracle:{T}: Add {G}.");
+        MultiCard result = convertFromFile("l/llanowar_elves.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> activated = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ACTIVATED).toList();
@@ -83,18 +93,12 @@ class CardScriptConverterTest {
 
     @Test
     void triggeredAbility() {
-        MultiCard result = convert(
-                "Name:Thragtusk",
-                "ManaCost:4 G",
-                "Types:Creature Beast",
-                "PT:5/3",
-                "T:Mode$ ChangesZone | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ Life | TriggerDescription$ When CARDNAME enters, you gain 5 life.",
-                "SVar:Life:DB$ GainLife | Defined$ You | LifeAmount$ 5",
-                "Oracle:When Thragtusk enters, you gain 5 life.");
+        MultiCard result = convertFromFile("t/thragtusk.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> triggered = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.TRIGGERED).toList();
-        assertEquals(1, triggered.size());
+        assertTrue(triggered.size() >= 1, "Expected at least 1 triggered ability");
+        // First trigger: enters the battlefield, gain life
         String line = triggered.get(0).formatLine();
         assertTrue(line.startsWith("triggered:"));
         assertTrue(line.contains("CARDNAME"));
@@ -103,12 +107,7 @@ class CardScriptConverterTest {
 
     @Test
     void staticAbility() {
-        MultiCard result = convert(
-                "Name:Blood Moon",
-                "ManaCost:2 R",
-                "Types:Enchantment",
-                "S:Mode$ Continuous | Affected$ Land.nonBasic | AddType$ Mountain | RemoveLandTypes$ True | Description$ Nonbasic lands are Mountains.",
-                "Oracle:Nonbasic lands are Mountains.");
+        MultiCard result = convertFromFile("b/blood_moon.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> statics = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.STATIC).toList();
@@ -118,18 +117,13 @@ class CardScriptConverterTest {
 
     @Test
     void replacementEffect() {
-        MultiCard result = convert(
-                "Name:Rest in Peace",
-                "ManaCost:1 W",
-                "Types:Enchantment",
-                "R:Event$ Moved | ActiveZones$ Battlefield | Destination$ Graveyard | ValidCard$ Card | ReplaceWith$ Exile | Description$ If a card or token would be put into a graveyard from anywhere, exile it instead.",
-                "SVar:Exile:DB$ ChangeZone | Origin$ All | Destination$ Exile",
-                "Oracle:If a card or token would be put into a graveyard from anywhere, exile it instead.");
+        MultiCard result = convertFromFile("r/rest_in_peace.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> replacements = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.REPLACEMENT).toList();
-        assertEquals(1, replacements.size());
-        assertTrue(replacements.get(0).formatLine().startsWith("replacement:"));
+        assertTrue(replacements.size() >= 1, "Expected at least 1 replacement effect");
+        assertTrue(replacements.stream().anyMatch(r -> r.formatLine().contains("exile it instead")),
+                "Expected replacement with 'exile it instead' but got: " + replacements);
     }
 
     @Test
@@ -171,13 +165,7 @@ class CardScriptConverterTest {
 
     @Test
     void textCasingCorrect() {
-        MultiCard result = convert(
-                "Name:Llanowar Elves",
-                "ManaCost:G",
-                "Types:Creature Elf Druid",
-                "PT:1/1",
-                "A:AB$ Mana | Cost$ T | Produced$ G | SpellDescription$ Add {G}.",
-                "Oracle:{T}: Add {G}.");
+        MultiCard result = convertFromFile("l/llanowar_elves.txt");
         String output = OutputFormatter.formatMultiCard(result);
         assertTrue(output.contains("llanowar elves"), "Name should be lowercase");
         assertTrue(output.contains("{G}"), "Brace symbols should be uppercase");
@@ -206,11 +194,7 @@ class CardScriptConverterTest {
 
     @Test
     void noCostCardOmitsManaCostLine() {
-        MultiCard result = convert(
-                "Name:Ancestral Vision",
-                "ManaCost:no cost",
-                "Types:Sorcery",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/ancestral_vision.txt");
         ConvertedCard card = result.faces().get(0);
         assertNull(card.manaCost());
         String output = OutputFormatter.formatCard(card);
@@ -236,15 +220,7 @@ class CardScriptConverterTest {
 
     @Test
     void planeswalkerAbilities() {
-        MultiCard result = convert(
-                "Name:Jace Beleren",
-                "ManaCost:1 U U",
-                "Types:Legendary Planeswalker Jace",
-                "Loyalty:3",
-                "A:AB$ Draw | Cost$ AddCounter<2/LOYALTY> | Defined$ Player | NumCards$ 1 | Planeswalker$ True | SpellDescription$ Each player draws a card.",
-                "A:AB$ Draw | Cost$ SubCounter<1/LOYALTY> | Defined$ Targeted | NumCards$ 1 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player draws a card.",
-                "A:AB$ Mill | Cost$ SubCounter<10/LOYALTY> | Defined$ Targeted | NumCards$ 20 | Planeswalker$ True | ValidTgts$ Player | SpellDescription$ Target player mills twenty cards.",
-                "Oracle:+2: Each player draws a card.\\n-1: Target player draws a card.\\n-10: Target player mills twenty cards.");
+        MultiCard result = convertFromFile("j/jace_beleren.txt");
         ConvertedCard card = result.faces().get(0);
         assertEquals("3", card.loyalty());
         List<AbilityLine> pwAbilities = card.abilities().stream()
@@ -260,15 +236,7 @@ class CardScriptConverterTest {
 
     @Test
     void sagaChapterAbilities() {
-        MultiCard result = convert(
-                "Name:The Eldest Reborn",
-                "ManaCost:4 B",
-                "Types:Enchantment Saga",
-                "K:Chapter:3:ChI,ChII,ChIII",
-                "SVar:ChI:DB$ Sacrifice | Defined$ OpponentNonTgtAP | SacValid$ Creature.OppCtrl,Planeswalker.OppCtrl | SpellDescription$ Each opponent sacrifices a creature or planeswalker.",
-                "SVar:ChII:DB$ Discard | Defined$ OpponentNonTgtAP | NumCards$ 1 | SpellDescription$ Each opponent discards a card.",
-                "SVar:ChIII:DB$ ChangeZone | Origin$ Graveyard | Destination$ Battlefield | ChangeType$ Creature.inYourYard,Planeswalker.inYourYard | SpellDescription$ Put target creature or planeswalker card from a graveyard onto the battlefield under your control.",
-                "Oracle:");
+        MultiCard result = convertFromFile("t/the_eldest_reborn.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> chapters = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.CHAPTER).toList();
@@ -286,26 +254,7 @@ class CardScriptConverterTest {
 
     @Test
     void battleCardWithDefense() {
-        MultiCard result = convert(
-                "Name:Invasion of Kamigawa",
-                "ManaCost:3 U",
-                "Types:Battle Siege",
-                "Defense:4",
-                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigTap | TriggerDescription$ When CARDNAME enters, tap target artifact or creature an opponent controls and put a stun counter on it.",
-                "SVar:TrigTap:DB$ Tap | ValidTgts$ Artifact.OppCtrl,Creature.OppCtrl | SubAbility$ DBCounter | TgtPrompt$ Select target artifact or creature an opponent controls",
-                "SVar:DBCounter:DB$ PutCounter | Defined$ Targeted | CounterType$ Stun | CounterNum$ 1",
-                "AlternateMode:DoubleFaced",
-                "Oracle:",
-                "ALTERNATE",
-                "Name:Rooftop Saboteurs",
-                "ManaCost:no cost",
-                "Colors:blue",
-                "Types:Creature Moonfolk Ninja",
-                "PT:2/3",
-                "K:Flying",
-                "T:Mode$ DamageDone | ValidSource$ Card.Self | ValidTarget$ Player,Battle | CombatDamage$ True | Execute$ TrigDraw | TriggerDescription$ Whenever CARDNAME deals combat damage to a player or battle, draw a card.",
-                "SVar:TrigDraw:DB$ Draw",
-                "Oracle:");
+        MultiCard result = convertFromFile("i/invasion_of_kamigawa_rooftop_saboteurs.txt");
         assertEquals("transform", result.layout());
         assertEquals(2, result.faces().size());
 
@@ -327,18 +276,7 @@ class CardScriptConverterTest {
 
     @Test
     void transformCard() {
-        MultiCard result = convert(
-                "Name:Daring Sleuth",
-                "ManaCost:1 U",
-                "Types:Creature Human Rogue",
-                "PT:2/1",
-                "AlternateMode:DoubleFaced",
-                "Oracle:",
-                "ALTERNATE",
-                "Name:Bearer of Overwhelming Truths",
-                "Types:Creature Human Wizard",
-                "PT:3/2",
-                "Oracle:");
+        MultiCard result = convertFromFile("d/daring_sleuth_bearer_of_overwhelming_truths.txt");
         assertEquals("transform", result.layout());
         assertEquals(2, result.faces().size());
         assertEquals("daring sleuth", result.faces().get(0).name());
@@ -347,12 +285,7 @@ class CardScriptConverterTest {
 
     @Test
     void spellEffect() {
-        MultiCard result = convert(
-                "Name:Lightning Bolt",
-                "ManaCost:R",
-                "Types:Instant",
-                "A:SP$ DealDamage | ValidTgts$ Creature,Player,Planeswalker | NumDmg$ 3 | SpellDescription$ CARDNAME deals 3 damage to any target.",
-                "Oracle:Lightning Bolt deals 3 damage to any target.");
+        MultiCard result = convertFromFile("l/lightning_bolt.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> spells = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.SPELL).toList();
@@ -367,13 +300,7 @@ class CardScriptConverterTest {
 
     @Test
     void spellWithAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Abandon Hope",
-                "ManaCost:X 1 B",
-                "Types:Sorcery",
-                "A:SP$ Discard | Cost$ X 1 B Discard<X/Card/card> | ValidTgts$ Opponent | Mode$ LookYouChoose | NumCards$ X | SpellDescription$ Look at target opponent's hand and choose X cards from it. That player discards those cards.",
-                "SVar:X:Count$xPaid",
-                "Oracle:As an additional cost to cast this spell, discard X cards.\\nLook at target opponent's hand and choose X cards from it. That player discards those cards.");
+        MultiCard result = convertFromFile("a/abandon_hope.txt");
         ConvertedCard card = result.faces().get(0);
 
         // Additional cost on its own line
@@ -399,20 +326,7 @@ class CardScriptConverterTest {
     @Test
     void cleaveEmittedAsAlternateCost() {
         // Alchemist's Gambit: Cleave is a NonBasicSpell alternate cost
-        MultiCard result = convert(
-                "Name:Alchemist's Gambit",
-                "ManaCost:1 R R",
-                "Types:Sorcery",
-                "A:SP$ AddTurn | NumTurns$ 1 | ExtraTurnDelayedTrigger$ DBDelTrig | ExtraTurnDelayedTriggerExcute$ TrigEffect | SubAbility$ DBExile | StackDescription$ {p:You} takes an extra turn after this one. During that turn, damage can't be prevented. At the beginning of that turn's end step, {p:You} loses the game. | SpellDescription$ Take an extra turn after this one. [At the beginning of that turn's end step, you lose the game.]",
-                "SVar:DBDelTrig:ThisTurn$ True | Static$ True | Mode$ Phase | Phase$ Upkeep | TriggerDescription$ During that turn, damage can't be prevented.",
-                "SVar:TrigEffect:DB$ Effect | Defined$ You | StaticAbilities$ STCantPrevent | Triggers$ EndLose",
-                "SVar:STCantPrevent:Mode$ CantPreventDamage | Description$ Damage can't be prevented.",
-                "SVar:EndLose:Mode$ Phase | Phase$ End of Turn | Execute$ TrigLose | TriggerDescription$ At the beginning of that turn's end step, you lose the game.",
-                "SVar:TrigLose:DB$ LosesGame | Defined$ You",
-                "A:SP$ AddTurn | Cost$ 4 U U R | NumTurns$ 1 | ExtraTurnDelayedTrigger$ DBDelTrig | ExtraTurnDelayedTriggerExcute$ TrigEffect2 | PrecostDesc$ Cleave | CostDesc$ {4}{U}{U}{R} | NonBasicSpell$ True | SubAbility$ DBExile | StackDescription$ {p:You} takes an extra turn after this one. During that turn, damage can't be prevented. | SpellDescription$ (You may cast this spell for its cleave cost. If you do, remove the words in square brackets.)",
-                "SVar:TrigEffect2:DB$ Effect | Defined$ You | StaticAbilities$ STCantPrevent",
-                "SVar:DBExile:DB$ ChangeZone | Origin$ Stack | Destination$ Exile | SpellDescription$ Exile CARDNAME.",
-                "Oracle:Cleave {4}{U}{U}{R} (You may cast this spell for its cleave cost. If you do, remove the words in square brackets.)\\nTake an extra turn after this one. During that turn, damage can't be prevented. [At the beginning of that turn's end step, you lose the game.]\\nExile Alchemist's Gambit.");
+        MultiCard result = convertFromFile("a/alchemists_gambit.txt");
         ConvertedCard card = result.faces().get(0);
 
         // Cleave should appear as alternate cost
@@ -439,16 +353,7 @@ class CardScriptConverterTest {
 
     @Test
     void creatureWithAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Abhorrent Oculus",
-                "ManaCost:2 U",
-                "Types:Creature Eye",
-                "PT:5/5",
-                "A:SP$ PermanentCreature | Cost$ 2 U ExileFromGrave<6/Card>",
-                "K:Flying",
-                "T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ Opponent | TriggerZones$ Battlefield | Execute$ TrigDread | TriggerDescription$ At the beginning of each opponent's upkeep, manifest dread.",
-                "SVar:TrigDread:DB$ ManifestDread",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/abhorrent_oculus.txt");
         ConvertedCard card = result.faces().get(0);
 
         // Additional cost should appear even without SpellDescription
@@ -461,14 +366,7 @@ class CardScriptConverterTest {
 
     @Test
     void additionalCostFromRaiseCostStatic() {
-        MultiCard result = convert(
-                "Name:Aether Tide",
-                "ManaCost:X U",
-                "Types:Sorcery",
-                "S:Mode$ RaiseCost | ValidCard$ Card.Self | Activator$ You | Type$ Spell | Cost$ Discard<X/Creature/creature(s)> | EffectZone$ All | Description$ As an additional cost to cast this spell, discard X creature cards.",
-                "A:SP$ ChangeZone | Cost$ X U | TargetMin$ X | TargetMax$ X | Origin$ Battlefield | Destination$ Hand | ValidTgts$ Creature | TgtPrompt$ Select X target creatures | SpellDescription$ Return X target creatures to their owners' hands.",
-                "SVar:X:Count$xPaid",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/aether_tide.txt");
         ConvertedCard card = result.faces().get(0);
 
         // RaiseCost static should become additional cost, not static
@@ -502,13 +400,7 @@ class CardScriptConverterTest {
     @Test
     void raiseCostOnOtherSpellsRemainsStatic() {
         // Aura of Silence: taxes opponent artifact/enchantment spells, not a self-cost
-        MultiCard result = convert(
-                "Name:Aura of Silence",
-                "ManaCost:1 W W",
-                "Types:Enchantment",
-                "S:Mode$ RaiseCost | ValidCard$ Artifact,Enchantment | Activator$ Opponent | Type$ Spell | Amount$ 2 | Description$ Artifact and enchantment spells your opponents cast cost {2} more to cast.",
-                "A:AB$ Destroy | Cost$ Sac<1/CARDNAME> | ValidTgts$ Enchantment,Artifact | TgtPrompt$ Select target artifact or enchantment | SpellDescription$ Destroy target artifact or enchantment.",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/aura_of_silence.txt");
         ConvertedCard card = result.faces().get(0);
 
         // Should be static, NOT additional cost
@@ -524,13 +416,7 @@ class CardScriptConverterTest {
 
     @Test
     void optionalAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Analyze the Pollen",
-                "ManaCost:G",
-                "Types:Sorcery",
-                "S:Mode$ OptionalCost | EffectZone$ All | ValidCard$ Card.Self | ValidSA$ Spell | Cost$ CollectEvidence<8> | Description$ As an additional cost to cast this spell, you may collect evidence 8. (Exile cards with total mana value 8 or greater from your graveyard.)",
-                "A:SP$ ChangeZone | Origin$ Library | Destination$ Hand | ChangeType$ Land.Basic | SpellDescription$ Search your library for a basic land card.",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/analyze_the_pollen.txt");
         ConvertedCard card = result.faces().get(0);
 
         // OptionalCost static should become additional cost
@@ -559,13 +445,7 @@ class CardScriptConverterTest {
 
     @Test
     void alternateAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Annihilating Glare",
-                "ManaCost:B",
-                "Types:Sorcery",
-                "K:AlternateAdditionalCost:Sac<1/Creature;Artifact/artifact or creature>:4",
-                "A:SP$ Destroy | ValidTgts$ Creature,Planeswalker | TgtPrompt$ Select target creature or planeswalker | SpellDescription$ Destroy target creature or planeswalker.",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/annihilating_glare.txt");
         ConvertedCard card = result.faces().get(0);
 
         // AlternateAdditionalCost keyword should become additional cost line
@@ -596,17 +476,7 @@ class CardScriptConverterTest {
 
     @Test
     void pawprintCharmOptions() {
-        MultiCard result = convert(
-                "Name:Season of the Burrow",
-                "ManaCost:3 W W",
-                "Types:Sorcery",
-                "A:SP$ Charm | Choices$ DBToken,DBExile,DBReanimate | CharmNum$ 5 | MinCharmNum$ 0 | CanRepeatModes$ True | Pawprint$ 5",
-                "SVar:DBToken:DB$ Token | Pawprint$ 1 | TokenScript$ w_1_1_rabbit | SpellDescription$ Create a 1/1 white Rabbit creature token.",
-                "SVar:DBExile:DB$ ChangeZone | Pawprint$ 2 | Origin$ Battlefield | Destination$ Exile | ValidTgts$ Permanent.nonLand | RememberLKI$ True | SubAbility$ DBDraw | SpellDescription$ Exile target nonland permanent. Its controller draws a card.",
-                "SVar:DBDraw:DB$ Draw | Defined$ RememberedController | NumCards$ 1 | SubAbility$ DBCleanup",
-                "SVar:DBCleanup:DB$ Cleanup | ClearRemembered$ True",
-                "SVar:DBReanimate:DB$ ChangeZone | Pawprint$ 3 | ValidTgts$ Permanent.YouCtrl+cmcLE3 | Origin$ Graveyard | Destination$ Battlefield | WithCountersType$ Indestructible | SpellDescription$ Return target permanent card with mana value 3 or less from your graveyard to the battlefield with an indestructible counter on it.",
-                "Oracle:");
+        MultiCard result = convertFromFile("s/season_of_the_burrow.txt");
         ConvertedCard card = result.faces().get(0);
 
         // Charm generates a spell line from the combined choice descriptions
@@ -634,18 +504,7 @@ class CardScriptConverterTest {
 
     @Test
     void classEnchantmentLevels() {
-        MultiCard result = convert(
-                "Name:Artificer Class",
-                "ManaCost:1 U",
-                "Types:Enchantment Class",
-                "S:Mode$ ReduceCost | EffectZone$ Battlefield | ValidCard$ Card.Artifact | Activator$ You | Type$ Spell | OnlyFirstSpell$ True | Amount$ 1 | Description$ The first artifact spell you cast each turn costs {1} less to cast.",
-                "K:Class:2:1 U:AddTrigger$ TriggerClassLevel",
-                "SVar:TriggerClassLevel:Mode$ ClassLevelGained | ClassLevel$ 2 | ValidCard$ Card.Self | TriggerZones$ Battlefield | Execute$ TrigDigUntil | Secondary$ True | TriggerDescription$ When this Class becomes level 2, reveal cards from the top of your library until you reveal an artifact card. Put that card into your hand and the rest on the bottom of your library in a random order.",
-                "SVar:TrigDigUntil:DB$ DigUntil | Valid$ Artifact | FoundDestination$ Hand | RevealedDestination$ Library | RevealedLibraryPosition$ -1 | RevealRandomOrder$ True",
-                "K:Class:3:5 U:AddTrigger$ TriggerEndTurn",
-                "SVar:TriggerEndTurn:Mode$ Phase | Phase$ End of Turn | ValidPlayer$ You | TriggerZones$ Battlefield | Execute$ CopyArtifact | Secondary$ True | TriggerDescription$ At the beginning of your end step, create a token that's a copy of target artifact you control.",
-                "SVar:CopyArtifact:DB$ CopyPermanent | ValidTgts$ Artifact.YouCtrl | TgtPrompt$ Select target artifact you control to copy",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/artificer_class.txt");
         ConvertedCard card = result.faces().get(0);
         assertEquals("enchantment class", card.types());
 
@@ -682,18 +541,7 @@ class CardScriptConverterTest {
 
     @Test
     void classWithEtbReplacementLevel1() {
-        MultiCard result = convert(
-                "Name:Bard Class",
-                "ManaCost:R G",
-                "Types:Enchantment Class",
-                "K:ETBReplacement:Other:AddExtraCounter:Mandatory:Battlefield:Creature.Legendary+YouCtrl+Other",
-                "SVar:AddExtraCounter:DB$ PutCounter | ETB$ True | Defined$ ReplacedCard | CounterType$ P1P1 | CounterNum$ 1 | SpellDescription$ Legendary creatures you control enter with an additional +1/+1 counter on them.",
-                "K:Class:2:R G:AddStaticAbility$ SReduceCost",
-                "SVar:SReduceCost:Mode$ ReduceCost | ValidCard$ Legendary | Type$ Spell | Activator$ You | Amount$ 1 | Color$ R G | IgnoreGeneric$ True | Secondary$ True | Description$ Legendary spells you cast cost {R}{G} less to cast.",
-                "K:Class:3:3 R G:AddTrigger$ TriggerCast",
-                "SVar:TriggerCast:Mode$ SpellCast | ValidCard$ Legendary | ValidActivatingPlayer$ You | TriggerZones$ Battlefield | Execute$ TrigImpulsiveDraw | Secondary$ True | TriggerDescription$ Whenever you cast a legendary spell, exile the top two cards of your library. You may play them this turn.",
-                "SVar:TrigImpulsiveDraw:DB$ Dig",
-                "Oracle:");
+        MultiCard result = convertFromFile("b/bard_class.txt");
         ConvertedCard card = result.faces().get(0);
 
         List<AbilityLine> levels = card.abilities().stream()
@@ -715,16 +563,7 @@ class CardScriptConverterTest {
 
     @Test
     void etbReplacementOnNonClassCard() {
-        MultiCard result = convert(
-                "Name:Flickering Ward",
-                "ManaCost:W",
-                "Types:Enchantment Aura",
-                "K:Enchant creature",
-                "K:ETBReplacement:Other:ChooseColor",
-                "SVar:ChooseColor:DB$ ChooseColor | Defined$ You | SpellDescription$ As CARDNAME enters, choose a color.",
-                "A:AB$ ChangeZone | Cost$ W | Origin$ Battlefield | Destination$ Hand | SpellDescription$ Return CARDNAME to its owner's hand.",
-                "S:Mode$ Continuous | Affected$ Creature.EnchantedBy | AddKeyword$ Protection:ChosenColor | Description$ Enchanted creature has protection from the chosen color. This effect doesn't remove CARDNAME.",
-                "Oracle:");
+        MultiCard result = convertFromFile("f/flickering_ward.txt");
         ConvertedCard card = result.faces().get(0);
 
         // ETBReplacement should be a replacement line, not a raw keyword
@@ -742,13 +581,7 @@ class CardScriptConverterTest {
 
     @Test
     void companionKeywordIncludesRestriction() {
-        MultiCard result = convert(
-                "Name:Gyruda Doom of Depths",
-                "ManaCost:4 U B",
-                "Types:Legendary Creature Demon Kraken",
-                "PT:6/6",
-                "K:Companion:Card.cmcM20:Your starting deck contains only cards with even mana value.",
-                "Oracle:");
+        MultiCard result = convertFromFile("g/gyruda_doom_of_depths.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> keywords = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
@@ -759,15 +592,7 @@ class CardScriptConverterTest {
 
     @Test
     void doubleKickerIncludesBothCosts() {
-        MultiCard result = convert(
-                "Name:Archangel of Wrath",
-                "ManaCost:2 W W",
-                "Types:Creature Angel",
-                "PT:3/4",
-                "K:Kicker:B:R",
-                "K:Flying",
-                "K:Lifelink",
-                "Oracle:");
+        MultiCard result = convertFromFile("a/archangel_of_wrath.txt");
         ConvertedCard card = result.faces().get(0);
         // Kicker should be reclassified as additional cost with both costs
         List<AbilityLine> costs = card.abilities().stream()
@@ -782,15 +607,7 @@ class CardScriptConverterTest {
 
     @Test
     void giftKeywordIncludesParameter() {
-        MultiCard result = convert(
-                "Name:Dawn's Truce",
-                "ManaCost:1 W",
-                "Types:Instant",
-                "K:Gift",
-                "SVar:GiftAbility:DB$ Draw | Defined$ Promised | GiftDescription$ a card",
-                "A:SP$ Pump | Defined$ You & Valid Permanent.YouCtrl | KW$ Hexproof | SubAbility$ DBPumpAll | SpellDescription$ You and permanents you control gain hexproof until end of turn.",
-                "SVar:DBPumpAll:DB$ PumpAll | ValidCards$ Permanent.YouCtrl | KW$ Indestructible | ConditionZone$ Stack | ConditionPresent$ Card.Self+PromisedGift | ConditionCompare$ EQ1",
-                "Oracle:");
+        MultiCard result = convertFromFile("d/dawns_truce.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> keywords = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.KEYWORD_PASSIVE).toList();
@@ -803,13 +620,7 @@ class CardScriptConverterTest {
 
     @Test
     void ninjutsuClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Yuffie Materia Hunter",
-                "ManaCost:2 R",
-                "Types:Legendary Creature Human Ninja",
-                "PT:3/3",
-                "K:Ninjutsu:1 R",
-                "Oracle:");
+        MultiCard result = convertFromFile("y/yuffie_materia_hunter.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -822,15 +633,7 @@ class CardScriptConverterTest {
 
     @Test
     void embalmClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Vizier of Many Faces",
-                "ManaCost:2 U U",
-                "Types:Creature Shapeshifter Cleric",
-                "PT:0/0",
-                "K:ETBReplacement:Copy:DBCopy:Optional",
-                "SVar:DBCopy:DB$ Clone | Choices$ Creature.Other | Embalm$ True | RemoveCost$ True | SetColor$ White | AddTypes$ Zombie | SpellDescription$ You may have CARDNAME enter as a copy of any creature on the battlefield.",
-                "K:Embalm:3 U U",
-                "Oracle:");
+        MultiCard result = convertFromFile("v/vizier_of_many_faces.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -843,16 +646,7 @@ class CardScriptConverterTest {
 
     @Test
     void miracleClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Zephyrim",
-                "ManaCost:3 W",
-                "Types:Creature Human Warrior",
-                "PT:3/3",
-                "K:Squad:2",
-                "K:Flying",
-                "K:Vigilance",
-                "K:Miracle:1 W",
-                "Oracle:");
+        MultiCard result = convertFromFile("z/zephyrim.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -867,15 +661,7 @@ class CardScriptConverterTest {
 
     @Test
     void unearthClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Yotian Frontliner",
-                "ManaCost:1",
-                "Types:Artifact Creature Soldier",
-                "PT:1/1",
-                "T:Mode$ Attacks | ValidCard$ Card.Self | Execute$ TrigPump | TriggerDescription$ Whenever CARDNAME attacks, another target creature you control gets +1/+1 until end of turn.",
-                "SVar:TrigPump:DB$ Pump | ValidTgts$ Creature.YouCtrl+Other | TgtPrompt$ Select another target creature you control | NumAtt$ +1 | NumDef$ +1",
-                "K:Unearth:W",
-                "Oracle:");
+        MultiCard result = convertFromFile("y/yotian_frontliner.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -886,13 +672,7 @@ class CardScriptConverterTest {
 
     @Test
     void awakenClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Sheer Drop",
-                "ManaCost:2 W",
-                "Types:Sorcery",
-                "A:SP$ Destroy | ValidTgts$ Creature.tapped | TgtPrompt$ Select target tapped creature | SpellDescription$ Destroy target tapped creature.",
-                "K:Awaken:3:5 W",
-                "Oracle:");
+        MultiCard result = convertFromFile("s/sheer_drop.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -903,15 +683,7 @@ class CardScriptConverterTest {
 
     @Test
     void suspendClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Wheel of Fate",
-                "ManaCost:no cost",
-                "Colors:red",
-                "Types:Sorcery",
-                "K:Suspend:4:1 R",
-                "A:SP$ Discard | Mode$ Hand | Defined$ Player | SubAbility$ DBDraw | SpellDescription$ Each player discards their hand, then draws seven cards.",
-                "SVar:DBDraw:DB$ Draw | Defined$ Player | NumCards$ 7",
-                "Oracle:");
+        MultiCard result = convertFromFile("w/wheel_of_fate.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -922,16 +694,7 @@ class CardScriptConverterTest {
 
     @Test
     void jumpStartClassifiedAsAlternateCost() {
-        MultiCard result = convert(
-                "Name:Surge of Acclaim",
-                "ManaCost:1 U",
-                "Types:Instant",
-                "K:Jump-start",
-                "A:SP$ Charm | CharmNum$ X | Choices$ DBSeek1,DBSeek2",
-                "SVar:DBSeek1:DB$ Seek | Type$ Card.nonLand | SpellDescription$ Seek a nonland card.",
-                "SVar:DBSeek2:DB$ Seek | Type$ Card.nonLand | SpellDescription$ Seek a nonland card.",
-                "SVar:X:Count$MaxSpeed.2.1",
-                "Oracle:");
+        MultiCard result = convertFromFile("s/surge_of_acclaim.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> altCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ALTERNATE_COST).toList();
@@ -944,15 +707,7 @@ class CardScriptConverterTest {
 
     @Test
     void bargainClassifiedAsAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Troublemaker Ouphe",
-                "ManaCost:1 G",
-                "Types:Creature Ouphe",
-                "PT:2/2",
-                "K:Bargain",
-                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self+bargained | Execute$ TrigExile | TriggerDescription$ When CARDNAME enters, if it was bargained, exile target artifact or enchantment an opponent controls.",
-                "SVar:TrigExile:DB$ ChangeZone | IsCurse$ True | ValidTgts$ Artifact.OppCtrl,Enchantment.OppCtrl | TgtPrompt$ Select target artifact or enchantment an opponent controls | Origin$ Battlefield | Destination$ Exile",
-                "Oracle:");
+        MultiCard result = convertFromFile("t/troublemaker_ouphe.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> addCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
@@ -963,15 +718,7 @@ class CardScriptConverterTest {
 
     @Test
     void conspireClassifiedAsAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Traitor's Roar",
-                "ManaCost:4 BR",
-                "Types:Sorcery",
-                "A:SP$ Tap | ValidTgts$ Creature.untapped | TgtPrompt$ Select target untapped creature | SubAbility$ DBDamage | SpellDescription$ Tap target untapped creature. It deals damage equal to its power to its controller.",
-                "SVar:DBDamage:DB$ DealDamage | Defined$ TargetedController | DamageSource$ Targeted | NumDmg$ X",
-                "SVar:X:Targeted$CardPower",
-                "K:Conspire",
-                "Oracle:");
+        MultiCard result = convertFromFile("t/traitors_roar.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> addCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
@@ -982,13 +729,7 @@ class CardScriptConverterTest {
 
     @Test
     void spliceClassifiedAsAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Wear Away",
-                "ManaCost:G G",
-                "Types:Instant Arcane",
-                "K:Splice:Arcane:3 G",
-                "A:SP$ Destroy | ValidTgts$ Artifact,Enchantment | TgtPrompt$ Select target artifact or enchantment | SpellDescription$ Destroy target artifact or enchantment.",
-                "Oracle:");
+        MultiCard result = convertFromFile("w/wear_away.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> addCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
@@ -999,15 +740,7 @@ class CardScriptConverterTest {
 
     @Test
     void spreeClassifiedAsAdditionalCost() {
-        MultiCard result = convert(
-                "Name:Unfortunate Accident",
-                "ManaCost:B",
-                "Types:Instant",
-                "K:Spree",
-                "A:SP$ Charm | Choices$ DBMurder,DBRecruit | MinCharmNum$ 1 | CharmNum$ 2",
-                "SVar:DBMurder:DB$ Destroy | ModeCost$ 2 B | ValidTgts$ Creature | SpellDescription$ Destroy target creature.",
-                "SVar:DBRecruit:DB$ Token | ModeCost$ 1 | TokenScript$ r_1_1_mercenary_tappump | TokenOwner$ You | SpellDescription$ Create a 1/1 red Mercenary creature token.",
-                "Oracle:");
+        MultiCard result = convertFromFile("u/unfortunate_accident.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> addCosts = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.ADDITIONAL_COST).toList();
@@ -1020,13 +753,7 @@ class CardScriptConverterTest {
 
     @Test
     void affinityClassifiedAsCostReduction() {
-        MultiCard result = convert(
-                "Name:Sojourner's Companion",
-                "ManaCost:7",
-                "Types:Artifact Creature Salamander",
-                "PT:4/4",
-                "K:Affinity:Artifact",
-                "Oracle:");
+        MultiCard result = convertFromFile("s/sojourners_companion.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> reductions = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
@@ -1038,13 +765,7 @@ class CardScriptConverterTest {
 
     @Test
     void delveClassifiedAsCostReduction() {
-        MultiCard result = convert(
-                "Name:Will of the Naga",
-                "ManaCost:4 U U",
-                "Types:Instant",
-                "K:Delve",
-                "A:SP$ Tap | TargetMin$ 0 | TargetMax$ 2 | ValidTgts$ Creature | SpellDescription$ Tap up to two target creatures.",
-                "Oracle:");
+        MultiCard result = convertFromFile("w/will_of_the_naga.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> reductions = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
@@ -1055,14 +776,7 @@ class CardScriptConverterTest {
 
     @Test
     void improviseClassifiedAsCostReduction() {
-        MultiCard result = convert(
-                "Name:Whir of Invention",
-                "ManaCost:X U U U",
-                "Types:Instant",
-                "K:Improvise",
-                "A:SP$ ChangeZone | Origin$ Library | Destination$ Battlefield | ChangeType$ Artifact.cmcLEX | ChangeNum$ 1 | SpellDescription$ Search your library for an artifact card with mana value X or less, put it onto the battlefield, then shuffle.",
-                "SVar:X:Count$xPaid",
-                "Oracle:");
+        MultiCard result = convertFromFile("w/whir_of_invention.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> reductions = card.abilities().stream()
                 .filter(a -> a.type() == AbilityType.COST_REDUCTION).toList();
@@ -1092,14 +806,7 @@ class CardScriptConverterTest {
 
     @Test
     void costReductionSortsToTop() {
-        MultiCard result = convert(
-                "Name:Whir of Invention",
-                "ManaCost:X U U U",
-                "Types:Instant",
-                "K:Improvise",
-                "A:SP$ ChangeZone | Origin$ Library | Destination$ Battlefield | ChangeType$ Artifact.cmcLEX | ChangeNum$ 1 | SpellDescription$ Search your library for an artifact card with mana value X or less, put it onto the battlefield, then shuffle.",
-                "SVar:X:Count$xPaid",
-                "Oracle:");
+        MultiCard result = convertFromFile("w/whir_of_invention.txt");
         ConvertedCard card = result.faces().get(0);
         // Cost reduction should come before spell abilities
         List<AbilityLine> abilities = card.abilities();
@@ -1111,15 +818,7 @@ class CardScriptConverterTest {
     @Test
     void allCostTypesSortBeforeOtherAbilities() {
         // Card with alternate cost, additional cost, cost reduction, and a spell
-        MultiCard result = convert(
-                "Name:Zephyrim",
-                "ManaCost:3 W",
-                "Types:Creature Human Warrior",
-                "PT:3/3",
-                "K:Flying",
-                "K:Squad:2",
-                "K:Miracle:1 W",
-                "Oracle:");
+        MultiCard result = convertFromFile("z/zephyrim.txt");
         ConvertedCard card = result.faces().get(0);
         List<AbilityLine> abilities = card.abilities();
         // Find the first non-cost ability
@@ -1171,18 +870,7 @@ class CardScriptConverterTest {
 
     @Test
     void meldHalf_mightstoneAndWeakstone_doesNotThrow() {
-        MultiCard result = convert(
-                "Name:The Mightstone and Weakstone",
-                "ManaCost:5",
-                "Types:Legendary Artifact Powerstone",
-                "T:Mode$ ChangesZone | Origin$ Any | Destination$ Battlefield | ValidCard$ Card.Self | Execute$ TrigCharm | TriggerDescription$ When CARDNAME enters, ABILITY",
-                "SVar:TrigCharm:DB$ Charm | Choices$ DBDraw,DBPump",
-                "SVar:DBDraw:DB$ Draw | Defined$ You | NumCards$ 2 | SpellDescription$ Draw two cards.",
-                "SVar:DBPump:DB$ Pump | IsCurse$ True | ValidTgts$ Creature | NumAtt$ -5 | NumDef$ -5 | SpellDescription$ Target creature gets -5/-5 until end of turn.",
-                "A:AB$ Mana | Cost$ T | Produced$ C | Amount$ 2 | RestrictValid$ CantCastNonArtifactSpells | SpellDescription$ Add {C}{C}. This mana can't be spent to cast nonartifact spells.",
-                "MeldPair:Urza, Lord Protector",
-                "AlternateMode:Meld",
-                "Oracle:When The Mightstone and Weakstone enters, choose one —\\n• Draw two cards.\\n• Target creature gets -5/-5 until end of turn.\\n{T}: Add {C}{C}. This mana can't be spent to cast nonartifact spells.\\n(Melds with Urza, Lord Protector.)");
+        MultiCard result = convertFromFile("t/the_mightstone_and_weakstone.txt");
         assertEquals("meld", result.layout());
         assertEquals(1, result.faces().size(), "Meld-half should have only the front face");
         assertEquals("the mightstone and weakstone", result.faces().get(0).name());
@@ -1190,18 +878,7 @@ class CardScriptConverterTest {
 
     @Test
     void meldHalf_phyrexianDragonEngine_doesNotThrow() {
-        MultiCard result = convert(
-                "Name:Phyrexian Dragon Engine",
-                "ManaCost:3",
-                "Types:Artifact Creature Phyrexian Dragon",
-                "PT:2/2",
-                "K:Double Strike",
-                "T:Mode$ ChangesZone | Origin$ Graveyard | Destination$ Battlefield | TriggerZones$ Battlefield | ValidCard$ Card.Self+YouOwn | Execute$ TrigDraw | TriggerDescription$ When CARDNAME enters from your graveyard, you may discard your hand. If you do, draw three cards.",
-                "SVar:TrigDraw:AB$ Draw | Cost$ Discard<1/Hand> | Defined$ You | NumCards$ 3",
-                "K:Unearth:3 R R",
-                "MeldPair:Mishra, Claimed by Gix",
-                "AlternateMode:Meld",
-                "Oracle:Double strike\\nWhen Phyrexian Dragon Engine enters from your graveyard, you may discard your hand. If you do, draw three cards.\\nUnearth:{3}{R}{R}");
+        MultiCard result = convertFromFile("p/phyrexian_dragon_engine.txt");
         assertEquals("meld", result.layout());
         assertEquals(1, result.faces().size(), "Meld-half should have only the front face");
         assertEquals("phyrexian dragon engine", result.faces().get(0).name());
@@ -1212,14 +889,7 @@ class CardScriptConverterTest {
 
     @Test
     void bloomTender_doesNotThrow() {
-        MultiCard result = convert(
-                "Name:Bloom Tender",
-                "ManaCost:1 G",
-                "Types:Creature Elf Druid",
-                "PT:1/1",
-                "A:AB$ Mana | Cost$ T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl | SpellDescription$ For each color among permanents you control, add one mana of that color.",
-                "AI:RemoveDeck:All",
-                "Oracle:{T}: For each color among permanents you control, add one mana of that color.");
+        MultiCard result = convertFromFile("b/bloom_tender.txt");
         assertNotNull(result);
         assertEquals("bloom tender", result.faces().get(0).name());
         assertEquals("1/1", result.faces().get(0).powerToughness());
@@ -1227,17 +897,7 @@ class CardScriptConverterTest {
 
     @Test
     void faeburrowElder_doesNotThrow() {
-        MultiCard result = convert(
-                "Name:Faeburrow Elder",
-                "ManaCost:1 G W",
-                "Types:Creature Treefolk Druid",
-                "PT:0/0",
-                "K:Vigilance",
-                "S:Mode$ Continuous | Affected$ Card.Self | AddPower$ X | AddToughness$ X | Description$ CARDNAME gets +1/+1 for each color among permanents you control.",
-                "SVar:X:Count$Valid Permanent.YouCtrl$Colors",
-                "A:AB$ Mana | Cost$ T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl | SpellDescription$ For each color among permanents you control, add one mana of that color.",
-                "SVar:NoZeroToughnessAI:True",
-                "Oracle:Vigilance\\nFaeburrow Elder gets +1/+1 for each color among permanents you control.\\n{T}: For each color among permanents you control, add one mana of that color.");
+        MultiCard result = convertFromFile("f/faeburrow_elder.txt");
         assertNotNull(result);
         assertEquals("faeburrow elder", result.faces().get(0).name());
         assertEquals("0/0", result.faces().get(0).powerToughness());
@@ -1247,17 +907,7 @@ class CardScriptConverterTest {
 
     @Test
     void whatMustBeDone_charmWithSubAbilityDescription() {
-        MultiCard result = convert(
-                "Name:What Must Be Done",
-                "ManaCost:3 W W",
-                "Types:Sorcery",
-                "A:SP$ Charm | Choices$ DBDestroyAll,DBConditionEffect",
-                "SVar:DBDestroyAll:DB$ DestroyAll | ValidCards$ Artifact,Creature | SpellDescription$ Let the World Burn — Destroy all artifacts and creatures.",
-                "SVar:DBConditionEffect:DB$ Effect | RememberObjects$ Targeted & Self | ReplacementEffects$ ETBCreat | ExileOnMoved$ Graveyard,Stack | SubAbility$ DBChangeZone",
-                "SVar:DBChangeZone:DB$ ChangeZone | Origin$ Graveyard | Destination$ Battlefield | ValidTgts$ Permanent.Historic+YouOwn | TgtPrompt$ Select target historic permanent card | SpellDescription$ Release Juno — Return target historic permanent card from your graveyard to the battlefield. It enters with two additional +1/+1 counters on it if it's a creature. (Artifacts, legendaries, and Sagas are historic.)",
-                "SVar:ETBCreat:Event$ Moved | ValidCard$ Creature.IsRemembered | Destination$ Battlefield | ReplaceWith$ DBPutP1P1 | ReplacementResult$ Updated | Description$ It enters with two additional +1/+1 counters on it if it's a creature.",
-                "SVar:DBPutP1P1:DB$ PutCounter | Defined$ ReplacedCard | CounterType$ P1P1 | ETB$ True | CounterNum$ 2",
-                "Oracle:Choose one —\\n• Let the World Burn — Destroy all artifacts and creatures.\\n• Release Juno — Return target historic permanent card from your graveyard to the battlefield. It enters with two additional +1/+1 counters on it if it's a creature. (Artifacts, legendaries, and Sagas are historic.)");
+        MultiCard result = convertFromFile("w/what_must_be_done.txt");
         assertNotNull(result);
         ConvertedCard card = result.faces().get(0);
 
@@ -1314,17 +964,7 @@ class CardScriptConverterTest {
 
     @Test
     void tarnationVista_doesNotThrow() {
-        MultiCard result = convert(
-                "Name:Tarnation Vista",
-                "ManaCost:no cost",
-                "Types:Land Cave",
-                "R:Event$ Moved | ValidCard$ Card.Self | Destination$ Battlefield | ReplaceWith$ ETBTapped | ReplacementResult$ Updated | Description$ CARDNAME enters tapped.",
-                "SVar:ETBTapped:DB$ Tap | Defined$ Self | ETB$ True",
-                "K:ETBReplacement:Other:ChooseColor",
-                "SVar:ChooseColor:DB$ ChooseColor | Defined$ You | AILogic$ MostProminentInComputerDeck | SpellDescription$ As CARDNAME enters, choose a color.",
-                "A:AB$ Mana | Cost$ T | Produced$ Chosen | SpellDescription$ Add one mana of the chosen color.",
-                "A:AB$ Mana | Cost$ 1 T | Produced$ Special EachColorAmong_Valid Permanent.YouCtrl+MonoColor | SpellDescription$ For each color among monocolored permanents you control, add one mana of that color.",
-                "Oracle:Tarnation Vista enters tapped. As it enters, choose a color.\\n{T}: Add one mana of the chosen color.\\n{1}, {T}: For each color among monocolored permanents you control, add one mana of that color.");
+        MultiCard result = convertFromFile("t/tarnation_vista.txt");
         assertNotNull(result);
         assertEquals("tarnation vista", result.faces().get(0).name());
     }
