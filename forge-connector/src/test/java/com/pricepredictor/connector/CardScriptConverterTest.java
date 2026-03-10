@@ -597,6 +597,17 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void spellWithMultipleSubAbilityDescriptions() {
+        // Seed Spark has SpellDescription on both the main SP$ and on a SubAbility SVar.
+        // Both should be emitted as separate spell lines.
+        ConvertedCard card = face("s/seed_spark.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(2, spells.size());
+        assertTrue(spells.get(0).description().contains("destroy target artifact or enchantment"));
+        assertTrue(spells.get(1).description().contains("create two 1/1 green saproling"));
+    }
+
+    @Test
     void activatedAbilityWithSubAbilityDescriptionSkipped() {
         // Arachnus Spinner's activated ability has SpellDescription only on the
         // sub-ability (DBChange), not on the main AB$ Pump. The sub-ability chain

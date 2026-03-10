@@ -353,17 +353,16 @@ public class CardScriptConverter {
                 }
                 abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
             } else if (sa.isSpell()) {
-                String spellDesc = findParamInChain(sa, "SpellDescription");
-                if (spellDesc == null) {
-                    continue;
+                List<String> descs = collectParamInChain(sa, "SpellDescription");
+                for (String spellDesc : descs) {
+                    String desc = stripReminderText(spellDesc);
+                    if (desc.isEmpty()) {
+                        continue;
+                    }
+                    actionCounter++;
+                    abilities.add(new AbilityLine(AbilityType.SPELL,
+                            applyTextCasing(desc), actionCounter));
                 }
-                String desc = stripReminderText(spellDesc);
-                if (desc.isEmpty()) {
-                    continue;
-                }
-                actionCounter++;
-                abilities.add(new AbilityLine(AbilityType.SPELL,
-                        applyTextCasing(desc), actionCounter));
             }
         }
 
@@ -789,6 +788,24 @@ public class CardScriptConverter {
             return "[" + m.group(1) + "]: " + text.substring(m.end());
         }
         return text;
+    }
+
+    /** Walk the sub-ability chain of {@code sa} collecting all values of {@code param}. */
+    private static List<String> collectParamInChain(SpellAbility sa, String param) {
+        List<String> values = new ArrayList<>();
+        String value = sa.getParam(param);
+        if (value != null && !value.isEmpty()) {
+            values.add(value);
+        }
+        SpellAbility sub = sa.getSubAbility();
+        while (sub != null) {
+            value = sub.getParam(param);
+            if (value != null && !value.isEmpty()) {
+                values.add(value);
+            }
+            sub = sub.getSubAbility();
+        }
+        return values;
     }
 
     /** Walk the sub-ability chain of {@code sa} looking for {@code param}. Returns null if not found. */
