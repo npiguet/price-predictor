@@ -521,6 +521,27 @@ class CardScriptConverterTest {
         assertEquals(expectedName, face(file).name());
     }
 
+    // --- Sub-ability description walking ---
+
+    @Test
+    void spellWithSubAbilityDescription() {
+        ConvertedCard card = face("a/aetherspouts.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size());
+        assertTrue(spells.get(0).formatLine().contains("each attacking creature"));
+    }
+
+    @Test
+    void activatedAbilityWithSubAbilityDescriptionSkipped() {
+        // Arachnus Spinner's activated ability has SpellDescription only on the
+        // sub-ability (DBChange), not on the main AB$ Pump. The sub-ability chain
+        // walk must NOT cause this to be picked up as a spell — only spells should
+        // walk the chain for SpellDescription.
+        ConvertedCard card = face("a/arachnus_spinner.txt");
+        assertEquals(0, countOfType(card, AbilityType.SPELL),
+                "Activated ability with sub-ability description should not appear as spell");
+    }
+
     // --- Charm sub-ability description walking ---
 
     @Test

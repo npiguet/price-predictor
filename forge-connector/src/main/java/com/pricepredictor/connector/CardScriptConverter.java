@@ -284,15 +284,7 @@ public class CardScriptConverter {
                 var choices = sa.getAdditionalAbilityList("Choices");
                 if (choices != null) {
                     for (var choice : choices) {
-                        String choiceDesc = choice.getParam("SpellDescription");
-                        if (choiceDesc == null) {
-                            // Walk the sub-ability chain to find a SpellDescription
-                            SpellAbility sub = choice.getSubAbility();
-                            while (sub != null && choiceDesc == null) {
-                                choiceDesc = sub.getParam("SpellDescription");
-                                sub = sub.getSubAbility();
-                            }
-                        }
+                        String choiceDesc = findParamInChain(choice, "SpellDescription");
                         if (choiceDesc != null) {
                             choiceDesc = stripReminderText(choiceDesc);
                         }
@@ -338,12 +330,11 @@ public class CardScriptConverter {
                 }
             }
 
-            String spellDesc = sa.getParam("SpellDescription");
-            if (spellDesc == null || spellDesc.isEmpty()) {
-                continue;
-            }
-
             if (sa.isActivatedAbility()) {
+                if (sa.getParam("SpellDescription") == null
+                        || sa.getParam("SpellDescription").isEmpty()) {
+                    continue;
+                }
                 String desc = stripReminderText(sa.getDescription());
                 actionCounter++;
                 AbilityType type;
@@ -355,6 +346,10 @@ public class CardScriptConverter {
                 }
                 abilities.add(new AbilityLine(type, applyTextCasing(desc), actionCounter));
             } else if (sa.isSpell()) {
+                String spellDesc = findParamInChain(sa, "SpellDescription");
+                if (spellDesc == null) {
+                    continue;
+                }
                 String desc = stripReminderText(spellDesc);
                 if (desc.isEmpty()) {
                     continue;
@@ -728,6 +723,23 @@ public class CardScriptConverter {
             return "[" + m.group(1) + "]: " + text.substring(m.end());
         }
         return text;
+    }
+
+    /** Walk the sub-ability chain of {@code sa} looking for {@code param}. Returns null if not found. */
+    private static String findParamInChain(SpellAbility sa, String param) {
+        String value = sa.getParam(param);
+        if (value != null && !value.isEmpty()) {
+            return value;
+        }
+        SpellAbility sub = sa.getSubAbility();
+        while (sub != null) {
+            value = sub.getParam(param);
+            if (value != null && !value.isEmpty()) {
+                return value;
+            }
+            sub = sub.getSubAbility();
+        }
+        return null;
     }
 
     private String stripReminderText(String text) {
