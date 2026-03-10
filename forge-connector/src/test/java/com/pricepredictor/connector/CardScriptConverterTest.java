@@ -113,6 +113,17 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void staticTriggerEmittedAsReplacement() {
+        // Domesticated Mammoth has a trigger with Static$ True ("as this enters").
+        // In MTG rules these are replacement effects, not triggered abilities.
+        ConvertedCard card = face("d/domesticated_mammoth.txt");
+        var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
+        assertEquals(1, replacements.size());
+        assertTrue(replacements.get(0).description().contains("token copy of pacifism"));
+        assertEquals(0, countOfType(card, AbilityType.TRIGGERED));
+    }
+
+    @Test
     void secondaryTriggerNotSkipped() {
         // Decorated Champion has a trigger marked Secondary$ True in Forge.
         // It should still be emitted since it's the card's actual ability text.

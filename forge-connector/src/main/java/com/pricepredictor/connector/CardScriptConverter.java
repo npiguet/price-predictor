@@ -453,8 +453,11 @@ public class CardScriptConverter {
                 // card.getTriggers() which includes the same Forge-generated objects.
                 continue;
             }
+            // Forge marks "as this enters" triggers with Static$ True.
+            // These are semantically replacement effects in MTG rules.
+            AbilityType effectiveType = type;
             if ("True".equals(trait.getParam("Static"))) {
-                continue;
+                effectiveType = AbilityType.REPLACEMENT;
             }
             String desc = trait.getParam(descParam);
             if (desc == null || desc.isEmpty()) {
@@ -470,7 +473,6 @@ public class CardScriptConverter {
             // RaiseCost/OptionalCost statics are additional casting costs ONLY when they
             // apply to this card itself (ValidCard$ Card.Self or Affected$ Card.Self).
             // Otherwise they are static abilities that tax or modify other spells' costs.
-            AbilityType effectiveType = type;
             String mode = trait.getParam("Mode");
             if (type == AbilityType.STATIC
                     && ("RaiseCost".equals(mode) || "OptionalCost".equals(mode))) {
