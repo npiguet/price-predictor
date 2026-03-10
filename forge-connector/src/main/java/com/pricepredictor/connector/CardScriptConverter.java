@@ -512,8 +512,11 @@ public class CardScriptConverter {
             return actionCounter;
         }
         if (original.startsWith("etbCounter:") || original.startsWith("ETBReplacement:")) {
+            // etbCounter replacements are marked Secondary$ True in Forge
+            // (secondary to the "move to battlefield" event), so we must not skip them.
+            boolean skipSecondary = !original.startsWith("etbCounter:");
             return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
-                    AbilityType.REPLACEMENT, false, abilities, actionCounter);
+                    AbilityType.REPLACEMENT, false, skipSecondary, abilities, actionCounter);
         }
         if (original.startsWith("AlternateAdditionalCost:")) {
             String[] costParts = original.split(":", 2)[1].split(":");
@@ -559,8 +562,15 @@ public class CardScriptConverter {
             Iterable<T> traits, Function<T, String> descExtractor,
             AbilityType type, boolean numbered,
             List<AbilityLine> abilities, int actionCounter) {
+        return emitKeywordTraits(traits, descExtractor, type, numbered, true, abilities, actionCounter);
+    }
+
+    private <T extends CardTraitBase> int emitKeywordTraits(
+            Iterable<T> traits, Function<T, String> descExtractor,
+            AbilityType type, boolean numbered, boolean skipSecondary,
+            List<AbilityLine> abilities, int actionCounter) {
         for (T trait : traits) {
-            if ("True".equals(trait.getParam("Secondary"))) {
+            if (skipSecondary && "True".equals(trait.getParam("Secondary"))) {
                 continue;
             }
             String desc = descExtractor.apply(trait);

@@ -384,6 +384,15 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void etbCounterWithDescriptionFallback() {
+        ConvertedCard card = face("a/ambitious_dragonborn.txt");
+        assertNoRawEtbReplacementKeyword(card);
+        var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
+        assertEquals(1, replacements.size());
+        assertTrue(replacements.get(0).description().contains("CARDNAME enters with X +1/+1 counters"));
+    }
+
+    @Test
     void companionKeywordIncludesRestriction() {
         assertHasAbility(face("g/gyruda_doom_of_depths.txt"),
                 AbilityType.KEYWORD_PASSIVE, "companion", "even mana value");
