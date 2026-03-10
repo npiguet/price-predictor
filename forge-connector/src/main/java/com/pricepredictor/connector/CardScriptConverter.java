@@ -365,6 +365,13 @@ public class CardScriptConverter {
         addDescribedTraits(abilities, card.getStaticAbilities(), "Description", AbilityType.STATIC, face.getName());
         addDescribedTraits(abilities, card.getReplacementEffects(), "Description", AbilityType.REPLACEMENT, face.getName());
 
+        // --- Implicit mana abilities from basic land types ---
+        String landManaDesc = buildLandManaDescription(face);
+        if (landManaDesc != null) {
+            actionCounter++;
+            abilities.add(new AbilityLine(AbilityType.ACTIVATED, landManaDesc, actionCounter));
+        }
+
         // --- Class post-processing: merge level costs with effect descriptions ---
         if (isClass) {
             // Remove any statics/triggers/replacements that duplicate level 2+ descriptions
@@ -666,6 +673,41 @@ public class CardScriptConverter {
     private Card buildFullCard(CardRules rules) {
         PaperCard paperCard = new PaperCard(rules, "UNK", CardRarity.Common);
         return CardFactory.getCard(paperCard, null, nextCardId++, getDummyGame());
+    }
+
+    // Mapping from basic land subtypes to the mana symbol they produce
+    private static final Map<String, String> LAND_TYPE_MANA = Map.of(
+            "Plains",   "{W}",
+            "Island",   "{U}",
+            "Swamp",    "{B}",
+            "Mountain", "{R}",
+            "Forest",   "{G}"
+    );
+
+    /**
+     * Build a "{T}: add ..." description for lands that have basic land subtypes.
+     * Returns null if the face has no basic land subtypes.
+     */
+    private static String buildLandManaDescription(ICardFace face) {
+        List<String> symbols = new ArrayList<>();
+        for (Map.Entry<String, String> entry : LAND_TYPE_MANA.entrySet()) {
+            if (face.getType().hasSubtype(entry.getKey())) {
+                symbols.add(entry.getValue());
+            }
+        }
+        if (symbols.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder("{T}: add ");
+        for (int i = 0; i < symbols.size(); i++) {
+            sb.append(symbols.get(i));
+            if (i + 2 == symbols.size()) {
+                sb.append(" or ");
+            } else if (i + 1 < symbols.size()) {
+                sb.append(", ");
+            }
+        }
+        return sb.toString();
     }
 
     private String formatTypeLine(ICardFace face) {

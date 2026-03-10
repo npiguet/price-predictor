@@ -539,6 +539,35 @@ class CardScriptConverterTest {
         assertEquals(expectedName, result.faces().get(0).name());
     }
 
+    // --- Implicit land mana abilities ---
+
+    @Test
+    void basicLandHasImplicitManaAbility() {
+        ConvertedCard card = face("f/forest.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertEquals("{T}: add {G}", activated.get(0).description());
+    }
+
+    @Test
+    void dualLandHasCombinedManaAbility() {
+        ConvertedCard card = face("b/bayou.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertTrue(activated.get(0).description().contains("{B}"));
+        assertTrue(activated.get(0).description().contains("or"));
+        assertTrue(activated.get(0).description().contains("{G}"));
+    }
+
+    @Test
+    void nonLandDoesNotGetImplicitManaAbility() {
+        ConvertedCard card = face("l/llanowar_elves.txt");
+        // Should have its own explicit activated ability, not an implicit land one
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertTrue(activated.get(0).description().contains("add {G}"));
+    }
+
     // --- Smoke tests: cards that previously caused errors ---
 
     @ParameterizedTest
