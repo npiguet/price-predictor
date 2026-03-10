@@ -185,7 +185,7 @@ public class CardScriptConverter {
                         break;
                     }
                 }
-                abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(giftTitle), null));
+                abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(giftTitle), null));
                 continue;
             }
 
@@ -197,14 +197,18 @@ public class CardScriptConverter {
                 }
                 String compTitle = (compDesc != null && !compDesc.isEmpty())
                         ? ki.getTitle() + " \u2014 " + compDesc : ki.getTitle();
-                abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(compTitle), null));
+                abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(compTitle), null));
                 continue;
             }
 
             // Known keywords — classify as active or passive based on generated traits
             boolean activatable = !ki.getAbilities().isEmpty();
             String title = ki.getTitle();
-            if (title == null || title.isEmpty()) {
+            if (title == null || title.isEmpty()
+                    || !title.trim().equals(title)) {
+                // getTitle() is missing or incomplete (e.g. Protection.getTitle()
+                // returns "Protection from " with trailing space). Fall back to
+                // the original keyword string which always has the full text.
                 title = ki.getOriginal();
             }
 
@@ -246,12 +250,15 @@ public class CardScriptConverter {
                 continue;
             }
 
-            // Regular keywords — classify as active or passive
+            // Regular keywords — classify by ability type:
+            // activated (cycling, equip), triggered (prowess, cascade), or static (flying, protection)
             if (activatable) {
                 actionCounter++;
-                abilities.add(new AbilityLine(AbilityType.KEYWORD_ACTIVE, applyTextCasing(title), actionCounter));
+                abilities.add(new AbilityLine(AbilityType.ACTIVATED, applyTextCasing(title), actionCounter));
+            } else if (!ki.getTriggers().isEmpty()) {
+                abilities.add(new AbilityLine(AbilityType.TRIGGERED, applyTextCasing(title), null));
             } else {
-                abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(title), null));
+                abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(title), null));
             }
         }
 
@@ -451,6 +458,7 @@ public class CardScriptConverter {
                                     Iterable<? extends CardTraitBase> traits,
                                     String descParam, AbilityType type,
                                     String faceName) {
+        Set<String> seenDescriptions = new HashSet<>();
         for (CardTraitBase trait : traits) {
             if (trait.getKeyword() != null) {
                 // Keyword-generated traits are already emitted by the keyword loop
@@ -492,6 +500,9 @@ public class CardScriptConverter {
                         desc = desc.substring(applyTextCasing(ADDITIONAL_COST_PREFIX).length());
                     }
                 }
+            }
+            if (!seenDescriptions.add(desc)) {
+                continue; // skip duplicate descriptions (e.g. ETB + attack split triggers)
             }
             abilities.add(new AbilityLine(effectiveType, desc, null));
         }
@@ -555,9 +566,11 @@ public class CardScriptConverter {
         }
         if (activatable) {
             actionCounter++;
-            abilities.add(new AbilityLine(AbilityType.KEYWORD_ACTIVE, applyTextCasing(title), actionCounter));
+            abilities.add(new AbilityLine(AbilityType.ACTIVATED, applyTextCasing(title), actionCounter));
+        } else if (!ki.getTriggers().isEmpty()) {
+            abilities.add(new AbilityLine(AbilityType.TRIGGERED, applyTextCasing(title), null));
         } else {
-            abilities.add(new AbilityLine(AbilityType.KEYWORD_PASSIVE, applyTextCasing(title), null));
+            abilities.add(new AbilityLine(AbilityType.STATIC, applyTextCasing(title), null));
         }
         return actionCounter;
     }

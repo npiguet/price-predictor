@@ -17,6 +17,15 @@ _REMINDER_TEXT = re.compile(r"\s*\([^)]*\)")
 _WHITESPACE = re.compile(r"\s+")
 _NON_ALNUM = re.compile(r"[^a-z0-9{} ]+")
 
+# Mapping from basic land subtypes to their intrinsic mana ability text
+_LAND_TYPE_MANA: dict[str, str] = {
+    "Plains": "{W}",
+    "Island": "{U}",
+    "Swamp": "{B}",
+    "Mountain": "{R}",
+    "Forest": "{G}",
+}
+
 
 @dataclass
 class CardCheckResult:
@@ -48,18 +57,54 @@ def _normalize(text: str, card_name: str | None = None) -> str:
     return text
 
 
+def _build_land_mana(types_line: str) -> str | None:
+    """Build implicit mana ability text from basic land subtypes, or None."""
+    symbols = [s for t, s in _LAND_TYPE_MANA.items() if t in types_line]
+    if not symbols:
+        return None
+    if len(symbols) == 1:
+        return f"{{T}}: Add {symbols[0]}."
+    return "{T}: Add " + ", ".join(symbols[:-1]) + " or " + symbols[-1] + "."
+
+
+def _strip_reminder(text: str) -> str:
+    """Strip reminder text (parenthesized) from a string."""
+    return _REMINDER_TEXT.sub("", text).strip()
+
+
 def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
-    """Extract Oracle text and card name from a Forge script string."""
+    """Extract Oracle text and card name from a Forge script string.
+
+    Strips reminder text from Oracle lines and appends implicit mana
+    abilities for lands with basic land subtypes.
+    """
     card_name = None
     oracle = None
+    types_line = None
     for line in forge_text.splitlines():
         line = line.strip()
         if line.startswith("Name:"):
             card_name = line[5:].strip()
+        elif line.startswith("Types:"):
+            types_line = line[6:].strip()
         elif line.startswith("Oracle:"):
             oracle = line[7:].strip()
     if oracle:
         oracle = oracle.replace("\\n", "\n")
+        # Strip reminder text from each oracle line
+        oracle_lines = [_strip_reminder(ln) for ln in oracle.split("\n")]
+        oracle_lines = [ln for ln in oracle_lines if ln]
+        # Append implicit land mana ability if applicable
+        if types_line:
+            land_mana = _build_land_mana(types_line)
+            if land_mana:
+                oracle_lines.append(land_mana)
+        oracle = "\n".join(oracle_lines) if oracle_lines else None
+    elif types_line:
+        # No oracle text, but may have implicit land mana
+        land_mana = _build_land_mana(types_line)
+        if land_mana:
+            oracle = land_mana
     return card_name, oracle
 
 
@@ -128,9 +173,17 @@ def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
             has_oracle=has_oracle,
         )
 
-    # Normalize and compare
-    norm_oracle = _normalize(oracle, card_name)
-    norm_converted = _normalize("\n".join(ability_lines), card_name)
+    # Normalize each line independently, sort, then compare.
+    # Sorting makes the comparison order-independent so that abilities
+    # emitted in a different order than Oracle text are not penalised.
+    oracle_parts = sorted(
+        _normalize(ln, card_name) for ln in oracle.split("\n") if ln.strip()
+    )
+    converted_parts = sorted(
+        _normalize(ln, card_name) for ln in ability_lines if ln.strip()
+    )
+    norm_oracle = " ".join(oracle_parts)
+    norm_converted = " ".join(converted_parts)
 
     similarity = SequenceMatcher(
         None, norm_oracle, norm_converted,

@@ -73,11 +73,17 @@ class CardScriptConverterTest {
 
     @Test
     void passiveKeywords() {
-        var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.KEYWORD_PASSIVE);
-        assertEquals(2, keywords.size());
-        assertEquals("keyword: flying", keywords.get(0).formatLine());
-        assertEquals("keyword: vigilance", keywords.get(1).formatLine());
+        var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
+        assertTrue(keywords.stream().anyMatch(k -> k.description().equals("flying")));
+        assertTrue(keywords.stream().anyMatch(k -> k.description().equals("vigilance")));
         assertNull(keywords.get(0).actionNumber());
+    }
+
+    @Test
+    void protectionKeywordIncludesColor() {
+        var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
+        assertTrue(statics.stream().anyMatch(k -> k.description().contains("protection from white")));
+        assertTrue(statics.stream().anyMatch(k -> k.description().contains("protection from black")));
     }
 
     @Test
@@ -341,8 +347,8 @@ class CardScriptConverterTest {
         String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
         assertTrue(costLine.contains("sacrifice"));
         assertTrue(costLine.contains("or"));
-        assertEquals(0, countOfType(card, AbilityType.KEYWORD_PASSIVE)
-                + countOfType(card, AbilityType.KEYWORD_ACTIVE),
+        assertEquals(0, countOfType(card, AbilityType.STATIC)
+                + countOfType(card, AbilityType.ACTIVATED),
                 "AlternateAdditionalCost should not appear as keyword");
 
         assertTrue(abilitiesOfType(card, AbilityType.SPELL).get(0).formatLine()
@@ -416,7 +422,7 @@ class CardScriptConverterTest {
     @Test
     void companionKeywordIncludesRestriction() {
         assertHasAbility(face("g/gyruda_doom_of_depths.txt"),
-                AbilityType.KEYWORD_PASSIVE, "companion", "even mana value");
+                AbilityType.STATIC, "companion", "even mana value");
     }
 
     @Test
@@ -431,7 +437,7 @@ class CardScriptConverterTest {
 
     @Test
     void giftKeywordIncludesParameter() {
-        assertHasAbility(face("d/dawns_truce.txt"), AbilityType.KEYWORD_PASSIVE, "gift a card");
+        assertHasAbility(face("d/dawns_truce.txt"), AbilityType.STATIC, "gift a card");
     }
 
     // --- Keyword cost classification (parameterized) ---
@@ -660,7 +666,7 @@ class CardScriptConverterTest {
 
     private void assertNoRawEtbReplacementKeyword(ConvertedCard card) {
         long raw = card.abilities().stream()
-                .filter(a -> (a.type() == AbilityType.KEYWORD_PASSIVE || a.type() == AbilityType.KEYWORD_ACTIVE)
+                .filter(a -> (a.type() == AbilityType.STATIC || a.type() == AbilityType.ACTIVATED)
                         && a.description().contains("etbreplacement"))
                 .count();
         assertEquals(0, raw, "ETBReplacement should not appear as raw keyword");

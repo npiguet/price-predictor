@@ -43,15 +43,15 @@ class OutputFormatterTest {
                 "test card", "{W}", "creature human",
                 "1/1", null, null, null, null,
                 List.of(
-                        new AbilityLine(AbilityType.KEYWORD_PASSIVE, "flying", null),
+                        new AbilityLine(AbilityType.STATIC, "flying", null),
                         new AbilityLine(AbilityType.ACTIVATED, "{T}: add {W}.", 1),
                         new AbilityLine(AbilityType.TRIGGERED, "when test card enters, draw a card.", null)
                 ));
         String output = OutputFormatter.formatCard(card);
-        int kwPos = output.indexOf("keyword: flying");
+        int staticPos = output.indexOf("static: flying");
         int actPos = output.indexOf("activated[1]: {T}: add {W}.");
         int trigPos = output.indexOf("triggered: when test card enters, draw a card.");
-        assertTrue(kwPos < actPos, "keyword should come before activated");
+        assertTrue(staticPos < actPos, "static should come before activated");
         assertTrue(actPos < trigPos, "activated should come before triggered");
     }
 
@@ -60,14 +60,14 @@ class OutputFormatterTest {
         AbilityLine activated = new AbilityLine(AbilityType.ACTIVATED, "{T}: add {G}.", 1);
         assertEquals("activated[1]: {T}: add {G}.", activated.formatLine());
 
-        AbilityLine keywordActive = new AbilityLine(AbilityType.KEYWORD_ACTIVE, "kicker {2}", 2);
-        assertEquals("keyword[2]: kicker {2}", keywordActive.formatLine());
+        AbilityLine keywordActive = new AbilityLine(AbilityType.ACTIVATED, "kicker {2}", 2);
+        assertEquals("activated[2]: kicker {2}", keywordActive.formatLine());
     }
 
     @Test
     void nonActionableTypesHaveNoBrackets() {
-        AbilityLine keyword = new AbilityLine(AbilityType.KEYWORD_PASSIVE, "flying", null);
-        assertEquals("keyword: flying", keyword.formatLine());
+        AbilityLine staticAbility = new AbilityLine(AbilityType.STATIC, "flying", null);
+        assertEquals("static: flying", staticAbility.formatLine());
 
         AbilityLine triggered = new AbilityLine(AbilityType.TRIGGERED, "when this enters, gain 3 life.", null);
         assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine());

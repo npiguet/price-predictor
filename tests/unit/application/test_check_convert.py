@@ -131,6 +131,69 @@ class TestCheckCard:
         result = check_card(converted, forge)
         assert result.similarity > 0.8
 
+    def test_order_independent_comparison(self):
+        forge = (
+            "Name:Test Card\n"
+            "Types:Creature\n"
+            "Oracle:Flying\\nVigilance\n"
+        )
+        # Converted has abilities in reverse order
+        converted = (
+            "name: test card\n"
+            "types: creature\n"
+            "keyword: vigilance\n"
+            "keyword: flying\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.9
+
+    def test_land_intrinsic_mana_included(self):
+        forge = (
+            "Name:Forest\n"
+            "ManaCost:no cost\n"
+            "Types:Basic Land Forest\n"
+            "Oracle:({T}: Add {G}.)\n"
+        )
+        converted = (
+            "name: forest\n"
+            "types: basic land forest\n"
+            "activated[1]: {T}: add {G}\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.7
+        assert result.has_oracle
+
+    def test_dual_land_intrinsic_mana(self):
+        forge = (
+            "Name:Bayou\n"
+            "ManaCost:no cost\n"
+            "Types:Land Swamp Forest\n"
+            "Oracle:({T}: Add {B} or {G}.)\n"
+        )
+        converted = (
+            "name: bayou\n"
+            "types: land swamp forest\n"
+            "activated[1]: {T}: add {B} or {G}\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.7
+
+    def test_reminder_text_stripped_from_oracle_lines(self):
+        forge = (
+            "Name:Test Flyer\n"
+            "Types:Creature\n"
+            "Oracle:Flying (This creature can deal excess combat damage.)\\n"
+            "Trample (It can trample.)\n"
+        )
+        converted = (
+            "name: test flyer\n"
+            "types: creature\n"
+            "keyword: flying\n"
+            "keyword: trample\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.9
+
     def test_multi_face_only_checks_first_face(self):
         forge = (
             "Name:Front Face\n"

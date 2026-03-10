@@ -9,8 +9,6 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum AbilityType {
-    KEYWORD_PASSIVE("keyword", false),
-    KEYWORD_ACTIVE("keyword", true),
     ACTIVATED("activated", true),
     TRIGGERED("triggered", false),
     STATIC("static", false),
