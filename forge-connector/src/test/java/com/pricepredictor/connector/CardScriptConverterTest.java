@@ -113,6 +113,16 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void secondaryTriggerNotSkipped() {
+        // Decorated Champion has a trigger marked Secondary$ True in Forge.
+        // It should still be emitted since it's the card's actual ability text.
+        ConvertedCard card = face("d/decorated_champion.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertEquals(1, triggered.size());
+        assertTrue(triggered.get(0).description().contains("put a +1/+1 counter"));
+    }
+
+    @Test
     void engineMetadataExcluded() {
         String output = OutputFormatter.formatMultiCard(convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",

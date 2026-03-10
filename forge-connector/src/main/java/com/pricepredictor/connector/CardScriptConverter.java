@@ -453,7 +453,7 @@ public class CardScriptConverter {
                 // card.getTriggers() which includes the same Forge-generated objects.
                 continue;
             }
-            if ("True".equals(trait.getParam("Secondary")) || "True".equals(trait.getParam("Static"))) {
+            if ("True".equals(trait.getParam("Static"))) {
                 continue;
             }
             String desc = trait.getParam(descParam);
@@ -514,9 +514,8 @@ public class CardScriptConverter {
         if (original.startsWith("etbCounter:") || original.startsWith("ETBReplacement:")) {
             // etbCounter replacements are marked Secondary$ True in Forge
             // (secondary to the "move to battlefield" event), so we must not skip them.
-            boolean skipSecondary = !original.startsWith("etbCounter:");
             return emitKeywordTraits(ki.getReplacements(), t -> t.getParam("Description"),
-                    AbilityType.REPLACEMENT, false, skipSecondary, abilities, actionCounter);
+                    AbilityType.REPLACEMENT, false, false, abilities, actionCounter);
         }
         if (original.startsWith("AlternateAdditionalCost:")) {
             String[] costParts = original.split(":", 2)[1].split(":");
