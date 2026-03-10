@@ -627,6 +627,32 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void activatedAbilityWithSubAbilityDescription() {
+        // Saprazzan Breaker's activated ability has SpellDescription on both the
+        // main AB$ and a sub-ability SVar. Both should be included in one line.
+        ConvertedCard card = face("s/saprazzan_breaker.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
+        String line = activated.get(0).description();
+        assertTrue(line.contains("mill a card"), "Should contain main description: " + line);
+        assertTrue(line.contains("can't be blocked this turn"), "Should contain sub-ability description: " + line);
+    }
+
+    @Test
+    void activatedAbilityWithSubAbilityNoDuplicateText() {
+        // Simple activated abilities (no sub-ability SpellDescription) must NOT
+        // produce duplicate description text from the chain walk.
+        ConvertedCard card = face("l/llanowar_elves.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        String desc = activated.get(0).description();
+        // Count occurrences of "add" — should appear exactly once
+        long addCount = desc.chars().mapToObj(i -> desc.substring(Math.max(0, desc.indexOf("add"))))
+                .count();
+        assertFalse(desc.matches(".*add.*add.*"), "Description should not contain duplicate text: " + desc);
+    }
+
+    @Test
     void activatedAbilityWithSubAbilityDescriptionSkipped() {
         // Arachnus Spinner's activated ability has SpellDescription only on the
         // sub-ability (DBChange), not on the main AB$ Pump. The sub-ability chain

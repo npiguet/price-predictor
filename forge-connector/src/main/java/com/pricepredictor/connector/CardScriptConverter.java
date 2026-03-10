@@ -355,7 +355,18 @@ public class CardScriptConverter {
                         || sa.getParam("SpellDescription").isEmpty()) {
                     continue;
                 }
-                String desc = stripReminderText(sa.getDescription());
+                // sa.getDescription() includes cost + main SpellDescription.
+                // Append any additional SpellDescriptions from the sub-ability chain.
+                String desc = sa.getDescription();
+                SpellAbility sub = sa.getSubAbility();
+                while (sub != null) {
+                    String subDesc = sub.getParam("SpellDescription");
+                    if (subDesc != null && !subDesc.isEmpty()) {
+                        desc = desc + " " + subDesc;
+                    }
+                    sub = sub.getSubAbility();
+                }
+                desc = stripReminderText(desc);
                 actionCounter++;
                 AbilityType type;
                 if (sa.isPwAbility()) {
