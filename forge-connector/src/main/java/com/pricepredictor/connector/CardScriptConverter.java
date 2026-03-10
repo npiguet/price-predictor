@@ -44,6 +44,11 @@ public class CardScriptConverter {
     private static final Pattern ROMAN_PREFIX = Pattern.compile("^([ivxlcdm]+(?:,\\s*[ivxlcdm]+)*)\\s*\u2014");
     private static final Pattern LOYALTY_COST = Pattern.compile("^([+\\-](?:\\d+|X)): ", Pattern.CASE_INSENSITIVE);
     private static final String ADDITIONAL_COST_PREFIX = "As an additional cost to cast this spell, ";
+    // Forge-internal keywords with non-player-facing display names.
+    // Use their reminder text instead of their title.
+    private static final Set<Keyword> INTERNAL_KEYWORDS = EnumSet.of(
+            Keyword.MAYFLASHCOST, Keyword.MAYFLASHSAC
+    );
 
     // Keywords that represent alternate casting costs (replace the mana cost)
     // or alternate deployment (put onto battlefield / create token from graveyard)
@@ -210,6 +215,14 @@ public class CardScriptConverter {
                 // returns "Protection from " with trailing space). Fall back to
                 // the original keyword string which always has the full text.
                 title = ki.getOriginal();
+            }
+            // Forge-internal keywords (e.g. MayFlashSac) have non-player-facing
+            // display names. Use their reminder text instead.
+            if (INTERNAL_KEYWORDS.contains(kw)) {
+                String reminder = ki.getReminderText();
+                if (reminder != null && !reminder.isEmpty()) {
+                    title = reminder;
+                }
             }
 
             // Kicker with two costs: getTitle() only includes the first cost.

@@ -80,6 +80,25 @@ class CardScriptConverterTest {
     }
 
     @Test
+    void internalKeywordUsesReminderText() {
+        // MayFlashSac is a Forge-internal keyword with a camelCase name.
+        // The converter should use its reminder text as the description.
+        ConvertedCard card = face("l/lightning_reflexes.txt");
+        assertTrue(card.abilities().stream().anyMatch(
+                a -> a.description().contains("you may cast CARDNAME as though it had flash")),
+                "MayFlashSac should use reminder text: " + card.abilities());
+    }
+
+    @Test
+    void mayFlashCostUsesReminderText() {
+        ConvertedCard card = face("a/asinine_antics.txt");
+        var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
+        assertEquals(1, costs.size());
+        assertTrue(costs.get(0).description().contains("you may cast CARDNAME as though it had flash"),
+                "MayFlashCost should use reminder text: " + costs.get(0).description());
+    }
+
+    @Test
     void protectionKeywordIncludesColor() {
         var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
         assertTrue(statics.stream().anyMatch(k -> k.description().contains("protection from white")));
