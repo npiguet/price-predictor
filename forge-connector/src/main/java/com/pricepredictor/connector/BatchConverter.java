@@ -16,7 +16,7 @@ import java.util.List;
  */
 public class BatchConverter {
 
-    private final CardScriptConverter converter = new CardScriptConverter();
+    private final RulesParser converter = new RulesParser();
 
     /**
      * Convert all .txt card scripts in cardsPath, writing output to outputPath
@@ -43,8 +43,8 @@ public class BatchConverter {
             try {
                 List<String> lines = Files.readAllLines(scriptFile);
                 String filename = scriptFile.getFileName().toString();
-                MultiCard result = converter.convertCard(lines, filename);
-                String output = OutputFormatter.formatMultiCard(result);
+                MultiCard result = converter.parseScript(lines, filename);
+                String output = result.formatText();
 
                 // Mirror directory structure
                 Path relativePath = cardsPath.relativize(scriptFile);

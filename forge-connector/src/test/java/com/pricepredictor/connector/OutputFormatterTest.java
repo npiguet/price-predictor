@@ -10,10 +10,10 @@ class OutputFormatterTest {
 
     @Test
     void vanillaCreatureFormatsCorrectly() {
-        ConvertedCard card = new ConvertedCard(
+        CardFace card = new CardFace(
                 "grizzly bears", "{1}{G}", "creature bear",
                 "2/2", null, null, null, null, List.of());
-        String output = OutputFormatter.formatCard(card);
+        String output = card.formatText();
         assertEquals("""
                 name: grizzly bears
                 mana cost: {1}{G}
@@ -23,12 +23,12 @@ class OutputFormatterTest {
 
     @Test
     void nullOptionalFieldsOmitted() {
-        ConvertedCard card = new ConvertedCard(
+        CardFace card = new CardFace(
                 "lightning bolt", "{R}", "instant",
                 null, null, null, null, null,
-                List.of(new AbilityLine(AbilityType.SPELL,
+                List.of(new Ability(AbilityType.SPELL,
                         "CARDNAME deals 3 damage to any target.", 1)));
-        String output = OutputFormatter.formatCard(card);
+        String output = card.formatText();
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
         assertFalse(output.contains("defense:"));
@@ -39,15 +39,15 @@ class OutputFormatterTest {
 
     @Test
     void abilitiesFormattedInOrder() {
-        ConvertedCard card = new ConvertedCard(
+        CardFace card = new CardFace(
                 "test card", "{W}", "creature human",
                 "1/1", null, null, null, null,
                 List.of(
-                        new AbilityLine(AbilityType.STATIC, "flying", null),
-                        new AbilityLine(AbilityType.ACTIVATED, "{T}: add {W}.", 1),
-                        new AbilityLine(AbilityType.TRIGGERED, "when test card enters, draw a card.", null)
+                        new Ability(AbilityType.STATIC, "flying", null),
+                        new Ability(AbilityType.ACTIVATED, "{T}: add {W}.", 1),
+                        new Ability(AbilityType.TRIGGERED, "when test card enters, draw a card.", null)
                 ));
-        String output = OutputFormatter.formatCard(card);
+        String output = card.formatText();
         int staticPos = output.indexOf("static: flying");
         int actPos = output.indexOf("activated[1]: {T}: add {W}.");
         int trigPos = output.indexOf("triggered: when test card enters, draw a card.");
@@ -57,35 +57,35 @@ class OutputFormatterTest {
 
     @Test
     void actionNumbersFormattedCorrectly() {
-        AbilityLine activated = new AbilityLine(AbilityType.ACTIVATED, "{T}: add {G}.", 1);
+        Ability activated = new Ability(AbilityType.ACTIVATED, "{T}: add {G}.", 1);
         assertEquals("activated[1]: {T}: add {G}.", activated.formatLine());
 
-        AbilityLine keywordActive = new AbilityLine(AbilityType.ACTIVATED, "kicker {2}", 2);
+        Ability keywordActive = new Ability(AbilityType.ACTIVATED, "kicker {2}", 2);
         assertEquals("activated[2]: kicker {2}", keywordActive.formatLine());
     }
 
     @Test
     void nonActionableTypesHaveNoBrackets() {
-        AbilityLine staticAbility = new AbilityLine(AbilityType.STATIC, "flying", null);
+        Ability staticAbility = new Ability(AbilityType.STATIC, "flying", null);
         assertEquals("static: flying", staticAbility.formatLine());
 
-        AbilityLine triggered = new AbilityLine(AbilityType.TRIGGERED, "when this enters, gain 3 life.", null);
+        Ability triggered = new Ability(AbilityType.TRIGGERED, "when this enters, gain 3 life.", null);
         assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine());
 
-        AbilityLine staticLine = new AbilityLine(AbilityType.STATIC, "creatures you control get +1/+1.", null);
+        Ability staticLine = new Ability(AbilityType.STATIC, "creatures you control get +1/+1.", null);
         assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine());
     }
 
     @Test
     void multiFaceCardWithLayout() {
-        ConvertedCard front = new ConvertedCard(
+        CardFace front = new CardFace(
                 "daring sleuth", "{1}{U}", "creature human rogue",
                 "2/1", null, null, null, null, List.of());
-        ConvertedCard back = new ConvertedCard(
+        CardFace back = new CardFace(
                 "bearer of overwhelming truths", null, "creature human wizard",
                 "3/2", null, null, null, null, List.of());
         MultiCard multi = MultiCard.multiFace("transform", List.of(front, back));
-        String output = OutputFormatter.formatMultiCard(multi);
+        String output = multi.formatText();
 
         assertTrue(output.startsWith("layout: transform\n"));
         assertTrue(output.contains("ALTERNATE"));
@@ -95,21 +95,21 @@ class OutputFormatterTest {
 
     @Test
     void singleFaceCardNoLayoutLine() {
-        ConvertedCard card = new ConvertedCard(
+        CardFace card = new CardFace(
                 "grizzly bears", "{1}{G}", "creature bear",
                 "2/2", null, null, null, null, List.of());
         MultiCard single = MultiCard.singleFace(card);
-        String output = OutputFormatter.formatMultiCard(single);
+        String output = single.formatText();
         assertFalse(output.contains("layout:"));
     }
 
     @Test
     void loyaltyFieldIncluded() {
-        ConvertedCard card = new ConvertedCard(
+        CardFace card = new CardFace(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null, null,
-                List.of(new AbilityLine(AbilityType.PLANESWALKER, "+2: each player draws a card.", 1)));
-        String output = OutputFormatter.formatCard(card);
+                List.of(new Ability(AbilityType.PLANESWALKER, "+2: each player draws a card.", 1)));
+        String output = card.formatText();
         assertTrue(output.contains("loyalty: 3"));
         assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));
     }

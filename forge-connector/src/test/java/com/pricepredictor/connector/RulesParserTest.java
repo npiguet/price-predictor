@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -17,39 +18,55 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Tag("integration")
 @ExtendWith(ForgeExtension.class)
-class CardScriptConverterTest {
+class RulesParserTest {
 
     private static final Path CARDS_FOLDER = ForgeEnvironmentInitializer.findCardsFolder();
 
-    private final CardScriptConverter converter = new CardScriptConverter();
+    private final RulesParser converter = new RulesParser();
 
     private MultiCard convert(String... lines) {
-        return converter.convertCard(Arrays.asList(lines), "test.txt");
+        return converter.parseScript(Arrays.asList(lines), "test.txt");
     }
 
     private MultiCard convertFromFile(String relativePath) {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
             List<String> lines = Files.readAllLines(file);
-            return converter.convertCard(lines, file.getFileName().toString());
+            return converter.parseScript(lines, file.getFileName().toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
-    private ConvertedCard face(String relativePath) {
+    private CardFace face(String relativePath) {
         return convertFromFile(relativePath).faces().get(0);
     }
 
-    private List<AbilityLine> abilitiesOfType(ConvertedCard card, AbilityType type) {
+    private List<Ability> abilitiesOfType(CardFace card, AbilityType type) {
         return card.abilities().stream().filter(a -> a.type() == type).toList();
     }
 
-    private long countOfType(ConvertedCard card, AbilityType type) {
+    private long countOfType(CardFace card, AbilityType type) {
         return card.abilities().stream().filter(a -> a.type() == type).count();
     }
 
-    private void assertHasAbility(ConvertedCard card, AbilityType type, String... containsTexts) {
+    /** Collect all OPTION abilities — both top-level and nested as sub-abilities. */
+    private List<Ability> allOptions(CardFace card) {
+        List<Ability> options = new ArrayList<>();
+        for (Ability a : card.abilities()) {
+            if (a.type() == AbilityType.OPTION) {
+                options.add(a);
+            }
+            for (Ability sub : a.subAbilities()) {
+                if (sub.type() == AbilityType.OPTION) {
+                    options.add(sub);
+                }
+            }
+        }
+        return options;
+    }
+
+    private void assertHasAbility(CardFace card, AbilityType type, String... containsTexts) {
         var abilities = abilitiesOfType(card, type);
         assertFalse(abilities.isEmpty(), "Expected at least one " + type + " but got: " + card.abilities());
         for (String text : containsTexts) {
@@ -62,7 +79,7 @@ class CardScriptConverterTest {
 
     @Test
     void vanillaCreature() {
-        ConvertedCard card = face("g/grizzly_bears.txt");
+        CardFace card = face("g/grizzly_bears.txt");
         assertEquals("grizzly bears", card.name());
         assertTrue(card.manaCost().contains("{G}"));
         assertEquals("creature bear", card.types());
@@ -83,7 +100,7 @@ class CardScriptConverterTest {
     void internalKeywordUsesReminderText() {
         // MayFlashSac is a Forge-internal keyword with a camelCase name.
         // The converter should use its reminder text as the description.
-        ConvertedCard card = face("l/lightning_reflexes.txt");
+        CardFace card = face("l/lightning_reflexes.txt");
         assertTrue(card.abilities().stream().anyMatch(
                 a -> a.description().contains("you may cast CARDNAME as though it had flash")),
                 "MayFlashSac should use reminder text: " + card.abilities());
@@ -91,7 +108,7 @@ class CardScriptConverterTest {
 
     @Test
     void mayFlashCostUsesReminderText() {
-        ConvertedCard card = face("a/asinine_antics.txt");
+        CardFace card = face("a/asinine_antics.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
         assertTrue(costs.get(0).description().contains("you may cast CARDNAME as though it had flash"),
@@ -141,7 +158,7 @@ class CardScriptConverterTest {
     void staticTriggerEmittedAsReplacement() {
         // Domesticated Mammoth has a trigger with Static$ True ("as this enters").
         // In MTG rules these are replacement effects, not triggered abilities.
-        ConvertedCard card = face("d/domesticated_mammoth.txt");
+        CardFace card = face("d/domesticated_mammoth.txt");
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
         assertTrue(replacements.get(0).description().contains("token copy of pacifism"));
@@ -152,7 +169,7 @@ class CardScriptConverterTest {
     void secondaryTriggerNotSkipped() {
         // Decorated Champion has a trigger marked Secondary$ True in Forge.
         // It should still be emitted since it's the card's actual ability text.
-        ConvertedCard card = face("d/decorated_champion.txt");
+        CardFace card = face("d/decorated_champion.txt");
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertEquals(1, triggered.size());
         assertTrue(triggered.get(0).description().contains("put a +1/+1 counter"));
@@ -160,10 +177,10 @@ class CardScriptConverterTest {
 
     @Test
     void engineMetadataExcluded() {
-        String output = OutputFormatter.formatMultiCard(convert(
+        String output = convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
                 "AI:RemoveDeck:Random", "DeckHints:Ability$LifeGain",
-                "SVar:AnotherSVar:DB$ Something", "Oracle:"));
+                "SVar:AnotherSVar:DB$ Something", "Oracle:").formatText();
         assertFalse(output.contains("AI:"));
         assertFalse(output.contains("DeckHints"));
         assertFalse(output.contains("SVar"));
@@ -171,11 +188,11 @@ class CardScriptConverterTest {
 
     @Test
     void actionCounterIncrementsAcrossMixedTypes() {
-        ConvertedCard card = convert(
+        CardFace card = convert(
                 "Name:Versatile Card", "ManaCost:2 W", "Types:Creature Human", "PT:2/2",
                 "K:Cycling:2", "A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.",
                 "Oracle:").faces().get(0);
-        List<AbilityLine> actionable = card.abilities().stream()
+        List<Ability> actionable = card.abilities().stream()
                 .filter(a -> a.actionNumber() != null).toList();
         assertTrue(actionable.size() >= 2);
         for (int i = 0; i < actionable.size() - 1; i++) {
@@ -185,7 +202,7 @@ class CardScriptConverterTest {
 
     @Test
     void textCasingCorrect() {
-        String output = OutputFormatter.formatMultiCard(convertFromFile("l/llanowar_elves.txt"));
+        String output = convertFromFile("l/llanowar_elves.txt").formatText();
         assertTrue(output.contains("llanowar elves"));
         assertTrue(output.contains("{G}"));
         assertTrue(output.contains("{T}"));
@@ -194,32 +211,32 @@ class CardScriptConverterTest {
     @Test
     void variableXStaysUppercase() {
         // Standalone X preserved
-        assertEquals("-X: deal X damage", CardScriptConverter.applyTextCasing("-X: Deal X damage"));
-        assertEquals("+X/+0 until end of turn", CardScriptConverter.applyTextCasing("+X/+0 until end of turn"));
-        assertEquals("where X is the number", CardScriptConverter.applyTextCasing("Where X is the number"));
+        assertEquals("-X: deal X damage", Ability.applyCasing("-X: Deal X damage"));
+        assertEquals("+X/+0 until end of turn", Ability.applyCasing("+X/+0 until end of turn"));
+        assertEquals("where X is the number", Ability.applyCasing("Where X is the number"));
         // X inside words lowercased
-        assertEquals("exile target creature", CardScriptConverter.applyTextCasing("Exile target creature"));
-        assertEquals("next end step", CardScriptConverter.applyTextCasing("Next end step"));
-        assertEquals("tax each opponent", CardScriptConverter.applyTextCasing("Tax each opponent"));
+        assertEquals("exile target creature", Ability.applyCasing("Exile target creature"));
+        assertEquals("next end step", Ability.applyCasing("Next end step"));
+        assertEquals("tax each opponent", Ability.applyCasing("Tax each opponent"));
         // Braces
-        assertEquals("{X}{R}", CardScriptConverter.applyTextCasing("{X}{R}"));
+        assertEquals("{X}{R}", Ability.applyCasing("{X}{R}"));
         // Mixed
         assertEquals("pay {X}, where X is the number of counters",
-                CardScriptConverter.applyTextCasing("Pay {X}, where X is the number of counters"));
+                Ability.applyCasing("Pay {X}, where X is the number of counters"));
     }
 
     @Test
     void noCostCardOmitsManaCostLine() {
-        ConvertedCard card = face("a/ancestral_vision.txt");
+        CardFace card = face("a/ancestral_vision.txt");
         assertNull(card.manaCost());
-        assertFalse(OutputFormatter.formatCard(card).contains("mana cost:"));
+        assertFalse(card.formatText().contains("mana cost:"));
     }
 
     @Test
     void textPropertyIncluded() {
-        String output = OutputFormatter.formatCard(convert(
+        String output = convert(
                 "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
-                "Text:This is flavor text.", "Oracle:").faces().get(0));
+                "Text:This is flavor text.", "Oracle:").faces().get(0).formatText();
         assertTrue(output.contains("text: this is flavor text."));
     }
 
@@ -227,7 +244,7 @@ class CardScriptConverterTest {
 
     @Test
     void planeswalkerAbilities() {
-        ConvertedCard card = face("j/jace_beleren.txt");
+        CardFace card = face("j/jace_beleren.txt");
         assertEquals("3", card.loyalty());
         var pw = abilitiesOfType(card, AbilityType.PLANESWALKER);
         assertEquals(3, pw.size());
@@ -257,13 +274,13 @@ class CardScriptConverterTest {
         assertEquals("transform", result.layout());
         assertEquals(2, result.faces().size());
 
-        ConvertedCard front = result.faces().get(0);
+        CardFace front = result.faces().get(0);
         assertEquals("invasion of kamigawa", front.name());
         assertEquals("4", front.defense());
         assertNull(front.powerToughness());
-        assertTrue(OutputFormatter.formatCard(front).contains("defense: 4"));
+        assertTrue(front.formatText().contains("defense: 4"));
 
-        ConvertedCard back = result.faces().get(1);
+        CardFace back = result.faces().get(1);
         assertEquals("rooftop saboteurs", back.name());
         assertNull(back.defense());
         assertEquals("2/3", back.powerToughness());
@@ -280,7 +297,7 @@ class CardScriptConverterTest {
 
     @Test
     void spellEffect() {
-        ConvertedCard card = face("l/lightning_bolt.txt");
+        CardFace card = face("l/lightning_bolt.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
         assertTrue(spells.get(0).formatLine().contains("CARDNAME deals 3 damage"));
@@ -290,7 +307,7 @@ class CardScriptConverterTest {
 
     @Test
     void spellWithAdditionalCost() {
-        ConvertedCard card = face("a/abandon_hope.txt");
+        CardFace card = face("a/abandon_hope.txt");
 
         String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
         assertTrue(costLine.startsWith("additional cost:"));
@@ -303,7 +320,7 @@ class CardScriptConverterTest {
 
     @Test
     void cleaveEmittedAsAlternateCost() {
-        ConvertedCard card = face("a/alchemists_gambit.txt");
+        CardFace card = face("a/alchemists_gambit.txt");
 
         String altLine = abilitiesOfType(card, AbilityType.ALTERNATE_COST).get(0).formatLine();
         assertTrue(altLine.contains("cleave"));
@@ -312,7 +329,7 @@ class CardScriptConverterTest {
 
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty());
-        List<Integer> actionNumbers = spells.stream().map(AbilityLine::actionNumber).toList();
+        List<Integer> actionNumbers = spells.stream().map(Ability::actionNumber).toList();
         for (int i = 0; i < actionNumbers.size() - 1; i++) {
             assertEquals(actionNumbers.get(i) + 1, (int) actionNumbers.get(i + 1));
         }
@@ -320,7 +337,7 @@ class CardScriptConverterTest {
 
     @Test
     void creatureWithAdditionalCost() {
-        ConvertedCard card = face("a/abhorrent_oculus.txt");
+        CardFace card = face("a/abhorrent_oculus.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
         assertTrue(costs.get(0).formatLine().contains("exile"));
@@ -328,7 +345,7 @@ class CardScriptConverterTest {
 
     @Test
     void additionalCostFromRaiseCostStatic() {
-        ConvertedCard card = face("a/aether_tide.txt");
+        CardFace card = face("a/aether_tide.txt");
 
         String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
         assertTrue(costLine.contains("discard X creature cards"));
@@ -342,7 +359,7 @@ class CardScriptConverterTest {
 
     @Test
     void raiseCostOnOtherSpellsRemainsStatic() {
-        ConvertedCard card = face("a/aura_of_silence.txt");
+        CardFace card = face("a/aura_of_silence.txt");
         assertEquals(1, abilitiesOfType(card, AbilityType.STATIC).size());
         assertTrue(abilitiesOfType(card, AbilityType.STATIC).get(0).description().contains("cost {2} more to cast"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
@@ -350,7 +367,7 @@ class CardScriptConverterTest {
 
     @Test
     void optionalAdditionalCost() {
-        ConvertedCard card = face("a/analyze_the_pollen.txt");
+        CardFace card = face("a/analyze_the_pollen.txt");
 
         String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
         assertTrue(costLine.contains("you may collect evidence 8"));
@@ -361,7 +378,7 @@ class CardScriptConverterTest {
 
     @Test
     void alternateAdditionalCost() {
-        ConvertedCard card = face("a/annihilating_glare.txt");
+        CardFace card = face("a/annihilating_glare.txt");
 
         String costLine = abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0).formatLine();
         assertTrue(costLine.contains("sacrifice"));
@@ -377,10 +394,12 @@ class CardScriptConverterTest {
 
     @Test
     void pawprintCharmOptions() {
-        ConvertedCard card = face("s/season_of_the_burrow.txt");
-        assertEquals(1, abilitiesOfType(card, AbilityType.SPELL).size());
+        CardFace card = face("s/season_of_the_burrow.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size());
 
-        var options = abilitiesOfType(card, AbilityType.OPTION);
+        // Charm options are sub-abilities of the spell
+        var options = spells.get(0).subAbilities();
         assertEquals(3, options.size());
         assertTrue(options.get(0).formatLine().contains("{P} \u2014"));
         assertTrue(options.get(0).formatLine().contains("create a 1/1"));
@@ -392,7 +411,7 @@ class CardScriptConverterTest {
 
     @Test
     void classEnchantmentLevels() {
-        ConvertedCard card = face("a/artificer_class.txt");
+        CardFace card = face("a/artificer_class.txt");
         assertEquals("enchantment class", card.types());
 
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
@@ -413,7 +432,7 @@ class CardScriptConverterTest {
 
     @Test
     void classWithEtbReplacementLevel1() {
-        ConvertedCard card = face("b/bard_class.txt");
+        CardFace card = face("b/bard_class.txt");
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
         assertTrue(levels.get(0).formatLine().startsWith("level[1]:"));
@@ -423,7 +442,7 @@ class CardScriptConverterTest {
 
     @Test
     void etbReplacementOnNonClassCard() {
-        ConvertedCard card = face("f/flickering_ward.txt");
+        CardFace card = face("f/flickering_ward.txt");
         assertNoRawEtbReplacementKeyword(card);
         assertTrue(abilitiesOfType(card, AbilityType.REPLACEMENT).stream()
                 .anyMatch(r -> r.description().contains("choose a color")));
@@ -431,7 +450,7 @@ class CardScriptConverterTest {
 
     @Test
     void etbCounterWithDescriptionFallback() {
-        ConvertedCard card = face("a/ambitious_dragonborn.txt");
+        CardFace card = face("a/ambitious_dragonborn.txt");
         assertNoRawEtbReplacementKeyword(card);
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
@@ -498,7 +517,7 @@ class CardScriptConverterTest {
 
     @Test
     void convokeClassifiedAsCostReduction() {
-        ConvertedCard card = convert(
+        CardFace card = convert(
                 "Name:Test Convoke Spell", "ManaCost:3 W W", "Types:Sorcery",
                 "K:Convoke", "A:SP$ Destroy | ValidTgts$ Creature | SpellDescription$ Destroy target creature.",
                 "Oracle:").faces().get(0);
@@ -510,12 +529,12 @@ class CardScriptConverterTest {
     @Test
     void allCostTypesSortBeforeOtherAbilities() {
         // Whir of Invention: cost reduction should be first ability
-        ConvertedCard whir = face("w/whir_of_invention.txt");
+        CardFace whir = face("w/whir_of_invention.txt");
         assertTrue(whir.abilities().size() >= 2);
         assertEquals(AbilityType.COST_REDUCTION, whir.abilities().get(0).type());
 
         // Zephyrim: alternate cost + additional cost + keywords
-        ConvertedCard zeph = face("z/zephyrim.txt");
+        CardFace zeph = face("z/zephyrim.txt");
         int firstNonCostIdx = -1, lastCostIdx = -1;
         for (int i = 0; i < zeph.abilities().size(); i++) {
             AbilityType t = zeph.abilities().get(i).type();
@@ -568,7 +587,7 @@ class CardScriptConverterTest {
 
     @Test
     void basicLandHasImplicitManaAbility() {
-        ConvertedCard card = face("f/forest.txt");
+        CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
         assertEquals("{T}: add {G}", activated.get(0).description());
@@ -576,7 +595,7 @@ class CardScriptConverterTest {
 
     @Test
     void dualLandHasCombinedManaAbility() {
-        ConvertedCard card = face("b/bayou.txt");
+        CardFace card = face("b/bayou.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
         assertTrue(activated.get(0).description().contains("{B}"));
@@ -586,7 +605,7 @@ class CardScriptConverterTest {
 
     @Test
     void nonLandDoesNotGetImplicitManaAbility() {
-        ConvertedCard card = face("l/llanowar_elves.txt");
+        CardFace card = face("l/llanowar_elves.txt");
         // Should have its own explicit activated ability, not an implicit land one
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
@@ -609,7 +628,7 @@ class CardScriptConverterTest {
 
     @Test
     void spellWithSubAbilityDescription() {
-        ConvertedCard card = face("a/aetherspouts.txt");
+        CardFace card = face("a/aetherspouts.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
         assertTrue(spells.get(0).formatLine().contains("each attacking creature"));
@@ -619,7 +638,7 @@ class CardScriptConverterTest {
     void spellWithMultipleSubAbilityDescriptions() {
         // Seed Spark has SpellDescription on both the main SP$ and on a SubAbility SVar.
         // Both should be emitted as separate spell lines.
-        ConvertedCard card = face("s/seed_spark.txt");
+        CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(2, spells.size());
         assertTrue(spells.get(0).description().contains("destroy target artifact or enchantment"));
@@ -630,7 +649,7 @@ class CardScriptConverterTest {
     void activatedAbilityWithSubAbilityDescription() {
         // Saprazzan Breaker's activated ability has SpellDescription on both the
         // main AB$ and a sub-ability SVar. Both should be included in one line.
-        ConvertedCard card = face("s/saprazzan_breaker.txt");
+        CardFace card = face("s/saprazzan_breaker.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
         String line = activated.get(0).description();
@@ -642,7 +661,7 @@ class CardScriptConverterTest {
     void activatedAbilityWithSubAbilityNoDuplicateText() {
         // Simple activated abilities (no sub-ability SpellDescription) must NOT
         // produce duplicate description text from the chain walk.
-        ConvertedCard card = face("l/llanowar_elves.txt");
+        CardFace card = face("l/llanowar_elves.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
         String desc = activated.get(0).description();
@@ -658,7 +677,7 @@ class CardScriptConverterTest {
         // sub-ability (DBChange), not on the main AB$ Pump. The sub-ability chain
         // walk must NOT cause this to be picked up as a spell — only spells should
         // walk the chain for SpellDescription.
-        ConvertedCard card = face("a/arachnus_spinner.txt");
+        CardFace card = face("a/arachnus_spinner.txt");
         assertEquals(0, countOfType(card, AbilityType.SPELL),
                 "Activated ability with sub-ability description should not appear as spell");
     }
@@ -667,7 +686,9 @@ class CardScriptConverterTest {
 
     @Test
     void charmWithSubAbilityDescription() {
-        var options = abilitiesOfType(face("w/what_must_be_done.txt"), AbilityType.OPTION);
+        // "What Must Be Done" has no SpellDescription on the Charm itself,
+        // so choices become top-level OPTION abilities (no parent SPELL).
+        var options = allOptions(face("w/what_must_be_done.txt"));
         assertEquals(2, options.size());
         assertTrue(options.get(0).formatLine().contains("destroy all artifacts and creatures"));
         assertTrue(options.get(1).formatLine().contains("release juno"));
@@ -688,13 +709,14 @@ class CardScriptConverterTest {
 
     @Test
     void charmChoiceDescriptionOnSubAbility() {
-        var options = abilitiesOfType(convert(
+        // Charm without SpellDescription → choices become top-level OPTION abilities
+        var options = allOptions(convert(
                 "Name:Chain Charm", "ManaCost:1 G", "Types:Sorcery",
                 "A:SP$ Charm | Choices$ DBChainTop,DBDirect",
                 "SVar:DBChainTop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0 | SubAbility$ DBChainDesc",
                 "SVar:DBChainDesc:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card from the chain.",
                 "SVar:DBDirect:DB$ GainLife | LifeAmount$ 3 | SpellDescription$ Gain 3 life.",
-                "Oracle:").faces().get(0), AbilityType.OPTION);
+                "Oracle:").faces().get(0));
         assertEquals(2, options.size());
         assertTrue(options.get(0).formatLine().contains("draw a card from the chain"));
         assertTrue(options.get(1).formatLine().contains("gain 3 life"));
@@ -702,7 +724,7 @@ class CardScriptConverterTest {
 
     // --- Helpers ---
 
-    private void assertCostsBeforeSpells(ConvertedCard card) {
+    private void assertCostsBeforeSpells(CardFace card) {
         var abilities = card.abilities();
         int lastCostIdx = -1, firstSpellIdx = -1;
         for (int i = 0; i < abilities.size(); i++) {
@@ -720,7 +742,7 @@ class CardScriptConverterTest {
         }
     }
 
-    private void assertNoRawEtbReplacementKeyword(ConvertedCard card) {
+    private void assertNoRawEtbReplacementKeyword(CardFace card) {
         long raw = card.abilities().stream()
                 .filter(a -> (a.type() == AbilityType.STATIC || a.type() == AbilityType.ACTIVATED)
                         && a.description().contains("etbreplacement"))
