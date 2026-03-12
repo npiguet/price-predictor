@@ -12,8 +12,11 @@ parsing classes (`CardRules.Reader`, `Cost`, `Keyword`, `ManaCost`) for accurate
 parsing and cost translation. The Python CLI launches the Java converter as a subprocess.
 
 **Output format highlights**:
-- All text lowercased except `CARDNAME`, `NICKNAME`, `ALTERNATE`, and brace symbols
-  (`{W}`, `{T}`, `{E}`, etc.) which stay uppercase
+- All text lowercased except `CARDNAME`, `NICKNAME`, `ALTERNATE`, standalone `X`, and
+  brace symbols (`{W}`, `{T}`, `{E}`, etc.) which stay uppercase
+- Keywords classified by game behavior (static, activated, alternate cost, etc.) rather
+  than passive/active
+- Action numbers assigned at output time via `ActionCounter`, not during parsing
 - Multi-face cards include a `layout:` line (e.g., `layout: transform`) before the first
   face; single-face cards omit it
 
@@ -85,21 +88,38 @@ forge-connector/                             # EXISTING — expanded with conver
 ├── src/
 │   ├── main/java/com/pricepredictor/connector/
 │   │   ├── (existing price prediction client classes)
-│   │   ├── CardScriptConverter.java         # NEW — Core: ICardFace → ConvertedCard
-│   │   ├── ConvertedCard.java               # NEW — Data: one card face output
-│   │   ├── AbilityLine.java                 # NEW — Data: single ability line
-│   │   ├── AbilityType.java                 # NEW — Enum: ability type categories
-│   │   ├── KeywordClassifier.java           # NEW — Logic: passive vs activatable
-│   │   ├── OutputFormatter.java             # NEW — Format: ConvertedCard → text output
-│   │   ├── BatchConverter.java              # NEW — I/O: directory walk + batch convert
-│   │   └── ConvertMain.java                 # NEW — CLI: main class (--cards-path, --output-path)
+│   │   ├── Ability.java                     # Interface: central ability abstraction
+│   │   ├── AbilityDescription.java          # Utility: text normalization (casing, reminder text)
+│   │   ├── AbilityType.java                 # Enum: behavior-based ability classification (13 values)
+│   │   ├── ActionCounter.java               # Utility: sequential action number assignment
+│   │   ├── BatchConverter.java              # I/O: directory walk + batch convert
+│   │   ├── CardFace.java                    # Data: one card face output
+│   │   ├── ConvertMain.java                 # CLI: main class (--cards-path, --output-path)
+│   │   ├── MultiCard.java                   # Data: complete card with 1+ faces
+│   │   ├── RulesParser.java                 # Router: delegates to ability variants
+│   │   └── ability/                         # Sub-package: 15 Ability variant implementations
+│   │       ├── ActivatedAbilityEntry.java   # SpellAbility → ACTIVATED/PLANESWALKER
+│   │       ├── AlternateCostSpell.java      # SpellAbility (NonBasicSpell) → ALTERNATE_COST
+│   │       ├── ChapterAbility.java          # KeywordInterface (Chapter:) → CHAPTER
+│   │       ├── CharmAbility.java            # SpellAbility (Charm) → SPELL + OPTION subs
+│   │       ├── ClassLevelAbility.java       # KeywordInterface (Class:) → LEVEL
+│   │       ├── CompanionKeyword.java        # KeywordInterface (Companion) → STATIC
+│   │       ├── EtbReplacementAbility.java   # KeywordInterface (etbCounter:) → REPLACEMENT
+│   │       ├── GiftKeyword.java             # KeywordInterface (Gift) → STATIC
+│   │       ├── ReplacementAbilityEntry.java # ReplacementEffect → REPLACEMENT
+│   │       ├── SpellAdditionalCost.java     # SpellAbility (spell cost) → ADDITIONAL_COST
+│   │       ├── SpellEffect.java             # SpellAbility (spell chain) → SPELL
+│   │       ├── SpellAbilityUtils.java       # Package-private: chain walking utilities
+│   │       ├── StandardKeyword.java         # KeywordInterface → classified type
+│   │       ├── StaticAbilityEntry.java      # StaticAbility → STATIC/ADDITIONAL_COST
+│   │       ├── TextAbility.java             # Catch-all: pre-computed text
+│   │       └── TriggeredAbilityEntry.java   # Trigger → TRIGGERED/REPLACEMENT
 │   └── test/java/com/pricepredictor/connector/
 │       ├── (existing price prediction client tests)
-│       ├── CardScriptConverterTest.java     # NEW — Unit: all ability types, all card types
-│       ├── CostTranslationTest.java         # NEW — Unit: Forge Cost class display
-│       ├── KeywordClassifierTest.java       # NEW — Unit: passive/active classification
-│       ├── OutputFormatterTest.java         # NEW — Unit: output format correctness
-│       └── BatchConverterTest.java          # NEW — Integration: batch with fixture files
+│       ├── RulesParserTest.java             # Unit: all ability types, all card types
+│       ├── CostTranslationTest.java         # Unit: Forge Cost class display
+│       ├── OutputFormatterTest.java         # Unit: output format correctness
+│       └── BatchConverterTest.java          # Integration: batch with fixture files
 
 src/price_predictor/
 ├── infrastructure/
@@ -108,13 +128,14 @@ src/price_predictor/
 
 tests/
 ├── integration/
-│   └── test_convert_cli.py                  # NEW: Python CLI → Java subprocess test
+│   └── test_convert_cli.py                  # Python CLI → Java subprocess test
 ```
 
 **Structure Decision**: Conversion code added directly to the existing `forge-connector/`
 module. forge-game is added as a Maven dependency — no circular dependency since Forge
 loads forge-connector at runtime via classpath, not as a Maven dependency. All Java code
-stays in one module. Python CLI integration is a thin subprocess launcher.
+stays in one module. Python CLI integration is a thin subprocess launcher. Ability variants
+are in a `ability/` sub-package to keep the top-level package clean.
 
 ## Complexity Tracking
 
