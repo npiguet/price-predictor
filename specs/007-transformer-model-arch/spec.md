@@ -1,12 +1,19 @@
 C# Feature Specification: Transformer Model Architecture
 
-**Feature Branch**: `009-transformer-model-arch`
+**Feature Branch**: `007-transformer-model-arch`
 **Created**: 2026-03-01
 **Status**: Draft
 **Input**: User description: "The AI model should be built based on a transformer model with attention, following the architecture of modern LLMs. Training must be possible on a GeForce RTX 3060 Ti with 8GB VRAM."
 **Depends on**: `001-card-price-predictor` (prediction requirements and accuracy targets)
 
 ## Clarifications
+
+### Session 2026-03-12
+
+- Q: What text representation of a card is fed to the tokenizer? → A: The full converted card script text from feature 006 (the `.txt` files in `./output/`). Each file contains a structured text representation with fields like `name:`, `mana cost:`, `types:`, `static:`, `activated:`, `triggered:`, `spell:`, etc. The entire file content is used as-is as the tokenizer input.
+- Q: What training/validation split strategy should be used? → A: Reuse feature 001's 80/20 random split to keep evaluation comparable across models.
+- Q: What loss function should be used for training? → A: MSE (mean squared error) on shifted-log prices. The shifted-log transform already tames outliers, so a robust loss is unnecessary.
+- Q: Should this feature reuse feature 001's data loading infrastructure for building the training dataset? → A: Yes — reuse `forge_parser.py` and `mtgjson_loader.py` for card loading and price matching. The converted card scripts from `./output/` are matched to prices via the existing pipeline.
 
 ### Session 2026-03-01
 
@@ -80,14 +87,14 @@ A model developer wants to evaluate how well the transformer architecture perfor
 
 - **FR-001**: The prediction model MUST use a transformer architecture with attention mechanisms, following the general design patterns of modern language models.
 - **FR-002**: The model MUST be trainable on a GPU with 8GB VRAM (GeForce RTX 3060 Ti). Peak GPU memory consumption during training MUST NOT exceed 8GB.
-- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers) as input, prepended with a `[CLS]` token and padded with `[PAD]` tokens for batching, and produce a single numeric price prediction as output. The tokenizer MUST be a standard off-the-shelf tokenizer from an existing library (e.g., a pre-trained WordPiece or BPE tokenizer). Internally, the model predicts in shifted-log-price space (trained on `log(price + 2)` where 2 EUR is the bulk threshold); the output is converted back to EUR via `exp(x) - 2` for the final prediction. The prediction is derived from the transformer's output at the `[CLS]` position.
+- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers) as input, prepended with a `[CLS]` token and padded with `[PAD]` tokens for batching, and produce a single numeric price prediction as output. The input text is the full converted card script from feature 006 (`./output/*.txt` files), tokenized using a standard off-the-shelf tokenizer from an existing library (e.g., a pre-trained WordPiece or BPE tokenizer). Internally, the model predicts in shifted-log-price space (trained on `log(price + 2)` where 2 EUR is the bulk threshold); the output is converted back to EUR via `exp(x) - 2` for the final prediction. The prediction is derived from the transformer's output at the `[CLS]` position.
 - **FR-004**: The model MUST handle variable-length input sequences. Cards with different amounts of text produce token sequences of different lengths, and the model must process all of them without requiring manual padding decisions from the user.
 - **FR-005**: The model MUST define a maximum input sequence length. Inputs exceeding this length MUST be truncated rather than causing errors.
 - **FR-006**: The model MUST use an embedding layer to convert token identifiers into dense vector representations that the transformer layers process. The embedding layer is trained alongside the model using the vocabulary defined by the chosen standard tokenizer.
 - **FR-007**: Inference (producing a prediction from a single card) MUST be fast enough to support the prediction service response time requirements from feature 005 (price estimate within 3 seconds).
 - **FR-008**: The model MUST produce deterministic predictions — the same input with the same model version MUST always yield the same output.
 - **FR-009**: The trained model MUST be saveable to and loadable from disk as a PyTorch native `.pt` file containing the model state dict and all configuration needed to reconstruct the model and run inference.
-- **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss and meeting the accuracy targets defined in feature 001 (median percentage error ≤ 50%).
+- **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss (MSE on shifted-log prices) and meeting the accuracy targets defined in feature 001 (median percentage error ≤ 50%).
 
 ### Key Entities
 
@@ -137,7 +144,7 @@ Input token IDs (from standard tokenizer)
 - The maximum input sequence length will be determined during implementation based on the distribution of tokenized card lengths in the dataset. Typical cards are expected to produce sequences of a few dozen to a few hundred tokens.
 - Mixed precision training and gradient accumulation are acceptable techniques to fit within the VRAM budget and improve effective batch size, but these are implementation choices — the requirement is simply that training completes within 8GB.
 - The model internally predicts shifted-log-transformed prices (`log(price + 2)` where 2 EUR is the community "bulk" threshold). The output layer maps the transformer's `[CLS]` representation to a single scalar in shifted-log-price space. During inference, the output is converted back to EUR via `exp(x) - 2`. This shifted-log approach compresses price differences below ~2 EUR (treating all bulk cards as roughly equivalent) while preserving proportional sensitivity in the mid-to-high price range where distinctions matter.
-- Training uses the training dataset from feature 007's dataset preparation stage. The validation dataset is used to monitor overfitting and report accuracy.
+- Training uses an 80/20 random split (same strategy as feature 001) to keep evaluation comparable across models. The validation dataset is used to monitor overfitting and report accuracy.
 
 ## Success Criteria *(mandatory)*
 
