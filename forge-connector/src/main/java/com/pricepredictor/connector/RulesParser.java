@@ -152,133 +152,133 @@ public class RulesParser {
         List<Ability> abilities = new ArrayList<>();
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
-
             if (kw == Keyword.UNDEFINED) {
                 abilities.addAll(handleUndefinedKeyword(ki, counter, classLevelDescriptions));
-                continue;
+            } else if (kw == Keyword.GIFT) {
+                abilities.add(buildGiftAbility(ki, card));
+            } else if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
+                abilities.add(buildCompanionAbility(ki, comp));
+            } else {
+                abilities.add(buildStandardKeyword(ki, kw, counter));
             }
-
-            if (kw == Keyword.GIFT) {
-                String giftTitle = ki.getTitle();
-                for (SpellAbility sa : card.getSpellAbilities()) {
-                    if (sa.hasAdditionalAbility("GiftAbility")) {
-                        String giftDesc = sa.getAdditionalAbility("GiftAbility")
-                                .getParam("GiftDescription");
-                        if (giftDesc != null && !giftDesc.isEmpty()) {
-                            giftTitle = giftTitle + " " + giftDesc;
-                        }
-                        break;
-                    }
-                }
-                abilities.add(new Ability(AbilityType.STATIC, AbilityDescription.ofCased(giftTitle), null));
-                continue;
-            }
-
-            if (kw == Keyword.COMPANION && ki instanceof Companion comp) {
-                String compDesc = comp.getDescription();
-                if (compDesc != null && !compDesc.isEmpty()) {
-                    compDesc = AbilityDescription.stripReminderText(compDesc);
-                }
-                String compTitle = (compDesc != null && !compDesc.isEmpty())
-                        ? ki.getTitle() + " \u2014 " + compDesc : ki.getTitle();
-                abilities.add(new Ability(AbilityType.STATIC, AbilityDescription.ofCased(compTitle), null));
-                continue;
-            }
-
-            boolean activatable = !ki.getAbilities().isEmpty();
-            String title = ki.getTitle();
-            if (title == null || title.isEmpty() || !title.trim().equals(title)) {
-                title = ki.getOriginal();
-            }
-            if (AbilityType.isInternalKeyword(kw)) {
-                String reminder = ki.getReminderText();
-                if (reminder != null && !reminder.isEmpty()) {
-                    title = reminder;
-                }
-            }
-
-            if (kw == Keyword.KICKER) {
-                // Kicker.cost2 is private with no getter — use getOriginal() to extract second cost
-                String[] kickerParts = ki.getOriginal().split(":", 3);
-                if (kickerParts.length >= 3) {
-                    Cost cost2 = new Cost(kickerParts[2], false);
-                    title = title + " and/or " + cost2.toSimpleString();
-                }
-            }
-
-            if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
-                title = "Affinity for " + kti.getTypeDescription();
-            }
-
-            AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
-            abilities.add(new Ability(kwType, AbilityDescription.ofCased(title), counter.nextIfActionable(kwType)));
         }
         return abilities;
+    }
+
+    private Ability buildGiftAbility(KeywordInterface ki, Card card) {
+        String giftTitle = ki.getTitle();
+        for (SpellAbility sa : card.getSpellAbilities()) {
+            if (sa.hasAdditionalAbility("GiftAbility")) {
+                String giftDesc = sa.getAdditionalAbility("GiftAbility")
+                        .getParam("GiftDescription");
+                if (giftDesc != null && !giftDesc.isEmpty()) {
+                    giftTitle = giftTitle + " " + giftDesc;
+                }
+                break;
+            }
+        }
+        return new Ability(AbilityType.STATIC, AbilityDescription.ofCased(giftTitle), null);
+    }
+
+    private Ability buildCompanionAbility(KeywordInterface ki, Companion comp) {
+        String compDesc = comp.getDescription();
+        if (compDesc != null && !compDesc.isEmpty()) {
+            compDesc = AbilityDescription.stripReminderText(compDesc);
+        }
+        String compTitle = (compDesc != null && !compDesc.isEmpty())
+                ? ki.getTitle() + " \u2014 " + compDesc : ki.getTitle();
+        return new Ability(AbilityType.STATIC, AbilityDescription.ofCased(compTitle), null);
+    }
+
+    private Ability buildStandardKeyword(KeywordInterface ki, Keyword kw, ActionCounter counter) {
+        boolean activatable = !ki.getAbilities().isEmpty();
+        String title = ki.getTitle();
+        if (title == null || title.isEmpty() || !title.trim().equals(title)) {
+            title = ki.getOriginal();
+        }
+        if (AbilityType.isInternalKeyword(kw)) {
+            String reminder = ki.getReminderText();
+            if (reminder != null && !reminder.isEmpty()) {
+                title = reminder;
+            }
+        }
+        if (kw == Keyword.KICKER) {
+            // Kicker.cost2 is private with no getter — use getOriginal() to extract second cost
+            String[] kickerParts = ki.getOriginal().split(":", 3);
+            if (kickerParts.length >= 3) {
+                Cost cost2 = new Cost(kickerParts[2], false);
+                title = title + " and/or " + cost2.toSimpleString();
+            }
+        }
+        if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
+            title = "Affinity for " + kti.getTypeDescription();
+        }
+        AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
+        return new Ability(kwType, AbilityDescription.ofCased(title), counter.nextIfActionable(kwType));
     }
 
     private List<Ability> extractSpellAbilities(Card card, ActionCounter counter) {
         List<Ability> abilities = new ArrayList<>();
         for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.getKeyword() != null) {
-                continue;
-            }
+            if (sa.getKeyword() != null) continue;
 
             if (sa.getApi() == ApiType.Charm) {
                 abilities.addAll(extractCharmAbility(sa, counter));
-                continue;
-            }
-
-            if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
-                String precost = sa.getParam("PrecostDesc");
-                String costDesc = sa.getParam("CostDesc");
-                if (precost != null && costDesc != null) {
-                    abilities.add(new Ability(AbilityType.ALTERNATE_COST,
-                            AbilityDescription.ofCased(precost + " " + costDesc), null));
-                }
-                continue;
-            }
-
-            if (sa.isSpell()) {
-                String costDesc = sa.getCostDescription();
-                if (costDesc != null) {
-                    costDesc = costDesc.trim();
-                    costDesc = AbilityDescription.stripReminderText(costDesc);
-                    if (costDesc != null && !costDesc.isEmpty()) {
-                        String normalized = AbilityDescription.applyCasing(costDesc);
-                        if (normalized.startsWith(ADDITIONAL_COST_PREFIX)) {
-                            normalized = normalized.substring(ADDITIONAL_COST_PREFIX.length());
-                        }
-                        if (!normalized.isEmpty()) {
-                            abilities.add(new Ability(AbilityType.ADDITIONAL_COST,
-                                    new AbilityDescription(normalized), null));
-                        }
-                    }
-                }
-            }
-
-            if (sa.isActivatedAbility()) {
-                if (sa.getParam("SpellDescription") == null
-                        || sa.getParam("SpellDescription").isEmpty()) {
-                    continue;
-                }
-                String desc = sa.getDescription();
-                for (String subDesc : collectParamInChain(sa.getSubAbility(), "SpellDescription")) {
-                    desc = desc + " " + subDesc;
-                }
-                AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
-                AbilityDescription abilityDesc = AbilityDescription.of(desc).withTypeFormatting(type);
-                abilities.add(new Ability(type, abilityDesc, counter.next()));
+            } else if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
+                addIfNotNull(abilities, buildAlternateCost(sa));
+            } else if (sa.isActivatedAbility()) {
+                addIfNotNull(abilities, buildActivatedAbility(sa, counter));
             } else if (sa.isSpell()) {
-                List<String> descs = collectParamInChain(sa, "SpellDescription");
-                for (String spellDesc : descs) {
-                    String stripped = AbilityDescription.stripReminderText(spellDesc);
-                    if (stripped == null || stripped.isEmpty()) {
-                        continue;
-                    }
-                    abilities.add(new Ability(AbilityType.SPELL,
-                            AbilityDescription.ofCased(stripped), counter.next()));
-                }
+                addIfNotNull(abilities, buildSpellAdditionalCost(sa));
+                abilities.addAll(buildSpellEffects(sa, counter));
             }
+        }
+        return abilities;
+    }
+
+    private Ability buildAlternateCost(SpellAbility sa) {
+        String precost = sa.getParam("PrecostDesc");
+        String costDesc = sa.getParam("CostDesc");
+        if (precost != null && costDesc != null) {
+            return new Ability(AbilityType.ALTERNATE_COST,
+                    AbilityDescription.ofCased(precost + " " + costDesc), null);
+        }
+        return null;
+    }
+
+    private Ability buildActivatedAbility(SpellAbility sa, ActionCounter counter) {
+        if (sa.getParam("SpellDescription") == null
+                || sa.getParam("SpellDescription").isEmpty()) {
+            return null;
+        }
+        String desc = sa.getDescription();
+        for (String subDesc : collectParamInChain(sa.getSubAbility(), "SpellDescription")) {
+            desc = desc + " " + subDesc;
+        }
+        AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
+        AbilityDescription abilityDesc = AbilityDescription.of(desc).withTypeFormatting(type);
+        return new Ability(type, abilityDesc, counter.next());
+    }
+
+    private Ability buildSpellAdditionalCost(SpellAbility sa) {
+        String costDesc = sa.getCostDescription();
+        if (costDesc == null) return null;
+        String normalized = normalizeDescription(costDesc.trim());
+        if (normalized == null) return null;
+        if (normalized.startsWith(ADDITIONAL_COST_PREFIX)) {
+            normalized = normalized.substring(ADDITIONAL_COST_PREFIX.length());
+        }
+        if (normalized.isEmpty()) return null;
+        return new Ability(AbilityType.ADDITIONAL_COST, new AbilityDescription(normalized), null);
+    }
+
+    private List<Ability> buildSpellEffects(SpellAbility sa, ActionCounter counter) {
+        List<Ability> abilities = new ArrayList<>();
+        for (String spellDesc : collectParamInChain(sa, "SpellDescription")) {
+            String stripped = AbilityDescription.stripReminderText(spellDesc);
+            if (stripped == null || stripped.isEmpty()) continue;
+            abilities.add(new Ability(AbilityType.SPELL,
+                    AbilityDescription.ofCased(stripped), counter.next()));
         }
         return abilities;
     }
@@ -338,12 +338,8 @@ public class RulesParser {
             }
             AbilityType effectiveType = trigger.isStatic()
                     ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            String raw = trigger.getParam("TriggerDescription");
-            if (raw == null || raw.isEmpty()) {
-                continue;
-            }
-            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
-            if (normalized.isEmpty()) {
+            String normalized = normalizeDescription(trigger.getParam("TriggerDescription"));
+            if (normalized == null) {
                 continue;
             }
             if (!seenDescriptions.add(normalized)) {
@@ -362,12 +358,8 @@ public class RulesParser {
                 continue;
             }
             AbilityType effectiveType = AbilityType.STATIC;
-            String raw = sa.getParam("Description");
-            if (raw == null || raw.isEmpty()) {
-                continue;
-            }
-            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
-            if (normalized.isEmpty()) {
+            String normalized = normalizeDescription(sa.getParam("Description"));
+            if (normalized == null) {
                 continue;
             }
             if (sa.checkMode(StaticAbilityMode.RaiseCost) || sa.checkMode(StaticAbilityMode.OptionalCost)) {
@@ -396,12 +388,8 @@ public class RulesParser {
             if (re.getKeyword() != null) {
                 continue;
             }
-            String raw = re.getParam("Description");
-            if (raw == null || raw.isEmpty()) {
-                continue;
-            }
-            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
-            if (normalized.isEmpty()) {
+            String normalized = normalizeDescription(re.getParam("Description"));
+            if (normalized == null) {
                 continue;
             }
             if (!seenDescriptions.add(normalized)) {
@@ -490,23 +478,9 @@ public class RulesParser {
             return abilities;
         }
         if (original.startsWith("AlternateAdditionalCost:")) {
-            String[] costParts = original.split(":", 2)[1].split(":");
-            StringBuilder desc = new StringBuilder();
-            for (int n = 0; n < costParts.length; n++) {
-                Cost cost = new Cost(costParts[n], false);
-                String costText = cost.toSimpleString();
-                if (cost.isOnlyManaCost()) {
-                    desc.append("pay ");
-                }
-                desc.append(costText.substring(0, 1).toLowerCase()).append(costText.substring(1));
-                if (n + 2 == costParts.length) {
-                    desc.append(costParts.length > 2 ? ", or " : " or ");
-                } else if (n + 1 < costParts.length) {
-                    desc.append(", ");
-                }
-            }
+            String desc = buildAlternateAdditionalCostDescription(original);
             abilities.add(new Ability(AbilityType.ADDITIONAL_COST,
-                    AbilityDescription.ofCased(desc.toString()), null));
+                    AbilityDescription.ofCased(desc), null));
             return abilities;
         }
 
@@ -518,6 +492,25 @@ public class RulesParser {
         AbilityType type = AbilityType.classifyKeyword(Keyword.UNDEFINED, activatable, !ki.getTriggers().isEmpty());
         abilities.add(new Ability(type, AbilityDescription.ofCased(title), counter.nextIfActionable(type)));
         return abilities;
+    }
+
+    private static String buildAlternateAdditionalCostDescription(String original) {
+        String[] costParts = original.split(":", 2)[1].split(":");
+        StringBuilder desc = new StringBuilder();
+        for (int n = 0; n < costParts.length; n++) {
+            Cost cost = new Cost(costParts[n], false);
+            String costText = cost.toSimpleString();
+            if (cost.isOnlyManaCost()) {
+                desc.append("pay ");
+            }
+            desc.append(costText.substring(0, 1).toLowerCase()).append(costText.substring(1));
+            if (n + 2 == costParts.length) {
+                desc.append(costParts.length > 2 ? ", or " : " or ");
+            } else if (n + 1 < costParts.length) {
+                desc.append(", ");
+            }
+        }
+        return desc.toString();
     }
 
     private <T extends CardTraitBase> List<Ability> emitKeywordTraits(
@@ -538,12 +531,8 @@ public class RulesParser {
             if (skipSecondary && "True".equals(trait.getParam("Secondary"))) {
                 continue;
             }
-            String desc = descExtractor.apply(trait);
-            if (desc == null || desc.isEmpty()) {
-                continue;
-            }
-            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(desc));
-            if (normalized.isEmpty()) {
+            String normalized = normalizeDescription(descExtractor.apply(trait));
+            if (normalized == null) {
                 continue;
             }
             AbilityDescription abilityDesc = new AbilityDescription(type.formatDescription(normalized));
@@ -648,6 +637,16 @@ public class RulesParser {
 
     private static String nullIfEmpty(String s) {
         return (s == null || s.isEmpty()) ? null : s;
+    }
+
+    private static String normalizeDescription(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        String result = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
+        return result.isEmpty() ? null : result;
+    }
+
+    private static void addIfNotNull(List<Ability> list, Ability item) {
+        if (item != null) list.add(item);
     }
 
     private static List<String> collectParamInChain(SpellAbility sa, String param) {
