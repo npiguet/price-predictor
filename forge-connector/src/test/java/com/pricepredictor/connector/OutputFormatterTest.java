@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.ability.TextAbility;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -26,8 +27,8 @@ class OutputFormatterTest {
         CardFace card = new CardFace(
                 "lightning bolt", "{R}", "instant",
                 null, null, null, null, null,
-                List.of(new Ability(AbilityType.SPELL,
-                        new AbilityDescription("CARDNAME deals 3 damage to any target."), 1)));
+                List.of(new TextAbility(AbilityType.SPELL,
+                        "CARDNAME deals 3 damage to any target.")));
         String output = card.formatText();
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
@@ -43,9 +44,9 @@ class OutputFormatterTest {
                 "test card", "{W}", "creature human",
                 "1/1", null, null, null, null,
                 List.of(
-                        new Ability(AbilityType.STATIC, new AbilityDescription("flying"), null),
-                        new Ability(AbilityType.ACTIVATED, new AbilityDescription("{T}: add {W}."), 1),
-                        new Ability(AbilityType.TRIGGERED, new AbilityDescription("when test card enters, draw a card."), null)
+                        new TextAbility(AbilityType.STATIC, "flying"),
+                        new TextAbility(AbilityType.ACTIVATED, "{T}: add {W}."),
+                        new TextAbility(AbilityType.TRIGGERED, "when test card enters, draw a card.")
                 ));
         String output = card.formatText();
         int staticPos = output.indexOf("static: flying");
@@ -57,22 +58,22 @@ class OutputFormatterTest {
 
     @Test
     void actionNumbersFormattedCorrectly() {
-        Ability activated = new Ability(AbilityType.ACTIVATED, new AbilityDescription("{T}: add {G}."), 1);
-        assertEquals("activated[1]: {T}: add {G}.", activated.formatLine());
+        Ability activated = new TextAbility(AbilityType.ACTIVATED, "{T}: add {G}.");
+        assertEquals("activated[1]: {T}: add {G}.", activated.formatLine(1));
 
-        Ability keywordActive = new Ability(AbilityType.ACTIVATED, new AbilityDescription("kicker {2}"), 2);
-        assertEquals("activated[2]: kicker {2}", keywordActive.formatLine());
+        Ability keywordActive = new TextAbility(AbilityType.ACTIVATED, "kicker {2}");
+        assertEquals("activated[2]: kicker {2}", keywordActive.formatLine(2));
     }
 
     @Test
     void nonActionableTypesHaveNoBrackets() {
-        Ability staticAbility = new Ability(AbilityType.STATIC, new AbilityDescription("flying"), null);
+        Ability staticAbility = new TextAbility(AbilityType.STATIC, "flying");
         assertEquals("static: flying", staticAbility.formatLine());
 
-        Ability triggered = new Ability(AbilityType.TRIGGERED, new AbilityDescription("when this enters, gain 3 life."), null);
+        Ability triggered = new TextAbility(AbilityType.TRIGGERED, "when this enters, gain 3 life.");
         assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine());
 
-        Ability staticLine = new Ability(AbilityType.STATIC, new AbilityDescription("creatures you control get +1/+1."), null);
+        Ability staticLine = new TextAbility(AbilityType.STATIC, "creatures you control get +1/+1.");
         assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine());
     }
 
@@ -108,7 +109,7 @@ class OutputFormatterTest {
         CardFace card = new CardFace(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null, null,
-                List.of(new Ability(AbilityType.PLANESWALKER, new AbilityDescription("+2: each player draws a card."), 1)));
+                List.of(new TextAbility(AbilityType.PLANESWALKER, "+2: each player draws a card.")));
         String output = card.formatText();
         assertTrue(output.contains("loyalty: 3"));
         assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));

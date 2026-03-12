@@ -52,8 +52,9 @@ public record CardFace(
         if (text != null) {
             sb.append('\n').append("text: ").append(text);
         }
+        ActionCounter counter = new ActionCounter(0);
         for (Ability ability : abilities) {
-            sb.append('\n').append(ability.formatBlock());
+            sb.append('\n').append(ability.formatBlock(counter));
         }
         return sb.toString();
     }

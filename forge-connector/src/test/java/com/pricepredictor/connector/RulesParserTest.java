@@ -70,7 +70,7 @@ class RulesParserTest {
         var abilities = abilitiesOfType(card, type);
         assertFalse(abilities.isEmpty(), "Expected at least one " + type + " but got: " + card.abilities());
         for (String text : containsTexts) {
-            assertTrue(abilities.stream().anyMatch(a -> a.description().text().contains(text)),
+            assertTrue(abilities.stream().anyMatch(a -> a.descriptionText().contains(text)),
                     "Expected '" + text + "' in " + type + " abilities but got: " + abilities);
         }
     }
@@ -91,9 +91,9 @@ class RulesParserTest {
     @Test
     void passiveKeywords() {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
-        assertTrue(keywords.stream().anyMatch(k -> k.description().text().equals("flying")));
-        assertTrue(keywords.stream().anyMatch(k -> k.description().text().equals("vigilance")));
-        assertNull(keywords.get(0).actionNumber());
+        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
+        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
+        assertFalse(keywords.get(0).formatLine().contains("["), "Static keywords should have no action number");
     }
 
     @Test
@@ -102,7 +102,7 @@ class RulesParserTest {
         // The converter should use its reminder text as the description.
         CardFace card = face("l/lightning_reflexes.txt");
         assertTrue(card.abilities().stream().anyMatch(
-                a -> a.description().text().contains("you may cast CARDNAME as though it had flash")),
+                a -> a.descriptionText().contains("you may cast CARDNAME as though it had flash")),
                 "MayFlashSac should use reminder text: " + card.abilities());
     }
 
@@ -111,23 +111,24 @@ class RulesParserTest {
         CardFace card = face("a/asinine_antics.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
-        assertTrue(costs.get(0).description().text().contains("you may cast CARDNAME as though it had flash"),
-                "MayFlashCost should use reminder text: " + costs.get(0).description().text());
+        assertTrue(costs.get(0).descriptionText().contains("you may cast CARDNAME as though it had flash"),
+                "MayFlashCost should use reminder text: " + costs.get(0).descriptionText());
     }
 
     @Test
     void protectionKeywordIncludesColor() {
         var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.description().text().contains("protection from white")));
-        assertTrue(statics.stream().anyMatch(k -> k.description().text().contains("protection from black")));
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from white")));
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from black")));
     }
 
     @Test
     void activatedAbility() {
-        String line = abilitiesOfType(face("l/llanowar_elves.txt"), AbilityType.ACTIVATED).get(0).formatLine();
-        assertTrue(line.startsWith("activated[1]:"), line);
-        assertTrue(line.contains("{T}"), line);
-        assertTrue(line.contains("add {G}"), line);
+        CardFace card = face("l/llanowar_elves.txt");
+        String output = card.formatText();
+        assertTrue(output.contains("activated[1]:"), output);
+        assertTrue(output.contains("{T}"), output);
+        assertTrue(output.contains("add {G}"), output);
     }
 
     @Test
@@ -161,7 +162,7 @@ class RulesParserTest {
         CardFace card = face("d/domesticated_mammoth.txt");
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
-        assertTrue(replacements.get(0).description().text().contains("token copy of pacifism"));
+        assertTrue(replacements.get(0).descriptionText().contains("token copy of pacifism"));
         assertEquals(0, countOfType(card, AbilityType.TRIGGERED));
     }
 
@@ -172,7 +173,7 @@ class RulesParserTest {
         CardFace card = face("d/decorated_champion.txt");
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertEquals(1, triggered.size());
-        assertTrue(triggered.get(0).description().text().contains("put a +1/+1 counter"));
+        assertTrue(triggered.get(0).descriptionText().contains("put a +1/+1 counter"));
     }
 
     @Test
@@ -192,12 +193,12 @@ class RulesParserTest {
                 "Name:Versatile Card", "ManaCost:2 W", "Types:Creature Human", "PT:2/2",
                 "K:Cycling:2", "A:AB$ GainLife | Cost$ T | LifeAmount$ 1 | SpellDescription$ Gain 1 life.",
                 "Oracle:").faces().get(0);
-        List<Ability> actionable = card.abilities().stream()
-                .filter(a -> a.actionNumber() != null).toList();
-        assertTrue(actionable.size() >= 2);
-        for (int i = 0; i < actionable.size() - 1; i++) {
-            assertTrue(actionable.get(i).actionNumber() < actionable.get(i + 1).actionNumber());
-        }
+        // Verify sequential action numbers in formatted output
+        String output = card.formatText();
+        assertTrue(output.contains("[1]:"), "Should have action number 1: " + output);
+        assertTrue(output.contains("[2]:"), "Should have action number 2: " + output);
+        assertTrue(output.indexOf("[1]:") < output.indexOf("[2]:"),
+                "Action numbers should be sequential in output: " + output);
     }
 
     @Test
@@ -251,9 +252,11 @@ class RulesParserTest {
         assertTrue(pw.get(0).formatLine().contains("[+2]:"));
         assertTrue(pw.get(1).formatLine().contains("[-1]:"));
         assertTrue(pw.get(2).formatLine().contains("[-10]:"));
-        assertEquals(1, (int) pw.get(0).actionNumber());
-        assertEquals(2, (int) pw.get(1).actionNumber());
-        assertEquals(3, (int) pw.get(2).actionNumber());
+        // Verify sequential action numbers in formatted output
+        String output = card.formatText();
+        assertTrue(output.contains("planeswalker[1]:"));
+        assertTrue(output.contains("planeswalker[2]:"));
+        assertTrue(output.contains("planeswalker[3]:"));
     }
 
     @Test
@@ -265,7 +268,7 @@ class RulesParserTest {
         assertTrue(chapters.get(1).formatLine().contains("II \u2014"));
         assertTrue(chapters.get(2).formatLine().contains("III \u2014"));
         assertTrue(chapters.get(0).formatLine().contains("sacrifices"));
-        assertNull(chapters.get(0).actionNumber());
+        assertFalse(chapters.get(0).formatLine().contains("["), "Chapters should have no action number");
     }
 
     @Test
@@ -301,7 +304,9 @@ class RulesParserTest {
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size());
         assertTrue(spells.get(0).formatLine().contains("CARDNAME deals 3 damage"));
-        assertEquals(1, (int) spells.get(0).actionNumber());
+        // Verify action number in formatted output
+        String output = card.formatText();
+        assertTrue(output.contains("spell[1]:"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
     }
 
@@ -329,9 +334,11 @@ class RulesParserTest {
 
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertFalse(spells.isEmpty());
-        List<Integer> actionNumbers = spells.stream().map(Ability::actionNumber).toList();
-        for (int i = 0; i < actionNumbers.size() - 1; i++) {
-            assertEquals(actionNumbers.get(i) + 1, (int) actionNumbers.get(i + 1));
+        // Verify sequential action numbering in formatted output
+        String output = card.formatText();
+        for (int i = 0; i < spells.size(); i++) {
+            assertTrue(output.contains("spell[" + (i + 1) + "]:"),
+                    "Expected spell[" + (i + 1) + "] in output: " + output);
         }
     }
 
@@ -361,7 +368,7 @@ class RulesParserTest {
     void raiseCostOnOtherSpellsRemainsStatic() {
         CardFace card = face("a/aura_of_silence.txt");
         assertEquals(1, abilitiesOfType(card, AbilityType.STATIC).size());
-        assertTrue(abilitiesOfType(card, AbilityType.STATIC).get(0).description().text().contains("cost {2} more to cast"));
+        assertTrue(abilitiesOfType(card, AbilityType.STATIC).get(0).descriptionText().contains("cost {2} more to cast"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
     }
 
@@ -416,15 +423,17 @@ class RulesParserTest {
 
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
-        assertTrue(levels.get(0).formatLine().startsWith("level[1]:"));
-        assertTrue(levels.get(0).formatLine().contains("first artifact spell"));
-        assertFalse(levels.get(0).formatLine().contains("{1}{U}:"));
-        assertTrue(levels.get(1).formatLine().startsWith("level[2]:"));
-        assertTrue(levels.get(1).formatLine().contains("{1}{U}:"));
-        assertTrue(levels.get(1).formatLine().contains("reveal cards"));
-        assertTrue(levels.get(2).formatLine().startsWith("level[3]:"));
-        assertTrue(levels.get(2).formatLine().contains("{5}{U}:"));
-        assertTrue(levels.get(2).formatLine().contains("create a token"));
+        // Class levels use ordinal() for fixed numbering in formatted output
+        String output = card.formatText();
+        assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
+        assertTrue(output.contains("level[2]:"), "Level 2 in output: " + output);
+        assertTrue(output.contains("level[3]:"), "Level 3 in output: " + output);
+        assertTrue(levels.get(0).descriptionText().contains("first artifact spell"));
+        assertFalse(levels.get(0).descriptionText().contains("{1}{U}:"));
+        assertTrue(levels.get(1).descriptionText().contains("{1}{U}:"));
+        assertTrue(levels.get(1).descriptionText().contains("reveal cards"));
+        assertTrue(levels.get(2).descriptionText().contains("{5}{U}:"));
+        assertTrue(levels.get(2).descriptionText().contains("create a token"));
 
         assertEquals(0, countOfType(card, AbilityType.ACTIVATED));
         assertEquals(0, countOfType(card, AbilityType.STATIC));
@@ -435,8 +444,9 @@ class RulesParserTest {
         CardFace card = face("b/bard_class.txt");
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
-        assertTrue(levels.get(0).formatLine().startsWith("level[1]:"));
-        assertTrue(levels.get(0).formatLine().contains("legendary creatures"));
+        String output = card.formatText();
+        assertTrue(output.contains("level[1]:"), "Level 1 in output: " + output);
+        assertTrue(levels.get(0).descriptionText().contains("legendary creatures"));
         assertNoRawEtbReplacementKeyword(card);
     }
 
@@ -445,7 +455,7 @@ class RulesParserTest {
         CardFace card = face("f/flickering_ward.txt");
         assertNoRawEtbReplacementKeyword(card);
         assertTrue(abilitiesOfType(card, AbilityType.REPLACEMENT).stream()
-                .anyMatch(r -> r.description().text().contains("choose a color")));
+                .anyMatch(r -> r.descriptionText().contains("choose a color")));
     }
 
     @Test
@@ -454,7 +464,7 @@ class RulesParserTest {
         assertNoRawEtbReplacementKeyword(card);
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
-        assertTrue(replacements.get(0).description().text().contains("CARDNAME enters with X +1/+1 counters"));
+        assertTrue(replacements.get(0).descriptionText().contains("CARDNAME enters with X +1/+1 counters"));
     }
 
     @Test
@@ -590,7 +600,7 @@ class RulesParserTest {
         CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertEquals("{T}: add {G}", activated.get(0).description().text());
+        assertEquals("{T}: add {G}", activated.get(0).descriptionText());
     }
 
     @Test
@@ -598,9 +608,9 @@ class RulesParserTest {
         CardFace card = face("b/bayou.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).description().text().contains("{B}"));
-        assertTrue(activated.get(0).description().text().contains("or"));
-        assertTrue(activated.get(0).description().text().contains("{G}"));
+        assertTrue(activated.get(0).descriptionText().contains("{B}"));
+        assertTrue(activated.get(0).descriptionText().contains("or"));
+        assertTrue(activated.get(0).descriptionText().contains("{G}"));
     }
 
     @Test
@@ -609,7 +619,7 @@ class RulesParserTest {
         // Should have its own explicit activated ability, not an implicit land one
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).description().text().contains("add {G}"));
+        assertTrue(activated.get(0).descriptionText().contains("add {G}"));
     }
 
     // --- Smoke tests: cards that previously caused errors ---
@@ -641,8 +651,8 @@ class RulesParserTest {
         CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(2, spells.size());
-        assertTrue(spells.get(0).description().text().contains("destroy target artifact or enchantment"));
-        assertTrue(spells.get(1).description().text().contains("create two 1/1 green saproling"));
+        assertTrue(spells.get(0).descriptionText().contains("destroy target artifact or enchantment"));
+        assertTrue(spells.get(1).descriptionText().contains("create two 1/1 green saproling"));
     }
 
     @Test
@@ -652,7 +662,7 @@ class RulesParserTest {
         CardFace card = face("s/saprazzan_breaker.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
-        String line = activated.get(0).description().text();
+        String line = activated.get(0).descriptionText();
         assertTrue(line.contains("mill a card"), "Should contain main description: " + line);
         assertTrue(line.contains("can't be blocked this turn"), "Should contain sub-ability description: " + line);
     }
@@ -664,7 +674,7 @@ class RulesParserTest {
         CardFace card = face("l/llanowar_elves.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        String desc = activated.get(0).description().text();
+        String desc = activated.get(0).descriptionText();
         // Count occurrences of "add" — should appear exactly once
         long addCount = desc.chars().mapToObj(i -> desc.substring(Math.max(0, desc.indexOf("add"))))
                 .count();
@@ -745,7 +755,7 @@ class RulesParserTest {
     private void assertNoRawEtbReplacementKeyword(CardFace card) {
         long raw = card.abilities().stream()
                 .filter(a -> (a.type() == AbilityType.STATIC || a.type() == AbilityType.ACTIVATED)
-                        && a.description().text().contains("etbreplacement"))
+                        && a.descriptionText().contains("etbreplacement"))
                 .count();
         assertEquals(0, raw, "ETBReplacement should not appear as raw keyword");
     }

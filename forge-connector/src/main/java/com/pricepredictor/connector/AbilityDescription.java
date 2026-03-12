@@ -2,57 +2,43 @@ package com.pricepredictor.connector;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Normalized ability description text. Immutable value object.
- * <p>
- * Pipeline: {@link #of} or {@link #ofCased} → optional {@link #withTypeFormatting} → done.
+ * Static utility methods for normalizing ability description text.
  */
-public record AbilityDescription(String text) {
+public final class AbilityDescription {
 
-    public AbilityDescription {
-        Objects.requireNonNull(text);
-        if (text.isEmpty()) throw new IllegalArgumentException("description must not be empty");
-    }
+    private AbilityDescription() {}
 
-    /** Full normalization: strip reminder text + apply casing. */
-    public static AbilityDescription of(String raw) {
-        return new AbilityDescription(applyCasing(stripReminderText(raw)));
-    }
-
-    /** Casing only — for keyword titles, cost strings, pre-processed text. */
-    public static AbilityDescription ofCased(String raw) {
-        return new AbilityDescription(applyCasing(raw));
-    }
-
-    /** Apply type-specific formatting (loyalty brackets, roman numerals). Returns new instance. */
-    public AbilityDescription withTypeFormatting(AbilityType type) {
-        return new AbilityDescription(type.formatDescription(text));
-    }
-
-    @Override
-    public String toString() {
-        return text;
-    }
-
-    // --- Normalization internals ---
+    // --- Normalization patterns ---
 
     private static final Pattern BRACE_SYMBOL = Pattern.compile("\\{[^}]+\\}");
     private static final Pattern REMINDER_TEXT = Pattern.compile("\\s*\\([^)]*\\)");
     private static final Pattern PLACEHOLDER_WORD = Pattern.compile("\\b(cardname|nickname|alternate)\\b");
     private static final Pattern VARIABLE_X = Pattern.compile("(?<![a-z])x(?![a-z])");
 
-    static String stripReminderText(String text) {
+    /**
+     * Full normalization returning null for empty/null input.
+     * Pipeline: strip reminder text, then apply casing.
+     */
+    public static String normalize(String raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        String result = applyCasing(stripReminderText(raw));
+        return (result == null || result.isEmpty()) ? null : result;
+    }
+
+    /** Strip parenthesized reminder text. */
+    public static String stripReminderText(String text) {
         if (text == null) {
             return null;
         }
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
     }
 
-    static String applyCasing(String text) {
+    /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
+    public static String applyCasing(String text) {
         if (text == null) {
             return null;
         }
