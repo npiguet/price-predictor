@@ -27,7 +27,7 @@ class OutputFormatterTest {
                 "lightning bolt", "{R}", "instant",
                 null, null, null, null, null,
                 List.of(new Ability(AbilityType.SPELL,
-                        "CARDNAME deals 3 damage to any target.", 1)));
+                        new AbilityDescription("CARDNAME deals 3 damage to any target."), 1)));
         String output = card.formatText();
         assertFalse(output.contains("power toughness:"));
         assertFalse(output.contains("loyalty:"));
@@ -43,9 +43,9 @@ class OutputFormatterTest {
                 "test card", "{W}", "creature human",
                 "1/1", null, null, null, null,
                 List.of(
-                        new Ability(AbilityType.STATIC, "flying", null),
-                        new Ability(AbilityType.ACTIVATED, "{T}: add {W}.", 1),
-                        new Ability(AbilityType.TRIGGERED, "when test card enters, draw a card.", null)
+                        new Ability(AbilityType.STATIC, new AbilityDescription("flying"), null),
+                        new Ability(AbilityType.ACTIVATED, new AbilityDescription("{T}: add {W}."), 1),
+                        new Ability(AbilityType.TRIGGERED, new AbilityDescription("when test card enters, draw a card."), null)
                 ));
         String output = card.formatText();
         int staticPos = output.indexOf("static: flying");
@@ -57,22 +57,22 @@ class OutputFormatterTest {
 
     @Test
     void actionNumbersFormattedCorrectly() {
-        Ability activated = new Ability(AbilityType.ACTIVATED, "{T}: add {G}.", 1);
+        Ability activated = new Ability(AbilityType.ACTIVATED, new AbilityDescription("{T}: add {G}."), 1);
         assertEquals("activated[1]: {T}: add {G}.", activated.formatLine());
 
-        Ability keywordActive = new Ability(AbilityType.ACTIVATED, "kicker {2}", 2);
+        Ability keywordActive = new Ability(AbilityType.ACTIVATED, new AbilityDescription("kicker {2}"), 2);
         assertEquals("activated[2]: kicker {2}", keywordActive.formatLine());
     }
 
     @Test
     void nonActionableTypesHaveNoBrackets() {
-        Ability staticAbility = new Ability(AbilityType.STATIC, "flying", null);
+        Ability staticAbility = new Ability(AbilityType.STATIC, new AbilityDescription("flying"), null);
         assertEquals("static: flying", staticAbility.formatLine());
 
-        Ability triggered = new Ability(AbilityType.TRIGGERED, "when this enters, gain 3 life.", null);
+        Ability triggered = new Ability(AbilityType.TRIGGERED, new AbilityDescription("when this enters, gain 3 life."), null);
         assertEquals("triggered: when this enters, gain 3 life.", triggered.formatLine());
 
-        Ability staticLine = new Ability(AbilityType.STATIC, "creatures you control get +1/+1.", null);
+        Ability staticLine = new Ability(AbilityType.STATIC, new AbilityDescription("creatures you control get +1/+1."), null);
         assertEquals("static: creatures you control get +1/+1.", staticLine.formatLine());
     }
 
@@ -108,7 +108,7 @@ class OutputFormatterTest {
         CardFace card = new CardFace(
                 "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
                 null, "3", null, null, null,
-                List.of(new Ability(AbilityType.PLANESWALKER, "+2: each player draws a card.", 1)));
+                List.of(new Ability(AbilityType.PLANESWALKER, new AbilityDescription("+2: each player draws a card."), 1)));
         String output = card.formatText();
         assertTrue(output.contains("loyalty: 3"));
         assertTrue(output.contains("planeswalker[1]: +2: each player draws a card."));

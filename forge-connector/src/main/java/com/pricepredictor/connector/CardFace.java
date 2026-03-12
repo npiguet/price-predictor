@@ -53,10 +53,7 @@ public record CardFace(
             sb.append('\n').append("text: ").append(text);
         }
         for (Ability ability : abilities) {
-            sb.append('\n').append(ability.formatLine());
-            for (Ability sub : ability.subAbilities()) {
-                sb.append('\n').append(sub.formatLine());
-            }
+            sb.append('\n').append(ability.formatBlock());
         }
         return sb.toString();
     }

@@ -70,7 +70,7 @@ class RulesParserTest {
         var abilities = abilitiesOfType(card, type);
         assertFalse(abilities.isEmpty(), "Expected at least one " + type + " but got: " + card.abilities());
         for (String text : containsTexts) {
-            assertTrue(abilities.stream().anyMatch(a -> a.description().contains(text)),
+            assertTrue(abilities.stream().anyMatch(a -> a.description().text().contains(text)),
                     "Expected '" + text + "' in " + type + " abilities but got: " + abilities);
         }
     }
@@ -91,8 +91,8 @@ class RulesParserTest {
     @Test
     void passiveKeywords() {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
-        assertTrue(keywords.stream().anyMatch(k -> k.description().equals("flying")));
-        assertTrue(keywords.stream().anyMatch(k -> k.description().equals("vigilance")));
+        assertTrue(keywords.stream().anyMatch(k -> k.description().text().equals("flying")));
+        assertTrue(keywords.stream().anyMatch(k -> k.description().text().equals("vigilance")));
         assertNull(keywords.get(0).actionNumber());
     }
 
@@ -102,7 +102,7 @@ class RulesParserTest {
         // The converter should use its reminder text as the description.
         CardFace card = face("l/lightning_reflexes.txt");
         assertTrue(card.abilities().stream().anyMatch(
-                a -> a.description().contains("you may cast CARDNAME as though it had flash")),
+                a -> a.description().text().contains("you may cast CARDNAME as though it had flash")),
                 "MayFlashSac should use reminder text: " + card.abilities());
     }
 
@@ -111,15 +111,15 @@ class RulesParserTest {
         CardFace card = face("a/asinine_antics.txt");
         var costs = abilitiesOfType(card, AbilityType.ADDITIONAL_COST);
         assertEquals(1, costs.size());
-        assertTrue(costs.get(0).description().contains("you may cast CARDNAME as though it had flash"),
-                "MayFlashCost should use reminder text: " + costs.get(0).description());
+        assertTrue(costs.get(0).description().text().contains("you may cast CARDNAME as though it had flash"),
+                "MayFlashCost should use reminder text: " + costs.get(0).description().text());
     }
 
     @Test
     void protectionKeywordIncludesColor() {
         var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.description().contains("protection from white")));
-        assertTrue(statics.stream().anyMatch(k -> k.description().contains("protection from black")));
+        assertTrue(statics.stream().anyMatch(k -> k.description().text().contains("protection from white")));
+        assertTrue(statics.stream().anyMatch(k -> k.description().text().contains("protection from black")));
     }
 
     @Test
@@ -161,7 +161,7 @@ class RulesParserTest {
         CardFace card = face("d/domesticated_mammoth.txt");
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
-        assertTrue(replacements.get(0).description().contains("token copy of pacifism"));
+        assertTrue(replacements.get(0).description().text().contains("token copy of pacifism"));
         assertEquals(0, countOfType(card, AbilityType.TRIGGERED));
     }
 
@@ -172,7 +172,7 @@ class RulesParserTest {
         CardFace card = face("d/decorated_champion.txt");
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertEquals(1, triggered.size());
-        assertTrue(triggered.get(0).description().contains("put a +1/+1 counter"));
+        assertTrue(triggered.get(0).description().text().contains("put a +1/+1 counter"));
     }
 
     @Test
@@ -211,18 +211,18 @@ class RulesParserTest {
     @Test
     void variableXStaysUppercase() {
         // Standalone X preserved
-        assertEquals("-X: deal X damage", Ability.applyCasing("-X: Deal X damage"));
-        assertEquals("+X/+0 until end of turn", Ability.applyCasing("+X/+0 until end of turn"));
-        assertEquals("where X is the number", Ability.applyCasing("Where X is the number"));
+        assertEquals("-X: deal X damage", AbilityDescription.applyCasing("-X: Deal X damage"));
+        assertEquals("+X/+0 until end of turn", AbilityDescription.applyCasing("+X/+0 until end of turn"));
+        assertEquals("where X is the number", AbilityDescription.applyCasing("Where X is the number"));
         // X inside words lowercased
-        assertEquals("exile target creature", Ability.applyCasing("Exile target creature"));
-        assertEquals("next end step", Ability.applyCasing("Next end step"));
-        assertEquals("tax each opponent", Ability.applyCasing("Tax each opponent"));
+        assertEquals("exile target creature", AbilityDescription.applyCasing("Exile target creature"));
+        assertEquals("next end step", AbilityDescription.applyCasing("Next end step"));
+        assertEquals("tax each opponent", AbilityDescription.applyCasing("Tax each opponent"));
         // Braces
-        assertEquals("{X}{R}", Ability.applyCasing("{X}{R}"));
+        assertEquals("{X}{R}", AbilityDescription.applyCasing("{X}{R}"));
         // Mixed
         assertEquals("pay {X}, where X is the number of counters",
-                Ability.applyCasing("Pay {X}, where X is the number of counters"));
+                AbilityDescription.applyCasing("Pay {X}, where X is the number of counters"));
     }
 
     @Test
@@ -361,7 +361,7 @@ class RulesParserTest {
     void raiseCostOnOtherSpellsRemainsStatic() {
         CardFace card = face("a/aura_of_silence.txt");
         assertEquals(1, abilitiesOfType(card, AbilityType.STATIC).size());
-        assertTrue(abilitiesOfType(card, AbilityType.STATIC).get(0).description().contains("cost {2} more to cast"));
+        assertTrue(abilitiesOfType(card, AbilityType.STATIC).get(0).description().text().contains("cost {2} more to cast"));
         assertEquals(0, countOfType(card, AbilityType.ADDITIONAL_COST));
     }
 
@@ -445,7 +445,7 @@ class RulesParserTest {
         CardFace card = face("f/flickering_ward.txt");
         assertNoRawEtbReplacementKeyword(card);
         assertTrue(abilitiesOfType(card, AbilityType.REPLACEMENT).stream()
-                .anyMatch(r -> r.description().contains("choose a color")));
+                .anyMatch(r -> r.description().text().contains("choose a color")));
     }
 
     @Test
@@ -454,7 +454,7 @@ class RulesParserTest {
         assertNoRawEtbReplacementKeyword(card);
         var replacements = abilitiesOfType(card, AbilityType.REPLACEMENT);
         assertEquals(1, replacements.size());
-        assertTrue(replacements.get(0).description().contains("CARDNAME enters with X +1/+1 counters"));
+        assertTrue(replacements.get(0).description().text().contains("CARDNAME enters with X +1/+1 counters"));
     }
 
     @Test
@@ -590,7 +590,7 @@ class RulesParserTest {
         CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertEquals("{T}: add {G}", activated.get(0).description());
+        assertEquals("{T}: add {G}", activated.get(0).description().text());
     }
 
     @Test
@@ -598,9 +598,9 @@ class RulesParserTest {
         CardFace card = face("b/bayou.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).description().contains("{B}"));
-        assertTrue(activated.get(0).description().contains("or"));
-        assertTrue(activated.get(0).description().contains("{G}"));
+        assertTrue(activated.get(0).description().text().contains("{B}"));
+        assertTrue(activated.get(0).description().text().contains("or"));
+        assertTrue(activated.get(0).description().text().contains("{G}"));
     }
 
     @Test
@@ -609,7 +609,7 @@ class RulesParserTest {
         // Should have its own explicit activated ability, not an implicit land one
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertTrue(activated.get(0).description().contains("add {G}"));
+        assertTrue(activated.get(0).description().text().contains("add {G}"));
     }
 
     // --- Smoke tests: cards that previously caused errors ---
@@ -641,8 +641,8 @@ class RulesParserTest {
         CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(2, spells.size());
-        assertTrue(spells.get(0).description().contains("destroy target artifact or enchantment"));
-        assertTrue(spells.get(1).description().contains("create two 1/1 green saproling"));
+        assertTrue(spells.get(0).description().text().contains("destroy target artifact or enchantment"));
+        assertTrue(spells.get(1).description().text().contains("create two 1/1 green saproling"));
     }
 
     @Test
@@ -652,7 +652,7 @@ class RulesParserTest {
         CardFace card = face("s/saprazzan_breaker.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
-        String line = activated.get(0).description();
+        String line = activated.get(0).description().text();
         assertTrue(line.contains("mill a card"), "Should contain main description: " + line);
         assertTrue(line.contains("can't be blocked this turn"), "Should contain sub-ability description: " + line);
     }
@@ -664,7 +664,7 @@ class RulesParserTest {
         CardFace card = face("l/llanowar_elves.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        String desc = activated.get(0).description();
+        String desc = activated.get(0).description().text();
         // Count occurrences of "add" — should appear exactly once
         long addCount = desc.chars().mapToObj(i -> desc.substring(Math.max(0, desc.indexOf("add"))))
                 .count();
@@ -745,7 +745,7 @@ class RulesParserTest {
     private void assertNoRawEtbReplacementKeyword(CardFace card) {
         long raw = card.abilities().stream()
                 .filter(a -> (a.type() == AbilityType.STATIC || a.type() == AbilityType.ACTIVATED)
-                        && a.description().contains("etbreplacement"))
+                        && a.description().text().contains("etbreplacement"))
                 .count();
         assertEquals(0, raw, "ETBReplacement should not appear as raw keyword");
     }
