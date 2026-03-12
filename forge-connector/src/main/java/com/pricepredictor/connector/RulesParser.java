@@ -14,7 +14,12 @@ import forge.game.cost.Cost;
 import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
+import forge.game.keyword.KeywordWithTypeInterface;
+import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+import forge.game.staticability.StaticAbilityMode;
+import forge.game.trigger.Trigger;
 import forge.game.Game;
 import forge.game.GameRules;
 import forge.game.GameType;
@@ -107,9 +112,9 @@ public class RulesParser {
         abilities.addAll(extractSpellAbilities(card, counter));
 
         // --- Triggers, Statics, Replacements (from T:/S:/R: lines) ---
-        abilities.addAll(extractTraitAbilities(card.getTriggers(), "TriggerDescription", AbilityType.TRIGGERED));
-        abilities.addAll(extractTraitAbilities(card.getStaticAbilities(), "Description", AbilityType.STATIC));
-        abilities.addAll(extractTraitAbilities(card.getReplacementEffects(), "Description", AbilityType.REPLACEMENT));
+        abilities.addAll(extractTriggerAbilities(card.getTriggers()));
+        abilities.addAll(extractStaticAbilities(card.getStaticAbilities()));
+        abilities.addAll(extractReplacementAbilities(card.getReplacementEffects()));
 
         // --- Implicit mana abilities from basic land types ---
         abilities.addAll(extractLandManaAbilities(face, counter));
@@ -193,6 +198,7 @@ public class RulesParser {
             }
 
             if (kw == Keyword.KICKER) {
+                // Kicker.cost2 is private with no getter — use getOriginal() to extract second cost
                 String[] kickerParts = ki.getOriginal().split(":", 3);
                 if (kickerParts.length >= 3) {
                     Cost cost2 = new Cost(kickerParts[2], false);
@@ -200,13 +206,8 @@ public class RulesParser {
                 }
             }
 
-            if (kw == Keyword.AFFINITY) {
-                String[] affinityParts = ki.getOriginal().split(":", 3);
-                if (affinityParts.length >= 2) {
-                    String typeName = affinityParts.length >= 3
-                            ? affinityParts[2] : affinityParts[1];
-                    title = "Affinity for " + typeName + "s";
-                }
+            if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
+                title = "Affinity for " + kti.getTypeDescription();
             }
 
             AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
@@ -261,13 +262,8 @@ public class RulesParser {
                     continue;
                 }
                 String desc = sa.getDescription();
-                SpellAbility sub = sa.getSubAbility();
-                while (sub != null) {
-                    String subDesc = sub.getParam("SpellDescription");
-                    if (subDesc != null && !subDesc.isEmpty()) {
-                        desc = desc + " " + subDesc;
-                    }
-                    sub = sub.getSubAbility();
+                for (String subDesc : collectParamInChain(sa.getSubAbility(), "SpellDescription")) {
+                    desc = desc + " " + subDesc;
                 }
                 AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
                 AbilityDescription abilityDesc = AbilityDescription.of(desc).withTypeFormatting(type);
@@ -333,19 +329,16 @@ public class RulesParser {
         return result;
     }
 
-    private List<Ability> extractTraitAbilities(Iterable<? extends CardTraitBase> traits,
-                                                String descParam, AbilityType type) {
+    private List<Ability> extractTriggerAbilities(Iterable<Trigger> triggers) {
         List<Ability> abilities = new ArrayList<>();
         Set<String> seenDescriptions = new HashSet<>();
-        for (CardTraitBase trait : traits) {
-            if (trait.getKeyword() != null) {
+        for (Trigger trigger : triggers) {
+            if (trigger.getKeyword() != null) {
                 continue;
             }
-            AbilityType effectiveType = type;
-            if ("True".equals(trait.getParam("Static"))) {
-                effectiveType = AbilityType.REPLACEMENT;
-            }
-            String raw = trait.getParam(descParam);
+            AbilityType effectiveType = trigger.isStatic()
+                    ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
+            String raw = trigger.getParam("TriggerDescription");
             if (raw == null || raw.isEmpty()) {
                 continue;
             }
@@ -353,11 +346,33 @@ public class RulesParser {
             if (normalized.isEmpty()) {
                 continue;
             }
-            String mode = trait.getParam("Mode");
-            if (type == AbilityType.STATIC
-                    && ("RaiseCost".equals(mode) || "OptionalCost".equals(mode))) {
-                String validCard = trait.getParam("ValidCard");
-                String affected = trait.getParam("Affected");
+            if (!seenDescriptions.add(normalized)) {
+                continue;
+            }
+            abilities.add(new Ability(effectiveType, new AbilityDescription(normalized), null));
+        }
+        return abilities;
+    }
+
+    private List<Ability> extractStaticAbilities(Iterable<StaticAbility> statics) {
+        List<Ability> abilities = new ArrayList<>();
+        Set<String> seenDescriptions = new HashSet<>();
+        for (StaticAbility sa : statics) {
+            if (sa.getKeyword() != null) {
+                continue;
+            }
+            AbilityType effectiveType = AbilityType.STATIC;
+            String raw = sa.getParam("Description");
+            if (raw == null || raw.isEmpty()) {
+                continue;
+            }
+            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (sa.checkMode(StaticAbilityMode.RaiseCost) || sa.checkMode(StaticAbilityMode.OptionalCost)) {
+                String validCard = sa.getParam("ValidCard");
+                String affected = sa.getParam("Affected");
                 boolean selfCost = "Card.Self".equals(validCard) || "Card.Self".equals(affected);
                 if (selfCost) {
                     effectiveType = AbilityType.ADDITIONAL_COST;
@@ -370,6 +385,29 @@ public class RulesParser {
                 continue;
             }
             abilities.add(new Ability(effectiveType, new AbilityDescription(normalized), null));
+        }
+        return abilities;
+    }
+
+    private List<Ability> extractReplacementAbilities(Iterable<ReplacementEffect> replacements) {
+        List<Ability> abilities = new ArrayList<>();
+        Set<String> seenDescriptions = new HashSet<>();
+        for (ReplacementEffect re : replacements) {
+            if (re.getKeyword() != null) {
+                continue;
+            }
+            String raw = re.getParam("Description");
+            if (raw == null || raw.isEmpty()) {
+                continue;
+            }
+            String normalized = AbilityDescription.applyCasing(AbilityDescription.stripReminderText(raw));
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (!seenDescriptions.add(normalized)) {
+                continue;
+            }
+            abilities.add(new Ability(AbilityType.REPLACEMENT, new AbilityDescription(normalized), null));
         }
         return abilities;
     }
@@ -614,6 +652,7 @@ public class RulesParser {
 
     private static List<String> collectParamInChain(SpellAbility sa, String param) {
         List<String> values = new ArrayList<>();
+        if (sa == null) return values;
         String value = sa.getParam(param);
         if (value != null && !value.isEmpty()) {
             values.add(value);
