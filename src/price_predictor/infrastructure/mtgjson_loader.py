@@ -116,7 +116,7 @@ def build_price_map(
             result[name] = selected_price
             if len(all_prices) > 1:
                 multi_printing_count += 1
-                logger.info(
+                logger.debug(
                     "  %s: selected \u20ac%.2f from %d prices",
                     name,
                     selected_price,

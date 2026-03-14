@@ -50,7 +50,7 @@ Model saved to models/transformer/model.pt
 ```
 Evaluation on validation set (4032 cards):
   Mean absolute error: €1.23
-  Median percentage error: 42.5%
+  Median absolute error (shifted-log): 0.19
 ```
 
 ## New Subcommand: `evaluate-transformer`
@@ -83,7 +83,7 @@ usage: price_predictor evaluate-transformer [-h]
 {
   "model_path": "models/transformer/model.pt",
   "mean_absolute_error_eur": 1.23,
-  "median_percentage_error": 42.5,
+  "median_abs_error_log": 0.19,
   "sample_count": 4032
 }
 ```

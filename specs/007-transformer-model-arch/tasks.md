@@ -99,9 +99,9 @@
 
 ## Phase 5: User Story 3 — Evaluate Model Quality (Priority: P3)
 
-**Goal**: A developer can run `price_predictor evaluate-transformer` to re-evaluate any saved model against the validation dataset and review MAE and median percentage error metrics.
+**Goal**: A developer can run `price_predictor evaluate-transformer` to re-evaluate any saved model against the validation dataset and review MAE and median absolute error in shifted-log space metrics.
 
-**Independent Test**: Train a model (US1), then run `price_predictor evaluate-transformer` and verify JSON output with MAE, median percentage error, and sample count. Test `--model-path` override and `--output-csv` per-card breakdown.
+**Independent Test**: Train a model (US1), then run `price_predictor evaluate-transformer` and verify JSON output with MAE, median absolute error in shifted-log space, and sample count. Test `--model-path` override and `--output-csv` per-card breakdown.
 
 ### Tests for User Story 3 (MANDATORY per Constitution)
 
@@ -127,6 +127,27 @@
 
 ---
 
+## Phase 7: SC-003 Metric Change — Replace Percentage Error with Shifted-Log MAE
+
+**Purpose**: Update the evaluation metric from median percentage error to median absolute error in shifted-log price space per updated SC-003. The shifted-log transform (`log(price + 2)`) intentionally compresses price differences below the €2 bulk threshold, making EUR percentage error misleading. The new target is median absolute error ≤ 0.25 in shifted-log space.
+
+### Tests (write first, ensure they FAIL before implementation)
+
+- [X] T029 [P] Update evaluate_transformer use case tests: replace `test_median_percentage_error_computation` with `test_median_abs_error_log_computation` testing that the metric computes `median(|log(actual+2) - log(predicted+2)|)`, and update all assertions from `median_percentage_error` to `median_abs_error_log` in tests/unit/application/test_evaluate_transformer.py
+- [X] T030 [P] Update evaluate-transformer CLI tests: change expected JSON output key from `median_percentage_error` to `median_abs_error_log` in tests/unit/infrastructure/test_cli_evaluate_transformer.py
+- [X] T031 [P] Update transformer integration test: change metric assertion from `median_percentage_error` to `median_abs_error_log` in tests/integration/test_transformer_training.py
+
+### Implementation
+
+- [X] T032 Rename `TransformerEvalResult.median_percentage_error` to `median_abs_error_log` in src/price_predictor/application/evaluate_transformer.py
+- [X] T033 Replace metric computation in `evaluate_transformer()`: change from `median(|actual - predicted| / actual * 100)` on EUR prices to `median(|log(actual+2) - log(predicted+2)|)` in shifted-log space, and update log message from "median pct error: X%" to "median abs error (log): X" in src/price_predictor/application/evaluate_transformer.py
+- [X] T034 Update auto-evaluation output in `train_transformer()`: change print line from "Median percentage error: X%" to "Median absolute error (shifted-log): X" in src/price_predictor/application/train_transformer.py
+- [X] T035 Update `evaluate-transformer` CLI JSON output: change key from `median_percentage_error` to `median_abs_error_log` in src/price_predictor/infrastructure/cli.py
+
+**Checkpoint**: All evaluation outputs now report median absolute error in shifted-log price space. The metric aligns with the training objective (MSE on shifted-log prices) and the SC-003 target of ≤ 0.25.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -137,6 +158,7 @@
 - **User Story 2 (Phase 4)**: Depends on Foundational phase completion (independent of US1)
 - **User Story 3 (Phase 5)**: Depends on Foundational phase completion (independent of US1, US2)
 - **Polish (Phase 6)**: Depends on all user stories being complete
+- **SC-003 Metric Change (Phase 7)**: Depends on Phase 6 completion (updates code from all prior phases)
 
 ### User Story Dependencies
 
@@ -159,6 +181,7 @@
 - **Phase 4**: T020 and T021 (tests) can run in parallel
 - **Phase 5**: T024 (single test task) is independent
 - **Phase 6**: T026 and T027 can run in parallel
+- **Phase 7**: T029, T030, and T031 (tests) can run in parallel; T032 before T033; T034 and T035 can run in parallel after T033
 - **Cross-phase**: US1, US2, US3 can run in parallel once Phase 2 is complete
 
 ---
@@ -187,6 +210,21 @@ Stream B (US2): T020+T021 → T022 → T023
 Stream C (US3): T024 → T025
 ```
 
+## Parallel Example: Phase 7 (SC-003 Metric Change)
+
+```bash
+# Launch all test updates together:
+Task T029: "Update evaluate_transformer tests"
+Task T030: "Update CLI evaluate tests"
+Task T031: "Update integration test"
+
+# Then implementation (T032 first, then T033, then T034+T035 in parallel):
+Task T032: "Rename field in TransformerEvalResult"
+Task T033: "Replace metric computation" (depends on T032)
+Task T034: "Update train auto-eval output" (depends on T033)
+Task T035: "Update CLI JSON output" (depends on T033)
+```
+
 ---
 
 ## Implementation Strategy
@@ -205,7 +243,8 @@ Stream C (US3): T024 → T025
 2. Add User Story 1 -> Train model -> Validate on GPU (MVP!)
 3. Add User Story 2 -> API serves dual predictions -> Test via eval CLI
 4. Add User Story 3 -> Standalone evaluation -> Test with --model-path override
-5. Each story adds value without breaking previous stories
+5. SC-003 Metric Change -> Evaluation uses shifted-log MAE -> Verify ≤ 0.25 target
+6. Each story adds value without breaking previous stories
 
 ### Parallel Team Strategy
 
@@ -217,6 +256,7 @@ With multiple developers:
    - Developer B: User Story 2 (API + eval CLI changes)
    - Developer C: User Story 3 (evaluate CLI subcommand)
 3. Stories complete and integrate independently
+4. Phase 7 (metric change) can be assigned to any developer after Phase 6
 
 ---
 
@@ -230,3 +270,4 @@ With multiple developers:
 - Stop at any checkpoint to validate story independently
 - The evaluate_transformer use case is in Phase 2 (Foundational) because it is used by US1 (auto-evaluation after training) and US3 (standalone CLI)
 - max_seq_len is determined empirically in T017 (sequence length analysis) — see research.md §1 for the full algorithm (95th percentile, round to multiple of 8, clamp min 64, stored in artifact)
+- Phase 7 implements the SC-003 metric change from median percentage error to median absolute error in shifted-log price space (≤ 0.25 target), aligning evaluation with the training objective (MSE on shifted-log prices)

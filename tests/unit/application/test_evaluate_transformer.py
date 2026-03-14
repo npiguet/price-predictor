@@ -67,7 +67,7 @@ class TestEvaluateTransformer:
         assert result.sample_count == 5
         assert result.model_path == Path("fake/model")
         assert result.mean_absolute_error_eur >= 0
-        assert result.median_percentage_error >= 0
+        assert result.median_abs_error_log >= 0
         assert result.per_card is not None
         assert len(result.per_card) == 5
 
@@ -87,11 +87,13 @@ class TestEvaluateTransformer:
         # |3-2| + |3-4| + |8-6| = 1 + 1 + 2 = 4, MAE = 4/3
         assert abs(mae - 4.0 / 3.0) < 1e-10
 
-    def test_median_percentage_error_computation(self):
-        """Median percentage error = median(|actual - predicted| / actual * 100)."""
+    def test_median_abs_error_log_computation(self):
+        """Median abs error in shifted-log space = median(|log(actual+2) - log(predicted+2)|)."""
         actual = np.array([10.0, 20.0, 50.0])
         predicted = np.array([12.0, 18.0, 45.0])
-        pct_errors = np.abs(actual - predicted) / actual * 100
-        median_pct = float(np.median(pct_errors))
-        # errors: 20%, 10%, 10% -> median = 10%
-        assert abs(median_pct - 10.0) < 1e-10
+        log_errors = np.abs(np.log(actual + 2) - np.log(predicted + 2))
+        median_log_err = float(np.median(log_errors))
+        # log(12)-log(14) ≈ 0.154, |log(22)-log(20)| ≈ 0.095, |log(52)-log(47)| ≈ 0.101
+        # sorted: 0.095, 0.101, 0.154 -> median ≈ 0.101
+        expected = float(np.median(np.abs(np.log(actual + 2) - np.log(predicted + 2))))
+        assert abs(median_log_err - expected) < 1e-10

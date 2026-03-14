@@ -89,7 +89,7 @@ Result of a transformer evaluation run.
 |---|---|---|
 | `model_path` | Path | Path to the evaluated model |
 | `mean_absolute_error_eur` | float | MAE in EUR |
-| `median_percentage_error` | float | Median percentage error |
+| `median_abs_error_log` | float | Median absolute error in shifted-log price space |
 | `sample_count` | int | Number of test cards evaluated |
 | `per_card` | list[dict] | Optional per-card breakdown |
 

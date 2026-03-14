@@ -572,7 +572,7 @@ def run_evaluate_transformer(args: argparse.Namespace) -> int:
     output = {
         "model_path": str(result.model_path / "model.pt"),
         "mean_absolute_error_eur": result.mean_absolute_error_eur,
-        "median_percentage_error": result.median_percentage_error,
+        "median_abs_error_log": result.median_abs_error_log,
         "sample_count": result.sample_count,
     }
     print(json.dumps(output, indent=2))

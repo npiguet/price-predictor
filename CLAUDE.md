@@ -37,7 +37,7 @@ Python 3.14+: Follow standard conventions
 
 ## Recent Changes
 - 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
-- 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
+- 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
 - 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
 
 <!-- MANUAL ADDITIONS START -->

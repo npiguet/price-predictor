@@ -13,10 +13,10 @@
 ## Install Dependencies
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 ```
 
-This installs `torch` and `transformers` (added as project dependencies for this feature) alongside the existing dependencies.
+This installs CUDA-enabled `torch` and `transformers` (added as project dependencies for this feature) alongside the existing dependencies. The `--extra-index-url` is required to get the GPU build of PyTorch — the default PyPI index only has the CPU-only build.
 
 ## Train the Transformer Model
 
@@ -56,7 +56,7 @@ Re-evaluates a saved model against the validation set. Defaults to `models/trans
 ```json
 {
   "mean_absolute_error_eur": 1.23,
-  "median_percentage_error": 42.5,
+  "median_abs_error_log": 0.19,
   "sample_count": 4000
 }
 ```

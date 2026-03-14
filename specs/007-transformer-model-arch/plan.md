@@ -15,7 +15,7 @@ Add an encoder-only transformer model (~2M parameters) for MTG card price predic
 **Testing**: pytest (unit + integration), ruff (linting)
 **Target Platform**: Windows 11 (development), NVIDIA GPU with CUDA (training), CPU fallback (inference)
 **Project Type**: CLI + web service (existing)
-**Performance Goals**: Single-card inference < 100 ms, training on ~20K cards < 10 minutes on RTX 3060 Ti, median percentage error ≤ 50%
+**Performance Goals**: Single-card inference < 100 ms, training on ~20K cards < 10 minutes on RTX 3060 Ti, median absolute error ≤ 0.25 in shifted-log price space (see SC-003)
 **Constraints**: Peak VRAM < 8 GB during training, CPU fallback for inference, deterministic predictions
 **Scale/Scope**: ~20,000 training cards, single-model artifact, 2 new CLI subcommands, 1 modified API endpoint
 

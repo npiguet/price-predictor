@@ -297,7 +297,7 @@ def train_transformer(
         print(
             f"\nEvaluation on validation set ({eval_result.sample_count} cards):\n"
             f"  Mean absolute error: \u20ac{eval_result.mean_absolute_error_eur}\n"
-            f"  Median percentage error: {eval_result.median_percentage_error}%"
+            f"  Median absolute error (shifted-log): {eval_result.median_abs_error_log}"
         )
     except Exception as e:
         logger.warning("Auto-evaluation failed: %s", e)

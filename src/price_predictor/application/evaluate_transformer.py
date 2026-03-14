@@ -24,7 +24,7 @@ class TransformerEvalResult:
 
     model_path: Path
     mean_absolute_error_eur: float
-    median_percentage_error: float
+    median_abs_error_log: float
     sample_count: int
     per_card: list[dict] | None = None
 
@@ -124,8 +124,9 @@ def evaluate_transformer(
     abs_errors = np.abs(predicted_prices - actual_prices)
     mae = float(np.mean(abs_errors))
 
-    pct_errors = np.abs(predicted_prices - actual_prices) / np.maximum(actual_prices, 0.01) * 100
-    median_pct_error = float(np.median(pct_errors))
+    # Median absolute error in shifted-log space: median(|log(actual+2) - log(predicted+2)|)
+    log_errors = np.abs(np.log(actual_prices + 2) - np.log(predicted_prices + 2))
+    median_log_error = float(np.median(log_errors))
 
     # Per-card breakdown
     per_card = []
@@ -138,14 +139,14 @@ def evaluate_transformer(
         })
 
     logger.info(
-        "Evaluation complete — MAE: €%.2f, median pct error: %.1f%%",
-        mae, median_pct_error,
+        "Evaluation complete — MAE: €%.2f, median abs error (log): %.3f",
+        mae, median_log_error,
     )
 
     return TransformerEvalResult(
         model_path=model_dir,
         mean_absolute_error_eur=round(mae, 2),
-        median_percentage_error=round(median_pct_error, 1),
+        median_abs_error_log=round(median_log_error, 3),
         sample_count=len(val_data),
         per_card=per_card,
     )
