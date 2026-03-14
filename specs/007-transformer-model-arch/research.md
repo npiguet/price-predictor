@@ -5,17 +5,27 @@
 
 ## 1. Maximum Sequence Length (`max_seq_len`)
 
-**Decision**: Defer final value to implementation; use 256 as the starting estimate and adjust based on empirical analysis.
+**Decision**: Computed automatically at the start of each training run from the actual dataset. Not hardcoded.
 
-**Rationale**: The spec states `max_seq_len` is TBD. The converted card scripts in `output/*.txt` vary from short vanilla creatures (~20 tokens) to complex cards with extensive triggered/activated abilities (~300+ tokens). The BERT WordPiece tokenizer (`bert-base-uncased`) will further expand some MTG-specific terms (e.g., "trample" stays as one token, but "hexproof" may split into "hex" + "##proof"). The implementation must:
+**Algorithm** (executed as the first step of `train-transformer`, before building `TransformerTrainingDataset`):
 
-1. Tokenize the full dataset and compute the distribution of sequence lengths.
-2. Choose `max_seq_len` to cover ≥95% of cards without truncation (likely 256–384).
-3. Log the percentage of truncated cards for transparency.
+1. Load all matched card texts from `output/` (same card set that will be used for training).
+2. Tokenize every card with `BertTokenizer("bert-base-uncased").encode()` (no padding, no truncation).
+3. Compute the distribution of raw token counts (including the `[CLS]` token added by `.encode()`).
+4. Set `max_seq_len` to the **95th percentile** of the distribution, rounded up to the nearest multiple of 8 (for GPU memory alignment). Clamp to a minimum of 64.
+5. Log to CLI: chosen `max_seq_len`, 95th/99th/max percentile values, and the percentage of cards that will be truncated.
+6. Store the computed `max_seq_len` in `TransformerConfig`, which is saved inside the `.pt` artifact. Inference and evaluation reload this value from the artifact — they never recompute it.
+
+**Why per-run, not hardcoded**: The output corpus changes when cards are re-converted (feature 006 updates). A stale hardcoded value could silently truncate new cards or waste memory on padding. Computing from the data ensures the value is always appropriate.
+
+**Expected range**: 256–384 tokens based on current card corpus. Starting estimate 256 (used only for VRAM budget calculations in the spec, not in code).
+
+**Rationale**: The converted card scripts in `output/*.txt` vary from short vanilla creatures (~20 tokens) to complex cards with extensive triggered/activated abilities (~300+ tokens). The BERT WordPiece tokenizer (`bert-base-uncased`) will further expand some MTG-specific terms (e.g., "trample" stays as one token, but "hexproof" may split into "hex" + "##proof").
 
 **Alternatives considered**:
 - Fixed 512 (BERT default): Wasteful — most cards are much shorter, and longer sequences increase VRAM usage quadratically in attention.
 - Fixed 128: Too short — would truncate many cards with multiple abilities.
+- Fixed 256: Could silently under- or over-fit if the corpus changes. Data-driven is safer.
 
 ## 2. Training Data Pipeline: Matching Card Scripts to Prices
 
