@@ -17,6 +17,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - Local text files (input: Forge card scripts at `../forge/forge-gui/res/cardsfolder/`, output: `./output/`) (006-card-script-parsing)
 - Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5 (006-card-script-parsing)
 - Local text files (input: Forge card scripts, output: converted text files in `./output/`) (006-card-script-parsing)
+- Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson (007-transformer-model-arch)
+- `.pt` model artifact in `models/transformer/`, existing `.joblib` models in `models/` (007-transformer-model-arch)
 
 ## Project Structure
 
@@ -34,9 +36,9 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
 - 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
 - 006-card-script-parsing: Added Java 17+ (converter module), Python 3.14+ (CLI integration) + forge-game 2.0.10-SNAPSHOT (transitively includes forge-core), JUnit 5
-- 006-card-script-parsing: Added Python 3.14+ (existing project stack) + None new — pure text parsing with stdlib only
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
