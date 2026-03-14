@@ -4,9 +4,23 @@ C# Feature Specification: Transformer Model Architecture
 **Created**: 2026-03-01
 **Status**: Draft
 **Input**: User description: "The AI model should be built based on a transformer model with attention, following the architecture of modern LLMs. Training must be possible on a GeForce RTX 3060 Ti with 8GB VRAM."
-**Depends on**: `001-card-price-predictor` (prediction requirements and accuracy targets)
+**Depends on**: `001-card-price-predictor` (prediction requirements and accuracy targets), `006-card-script-parsing` (card text input)
 
 ## Clarifications
+
+### Session 2026-03-14
+
+- Q: Does the transformer model replace the existing sklearn model or coexist alongside it? → A: Coexist — both models are available; the prediction service runs both.
+- Q: Where should the trained model artifact (`.pt` file) be saved? → A: `models/transformer/` — under the existing `models/` directory, separated by model type.
+- Q: Should training and inference support CPU fallback when no GPU is available? → A: GPU required for training, CPU fallback for inference.
+- Q: How should the training process be invoked? → A: Subcommand added to an existing CLI entry point.
+- Q: When the API evaluation endpoint is invoked, which models run? → A: Both models always run. The response includes the predicted price from both the sklearn model and the transformer model. There is no model selection parameter — both predictions are always returned.
+- Q: Should model evaluation run automatically after training or be a separate CLI subcommand? → A: Both — auto-evaluate after training (metrics printed at end of run), plus a separate CLI subcommand for re-evaluation against any saved model.
+- Q: Should `torch` and `transformers` be added as required project dependencies? → A: Yes — both `torch` and `transformers` (Hugging Face) are required project dependencies for this feature.
+- Q: When retraining, what happens to the existing model artifact? → A: Overwrite — new training always replaces the existing `.pt` file in `models/transformer/`.
+- Q: How does the evaluation subcommand specify which model to evaluate? → A: Default path (`models/transformer/`) with optional `--model-path` override.
+- Q: Is `max_seq_len = 256` final, or should it be determined empirically? → A: Empirical — analyze tokenized card lengths first during implementation, then finalize (may differ from 256).
+- Q: What training progress information should the CLI display? → A: Per-epoch summary line (epoch number, train loss, val loss, elapsed time) plus a final summary with best epoch and early-stop status. No progress bars.
 
 ### Session 2026-03-12
 
@@ -14,6 +28,9 @@ C# Feature Specification: Transformer Model Architecture
 - Q: What training/validation split strategy should be used? → A: Reuse feature 001's 80/20 random split to keep evaluation comparable across models.
 - Q: What loss function should be used for training? → A: MSE (mean squared error) on shifted-log prices. The shifted-log transform already tames outliers, so a robust loss is unnecessary.
 - Q: Should this feature reuse feature 001's data loading infrastructure for building the training dataset? → A: Yes — reuse `forge_parser.py` and `mtgjson_loader.py` for card loading and price matching. The converted card scripts from `./output/` are matched to prices via the existing pipeline.
+- Q: Which specific tokenizer should the model use? → A: BERT WordPiece tokenizer (`bert-base-uncased`, ~30K vocab). Pre-trained, no custom training step needed, good English coverage for card text.
+- Q: What training hyperparameters should be used? → A: AdamW optimizer, lr=1e-4, batch size 64, 20 epochs, linear warmup over first 2 epochs.
+- Q: Should training use checkpointing and/or early stopping? → A: Save best model checkpoint (by validation loss) + early stopping with patience of 5 epochs.
 
 ### Session 2026-03-01
 
@@ -87,21 +104,26 @@ A model developer wants to evaluate how well the transformer architecture perfor
 
 - **FR-001**: The prediction model MUST use a transformer architecture with attention mechanisms, following the general design patterns of modern language models.
 - **FR-002**: The model MUST be trainable on a GPU with 8GB VRAM (GeForce RTX 3060 Ti). Peak GPU memory consumption during training MUST NOT exceed 8GB.
-- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers) as input, prepended with a `[CLS]` token and padded with `[PAD]` tokens for batching, and produce a single numeric price prediction as output. The input text is the full converted card script from feature 006 (`./output/*.txt` files), tokenized using a standard off-the-shelf tokenizer from an existing library (e.g., a pre-trained WordPiece or BPE tokenizer). Internally, the model predicts in shifted-log-price space (trained on `log(price + 2)` where 2 EUR is the bulk threshold); the output is converted back to EUR via `exp(x) - 2` for the final prediction. The prediction is derived from the transformer's output at the `[CLS]` position.
+- **FR-003**: The model MUST accept tokenized card data (a sequence of token identifiers) as input, prepended with a `[CLS]` token and padded with `[PAD]` tokens for batching, and produce a single numeric price prediction as output. The input text is the full converted card script from feature 006 (`./output/*.txt` files), tokenized using the BERT WordPiece tokenizer (`bert-base-uncased`, ~30K vocab) from the Hugging Face `transformers` library. Internally, the model predicts in shifted-log-price space (trained on `log(price + 2)` where 2 EUR is the bulk threshold); the output is converted back to EUR via `exp(x) - 2` for the final prediction. The prediction is derived from the transformer's output at the `[CLS]` position.
 - **FR-004**: The model MUST handle variable-length input sequences. Cards with different amounts of text produce token sequences of different lengths, and the model must process all of them without requiring manual padding decisions from the user.
 - **FR-005**: The model MUST define a maximum input sequence length. Inputs exceeding this length MUST be truncated rather than causing errors.
 - **FR-006**: The model MUST use an embedding layer to convert token identifiers into dense vector representations that the transformer layers process. The embedding layer is trained alongside the model using the vocabulary defined by the chosen standard tokenizer.
 - **FR-007**: Inference (producing a prediction from a single card) MUST be fast enough to support the prediction service response time requirements from feature 005 (price estimate within 3 seconds).
 - **FR-008**: The model MUST produce deterministic predictions — the same input with the same model version MUST always yield the same output.
-- **FR-009**: The trained model MUST be saveable to and loadable from disk as a PyTorch native `.pt` file containing the model state dict and all configuration needed to reconstruct the model and run inference.
+- **FR-009**: The trained model MUST be saveable to and loadable from disk as a PyTorch native `.pt` file containing the model state dict and all configuration needed to reconstruct the model and run inference. The model artifact MUST be saved to `models/transformer/`. Retraining overwrites the existing artifact; no versioning or history is maintained.
+- **FR-012**: The transformer model MUST coexist alongside the existing sklearn model from feature 001. When the API evaluation endpoint (`POST /api/v1/evaluate`) is invoked, BOTH models MUST be run and the response MUST include the predicted price from each model. There is no model selection parameter — both predictions are always returned. The response format MUST include separate fields for each model's prediction (e.g., `predicted_price_eur_sklearn` and `predicted_price_eur_transformer`). If the transformer model is not available (no trained artifact), its prediction field MUST be `null` and the sklearn prediction MUST still be returned (graceful degradation).
+- **FR-013**: Inference MUST support CPU fallback when no GPU is available. Training requires GPU.
+- **FR-014**: Training MUST be invocable as a subcommand added to an existing CLI entry point (not a standalone script). During training, the CLI MUST print a per-epoch summary line containing epoch number, train loss, validation loss, and elapsed time (e.g., `Epoch 3/20 — train_loss: 0.142, val_loss: 0.158, 12.3s`). After training completes, a final summary MUST be printed showing the best epoch and early-stopping status. No progress bars.
+- **FR-015**: Evaluation MUST run automatically after training completes, printing metrics (MAE, median percentage error) to the CLI. A separate evaluation subcommand MUST also be available to re-evaluate any saved model against the validation dataset independently. The evaluation subcommand defaults to loading the model from `models/transformer/` but accepts an optional `--model-path` argument to evaluate a model at a different location.
 - **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss (MSE on shifted-log prices) and meeting the accuracy targets defined in feature 001 (median percentage error ≤ 50%).
+- **FR-011**: Training MUST save the best model checkpoint (lowest validation loss) and apply early stopping with a patience of 5 epochs. The final saved model artifact is the best checkpoint, not the last epoch's weights.
 
 ### Key Entities
 
 - **Transformer Model**: The core prediction model. Uses attention mechanisms to process sequences of card tokens and produce a price prediction. Sized to fit within the 8GB VRAM constraint during training. Saved as a model artifact after training.
-- **Embedding Layer**: Converts token identifiers into dense vector representations. Trained alongside the transformer model. The vocabulary size is determined by the chosen standard tokenizer and includes special tokens (`[CLS]`, `[PAD]`).
+- **Embedding Layer**: Converts token identifiers into dense vector representations. Trained alongside the transformer model. Uses the BERT `bert-base-uncased` vocabulary (30,522 tokens), which already includes `[CLS]` and `[PAD]` special tokens.
 - **Attention Mechanism**: The component within each transformer layer that allows the model to weigh relationships between different tokens in the input sequence (e.g., how a keyword ability relates to the mana cost to influence predicted price).
-- **Model Artifact**: The complete trained model saved to disk as a PyTorch native `.pt` file. Contains all weights (embeddings, transformer layers, output layer) as a state dict, plus the model configuration needed to reconstruct the architecture and run inference. Produced by the training stage, consumed by the prediction stage.
+- **Model Artifact**: The complete trained model saved to disk as a PyTorch native `.pt` file in `models/transformer/`. Contains all weights (embeddings, transformer layers, output layer) as a state dict, plus the model configuration needed to reconstruct the architecture and run inference. Produced by the training stage, consumed by the prediction stage. Coexists with the sklearn model artifacts in `models/`.
 
 ### Network Architecture
 
@@ -130,21 +152,36 @@ Input token IDs (from standard tokenizer)
 | `n_layers` | 4 | Transformer encoder layers. Enough depth for multi-hop attention patterns (e.g., keyword + mana cost → price) without excess capacity. |
 | `n_heads` | 4 | Attention heads (head_dim = 32 each). Allows the model to attend to different relationship types in parallel. |
 | `ff_dim` | 512 | Feed-forward inner dimension (4× d_model, the standard transformer ratio). |
-| `max_seq_len` | 256 | Maximum input token count including `[CLS]` and `[PAD]`. Covers the longest tokenized cards with headroom. |
+| `max_seq_len` | TBD (starting estimate: 256) | Maximum input token count including `[CLS]` and `[PAD]`. To be determined empirically by analyzing the tokenized card length distribution during implementation. |
 | `dropout` | 0.1 | Applied after positional encoding and before the output head. Primary regularization against overfitting. |
-| `vocab_size` | from tokenizer | Determined by the chosen standard tokenizer (e.g., ~30K for BERT WordPiece, or smaller for a domain-trained BPE). |
+| `vocab_size` | 30,522 | BERT `bert-base-uncased` WordPiece vocabulary size (fixed). |
 
-**Size estimate**: ~2M parameters. Training memory footprint with Adam optimizer (fp32): ~350 MB for batch size 64 — well within the 8GB VRAM budget.
+**Size estimate**: ~2M parameters. Training memory footprint with AdamW optimizer (fp32): ~350 MB for batch size 64 — well within the 8GB VRAM budget.
+
+**Training hyperparameters**:
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| Optimizer | AdamW | Standard for transformer training; weight decay helps regularize. |
+| Learning rate | 1e-4 | Conservative starting point for small transformers; avoids divergence. |
+| Batch size | 64 | Fits comfortably in 8GB VRAM with this model size. |
+| Epochs | 20 | ~16K training examples × 20 passes provides sufficient gradient updates for convergence. |
+| LR schedule | Linear warmup (2 epochs) | Stabilizes early training before full learning rate is applied. |
+| Early stopping | Patience = 5 epochs | Stop training if validation loss does not improve for 5 consecutive epochs; prevents overfitting. |
+| Checkpointing | Best model (by val loss) | Save the model state dict whenever validation loss reaches a new minimum; final artifact is the best checkpoint. |
 
 ## Assumptions
 
 - The model is an encoder-only (or encoder-style) transformer, since the task is regression (input sequence → single number), not text generation. The architecture does not need a decoder or autoregressive generation capabilities.
-- The tokenizer is a standard off-the-shelf tokenizer from an existing library (e.g., BERT's WordPiece tokenizer or a BPE tokenizer). The model pipeline prepends a `[CLS]` token, truncates to the maximum sequence length if needed, and pads with `[PAD]` tokens for batching. These special tokens must be present in the tokenizer's vocabulary.
+- The tokenizer is the BERT WordPiece tokenizer (`bert-base-uncased`, vocab size 30,522) from the Hugging Face `transformers` library. Both `torch` and `transformers` are required project dependencies for this feature. The model pipeline prepends a `[CLS]` token, truncates to the maximum sequence length if needed, and pads with `[PAD]` tokens for batching. These special tokens are already present in the BERT vocabulary.
 - The 8GB VRAM budget must accommodate the model parameters, the batch of training examples, gradients, and optimizer state simultaneously during training. The model size must be chosen accordingly.
-- The maximum input sequence length will be determined during implementation based on the distribution of tokenized card lengths in the dataset. Typical cards are expected to produce sequences of a few dozen to a few hundred tokens.
-- Mixed precision training and gradient accumulation are acceptable techniques to fit within the VRAM budget and improve effective batch size, but these are implementation choices — the requirement is simply that training completes within 8GB.
+- The maximum input sequence length will be determined empirically during implementation by analyzing the distribution of tokenized card lengths in the dataset. The starting estimate is 256 tokens, but the final value may differ. Typical cards are expected to produce sequences of a few dozen to a few hundred tokens.
+- Training uses AdamW optimizer (lr=1e-4, batch size 64, 20 epochs) with linear warmup over the first 2 epochs. Mixed precision training and gradient accumulation are acceptable additional techniques to fit within the VRAM budget, but these are implementation choices — the requirement is simply that training completes within 8GB.
 - The model internally predicts shifted-log-transformed prices (`log(price + 2)` where 2 EUR is the community "bulk" threshold). The output layer maps the transformer's `[CLS]` representation to a single scalar in shifted-log-price space. During inference, the output is converted back to EUR via `exp(x) - 2`. This shifted-log approach compresses price differences below ~2 EUR (treating all bulk cards as roughly equivalent) while preserving proportional sensitivity in the mid-to-high price range where distinctions matter.
 - Training uses an 80/20 random split (same strategy as feature 001) to keep evaluation comparable across models. The validation dataset is used to monitor overfitting and report accuracy.
+- The transformer model coexists with the existing sklearn model from feature 001. When the evaluation endpoint is called, both models are always run and both predictions are returned. If the transformer model artifact is not available, its prediction is returned as `null` while the sklearn prediction is still provided.
+- Inference supports CPU fallback (automatic device detection) so the prediction service does not require GPU. Training requires GPU (CUDA).
+- Training is invoked as a subcommand on an existing CLI entry point, not as a standalone script.
 
 ## Success Criteria *(mandatory)*
 
