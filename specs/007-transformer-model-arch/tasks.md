@@ -19,9 +19,9 @@
 
 **Purpose**: Add PyTorch dependencies, create directory structure, and prepare test fixtures
 
-- [ ] T001 Add `torch` and `transformers` dependencies to pyproject.toml
-- [ ] T002 [P] Create test fixture converted card text files in tests/fixtures/converted_cards/ (lightning_bolt.txt, grizzly_bears.txt, jace_the_mind_sculptor.txt)
-- [ ] T003 [P] Create models/transformer/ directory with .gitkeep
+- [X] T001 Add `torch` and `transformers` dependencies to pyproject.toml
+- [X] T002 [P] Create test fixture converted card text files in tests/fixtures/converted_cards/ (lightning_bolt.txt, grizzly_bears.txt, jace_the_mind_sculptor.txt)
+- [X] T003 [P] Create models/transformer/ directory with .gitkeep
 
 ---
 
@@ -33,19 +33,19 @@
 
 ### Tests (write first, ensure they FAIL before implementation)
 
-- [ ] T004 [P] Write TransformerConfig validation tests (all fields > 0, d_model divisible by n_heads, dropout in [0, 1)) in tests/unit/domain/test_entities.py
-- [ ] T005 [P] Write CardPriceTransformerModel tests (forward pass shape, CLS extraction, determinism, attention mask handling) in tests/unit/infrastructure/test_transformer_model.py
-- [ ] T006 [P] Write TransformerTrainingDataset tests (construction from card tuples, tokenization, padding/truncation, shifted-log target transform) in tests/unit/infrastructure/test_transformer_dataset.py
-- [ ] T007 [P] Write TransformerStore tests (save/load roundtrip, config preserved, missing file error) in tests/unit/infrastructure/test_transformer_store.py
-- [ ] T008 [P] Write evaluate_transformer use case tests (MAE and median percentage error computation, shifted-log inverse transform, per-card breakdown) in tests/unit/application/test_evaluate_transformer.py
+- [X] T004 [P] Write TransformerConfig validation tests (all fields > 0, d_model divisible by n_heads, dropout in [0, 1)) in tests/unit/domain/test_entities.py
+- [X] T005 [P] Write CardPriceTransformerModel tests (forward pass shape, CLS extraction, determinism, attention mask handling) in tests/unit/infrastructure/test_transformer_model.py
+- [X] T006 [P] Write TransformerTrainingDataset tests (construction from card tuples, tokenization, padding/truncation, shifted-log target transform) in tests/unit/infrastructure/test_transformer_dataset.py
+- [X] T007 [P] Write TransformerStore tests (save/load roundtrip, config preserved, missing file error) in tests/unit/infrastructure/test_transformer_store.py
+- [X] T008 [P] Write evaluate_transformer use case tests (MAE and median percentage error computation, shifted-log inverse transform, per-card breakdown) in tests/unit/application/test_evaluate_transformer.py
 
 ### Implementation
 
-- [ ] T009 Add TransformerConfig frozen dataclass with validation to src/price_predictor/domain/entities.py
-- [ ] T010 [P] Create CardPriceTransformerModel (nn.Module) with token embedding, learned positional embedding, 4-layer TransformerEncoder, CLS extraction, and linear output head in src/price_predictor/infrastructure/transformer_model.py
-- [ ] T011 [P] Create TransformerTrainingDataset (torch Dataset) with BERT WordPiece tokenization, padding/truncation, and shifted-log price targets in src/price_predictor/infrastructure/transformer_dataset.py
-- [ ] T012 Create TransformerStore with save (state_dict + config dict) and load (.pt artifact reconstruction) in src/price_predictor/infrastructure/transformer_store.py
-- [ ] T013 Create evaluate_transformer use case (load model, build validation dataset, compute MAE and median percentage error, return TransformerEvalResult) in src/price_predictor/application/evaluate_transformer.py
+- [X] T009 Add TransformerConfig frozen dataclass with validation to src/price_predictor/domain/entities.py
+- [X] T010 [P] Create CardPriceTransformerModel (nn.Module) with token embedding, learned positional embedding, 4-layer TransformerEncoder, CLS extraction, and linear output head in src/price_predictor/infrastructure/transformer_model.py
+- [X] T011 [P] Create TransformerTrainingDataset (torch Dataset) with BERT WordPiece tokenization, padding/truncation, and shifted-log price targets in src/price_predictor/infrastructure/transformer_dataset.py
+- [X] T012 Create TransformerStore with save (state_dict + config dict) and load (.pt artifact reconstruction) in src/price_predictor/infrastructure/transformer_store.py
+- [X] T013 Create evaluate_transformer use case (load model, build validation dataset, compute MAE and median percentage error, return TransformerEvalResult) in src/price_predictor/application/evaluate_transformer.py
 
 **Checkpoint**: Foundation ready — all core components tested and working. User story implementation can now begin.
 
@@ -61,15 +61,15 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T014 [P] [US1] Write sequence length analysis tests (95th percentile calculation, round-up to multiple of 8, clamp to min 64, CLI logging of distribution stats) in tests/unit/application/test_train_transformer.py
-- [ ] T015 [P] [US1] Write train_transformer use case tests (training loop with mocked model on CPU, early stopping logic, best-checkpoint saving, auto-evaluation call, TransformerTrainResult fields) in tests/unit/application/test_train_transformer.py
-- [ ] T016 [P] [US1] Write train-transformer CLI argument parsing and invocation tests in tests/unit/infrastructure/test_cli_train_transformer.py
+- [X] T014 [P] [US1] Write sequence length analysis tests (95th percentile calculation, round-up to multiple of 8, clamp to min 64, CLI logging of distribution stats) in tests/unit/application/test_train_transformer.py
+- [X] T015 [P] [US1] Write train_transformer use case tests (training loop with mocked model on CPU, early stopping logic, best-checkpoint saving, auto-evaluation call, TransformerTrainResult fields) in tests/unit/application/test_train_transformer.py
+- [X] T016 [P] [US1] Write train-transformer CLI argument parsing and invocation tests in tests/unit/infrastructure/test_cli_train_transformer.py
 
 ### Implementation for User Story 1
 
-- [ ] T017 [US1] Implement sequence length analysis function: tokenize all card texts, compute 95th percentile, round up to nearest multiple of 8, clamp min 64, log distribution stats (95th/99th/max, truncation %) per research.md §1 in src/price_predictor/application/train_transformer.py
-- [ ] T018 [US1] Create train_transformer use case (load cards via forge_parser + mtgjson_loader, match to output/ texts, call sequence length analysis from T017, build dataset, 80/20 split seed 42, AdamW lr=1e-4, linear warmup 2 epochs, early stopping patience 5, save best checkpoint, auto-evaluate, return TransformerTrainResult) in src/price_predictor/application/train_transformer.py
-- [ ] T019 [US1] Add `train-transformer` CLI subcommand with all arguments per contracts/cli-subcommands.md, per-epoch summary output, and final summary in src/price_predictor/infrastructure/cli.py
+- [X] T017 [US1] Implement sequence length analysis function: tokenize all card texts, compute 95th percentile, round up to nearest multiple of 8, clamp min 64, log distribution stats (95th/99th/max, truncation %) per research.md §1 in src/price_predictor/application/train_transformer.py
+- [X] T018 [US1] Create train_transformer use case (load cards via forge_parser + mtgjson_loader, match to output/ texts, call sequence length analysis from T017, build dataset, 80/20 split seed 42, AdamW lr=1e-4, linear warmup 2 epochs, early stopping patience 5, save best checkpoint, auto-evaluate, return TransformerTrainResult) in src/price_predictor/application/train_transformer.py
+- [X] T019 [US1] Add `train-transformer` CLI subcommand with all arguments per contracts/cli-subcommands.md, per-epoch summary output, and final summary in src/price_predictor/infrastructure/cli.py
 
 **Checkpoint**: At this point, User Story 1 should be fully functional — `price_predictor train-transformer` produces a trained model artifact with progress output.
 
@@ -85,13 +85,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T020 [P] [US2] Update server unit tests for dual-model response format (both models present, transformer null when unavailable, response schema per contracts/evaluate-endpoint.md) in tests/unit/infrastructure/test_server.py
-- [ ] T021 [P] [US2] Update eval CLI tests for new nested response format (both models displayed, transformer "not available" when null) in tests/unit/infrastructure/test_cli_eval.py
+- [X] T020 [P] [US2] Update server unit tests for dual-model response format (both models present, transformer null when unavailable, response schema per contracts/evaluate-endpoint.md) in tests/unit/infrastructure/test_server.py
+- [X] T021 [P] [US2] Update eval CLI tests for new nested response format (both models displayed, transformer "not available" when null) in tests/unit/infrastructure/test_cli_eval.py
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Modify `create_app()` to accept optional transformer model, run both models on evaluate endpoint, return nested response with graceful degradation in src/price_predictor/infrastructure/server.py
-- [ ] T023 [US2] Update `eval` CLI subcommand to parse nested response and display both sklearn and transformer predictions in src/price_predictor/infrastructure/cli.py
+- [X] T022 [US2] Modify `create_app()` to accept optional transformer model, run both models on evaluate endpoint, return nested response with graceful degradation in src/price_predictor/infrastructure/server.py
+- [X] T023 [US2] Update `eval` CLI subcommand to parse nested response and display both sklearn and transformer predictions in src/price_predictor/infrastructure/cli.py
 
 **Checkpoint**: At this point, the prediction service returns dual-model predictions and the eval CLI displays both.
 
@@ -107,11 +107,11 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T024 [P] [US3] Write evaluate-transformer CLI argument parsing and invocation tests (default model path, --model-path override, --output-csv, JSON output format) in tests/unit/infrastructure/test_cli_evaluate_transformer.py
+- [X] T024 [P] [US3] Write evaluate-transformer CLI argument parsing and invocation tests (default model path, --model-path override, --output-csv, JSON output format) in tests/unit/infrastructure/test_cli_evaluate_transformer.py
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Add `evaluate-transformer` CLI subcommand with all arguments per contracts/cli-subcommands.md, JSON output, and optional CSV export in src/price_predictor/infrastructure/cli.py
+- [X] T025 [US3] Add `evaluate-transformer` CLI subcommand with all arguments per contracts/cli-subcommands.md, JSON output, and optional CSV export in src/price_predictor/infrastructure/cli.py
 
 **Checkpoint**: All user stories are independently functional — training, API prediction, and standalone evaluation all work.
 
@@ -121,9 +121,9 @@
 
 **Purpose**: Integration tests and end-to-end validation across all stories
 
-- [ ] T026 [P] Create integration test: train tiny model on fixture data (3 cards, 2 epochs, CPU) and verify artifact saved and eval metrics returned in tests/integration/test_transformer_training.py
-- [ ] T027 [P] Update server integration tests for dual-model responses (load both models, verify nested response) in tests/integration/test_server_integration.py
-- [ ] T028 Run quickstart.md end-to-end validation (install deps, train, evaluate, serve, eval CLI)
+- [X] T026 [P] Create integration test: train tiny model on fixture data (3 cards, 2 epochs, CPU) and verify artifact saved and eval metrics returned in tests/integration/test_transformer_training.py
+- [X] T027 [P] Update server integration tests for dual-model responses (load both models, verify nested response) in tests/integration/test_server_integration.py
+- [X] T028 Run quickstart.md end-to-end validation (install deps, train, evaluate, serve, eval CLI)
 
 ---
 

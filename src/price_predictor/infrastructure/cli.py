@@ -108,6 +108,47 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory for converted files",
     )
 
+    # train-transformer subcommand
+    tt_parser = subparsers.add_parser(
+        "train-transformer", help="Train transformer model on converted card texts"
+    )
+    tt_parser.add_argument("--output-dir", type=str, default="output/")
+    tt_parser.add_argument(
+        "--prices-path", type=str, default="resources/AllPricesToday.json"
+    )
+    tt_parser.add_argument(
+        "--printings-path", type=str, default="resources/AllPrintings.json"
+    )
+    tt_parser.add_argument(
+        "--forge-cards-path", type=str,
+        default="../forge/forge-gui/res/cardsfolder/",
+    )
+    tt_parser.add_argument("--model-output", type=str, default="models/transformer/")
+    tt_parser.add_argument("--batch-size", type=int, default=64)
+    tt_parser.add_argument("--epochs", type=int, default=20)
+    tt_parser.add_argument("--lr", type=float, default=1e-4)
+    tt_parser.add_argument("--patience", type=int, default=5)
+    tt_parser.add_argument("--random-seed", type=int, default=42)
+
+    # evaluate-transformer subcommand
+    et_parser = subparsers.add_parser(
+        "evaluate-transformer", help="Evaluate transformer model accuracy"
+    )
+    et_parser.add_argument("--model-path", type=str, default="models/transformer/")
+    et_parser.add_argument("--output-dir", type=str, default="output/")
+    et_parser.add_argument(
+        "--prices-path", type=str, default="resources/AllPricesToday.json"
+    )
+    et_parser.add_argument(
+        "--printings-path", type=str, default="resources/AllPrintings.json"
+    )
+    et_parser.add_argument(
+        "--forge-cards-path", type=str,
+        default="../forge/forge-gui/res/cardsfolder/",
+    )
+    et_parser.add_argument("--random-seed", type=int, default=42)
+    et_parser.add_argument("--output-csv", type=str, default=None)
+
     # check-convert subcommand
     check_parser = subparsers.add_parser(
         "check-convert",
@@ -180,10 +221,26 @@ def run_eval(args: argparse.Namespace) -> int:
         )
         return 2
 
-    price = data["predicted_price_eur"]
-    version = data["model_version"]
-    print(f"Predicted price: \u20ac{price}")
-    print(f"Model version:   {version}")
+    # Handle dual-model response format (feature 007)
+    if "sklearn" in data:
+        sklearn = data["sklearn"]
+        print("sklearn:")
+        print(f"  Predicted price: \u20ac{sklearn['predicted_price_eur']}")
+        print(f"  Model version:   {sklearn['model_version']}")
+        transformer = data.get("transformer")
+        if transformer is not None:
+            print("transformer:")
+            print(f"  Predicted price: \u20ac{transformer['predicted_price_eur']}")
+            print(f"  Model version:   {transformer['model_version']}")
+        else:
+            print("transformer:")
+            print("  not available")
+    else:
+        # Legacy flat format
+        price = data["predicted_price_eur"]
+        version = data["model_version"]
+        print(f"Predicted price: \u20ac{price}")
+        print(f"Model version:   {version}")
     return 0
 
 
@@ -209,7 +266,29 @@ def run_serve(args: argparse.Namespace) -> int:
         model_version = "latest"
     artifact["model_version"] = model_version
 
-    app = create_app(artifact)
+    # Try loading transformer model (optional — graceful degradation)
+    transformer_artifact = None
+    transformer_dir = Path("models/transformer/")
+    transformer_pt = transformer_dir / "model.pt"
+    if transformer_pt.exists():
+        try:
+            from price_predictor.infrastructure.transformer_store import (
+                load_model as load_transformer,
+            )
+
+            model, config = load_transformer(transformer_dir)
+            transformer_artifact = {
+                "model": model,
+                "config": config,
+                "model_version": "transformer-v1",
+            }
+            print("Transformer model loaded.", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Failed to load transformer model: {e}", file=sys.stderr)
+    else:
+        print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
+
+    app = create_app(artifact, transformer_artifact=transformer_artifact)
     print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
@@ -417,6 +496,84 @@ def run_evaluate(args: argparse.Namespace) -> int:
         "median_percentage_error": result.metrics.median_percentage_error,
         "top_20_overlap": result.metrics.top_20_overlap,
         "sample_count": result.metrics.sample_count,
+    }
+    print(json.dumps(output, indent=2))
+    return 0
+
+
+def run_train_transformer(args: argparse.Namespace) -> int:
+    """Execute the train-transformer command."""
+    from price_predictor.application.train_transformer import train_transformer
+
+    try:
+        train_transformer(
+            output_dir=Path(args.output_dir),
+            forge_cards_path=Path(args.forge_cards_path),
+            prices_path=Path(args.prices_path),
+            printings_path=Path(args.printings_path),
+            model_output=Path(args.model_output),
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            lr=args.lr,
+            patience=args.patience,
+            random_seed=args.random_seed,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    return 0
+
+
+def run_evaluate_transformer(args: argparse.Namespace) -> int:
+    """Execute the evaluate-transformer command."""
+    from price_predictor.application.evaluate_transformer import evaluate_transformer
+
+    model_path = Path(args.model_path)
+    try:
+        result = evaluate_transformer(
+            model_dir=model_path,
+            output_dir=Path(args.output_dir),
+            forge_cards_path=Path(args.forge_cards_path),
+            prices_path=Path(args.prices_path),
+            printings_path=Path(args.printings_path),
+            random_seed=args.random_seed,
+        )
+    except FileNotFoundError:
+        print(f"Error: Model not found at {model_path}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    # Optionally write per-card CSV
+    if args.output_csv and result.per_card:
+        import csv
+        with open(args.output_csv, "w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "name", "actual_price_eur",
+                    "predicted_price_eur", "absolute_error_eur",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(result.per_card)
+
+    output = {
+        "model_path": str(result.model_path / "model.pt"),
+        "mean_absolute_error_eur": result.mean_absolute_error_eur,
+        "median_percentage_error": result.median_percentage_error,
+        "sample_count": result.sample_count,
     }
     print(json.dumps(output, indent=2))
     return 0

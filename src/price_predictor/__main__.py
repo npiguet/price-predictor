@@ -9,9 +9,11 @@ from price_predictor.infrastructure.cli import (
     run_convert,
     run_eval,
     run_evaluate,
+    run_evaluate_transformer,
     run_predict,
     run_serve,
     run_train,
+    run_train_transformer,
 )
 
 
@@ -47,6 +49,12 @@ def main() -> int:
         return run_eval(args)
     elif args.command == "convert":
         return run_convert(args)
+    elif args.command == "train-transformer":
+        _configure_logging()
+        return run_train_transformer(args)
+    elif args.command == "evaluate-transformer":
+        _configure_logging()
+        return run_evaluate_transformer(args)
     elif args.command == "check-convert":
         return run_check_convert(args)
     else:

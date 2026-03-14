@@ -65,9 +65,9 @@ class TestServerIntegration:
         )
         assert response.status_code == 200
         data = response.json()
-        assert isinstance(data["predicted_price_eur"], float)
-        assert data["predicted_price_eur"] > 0
-        assert isinstance(data["model_version"], str)
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert data["sklearn"]["predicted_price_eur"] > 0
+        assert isinstance(data["sklearn"]["model_version"], str)
 
     def test_service_matches_standalone_prediction(
         self, integration_client: TestClient, model_path: Path
@@ -78,7 +78,7 @@ class TestServerIntegration:
             content=BOLT_SCRIPT,
             headers={"Content-Type": "text/plain"},
         )
-        service_price = response.json()["predicted_price_eur"]
+        service_price = response.json()["sklearn"]["predicted_price_eur"]
 
         # Same card through standalone use case
         card = Card(
@@ -140,6 +140,6 @@ class TestServerConcurrency:
         assert len(results) == 10
         for status_code, data in results:
             assert status_code == 200
-            assert "predicted_price_eur" in data
-            assert isinstance(data["predicted_price_eur"], float)
+            assert "sklearn" in data
+            assert isinstance(data["sklearn"]["predicted_price_eur"], float)
         assert elapsed < 3.0

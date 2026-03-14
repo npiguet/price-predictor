@@ -8,6 +8,7 @@ from price_predictor.domain.entities import (
     PriceEstimate,
     TrainedModel,
     TrainingExample,
+    TransformerConfig,
 )
 from price_predictor.domain.value_objects import ManaCost
 
@@ -274,3 +275,89 @@ class TestEvaluationMetrics:
         )
         with pytest.raises(AttributeError):
             metrics.sample_count = 200
+
+
+# ---------------------------------------------------------------------------
+# TransformerConfig
+# ---------------------------------------------------------------------------
+
+
+def _make_config(**overrides):
+    defaults = dict(
+        d_model=128,
+        n_layers=4,
+        n_heads=4,
+        ff_dim=512,
+        max_seq_len=256,
+        vocab_size=30522,
+        dropout=0.1,
+    )
+    defaults.update(overrides)
+    return TransformerConfig(**defaults)
+
+
+class TestTransformerConfig:
+    """Tests for the TransformerConfig frozen dataclass."""
+
+    def test_construction_with_valid_defaults(self):
+        cfg = _make_config()
+        assert cfg.d_model == 128
+        assert cfg.n_layers == 4
+        assert cfg.n_heads == 4
+        assert cfg.ff_dim == 512
+        assert cfg.max_seq_len == 256
+        assert cfg.vocab_size == 30522
+        assert cfg.dropout == 0.1
+
+    def test_frozen(self):
+        cfg = _make_config()
+        with pytest.raises(AttributeError):
+            cfg.d_model = 256
+
+    def test_zero_d_model_raises(self):
+        with pytest.raises(ValueError, match="d_model"):
+            _make_config(d_model=0)
+
+    def test_zero_n_layers_raises(self):
+        with pytest.raises(ValueError, match="n_layers"):
+            _make_config(n_layers=0)
+
+    def test_zero_n_heads_raises(self):
+        with pytest.raises(ValueError, match="n_heads"):
+            _make_config(n_heads=0)
+
+    def test_zero_ff_dim_raises(self):
+        with pytest.raises(ValueError, match="ff_dim"):
+            _make_config(ff_dim=0)
+
+    def test_zero_max_seq_len_raises(self):
+        with pytest.raises(ValueError, match="max_seq_len"):
+            _make_config(max_seq_len=0)
+
+    def test_zero_vocab_size_raises(self):
+        with pytest.raises(ValueError, match="vocab_size"):
+            _make_config(vocab_size=0)
+
+    def test_negative_d_model_raises(self):
+        with pytest.raises(ValueError, match="d_model"):
+            _make_config(d_model=-1)
+
+    def test_d_model_not_divisible_by_n_heads_raises(self):
+        with pytest.raises(ValueError, match="d_model"):
+            _make_config(d_model=128, n_heads=3)
+
+    def test_dropout_negative_raises(self):
+        with pytest.raises(ValueError, match="dropout"):
+            _make_config(dropout=-0.1)
+
+    def test_dropout_one_raises(self):
+        with pytest.raises(ValueError, match="dropout"):
+            _make_config(dropout=1.0)
+
+    def test_dropout_above_one_raises(self):
+        with pytest.raises(ValueError, match="dropout"):
+            _make_config(dropout=1.5)
+
+    def test_dropout_zero_is_valid(self):
+        cfg = _make_config(dropout=0.0)
+        assert cfg.dropout == 0.0

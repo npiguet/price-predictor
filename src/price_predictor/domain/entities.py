@@ -101,3 +101,27 @@ class TrainedModel:
     price_range_min_eur: float
     price_range_max_eur: float
     metrics: EvaluationMetrics | None = None
+
+
+@dataclass(frozen=True)
+class TransformerConfig:
+    """Immutable configuration for reconstructing a transformer model architecture."""
+
+    d_model: int
+    n_layers: int
+    n_heads: int
+    ff_dim: int
+    max_seq_len: int
+    vocab_size: int
+    dropout: float
+
+    def __post_init__(self) -> None:
+        for name in ("d_model", "n_layers", "n_heads", "ff_dim", "max_seq_len", "vocab_size"):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name} must be > 0, got {getattr(self, name)}")
+        if self.d_model % self.n_heads != 0:
+            raise ValueError(
+                f"d_model ({self.d_model}) must be divisible by n_heads ({self.n_heads})"
+            )
+        if not (0.0 <= self.dropout < 1.0):
+            raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")

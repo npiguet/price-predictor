@@ -16,6 +16,7 @@ venv/
 
 # Models (trained artifacts)
 models/
+!models/transformer/.gitkeep
 *.joblib
 
 # IDE

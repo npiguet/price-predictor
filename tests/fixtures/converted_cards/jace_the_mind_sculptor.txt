@@ -1,0 +1,9 @@
+name: jace, the mind sculptor
+mana cost: {2}{U}{U}
+types: legendary planeswalker jace
+loyalty: 3
+planeswalker[1]: [+2]: look at the top card of target player's library. you may put that card on the bottom of that player's library.
+planeswalker[2]: 0: draw three cards, then put two cards from your hand on top of your library in any order.
+planeswalker[3]: [-1]: return target creature to its owner's hand.
+planeswalker[4]: [-12]: exile all cards from target player's library, then that player shuffles their hand into their library.
+replacement: CARDNAME enters with three loyalty counters on it.

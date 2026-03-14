@@ -200,3 +200,55 @@ class TestEvalSubcommandParser:
         parser = build_parser()
         args = parser.parse_args(["eval", "card.txt", "--endpoint", "http://other:9000/api/v1/evaluate"])
         assert args.endpoint == "http://other:9000/api/v1/evaluate"
+
+
+class TestDualModelEvalOutput:
+    """Tests for US2: eval CLI displays both model predictions."""
+
+    def test_displays_both_models(self, bolt_file, capsys):
+        """Eval CLI shows both sklearn and transformer predictions."""
+        from price_predictor.infrastructure.cli import run_eval
+        from unittest.mock import MagicMock, patch
+
+        response_data = json.dumps({
+            "sklearn": {"predicted_price_eur": 2.35, "model_version": "20260301-143000"},
+            "transformer": {"predicted_price_eur": 2.18, "model_version": "transformer-v1"},
+        }).encode("utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_data
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("price_predictor.infrastructure.cli.urlopen", return_value=mock_resp):
+            exit_code = run_eval(_make_args(str(bolt_file)))
+
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "sklearn" in out.lower()
+        assert "transformer" in out.lower()
+        assert "2.35" in out
+        assert "2.18" in out
+
+    def test_displays_transformer_not_available_when_null(self, bolt_file, capsys):
+        """Eval CLI shows 'not available' when transformer is null."""
+        from price_predictor.infrastructure.cli import run_eval
+        from unittest.mock import MagicMock, patch
+
+        response_data = json.dumps({
+            "sklearn": {"predicted_price_eur": 2.35, "model_version": "20260301-143000"},
+            "transformer": None,
+        }).encode("utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_data
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("price_predictor.infrastructure.cli.urlopen", return_value=mock_resp):
+            exit_code = run_eval(_make_args(str(bolt_file)))
+
+        assert exit_code == 0
+        out = capsys.readouterr().out
+        assert "sklearn" in out.lower()
+        assert "not available" in out.lower()

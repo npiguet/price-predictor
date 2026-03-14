@@ -45,10 +45,9 @@ class TestEvaluateEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert "predicted_price_eur" in data
-        assert isinstance(data["predicted_price_eur"], float)
-        assert "model_version" in data
-        assert isinstance(data["model_version"], str)
+        assert "sklearn" in data
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert isinstance(data["sklearn"]["model_version"], str)
 
     def test_partial_script_only_types_returns_200(self, client: TestClient) -> None:
         response = client.post(
@@ -58,8 +57,9 @@ class TestEvaluateEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert "predicted_price_eur" in data
-        assert "model_version" in data
+        assert "sklearn" in data
+        assert "predicted_price_eur" in data["sklearn"]
+        assert "model_version" in data["sklearn"]
 
     def test_empty_body_returns_400(self, client: TestClient) -> None:
         response = client.post(
@@ -93,7 +93,7 @@ class TestEvaluateEndpoint:
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["predicted_price_eur"] > 0
+        assert data["sklearn"]["predicted_price_eur"] > 0
 
     def test_response_content_type_is_json(self, client: TestClient) -> None:
         response = client.post(
@@ -128,8 +128,8 @@ class TestStructuredRequestLogging:
         assert entry["card_name"] == "Lightning Bolt"
         assert entry["card_types"] == ["Instant"]
         assert entry["card_mana_cost"] == "R"
-        assert isinstance(entry["predicted_price_eur"], float)
-        assert entry["model_version"] == "20260301-143000"
+        assert isinstance(entry["sklearn_predicted_price_eur"], float)
+        assert entry["sklearn_model_version"] == "20260301-143000"
 
     def test_parse_error_log_contains_required_fields(
         self, client: TestClient, caplog: pytest.LogCaptureFixture
@@ -219,3 +219,102 @@ class TestStructuredRequestLogging:
         entry = json.loads(log_entries[0].getMessage())
         assert entry["card_mana_cost"] is None
         assert entry["status_code"] == 200
+
+
+class TestDualModelResponse:
+    """Tests for US2: dual-model response format."""
+
+    def test_both_models_present(self):
+        """When both models loaded, response has sklearn and transformer objects."""
+        import numpy as np
+        from unittest.mock import MagicMock
+        from fastapi.testclient import TestClient
+        from price_predictor.infrastructure.server import create_app
+
+        mock_model = MagicMock()
+        mock_model.predict.return_value = np.array([np.log(2.35)])
+        mock_fe = MagicMock()
+        mock_fe.transform.return_value = [[1, 2, 3]]
+        sklearn_artifact = {"model": mock_model, "feature_engineering": mock_fe, "model_version": "20260301-143000"}
+
+        # Mock transformer that returns a tensor
+        import torch
+        mock_transformer = MagicMock()
+        mock_transformer.return_value = torch.tensor([0.85])  # shifted-log value
+        mock_transformer.eval = MagicMock()
+        mock_transformer.to = MagicMock(return_value=mock_transformer)
+        # Mock parameters() to return a tensor so next(...).device works
+        param = torch.zeros(1)
+        mock_transformer.parameters = MagicMock(return_value=iter([param]))
+        mock_config = MagicMock()
+        mock_config.max_seq_len = 64
+
+        transformer_artifact = {"model": mock_transformer, "config": mock_config, "model_version": "transformer-v1"}
+
+        app = create_app(sklearn_artifact, transformer_artifact=transformer_artifact)
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/evaluate",
+            content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "sklearn" in data
+        assert "transformer" in data
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert isinstance(data["transformer"]["predicted_price_eur"], float)
+        assert data["sklearn"]["model_version"] == "20260301-143000"
+        assert data["transformer"]["model_version"] == "transformer-v1"
+
+    def test_transformer_null_when_unavailable(self):
+        """When no transformer loaded, transformer is null."""
+        import numpy as np
+        from unittest.mock import MagicMock
+        from fastapi.testclient import TestClient
+        from price_predictor.infrastructure.server import create_app
+
+        mock_model = MagicMock()
+        mock_model.predict.return_value = np.array([np.log(2.35)])
+        mock_fe = MagicMock()
+        mock_fe.transform.return_value = [[1, 2, 3]]
+        sklearn_artifact = {"model": mock_model, "feature_engineering": mock_fe, "model_version": "20260301-143000"}
+
+        app = create_app(sklearn_artifact, transformer_artifact=None)
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/evaluate",
+            content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "sklearn" in data
+        assert data["transformer"] is None
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+
+    def test_response_schema_structure(self):
+        """Response must have exactly sklearn and transformer keys at top level."""
+        import numpy as np
+        from unittest.mock import MagicMock
+        from fastapi.testclient import TestClient
+        from price_predictor.infrastructure.server import create_app
+
+        mock_model = MagicMock()
+        mock_model.predict.return_value = np.array([np.log(1.0)])
+        mock_fe = MagicMock()
+        mock_fe.transform.return_value = [[1]]
+        artifact = {"model": mock_model, "feature_engineering": mock_fe, "model_version": "test"}
+
+        app = create_app(artifact)
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/evaluate",
+            content="Name:Test\nTypes:Instant\n",
+            headers={"Content-Type": "text/plain"},
+        )
+        data = response.json()
+        assert set(data.keys()) == {"sklearn", "transformer"}
