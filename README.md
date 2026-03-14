@@ -20,8 +20,8 @@ python -m venv .venv
 source .venv/bin/activate    # Linux/Mac
 # .venv\Scripts\activate     # Windows
 
-# Install the package with dev dependencies
-pip install -e ".[dev]"
+# Install the package with dev dependencies (includes CUDA-enabled PyTorch)
+pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 
 # Download MTGJSON data files (one-time)
 # Place these in the resources/ directory:

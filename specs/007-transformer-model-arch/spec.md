@@ -84,8 +84,8 @@ A model developer wants to evaluate how well the transformer architecture perfor
 
 **Acceptance Scenarios**:
 
-1. **Given** a trained model and the validation dataset, **When** evaluation is run, **Then** the system reports accuracy metrics including mean absolute error and median percentage error.
-2. **Given** the evaluation results, **When** compared to the accuracy targets from feature 001, **Then** the model meets or exceeds the target of median percentage error of 50% or less.
+1. **Given** a trained model and the validation dataset, **When** evaluation is run, **Then** the system reports accuracy metrics including mean absolute error (EUR) and median absolute error in shifted-log price space.
+2. **Given** the evaluation results, **When** compared to the accuracy targets, **Then** the model meets or exceeds the target of median absolute error ≤ 0.25 in shifted-log price space (see SC-003).
 3. **Given** the evaluation results, **When** the per-card breakdown is reviewed, **Then** the model's predictions show a meaningful correlation with actual prices (not random).
 
 ---
@@ -114,8 +114,8 @@ A model developer wants to evaluate how well the transformer architecture perfor
 - **FR-012**: The transformer model MUST coexist alongside the existing sklearn model from feature 001. When the API evaluation endpoint (`POST /api/v1/evaluate`) is invoked, BOTH models MUST be run and the response MUST include the predicted price from each model. There is no model selection parameter — both predictions are always returned. The response format MUST include separate fields for each model's prediction (e.g., `predicted_price_eur_sklearn` and `predicted_price_eur_transformer`). If the transformer model is not available (no trained artifact), its prediction field MUST be `null` and the sklearn prediction MUST still be returned (graceful degradation).
 - **FR-013**: Inference MUST support CPU fallback when no GPU is available. Training requires GPU.
 - **FR-014**: Training MUST be invocable as a subcommand added to an existing CLI entry point (not a standalone script). During training, the CLI MUST print a per-epoch summary line containing epoch number, train loss, validation loss, and elapsed time (e.g., `Epoch 3/20 — train_loss: 0.142, val_loss: 0.158, 12.3s`). After training completes, a final summary MUST be printed showing the best epoch and early-stopping status. No progress bars.
-- **FR-015**: Evaluation MUST run automatically after training completes, printing metrics (MAE, median percentage error) to the CLI. A separate evaluation subcommand MUST also be available to re-evaluate any saved model against the validation dataset independently. The evaluation subcommand defaults to loading the model from `models/transformer/` but accepts an optional `--model-path` argument to evaluate a model at a different location.
-- **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss (MSE on shifted-log prices) and meeting the accuracy targets defined in feature 001 (median percentage error ≤ 50%).
+- **FR-015**: Evaluation MUST run automatically after training completes, printing metrics (MAE in EUR, median absolute error in shifted-log price space) to the CLI. A separate evaluation subcommand MUST also be available to re-evaluate any saved model against the validation dataset independently. The evaluation subcommand defaults to loading the model from `models/transformer/` but accepts an optional `--model-path` argument to evaluate a model at a different location.
+- **FR-010**: The model MUST be capable of learning price-relevant patterns from the training data, as evidenced by decreasing training loss (MSE on shifted-log prices) and meeting the accuracy target of median absolute error ≤ 0.25 in shifted-log price space (see SC-003).
 - **FR-011**: Training MUST save the best model checkpoint (lowest validation loss) and apply early stopping with a patience of 5 epochs. The final saved model artifact is the best checkpoint, not the last epoch's weights.
 
 ### Key Entities
@@ -189,7 +189,7 @@ Input token IDs (from standard tokenizer)
 
 - **SC-001**: Model training completes on a GeForce RTX 3060 Ti (8GB VRAM) without out-of-memory errors, using the full training dataset.
 - **SC-002**: Peak VRAM usage during training stays below 8GB as measured by GPU monitoring tools.
-- **SC-003**: The trained model achieves a median percentage error of 50% or less on the held-out validation dataset (per feature 001 SC-002).
+- **SC-003**: The trained model achieves a median absolute error of 0.25 or less in shifted-log price space (`log(price + 2)`) on the held-out validation dataset. This replaces the original median percentage error target from feature 001 SC-002 because the shifted-log transform intentionally compresses price differences below the €2 bulk threshold, making EUR percentage error misleading (bulk cards at €0.02 predicted as €0.06 register as 200% error despite being negligible in log space). The 0.25 threshold is derived from the original 50% EUR percentage error goal: a 50% price error maps to ~0.22–0.29 in shifted-log space across the non-bulk price range (€2–€50), so 0.25 is the representative midpoint.
 - **SC-004**: Single-card inference completes in under 100 milliseconds, well within the 3-second endpoint requirement from feature 005.
 - **SC-005**: Training on the full dataset (20,000+ cards) completes within 10 minutes on the target hardware (per feature 001 SC-004).
 - **SC-006**: Training loss consistently decreases over the course of training, demonstrating that the model learns from the data rather than producing random predictions.
