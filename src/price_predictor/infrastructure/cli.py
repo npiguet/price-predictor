@@ -6,10 +6,6 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from urllib.request import Request, urlopen
-
-from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost
 
 
 def _add_shared_train_args(parser: argparse.ArgumentParser) -> None:
@@ -148,75 +144,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_eval(args: argparse.Namespace) -> int:
-    """Execute the eval command — send a card file to the prediction endpoint."""
-    from urllib.error import HTTPError, URLError
-
-    file_path = Path(args.file)
-    if not file_path.exists():
-        print(f"Error: File not found: {file_path}", file=sys.stderr)
-        return 1
-    if not file_path.is_file():
-        print(f"Error: Path is not a file: {file_path}", file=sys.stderr)
-        return 1
-
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except OSError as e:
-        print(f"Error: Could not read file: {e}", file=sys.stderr)
-        return 1
-
-    req = Request(
-        args.endpoint,
-        data=content.encode("utf-8"),
-        headers={"Content-Type": "text/plain"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except HTTPError as e:
-        try:
-            error_data = json.loads(e.read().decode("utf-8"))
-            msg = error_data.get("error", str(e))
-        except Exception:
-            msg = str(e)
-        print(
-            f"Error: Prediction service returned error ({e.code}): {msg}",
-            file=sys.stderr,
-        )
-        return 2
-    except URLError:
-        print(
-            f"Error: Could not connect to prediction service at {args.endpoint}",
-            file=sys.stderr,
-        )
-        return 2
-
-    # Handle dual-model response format (feature 007)
-    if "sklearn" in data:
-        sklearn = data["sklearn"]
-        print("sklearn:")
-        print(f"  Predicted price: \u20ac{sklearn['predicted_price_eur']}")
-        print(f"  Model version:   {sklearn['model_version']}")
-        transformer = data.get("transformer")
-        if transformer is not None:
-            print("transformer:")
-            print(f"  Predicted price: \u20ac{transformer['predicted_price_eur']}")
-            print(f"  Model version:   {transformer['model_version']}")
-        else:
-            print("transformer:")
-            print("  not available")
-    else:
-        # Legacy flat format
-        price = data["predicted_price_eur"]
-        version = data["model_version"]
-        print(f"Predicted price: \u20ac{price}")
-        print(f"Model version:   {version}")
-    return 0
-
-
 def run_serve(args: argparse.Namespace) -> int:
     """Execute the serve command."""
     import uvicorn
@@ -264,113 +191,6 @@ def run_serve(args: argparse.Namespace) -> int:
     app = create_app(artifact, transformer_artifact=transformer_artifact)
     print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
-    return 0
-
-
-def _parse_comma_list(value: str | None) -> list[str]:
-    """Parse a comma-separated string into a list of stripped strings."""
-    if not value:
-        return []
-    return [v.strip() for v in value.split(",") if v.strip()]
-
-
-def run_predict(args: argparse.Namespace) -> int:
-    """Execute the predict command."""
-    from price_predictor.application.predict import PredictPriceUseCase
-    from price_predictor.infrastructure.model_store import ModelNotFoundError
-
-    types = _parse_comma_list(args.types)
-    if not types:
-        print("Error: No card types provided. At least one --types value is required.",
-              file=sys.stderr)
-        return 1
-
-    mana_cost = ManaCost.parse(args.mana_cost) if args.mana_cost else None
-
-    try:
-        card = Card(
-            name="prediction_input",
-            types=types,
-            supertypes=_parse_comma_list(args.supertypes),
-            subtypes=_parse_comma_list(args.subtypes),
-            mana_cost=mana_cost,
-            oracle_text=args.oracle_text,
-            keywords=_parse_comma_list(args.keywords),
-            power=args.power,
-            toughness=args.toughness,
-            loyalty=args.loyalty,
-        )
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    model_path = Path(args.model_path)
-    try:
-        use_case = PredictPriceUseCase()
-        result = use_case.execute(card, model_path)
-    except ModelNotFoundError:
-        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-
-    output = {
-        "predicted_price_eur": result.predicted_price_eur,
-        "model_version": result.model_version,
-    }
-    print(json.dumps(output, indent=2))
-    return 0
-
-
-def run_train(args: argparse.Namespace) -> int:
-    """Execute the train command."""
-    from price_predictor.application.train import TrainModelUseCase
-
-    output_dir = Path(args.output_dir)
-    if not output_dir.exists():
-        print(f"Error: Converted cards directory not found: {output_dir}", file=sys.stderr)
-        return 1
-
-    prices_path = Path(args.prices_path)
-    if not prices_path.exists():
-        print(f"Error: Prices file not found: {prices_path}", file=sys.stderr)
-        return 1
-
-    printings_path = Path(args.printings_path)
-    if not printings_path.exists():
-        print(f"Error: Printings file not found: {printings_path}", file=sys.stderr)
-        return 1
-
-    try:
-        use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=output_dir,
-            prices_path=prices_path,
-            printings_path=printings_path,
-            output_path=Path(args.output_path),
-            test_split=args.test_split,
-            random_seed=args.random_seed,
-        )
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-
-    output = {
-        "model_version": result.trained_model.model_version,
-        "model_path": str(result.model_path),
-        "cards_used": result.trained_model.card_count,
-        "cards_skipped": result.cards_skipped,
-        "skipped_reasons": result.skipped_reasons,
-        "price_range_eur": {
-            "min": result.trained_model.price_range_min_eur,
-            "max": result.trained_model.price_range_max_eur,
-        },
-    }
-    print(json.dumps(output, indent=2))
     return 0
 
 
@@ -423,133 +243,6 @@ def run_convert(args: argparse.Namespace) -> int:
         return 2
 
 
-def run_evaluate(args: argparse.Namespace) -> int:
-    """Execute the evaluate command."""
-    from price_predictor.application.evaluate import EvaluateModelUseCase
-    from price_predictor.infrastructure.model_store import ModelNotFoundError
-
-    model_path = Path(args.model_path)
-    try:
-        use_case = EvaluateModelUseCase()
-        result = use_case.execute(
-            model_path=model_path,
-            output_dir=Path(args.output_dir),
-            prices_path=Path(args.prices_path),
-            printings_path=Path(args.printings_path),
-            test_split=args.test_split,
-            random_seed=args.random_seed,
-        )
-    except ModelNotFoundError:
-        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
-        return 1
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-
-    # Optionally write per-card CSV
-    if args.output_csv and result.per_card:
-        import csv
-        with open(args.output_csv, "w", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=[
-                    "name", "actual_price_eur",
-                    "predicted_price_eur", "absolute_error_eur",
-                ],
-            )
-            writer.writeheader()
-            writer.writerows(result.per_card)
-
-    output = {
-        "model_version": result.model_version,
-        "mean_absolute_error_eur": result.metrics.mean_absolute_error_eur,
-        "median_percentage_error": result.metrics.median_percentage_error,
-        "top_20_overlap": result.metrics.top_20_overlap,
-        "sample_count": result.metrics.sample_count,
-    }
-    print(json.dumps(output, indent=2))
-    return 0
-
-
-def run_train_transformer(args: argparse.Namespace) -> int:
-    """Execute the train-transformer command."""
-    from price_predictor.application.train_transformer import train_transformer
-
-    try:
-        train_transformer(
-            output_dir=Path(args.output_dir),
-            prices_path=Path(args.prices_path),
-            printings_path=Path(args.printings_path),
-            model_output=Path(args.model_output),
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            lr=args.lr,
-            patience=args.patience,
-            random_seed=args.random_seed,
-        )
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-
-    return 0
-
-
-def run_evaluate_transformer(args: argparse.Namespace) -> int:
-    """Execute the evaluate-transformer command."""
-    from price_predictor.application.evaluate_transformer import evaluate_transformer
-
-    model_path = Path(args.model_path)
-    try:
-        result = evaluate_transformer(
-            model_dir=model_path,
-            output_dir=Path(args.output_dir),
-            prices_path=Path(args.prices_path),
-            printings_path=Path(args.printings_path),
-            random_seed=args.random_seed,
-        )
-    except FileNotFoundError:
-        print(f"Error: Model not found at {model_path}", file=sys.stderr)
-        return 1
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-
-    # Optionally write per-card CSV
-    if args.output_csv and result.per_card:
-        import csv
-        with open(args.output_csv, "w", newline="") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=[
-                    "name", "actual_price_eur",
-                    "predicted_price_eur", "absolute_error_eur",
-                ],
-            )
-            writer.writeheader()
-            writer.writerows(result.per_card)
-
-    output = {
-        "model_path": str(result.model_path / "latest.pt"),
-        "mean_absolute_error_eur": result.mean_absolute_error_eur,
-        "median_abs_error_log": result.median_abs_error_log,
-        "sample_count": result.sample_count,
-    }
-    print(json.dumps(output, indent=2))
-    return 0
-
-
 def run_check_convert(args: argparse.Namespace) -> int:
     """Execute the check-convert command."""
     from price_predictor.application.check_convert import check_all, format_report
@@ -575,9 +268,6 @@ def run_check_convert(args: argparse.Namespace) -> int:
           file=sys.stderr)
     print(format_report(results, limit=args.limit))
     return 0
-
-
-# ── New stub handlers (008) ──────────────────────────────────────────
 
 
 def run_train_sklearn(args: argparse.Namespace) -> int:

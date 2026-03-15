@@ -39,10 +39,10 @@ class TestEvaluateTransformerParser:
         assert args.model_path == "custom/path/"
 
 
-class TestRunEvaluateTransformer:
+class TestRunEvaluateTransformerNew:
     @patch("price_predictor.application.evaluate_transformer.evaluate_transformer")
     def test_success_prints_json(self, mock_eval, capsys):
-        from price_predictor.infrastructure.cli import run_evaluate_transformer
+        from price_predictor.infrastructure.cli import run_evaluate_transformer_new
 
         mock_result = MagicMock()
         mock_result.model_path = Path("models/transformer")
@@ -54,15 +54,13 @@ class TestRunEvaluateTransformer:
 
         import argparse
         args = argparse.Namespace(
-            model_path="models/transformer/",
-            output_dir="output/",
+            model_path="./models/transformer/",
+            output_dir="./output",
             prices_path="resources/AllPricesToday.json",
             printings_path="resources/AllPrintings.json",
-            forge_cards_path="../forge/forge-gui/res/cardsfolder/",
             random_seed=42,
-            output_csv=None,
         )
-        exit_code = run_evaluate_transformer(args)
+        exit_code = run_evaluate_transformer_new(args)
 
         assert exit_code == 0
         out = capsys.readouterr().out
