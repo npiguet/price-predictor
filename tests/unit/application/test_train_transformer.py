@@ -29,13 +29,12 @@ class TestAnalyzeSequenceLengths:
         assert "p95" in stats
         assert "p99" in stats
         assert "max" in stats
-        assert "truncation_pct" in stats
 
-    def test_truncation_pct_is_valid(self):
+    def test_max_seq_len_covers_all_cards(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
-        texts = ["word " * 10] * 100
-        _, stats = analyze_sequence_lengths(texts)
-        assert 0.0 <= stats["truncation_pct"] <= 100.0
+        texts = ["word " * i for i in range(1, 101)]
+        max_seq_len, stats = analyze_sequence_lengths(texts)
+        assert max_seq_len >= stats["max"]
 
     def test_p95_less_than_or_equal_to_max(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
@@ -68,7 +67,7 @@ class TestTrainTransformer:
         mock_name_uuids.return_value = {}
         mock_price_map.return_value = {}
         mock_match.return_value = matched
-        mock_analyze.return_value = (64, {"p95": 30, "p99": 40, "max": 50, "truncation_pct": 0.0})
+        mock_analyze.return_value = (64, {"p95": 30, "p99": 40, "max": 50})
         mock_split.return_value = (matched[:16], matched[16:])
         mock_torch.cuda.is_available.return_value = True
         mock_torch.device.return_value = MagicMock()

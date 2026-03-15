@@ -91,8 +91,10 @@ def _match_cards_to_texts(
 def analyze_sequence_lengths(card_texts: list[str]) -> tuple[int, dict]:
     """Analyze token length distribution and compute max_seq_len.
 
-    Returns (max_seq_len, stats_dict) where max_seq_len is the 95th percentile
-    rounded up to the nearest multiple of 8, clamped to a minimum of 64.
+    Returns (max_seq_len, stats_dict) where max_seq_len is the maximum token
+    length across all cards, rounded up to the nearest multiple of 8, clamped
+    to a minimum of 64. This ensures zero truncation — every card is fully
+    represented.
     """
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     lengths = [len(tokenizer.encode(text)) for text in card_texts]
@@ -101,17 +103,14 @@ def analyze_sequence_lengths(card_texts: list[str]) -> tuple[int, dict]:
     p99 = int(np.percentile(lengths, 99))
     max_len = max(lengths)
 
-    # Round up to nearest multiple of 8
-    max_seq_len = math.ceil(p95 / 8) * 8
+    # Use full max so no cards are truncated; round up to multiple of 8
+    max_seq_len = math.ceil(max_len / 8) * 8
     max_seq_len = max(max_seq_len, 64)
-
-    truncation_pct = sum(1 for n in lengths if n > max_seq_len) / len(lengths) * 100
 
     stats = {
         "p95": p95,
         "p99": p99,
         "max": max_len,
-        "truncation_pct": round(truncation_pct, 1),
     }
     return max_seq_len, stats
 
@@ -242,8 +241,12 @@ def train_transformer(
     texts = [text for _, text, _ in matched]
     max_seq_len, stats = analyze_sequence_lengths(texts)
     logger.info(
-        "Sequence length analysis: max_seq_len=%d, p95=%d, p99=%d, max=%d, truncation=%.1f%%",
-        max_seq_len, stats["p95"], stats["p99"], stats["max"], stats["truncation_pct"],
+        "Token length stats: p95=%d, p99=%d, max=%d",
+        stats["p95"], stats["p99"], stats["max"],
+    )
+    logger.info(
+        "Chosen max_seq_len=%d (max rounded up to multiple of 8). No cards will be truncated.",
+        max_seq_len,
     )
 
     # 3. Split data 80/20

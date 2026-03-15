@@ -12,8 +12,8 @@
 1. Load all matched card texts from `output/` (same card set that will be used for training).
 2. Tokenize every card with `BertTokenizer("bert-base-uncased").encode()` (no padding, no truncation).
 3. Compute the distribution of raw token counts (including the `[CLS]` token added by `.encode()`).
-4. Set `max_seq_len` to the **95th percentile** of the distribution, rounded up to the nearest multiple of 8 (for GPU memory alignment). Clamp to a minimum of 64.
-5. Log to CLI: chosen `max_seq_len`, 95th/99th/max percentile values, and the percentage of cards that will be truncated.
+4. Set `max_seq_len` to the **maximum** token count across all cards, rounded up to the nearest multiple of 8 (for GPU memory alignment). Clamp to a minimum of 64. This ensures zero truncation — every card is fully represented. (Changed from 95th percentile in feature 008 — the max is small enough that there's no benefit to truncating.)
+5. Log to CLI: chosen `max_seq_len` and 95th/99th/max percentile values.
 6. Store the computed `max_seq_len` in `TransformerConfig`, which is saved inside the `.pt` artifact. Inference and evaluation reload this value from the artifact — they never recompute it.
 
 **Why per-run, not hardcoded**: The output corpus changes when cards are re-converted (feature 006 updates). A stale hardcoded value could silently truncate new cards or waste memory on padding. Computing from the data ensures the value is always appropriate.
