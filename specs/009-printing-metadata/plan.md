@@ -60,9 +60,7 @@ src/price_predictor/
 │   ├── train_transformer.py   # MODIFY: Enrich text with metadata during training
 │   ├── evaluate.py            # MODIFY: Enrich cards with metadata during evaluation
 │   ├── evaluate_transformer.py # MODIFY: Enrich text with metadata during evaluation
-│   ├── feature_engineering.py # MODIFY: Add printing data features to sklearn feature vector
-│   ├── predict.py             # MODIFY: Support enriched Card entities
-│   └── predict_transformer.py # MODIFY: Support enriched text
+│   └── feature_engineering.py # MODIFY: Add printing data features to sklearn feature vector
 ├── infrastructure/
 │   ├── mtgjson_loader.py      # MODIFY: New function to build metadata map (card→PrintingData)
 │   ├── converted_card_parser.py # MODIFY: Recognize 5 new key:value fields → Card entity
