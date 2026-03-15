@@ -12,6 +12,30 @@ from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import ManaCost
 
 
+def _add_shared_train_args(parser: argparse.ArgumentParser) -> None:
+    """Add shared training options to a parser."""
+    parser.add_argument("--output-dir", type=str, default="./output",
+                        help="Converted card text directory")
+    parser.add_argument("--prices-path", type=str,
+                        default="resources/AllPricesToday.json")
+    parser.add_argument("--printings-path", type=str,
+                        default="resources/AllPrintings.json")
+    parser.add_argument("--test-split", type=float, default=0.2)
+    parser.add_argument("--random-seed", type=int, default=42)
+
+
+def _add_shared_evaluate_args(parser: argparse.ArgumentParser) -> None:
+    """Add shared evaluate options to a parser."""
+    parser.add_argument("--output-dir", type=str, default="./output",
+                        help="Converted card text directory")
+    parser.add_argument("--prices-path", type=str,
+                        default="resources/AllPricesToday.json")
+    parser.add_argument("--printings-path", type=str,
+                        default="resources/AllPrintings.json")
+    parser.add_argument("--test-split", type=float, default=0.2)
+    parser.add_argument("--random-seed", type=int, default=42)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser with all subcommands."""
     parser = argparse.ArgumentParser(
@@ -20,81 +44,71 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # predict subcommand
-    predict_parser = subparsers.add_parser("predict", help="Predict price for a card")
-    predict_parser.add_argument("--mana-cost", type=str, default=None)
-    predict_parser.add_argument("--types", type=str, default=None)
-    predict_parser.add_argument("--supertypes", type=str, default=None)
-    predict_parser.add_argument("--subtypes", type=str, default=None)
-    predict_parser.add_argument("--oracle-text", type=str, default=None)
-    predict_parser.add_argument("--keywords", type=str, default=None)
-    predict_parser.add_argument("--power", type=str, default=None)
-    predict_parser.add_argument("--toughness", type=str, default=None)
-    predict_parser.add_argument("--loyalty", type=str, default=None)
-    predict_parser.add_argument("--colors", type=str, default=None)
-    predict_parser.add_argument(
-        "--model-path", type=str, default="models/latest.joblib"
-    )
-
-    # train subcommand
+    # ── train {model} ─────────────────────────────────────────────
     train_parser = subparsers.add_parser("train", help="Train model on card data")
-    train_parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder",
-    )
-    train_parser.add_argument(
-        "--prices-path", type=str, default="resources/AllPricesToday.json"
-    )
-    train_parser.add_argument(
-        "--printings-path", type=str, default="resources/AllPrintings.json"
-    )
-    train_parser.add_argument("--output-path", type=str, default="models/")
-    train_parser.add_argument("--test-split", type=float, default=0.2)
-    train_parser.add_argument("--random-seed", type=int, default=42)
+    train_subparsers = train_parser.add_subparsers(dest="model")
 
-    # evaluate subcommand
-    eval_parser = subparsers.add_parser("evaluate", help="Evaluate model accuracy")
-    eval_parser.add_argument(
-        "--model-path", type=str, default="models/latest.joblib"
-    )
-    eval_parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder",
-    )
-    eval_parser.add_argument(
-        "--prices-path", type=str, default="resources/AllPricesToday.json"
-    )
-    eval_parser.add_argument(
-        "--printings-path", type=str, default="resources/AllPrintings.json"
-    )
-    eval_parser.add_argument("--test-split", type=float, default=0.2)
-    eval_parser.add_argument("--random-seed", type=int, default=42)
-    eval_parser.add_argument("--output-csv", type=str, default=None)
+    # train sklearn
+    train_sklearn = train_subparsers.add_parser("sklearn",
+                                                 help="Train sklearn model")
+    _add_shared_train_args(train_sklearn)
+    train_sklearn.add_argument("--model-output", type=str,
+                               default="./models/sklearn/")
 
-    # serve subcommand
-    serve_parser = subparsers.add_parser("serve", help="Start the prediction REST service")
-    serve_parser.add_argument(
-        "--model-path", type=str, default="models/latest.joblib"
-    )
+    # train transformer
+    train_transformer = train_subparsers.add_parser("transformer",
+                                                     help="Train transformer model")
+    _add_shared_train_args(train_transformer)
+    train_transformer.add_argument("--model-output", type=str,
+                                   default="./models/transformer/")
+    train_transformer.add_argument("--batch-size", type=int, default=64)
+    train_transformer.add_argument("--epochs", type=int, default=20)
+    train_transformer.add_argument("--lr", type=float, default=1e-4)
+    train_transformer.add_argument("--patience", type=int, default=5)
+
+    # ── predict {model} ──────────────────────────────────────────
+    predict_parser = subparsers.add_parser("predict",
+                                           help="Predict price for a card")
+    predict_subparsers = predict_parser.add_subparsers(dest="model")
+
+    for model_name in ("sklearn", "transformer"):
+        p = predict_subparsers.add_parser(model_name,
+                                          help=f"Predict using {model_name} model")
+        group = p.add_mutually_exclusive_group(required=True)
+        group.add_argument("--file", "-f", type=str,
+                           help="Path to converted card text file")
+        group.add_argument("--card", "-c", type=str,
+                           help="Inline multiline converted card text")
+
+    # ── evaluate {model} ─────────────────────────────────────────
+    evaluate_parser = subparsers.add_parser("evaluate",
+                                            help="Evaluate model accuracy")
+    evaluate_subparsers = evaluate_parser.add_subparsers(dest="model")
+
+    # evaluate sklearn
+    eval_sklearn = evaluate_subparsers.add_parser("sklearn",
+                                                   help="Evaluate sklearn model")
+    _add_shared_evaluate_args(eval_sklearn)
+    eval_sklearn.add_argument("--model-path", type=str,
+                              default="./models/sklearn/")
+    eval_sklearn.add_argument("--output-csv", type=str, default=None)
+
+    # evaluate transformer
+    eval_transformer = evaluate_subparsers.add_parser(
+        "transformer", help="Evaluate transformer model")
+    _add_shared_evaluate_args(eval_transformer)
+    eval_transformer.add_argument("--model-path", type=str,
+                                  default="./models/transformer/")
+
+    # ── serve ─────────────────────────────────────────────────────
+    serve_parser = subparsers.add_parser("serve",
+                                         help="Start the prediction REST service")
+    serve_parser.add_argument("--model-path", type=str,
+                              default="models/sklearn/latest.joblib")
     serve_parser.add_argument("--host", type=str, default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8000)
 
-    # eval subcommand
-    eval_card_parser = subparsers.add_parser(
-        "eval",
-        help="Evaluate a card from a Forge script file via the prediction service",
-    )
-    eval_card_parser.add_argument(
-        "file", type=str, help="Path to a Forge card script file"
-    )
-    eval_card_parser.add_argument(
-        "--endpoint",
-        type=str,
-        default="http://localhost:8000/api/v1/evaluate",
-        help="Prediction service endpoint URL",
-    )
-
-    # convert subcommand
+    # ── convert ───────────────────────────────────────────────────
     convert_parser = subparsers.add_parser(
         "convert", help="Convert Forge card scripts to LLM-friendly text format"
     )
@@ -108,48 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory for converted files",
     )
 
-    # train-transformer subcommand
-    tt_parser = subparsers.add_parser(
-        "train-transformer", help="Train transformer model on converted card texts"
-    )
-    tt_parser.add_argument("--output-dir", type=str, default="output/")
-    tt_parser.add_argument(
-        "--prices-path", type=str, default="resources/AllPricesToday.json"
-    )
-    tt_parser.add_argument(
-        "--printings-path", type=str, default="resources/AllPrintings.json"
-    )
-    tt_parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder/",
-    )
-    tt_parser.add_argument("--model-output", type=str, default="models/transformer/")
-    tt_parser.add_argument("--batch-size", type=int, default=64)
-    tt_parser.add_argument("--epochs", type=int, default=20)
-    tt_parser.add_argument("--lr", type=float, default=1e-4)
-    tt_parser.add_argument("--patience", type=int, default=5)
-    tt_parser.add_argument("--random-seed", type=int, default=42)
-
-    # evaluate-transformer subcommand
-    et_parser = subparsers.add_parser(
-        "evaluate-transformer", help="Evaluate transformer model accuracy"
-    )
-    et_parser.add_argument("--model-path", type=str, default="models/transformer/")
-    et_parser.add_argument("--output-dir", type=str, default="output/")
-    et_parser.add_argument(
-        "--prices-path", type=str, default="resources/AllPricesToday.json"
-    )
-    et_parser.add_argument(
-        "--printings-path", type=str, default="resources/AllPrintings.json"
-    )
-    et_parser.add_argument(
-        "--forge-cards-path", type=str,
-        default="../forge/forge-gui/res/cardsfolder/",
-    )
-    et_parser.add_argument("--random-seed", type=int, default=42)
-    et_parser.add_argument("--output-csv", type=str, default=None)
-
-    # check-convert subcommand
+    # ── check-convert ─────────────────────────────────────────────
     check_parser = subparsers.add_parser(
         "check-convert",
         help="Check converted files against Oracle text from Forge scripts",
@@ -269,7 +242,7 @@ def run_serve(args: argparse.Namespace) -> int:
     # Try loading transformer model (optional — graceful degradation)
     transformer_artifact = None
     transformer_dir = Path("models/transformer/")
-    transformer_pt = transformer_dir / "model.pt"
+    transformer_pt = transformer_dir / "latest.pt"
     if transformer_pt.exists():
         try:
             from price_predictor.infrastructure.transformer_store import (
@@ -570,7 +543,7 @@ def run_evaluate_transformer(args: argparse.Namespace) -> int:
             writer.writerows(result.per_card)
 
     output = {
-        "model_path": str(result.model_path / "model.pt"),
+        "model_path": str(result.model_path / "latest.pt"),
         "mean_absolute_error_eur": result.mean_absolute_error_eur,
         "median_abs_error_log": result.median_abs_error_log,
         "sample_count": result.sample_count,
@@ -604,3 +577,36 @@ def run_check_convert(args: argparse.Namespace) -> int:
           file=sys.stderr)
     print(format_report(results, limit=args.limit))
     return 0
+
+
+# ── New stub handlers (008) ──────────────────────────────────────────
+
+
+def run_train_sklearn(args: argparse.Namespace) -> int:
+    """Train the sklearn model (stub — not yet implemented)."""
+    raise NotImplementedError("run_train_sklearn is not yet implemented")
+
+
+def run_train_transformer_new(args: argparse.Namespace) -> int:
+    """Train the transformer model (stub — not yet implemented)."""
+    raise NotImplementedError("run_train_transformer_new is not yet implemented")
+
+
+def run_predict_sklearn(args: argparse.Namespace) -> int:
+    """Predict with the sklearn model (stub — not yet implemented)."""
+    raise NotImplementedError("run_predict_sklearn is not yet implemented")
+
+
+def run_predict_transformer(args: argparse.Namespace) -> int:
+    """Predict with the transformer model (stub — not yet implemented)."""
+    raise NotImplementedError("run_predict_transformer is not yet implemented")
+
+
+def run_evaluate_sklearn(args: argparse.Namespace) -> int:
+    """Evaluate the sklearn model (stub — not yet implemented)."""
+    raise NotImplementedError("run_evaluate_sklearn is not yet implemented")
+
+
+def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
+    """Evaluate the transformer model (stub — not yet implemented)."""
+    raise NotImplementedError("run_evaluate_transformer_new is not yet implemented")

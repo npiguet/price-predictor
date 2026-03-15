@@ -7,13 +7,13 @@ from price_predictor.infrastructure.cli import (
     build_parser,
     run_check_convert,
     run_convert,
-    run_eval,
-    run_evaluate,
-    run_evaluate_transformer,
-    run_predict,
+    run_evaluate_sklearn,
+    run_evaluate_transformer_new,
+    run_predict_sklearn,
+    run_predict_transformer,
     run_serve,
-    run_train,
-    run_train_transformer,
+    run_train_sklearn,
+    run_train_transformer_new,
 )
 
 
@@ -34,32 +34,45 @@ def main() -> int:
         parser.print_help()
         return 1
 
-    if args.command == "predict":
-        return run_predict(args)
-    elif args.command == "train":
+    if args.command == "train":
+        if getattr(args, "model", None) is None:
+            parser.parse_args(["train", "--help"])
+            return 1
         _configure_logging()
-        return run_train(args)
+        if args.model == "sklearn":
+            return run_train_sklearn(args)
+        elif args.model == "transformer":
+            return run_train_transformer_new(args)
+    elif args.command == "predict":
+        if getattr(args, "model", None) is None:
+            parser.parse_args(["predict", "--help"])
+            return 1
+        if args.model == "sklearn":
+            return run_predict_sklearn(args)
+        elif args.model == "transformer":
+            return run_predict_transformer(args)
     elif args.command == "evaluate":
+        if getattr(args, "model", None) is None:
+            parser.parse_args(["evaluate", "--help"])
+            return 1
         _configure_logging()
-        return run_evaluate(args)
+        if args.model == "sklearn":
+            return run_evaluate_sklearn(args)
+        elif args.model == "transformer":
+            return run_evaluate_transformer_new(args)
     elif args.command == "serve":
         _configure_logging()
         return run_serve(args)
-    elif args.command == "eval":
-        return run_eval(args)
     elif args.command == "convert":
         return run_convert(args)
-    elif args.command == "train-transformer":
-        _configure_logging()
-        return run_train_transformer(args)
-    elif args.command == "evaluate-transformer":
-        _configure_logging()
-        return run_evaluate_transformer(args)
     elif args.command == "check-convert":
         return run_check_convert(args)
     else:
         parser.print_help()
         return 1
+
+    # Should not be reached, but just in case
+    return 1
 
 
 if __name__ == "__main__":

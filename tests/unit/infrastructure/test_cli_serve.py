@@ -19,7 +19,7 @@ class TestServeSubcommand:
     def test_model_path_default(self) -> None:
         parser = build_parser()
         args = parser.parse_args(["serve"])
-        assert args.model_path == "models/latest.joblib"
+        assert args.model_path == "models/sklearn/latest.joblib"
 
     def test_host_default(self) -> None:
         parser = build_parser()

@@ -77,7 +77,7 @@ class TestTrainTransformer:
         mock_torch.manual_seed = MagicMock()
         mock_model_cls.return_value = MagicMock()
         mock_train_loop.return_value = (1, 0.1, False, 5)
-        mock_save.return_value = Path("models/transformer/model.pt")
+        mock_save.return_value = ("20260101-120000", Path("models/transformer/20260101-120000.pt"))
         mock_eval.return_value = MagicMock()
 
         result = train_transformer(
@@ -90,7 +90,7 @@ class TestTrainTransformer:
 
         assert result.card_count == 20
         assert result.max_seq_len == 64
-        assert result.model_path == Path("models/transformer/model.pt")
+        assert result.model_path == Path("models/transformer/20260101-120000.pt")
         assert result.best_epoch == 1
         assert result.best_val_loss == 0.1
 

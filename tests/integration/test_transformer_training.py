@@ -60,8 +60,9 @@ class TestTransformerTrainingIntegration:
         assert all(loss > 0 for loss in losses)
 
         # Save and verify
-        model_path = save_model(model, config, tmp_path)
+        version, model_path = save_model(model, config, tmp_path)
         assert model_path.exists()
+        assert model_path.name == f"{version}.pt"
 
         # Reload and verify predictions
         loaded_model, loaded_config = load_model(tmp_path)

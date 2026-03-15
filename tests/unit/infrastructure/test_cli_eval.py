@@ -178,28 +178,15 @@ class TestRunEvalEndpointFlag:
         assert request_obj.full_url == "http://myhost:9000/api/v1/evaluate"
 
 
-class TestEvalSubcommandParser:
-    def test_eval_subcommand_registered(self) -> None:
+class TestEvalSubcommandRemoved:
+    """The 'eval' subcommand was removed in feature 008 (FR-010)."""
+
+    def test_eval_subcommand_no_longer_registered(self) -> None:
         from price_predictor.infrastructure.cli import build_parser
 
         parser = build_parser()
-        args = parser.parse_args(["eval", "card.txt"])
-        assert args.command == "eval"
-        assert args.file == "card.txt"
-
-    def test_eval_default_endpoint(self) -> None:
-        from price_predictor.infrastructure.cli import build_parser
-
-        parser = build_parser()
-        args = parser.parse_args(["eval", "card.txt"])
-        assert args.endpoint == "http://localhost:8000/api/v1/evaluate"
-
-    def test_eval_custom_endpoint(self) -> None:
-        from price_predictor.infrastructure.cli import build_parser
-
-        parser = build_parser()
-        args = parser.parse_args(["eval", "card.txt", "--endpoint", "http://other:9000/api/v1/evaluate"])
-        assert args.endpoint == "http://other:9000/api/v1/evaluate"
+        with pytest.raises(SystemExit):
+            parser.parse_args(["eval", "card.txt"])
 
 
 class TestDualModelEvalOutput:

@@ -274,7 +274,7 @@ def train_transformer(
 
     # 7. Save
     model.cpu()
-    model_path = save_model(model, config, model_output)
+    version, model_path = save_model(model, config, model_output)
 
     prices = [price for _, _, price in matched]
     print(

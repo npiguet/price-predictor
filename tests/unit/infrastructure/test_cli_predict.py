@@ -1,77 +1,41 @@
-"""Tests for predict CLI subcommand."""
+"""Tests for predict CLI subcommand (new nested interface).
+
+The old predict command with --types, --mana-cost etc. has been removed (FR-010).
+New predict command uses: predict sklearn --file/--card or predict transformer --file/--card.
+Full tests for the new predict handlers will be added in US2 (Phase 4).
+"""
 
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-from pathlib import Path
-
 import pytest
 
-from price_predictor.application.train import TrainModelUseCase
+from price_predictor.infrastructure.cli import build_parser
 
 
-@pytest.fixture
-def trained_model_dir(tmp_path: Path) -> Path:
-    fixtures = Path(__file__).parents[2] / "fixtures"
-    use_case = TrainModelUseCase()
-    use_case.execute(
-        forge_cards_path=fixtures / "forge_cards",
-        prices_path=fixtures / "allprices_sample.json",
-        printings_path=fixtures / "allprintings_sample.json",
-        output_path=tmp_path,
-        test_split=0.2,
-        random_seed=42,
-    )
-    return tmp_path
+class TestPredictParserStructure:
+    def test_predict_sklearn_subcommand_registered(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["predict", "sklearn", "--file", "card.txt"])
+        assert args.command == "predict"
+        assert args.model == "sklearn"
 
+    def test_predict_transformer_subcommand_registered(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["predict", "transformer", "--card", "name: test\ntypes: creature"])
+        assert args.command == "predict"
+        assert args.model == "transformer"
 
-class TestPredictCli:
-    def test_valid_args_produce_json(self, trained_model_dir: Path) -> None:
-        model_path = trained_model_dir / "latest.joblib"
-        result = subprocess.run(
-            [sys.executable, "-m", "price_predictor", "predict",
-             "--types", "Creature",
-             "--mana-cost", "1 G",
-             "--power", "2",
-             "--toughness", "2",
-             "--model-path", str(model_path)],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 0
-        output = json.loads(result.stdout)
-        assert "predicted_price_eur" in output
-        assert "model_version" in output
-        assert output["predicted_price_eur"] > 0
+    def test_file_and_card_mutually_exclusive(self) -> None:
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["predict", "sklearn", "--file", "a.txt", "--card", "text"])
 
-    def test_missing_types_exits_1(self) -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "price_predictor", "predict",
-             "--mana-cost", "R"],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 1
-        assert "types" in result.stderr.lower()
+    def test_missing_file_and_card_exits(self) -> None:
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["predict", "sklearn"])
 
-    def test_missing_model_exits_2(self) -> None:
-        result = subprocess.run(
-            [sys.executable, "-m", "price_predictor", "predict",
-             "--types", "Creature",
-             "--model-path", "nonexistent/model.joblib"],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 2
-
-    def test_partial_args_succeed(self, trained_model_dir: Path) -> None:
-        model_path = trained_model_dir / "latest.joblib"
-        result = subprocess.run(
-            [sys.executable, "-m", "price_predictor", "predict",
-             "--types", "Creature",
-             "--mana-cost", "2 W",
-             "--model-path", str(model_path)],
-            capture_output=True, text=True,
-        )
-        assert result.returncode == 0
-        output = json.loads(result.stdout)
-        assert output["predicted_price_eur"] > 0
+    def test_old_predict_with_types_no_longer_works(self) -> None:
+        parser = build_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["predict", "--types", "Creature"])

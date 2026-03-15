@@ -19,11 +19,13 @@ def _make_config(**overrides) -> TransformerConfig:
 
 
 class TestTransformerStore:
-    def test_save_creates_model_file(self, tmp_path: Path):
+    def test_save_creates_versioned_and_latest_files(self, tmp_path: Path):
         config = _make_config()
         model = CardPriceTransformerModel(config)
-        save_model(model, config, tmp_path)
-        assert (tmp_path / "model.pt").exists()
+        version, model_path = save_model(model, config, tmp_path)
+        assert model_path.exists()
+        assert model_path.name == f"{version}.pt"
+        assert (tmp_path / "latest.pt").exists()
 
     def test_load_returns_model_and_config(self, tmp_path: Path):
         config = _make_config()

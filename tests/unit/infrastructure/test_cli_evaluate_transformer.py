@@ -1,4 +1,4 @@
-"""Tests for evaluate-transformer CLI subcommand."""
+"""Tests for evaluate transformer CLI subcommand."""
 
 from __future__ import annotations
 
@@ -14,38 +14,29 @@ from price_predictor.infrastructure.cli import build_parser
 class TestEvaluateTransformerParser:
     def test_subcommand_registered(self):
         parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer"])
-        assert args.command == "evaluate-transformer"
+        args = parser.parse_args(["evaluate", "transformer"])
+        assert args.command == "evaluate"
+        assert args.model == "transformer"
 
     def test_default_model_path(self):
         parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer"])
-        assert args.model_path == "models/transformer/"
+        args = parser.parse_args(["evaluate", "transformer"])
+        assert args.model_path == "./models/transformer/"
 
     def test_default_output_dir(self):
         parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer"])
-        assert args.output_dir == "output/"
+        args = parser.parse_args(["evaluate", "transformer"])
+        assert args.output_dir == "./output"
 
     def test_default_random_seed(self):
         parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer"])
+        args = parser.parse_args(["evaluate", "transformer"])
         assert args.random_seed == 42
-
-    def test_default_output_csv_is_none(self):
-        parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer"])
-        assert args.output_csv is None
 
     def test_custom_model_path(self):
         parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer", "--model-path", "custom/path/"])
+        args = parser.parse_args(["evaluate", "transformer", "--model-path", "custom/path/"])
         assert args.model_path == "custom/path/"
-
-    def test_custom_output_csv(self):
-        parser = build_parser()
-        args = parser.parse_args(["evaluate-transformer", "--output-csv", "results.csv"])
-        assert args.output_csv == "results.csv"
 
 
 class TestRunEvaluateTransformer:
@@ -54,7 +45,7 @@ class TestRunEvaluateTransformer:
         from price_predictor.infrastructure.cli import run_evaluate_transformer
 
         mock_result = MagicMock()
-        mock_result.model_path = Path("models/transformer/model.pt")
+        mock_result.model_path = Path("models/transformer")
         mock_result.mean_absolute_error_eur = 1.23
         mock_result.median_abs_error_log = 0.19
         mock_result.sample_count = 4032

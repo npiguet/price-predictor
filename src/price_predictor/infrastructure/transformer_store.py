@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import shutil
 from dataclasses import asdict
 from pathlib import Path
 
 import torch
 
 from price_predictor.domain.entities import TransformerConfig
+from price_predictor.infrastructure.model_store import generate_model_version
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 
 
@@ -15,11 +17,19 @@ def save_model(
     model: CardPriceTransformerModel,
     config: TransformerConfig,
     output_dir: Path,
-) -> Path:
-    """Save model state_dict and config to output_dir/model.pt."""
+    version: str | None = None,
+) -> tuple[str, Path]:
+    """Save model state_dict and config to output_dir/<version>.pt.
+
+    Returns (version, model_path) tuple.
+    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    model_path = output_dir / "model.pt"
+
+    if version is None:
+        version = generate_model_version()
+
+    model_path = output_dir / f"{version}.pt"
     torch.save(
         {
             "state_dict": model.state_dict(),
@@ -27,16 +37,23 @@ def save_model(
         },
         model_path,
     )
-    return model_path
+
+    # Update latest copy
+    latest_path = output_dir / "latest.pt"
+    if latest_path.exists() or latest_path.is_symlink():
+        latest_path.unlink()
+    shutil.copy2(model_path, latest_path)
+
+    return version, model_path
 
 
 def load_model(model_dir: Path) -> tuple[CardPriceTransformerModel, TransformerConfig]:
-    """Load model and config from model_dir/model.pt.
+    """Load model and config from model_dir/latest.pt.
 
     Returns (model, config) tuple.
-    Raises FileNotFoundError if model.pt does not exist.
+    Raises FileNotFoundError if latest.pt does not exist.
     """
-    model_path = Path(model_dir) / "model.pt"
+    model_path = Path(model_dir) / "latest.pt"
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
