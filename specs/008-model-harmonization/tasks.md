@@ -36,8 +36,8 @@
 
 - [ ] T003 [P] Update `transformer_store.py` in `src/price_predictor/infrastructure/transformer_store.py` to use versioned filenames: `save_model()` generates a timestamp version string (reuse `generate_model_version()` from `model_store.py`), saves to `<version>.pt`, and creates a `latest.pt` copy. `load_model()` defaults to loading `latest.pt`. Return `(version, path)` tuple like sklearn's `save_model()`.
 - [ ] T004 [P] Update unit tests for transformer store versioning in `tests/unit/infrastructure/test_transformer_store.py`. Cover: save creates versioned file + latest.pt copy, multiple saves create multiple versioned files, load defaults to latest.pt.
-- [ ] T005 [P] Update `model_store.py` in `src/price_predictor/infrastructure/model_store.py` to change default output directory references from `models/` to `models/sklearn/` (this is a caller-side change — the store itself is path-agnostic, but update any hardcoded defaults).
-- [ ] T006 [P] Update unit tests for model store in `tests/unit/infrastructure/test_model_store.py` to verify artifacts land in expected paths.
+- [ ] T005 [P] Verify `model_store.py` in `src/price_predictor/infrastructure/model_store.py` is path-agnostic (no hardcoded `models/` default). If it is, no changes needed — the path change to `models/sklearn/` is handled by callers (train.py, predict.py, evaluate.py, cli.py) in later tasks. If any hardcoded defaults exist, update them.
+- [ ] T006 [P] Update unit tests for model store in `tests/unit/infrastructure/test_model_store.py` to verify save/load works correctly with a `models/sklearn/` style path.
 
 ### Transformer Predict Use Case
 
@@ -61,8 +61,8 @@
 
 ### Tests for User Story 1 (MANDATORY per Constitution) ✅
 
-- [ ] T011 [P] [US1] Update unit tests in `tests/unit/application/test_train.py` to verify sklearn training reads from converted card text files (not Forge scripts) and saves to `models/sklearn/`.
-- [ ] T012 [P] [US1] Update unit tests in `tests/unit/application/test_train_transformer.py` to verify transformer training reads converted texts directly from `./output/` without Forge script dependency and saves to `models/transformer/` with versioned filenames.
+- [ ] T011 [P] [US1] Update unit tests in `tests/unit/application/test_train.py` to verify sklearn training reads from converted card text files (not Forge scripts) and saves to `models/sklearn/`. Include error cases: empty `./output` folder raises clear error suggesting `convert`, missing prices file raises error.
+- [ ] T012 [P] [US1] Update unit tests in `tests/unit/application/test_train_transformer.py` to verify transformer training reads converted texts directly from `./output/` without Forge script dependency and saves to `models/transformer/` with versioned filenames. Include error case: empty `./output` folder raises clear error.
 
 ### Implementation for User Story 1
 
@@ -82,8 +82,8 @@
 
 ### Tests for User Story 2 (MANDATORY per Constitution) ✅
 
-- [ ] T016 [P] [US2] Update unit tests in `tests/unit/application/test_predict.py` to verify sklearn prediction accepts a `Card` parsed from converted text (instead of manual attribute input) and loads model from `models/sklearn/latest.joblib`.
-- [ ] T017 [P] [US2] Write CLI-level tests to verify `predict sklearn --file` reads a file path, `predict sklearn --card` reads inline text, mutual exclusivity of `--file`/`--card`, and error on missing arguments.
+- [ ] T016 [P] [US2] Update unit tests in `tests/unit/application/test_predict.py` to verify sklearn prediction accepts a `Card` parsed from converted text (instead of manual attribute input) and loads model from `models/sklearn/latest.joblib`. Include error case: model not found raises clear error.
+- [ ] T017 [P] [US2] Write CLI-level tests in `tests/unit/infrastructure/test_cli_predict.py` to verify `predict sklearn --file` reads a file path, `predict sklearn --card` reads inline text, mutual exclusivity of `--file`/`--card`, error on missing arguments, and error when `--file` points to nonexistent file.
 
 ### Implementation for User Story 2
 
@@ -102,8 +102,8 @@
 
 ### Tests for User Story 3 (MANDATORY per Constitution) ✅
 
-- [ ] T020 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate.py` to verify sklearn evaluation reads from converted card texts and loads model from `models/sklearn/`.
-- [ ] T021 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate_transformer.py` to verify transformer evaluation reads converted texts directly and loads model from `models/transformer/latest.pt`.
+- [ ] T020 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate.py` to verify sklearn evaluation reads from converted card texts and loads model from `models/sklearn/`. Include error case: model not found raises clear error.
+- [ ] T021 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate_transformer.py` to verify transformer evaluation reads converted texts directly and loads model from `models/transformer/latest.pt`. Include error case: model not found raises clear error.
 
 ### Implementation for User Story 3
 
