@@ -472,6 +472,7 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
             writer.writerows(result.per_card)
 
     output = {
+        "model_name": "sklearn",
         "model_version": result.model_version,
         "mean_absolute_error_eur": result.metrics.mean_absolute_error_eur,
         "median_percentage_error": result.metrics.median_percentage_error,
@@ -507,6 +508,7 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
         return 2
 
     output = {
+        "model_name": "transformer",
         "model_version": result.model_version,
         "mean_absolute_error_eur": result.mean_absolute_error_eur,
         "median_percentage_error": result.median_percentage_error,

@@ -14,7 +14,6 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer
 
-from price_predictor.application.evaluate_transformer import evaluate_transformer
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
@@ -296,23 +295,6 @@ def train_transformer(
         + (f"Early stopping triggered at epoch {final_epoch}." if stopped_early else "")
     )
     print(f"Model saved to {model_path}")
-
-    # 8. Auto-evaluate
-    try:
-        eval_result = evaluate_transformer(
-            model_dir=model_output,
-            output_dir=output_dir,
-            prices_path=prices_path,
-            printings_path=printings_path,
-            random_seed=random_seed,
-        )
-        print(
-            f"\nEvaluation on validation set ({eval_result.sample_count} cards):\n"
-            f"  Mean absolute error: \u20ac{eval_result.mean_absolute_error_eur}\n"
-            f"  Median absolute error (shifted-log): {eval_result.median_abs_error_log}"
-        )
-    except Exception as e:
-        logger.warning("Auto-evaluation failed: %s", e)
 
     return TransformerTrainResult(
         model_path=model_path,

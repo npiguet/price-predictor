@@ -55,9 +55,8 @@ class TestTrainTransformer:
     @patch("price_predictor.application.train_transformer.train_test_split")
     @patch("price_predictor.application.train_transformer._train_loop")
     @patch("price_predictor.application.train_transformer.save_model")
-    @patch("price_predictor.application.train_transformer.evaluate_transformer")
     def test_returns_train_result_with_expected_fields(
-        self, mock_eval, mock_save, mock_train_loop, mock_split, mock_torch,
+        self, mock_save, mock_train_loop, mock_split, mock_torch,
         mock_model_cls, mock_dataloader, mock_dataset_cls, mock_analyze,
         mock_match, mock_price_map, mock_name_uuids
     ):
@@ -75,7 +74,6 @@ class TestTrainTransformer:
         mock_model_cls.return_value = MagicMock()
         mock_train_loop.return_value = (1, 0.1, False, 5)
         mock_save.return_value = ("20260101-120000", Path("models/transformer/20260101-120000.pt"))
-        mock_eval.return_value = MagicMock()
 
         result = train_transformer(
             output_dir=Path("output/"),
