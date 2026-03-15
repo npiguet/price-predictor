@@ -5,6 +5,13 @@
 **Status**: Draft
 **Input**: User description: "Harmonization of the application across models. Get rid of accumulated cruft and inconsistencies, and make way for future addition of more training models without overloading the CLI or REST API."
 
+## Clarifications
+
+### Session 2026-03-15
+
+- Q: What happens to model evaluation (metrics reporting) after removing `evaluate` and `evaluate-transformer`? → A: Add a third unified command `evaluate {model}` that replaces both old evaluate commands.
+- Q: REST API — which model(s) does the prediction endpoint use? → A: Endpoint returns predictions from all available trained models (current behavior, new card format).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Unified Model Training (Priority: P1)
@@ -42,7 +49,23 @@ A user wants to predict the price of a card. Instead of choosing between three o
 
 ---
 
-### User Story 3 - REST API Accepts Converted Card Format (Priority: P2)
+### User Story 3 - Unified Model Evaluation (Priority: P1)
+
+A user wants to evaluate how well a trained model performs. Instead of using separate `evaluate` and `evaluate-transformer` commands, they use a single `evaluate` command and specify which model to assess. The command runs the selected model against a test set and reports quality metrics.
+
+**Why this priority**: Evaluation is the essential feedback loop for training. Without it, users cannot assess model quality. Unifying it follows the same pattern as `train` and `predict`.
+
+**Independent Test**: Can be tested by running `evaluate sklearn` and `evaluate transformer` and verifying both produce quality metrics.
+
+**Acceptance Scenarios**:
+
+1. **Given** a trained sklearn model exists in `./models/sklearn/` and converted card texts exist in `./output`, **When** the user runs `evaluate sklearn`, **Then** the system evaluates the model and outputs quality metrics.
+2. **Given** a trained transformer model exists in `./models/transformer/` and converted card texts exist in `./output`, **When** the user runs `evaluate transformer`, **Then** the system evaluates the model and outputs quality metrics.
+3. **Given** no model argument is provided, **When** the user runs `evaluate`, **Then** a clear error message is shown listing the available model choices.
+
+---
+
+### User Story 4 - REST API Accepts Converted Card Format (Priority: P2)
 
 An API consumer sends a card in the converted text format to the prediction endpoint. The endpoint no longer accepts raw Forge card script syntax; it accepts the same converted text format used by the CLI and training pipelines, establishing a single card representation across the entire application.
 
@@ -77,10 +100,11 @@ An API consumer sends a card in the converted text format to the prediction endp
 - **FR-006**: The CLI MUST provide a single `predict` command that accepts a positional model argument with the same allowed values as `train`.
 - **FR-007**: The `predict` command MUST accept exactly one of two mutually exclusive input methods: `--file` / `-f` (path to a converted card text file) or `--card` / `-c` (inline multiline string in converted card text format).
 - **FR-008**: The `predict` command MUST run prediction locally by calling the relevant model's inference logic directly, without requiring or contacting the REST service.
-- **FR-009**: The old `predict`, `eval`, `evaluate`, `evaluate-transformer`, and `train-transformer` commands MUST be removed from the CLI.
-- **FR-010**: The REST API prediction endpoint MUST accept a multiline string in converted card text format (instead of raw Forge card script format).
-- **FR-011**: The system MUST provide clear, actionable error messages when: an invalid model name is given, required arguments are missing, input files don't exist, no trained model is found, or training data is unavailable.
-- **FR-012**: The `serve` and `convert` and `check-convert` commands MUST remain unchanged.
+- **FR-009**: The CLI MUST provide a single `evaluate` command that accepts a positional model argument with the same allowed values as `train`, replacing the old `evaluate` and `evaluate-transformer` commands. It MUST use converted card texts from `./output` and load models from `./models/<model>/`.
+- **FR-010**: The old `predict`, `eval`, `evaluate`, `evaluate-transformer`, and `train-transformer` commands MUST be removed from the CLI.
+- **FR-011**: The REST API prediction endpoint MUST accept a multiline string in converted card text format (instead of raw Forge card script format). The endpoint MUST continue returning predictions from all available trained models in the response (preserving current multi-model response behavior).
+- **FR-012**: The system MUST provide clear, actionable error messages when: an invalid model name is given, required arguments are missing, input files don't exist, no trained model is found, or training data is unavailable.
+- **FR-013**: The `serve` and `convert` and `check-convert` commands MUST remain unchanged.
 
 ### Key Entities
 
@@ -91,7 +115,7 @@ An API consumer sends a card in the converted text format to the prediction endp
 
 ### Measurable Outcomes
 
-- **SC-001**: The CLI exposes exactly two model-related commands (`train`, `predict`) instead of the current five (`train`, `train-transformer`, `predict`, `eval`, `evaluate`, `evaluate-transformer`), reducing command count by more than half.
+- **SC-001**: The CLI exposes exactly three model-related commands (`train`, `predict`, `evaluate`) instead of the current six (`train`, `train-transformer`, `predict`, `eval`, `evaluate`, `evaluate-transformer`), reducing command count by half.
 - **SC-002**: All model training and prediction operations use the same card input format (converted card text), eliminating format divergence between model pipelines.
 - **SC-003**: Price predictions via the CLI do not require the REST service to be running; they execute locally and return results within the same time frame as the current implementation.
 - **SC-004**: Adding a new model type in the future requires only: implementing the model's train/predict logic and registering the model name as a valid choice. No new CLI commands or REST endpoints are needed.
