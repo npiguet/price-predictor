@@ -11,6 +11,9 @@
 
 - Q: What happens to model evaluation (metrics reporting) after removing `evaluate` and `evaluate-transformer`? → A: Add a third unified command `evaluate {model}` that replaces both old evaluate commands.
 - Q: REST API — which model(s) does the prediction endpoint use? → A: Endpoint returns predictions from all available trained models (current behavior, new card format).
+- Q: Should model artifact versioning be harmonized across models? → A: Yes. The transformer store currently overwrites a single `model.pt` with no versioning. It must adopt the sklearn convention: timestamped filenames (`<version>.pt`) plus a `latest.pt` copy.
+- Q: Should the REST API endpoint be renamed for consistency? → A: Yes, rename `/api/v1/evaluate` to `/api/v1/predict` to match the CLI `predict` command.
+- Q: Does switching to converted card text input require a new parser? → A: Yes for sklearn (needs structured Card entity for feature engineering); no for transformer (passes raw text directly to BERT tokenizer). A converted-text-to-Card parser must be created, mirroring forge_parser.py but reading the `name:`, `mana cost:`, `types:` line format.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -94,7 +97,7 @@ An API consumer sends a card in the converted text format to the prediction endp
 
 - **FR-001**: The CLI MUST provide a single `train` command that accepts a positional model argument with allowed values (currently: `sklearn`, `transformer`).
 - **FR-002**: The `train` command MUST use converted card text files from the `./output` folder as the sole training input for all models. Raw Forge card scripts MUST NOT be used directly for training.
-- **FR-003**: The `train` command MUST save each model's output artifacts to a dedicated subdirectory under `./models/` named after the model identifier (e.g., `./models/sklearn/`, `./models/transformer/`).
+- **FR-003**: The `train` command MUST save each model's output artifacts to a dedicated subdirectory under `./models/` named after the model identifier (e.g., `./models/sklearn/`, `./models/transformer/`). All models MUST use the same versioning convention: timestamped artifact filenames plus a `latest` copy.
 - **FR-004**: The `predict` command MUST default to loading the model from the corresponding `./models/<model>/` subdirectory when no explicit model path is provided.
 - **FR-005**: The `train` command MUST retain all model-specific tuning parameters (e.g., batch size, epochs, learning rate for transformer; test split, random seed for sklearn) as optional arguments.
 - **FR-006**: The CLI MUST provide a single `predict` command that accepts a positional model argument with the same allowed values as `train`.
@@ -102,7 +105,7 @@ An API consumer sends a card in the converted text format to the prediction endp
 - **FR-008**: The `predict` command MUST run prediction locally by calling the relevant model's inference logic directly, without requiring or contacting the REST service.
 - **FR-009**: The CLI MUST provide a single `evaluate` command that accepts a positional model argument with the same allowed values as `train`, replacing the old `evaluate` and `evaluate-transformer` commands. It MUST use converted card texts from `./output` and load models from `./models/<model>/`.
 - **FR-010**: The old `predict`, `eval`, `evaluate`, `evaluate-transformer`, and `train-transformer` commands MUST be removed from the CLI.
-- **FR-011**: The REST API prediction endpoint MUST accept a multiline string in converted card text format (instead of raw Forge card script format). The endpoint MUST continue returning predictions from all available trained models in the response (preserving current multi-model response behavior).
+- **FR-011**: The REST API prediction endpoint MUST be renamed from `/api/v1/evaluate` to `/api/v1/predict` and MUST accept a multiline string in converted card text format (instead of raw Forge card script format). The endpoint MUST continue returning predictions from all available trained models in the response (preserving current multi-model response behavior).
 - **FR-012**: The system MUST provide clear, actionable error messages when: an invalid model name is given, required arguments are missing, input files don't exist, no trained model is found, or training data is unavailable.
 - **FR-013**: The `serve` and `convert` and `check-convert` commands MUST remain unchanged.
 
