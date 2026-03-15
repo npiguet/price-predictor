@@ -21,6 +21,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - `.pt` model artifact in `models/transformer/`, existing `.joblib` models in `models/` (007-transformer-model-arch)
 - Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn (008-model-harmonization)
 - `.joblib` model files in `models/sklearn/`, `.pt` model files in `models/transformer/` (008-model-harmonization)
+- Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn, ijson (009-printing-metadata)
+- Local JSON files (AllPrintings.json, AllPricesToday.json), joblib model files (models/sklearn/), .pt model files (models/transformer/) (009-printing-metadata)
 
 ## Project Structure
 
@@ -38,8 +40,8 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 009-printing-metadata: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn, ijson
 - 008-model-harmonization: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn
-- 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
 - 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
 
 <!-- MANUAL ADDITIONS START -->
