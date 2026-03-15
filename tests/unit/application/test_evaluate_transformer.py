@@ -21,12 +21,11 @@ def _make_config(**overrides) -> TransformerConfig:
 
 class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_model")
-    @patch("price_predictor.application.evaluate_transformer.parse_converted_cards")
     @patch("price_predictor.application.evaluate_transformer.build_name_to_uuids")
     @patch("price_predictor.application.evaluate_transformer.build_price_map")
-    @patch("price_predictor.application.evaluate_transformer._match_cards_to_prices")
+    @patch("price_predictor.application.evaluate_transformer._match_texts_to_prices")
     def test_returns_eval_result_with_metrics(
-        self, mock_match, mock_price_map, mock_name_uuids, mock_parse, mock_load, tmp_path
+        self, mock_match, mock_price_map, mock_name_uuids, mock_load, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
 
@@ -34,8 +33,6 @@ class TestEvaluateTransformer:
 
         # Create a mock model that returns fixed shifted-log predictions
         mock_model = MagicMock()
-        # The model will be called with batched input_ids and attention_mask
-        # Return predictions as shifted-log values
         val_prices = [1.0, 2.0, 5.0, 10.0, 3.0]
         shifted_log_preds = torch.tensor(
             [math.log(p + 2) for p in val_prices], dtype=torch.float32
@@ -45,13 +42,10 @@ class TestEvaluateTransformer:
         mock_model.to = MagicMock(return_value=mock_model)
         mock_load.return_value = (mock_model, config)
 
-        # 25 total cards -> 80/20 split -> 5 val cards
-        cards = [MagicMock(name=f"Card {i}") for i in range(25)]
-        mock_parse.return_value = (cards, [])
         mock_name_uuids.return_value = {}
         mock_price_map.return_value = {}
 
-        # _match_cards_to_prices returns 25 matched cards
+        # _match_texts_to_prices returns 25 matched cards (reads files directly)
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(25)]
         mock_match.return_value = matched
 

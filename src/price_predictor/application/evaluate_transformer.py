@@ -10,7 +10,6 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
@@ -31,40 +30,52 @@ class TransformerEvalResult:
     per_card: list[dict] | None = None
 
 
-def _match_cards_to_prices(
-    cards: list,
+def _match_texts_to_prices(
+    output_dir: Path,
     name_to_uuids: dict,
     price_map: dict,
-    output_dir: Path,
 ) -> list[tuple[str, str, float]]:
-    """Match parsed cards to prices and read their converted text files."""
+    """Read converted text files directly and match to prices by name.
+
+    No Card parsing needed — the transformer ingests raw text.
+    """
     lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
     matched = []
-    for card in cards:
-        card_name_lower = card.name.lower()
+    skipped = 0
+    for txt_file in sorted(output_dir.rglob("*.txt")):
+        try:
+            text = txt_file.read_text(encoding="utf-8")
+        except OSError:
+            skipped += 1
+            continue
+
+        # Extract card name from the name: line
+        card_name = None
+        for line in text.splitlines():
+            line = line.strip()
+            if line.lower().startswith("name:"):
+                card_name = line[len("name:"):].strip()
+                break
+
+        if not card_name:
+            skipped += 1
+            continue
+
+        card_name_lower = card_name.lower()
         canonical = lower_to_canonical.get(card_name_lower)
         if canonical is None:
             for full_lower, full_canonical in lower_to_canonical.items():
                 if full_lower.startswith(card_name_lower + " // "):
                     canonical = full_canonical
                     break
+
         if canonical is None or canonical not in price_map:
             continue
 
-        slug = card.name.lower().replace(" ", "_").replace(",", "").replace("'", "")
-        first_letter = slug[0] if slug else "_"
-        text_path = output_dir / first_letter / f"{slug}.txt"
-        if text_path.exists():
-            text = text_path.read_text(encoding="utf-8")
-        else:
-            # Fall back: the file might be at the root of output_dir (e.g. in tests)
-            flat_path = output_dir / f"{slug}.txt"
-            if flat_path.exists():
-                text = flat_path.read_text(encoding="utf-8")
-            else:
-                continue
+        matched.append((card_name, text, price_map[canonical]))
 
-        matched.append((card.name, text, price_map[canonical]))
+    if skipped > 0:
+        logger.info("Skipped %d text files (unreadable or missing name)", skipped)
     return matched
 
 
@@ -82,13 +93,11 @@ def evaluate_transformer(
     model.to(device)
     model.eval()
 
-    # Re-derive the dataset (same pipeline as training)
-    cards, parse_errors = parse_converted_cards(output_dir)
-    logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
+    # Read text files directly and match to prices (no Card parsing needed)
     name_to_uuids = build_name_to_uuids(printings_path)
     price_map = build_price_map(prices_path, name_to_uuids)
 
-    matched = _match_cards_to_prices(cards, name_to_uuids, price_map, output_dir)
+    matched = _match_texts_to_prices(output_dir, name_to_uuids, price_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 2:
