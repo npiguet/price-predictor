@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import EvaluationMetrics
-from price_predictor.infrastructure.forge_parser import parse_forge_cards
+from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import load_model
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 
@@ -33,7 +33,7 @@ class EvaluateModelUseCase:
     def execute(
         self,
         model_path: Path,
-        forge_cards_path: Path,
+        output_dir: Path,
         prices_path: Path,
         printings_path: Path,
         test_split: float = 0.2,
@@ -46,7 +46,7 @@ class EvaluateModelUseCase:
         fe: FeatureEngineering = artifact["feature_engineering"]
 
         # Re-derive the dataset (same pipeline as training)
-        cards, parse_errors = parse_forge_cards(forge_cards_path)
+        cards, parse_errors = parse_converted_cards(output_dir)
         logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
         name_to_uuids = build_name_to_uuids(printings_path)
         price_map = build_price_map(prices_path, name_to_uuids)

@@ -13,7 +13,7 @@ import numpy as np
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from price_predictor.infrastructure.forge_parser import parse_forge_text
+from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
 logger = logging.getLogger(__name__)
 
@@ -51,13 +51,13 @@ def create_app(
     app.state.model_artifact = model_artifact
     app.state.transformer_artifact = transformer_artifact
 
-    @app.post("/api/v1/evaluate")
-    async def evaluate(request: Request) -> Response:
+    @app.post("/api/v1/predict")
+    async def predict(request: Request) -> Response:
         start = time.perf_counter()
         body = (await request.body()).decode("utf-8")
 
         try:
-            card = parse_forge_text(body)
+            card = parse_converted_text(body)
         except (ValueError, TypeError) as e:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.info(json.dumps(_build_log_entry(
@@ -67,7 +67,7 @@ def create_app(
             )))
             return JSONResponse(
                 status_code=400,
-                content={"error": f"Failed to parse card script: {e}"},
+                content={"error": f"Failed to parse converted card text: {e}"},
             )
 
         try:
@@ -124,7 +124,7 @@ def create_app(
             latency_ms = (time.perf_counter() - start) * 1000
             mana_cost_raw = None
             for line in body.splitlines():
-                if line.strip().startswith("ManaCost:"):
+                if line.strip().lower().startswith("mana cost:"):
                     mana_cost_raw = line.split(":", 1)[1].strip() or None
                     break
 

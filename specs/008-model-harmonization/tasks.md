@@ -61,14 +61,14 @@
 
 ### Tests for User Story 1 (MANDATORY per Constitution) ✅
 
-- [ ] T011 [P] [US1] Update unit tests in `tests/unit/application/test_train.py` to verify sklearn training reads from converted card text files (not Forge scripts) and saves to `models/sklearn/`. Include error cases: empty `./output` folder raises clear error suggesting `convert`, missing prices file raises error.
-- [ ] T012 [P] [US1] Update unit tests in `tests/unit/application/test_train_transformer.py` to verify transformer training reads converted texts directly from `./output/` without Forge script dependency and saves to `models/transformer/` with versioned filenames. Include error case: empty `./output` folder raises clear error.
+- [x] T011 [P] [US1] Update unit tests in `tests/unit/application/test_train.py` to verify sklearn training reads from converted card text files (not Forge scripts) and saves to `models/sklearn/`. Include error cases: empty `./output` folder raises clear error suggesting `convert`, missing prices file raises error.
+- [x] T012 [P] [US1] Update unit tests in `tests/unit/application/test_train_transformer.py` to verify transformer training reads converted texts directly from `./output/` without Forge script dependency and saves to `models/transformer/` with versioned filenames. Include error case: empty `./output` folder raises clear error.
 
 ### Implementation for User Story 1
 
-- [ ] T013 [US1] Modify `TrainModelUseCase.execute()` in `src/price_predictor/application/train.py` to replace `parse_forge_cards(forge_cards_path)` with `parse_converted_cards(output_dir)` from the new converted card parser. Update price matching to work with cards parsed from converted text. Change default output path to `models/sklearn/`. Remove `--forge-cards-path` argument dependency.
-- [ ] T014 [US1] Modify `train_transformer()` in `src/price_predictor/application/train_transformer.py` to remove the Forge script parsing step. Currently it parses Forge scripts to get card names, then matches to converted text files. Instead, read converted text files directly from `./output/`, extract card names from the `name:` line, and match to prices. Change default model output to `models/transformer/` (already correct, but verify versioned save via updated transformer_store).
-- [ ] T015 [US1] Wire `run_train_sklearn()` and `run_train_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py` to call the updated `TrainModelUseCase` and `train_transformer()` respectively. Replace the `NotImplementedError` stubs from T009.
+- [x] T013 [US1] Modify `TrainModelUseCase.execute()` in `src/price_predictor/application/train.py` to replace `parse_forge_cards(forge_cards_path)` with `parse_converted_cards(output_dir)` from the new converted card parser. Update price matching to work with cards parsed from converted text. Change default output path to `models/sklearn/`. Remove `--forge-cards-path` argument dependency.
+- [x] T014 [US1] Modify `train_transformer()` in `src/price_predictor/application/train_transformer.py` to remove the Forge script parsing step. Currently it parses Forge scripts to get card names, then matches to converted text files. Instead, read converted text files directly from `./output/`, extract card names from the `name:` line, and match to prices. Change default model output to `models/transformer/` (already correct, but verify versioned save via updated transformer_store).
+- [x] T015 [US1] Wire `run_train_sklearn()` and `run_train_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py` to call the updated `TrainModelUseCase` and `train_transformer()` respectively. Replace the `NotImplementedError` stubs from T009.
 
 **Checkpoint**: `train sklearn` and `train transformer` both work end-to-end from converted card texts.
 
@@ -82,13 +82,13 @@
 
 ### Tests for User Story 2 (MANDATORY per Constitution) ✅
 
-- [ ] T016 [P] [US2] Update unit tests in `tests/unit/application/test_predict.py` to verify sklearn prediction accepts a `Card` parsed from converted text (instead of manual attribute input) and loads model from `models/sklearn/latest.joblib`. Include error case: model not found raises clear error.
-- [ ] T017 [P] [US2] Write CLI-level tests in `tests/unit/infrastructure/test_cli_predict.py` to verify `predict sklearn --file` reads a file path, `predict sklearn --card` reads inline text, mutual exclusivity of `--file`/`--card`, error on missing arguments, and error when `--file` points to nonexistent file.
+- [x] T016 [P] [US2] Update unit tests in `tests/unit/application/test_predict.py` to verify sklearn prediction accepts a `Card` parsed from converted text (instead of manual attribute input) and loads model from `models/sklearn/latest.joblib`. Include error case: model not found raises clear error.
+- [x] T017 [P] [US2] Write CLI-level tests in `tests/unit/infrastructure/test_cli_predict.py` to verify `predict sklearn --file` reads a file path, `predict sklearn --card` reads inline text, mutual exclusivity of `--file`/`--card`, error on missing arguments, and error when `--file` points to nonexistent file.
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Modify `PredictPriceUseCase` in `src/price_predictor/application/predict.py` to accept a `Card` entity directly (parsed from converted text by the caller) instead of building a Card from individual CLI arguments. Update default model path to `models/sklearn/latest.joblib`.
-- [ ] T019 [US2] Wire `run_predict_sklearn()` and `run_predict_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py`. For sklearn: read file or inline text → `parse_converted_text()` → `PredictPriceUseCase`. For transformer: read file or inline text → `PredictTransformerUseCase`. Output JSON with `predicted_price_eur` and `model_version`.
+- [x] T018 [US2] Modify `PredictPriceUseCase` in `src/price_predictor/application/predict.py` to accept a `Card` entity directly (parsed from converted text by the caller) instead of building a Card from individual CLI arguments. Update default model path to `models/sklearn/latest.joblib`.
+- [x] T019 [US2] Wire `run_predict_sklearn()` and `run_predict_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py`. For sklearn: read file or inline text → `parse_converted_text()` → `PredictPriceUseCase`. For transformer: read file or inline text → `PredictTransformerUseCase`. Output JSON with `predicted_price_eur` and `model_version`.
 
 **Checkpoint**: `predict sklearn` and `predict transformer` both work locally, no REST service needed.
 
@@ -102,14 +102,14 @@
 
 ### Tests for User Story 3 (MANDATORY per Constitution) ✅
 
-- [ ] T020 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate.py` to verify sklearn evaluation reads from converted card texts and loads model from `models/sklearn/`. Include error case: model not found raises clear error.
-- [ ] T021 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate_transformer.py` to verify transformer evaluation reads converted texts directly and loads model from `models/transformer/latest.pt`. Include error case: model not found raises clear error.
+- [x] T020 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate.py` to verify sklearn evaluation reads from converted card texts and loads model from `models/sklearn/`. Include error case: model not found raises clear error.
+- [x] T021 [P] [US3] Update unit tests in `tests/unit/application/test_evaluate_transformer.py` to verify transformer evaluation reads converted texts directly and loads model from `models/transformer/latest.pt`. Include error case: model not found raises clear error.
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Modify `EvaluateModelUseCase.execute()` in `src/price_predictor/application/evaluate.py` to replace `parse_forge_cards()` with `parse_converted_cards()`. Update default model path to `models/sklearn/latest.joblib`.
-- [ ] T023 [US3] Modify `evaluate_transformer()` in `src/price_predictor/application/evaluate_transformer.py` to remove Forge script dependency, read converted texts directly, and load model from `models/transformer/latest.pt`.
-- [ ] T024 [US3] Wire `run_evaluate_sklearn()` and `run_evaluate_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py`. Replace the `NotImplementedError` stubs from T009.
+- [x] T022 [US3] Modify `EvaluateModelUseCase.execute()` in `src/price_predictor/application/evaluate.py` to replace `parse_forge_cards()` with `parse_converted_cards()`. Update default model path to `models/sklearn/latest.joblib`.
+- [x] T023 [US3] Modify `evaluate_transformer()` in `src/price_predictor/application/evaluate_transformer.py` to remove Forge script dependency, read converted texts directly, and load model from `models/transformer/latest.pt`.
+- [x] T024 [US3] Wire `run_evaluate_sklearn()` and `run_evaluate_transformer()` handler functions in `src/price_predictor/infrastructure/cli.py`. Replace the `NotImplementedError` stubs from T009.
 
 **Checkpoint**: `evaluate sklearn` and `evaluate transformer` both work. All three unified CLI commands (train, predict, evaluate) are functional.
 
@@ -123,13 +123,13 @@
 
 ### Tests for User Story 4 (MANDATORY per Constitution) ✅
 
-- [ ] T025 [P] [US4] Update server integration tests in `tests/integration/test_server_integration.py` to send converted card text format (not Forge script) and verify response. Test renamed endpoint `/api/v1/predict`.
-- [ ] T026 [P] [US4] Update unit tests in `tests/unit/infrastructure/test_server.py` to verify server parses converted card text via `parse_converted_text()` for sklearn and passes raw text for transformer tokenization.
+- [x] T025 [P] [US4] Update server integration tests in `tests/integration/test_server_integration.py` to send converted card text format (not Forge script) and verify response. Test renamed endpoint `/api/v1/predict`.
+- [x] T026 [P] [US4] Update unit tests in `tests/unit/infrastructure/test_server.py` to verify server parses converted card text via `parse_converted_text()` for sklearn and passes raw text for transformer tokenization.
 
 ### Implementation for User Story 4
 
-- [ ] T027 [US4] Modify `create_app()` in `src/price_predictor/infrastructure/server.py`: rename endpoint from `/api/v1/evaluate` to `/api/v1/predict`, replace `parse_forge_text()` call with `parse_converted_text()` for sklearn feature extraction, update transformer tokenization to use the raw converted text body (instead of extracting Forge body). Update model loading paths to `models/sklearn/` and `models/transformer/`.
-- [ ] T028 [US4] Update `run_serve()` in `src/price_predictor/infrastructure/cli.py` to pass updated default model paths for both sklearn and transformer models.
+- [x] T027 [US4] Modify `create_app()` in `src/price_predictor/infrastructure/server.py`: rename endpoint from `/api/v1/evaluate` to `/api/v1/predict`, replace `parse_forge_text()` call with `parse_converted_text()` for sklearn feature extraction, update transformer tokenization to use the raw converted text body (instead of extracting Forge body). Update model loading paths to `models/sklearn/` and `models/transformer/`.
+- [x] T028 [US4] Update `run_serve()` in `src/price_predictor/infrastructure/cli.py` to pass updated default model paths for both sklearn and transformer models.
 
 **Checkpoint**: REST API works with converted card text format. All four user stories are complete.
 

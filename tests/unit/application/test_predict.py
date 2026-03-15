@@ -19,7 +19,7 @@ def trained_model_path(tmp_path: Path) -> Path:
     fixtures = Path(__file__).parents[2] / "fixtures"
     use_case = TrainModelUseCase()
     result = use_case.execute(
-        forge_cards_path=fixtures / "forge_cards",
+        output_dir=fixtures / "converted_cards_training",
         prices_path=fixtures / "allprices_sample.json",
         printings_path=fixtures / "allprintings_sample.json",
         output_path=tmp_path,

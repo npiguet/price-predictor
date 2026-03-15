@@ -1,0 +1,3 @@
+name: Island
+types: basic land island
+mana[1]: {T}: Add {U}.

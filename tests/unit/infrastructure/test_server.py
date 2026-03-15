@@ -36,11 +36,11 @@ def client(mock_model_artifact: dict) -> TestClient:
     return TestClient(app)
 
 
-class TestEvaluateEndpoint:
-    def test_valid_complete_forge_script_returns_200(self, client: TestClient) -> None:
+class TestPredictEndpoint:
+    def test_valid_complete_converted_card_returns_200(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+            "/api/v1/predict",
+            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -49,10 +49,10 @@ class TestEvaluateEndpoint:
         assert isinstance(data["sklearn"]["predicted_price_eur"], float)
         assert isinstance(data["sklearn"]["model_version"], str)
 
-    def test_partial_script_only_types_returns_200(self, client: TestClient) -> None:
+    def test_partial_card_only_types_returns_200(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Test Card\nTypes:Instant\n",
+            "/api/v1/predict",
+            content="name: test card\ntypes: instant\n",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -63,7 +63,7 @@ class TestEvaluateEndpoint:
 
     def test_empty_body_returns_400(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content="",
             headers={"Content-Type": "text/plain"},
         )
@@ -73,8 +73,8 @@ class TestEvaluateEndpoint:
 
     def test_unparseable_body_no_types_returns_400(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Bad Card\nManaCost:R\n",
+            "/api/v1/predict",
+            content="name: bad card\nmana cost: {R}\n",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 400
@@ -84,10 +84,10 @@ class TestEvaluateEndpoint:
 
     def test_made_up_card_returns_200(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=(
-                "Name:Imaginary Dragon\nManaCost:4 R R\n"
-                "Types:Creature Dragon\nPT:6/6\nK:Flying\nK:Haste"
+                "name: imaginary dragon\nmana cost: {4}{R}{R}\n"
+                "types: creature dragon\npower toughness: 6/6\nspell[1]: flying\nspell[2]: haste"
             ),
             headers={"Content-Type": "text/plain"},
         )
@@ -97,8 +97,8 @@ class TestEvaluateEndpoint:
 
     def test_response_content_type_is_json(self, client: TestClient) -> None:
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Test\nTypes:Instant\n",
+            "/api/v1/predict",
+            content="name: test\ntypes: instant\n",
             headers={"Content-Type": "text/plain"},
         )
         assert "application/json" in response.headers["content-type"]
@@ -112,8 +112,8 @@ class TestStructuredRequestLogging:
     ) -> None:
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             client.post(
-                "/api/v1/evaluate",
-                content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+                "/api/v1/predict",
+                content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
                 headers={"Content-Type": "text/plain"},
             )
 
@@ -125,9 +125,9 @@ class TestStructuredRequestLogging:
         assert entry["status_code"] == 200
         assert isinstance(entry["latency_ms"], (int, float))
         assert entry["latency_ms"] > 0
-        assert entry["card_name"] == "Lightning Bolt"
+        assert entry["card_name"] == "lightning bolt"
         assert entry["card_types"] == ["Instant"]
-        assert entry["card_mana_cost"] == "R"
+        assert entry["card_mana_cost"] == "{R}"
         assert isinstance(entry["sklearn_predicted_price_eur"], float)
         assert entry["sklearn_model_version"] == "20260301-143000"
 
@@ -136,7 +136,7 @@ class TestStructuredRequestLogging:
     ) -> None:
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             client.post(
-                "/api/v1/evaluate",
+                "/api/v1/predict",
                 content="",
                 headers={"Content-Type": "text/plain"},
             )
@@ -175,8 +175,8 @@ class TestStructuredRequestLogging:
 
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             error_client.post(
-                "/api/v1/evaluate",
-                content="Name:Test Card\nTypes:Instant\n",
+                "/api/v1/predict",
+                content="name: test card\ntypes: instant\n",
                 headers={"Content-Type": "text/plain"},
             )
 
@@ -195,8 +195,8 @@ class TestStructuredRequestLogging:
 
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             client.post(
-                "/api/v1/evaluate",
-                content="Name:Test\nTypes:Instant\n",
+                "/api/v1/predict",
+                content="name: test\ntypes: instant\n",
                 headers={"Content-Type": "text/plain"},
             )
 
@@ -210,8 +210,8 @@ class TestStructuredRequestLogging:
     ) -> None:
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             client.post(
-                "/api/v1/evaluate",
-                content="Name:Island\nTypes:Basic Land Island\n",
+                "/api/v1/predict",
+                content="name: island\ntypes: basic land island\n",
                 headers={"Content-Type": "text/plain"},
             )
 
@@ -255,8 +255,8 @@ class TestDualModelResponse:
         client = TestClient(app)
 
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+            "/api/v1/predict",
+            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -285,8 +285,8 @@ class TestDualModelResponse:
         client = TestClient(app)
 
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Lightning Bolt\nManaCost:R\nTypes:Instant\nOracle:Deals 3 damage.",
+            "/api/v1/predict",
+            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -312,8 +312,8 @@ class TestDualModelResponse:
         client = TestClient(app)
 
         response = client.post(
-            "/api/v1/evaluate",
-            content="Name:Test\nTypes:Instant\n",
+            "/api/v1/predict",
+            content="name: test\ntypes: instant\n",
             headers={"Content-Type": "text/plain"},
         )
         data = response.json()

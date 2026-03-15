@@ -1,0 +1,4 @@
+name: Sol Ring
+mana cost: {1}
+types: artifact
+mana[1]: {T}: Add {C}{C}.

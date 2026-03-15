@@ -1,0 +1,4 @@
+name: Grizzly Bears
+mana cost: {1}{G}
+types: creature bear
+power toughness: 2/2

@@ -20,7 +20,7 @@ def fixtures_dir() -> Path:
 def trained_model_path(fixtures_dir: Path, tmp_path: Path) -> Path:
     use_case = TrainModelUseCase()
     result = use_case.execute(
-        forge_cards_path=fixtures_dir / "forge_cards",
+        output_dir=fixtures_dir / "converted_cards",
         prices_path=fixtures_dir / "allprices_sample.json",
         printings_path=fixtures_dir / "allprintings_sample.json",
         output_path=tmp_path,
@@ -38,7 +38,7 @@ class TestEvaluateProgressLogging:
             use_case = EvaluateModelUseCase()
             use_case.execute(
                 model_path=trained_model_path,
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )
@@ -53,7 +53,7 @@ class TestEvaluateProgressLogging:
             use_case = EvaluateModelUseCase()
             use_case.execute(
                 model_path=trained_model_path,
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )
@@ -68,7 +68,7 @@ class TestEvaluateProgressLogging:
             use_case = EvaluateModelUseCase()
             use_case.execute(
                 model_path=trained_model_path,
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )
@@ -84,7 +84,7 @@ class TestEvaluateProgressLogging:
             use_case = EvaluateModelUseCase()
             use_case.execute(
                 model_path=trained_model_path,
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )
@@ -103,7 +103,7 @@ class TestEvaluateProgressLogging:
             use_case = EvaluateModelUseCase()
             use_case.execute(
                 model_path=trained_model_path,
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )

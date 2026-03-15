@@ -1,0 +1,4 @@
+name: Fire
+mana cost: {1}{R}
+types: instant
+spell[1]: fire deals 2 damage divided as you choose among one or two targets.

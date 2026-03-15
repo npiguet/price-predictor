@@ -27,7 +27,7 @@ class TestEndToEnd:
         # 1. Train
         train_uc = TrainModelUseCase()
         train_result = train_uc.execute(
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             output_path=tmp_path / "models",
@@ -73,7 +73,7 @@ class TestEndToEnd:
         eval_uc = EvaluateModelUseCase()
         eval_result = eval_uc.execute(
             model_path=model_path,
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             test_split=0.2,
@@ -86,7 +86,7 @@ class TestEndToEnd:
         """Same model + same input = same output across multiple runs."""
         train_uc = TrainModelUseCase()
         train_result = train_uc.execute(
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             output_path=tmp_path / "models",

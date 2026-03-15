@@ -21,10 +21,10 @@ def _make_config(**overrides) -> TransformerConfig:
 
 class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_model")
-    @patch("price_predictor.application.evaluate_transformer.parse_forge_cards")
+    @patch("price_predictor.application.evaluate_transformer.parse_converted_cards")
     @patch("price_predictor.application.evaluate_transformer.build_name_to_uuids")
     @patch("price_predictor.application.evaluate_transformer.build_price_map")
-    @patch("price_predictor.application.evaluate_transformer._match_cards_to_texts")
+    @patch("price_predictor.application.evaluate_transformer._match_cards_to_prices")
     def test_returns_eval_result_with_metrics(
         self, mock_match, mock_price_map, mock_name_uuids, mock_parse, mock_load, tmp_path
     ):
@@ -51,14 +51,13 @@ class TestEvaluateTransformer:
         mock_name_uuids.return_value = {}
         mock_price_map.return_value = {}
 
-        # _match_cards_to_texts returns 25 matched cards
+        # _match_cards_to_prices returns 25 matched cards
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(25)]
         mock_match.return_value = matched
 
         result = evaluate_transformer(
             model_dir=Path("fake/model"),
             output_dir=tmp_path,
-            forge_cards_path=Path("fake/forge"),
             prices_path=Path("fake/prices.json"),
             printings_path=Path("fake/printings.json"),
             random_seed=42,

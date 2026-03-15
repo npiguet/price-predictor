@@ -10,8 +10,8 @@ from price_predictor.application.train import TrainModelUseCase
 
 
 @pytest.fixture
-def forge_cards_dir() -> Path:
-    return Path(__file__).parents[2] / "fixtures" / "forge_cards"
+def converted_cards_dir() -> Path:
+    return Path(__file__).parents[2] / "fixtures" / "converted_cards_training"
 
 
 @pytest.fixture
@@ -26,11 +26,11 @@ def allprices_path() -> Path:
 
 class TestTrainModelUseCase:
     def test_train_produces_trained_model(
-        self, forge_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
     ) -> None:
         use_case = TrainModelUseCase()
         result = use_case.execute(
-            forge_cards_path=forge_cards_dir,
+            output_dir=converted_cards_dir,
             prices_path=allprices_path,
             printings_path=allprintings_path,
             output_path=tmp_path,
@@ -44,11 +44,11 @@ class TestTrainModelUseCase:
         assert result.model_path.exists()
 
     def test_skip_report_has_reasons(
-        self, forge_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
     ) -> None:
         use_case = TrainModelUseCase()
         result = use_case.execute(
-            forge_cards_path=forge_cards_dir,
+            output_dir=converted_cards_dir,
             prices_path=allprices_path,
             printings_path=allprintings_path,
             output_path=tmp_path,
@@ -59,11 +59,11 @@ class TestTrainModelUseCase:
         assert isinstance(result.skipped_reasons, dict)
 
     def test_model_is_saved(
-        self, forge_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
     ) -> None:
         use_case = TrainModelUseCase()
         result = use_case.execute(
-            forge_cards_path=forge_cards_dir,
+            output_dir=converted_cards_dir,
             prices_path=allprices_path,
             printings_path=allprintings_path,
             output_path=tmp_path,
@@ -77,11 +77,11 @@ class TestTrainModelUseCase:
         assert latest.exists()
 
     def test_reproducible_training(
-        self, forge_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
     ) -> None:
         use_case1 = TrainModelUseCase()
         result1 = use_case1.execute(
-            forge_cards_path=forge_cards_dir,
+            output_dir=converted_cards_dir,
             prices_path=allprices_path,
             printings_path=allprintings_path,
             output_path=tmp_path / "run1",
@@ -90,7 +90,7 @@ class TestTrainModelUseCase:
         )
         use_case2 = TrainModelUseCase()
         result2 = use_case2.execute(
-            forge_cards_path=forge_cards_dir,
+            output_dir=converted_cards_dir,
             prices_path=allprices_path,
             printings_path=allprintings_path,
             output_path=tmp_path / "run2",
@@ -100,10 +100,12 @@ class TestTrainModelUseCase:
         assert result1.trained_model.card_count == result2.trained_model.card_count
 
     def test_insufficient_data_raises(self, tmp_path: Path) -> None:
-        # Create a dir with just one parseable card
+        # Create a dir with just one parseable card in converted format
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
-        (cards_dir / "one.txt").write_text("Name:Only Card\nTypes:Creature\nManaCost:R\nPT:1/1\n")
+        (cards_dir / "one.txt").write_text(
+            "name: Only Card\ntypes: creature\npower toughness: 1/1\nmana cost: {R}\n"
+        )
         prices = tmp_path / "prices.json"
         prices.write_text('{"meta":{},"data":{}}')
         printings = tmp_path / "printings.json"
@@ -111,7 +113,7 @@ class TestTrainModelUseCase:
         use_case = TrainModelUseCase()
         with pytest.raises(ValueError, match="[Ii]nsufficient"):
             use_case.execute(
-                forge_cards_path=cards_dir,
+                output_dir=cards_dir,
                 prices_path=prices,
                 printings_path=printings,
                 output_path=tmp_path / "out",

@@ -25,7 +25,7 @@ def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("models")
     use_case = TrainModelUseCase()
     use_case.execute(
-        forge_cards_path=FIXTURES_DIR / "forge_cards",
+        output_dir=FIXTURES_DIR / "converted_cards",
         prices_path=FIXTURES_DIR / "allprices_sample.json",
         printings_path=FIXTURES_DIR / "allprintings_sample.json",
         output_path=tmp,
@@ -50,8 +50,8 @@ def integration_client(model_path: Path) -> TestClient:
 
 
 BOLT_SCRIPT = (
-    "Name:Lightning Bolt\nManaCost:R\nTypes:Instant\n"
-    "Oracle:Lightning Bolt deals 3 damage to any target."
+    "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
+    "spell[1]: CARDNAME deals 3 damage to any target."
 )
 
 
@@ -59,7 +59,7 @@ BOLT_SCRIPT = (
 class TestServerIntegration:
     def test_valid_card_returns_numeric_price(self, integration_client: TestClient) -> None:
         response = integration_client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=BOLT_SCRIPT,
             headers={"Content-Type": "text/plain"},
         )
@@ -74,7 +74,7 @@ class TestServerIntegration:
     ) -> None:
         """FR-011: Service MUST produce identical results to standalone model."""
         response = integration_client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=BOLT_SCRIPT,
             headers={"Content-Type": "text/plain"},
         )
@@ -97,7 +97,7 @@ class TestServerIntegration:
         """SC-001: Single-request response time under 3 seconds."""
         start = time.monotonic()
         response = integration_client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=BOLT_SCRIPT,
             headers={"Content-Type": "text/plain"},
         )
@@ -111,21 +111,21 @@ class TestServerConcurrency:
     def test_10_concurrent_requests(self, integration_client: TestClient) -> None:
         """FR-009 / SC-004: 10 concurrent requests without degradation."""
         card_scripts = [
-            "Name:Lightning Bolt\nManaCost:R\nTypes:Instant",
-            "Name:Grizzly Bears\nManaCost:1 G\nTypes:Creature Bear\nPT:2/2",
-            "Name:Serra Angel\nManaCost:3 W W\nTypes:Creature Angel\nPT:4/4\nK:Flying\nK:Vigilance",
-            "Name:Sol Ring\nManaCost:1\nTypes:Artifact",
-            "Name:Island\nTypes:Basic Land Island",
-            "Name:Ragavan\nManaCost:R\nTypes:Legendary Creature Monkey Pirate\nPT:2/1\nK:Dash",
-            "Name:Jace\nManaCost:2 U U\nTypes:Legendary Planeswalker Jace\nLoyalty:3",
-            "Name:Breeding Pool\nTypes:Land Forest Island",
-            "Name:Made Up Dragon\nManaCost:4 R R\nTypes:Creature Dragon\nPT:6/6\nK:Flying",
-            "Name:Test Enchantment\nManaCost:1 W\nTypes:Enchantment",
+            "name: lightning bolt\nmana cost: {R}\ntypes: instant",
+            "name: grizzly bears\nmana cost: {1}{G}\ntypes: creature bear\npower toughness: 2/2",
+            "name: serra angel\nmana cost: {3}{W}{W}\ntypes: creature angel\npower toughness: 4/4\nspell[1]: flying\nspell[2]: vigilance",
+            "name: sol ring\nmana cost: {1}\ntypes: artifact",
+            "name: island\ntypes: basic land island",
+            "name: ragavan\nmana cost: {R}\ntypes: legendary creature monkey pirate\npower toughness: 2/1\nspell[1]: dash",
+            "name: jace\nmana cost: {2}{U}{U}\ntypes: legendary planeswalker jace\nloyalty: 3",
+            "name: breeding pool\ntypes: land forest island",
+            "name: made up dragon\nmana cost: {4}{R}{R}\ntypes: creature dragon\npower toughness: 6/6\nspell[1]: flying",
+            "name: test enchantment\nmana cost: {1}{W}\ntypes: enchantment",
         ]
 
         def send_request(script: str) -> tuple[int, dict]:
             resp = integration_client.post(
-                "/api/v1/evaluate",
+                "/api/v1/predict",
                 content=script,
                 headers={"Content-Type": "text/plain"},
             )

@@ -1,0 +1,5 @@
+name: Breeding Pool
+types: land forest island
+static: as CARDNAME enters the battlefield, you may pay 2 life. if you don't, it enters the battlefield tapped.
+mana[1]: {T}: add {G}.
+mana[2]: {T}: add {U}.

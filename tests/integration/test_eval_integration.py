@@ -25,7 +25,7 @@ def trained_model_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
     tmp = tmp_path_factory.mktemp("models")
     use_case = TrainModelUseCase()
     use_case.execute(
-        forge_cards_path=FIXTURES_DIR / "forge_cards",
+        output_dir=FIXTURES_DIR / "converted_cards",
         prices_path=FIXTURES_DIR / "allprices_sample.json",
         printings_path=FIXTURES_DIR / "allprintings_sample.json",
         output_path=tmp,

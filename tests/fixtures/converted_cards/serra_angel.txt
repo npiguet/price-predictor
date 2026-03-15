@@ -1,0 +1,6 @@
+name: Serra Angel
+mana cost: {3}{W}{W}
+types: creature angel
+power toughness: 4/4
+keyword[1]: flying
+keyword[2]: vigilance

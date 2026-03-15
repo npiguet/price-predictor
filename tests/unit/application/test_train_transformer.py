@@ -45,7 +45,6 @@ class TestAnalyzeSequenceLengths:
 
 
 class TestTrainTransformer:
-    @patch("price_predictor.application.train_transformer.parse_forge_cards")
     @patch("price_predictor.application.train_transformer.build_name_to_uuids")
     @patch("price_predictor.application.train_transformer.build_price_map")
     @patch("price_predictor.application.train_transformer._match_cards_to_texts")
@@ -61,12 +60,11 @@ class TestTrainTransformer:
     def test_returns_train_result_with_expected_fields(
         self, mock_eval, mock_save, mock_train_loop, mock_split, mock_torch,
         mock_model_cls, mock_dataloader, mock_dataset_cls, mock_analyze,
-        mock_match, mock_price_map, mock_name_uuids, mock_parse
+        mock_match, mock_price_map, mock_name_uuids
     ):
         from price_predictor.application.train_transformer import train_transformer
 
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(20)]
-        mock_parse.return_value = ([], [])
         mock_name_uuids.return_value = {}
         mock_price_map.return_value = {}
         mock_match.return_value = matched
@@ -82,7 +80,6 @@ class TestTrainTransformer:
 
         result = train_transformer(
             output_dir=Path("output/"),
-            forge_cards_path=Path("fake/forge"),
             prices_path=Path("fake/prices.json"),
             printings_path=Path("fake/printings.json"),
             model_output=Path("models/transformer/"),
@@ -94,16 +91,14 @@ class TestTrainTransformer:
         assert result.best_epoch == 1
         assert result.best_val_loss == 0.1
 
-    @patch("price_predictor.application.train_transformer.parse_forge_cards")
     @patch("price_predictor.application.train_transformer.build_name_to_uuids")
     @patch("price_predictor.application.train_transformer.build_price_map")
     @patch("price_predictor.application.train_transformer._match_cards_to_texts")
     def test_insufficient_data_raises(
-        self, mock_match, mock_price_map, mock_name_uuids, mock_parse
+        self, mock_match, mock_price_map, mock_name_uuids
     ):
         from price_predictor.application.train_transformer import train_transformer
 
-        mock_parse.return_value = ([], [])
         mock_name_uuids.return_value = {}
         mock_price_map.return_value = {}
         mock_match.return_value = [("Card 1", "text", 1.0)]  # Only 1 card
@@ -111,7 +106,6 @@ class TestTrainTransformer:
         with pytest.raises(ValueError, match="Insufficient"):
             train_transformer(
                 output_dir=Path("output/"),
-                forge_cards_path=Path("fake/forge"),
                 prices_path=Path("fake/prices.json"),
                 printings_path=Path("fake/printings.json"),
                 model_output=Path("models/transformer/"),

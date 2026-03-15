@@ -327,9 +327,9 @@ def run_train(args: argparse.Namespace) -> int:
     """Execute the train command."""
     from price_predictor.application.train import TrainModelUseCase
 
-    forge_path = Path(args.forge_cards_path)
-    if not forge_path.exists():
-        print(f"Error: Forge cards path not found: {forge_path}", file=sys.stderr)
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        print(f"Error: Converted cards directory not found: {output_dir}", file=sys.stderr)
         return 1
 
     prices_path = Path(args.prices_path)
@@ -345,7 +345,7 @@ def run_train(args: argparse.Namespace) -> int:
     try:
         use_case = TrainModelUseCase()
         result = use_case.execute(
-            forge_cards_path=forge_path,
+            output_dir=output_dir,
             prices_path=prices_path,
             printings_path=printings_path,
             output_path=Path(args.output_path),
@@ -433,7 +433,7 @@ def run_evaluate(args: argparse.Namespace) -> int:
         use_case = EvaluateModelUseCase()
         result = use_case.execute(
             model_path=model_path,
-            forge_cards_path=Path(args.forge_cards_path),
+            output_dir=Path(args.output_dir),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
             test_split=args.test_split,
@@ -481,7 +481,6 @@ def run_train_transformer(args: argparse.Namespace) -> int:
     try:
         train_transformer(
             output_dir=Path(args.output_dir),
-            forge_cards_path=Path(args.forge_cards_path),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
             model_output=Path(args.model_output),
@@ -513,7 +512,6 @@ def run_evaluate_transformer(args: argparse.Namespace) -> int:
         result = evaluate_transformer(
             model_dir=model_path,
             output_dir=Path(args.output_dir),
-            forge_cards_path=Path(args.forge_cards_path),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
             random_seed=args.random_seed,
@@ -583,30 +581,245 @@ def run_check_convert(args: argparse.Namespace) -> int:
 
 
 def run_train_sklearn(args: argparse.Namespace) -> int:
-    """Train the sklearn model (stub — not yet implemented)."""
-    raise NotImplementedError("run_train_sklearn is not yet implemented")
+    """Train the sklearn model using converted card text files."""
+    from price_predictor.application.train import TrainModelUseCase
+
+    output_dir = Path(args.output_dir)
+    if not output_dir.exists():
+        print(f"Error: Converted cards directory not found: {output_dir}", file=sys.stderr)
+        print("Run 'convert' first to generate converted card text files.", file=sys.stderr)
+        return 1
+    prices_path = Path(args.prices_path)
+    if not prices_path.exists():
+        print(f"Error: Prices file not found: {prices_path}", file=sys.stderr)
+        return 1
+    printings_path = Path(args.printings_path)
+    if not printings_path.exists():
+        print(f"Error: Printings file not found: {printings_path}", file=sys.stderr)
+        return 1
+    try:
+        use_case = TrainModelUseCase()
+        result = use_case.execute(
+            output_dir=output_dir,
+            prices_path=prices_path,
+            printings_path=printings_path,
+            output_path=Path(args.model_output),
+            test_split=args.test_split,
+            random_seed=args.random_seed,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    output = {
+        "model_version": result.trained_model.model_version,
+        "model_path": str(result.model_path),
+        "cards_used": result.trained_model.card_count,
+        "cards_skipped": result.cards_skipped,
+        "skipped_reasons": result.skipped_reasons,
+        "price_range_eur": {
+            "min": result.trained_model.price_range_min_eur,
+            "max": result.trained_model.price_range_max_eur,
+        },
+    }
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 def run_train_transformer_new(args: argparse.Namespace) -> int:
-    """Train the transformer model (stub — not yet implemented)."""
-    raise NotImplementedError("run_train_transformer_new is not yet implemented")
+    """Train the transformer model using converted card text files."""
+    from price_predictor.application.train_transformer import train_transformer
+
+    try:
+        train_transformer(
+            output_dir=Path(args.output_dir),
+            prices_path=Path(args.prices_path),
+            printings_path=Path(args.printings_path),
+            model_output=Path(args.model_output),
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            lr=args.lr,
+            patience=args.patience,
+            random_seed=args.random_seed,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def run_predict_sklearn(args: argparse.Namespace) -> int:
-    """Predict with the sklearn model (stub — not yet implemented)."""
-    raise NotImplementedError("run_predict_sklearn is not yet implemented")
+    """Predict with the sklearn model using converted card text."""
+    from price_predictor.application.predict import PredictPriceUseCase
+    from price_predictor.infrastructure.converted_card_parser import parse_converted_text
+    from price_predictor.infrastructure.model_store import ModelNotFoundError
+
+    # Read card text from file or inline
+    if args.file:
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"Error: File not found: {file_path}", file=sys.stderr)
+            return 1
+        try:
+            card_text = file_path.read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"Error: Could not read file: {e}", file=sys.stderr)
+            return 1
+    else:
+        card_text = args.card
+
+    try:
+        card = parse_converted_text(card_text)
+    except ValueError as e:
+        print(f"Error: Failed to parse card text: {e}", file=sys.stderr)
+        return 1
+
+    model_path = Path("models/sklearn/latest.joblib")
+    try:
+        use_case = PredictPriceUseCase()
+        result = use_case.execute(card, model_path)
+    except ModelNotFoundError:
+        print(
+            f"Error: Model not found at {model_path}. Run 'train sklearn' first.",
+            file=sys.stderr,
+        )
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    output = {
+        "predicted_price_eur": result.predicted_price_eur,
+        "model_version": result.model_version,
+    }
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 def run_predict_transformer(args: argparse.Namespace) -> int:
-    """Predict with the transformer model (stub — not yet implemented)."""
-    raise NotImplementedError("run_predict_transformer is not yet implemented")
+    """Predict with the transformer model using raw card text."""
+    from price_predictor.application.predict_transformer import PredictTransformerUseCase
+
+    # Read card text from file or inline
+    if args.file:
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"Error: File not found: {file_path}", file=sys.stderr)
+            return 1
+        try:
+            card_text = file_path.read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"Error: Could not read file: {e}", file=sys.stderr)
+            return 1
+    else:
+        card_text = args.card
+
+    model_dir = Path("models/transformer/")
+    try:
+        use_case = PredictTransformerUseCase()
+        result = use_case.execute(card_text, model_dir)
+    except FileNotFoundError:
+        print(
+            f"Error: Model not found at {model_dir}. Run 'train transformer' first.",
+            file=sys.stderr,
+        )
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    output = {
+        "predicted_price_eur": result.predicted_price_eur,
+        "model_version": result.model_version,
+    }
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 def run_evaluate_sklearn(args: argparse.Namespace) -> int:
-    """Evaluate the sklearn model (stub — not yet implemented)."""
-    raise NotImplementedError("run_evaluate_sklearn is not yet implemented")
+    """Evaluate the sklearn model on held-out test data."""
+    from price_predictor.application.evaluate import EvaluateModelUseCase
+    from price_predictor.infrastructure.model_store import ModelNotFoundError
+
+    model_path = Path(args.model_path)
+    try:
+        use_case = EvaluateModelUseCase()
+        result = use_case.execute(
+            model_path=model_path,
+            output_dir=Path(args.output_dir),
+            prices_path=Path(args.prices_path),
+            printings_path=Path(args.printings_path),
+            test_split=args.test_split,
+            random_seed=args.random_seed,
+        )
+    except ModelNotFoundError:
+        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    if hasattr(args, 'output_csv') and args.output_csv and result.per_card:
+        import csv
+        with open(args.output_csv, "w", newline="") as f:
+            fieldnames = [
+                "name", "actual_price_eur",
+                "predicted_price_eur", "absolute_error_eur",
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(result.per_card)
+
+    output = {
+        "model_version": result.model_version,
+        "mean_absolute_error_eur": result.metrics.mean_absolute_error_eur,
+        "median_percentage_error": result.metrics.median_percentage_error,
+        "top_20_overlap": result.metrics.top_20_overlap,
+        "sample_count": result.metrics.sample_count,
+    }
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
-    """Evaluate the transformer model (stub — not yet implemented)."""
-    raise NotImplementedError("run_evaluate_transformer_new is not yet implemented")
+    """Evaluate the transformer model on held-out validation data."""
+    from price_predictor.application.evaluate_transformer import evaluate_transformer
+
+    model_path = Path(args.model_path)
+    try:
+        result = evaluate_transformer(
+            model_dir=model_path,
+            output_dir=Path(args.output_dir),
+            prices_path=Path(args.prices_path),
+            printings_path=Path(args.printings_path),
+            random_seed=args.random_seed,
+        )
+    except FileNotFoundError:
+        print(f"Error: Model not found at {model_path}", file=sys.stderr)
+        return 1
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
+
+    output = {
+        "model_path": str(result.model_path / "latest.pt"),
+        "mean_absolute_error_eur": result.mean_absolute_error_eur,
+        "median_abs_error_log": result.median_abs_error_log,
+        "sample_count": result.sample_count,
+    }
+    print(json.dumps(output, indent=2))
+    return 0

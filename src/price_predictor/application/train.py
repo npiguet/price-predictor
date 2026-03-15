@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import TrainedModel
-from price_predictor.infrastructure.forge_parser import parse_forge_cards
+from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import save_model
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 
@@ -35,15 +35,15 @@ class TrainModelUseCase:
 
     def execute(
         self,
-        forge_cards_path: Path,
+        output_dir: Path,
         prices_path: Path,
         printings_path: Path,
         output_path: Path,
         test_split: float = 0.2,
         random_seed: int = 42,
     ) -> TrainResult:
-        # 1. Parse Forge cards
-        cards, parse_errors = parse_forge_cards(forge_cards_path)
+        # 1. Parse converted card texts
+        cards, parse_errors = parse_converted_cards(output_dir)
         logger.info("Parsed %d cards, %d parse errors", len(cards), len(parse_errors))
 
         # 2. Build name→UUIDs mapping

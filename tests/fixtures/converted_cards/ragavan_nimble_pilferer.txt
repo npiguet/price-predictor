@@ -1,0 +1,6 @@
+name: Ragavan, Nimble Pilferer
+mana cost: {R}
+types: legendary creature monkey pirate
+power toughness: 2/1
+keyword[1]: dash {1}{R}
+triggered: Whenever CARDNAME deals combat damage to a player, create a Treasure token and exile the top card of that player's library. Until end of turn, you may cast that card.

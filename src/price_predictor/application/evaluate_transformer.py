@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from price_predictor.infrastructure.forge_parser import parse_forge_cards
+from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
@@ -29,13 +29,13 @@ class TransformerEvalResult:
     per_card: list[dict] | None = None
 
 
-def _match_cards_to_texts(
+def _match_cards_to_prices(
     cards: list,
     name_to_uuids: dict,
     price_map: dict,
     output_dir: Path,
 ) -> list[tuple[str, str, float]]:
-    """Match cards to their converted text files and prices."""
+    """Match parsed cards to prices and read their converted text files."""
     matched = []
     for card in cards:
         card_name = card.name
@@ -50,10 +50,16 @@ def _match_cards_to_texts(
         slug = card.name.lower().replace(" ", "_").replace(",", "").replace("'", "")
         first_letter = slug[0] if slug else "_"
         text_path = output_dir / first_letter / f"{slug}.txt"
-        if not text_path.exists():
-            continue
+        if text_path.exists():
+            text = text_path.read_text(encoding="utf-8")
+        else:
+            # Fall back: the file might be at the root of output_dir (e.g. in tests)
+            flat_path = output_dir / f"{slug}.txt"
+            if flat_path.exists():
+                text = flat_path.read_text(encoding="utf-8")
+            else:
+                continue
 
-        text = text_path.read_text(encoding="utf-8")
         matched.append((card.name, text, price_map[card_name]))
     return matched
 
@@ -61,7 +67,6 @@ def _match_cards_to_texts(
 def evaluate_transformer(
     model_dir: Path,
     output_dir: Path,
-    forge_cards_path: Path,
     prices_path: Path,
     printings_path: Path,
     random_seed: int = 42,
@@ -74,12 +79,12 @@ def evaluate_transformer(
     model.eval()
 
     # Re-derive the dataset (same pipeline as training)
-    cards, parse_errors = parse_forge_cards(forge_cards_path)
+    cards, parse_errors = parse_converted_cards(output_dir)
     logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
     name_to_uuids = build_name_to_uuids(printings_path)
     price_map = build_price_map(prices_path, name_to_uuids)
 
-    matched = _match_cards_to_texts(cards, name_to_uuids, price_map, output_dir)
+    matched = _match_cards_to_prices(cards, name_to_uuids, price_map, output_dir)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 2:

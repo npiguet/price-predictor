@@ -24,7 +24,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -40,7 +40,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -58,7 +58,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -74,7 +74,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -90,7 +90,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -107,7 +107,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.application.train"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,
@@ -127,7 +127,7 @@ class TestTrainProgressLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor"):
             use_case = TrainModelUseCase()
             use_case.execute(
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
                 output_path=tmp_path,

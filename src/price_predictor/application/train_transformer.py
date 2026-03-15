@@ -16,7 +16,6 @@ from transformers import BertTokenizer
 
 from price_predictor.application.evaluate_transformer import evaluate_transformer
 from price_predictor.domain.entities import TransformerConfig
-from price_predictor.infrastructure.forge_parser import parse_forge_cards
 from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
@@ -42,36 +41,48 @@ class TransformerTrainResult:
 
 
 def _match_cards_to_texts(
-    cards: list,
+    output_dir: Path,
     name_to_uuids: dict,
     price_map: dict,
-    output_dir: Path,
 ) -> list[tuple[str, str, float]]:
-    """Match cards to their converted text files and prices."""
+    """Read converted text files from output_dir, extract card names, and match to prices."""
     matched = []
     skipped = 0
-    for card in cards:
-        card_name = card.name
-        if card_name not in name_to_uuids:
-            for full_name in name_to_uuids:
-                if full_name.startswith(card_name + " // "):
-                    card_name = full_name
-                    break
-        if card_name not in price_map:
-            continue
-
-        slug = card.name.lower().replace(" ", "_").replace(",", "").replace("'", "")
-        first_letter = slug[0] if slug else "_"
-        text_path = output_dir / first_letter / f"{slug}.txt"
-        if not text_path.exists():
+    txt_files = sorted(output_dir.rglob("*.txt"))
+    for txt_file in txt_files:
+        try:
+            text = txt_file.read_text(encoding="utf-8")
+        except OSError:
             skipped += 1
             continue
 
-        text = text_path.read_text(encoding="utf-8")
-        matched.append((card.name, text, price_map[card_name]))
+        # Extract card name from the name: line
+        card_name = None
+        for line in text.splitlines():
+            line = line.strip()
+            if line.lower().startswith("name:"):
+                card_name = line[len("name:"):].strip()
+                break
+
+        if not card_name:
+            skipped += 1
+            continue
+
+        # Try matching to price map (including split card lookup)
+        lookup_name = card_name
+        if lookup_name not in name_to_uuids:
+            for full_name in name_to_uuids:
+                if full_name.startswith(lookup_name + " // "):
+                    lookup_name = full_name
+                    break
+
+        if lookup_name not in price_map:
+            continue
+
+        matched.append((card_name, text, price_map[lookup_name]))
 
     if skipped > 0:
-        logger.info("Skipped %d cards with no matching text file", skipped)
+        logger.info("Skipped %d text files (unreadable or missing name)", skipped)
     return matched
 
 
@@ -198,7 +209,6 @@ def _train_loop(
 
 def train_transformer(
     output_dir: Path,
-    forge_cards_path: Path,
     prices_path: Path,
     printings_path: Path,
     model_output: Path = Path("models/transformer/"),
@@ -211,14 +221,12 @@ def train_transformer(
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
 
-    # 1. Load cards and match to prices + text files
-    cards, parse_errors = parse_forge_cards(forge_cards_path)
-    logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
-
+    # 1. Read converted text files and match to prices
     name_to_uuids = build_name_to_uuids(printings_path)
     price_map = build_price_map(prices_path, name_to_uuids)
 
-    matched = _match_cards_to_texts(cards, name_to_uuids, price_map, output_dir)
+    txt_file_count = len(list(output_dir.rglob("*.txt")))
+    matched = _match_cards_to_texts(output_dir, name_to_uuids, price_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 5:
@@ -226,7 +234,7 @@ def train_transformer(
             f"Insufficient training data: only {len(matched)} matched cards. Need at least 5."
         )
 
-    cards_skipped = len(cards) - len(matched) + len(parse_errors)
+    cards_skipped = txt_file_count - len(matched)
 
     # 2. Analyze sequence lengths
     texts = [text for _, text, _ in matched]
@@ -289,7 +297,6 @@ def train_transformer(
         eval_result = evaluate_transformer(
             model_dir=model_output,
             output_dir=output_dir,
-            forge_cards_path=forge_cards_path,
             prices_path=prices_path,
             printings_path=printings_path,
             random_seed=random_seed,

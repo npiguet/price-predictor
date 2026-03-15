@@ -20,7 +20,7 @@ def fixtures_dir() -> Path:
 def trained_model_path(fixtures_dir: Path, tmp_path: Path) -> Path:
     use_case = TrainModelUseCase()
     result = use_case.execute(
-        forge_cards_path=fixtures_dir / "forge_cards",
+        output_dir=fixtures_dir / "converted_cards",
         prices_path=fixtures_dir / "allprices_sample.json",
         printings_path=fixtures_dir / "allprintings_sample.json",
         output_path=tmp_path,
@@ -37,7 +37,7 @@ class TestEvaluateModelUseCase:
         use_case = EvaluateModelUseCase()
         result = use_case.execute(
             model_path=trained_model_path,
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             test_split=0.2,
@@ -54,7 +54,7 @@ class TestEvaluateModelUseCase:
         use_case = EvaluateModelUseCase()
         result = use_case.execute(
             model_path=trained_model_path,
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             test_split=0.2,
@@ -73,7 +73,7 @@ class TestEvaluateModelUseCase:
         use_case = EvaluateModelUseCase()
         r1 = use_case.execute(
             model_path=trained_model_path,
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             test_split=0.2,
@@ -81,7 +81,7 @@ class TestEvaluateModelUseCase:
         )
         r2 = use_case.execute(
             model_path=trained_model_path,
-            forge_cards_path=fixtures_dir / "forge_cards",
+            output_dir=fixtures_dir / "converted_cards",
             prices_path=fixtures_dir / "allprices_sample.json",
             printings_path=fixtures_dir / "allprintings_sample.json",
             test_split=0.2,
@@ -95,7 +95,7 @@ class TestEvaluateModelUseCase:
         with pytest.raises(ModelNotFoundError):
             use_case.execute(
                 model_path=Path("nonexistent.joblib"),
-                forge_cards_path=fixtures_dir / "forge_cards",
+                output_dir=fixtures_dir / "converted_cards",
                 prices_path=fixtures_dir / "allprices_sample.json",
                 printings_path=fixtures_dir / "allprintings_sample.json",
             )

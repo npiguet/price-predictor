@@ -151,12 +151,20 @@ def test_parse_converted_file_nonexistent_returns_none(tmp_path: Path):
 def test_parse_converted_cards_with_fixtures():
     cards, errors = parse_converted_cards(FIXTURES)
 
-    assert len(cards) == 3
+    assert len(cards) == 11
     assert len(errors) == 0
     names = {c.name for c in cards}
     assert "lightning bolt" in names
     assert "grizzly bears" in names
     assert "jace, the mind sculptor" in names
+    assert "Serra Angel" in names
+    assert "Delver of Secrets" in names
+    assert "Sol Ring" in names
+    assert "Ragavan, Nimble Pilferer" in names
+    assert "Breeding Pool" in names
+    assert "Fire" in names
+    assert "Matter Reshaper" in names
+    assert "Island" in names
 
 
 # --- 10. parse_converted_cards with nonexistent directory ---
