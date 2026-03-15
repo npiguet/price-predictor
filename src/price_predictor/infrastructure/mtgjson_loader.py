@@ -5,17 +5,27 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
+
+from price_predictor.domain.value_objects import RECOGNIZED_FORMATS, PrintingData
 
 logger = logging.getLogger(__name__)
 
 
-def build_name_to_uuids(allprintings_path: Path) -> dict[str, list[str]]:
+def build_name_to_uuids(
+    allprintings_path: Path,
+) -> tuple[dict[str, list[str]], dict[str, dict[str, Any]]]:
     """Build a mapping of card name -> list of UUIDs from AllPrintings.json.
 
     Filters to paper-available, English, non-funny, non-online-only cards.
+
+    Returns:
+        (name_to_uuids, uuid_metadata) where uuid_metadata maps UUID to
+        a dict with keys: rarity, setCode, isReserved, legalities, printings.
     """
-    logger.info("Loading AllPrintings.json \u2014 building name-to-UUID mapping...")
+    logger.info("Loading AllPrintings.json — building name-to-UUID mapping...")
     mapping: dict[str, list[str]] = {}
+    uuid_meta: dict[str, dict[str, Any]] = {}
 
     with open(allprintings_path, encoding="utf-8") as f:
         data = json.load(f)
@@ -41,9 +51,16 @@ def build_name_to_uuids(allprintings_path: Path) -> dict[str, list[str]]:
                 if name not in mapping:
                     mapping[name] = []
                 mapping[name].append(uuid)
+                uuid_meta[uuid] = {
+                    "rarity": card.get("rarity", ""),
+                    "setCode": card.get("setCode", set_code),
+                    "isReserved": card.get("isReserved", False),
+                    "legalities": card.get("legalities", {}),
+                    "printings": card.get("printings", []),
+                }
 
     logger.info("Built name-to-UUID mapping (%d card names)", len(mapping))
-    return mapping
+    return mapping, uuid_meta
 
 
 def get_cheapest_price(
@@ -87,16 +104,32 @@ def build_price_map(
     Applies a €0.01 price floor to all prices.
     Returns only cards with a valid price >= 0.
     """
-    logger.info("Loading AllPricesToday.json \u2014 building price map...")
+    price_map, _ = build_price_map_with_uuids(allprices_path, name_to_uuids)
+    return price_map
+
+
+def build_price_map_with_uuids(
+    allprices_path: Path, name_to_uuids: dict[str, list[str]]
+) -> tuple[dict[str, float], dict[str, str]]:
+    """Build price map AND track which UUID produced the cheapest price.
+
+    Returns:
+        (price_map, cheapest_uuid_map) where price_map is name->price
+        and cheapest_uuid_map is name->uuid of the cheapest printing.
+    """
+    logger.info("Loading AllPricesToday.json — building price map...")
     with open(allprices_path, encoding="utf-8") as f:
         data = json.load(f)
 
     prices_data = data.get("data", {})
     result: dict[str, float] = {}
+    cheapest_uuids: dict[str, str] = {}
     multi_printing_count = 0
 
     for name, uuids in name_to_uuids.items():
-        all_prices: list[float] = []
+        best_price: float | None = None
+        best_uuid: str | None = None
+
         for uuid in uuids:
             uuid_data = prices_data.get(uuid, {})
             paper = uuid_data.get("paper", {})
@@ -109,22 +142,25 @@ def build_price_map(
                     latest_date = max(finish_data.keys())
                     price = finish_data[latest_date]
                     if price is not None and price >= 0:
-                        all_prices.append(price)
+                        if best_price is None or price < best_price:
+                            best_price = price
+                            best_uuid = uuid
 
-        if all_prices:
-            selected_price = max(min(all_prices), 0.01)
+        if best_price is not None and best_uuid is not None:
+            selected_price = max(best_price, 0.01)
             result[name] = selected_price
-            if len(all_prices) > 1:
+            cheapest_uuids[name] = best_uuid
+            if len(uuids) > 1:
                 multi_printing_count += 1
                 logger.debug(
-                    "  %s: selected \u20ac%.2f from %d prices",
+                    "  %s: selected €%.2f from uuid %s",
                     name,
                     selected_price,
-                    len(all_prices),
+                    best_uuid,
                 )
 
     logger.info(
-        "Price selection summary: %d of %d cards had multiple price points",
+        "Price selection summary: %d of %d cards had multiple printings",
         multi_printing_count,
         len(result),
     )
@@ -135,4 +171,63 @@ def build_price_map(
         len(name_to_uuids),
     )
     logger.info("Loaded price data (%d cards with prices)", len(result))
-    return result
+    return result, cheapest_uuids
+
+
+def build_metadata_map(
+    allprintings_path: Path,
+    allprices_path: Path,
+) -> tuple[dict[str, PrintingData], dict[str, float]]:
+    """Build a metadata map: card name -> PrintingData from cheapest printing.
+
+    Also returns the price map for convenience (avoids re-loading prices).
+
+    Returns:
+        (metadata_map, price_map) where metadata_map is name->PrintingData
+        derived from the cheapest printing's data.
+    """
+    name_to_uuids, uuid_meta = build_name_to_uuids(allprintings_path)
+    price_map, cheapest_uuids = build_price_map_with_uuids(allprices_path, name_to_uuids)
+
+    metadata_map: dict[str, PrintingData] = {}
+    for name, cheapest_uuid in cheapest_uuids.items():
+        meta = uuid_meta.get(cheapest_uuid, {})
+
+        # isReserved: absent means False
+        is_reserved = bool(meta.get("isReserved", False))
+
+        # rarity: fallback to "rare" for missing/unknown
+        raw_rarity = meta.get("rarity", "").lower()
+        if raw_rarity in ("common", "uncommon", "rare", "mythic"):
+            rarity = raw_rarity
+        else:
+            rarity = "rare"
+
+        # printings count
+        printings_list = meta.get("printings", [])
+        printings_count = max(len(printings_list), 1)
+
+        # set code: lowercase
+        set_code = meta.get("setCode", "ukn").lower()
+        if not set_code:
+            set_code = "ukn"
+
+        # legalities: filter to recognized formats, only "Legal" status
+        raw_legalities = meta.get("legalities", {})
+        # MTGJSON uses lowercase format keys; RECOGNIZED_FORMATS is also lowercase
+        legalities = sorted(
+            fmt
+            for fmt in RECOGNIZED_FORMATS
+            if raw_legalities.get(fmt, "") == "Legal"
+        )
+
+        metadata_map[name] = PrintingData(
+            is_reserved=is_reserved,
+            rarity=rarity,
+            printings_count=printings_count,
+            set_code=set_code,
+            legalities=legalities,
+        )
+
+    logger.info("Built metadata map (%d cards)", len(metadata_map))
+    return metadata_map, price_map

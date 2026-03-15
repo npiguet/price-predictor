@@ -15,7 +15,9 @@ from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import TrainedModel
 from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import save_model
-from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
+from price_predictor.infrastructure.mtgjson_loader import (
+    build_metadata_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +48,13 @@ class TrainModelUseCase:
         cards, parse_errors = parse_converted_cards(output_dir)
         logger.info("Parsed %d cards, %d parse errors", len(cards), len(parse_errors))
 
-        # 2. Build name→UUIDs mapping
-        name_to_uuids = build_name_to_uuids(printings_path)
+        # 2. Build metadata map and price map
+        metadata_map, price_map = build_metadata_map(printings_path, prices_path)
 
-        # 3. Build price map
-        price_map = build_price_map(prices_path, name_to_uuids)
+        # 3. Build case-insensitive lookup
+        lower_to_canonical: dict[str, str] = {k.lower(): k for k in price_map}
 
-        # 4. Build case-insensitive lookup (converted cards are lowercase)
-        lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
-
-        # 5. Join cards to prices
+        # 4. Join cards to prices and attach printing data
         training_cards = []
         training_prices = []
         skipped_reasons: dict[str, int] = {
@@ -83,7 +82,12 @@ class TrainModelUseCase:
                 skipped_reasons["no_price"] += 1
                 continue
 
-            training_cards.append(card)
+            # Attach printing data from metadata map (Card is frozen, create new)
+            pd = metadata_map.get(canonical)
+            from dataclasses import replace
+            enriched_card = replace(card, printing_data=pd) if pd else card
+
+            training_cards.append(enriched_card)
             training_prices.append(price_map[canonical])
 
         total_skipped = sum(skipped_reasons.values())

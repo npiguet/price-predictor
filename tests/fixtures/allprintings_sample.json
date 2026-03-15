@@ -12,7 +12,18 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "10E",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pauper": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal"
+          },
+          "printings": ["10E", "7ED", "LEA", "LEB", "2ED"]
         },
         {
           "name": "Serra Angel",
@@ -20,7 +31,18 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "isReserved": true,
+          "rarity": "uncommon",
+          "setCode": "10E",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal"
+          },
+          "printings": ["10E", "LEA", "LEB"]
         },
         {
           "name": "Island",
@@ -28,7 +50,22 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "10E",
+          "legalities": {
+            "standard": "Legal",
+            "pioneer": "Legal",
+            "modern": "Legal",
+            "brawl": "Legal",
+            "legacy": "Legal",
+            "vintage": "Legal",
+            "pauper": "Legal",
+            "commander": "Legal",
+            "penny": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["10E"]
         }
       ]
     },
@@ -40,7 +77,18 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "7ED",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pauper": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal"
+          },
+          "printings": ["10E", "7ED", "LEA", "LEB", "2ED"]
         }
       ]
     },
@@ -52,7 +100,19 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "A25",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pauper": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["A25", "2XM", "LEA"]
         },
         {
           "name": "Jace, the Mind Sculptor",
@@ -60,7 +120,17 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "mythic",
+          "setCode": "A25",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "vintage": "Restricted",
+            "modern": "Banned",
+            "standard": "Not Legal"
+          },
+          "printings": ["A25", "WWK"]
         }
       ]
     },
@@ -72,7 +142,19 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "2XM",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pauper": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["A25", "2XM", "LEA"]
         }
       ]
     },
@@ -84,7 +166,17 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "mythic",
+          "setCode": "WWK",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "vintage": "Restricted",
+            "modern": "Banned",
+            "standard": "Not Legal"
+          },
+          "printings": ["A25", "WWK"]
         }
       ]
     },
@@ -96,7 +188,20 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "ISD",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pauper": "Legal",
+            "vintage": "Legal",
+            "pioneer": "Legal",
+            "penny": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["ISD"]
         }
       ]
     },
@@ -108,7 +213,17 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "C21",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Banned",
+            "vintage": "Restricted",
+            "modern": "Not Legal",
+            "standard": "Not Legal"
+          },
+          "printings": ["C21", "C20"]
         }
       ]
     },
@@ -120,7 +235,17 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "C20",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Banned",
+            "vintage": "Restricted",
+            "modern": "Not Legal",
+            "standard": "Not Legal"
+          },
+          "printings": ["C21", "C20"]
         }
       ]
     },
@@ -132,7 +257,17 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "mythic",
+          "setCode": "MH2",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Banned",
+            "vintage": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["MH2"]
         }
       ]
     },
@@ -144,7 +279,19 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "rare",
+          "setCode": "RNA",
+          "legalities": {
+            "standard": "Not Legal",
+            "pioneer": "Legal",
+            "modern": "Legal",
+            "commander": "Legal",
+            "legacy": "Legal",
+            "vintage": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["RNA"]
         }
       ]
     },
@@ -156,7 +303,18 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "MH1",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "vintage": "Legal",
+            "penny": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["MH1"]
         }
       ]
     },
@@ -168,7 +326,18 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "rare",
+          "setCode": "OGW",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "modern": "Legal",
+            "pioneer": "Legal",
+            "vintage": "Legal",
+            "oathbreaker": "Legal"
+          },
+          "printings": ["OGW"]
         }
       ]
     },
@@ -180,7 +349,11 @@
           "availability": ["paper"],
           "isFunny": true,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "UNH",
+          "legalities": {},
+          "printings": ["UNH"]
         }
       ]
     },
@@ -192,7 +365,15 @@
           "availability": ["mtgo"],
           "isFunny": false,
           "isOnlineOnly": true,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "PRM",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal",
+            "vintage": "Legal"
+          },
+          "printings": ["PRM"]
         }
       ]
     },
@@ -204,7 +385,14 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "ZPC",
+          "legalities": {
+            "standard": "Not Legal",
+            "commander": "Banned"
+          },
+          "printings": ["ZPC"]
         }
       ]
     },
@@ -216,7 +404,11 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "common",
+          "setCode": "SCC",
+          "legalities": {},
+          "printings": ["SCC"]
         }
       ]
     },
@@ -228,7 +420,14 @@
           "availability": ["paper"],
           "isFunny": false,
           "isOnlineOnly": false,
-          "language": "English"
+          "language": "English",
+          "rarity": "uncommon",
+          "setCode": "NPC",
+          "legalities": {
+            "commander": "Legal",
+            "legacy": "Legal"
+          },
+          "printings": ["NPC"]
         }
       ]
     }

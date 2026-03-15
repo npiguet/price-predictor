@@ -10,7 +10,11 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
+from price_predictor.application.card_enrichment import enrich_card_text
+from price_predictor.infrastructure.mtgjson_loader import (
+    build_metadata_map,
+    build_name_to_uuids,
+)
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
 
@@ -34,6 +38,7 @@ def _match_texts_to_prices(
     output_dir: Path,
     name_to_uuids: dict,
     price_map: dict,
+    metadata_map: dict | None = None,
 ) -> list[tuple[str, str, float]]:
     """Read converted text files directly and match to prices by name.
 
@@ -72,6 +77,10 @@ def _match_texts_to_prices(
         if canonical is None or canonical not in price_map:
             continue
 
+        # Enrich text with printing data if metadata available
+        if metadata_map and canonical in metadata_map:
+            text = enrich_card_text(text, metadata_map[canonical])
+
         matched.append((card_name, text, price_map[canonical]))
 
     if skipped > 0:
@@ -93,11 +102,11 @@ def evaluate_transformer(
     model.to(device)
     model.eval()
 
-    # Read text files directly and match to prices (no Card parsing needed)
-    name_to_uuids = build_name_to_uuids(printings_path)
-    price_map = build_price_map(prices_path, name_to_uuids)
+    # Read text files directly and match to prices (with metadata enrichment)
+    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+    name_to_uuids, _uuid_meta = build_name_to_uuids(printings_path)
 
-    matched = _match_texts_to_prices(output_dir, name_to_uuids, price_map)
+    matched = _match_texts_to_prices(output_dir, name_to_uuids, price_map, metadata_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 2:

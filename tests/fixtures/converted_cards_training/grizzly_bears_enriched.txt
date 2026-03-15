@@ -1,0 +1,9 @@
+name: Grizzly Bears
+mana cost: {1}{G}
+types: creature bear
+power toughness: 2/2
+reserved: false
+rarity: common
+printings: 5
+set: 7ed
+legalities: commander, legacy, modern, pauper, vintage, penny

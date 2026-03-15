@@ -14,8 +14,12 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from transformers import BertTokenizer
 
+from price_predictor.application.card_enrichment import enrich_card_text
 from price_predictor.domain.entities import TransformerConfig
-from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
+from price_predictor.infrastructure.mtgjson_loader import (
+    build_metadata_map,
+    build_name_to_uuids,
+)
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from price_predictor.infrastructure.transformer_store import save_model
@@ -43,6 +47,7 @@ def _match_cards_to_texts(
     output_dir: Path,
     name_to_uuids: dict,
     price_map: dict,
+    metadata_map: dict | None = None,
 ) -> list[tuple[str, str, float]]:
     """Read converted text files from output_dir, extract card names, and match to prices."""
     lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
@@ -79,6 +84,10 @@ def _match_cards_to_texts(
 
         if canonical is None or canonical not in price_map:
             continue
+
+        # Enrich text with printing data if metadata available
+        if metadata_map and canonical in metadata_map:
+            text = enrich_card_text(text, metadata_map[canonical])
 
         matched.append((card_name, text, price_map[canonical]))
 
@@ -221,12 +230,12 @@ def train_transformer(
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
 
-    # 1. Read converted text files and match to prices
-    name_to_uuids = build_name_to_uuids(printings_path)
-    price_map = build_price_map(prices_path, name_to_uuids)
+    # 1. Read converted text files and match to prices (with metadata enrichment)
+    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+    name_to_uuids, _uuid_meta = build_name_to_uuids(printings_path)
 
     txt_file_count = len(list(output_dir.rglob("*.txt")))
-    matched = _match_cards_to_texts(output_dir, name_to_uuids, price_map)
+    matched = _match_cards_to_texts(output_dir, name_to_uuids, price_map, metadata_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 5:

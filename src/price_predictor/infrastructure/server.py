@@ -13,6 +13,10 @@ import numpy as np
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from price_predictor.application.card_enrichment import (
+    enrich_or_default,
+    extract_printing_data_from_text,
+)
 from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
 logger = logging.getLogger(__name__)
@@ -37,6 +41,7 @@ def _build_log_entry(
 def create_app(
     model_artifact: dict[str, Any],
     transformer_artifact: dict[str, Any] | None = None,
+    metadata_map: dict | None = None,
 ) -> FastAPI:
     """Create a FastAPI application with the given model artifact(s).
 
@@ -50,14 +55,23 @@ def create_app(
     app = FastAPI(title="Price Predictor Service")
     app.state.model_artifact = model_artifact
     app.state.transformer_artifact = transformer_artifact
+    app.state.metadata_map = metadata_map or {}
 
     @app.post("/api/v1/predict")
     async def predict(request: Request) -> Response:
         start = time.perf_counter()
         body = (await request.body()).decode("utf-8")
 
+        # Enrich card text with printing data (auto-fill/default)
+        enriched_body = enrich_or_default(body, request.app.state.metadata_map)
+
         try:
-            card = parse_converted_text(body)
+            card = parse_converted_text(enriched_body)
+            # Attach printing data to Card for sklearn feature engineering
+            pd = extract_printing_data_from_text(enriched_body)
+            if pd is not None:
+                from dataclasses import replace
+                card = replace(card, printing_data=pd)
         except (ValueError, TypeError) as e:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.info(json.dumps(_build_log_entry(
@@ -94,7 +108,7 @@ def create_app(
 
                     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
                     encoded = tokenizer(
-                        body,
+                        enriched_body,
                         max_length=t_config.max_seq_len,
                         truncation=True,
                         padding="max_length",

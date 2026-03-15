@@ -21,11 +21,11 @@ def _make_config(**overrides) -> TransformerConfig:
 
 class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_model")
+    @patch("price_predictor.application.evaluate_transformer.build_metadata_map")
     @patch("price_predictor.application.evaluate_transformer.build_name_to_uuids")
-    @patch("price_predictor.application.evaluate_transformer.build_price_map")
     @patch("price_predictor.application.evaluate_transformer._match_texts_to_prices")
     def test_returns_eval_result_with_metrics(
-        self, mock_match, mock_price_map, mock_name_uuids, mock_load, tmp_path
+        self, mock_match, mock_name_uuids, mock_metadata_map, mock_load, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
 
@@ -42,8 +42,8 @@ class TestEvaluateTransformer:
         mock_model.to = MagicMock(return_value=mock_model)
         mock_load.return_value = (mock_model, config)
 
-        mock_name_uuids.return_value = {}
-        mock_price_map.return_value = {}
+        mock_metadata_map.return_value = ({}, {})
+        mock_name_uuids.return_value = ({}, {})
 
         # _match_texts_to_prices returns 25 matched cards (reads files directly)
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(25)]

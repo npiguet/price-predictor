@@ -183,3 +183,44 @@ def test_parse_converted_cards_no_txt_files_raises(tmp_path: Path):
     (tmp_path / "readme.md").write_text("not a card")
     with pytest.raises(ValueError, match="(?i)no .txt files"):
         parse_converted_cards(tmp_path)
+
+
+# --- 12. Backward compatibility: printing data lines do not affect Card parsing ---
+
+
+def test_printing_data_lines_produce_same_card():
+    """Appending printing data lines to card text does not change the parsed Card entity.
+
+    The parser should ignore the printing data fields (reserved, rarity, printings,
+    set, legalities) and produce the same Card values. The printing_data field on Card
+    should NOT be set by the parser.
+    """
+    base_text = (
+        "name: Grizzly Bears\n"
+        "mana cost: {1}{G}\n"
+        "types: creature bear\n"
+        "power toughness: 2/2\n"
+    )
+    enriched_text = (
+        base_text
+        + "reserved: false\n"
+        "rarity: common\n"
+        "printings: 5\n"
+        "set: 7ed\n"
+        "legalities: commander, legacy, modern, pauper, penny, vintage\n"
+    )
+    card_base = parse_converted_text(base_text)
+    card_enriched = parse_converted_text(enriched_text)
+
+    # Core Card attributes must be identical
+    assert card_enriched.name == card_base.name
+    assert card_enriched.types == card_base.types
+    assert card_enriched.mana_cost == card_base.mana_cost
+    assert card_enriched.oracle_text == card_base.oracle_text
+    assert card_enriched.ability_count == card_base.ability_count
+    assert card_enriched.power == card_base.power
+    assert card_enriched.toughness == card_base.toughness
+
+    # The parser does NOT populate printing_data
+    assert card_enriched.printing_data is None
+    assert card_base.printing_data is None

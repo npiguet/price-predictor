@@ -13,7 +13,9 @@ from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import EvaluationMetrics
 from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import load_model
-from price_predictor.infrastructure.mtgjson_loader import build_name_to_uuids, build_price_map
+from price_predictor.infrastructure.mtgjson_loader import (
+    build_metadata_map,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +50,10 @@ class EvaluateModelUseCase:
         # Re-derive the dataset (same pipeline as training)
         cards, parse_errors = parse_converted_cards(output_dir)
         logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
-        name_to_uuids = build_name_to_uuids(printings_path)
-        price_map = build_price_map(prices_path, name_to_uuids)
+        metadata_map, price_map = build_metadata_map(printings_path, prices_path)
 
         # Case-insensitive lookup (converted cards are lowercase)
-        lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
+        lower_to_canonical: dict[str, str] = {k.lower(): k for k in price_map}
 
         eval_cards = []
         eval_prices = []
@@ -65,7 +66,11 @@ class EvaluateModelUseCase:
                         canonical = full_canonical
                         break
             if canonical is not None and canonical in price_map:
-                eval_cards.append(card)
+                # Attach printing data (Card is frozen, create new instance)
+                pd = metadata_map.get(canonical)
+                from dataclasses import replace
+                enriched_card = replace(card, printing_data=pd) if pd else card
+                eval_cards.append(enriched_card)
                 eval_prices.append(price_map[canonical])
 
         logger.info(

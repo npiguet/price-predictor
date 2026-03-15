@@ -101,6 +101,10 @@ def build_parser() -> argparse.ArgumentParser:
                                          help="Start the prediction REST service")
     serve_parser.add_argument("--model-path", type=str,
                               default="models/sklearn/latest.joblib")
+    serve_parser.add_argument("--printings-path", type=str,
+                              default="resources/AllPrintings.json")
+    serve_parser.add_argument("--prices-path", type=str,
+                              default="resources/AllPricesToday.json")
     serve_parser.add_argument("--host", type=str, default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8000)
 
@@ -188,7 +192,23 @@ def run_serve(args: argparse.Namespace) -> int:
     else:
         print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
 
-    app = create_app(artifact, transformer_artifact=transformer_artifact)
+    # Build metadata map for auto-fill (optional — graceful if files missing)
+    metadata_map = None
+    printings_path = Path(args.printings_path)
+    prices_path = Path(args.prices_path)
+    if printings_path.exists() and prices_path.exists():
+        try:
+            from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+            metadata_map_result, _ = build_metadata_map(printings_path, prices_path)
+            metadata_map = metadata_map_result
+            print(f"Metadata map loaded ({len(metadata_map)} cards).", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Failed to build metadata map: {e}", file=sys.stderr)
+    else:
+        print("Metadata files not found — auto-fill disabled.", file=sys.stderr)
+
+    app = create_app(artifact, transformer_artifact=transformer_artifact,
+                      metadata_map=metadata_map)
     print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0

@@ -17,8 +17,8 @@
 
 **Purpose**: Test fixture preparation and shared constants
 
-- [ ] T001 Update test fixture `tests/fixtures/allprintings_sample.json` to include `isReserved`, `rarity`, `legalities`, `printings`, and `setCode` fields for all sample cards
-- [ ] T002 [P] Add enriched card text fixtures in `tests/fixtures/converted_cards_training/` — create at least 2 sample `.txt` files that include the 5 printing data lines appended at the end
+- [x] T001 Update test fixture `tests/fixtures/allprintings_sample.json` to include `isReserved`, `rarity`, `legalities`, `printings`, and `setCode` fields for all sample cards
+- [x] T002 [P] Add enriched card text fixtures in `tests/fixtures/converted_cards_training/` — create at least 2 sample `.txt` files that include the 5 printing data lines appended at the end
 
 ---
 
@@ -28,17 +28,17 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 [P] Create `PrintingData` frozen dataclass in `src/price_predictor/domain/value_objects.py` with fields: `is_reserved` (bool), `rarity` (str), `printings_count` (int), `set_code` (str), `legalities` (list[str]). Add validation, `defaults()` classmethod, and `RECOGNIZED_FORMATS` constant tuple. See data-model.md for field specs.
-- [ ] T004 [P] Add unit tests for `PrintingData` in `tests/unit/domain/test_printing_data.py` — test construction, validation (invalid rarity, negative printings_count), `defaults()` factory, and `RECOGNIZED_FORMATS` contents
-- [ ] T005 Add optional `printing_data: PrintingData | None = None` field to `Card` entity in `src/price_predictor/domain/entities.py`
-- [ ] T006 Extend `build_name_to_uuids` in `src/price_predictor/infrastructure/mtgjson_loader.py` to also return a `dict[str, dict]` mapping UUID to card metadata (`rarity`, `setCode`, `isReserved`, `legalities`, `printings` list). Return as a second value from an updated function or a new `build_name_to_uuids_with_metadata` function.
-- [ ] T007 Modify `build_price_map` in `src/price_predictor/infrastructure/mtgjson_loader.py` to also track which UUID produced the cheapest price per card. Return `dict[str, tuple[float, str]]` (price, cheapest_uuid) — or add a new `build_price_map_with_uuids` function to avoid breaking existing callers.
-- [ ] T008 Add new `build_metadata_map` function in `src/price_predictor/infrastructure/mtgjson_loader.py` that combines name-to-UUID mapping, UUID metadata, and cheapest-UUID tracking to produce `dict[str, PrintingData]` — one `PrintingData` per card name, derived from the cheapest printing's data. Handle `isReserved` absent = False, legalities filtering to `RECOGNIZED_FORMATS`, rarity fallback to "rare" for missing/unknown values.
-- [ ] T009 [P] Add unit tests for metadata map building in `tests/unit/infrastructure/test_mtgjson_loader.py` — test `build_metadata_map` with sample fixture data: reserved card, multi-printing card, card with no rarity, card with online-only format legalities, card banned in all formats
-- [ ] T010 Verify that `parse_converted_text` in `src/price_predictor/infrastructure/converted_card_parser.py` handles enriched card text (with 5 printing data lines appended) without errors — no code changes needed, the parser already ignores unrecognized key:value lines. The parser does NOT populate `Card.printing_data`; all printing data extraction is handled by `card_enrichment.py` (T012).
-- [ ] T011 [P] Add backward-compatibility test in `tests/unit/infrastructure/test_converted_card_parser.py` — verify parsing card text with printing data lines present produces the same Card entity (same name, types, mana cost, oracle text, ability count) as parsing without them
-- [ ] T012 Create `src/price_predictor/application/card_enrichment.py` with: (a) `enrich_card_text(text: str, printing_data: PrintingData) -> str` that appends the 5 printing data lines at the end of card text; (b) `extract_printing_fields_from_text(text: str) -> dict[str, str]` that detects which printing data keys are already present in the text and returns their values; (c) `extract_printing_data_from_text(text: str) -> PrintingData | None` that parses all 5 fields from the text into a `PrintingData` instance (returns None if no fields present); (d) `enrich_or_default(text: str, metadata_map: dict[str, PrintingData]) -> str` that parses the card name from text, looks it up in the metadata map, merges client-provided fields with auto-filled or default values, and returns enriched text. Note: the card text parser (`converted_card_parser.py`) does NOT handle printing data — all extraction and enrichment is centralized here.
-- [ ] T013 [P] Add unit tests for card enrichment in `tests/unit/application/test_card_enrichment.py` — test `enrich_card_text` produces correct format, `extract_printing_fields_from_text` finds existing fields, `enrich_or_default` auto-fills for known card, applies defaults for unknown card, and respects client-provided overrides
+- [x] T003 [P] Create `PrintingData` frozen dataclass in `src/price_predictor/domain/value_objects.py` with fields: `is_reserved` (bool), `rarity` (str), `printings_count` (int), `set_code` (str), `legalities` (list[str]). Add validation, `defaults()` classmethod, and `RECOGNIZED_FORMATS` constant tuple. See data-model.md for field specs.
+- [x] T004 [P] Add unit tests for `PrintingData` in `tests/unit/domain/test_printing_data.py` — test construction, validation (invalid rarity, negative printings_count), `defaults()` factory, and `RECOGNIZED_FORMATS` contents
+- [x] T005 Add optional `printing_data: PrintingData | None = None` field to `Card` entity in `src/price_predictor/domain/entities.py`
+- [x] T006 Extend `build_name_to_uuids` in `src/price_predictor/infrastructure/mtgjson_loader.py` to also return a `dict[str, dict]` mapping UUID to card metadata (`rarity`, `setCode`, `isReserved`, `legalities`, `printings` list). Return as a second value from an updated function or a new `build_name_to_uuids_with_metadata` function.
+- [x] T007 Modify `build_price_map` in `src/price_predictor/infrastructure/mtgjson_loader.py` to also track which UUID produced the cheapest price per card. Return `dict[str, tuple[float, str]]` (price, cheapest_uuid) — or add a new `build_price_map_with_uuids` function to avoid breaking existing callers.
+- [x] T008 Add new `build_metadata_map` function in `src/price_predictor/infrastructure/mtgjson_loader.py` that combines name-to-UUID mapping, UUID metadata, and cheapest-UUID tracking to produce `dict[str, PrintingData]` — one `PrintingData` per card name, derived from the cheapest printing's data. Handle `isReserved` absent = False, legalities filtering to `RECOGNIZED_FORMATS`, rarity fallback to "rare" for missing/unknown values.
+- [x] T009 [P] Add unit tests for metadata map building in `tests/unit/infrastructure/test_mtgjson_loader.py` — test `build_metadata_map` with sample fixture data: reserved card, multi-printing card, card with no rarity, card with online-only format legalities, card banned in all formats
+- [x] T010 Verify that `parse_converted_text` in `src/price_predictor/infrastructure/converted_card_parser.py` handles enriched card text (with 5 printing data lines appended) without errors — no code changes needed, the parser already ignores unrecognized key:value lines. The parser does NOT populate `Card.printing_data`; all printing data extraction is handled by `card_enrichment.py` (T012).
+- [x] T011 [P] Add backward-compatibility test in `tests/unit/infrastructure/test_converted_card_parser.py` — verify parsing card text with printing data lines present produces the same Card entity (same name, types, mana cost, oracle text, ability count) as parsing without them
+- [x] T012 Create `src/price_predictor/application/card_enrichment.py` with: (a) `enrich_card_text(text: str, printing_data: PrintingData) -> str` that appends the 5 printing data lines at the end of card text; (b) `extract_printing_fields_from_text(text: str) -> dict[str, str]` that detects which printing data keys are already present in the text and returns their values; (c) `extract_printing_data_from_text(text: str) -> PrintingData | None` that parses all 5 fields from the text into a `PrintingData` instance (returns None if no fields present); (d) `enrich_or_default(text: str, metadata_map: dict[str, PrintingData]) -> str` that parses the card name from text, looks it up in the metadata map, merges client-provided fields with auto-filled or default values, and returns enriched text. Note: the card text parser (`converted_card_parser.py`) does NOT handle printing data — all extraction and enrichment is centralized here.
+- [x] T013 [P] Add unit tests for card enrichment in `tests/unit/application/test_card_enrichment.py` — test `enrich_card_text` produces correct format, `extract_printing_fields_from_text` finds existing fields, `enrich_or_default` auto-fills for known card, applies defaults for unknown card, and respects client-provided overrides
 
 **Checkpoint**: Foundation ready — all domain objects, metadata extraction, parsing, and enrichment logic are in place. User story implementation can begin.
 
@@ -59,11 +59,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Add 17 printing data features to `FeatureEngineering._transform_single` in `src/price_predictor/application/feature_engineering.py` — is_reserved (1 binary), rarity one-hot (4: common/uncommon/rare/mythic), printings_count (1 numeric), legalities_count (1 numeric), per-format legality multi-hot (10 binary). Update `get_feature_count`. When `card.printing_data` is None, output 17 zeros. See data-model.md for feature spec.
-- [ ] T019 [US1] Update `TrainModelUseCase.execute` in `src/price_predictor/application/train.py` — after joining cards to prices, call `build_metadata_map` and attach `PrintingData` to each training Card by constructing a new Card instance with `printing_data` set (Card is frozen). The parser does not set printing_data; this is the only place it gets attached for sklearn training.
-- [ ] T020 [US1] Update `_match_cards_to_texts` in `src/price_predictor/application/train_transformer.py` — after matching card name to price, also look up metadata from `build_metadata_map` and call `enrich_card_text` to append metadata lines to the raw text before returning it
-- [ ] T021 [US1] Update `EvaluateModelUseCase.execute` in `src/price_predictor/application/evaluate.py` — same enrichment as training: build metadata map, attach `PrintingData` to each eval Card before feature transformation
-- [ ] T022 [US1] Update `evaluate_transformer` in `src/price_predictor/application/evaluate_transformer.py` — enrich text with metadata before tokenization, same as training pipeline
+- [x] T018 [US1] Add 17 printing data features to `FeatureEngineering._transform_single` in `src/price_predictor/application/feature_engineering.py` — is_reserved (1 binary), rarity one-hot (4: common/uncommon/rare/mythic), printings_count (1 numeric), legalities_count (1 numeric), per-format legality multi-hot (10 binary). Update `get_feature_count`. When `card.printing_data` is None, output 17 zeros. See data-model.md for feature spec.
+- [x] T019 [US1] Update `TrainModelUseCase.execute` in `src/price_predictor/application/train.py` — after joining cards to prices, call `build_metadata_map` and attach `PrintingData` to each training Card by constructing a new Card instance with `printing_data` set (Card is frozen). The parser does not set printing_data; this is the only place it gets attached for sklearn training.
+- [x] T020 [US1] Update `_match_cards_to_texts` in `src/price_predictor/application/train_transformer.py` — after matching card name to price, also look up metadata from `build_metadata_map` and call `enrich_card_text` to append metadata lines to the raw text before returning it
+- [x] T021 [US1] Update `EvaluateModelUseCase.execute` in `src/price_predictor/application/evaluate.py` — same enrichment as training: build metadata map, attach `PrintingData` to each eval Card before feature transformation
+- [x] T022 [US1] Update `evaluate_transformer` in `src/price_predictor/application/evaluate_transformer.py` — enrich text with metadata before tokenization, same as training pipeline
 
 **Checkpoint**: Training and evaluation pipelines produce enriched card text with metadata. Models can be retrained. US1 acceptance scenarios 1–7 are testable.
 
@@ -82,9 +82,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T025 [US2] Update `serve` subparser in `src/price_predictor/infrastructure/cli.py` — add `--printings-path` (default: `resources/AllPrintings.json`) and `--prices-path` (default: `resources/AllPricesToday.json`) arguments
-- [ ] T026 [US2] Update `run_serve` in `src/price_predictor/infrastructure/cli.py` — call `build_metadata_map` at startup using the new CLI args, pass the resulting metadata map to `create_app`
-- [ ] T027 [US2] Update `create_app` and the `predict` endpoint in `src/price_predictor/infrastructure/server.py` — accept `metadata_map` parameter, store in `app.state.metadata_map`. In the predict handler, after reading the body: (1) call `enrich_or_default(body, metadata_map)` to produce enriched text, (2) parse enriched text to Card via `parse_converted_text`, (3) call `extract_printing_data_from_text(enriched_text)` to get PrintingData and construct a new Card with printing_data set for sklearn, (4) pass enriched text to transformer tokenizer.
+- [x] T025 [US2] Update `serve` subparser in `src/price_predictor/infrastructure/cli.py` — add `--printings-path` (default: `resources/AllPrintings.json`) and `--prices-path` (default: `resources/AllPricesToday.json`) arguments
+- [x] T026 [US2] Update `run_serve` in `src/price_predictor/infrastructure/cli.py` — call `build_metadata_map` at startup using the new CLI args, pass the resulting metadata map to `create_app`
+- [x] T027 [US2] Update `create_app` and the `predict` endpoint in `src/price_predictor/infrastructure/server.py` — accept `metadata_map` parameter, store in `app.state.metadata_map`. In the predict handler, after reading the body: (1) call `enrich_or_default(body, metadata_map)` to produce enriched text, (2) parse enriched text to Card via `parse_converted_text`, (3) call `extract_printing_data_from_text(enriched_text)` to get PrintingData and construct a new Card with printing_data set for sklearn, (4) pass enriched text to transformer tokenizer.
 
 **Checkpoint**: Server auto-fills metadata for known cards. Existing API clients work unchanged. US2 acceptance scenarios 1–3 are testable.
 
@@ -105,8 +105,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T032 [US3] Verify `enrich_or_default` in `src/price_predictor/application/card_enrichment.py` handles the unknown-card path correctly — if card name not found in metadata map, apply `PrintingData.defaults()` for all missing fields. If some fields are client-provided in the text, merge: keep client values, fill remaining from defaults. (This should already be implemented in T012; this task verifies and fixes edge cases.)
-- [ ] T033 [US3] Verify known-card override behavior in `src/price_predictor/application/card_enrichment.py` — if a known card has client-provided fields in the text, those override auto-filled values (e.g., `rarity: mythic` overrides the actual rarity). (Same as T032 — verify edge case from spec.)
+- [x] T032 [US3] Verify `enrich_or_default` in `src/price_predictor/application/card_enrichment.py` handles the unknown-card path correctly — if card name not found in metadata map, apply `PrintingData.defaults()` for all missing fields. If some fields are client-provided in the text, merge: keep client values, fill remaining from defaults. (This should already be implemented in T012; this task verifies and fixes edge cases.)
+- [x] T033 [US3] Verify known-card override behavior in `src/price_predictor/application/card_enrichment.py` — if a known card has client-provided fields in the text, those override auto-filled values (e.g., `rarity: mythic` overrides the actual rarity). (Same as T032 — verify edge case from spec.)
 
 **Checkpoint**: All three user stories are independently functional and testable. Default values and partial overrides work correctly.
 
@@ -117,8 +117,8 @@
 **Purpose**: Cleanup, validation, and documentation
 
 - [ ] T034 [P] Update CLI predict commands (`run_predict_sklearn`, `run_predict_transformer`) in `src/price_predictor/infrastructure/cli.py` to support metadata enrichment for file-based and inline card text prediction (auto-fill if AllPrintings available, otherwise pass through)
-- [ ] T035 [P] Run `ruff check .` from `src/` and fix any linting issues introduced by this feature
-- [ ] T036 Run full test suite (`cd src && pytest`) and fix any failures
+- [x] T035 [P] Run `ruff check .` from `src/` and fix any linting issues introduced by this feature
+- [x] T036 Run full test suite (`cd src && pytest`) and fix any failures
 - [ ] T037 Run quickstart.md validation — manually verify the training, evaluation, and prediction examples from `specs/009-printing-metadata/quickstart.md` work end-to-end
 - [ ] T038 [P] SC-004 accuracy comparison: run `evaluate sklearn` and `evaluate transformer` on pre-metadata models to capture baseline metrics, then retrain both models on enriched data, run evaluate again, and log the before/after comparison. This is informational only — no pass/fail gate.
 - [ ] T039 [P] Update project documentation to reflect feature 009 changes: new `--printings-path` and `--prices-path` serve CLI options, enriched card text format with 5 printing data fields, and updated workflow descriptions per Constitution Principle VI

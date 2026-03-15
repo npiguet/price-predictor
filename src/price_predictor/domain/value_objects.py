@@ -2,9 +2,55 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 COLORS = frozenset({"W", "U", "B", "R", "G"})
+
+RECOGNIZED_FORMATS = (
+    "standard", "pioneer", "modern", "brawl", "legacy",
+    "vintage", "pauper", "commander", "penny", "oathbreaker",
+)
+
+VALID_RARITIES = frozenset({
+    "common", "uncommon", "rare", "mythic", "special", "bonus",
+})
+
+
+@dataclass(frozen=True)
+class PrintingData:
+    """Printing context for a card: reserve list, rarity, reprint count, set, legalities."""
+
+    is_reserved: bool = False
+    rarity: str = "rare"
+    printings_count: int = 1
+    set_code: str = "ukn"
+    legalities: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if self.rarity not in VALID_RARITIES:
+            raise ValueError(
+                f"rarity must be one of {sorted(VALID_RARITIES)}, got '{self.rarity}'"
+            )
+        if self.printings_count < 1:
+            raise ValueError(f"printings_count must be >= 1, got {self.printings_count}")
+        if not self.set_code:
+            raise ValueError("set_code must not be empty")
+        for fmt in self.legalities:
+            if fmt not in RECOGNIZED_FORMATS:
+                raise ValueError(
+                    f"legality '{fmt}' not in RECOGNIZED_FORMATS"
+                )
+
+    @classmethod
+    def defaults(cls) -> PrintingData:
+        """Return a PrintingData with all default values (FR-005)."""
+        return cls(
+            is_reserved=False,
+            rarity="rare",
+            printings_count=1,
+            set_code="ukn",
+            legalities=list(RECOGNIZED_FORMATS),
+        )
 
 # Two-character hybrid pairs (e.g., WU, WB, UB, UR, UG, BR, BG, RG, RW, GW, GU)
 _HYBRID_PAIRS = {

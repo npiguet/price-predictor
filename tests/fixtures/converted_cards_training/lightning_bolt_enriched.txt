@@ -1,0 +1,9 @@
+name: Lightning Bolt
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target.
+reserved: false
+rarity: uncommon
+printings: 3
+set: 2xm
+legalities: commander, legacy, modern, pauper, vintage, penny, oathbreaker

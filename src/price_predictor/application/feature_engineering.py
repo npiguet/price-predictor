@@ -6,6 +6,7 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from price_predictor.domain.entities import Card
+from price_predictor.domain.value_objects import RECOGNIZED_FORMATS
 
 CARD_TYPES = [
     "Creature", "Instant", "Sorcery", "Enchantment",
@@ -14,6 +15,7 @@ CARD_TYPES = [
 ]
 SUPERTYPES = ["Legendary", "Basic", "Snow", "World", "Ongoing", "Host"]
 LAYOUTS = ["normal", "doublefaced", "split", "adventure", "modal", "flip"]
+RARITIES = ["common", "uncommon", "rare", "mythic"]
 
 
 def _parse_pt(value: str | None) -> tuple[float, bool]:
@@ -147,6 +149,22 @@ class FeatureEngineering:
         for layout in LAYOUTS:
             features.append(1.0 if card.layout == layout else 0.0)
 
+        # Printing data features (17 total)
+        pd = card.printing_data
+        if pd is not None:
+            features.append(1.0 if pd.is_reserved else 0.0)
+            # Rarity one-hot (4: common/uncommon/rare/mythic)
+            effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
+            for r in RARITIES:
+                features.append(1.0 if effective_rarity == r else 0.0)
+            features.append(float(pd.printings_count))
+            legalities_set = set(pd.legalities)
+            features.append(float(len(legalities_set)))
+            for fmt in RECOGNIZED_FORMATS:
+                features.append(1.0 if fmt in legalities_set else 0.0)
+        else:
+            features.extend([0.0] * 17)
+
         return features, None
 
     def get_feature_count(self) -> int:
@@ -154,8 +172,8 @@ class FeatureEngineering:
         # Dense features: 12 (mana) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
         #   + 30 (keywords) + 1 (kw count) + 1 (text len)
         #   + 2 (power/toughness) + 2 (star indicators) + 1 (loyalty) + 1 (ability count)
-        #   + 6 (layout)
-        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6
+        #   + 6 (layout) + 17 (printing data)
+        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 17
         if self._is_fitted and hasattr(self._tfidf, "vocabulary_"):
             tfidf = len(self._tfidf.vocabulary_)
         else:

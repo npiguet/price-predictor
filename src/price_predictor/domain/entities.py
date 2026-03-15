@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from price_predictor.domain.value_objects import ManaCost
+from price_predictor.domain.value_objects import ManaCost, PrintingData
 
 VALID_LAYOUTS = frozenset(
     {"normal", "doublefaced", "split", "adventure", "modal", "flip"}
@@ -41,6 +41,7 @@ class Card:
     loyalty: str | None = None
     layout: str = "normal"
     ability_count: int = 0
+    printing_data: PrintingData | None = None
 
     def __post_init__(self) -> None:
         if not self.name:
