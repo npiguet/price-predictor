@@ -52,7 +52,10 @@ class TrainModelUseCase:
         # 3. Build price map
         price_map = build_price_map(prices_path, name_to_uuids)
 
-        # 4. Join cards to prices
+        # 4. Build case-insensitive lookup (converted cards are lowercase)
+        lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
+
+        # 5. Join cards to prices
         training_cards = []
         training_prices = []
         skipped_reasons: dict[str, int] = {
@@ -62,26 +65,26 @@ class TrainModelUseCase:
         }
 
         for card in cards:
-            # For split cards, look up by front face name and also try "Front // Back"
-            card_name = card.name
-            if card_name not in name_to_uuids:
-                # Try split card naming convention
+            card_name_lower = card.name.lower()
+            canonical = lower_to_canonical.get(card_name_lower)
+            if canonical is None:
+                # Try split card naming convention: "front // back"
                 found = False
-                for full_name in name_to_uuids:
-                    if full_name.startswith(card_name + " // "):
-                        card_name = full_name
+                for full_lower, full_canonical in lower_to_canonical.items():
+                    if full_lower.startswith(card_name_lower + " // "):
+                        canonical = full_canonical
                         found = True
                         break
                 if not found:
                     skipped_reasons["no_printings_match"] += 1
                     continue
 
-            if card_name not in price_map:
+            if canonical not in price_map:
                 skipped_reasons["no_price"] += 1
                 continue
 
             training_cards.append(card)
-            training_prices.append(price_map[card_name])
+            training_prices.append(price_map[canonical])
 
         total_skipped = sum(skipped_reasons.values())
 

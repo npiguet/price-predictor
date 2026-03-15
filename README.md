@@ -39,196 +39,93 @@ All commands are run as `python -m price_predictor <subcommand>`.
 
 ### Train a model
 
-Reads card attributes from Forge card scripts, joins them with Cardmarket EUR
-prices from MTGJSON data, and trains a prediction model.
+Reads converted card text files, joins them with Cardmarket EUR prices from
+MTGJSON data, and trains a prediction model. Two model types are available:
+`sklearn` (Gradient Boosted Trees) and `transformer` (BERT-based encoder).
 
-**Inputs**: Forge cardsfolder directory (~32,000 `.txt` card scripts),
+**Inputs**: Converted card text files in `./output/` (from `convert`),
 `AllPrintings.json` (name-to-UUID mapping), `AllPricesToday.json` (EUR prices).
 
-**Processing**:
-1. Parse each Forge card script into structured attributes (name, mana cost,
-   types, oracle text, power/toughness, keywords, abilities).
-2. Build a card-name-to-UUID mapping from `AllPrintings.json`, filtering to
-   paper-available, English, non-funny, non-online-only entries.
-3. For each card, look up all printing UUIDs and find the cheapest Cardmarket
-   EUR price across all printings (normal and foil).
-4. Exclude cards with no price data or that failed to parse.
-5. Engineer features from card attributes (see [Feature Engineering](#feature-engineering)).
-6. Log-transform prices (to handle the skewed distribution of card values).
-7. Train a Gradient Boosted Trees model on an 80/20 train/test split
-   (fixed random seed 42 for reproducibility).
-8. Save the trained model artifact to `models/`.
-
-**Output**: A `.joblib` model file and a JSON summary to stdout reporting
-cards used, cards skipped (with reasons), and price range. Progress messages
-are printed to stderr so the user can follow each stage. To capture clean
-JSON only: `python -m price_predictor train ... > result.json` (progress
-remains visible on the console).
-
 ```bash
-python -m price_predictor train \
-  --forge-cards-path ../forge/forge-gui/res/cardsfolder \
-  --prices-path resources/AllPricesToday.json \
-  --printings-path resources/AllPrintings.json
+# Train the sklearn model
+python -m price_predictor train sklearn
+
+# Train the transformer model
+python -m price_predictor train transformer --epochs 20 --batch-size 64
 ```
 
-Options: `--output-path`, `--test-split`, `--random-seed`. See full options
-with `python -m price_predictor train --help`.
+Models are saved to `models/sklearn/` and `models/transformer/` respectively,
+with timestamped filenames and a `latest` copy.
+
+Options: `--output-dir`, `--prices-path`, `--printings-path`, `--model-output`,
+`--test-split`, `--random-seed`. Transformer adds `--batch-size`, `--epochs`,
+`--lr`, `--patience`. See `python -m price_predictor train sklearn --help`.
 
 ### Predict a card price
 
-Takes card attributes as input and returns an EUR price estimate. Works for
-any combination of valid attributes, including cards that do not exist.
+Takes a card in converted text format (from a file or inline) and returns an
+EUR price estimate. Runs locally — no REST service needed.
 
-**Inputs**: Card attributes provided as CLI flags (types, mana cost, oracle
-text, power, toughness, keywords, etc.). A trained model file.
+```bash
+# From a file
+python -m price_predictor predict sklearn --file output/l/lightning_bolt.txt
 
-**Processing**:
-1. Parse CLI arguments into a Card entity.
-2. Validate input (at least one card type is required).
-3. Load the trained model from disk.
-4. Transform the card through the same feature engineering pipeline used
-   during training.
-5. Run the model's predict function on the feature vector.
-6. Exp-transform the log-price prediction back to EUR.
+# From inline text
+python -m price_predictor predict transformer --card "name: lightning bolt
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target."
+```
 
 **Output**: JSON to stdout with `predicted_price_eur` and `model_version`.
 
-```bash
-python -m price_predictor predict \
-  --types "Creature" \
-  --supertypes "Legendary" \
-  --subtypes "Human,Wizard" \
-  --mana-cost "1 U R" \
-  --power "2" \
-  --toughness "2" \
-  --keywords "Prowess" \
-  --oracle-text "Whenever you cast a noncreature spell, draw a card."
-```
-
-Options: `--model-path`, `--loyalty`, `--colors`. See full options
-with `python -m price_predictor predict --help`.
-
 ### Evaluate model accuracy
 
-Computes accuracy metrics on a held-out test set to measure how well the
-model predicts real card prices.
-
-**Inputs**: A trained model file, the same Forge cards and MTGJSON data used
-for training.
-
-**Processing**:
-1. Load the trained model.
-2. Re-derive the train/test split using the same random seed as training
-   (ensuring the test set was not seen during training).
-3. Predict prices for all cards in the test set.
-4. Compute metrics: mean absolute error (EUR), median percentage error,
-   top-20% price tier overlap.
-5. Optionally write per-card results to a CSV file.
-
-**Output**: JSON to stdout with accuracy metrics. Progress messages appear
-on stderr (same behaviour as `train`).
+Computes accuracy metrics on a held-out test set.
 
 ```bash
-python -m price_predictor evaluate \
-  --model-path models/latest.joblib
+python -m price_predictor evaluate sklearn
+python -m price_predictor evaluate transformer
 ```
 
-Options: `--forge-cards-path`, `--prices-path`, `--printings-path`,
-`--test-split`, `--random-seed`, `--output-csv`. See full options
-with `python -m price_predictor evaluate --help`.
+Options: `--model-path`, `--output-dir`, `--prices-path`, `--printings-path`,
+`--test-split`, `--random-seed`, `--output-csv` (sklearn only).
 
 ### Serve the prediction API
 
-Starts a REST service that exposes the trained model over HTTP. This is the
-network-accessible counterpart to the `predict` command — instead of CLI flags,
-callers send a Forge card script as the request body and receive JSON back.
-
-**Relationship to `predict`**: The `serve` command loads the same trained model
-and uses the same prediction pipeline. Results are identical (FR-011).
-
-**Inputs**: A trained model file (from `train`).
-
-**Processing**:
-1. Load the model from `--model-path`.
-2. If the model file does not exist, print an error and exit with code 2.
-3. Start a FastAPI/uvicorn HTTP server on `--host`:`--port`.
-4. Accept `POST /api/v1/evaluate` with a Forge card script as `text/plain` body.
-5. Parse the card script, run prediction, return JSON response.
-
-**Output**: HTTP JSON responses. Server logs go to stderr.
+Starts a REST service exposing both models over HTTP. Callers send a card in
+converted text format and receive JSON predictions from all available models.
 
 ```bash
 python -m price_predictor serve
 ```
 
-Options: `--model-path` (default: `models/latest.joblib`), `--host` (default:
-`0.0.0.0`), `--port` (default: `8000`).
+Options: `--model-path` (default: `models/sklearn/latest.joblib`), `--host`
+(default: `0.0.0.0`), `--port` (default: `8000`).
 
 Test with curl:
 ```bash
-curl -X POST http://localhost:8000/api/v1/evaluate \
+curl -X POST http://localhost:8000/api/v1/predict \
   -H "Content-Type: text/plain" \
-  -d "Name:Lightning Bolt
-ManaCost:R
-Types:Instant
-Oracle:Lightning Bolt deals 3 damage to any target."
+  -d "name: lightning bolt
+mana cost: {R}
+types: instant
+spell[1]: CARDNAME deals 3 damage to any target."
 ```
 
 Response:
 ```json
-{"predicted_price_eur": 2.35, "model_version": "20260301-143000"}
-```
-
-### Evaluate a card from a file
-
-Reads a Forge card script file from disk and sends it to the running prediction
-service for evaluation. This is a thin client — all prediction logic runs at
-the endpoint.
-
-**Inputs**: A Forge card script `.txt` file and (optionally) the endpoint URL.
-
-**Processing**:
-1. Read the file contents.
-2. Send the contents as a `POST` request to the prediction endpoint.
-3. Display the price estimate and model version from the response.
-
-**Output**: Human-readable price estimate and model version on stdout. Errors
-on stderr.
-
-```bash
-python -m price_predictor eval path/to/card.txt
-```
-
-Options: `--endpoint` (default: `http://localhost:8000/api/v1/evaluate`).
-
-Example output:
-```
-Predicted price: €2.35
-Model version:   latest
-```
-
-Error examples:
-```bash
-# File not found
-python -m price_predictor eval missing.txt
-# Error: File not found: missing.txt
-
-# Service not running
-python -m price_predictor eval card.txt
-# Error: Could not connect to prediction service at http://localhost:8000/api/v1/evaluate
+{
+  "sklearn": {"predicted_price_eur": 0.16, "model_version": "latest"},
+  "transformer": {"predicted_price_eur": 0.22, "model_version": "transformer"}
+}
 ```
 
 ### Structured request logging
 
-When the prediction service is running (`serve`), every request to
-`POST /api/v1/evaluate` is logged to stderr as a single-line JSON object
-containing: event type, ISO timestamp, HTTP status code, response latency
-(ms), parsed card attributes, and prediction result.
-
-```json
-{"event": "evaluate_request", "timestamp": "2026-03-01T14:30:00.123456+00:00", "status_code": 200, "latency_ms": 42.5, "card_name": "Lightning Bolt", "card_types": ["Instant"], "card_mana_cost": "R", "predicted_price_eur": 2.35, "model_version": "latest"}
-```
+Every request to `POST /api/v1/predict` is logged to stderr as a single-line
+JSON object with: event type, timestamp, status code, latency, card attributes,
+and prediction results from each model.
 
 ### Batch convert Forge card scripts
 
@@ -362,14 +259,15 @@ case where rarity is undefined.
 
 ### Trained model files
 
-- **Location**: `models/`
-- **Format**: `.joblib` (serialized scikit-learn model + fitted feature
-  engineering pipeline)
-- **Naming**: `{ISO-timestamp}.joblib` (e.g., `20260301-143000.joblib`)
-- **Latest**: `models/latest.joblib` (copy of the most recent model)
-- **Contents**: The GradientBoostingRegressor model and the fitted
-  FeatureEngineering object (including the TF-IDF vectorizer vocabulary)
-  bundled as a single artifact for consistent predictions.
+Model artifacts are organized by model type:
+
+- **sklearn**: `models/sklearn/{timestamp}.joblib` + `models/sklearn/latest.joblib`
+  Contains the GradientBoostingRegressor and fitted FeatureEngineering pipeline.
+- **transformer**: `models/transformer/{timestamp}.pt` + `models/transformer/latest.pt`
+  Contains the transformer state_dict and architecture config.
+
+Both use timestamped filenames (e.g., `20260315-143000`) with a `latest` copy
+pointing to the most recent version.
 
 ### Training output (JSON, stdout)
 
@@ -441,16 +339,23 @@ src/price_predictor/
     entities.py     Card, PriceEstimate, TrainingExample, TrainedModel, EvaluationMetrics
     value_objects.py ManaCost (parsed Forge mana format)
   application/      Use cases (depends on domain only)
-    train.py        TrainModelUseCase
-    predict.py      PredictPriceUseCase
-    evaluate.py     EvaluateModelUseCase
+    train.py        TrainModelUseCase (sklearn)
+    train_transformer.py  Transformer training pipeline
+    predict.py      PredictPriceUseCase (sklearn)
+    predict_transformer.py  PredictTransformerUseCase
+    evaluate.py     EvaluateModelUseCase (sklearn)
+    evaluate_transformer.py  Transformer evaluation
     feature_engineering.py  Card -> numeric feature vector
   infrastructure/   External integrations (depends on application)
-    cli.py          argparse CLI (train, predict, evaluate, serve, eval, convert subcommands)
-    server.py       FastAPI app, POST /api/v1/evaluate endpoint
-    forge_parser.py Forge card script parser (file + text)
+    cli.py          argparse CLI (train/predict/evaluate {sklearn,transformer}, serve, convert)
+    server.py       FastAPI app, POST /api/v1/predict endpoint
+    forge_parser.py Forge card script parser (used by convert)
+    converted_card_parser.py  Converted text → Card parser (used by train/predict/evaluate)
     mtgjson_loader.py AllPrintings/AllPricesToday loaders
-    model_store.py  Model save/load (joblib)
+    model_store.py  sklearn model save/load (joblib)
+    transformer_store.py  Transformer model save/load (.pt)
+    transformer_model.py  CardPriceTransformerModel architecture
+    transformer_dataset.py  PyTorch Dataset for transformer training
 forge-connector/    Java Maven module for Forge integration
   src/main/java/    PricePredictorClient, CardScriptConverter, BatchConverter, ConvertMain
   src/test/java/    JUnit 5 tests (unit + @Tag("integration") for Forge-dependent tests)

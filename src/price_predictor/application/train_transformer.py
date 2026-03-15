@@ -46,6 +46,7 @@ def _match_cards_to_texts(
     price_map: dict,
 ) -> list[tuple[str, str, float]]:
     """Read converted text files from output_dir, extract card names, and match to prices."""
+    lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
     matched = []
     skipped = 0
     txt_files = sorted(output_dir.rglob("*.txt"))
@@ -68,18 +69,19 @@ def _match_cards_to_texts(
             skipped += 1
             continue
 
-        # Try matching to price map (including split card lookup)
-        lookup_name = card_name
-        if lookup_name not in name_to_uuids:
-            for full_name in name_to_uuids:
-                if full_name.startswith(lookup_name + " // "):
-                    lookup_name = full_name
+        # Case-insensitive matching (converted cards are lowercase)
+        card_name_lower = card_name.lower()
+        canonical = lower_to_canonical.get(card_name_lower)
+        if canonical is None:
+            for full_lower, full_canonical in lower_to_canonical.items():
+                if full_lower.startswith(card_name_lower + " // "):
+                    canonical = full_canonical
                     break
 
-        if lookup_name not in price_map:
+        if canonical is None or canonical not in price_map:
             continue
 
-        matched.append((card_name, text, price_map[lookup_name]))
+        matched.append((card_name, text, price_map[canonical]))
 
     if skipped > 0:
         logger.info("Skipped %d text files (unreadable or missing name)", skipped)

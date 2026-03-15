@@ -36,15 +36,17 @@ def _match_cards_to_prices(
     output_dir: Path,
 ) -> list[tuple[str, str, float]]:
     """Match parsed cards to prices and read their converted text files."""
+    lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
     matched = []
     for card in cards:
-        card_name = card.name
-        if card_name not in name_to_uuids:
-            for full_name in name_to_uuids:
-                if full_name.startswith(card_name + " // "):
-                    card_name = full_name
+        card_name_lower = card.name.lower()
+        canonical = lower_to_canonical.get(card_name_lower)
+        if canonical is None:
+            for full_lower, full_canonical in lower_to_canonical.items():
+                if full_lower.startswith(card_name_lower + " // "):
+                    canonical = full_canonical
                     break
-        if card_name not in price_map:
+        if canonical is None or canonical not in price_map:
             continue
 
         slug = card.name.lower().replace(" ", "_").replace(",", "").replace("'", "")
@@ -60,7 +62,7 @@ def _match_cards_to_prices(
             else:
                 continue
 
-        matched.append((card.name, text, price_map[card_name]))
+        matched.append((card.name, text, price_map[canonical]))
     return matched
 
 

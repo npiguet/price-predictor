@@ -86,7 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
                                                    help="Evaluate sklearn model")
     _add_shared_evaluate_args(eval_sklearn)
     eval_sklearn.add_argument("--model-path", type=str,
-                              default="./models/sklearn/")
+                              default="./models/sklearn/latest.joblib")
     eval_sklearn.add_argument("--output-csv", type=str, default=None)
 
     # evaluate transformer

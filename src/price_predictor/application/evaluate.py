@@ -51,18 +51,22 @@ class EvaluateModelUseCase:
         name_to_uuids = build_name_to_uuids(printings_path)
         price_map = build_price_map(prices_path, name_to_uuids)
 
+        # Case-insensitive lookup (converted cards are lowercase)
+        lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
+
         eval_cards = []
         eval_prices = []
         for card in cards:
-            card_name = card.name
-            if card_name not in name_to_uuids:
-                for full_name in name_to_uuids:
-                    if full_name.startswith(card_name + " // "):
-                        card_name = full_name
+            card_name_lower = card.name.lower()
+            canonical = lower_to_canonical.get(card_name_lower)
+            if canonical is None:
+                for full_lower, full_canonical in lower_to_canonical.items():
+                    if full_lower.startswith(card_name_lower + " // "):
+                        canonical = full_canonical
                         break
-            if card_name in price_map:
+            if canonical is not None and canonical in price_map:
                 eval_cards.append(card)
-                eval_prices.append(price_map[card_name])
+                eval_prices.append(price_map[canonical])
 
         logger.info(
             "Matched %d cards to prices, skipped %d",

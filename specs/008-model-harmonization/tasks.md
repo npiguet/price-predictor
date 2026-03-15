@@ -141,8 +141,8 @@
 
 - [x] T029 Remove all dead code: old handler functions (`run_eval()`, old `run_predict()`, old `run_train()`, old `run_evaluate()`, `run_train_transformer()`, `run_evaluate_transformer()`) from `src/price_predictor/infrastructure/cli.py`.
 - [x] T030 Update integration tests in `tests/integration/test_end_to_end.py` to use new CLI commands (`train sklearn`, `predict sklearn --file`, `evaluate sklearn`).
-- [ ] T031 [P] Update `README.md` with new CLI commands, workflows, and model artifact paths per constitution principle VI.
-- [ ] T032 Run quickstart.md validation: execute all commands from `specs/008-model-harmonization/quickstart.md` and verify they work.
+- [x] T031 [P] Update `README.md` with new CLI commands, workflows, and model artifact paths per constitution principle VI.
+- [x] T032 Run quickstart.md validation: execute all commands from `specs/008-model-harmonization/quickstart.md` and verify they work.
 - [x] T033 Run full test suite (`cd src; pytest; ruff check .`) and fix any failures.
 
 ---
