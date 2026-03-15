@@ -14,6 +14,7 @@
 - Q: Should model artifact versioning be harmonized across models? → A: Yes. The transformer store currently overwrites a single `model.pt` with no versioning. It must adopt the sklearn convention: timestamped filenames (`<version>.pt`) plus a `latest.pt` copy.
 - Q: Should the REST API endpoint be renamed for consistency? → A: Yes, rename `/api/v1/evaluate` to `/api/v1/predict` to match the CLI `predict` command.
 - Q: Does switching to converted card text input require a new parser? → A: Yes for sklearn (needs structured Card entity for feature engineering); no for transformer (passes raw text directly to BERT tokenizer). A converted-text-to-Card parser must be created, mirroring forge_parser.py but reading the `name:`, `mana cost:`, `types:` line format.
+- Q: Should evaluation output be standardized across models? → A: Yes. Both models must return the same set of metrics: model_version, mean_absolute_error_eur, median_percentage_error, median_abs_error_log, top_20_overlap, sample_count.
 
 ## User Scenarios & Testing *(mandatory)*
 

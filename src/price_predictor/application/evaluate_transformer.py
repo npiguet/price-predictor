@@ -22,9 +22,11 @@ logger = logging.getLogger(__name__)
 class TransformerEvalResult:
     """Result of a transformer evaluation run."""
 
-    model_path: Path
+    model_version: str
     mean_absolute_error_eur: float
+    median_percentage_error: float
     median_abs_error_log: float
+    top_20_overlap: float
     sample_count: int
     per_card: list[dict] | None = None
 
@@ -131,9 +133,19 @@ def evaluate_transformer(
     abs_errors = np.abs(predicted_prices - actual_prices)
     mae = float(np.mean(abs_errors))
 
+    # Median percentage error
+    pct_errors = np.abs(predicted_prices - actual_prices) / np.maximum(actual_prices, 0.01) * 100
+    median_percentage_error = float(np.median(pct_errors))
+
     # Median absolute error in shifted-log space: median(|log(actual+2) - log(predicted+2)|)
     log_errors = np.abs(np.log(actual_prices + 2) - np.log(predicted_prices + 2))
     median_log_error = float(np.median(log_errors))
+
+    # Top-20% overlap
+    n_top = max(1, int(len(actual_prices) * 0.2))
+    actual_top_indices = set(np.argsort(actual_prices.flatten())[-n_top:])
+    predicted_top_indices = set(np.argsort(predicted_prices.flatten())[-n_top:])
+    top_20_overlap = float(len(actual_top_indices & predicted_top_indices) / n_top)
 
     # Per-card breakdown
     per_card = []
@@ -150,10 +162,15 @@ def evaluate_transformer(
         mae, median_log_error,
     )
 
+    # Model version from directory name
+    model_version = model_dir.name or "transformer"
+
     return TransformerEvalResult(
-        model_path=model_dir,
+        model_version=model_version,
         mean_absolute_error_eur=round(mae, 2),
+        median_percentage_error=round(median_percentage_error, 1),
         median_abs_error_log=round(median_log_error, 3),
+        top_20_overlap=round(top_20_overlap, 2),
         sample_count=len(val_data),
         per_card=per_card,
     )

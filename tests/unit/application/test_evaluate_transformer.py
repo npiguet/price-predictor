@@ -64,9 +64,11 @@ class TestEvaluateTransformer:
         )
 
         assert result.sample_count == 5
-        assert result.model_path == Path("fake/model")
+        assert result.model_version == "model"
         assert result.mean_absolute_error_eur >= 0
+        assert result.median_percentage_error >= 0
         assert result.median_abs_error_log >= 0
+        assert result.top_20_overlap >= 0
         assert result.per_card is not None
         assert len(result.per_card) == 5
 

@@ -87,6 +87,7 @@ class EvaluationMetrics:
 
     mean_absolute_error_eur: float
     median_percentage_error: float
+    median_abs_error_log: float
     top_20_overlap: float
     sample_count: int
 

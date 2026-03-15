@@ -101,6 +101,10 @@ class EvaluateModelUseCase:
         pct_errors = np.abs(predicted_prices - test_prices) / test_prices * 100
         median_percentage_error = float(np.median(pct_errors))
 
+        # Median absolute error in shifted-log space
+        log_errors = np.abs(np.log(test_prices + 2) - np.log(predicted_prices + 2))
+        median_abs_error_log = float(np.median(log_errors))
+
         # Top-20% overlap
         n_top = max(1, int(len(test_prices) * 0.2))
         actual_top_indices = set(np.argsort(test_prices)[-n_top:])
@@ -111,6 +115,7 @@ class EvaluateModelUseCase:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=round(mean_absolute_error, 2),
             median_percentage_error=round(median_percentage_error, 1),
+            median_abs_error_log=round(median_abs_error_log, 3),
             top_20_overlap=round(top_20_overlap, 2),
             sample_count=len(test_cards),
         )

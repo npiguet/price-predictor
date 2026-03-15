@@ -65,3 +65,13 @@ Additionally, `transformer_store.py` must adopt the same versioning convention a
 
 **Alternatives considered**:
 - Keep transformer as single `model.pt` — rejected because it loses previous versions on retrain, inconsistent with sklearn convention.
+
+## R7: Standardized Evaluation Metrics
+
+**Decision**: Both sklearn and transformer evaluations return the same set of metrics: `model_version`, `mean_absolute_error_eur`, `median_percentage_error`, `median_abs_error_log`, `top_20_overlap`, `sample_count`.
+
+**Rationale**: Previously sklearn reported `median_percentage_error` and `top_20_overlap` while transformer reported `median_abs_error_log`. Users comparing models need identical metrics. The union of all fields is small and cheap to compute, so both models now report all of them.
+
+**Changes**:
+- Transformer gains: `median_percentage_error`, `top_20_overlap`, `model_version` (replacing `model_path`)
+- Sklearn gains: `median_abs_error_log`

@@ -219,6 +219,7 @@ class TestTrainedModel:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=0.50,
             median_percentage_error=12.5,
+            median_abs_error_log=0.123,
             top_20_overlap=0.85,
             sample_count=200,
         )
@@ -258,6 +259,7 @@ class TestEvaluationMetrics:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=1.23,
             median_percentage_error=15.0,
+            median_abs_error_log=0.2,
             top_20_overlap=0.75,
             sample_count=500,
         )
@@ -270,6 +272,7 @@ class TestEvaluationMetrics:
         metrics = EvaluationMetrics(
             mean_absolute_error_eur=1.0,
             median_percentage_error=10.0,
+            median_abs_error_log=0.15,
             top_20_overlap=0.5,
             sample_count=100,
         )

@@ -475,6 +475,7 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
         "model_version": result.model_version,
         "mean_absolute_error_eur": result.metrics.mean_absolute_error_eur,
         "median_percentage_error": result.metrics.median_percentage_error,
+        "median_abs_error_log": result.metrics.median_abs_error_log,
         "top_20_overlap": result.metrics.top_20_overlap,
         "sample_count": result.metrics.sample_count,
     }
@@ -506,9 +507,11 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
         return 2
 
     output = {
-        "model_path": str(result.model_path / "latest.pt"),
+        "model_version": result.model_version,
         "mean_absolute_error_eur": result.mean_absolute_error_eur,
+        "median_percentage_error": result.median_percentage_error,
         "median_abs_error_log": result.median_abs_error_log,
+        "top_20_overlap": result.top_20_overlap,
         "sample_count": result.sample_count,
     }
     print(json.dumps(output, indent=2))
