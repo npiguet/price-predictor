@@ -23,6 +23,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - `.joblib` model files in `models/sklearn/`, `.pt` model files in `models/transformer/` (008-model-harmonization)
 - Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn, ijson (009-printing-metadata)
 - Local JSON files (AllPrintings.json, AllPricesToday.json), joblib model files (models/sklearn/), .pt model files (models/transformer/) (009-printing-metadata)
+- Python 3.14+ + Standard library only — no new Python packages required (010-mtg-custom-tokenizer)
+- `models/transformer/vocab.txt` (plain text, UTF-8, one token per line) (010-mtg-custom-tokenizer)
 
 ## Project Structure
 
@@ -40,9 +42,9 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 010-mtg-custom-tokenizer: Added Python 3.14+ + Standard library only — no new Python packages required
 - 009-printing-metadata: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn, ijson
 - 008-model-harmonization: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn
-- 007-transformer-model-arch: Added Python 3.14+ + PyTorch (`torch`), Hugging Face `transformers` (BERT tokenizer), existing: scikit-learn, FastAPI, uvicorn, numpy, pandas, joblib, ijson
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
