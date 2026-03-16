@@ -100,8 +100,16 @@ converted text format and receive JSON predictions from all available models.
 python -m price_predictor serve
 ```
 
-Options: `--model-path` (default: `models/sklearn/latest.joblib`), `--host`
-(default: `0.0.0.0`), `--port` (default: `8000`).
+Options: `--model-path` (default: `models/sklearn/latest.joblib`),
+`--printings-path` (default: `resources/AllPrintings.json`),
+`--prices-path` (default: `resources/AllPricesToday.json`),
+`--host` (default: `0.0.0.0`), `--port` (default: `8000`).
+
+The server loads AllPrintings and AllPricesToday at startup to build a metadata
+lookup. For known cards, it auto-fills printing data fields (reserved, rarity,
+printings count, set code, legalities) from the cheapest printing. Unknown cards
+receive sensible defaults. Client-provided fields in the card text override
+auto-filled values.
 
 Test with curl:
 ```bash
@@ -153,6 +161,30 @@ mana cost: R
 types: instant
 spell[1]: CARDNAME deals 3 damage to any target.
 ```
+
+#### Printing data fields
+
+During training and prediction, 5 printing data fields are appended to the
+card text. These are derived from AllPrintings.json for known cards:
+
+```
+reserved: false
+rarity: uncommon
+printings: 23
+set: 2xm
+legalities: commander, legacy, modern, pauper, vintage, penny, oathbreaker
+```
+
+| Field | Source | Default (unknown cards) |
+|-------|--------|------------------------|
+| `reserved` | `isReserved` from AllPrintings (absent = false) | `false` |
+| `rarity` | Rarity of the cheapest printing | `rare` |
+| `printings` | Count of sets the card has been printed in | `1` |
+| `set` | Set code of the cheapest printing (lowercase) | `ukn` |
+| `legalities` | Formats where the card is "Legal" (10 recognized formats) | all 10 formats |
+
+The 10 recognized formats: Standard, Pioneer, Modern, Brawl, Legacy, Vintage,
+Pauper, Commander, Penny, Oathbreaker.
 
 Multi-face cards include a `layout:` line and separate faces with `ALTERNATE`:
 ```
@@ -249,11 +281,16 @@ feature groups:
 | 14 | Loyalty | Planeswalker starting loyalty | numeric |
 | 15 | Abilities | Count of defined abilities | numeric |
 | 16 | Layout | Card layout (normal, split, etc.) | one-hot |
+| 17 | Printing data | Reserve list status | binary |
+| 18 | Printing data | Rarity (common/uncommon/rare/mythic) | one-hot (4) |
+| 19 | Printing data | Printings count | numeric |
+| 20 | Printing data | Legalities count | numeric |
+| 21 | Printing data | Per-format legality (10 formats) | multi-hot (10) |
 
 Colorless mana ({C}) is tracked separately from generic mana ({1}--{N}).
-Rarity is deliberately excluded — the model predicts from game
-characteristics only, which keeps it consistent with the made-up card use
-case where rarity is undefined.
+Printing data fields (features 17--21) are derived from AllPrintings.json at
+training time. Set code is excluded from sklearn features (too high-cardinality)
+but is present in the tokenized text for the transformer model.
 
 ## Artifacts
 
@@ -345,6 +382,7 @@ src/price_predictor/
     predict_transformer.py  PredictTransformerUseCase
     evaluate.py     EvaluateModelUseCase (sklearn)
     evaluate_transformer.py  Transformer evaluation
+    card_enrichment.py  Printing data enrichment (auto-fill, defaults, merge)
     feature_engineering.py  Card -> numeric feature vector
   infrastructure/   External integrations (depends on application)
     cli.py          argparse CLI (train/predict/evaluate {sklearn,transformer}, serve, convert)

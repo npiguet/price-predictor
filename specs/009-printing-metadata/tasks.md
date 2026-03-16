@@ -119,9 +119,9 @@
 - [x] T034 [P] Update CLI predict commands (`run_predict_sklearn`, `run_predict_transformer`) in `src/price_predictor/infrastructure/cli.py` to support metadata enrichment for file-based and inline card text prediction (auto-fill if AllPrintings available, otherwise pass through)
 - [x] T035 [P] Run `ruff check .` from `src/` and fix any linting issues introduced by this feature
 - [x] T036 Run full test suite (`cd src && pytest`) and fix any failures
-- [ ] T037 Run quickstart.md validation — manually verify the training, evaluation, and prediction examples from `specs/009-printing-metadata/quickstart.md` work end-to-end
-- [ ] T038 [P] SC-004 accuracy comparison: run `evaluate sklearn` and `evaluate transformer` on pre-metadata models to capture baseline metrics, then retrain both models on enriched data, run evaluate again, and log the before/after comparison. This is informational only — no pass/fail gate.
-- [ ] T039 [P] Update project documentation to reflect feature 009 changes: new `--printings-path` and `--prices-path` serve CLI options, enriched card text format with 5 printing data fields, and updated workflow descriptions per Constitution Principle VI
+- [x] T037 Run quickstart.md validation — manually verify the training, evaluation, and prediction examples from `specs/009-printing-metadata/quickstart.md` work end-to-end
+- [x] T038 [P] SC-004 accuracy comparison: run `evaluate sklearn` and `evaluate transformer` on pre-metadata models to capture baseline metrics, then retrain both models on enriched data, run evaluate again, and log the before/after comparison. This is informational only — no pass/fail gate.
+- [x] T039 [P] Update project documentation to reflect feature 009 changes: new `--printings-path` and `--prices-path` serve CLI options, enriched card text format with 5 printing data fields, and updated workflow descriptions per Constitution Principle VI
 
 ---
 
