@@ -107,3 +107,73 @@ class TestTrainTransformer:
                 printings_path=Path("fake/printings.json"),
                 model_output=Path("models/transformer/"),
             )
+
+
+class TestMatchCardsToTextsMetadata:
+    """Tests for metadata enrichment in _match_cards_to_texts."""
+
+    def test_metadata_map_enriches_text_with_printing_data_lines(self, tmp_path: Path):
+        """When _match_cards_to_texts is called with a metadata_map, the returned
+        texts contain printing data lines (reserved:, rarity:, printings:, set:, legalities:)."""
+        from price_predictor.application.train_transformer import _match_cards_to_texts
+        from price_predictor.domain.value_objects import PrintingData
+
+        # Create a temporary text file with a card
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        (cards_dir / "test_card.txt").write_text(
+            "name: Test Card\nmana cost: {1}{G}\ntypes: creature\npower toughness: 2/2\n",
+            encoding="utf-8",
+        )
+
+        # Build a small name_to_uuids and price_map
+        name_to_uuids = {"Test Card": ["uuid-1234"]}
+        price_map = {"Test Card": 1.50}
+
+        # Build a metadata_map
+        metadata_map = {
+            "Test Card": PrintingData(
+                is_reserved=True,
+                rarity="rare",
+                printings_count=5,
+                set_code="m21",
+                legalities=["commander", "modern", "legacy"],
+            ),
+        }
+
+        matched = _match_cards_to_texts(cards_dir, name_to_uuids, price_map, metadata_map)
+
+        assert len(matched) == 1
+        card_name, text, price = matched[0]
+        assert card_name == "Test Card"
+        assert price == 1.50
+
+        # Verify the text contains printing data lines
+        assert "reserved: true" in text
+        assert "rarity: rare" in text
+        assert "printings: 5" in text
+        assert "set: m21" in text
+        assert "legalities: commander, modern, legacy" in text
+
+    def test_no_metadata_map_leaves_text_unchanged(self, tmp_path: Path):
+        """When metadata_map is None, the text is returned without printing data lines."""
+        from price_predictor.application.train_transformer import _match_cards_to_texts
+
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        original_text = "name: Plain Card\nmana cost: {R}\ntypes: instant\n"
+        (cards_dir / "plain_card.txt").write_text(original_text, encoding="utf-8")
+
+        name_to_uuids = {"Plain Card": ["uuid-5678"]}
+        price_map = {"Plain Card": 2.00}
+
+        matched = _match_cards_to_texts(cards_dir, name_to_uuids, price_map, metadata_map=None)
+
+        assert len(matched) == 1
+        _, text, _ = matched[0]
+        # No printing data lines should be present
+        assert "reserved:" not in text
+        assert "rarity:" not in text
+        assert "printings:" not in text
+        assert "set:" not in text
+        assert "legalities:" not in text

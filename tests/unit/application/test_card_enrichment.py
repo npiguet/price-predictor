@@ -222,3 +222,72 @@ class TestEnrichOrDefault:
         # Should still match despite case difference
         assert "rarity: common" in result
         assert "printings: 5" in result
+
+    def test_known_card_auto_fills_all_printing_fields(self) -> None:
+        """T024: Known card auto-fill populates all 5 printing data fields."""
+        metadata_map = {
+            "Test Card": PrintingData(
+                is_reserved=True,
+                rarity="mythic",
+                printings_count=5,
+                set_code="a25",
+                legalities=["commander", "legacy", "vintage"],
+            ),
+        }
+        card_text = (
+            "name: Test Card\n"
+            "mana cost: {2}{R}\n"
+            "types: creature goblin\n"
+            "power toughness: 2/2"
+        )
+        result = enrich_or_default(card_text, metadata_map)
+        assert "reserved: true" in result
+        assert "rarity: mythic" in result
+        assert "printings: 5" in result
+        assert "set: a25" in result
+        assert "legalities: commander, legacy, vintage" in result
+
+    def test_unknown_card_applies_all_defaults(self) -> None:
+        """T030: Unknown card (not in metadata_map) gets default printing data."""
+        card_text = (
+            "name: Completely Unknown Card\n"
+            "mana cost: {3}{B}\n"
+            "types: creature zombie\n"
+            "power toughness: 3/3"
+        )
+        result = enrich_or_default(card_text, {})
+        assert "reserved: false" in result
+        assert "rarity: rare" in result
+        assert "printings: 1" in result
+        assert "set: ukn" in result
+        # All 10 recognized formats should be present
+        defaults = PrintingData.defaults()
+        expected_legalities = ", ".join(defaults.legalities)
+        assert f"legalities: {expected_legalities}" in result
+
+    def test_known_card_client_rarity_preserved_others_auto_filled(self) -> None:
+        """T031: Client provides rarity: mythic, other fields auto-filled from metadata_map."""
+        metadata_map = {
+            "Test Card": PrintingData(
+                is_reserved=False,
+                rarity="common",
+                printings_count=8,
+                set_code="m21",
+                legalities=["commander", "modern", "legacy"],
+            ),
+        }
+        card_text = (
+            "name: Test Card\n"
+            "mana cost: {1}{G}\n"
+            "types: creature elf\n"
+            "power toughness: 1/1\n"
+            "rarity: mythic\n"
+        )
+        result = enrich_or_default(card_text, metadata_map)
+        # Client-provided rarity should be preserved
+        assert "rarity: mythic" in result
+        # Other fields should come from metadata_map
+        assert "reserved: false" in result
+        assert "printings: 8" in result
+        assert "set: m21" in result
+        assert "legalities: commander, modern, legacy" in result

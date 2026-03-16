@@ -5,7 +5,7 @@ import pytest
 
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost
+from price_predictor.domain.value_objects import ManaCost, PrintingData, RECOGNIZED_FORMATS
 
 
 @pytest.fixture
@@ -258,3 +258,107 @@ class TestFeatureEngineeringTransform:
         # Layout one-hot is near the end of the dense features
         # Check that it produces valid output without errors
         assert result.shape[1] == fitted_fe.get_feature_count()
+
+
+class TestPrintingDataFeatures:
+    """Tests for the 17 printing-data features appended to the dense vector."""
+
+    def test_card_with_printing_data_produces_17_additional_features(
+        self, fitted_fe: FeatureEngineering
+    ) -> None:
+        """A Card with printing_data populated produces 17 additional dense features
+        at the END of the feature vector, with correct values."""
+        pd = PrintingData(
+            is_reserved=True,
+            rarity="mythic",
+            printings_count=3,
+            set_code="uma",
+            legalities=["commander", "legacy"],
+        )
+        card = Card(
+            name="Test Reserved",
+            types=["Creature"],
+            mana_cost=ManaCost.parse("3 W W"),
+            power="4",
+            toughness="4",
+            printing_data=pd,
+        )
+        result = fitted_fe.transform([card])
+        total_features = fitted_fe.get_feature_count()
+        assert result.shape == (1, total_features)
+
+        # The 17 printing data features are at the end of the dense block,
+        # just before the TF-IDF features.
+        # The fitted TF-IDF vocab may be smaller than 500 (depends on training data).
+        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        dense_count = total_features - tfidf_count
+        # Printing data starts at dense_count - 17
+        pd_start = dense_count - 17
+
+        row = result[0]
+
+        # is_reserved = 1.0
+        assert row[pd_start] == 1.0
+
+        # rarity one-hot: common=0, uncommon=0, rare=0, mythic=1
+        assert row[pd_start + 1] == 0.0  # common
+        assert row[pd_start + 2] == 0.0  # uncommon
+        assert row[pd_start + 3] == 0.0  # rare
+        assert row[pd_start + 4] == 1.0  # mythic
+
+        # printings_count = 3.0
+        assert row[pd_start + 5] == 3.0
+
+        # legalities_count = 2.0
+        assert row[pd_start + 6] == 2.0
+
+        # format multi-hot (10 positions matching RECOGNIZED_FORMATS order)
+        # RECOGNIZED_FORMATS = ("standard", "pioneer", "modern", "brawl", "legacy",
+        #                       "vintage", "pauper", "commander", "penny", "oathbreaker")
+        fmt_start = pd_start + 7
+        for i, fmt in enumerate(RECOGNIZED_FORMATS):
+            expected = 1.0 if fmt in ("commander", "legacy") else 0.0
+            assert row[fmt_start + i] == expected, (
+                f"Format {fmt} at position {i}: expected {expected}, got {row[fmt_start + i]}"
+            )
+
+    def test_card_without_printing_data_produces_17_zeros(
+        self, fitted_fe: FeatureEngineering
+    ) -> None:
+        """A Card with printing_data=None produces 17 zeros at the end of the dense block."""
+        card = Card(
+            name="No Printing Data",
+            types=["Creature"],
+            mana_cost=ManaCost.parse("2 G"),
+            power="2",
+            toughness="2",
+            printing_data=None,
+        )
+        result = fitted_fe.transform([card])
+        total_features = fitted_fe.get_feature_count()
+        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        dense_count = total_features - tfidf_count
+        pd_start = dense_count - 17
+
+        row = result[0]
+        for i in range(17):
+            assert row[pd_start + i] == 0.0, (
+                f"Printing data feature at offset {i}: expected 0.0, got {row[pd_start + i]}"
+            )
+
+    def test_feature_count_increased_by_17(
+        self, fitted_fe: FeatureEngineering
+    ) -> None:
+        """Dense feature count is 93 (was 76 before printing data).
+        The 17 extra features come from printing data.
+        With a full 500-word TF-IDF vocabulary: 93 + 500 = 593.
+        With the test fixture's small vocabulary, we verify
+        dense = 93 and that it is exactly 17 more than the old 76."""
+        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        total = fitted_fe.get_feature_count()
+        dense_count = total - tfidf_count
+        # Dense features should be 93 (76 old + 17 printing data)
+        assert dense_count == 93
+        # The increase from the old dense count (76) is exactly 17
+        old_dense_count = 76
+        assert dense_count - old_dense_count == 17

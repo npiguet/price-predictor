@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 from price_predictor.application.predict import PredictPriceUseCase
 from price_predictor.application.train import TrainModelUseCase
 from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost
+from price_predictor.domain.value_objects import ManaCost, PrintingData
 from price_predictor.infrastructure.model_store import load_model
 from price_predictor.infrastructure.server import create_app
 
@@ -143,3 +143,90 @@ class TestServerConcurrency:
             assert "sklearn" in data
             assert isinstance(data["sklearn"]["predicted_price_eur"], float)
         assert elapsed < 3.0
+
+
+@pytest.fixture(scope="module")
+def metadata_map() -> dict[str, PrintingData]:
+    """A small metadata_map with a known card for enrichment tests."""
+    return {
+        "Lightning Bolt": PrintingData(
+            is_reserved=False,
+            rarity="common",
+            printings_count=12,
+            set_code="a25",
+            legalities=["commander", "legacy", "modern", "pauper", "penny", "vintage"],
+        ),
+    }
+
+
+@pytest.fixture(scope="module")
+def enrichment_client(model_path: Path, metadata_map: dict[str, PrintingData]) -> TestClient:
+    """Create a TestClient with a real trained model and a metadata_map."""
+    artifact = load_model(model_path)
+    artifact["model_version"] = model_path.stem
+    app = create_app(artifact, metadata_map=metadata_map)
+    return TestClient(app)
+
+
+# Card text with no printing data lines — server should auto-fill from metadata_map
+BOLT_NO_PRINTING = (
+    "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
+    "spell[1]: CARDNAME deals 3 damage to any target."
+)
+
+# Unknown card — name not in metadata_map
+UNKNOWN_CARD = (
+    "name: totally invented spell\nmana cost: {2}{B}\ntypes: sorcery\n"
+    "spell[1]: target player discards a card."
+)
+
+# Unknown card with partial metadata (rarity only)
+UNKNOWN_CARD_WITH_RARITY = (
+    "name: totally invented spell\nmana cost: {2}{B}\ntypes: sorcery\n"
+    "spell[1]: target player discards a card.\nrarity: mythic"
+)
+
+
+@pytest.mark.integration
+class TestServerAutoFill:
+    def test_known_card_without_printing_data_returns_200(
+        self, enrichment_client: TestClient
+    ) -> None:
+        """T023: POST known card text WITHOUT printing data, server enriches internally."""
+        response = enrichment_client.post(
+            "/api/v1/predict",
+            content=BOLT_NO_PRINTING,
+            headers={"Content-Type": "text/plain"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert data["sklearn"]["predicted_price_eur"] > 0
+
+    def test_unknown_card_without_metadata_returns_200(
+        self, enrichment_client: TestClient
+    ) -> None:
+        """T028: POST unknown card text (not in metadata_map), server applies defaults."""
+        response = enrichment_client.post(
+            "/api/v1/predict",
+            content=UNKNOWN_CARD,
+            headers={"Content-Type": "text/plain"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert data["sklearn"]["predicted_price_eur"] > 0
+
+    def test_unknown_card_with_partial_metadata_returns_200(
+        self, enrichment_client: TestClient
+    ) -> None:
+        """T029: POST unknown card with rarity: mythic only, server fills remaining defaults."""
+        response = enrichment_client.post(
+            "/api/v1/predict",
+            content=UNKNOWN_CARD_WITH_RARITY,
+            headers={"Content-Type": "text/plain"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data["sklearn"]["predicted_price_eur"], float)
+        assert data["sklearn"]["predicted_price_eur"] > 0

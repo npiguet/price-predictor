@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import joblib
 import pytest
 
 from price_predictor.application.train import TrainModelUseCase
@@ -120,3 +121,46 @@ class TestTrainModelUseCase:
                 test_split=0.2,
                 random_seed=42,
             )
+
+    def test_trained_cards_have_printing_data(
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+    ) -> None:
+        """Training enriches Cards with printing_data from the metadata map.
+        The feature engineering dense count should be 93 (76 old + 17 printing data)."""
+        use_case = TrainModelUseCase()
+        result = use_case.execute(
+            output_dir=converted_cards_dir,
+            prices_path=allprices_path,
+            printings_path=allprintings_path,
+            output_path=tmp_path,
+            test_split=0.2,
+            random_seed=42,
+        )
+        # Load the saved artifact and inspect the feature engineering
+        artifact = joblib.load(result.model_path)
+        fe = artifact["feature_engineering"]
+        # Dense feature count should be 93 (includes 17 printing data features)
+        tfidf_count = len(fe._tfidf.vocabulary_)
+        dense_count = fe.get_feature_count() - tfidf_count
+        assert dense_count == 93
+
+    def test_model_artifact_has_increased_feature_count(
+        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
+    ) -> None:
+        """The trained model artifact's feature engineering has 93 dense features,
+        which is 17 more than the old dense count of 76."""
+        use_case = TrainModelUseCase()
+        result = use_case.execute(
+            output_dir=converted_cards_dir,
+            prices_path=allprices_path,
+            printings_path=allprintings_path,
+            output_path=tmp_path,
+            test_split=0.2,
+            random_seed=42,
+        )
+        artifact = joblib.load(result.model_path)
+        fe = artifact["feature_engineering"]
+        tfidf_count = len(fe._tfidf.vocabulary_)
+        dense_count = fe.get_feature_count() - tfidf_count
+        old_dense_count = 76
+        assert dense_count - old_dense_count == 17

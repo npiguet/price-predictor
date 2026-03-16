@@ -52,10 +52,10 @@
 
 ### Tests for User Story 1 (MANDATORY per Constitution)
 
-- [ ] T014 [P] [US1] Add unit tests for printing data features in `tests/unit/application/test_feature_engineering.py` — test that a Card with `printing_data` produces 17 additional dense features (is_reserved, rarity one-hot, printings_count, legalities_count, 10 format multi-hot), and that a Card with `printing_data=None` produces 17 zeros
-- [ ] T015 [P] [US1] Add unit tests for enriched sklearn training in `tests/unit/application/test_train.py` — test that `TrainModelUseCase.execute` produces Cards with `printing_data` populated, and that the feature matrix has 17 additional columns
-- [ ] T016 [P] [US1] Add unit tests for enriched transformer training in `tests/unit/application/test_train_transformer.py` — test that `_match_cards_to_texts` returns enriched text strings containing metadata lines
-- [ ] T017 [P] [US1] Add integration test for enriched training pipeline in `tests/integration/test_end_to_end.py` — train sklearn model on fixture data with metadata, verify model artifact loads and predicts without error
+- [x] T014 [P] [US1] Add unit tests for printing data features in `tests/unit/application/test_feature_engineering.py` — test that a Card with `printing_data` produces 17 additional dense features (is_reserved, rarity one-hot, printings_count, legalities_count, 10 format multi-hot), and that a Card with `printing_data=None` produces 17 zeros
+- [x] T015 [P] [US1] Add unit tests for enriched sklearn training in `tests/unit/application/test_train.py` — test that `TrainModelUseCase.execute` produces Cards with `printing_data` populated, and that the feature matrix has 17 additional columns
+- [x] T016 [P] [US1] Add unit tests for enriched transformer training in `tests/unit/application/test_train_transformer.py` — test that `_match_cards_to_texts` returns enriched text strings containing metadata lines
+- [x] T017 [P] [US1] Add integration test for enriched training pipeline in `tests/integration/test_end_to_end.py` — train sklearn model on fixture data with metadata, verify model artifact loads and predicts without error
 
 ### Implementation for User Story 1
 
@@ -77,8 +77,8 @@
 
 ### Tests for User Story 2 (MANDATORY per Constitution)
 
-- [ ] T023 [P] [US2] Add integration test for server auto-fill in `tests/integration/test_server_integration.py` — POST known card text (no metadata lines) to `/api/v1/predict`, verify 200 response. Verify that the server internally enriched the text (can test via a mock or by checking that the model received enriched input).
-- [ ] T024 [P] [US2] Add unit test for `enrich_or_default` known-card path in `tests/unit/application/test_card_enrichment.py` — verify that for a card name present in the metadata map, all 5 fields are filled from the map values
+- [x] T023 [P] [US2] Add integration test for server auto-fill in `tests/integration/test_server_integration.py` — POST known card text (no metadata lines) to `/api/v1/predict`, verify 200 response. Verify that the server internally enriched the text (can test via a mock or by checking that the model received enriched input).
+- [x] T024 [P] [US2] Add unit test for `enrich_or_default` known-card path in `tests/unit/application/test_card_enrichment.py` — verify that for a card name present in the metadata map, all 5 fields are filled from the map values
 
 ### Implementation for User Story 2
 
@@ -98,10 +98,10 @@
 
 ### Tests for User Story 3 (MANDATORY per Constitution)
 
-- [ ] T028 [P] [US3] Add integration test for server defaults in `tests/integration/test_server_integration.py` — POST unknown card text (no metadata) to `/api/v1/predict`, verify 200 response with default metadata applied
-- [ ] T029 [P] [US3] Add integration test for partial metadata override in `tests/integration/test_server_integration.py` — POST unknown card text with `rarity: mythic` only, verify mythic is used and other 4 fields get defaults
-- [ ] T030 [P] [US3] Add unit test for `enrich_or_default` unknown-card path in `tests/unit/application/test_card_enrichment.py` — verify defaults applied when card name not in metadata map
-- [ ] T031 [P] [US3] Add unit test for client override in `tests/unit/application/test_card_enrichment.py` — verify that client-provided fields in the text are preserved and not overwritten by auto-fill or defaults
+- [x] T028 [P] [US3] Add integration test for server defaults in `tests/integration/test_server_integration.py` — POST unknown card text (no metadata) to `/api/v1/predict`, verify 200 response with default metadata applied
+- [x] T029 [P] [US3] Add integration test for partial metadata override in `tests/integration/test_server_integration.py` — POST unknown card text with `rarity: mythic` only, verify mythic is used and other 4 fields get defaults
+- [x] T030 [P] [US3] Add unit test for `enrich_or_default` unknown-card path in `tests/unit/application/test_card_enrichment.py` — verify defaults applied when card name not in metadata map
+- [x] T031 [P] [US3] Add unit test for client override in `tests/unit/application/test_card_enrichment.py` — verify that client-provided fields in the text are preserved and not overwritten by auto-fill or defaults
 
 ### Implementation for User Story 3
 
@@ -116,7 +116,7 @@
 
 **Purpose**: Cleanup, validation, and documentation
 
-- [ ] T034 [P] Update CLI predict commands (`run_predict_sklearn`, `run_predict_transformer`) in `src/price_predictor/infrastructure/cli.py` to support metadata enrichment for file-based and inline card text prediction (auto-fill if AllPrintings available, otherwise pass through)
+- [x] T034 [P] Update CLI predict commands (`run_predict_sklearn`, `run_predict_transformer`) in `src/price_predictor/infrastructure/cli.py` to support metadata enrichment for file-based and inline card text prediction (auto-fill if AllPrintings available, otherwise pass through)
 - [x] T035 [P] Run `ruff check .` from `src/` and fix any linting issues introduced by this feature
 - [x] T036 Run full test suite (`cd src && pytest`) and fix any failures
 - [ ] T037 Run quickstart.md validation — manually verify the training, evaluation, and prediction examples from `specs/009-printing-metadata/quickstart.md` work end-to-end

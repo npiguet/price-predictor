@@ -366,8 +366,26 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_metadata_map_optional() -> dict | None:
+    """Try to load metadata map from default paths. Returns None if unavailable."""
+    printings_path = Path("resources/AllPrintings.json")
+    prices_path = Path("resources/AllPricesToday.json")
+    if printings_path.exists() and prices_path.exists():
+        try:
+            from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+            metadata_map, _ = build_metadata_map(printings_path, prices_path)
+            return metadata_map
+        except Exception:
+            pass
+    return None
+
+
 def run_predict_sklearn(args: argparse.Namespace) -> int:
     """Predict with the sklearn model using converted card text."""
+    from price_predictor.application.card_enrichment import (
+        enrich_or_default,
+        extract_printing_data_from_text,
+    )
     from price_predictor.application.predict import PredictPriceUseCase
     from price_predictor.infrastructure.converted_card_parser import parse_converted_text
     from price_predictor.infrastructure.model_store import ModelNotFoundError
@@ -386,8 +404,17 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
     else:
         card_text = args.card
 
+    # Enrich with printing data (auto-fill/default)
+    metadata_map = _load_metadata_map_optional()
+    enriched_text = enrich_or_default(card_text, metadata_map or {})
+
     try:
-        card = parse_converted_text(card_text)
+        card = parse_converted_text(enriched_text)
+        # Attach printing data for feature engineering
+        pd = extract_printing_data_from_text(enriched_text)
+        if pd is not None:
+            from dataclasses import replace
+            card = replace(card, printing_data=pd)
     except ValueError as e:
         print(f"Error: Failed to parse card text: {e}", file=sys.stderr)
         return 1
@@ -416,6 +443,7 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
 
 def run_predict_transformer(args: argparse.Namespace) -> int:
     """Predict with the transformer model using raw card text."""
+    from price_predictor.application.card_enrichment import enrich_or_default
     from price_predictor.application.predict_transformer import PredictTransformerUseCase
 
     # Read card text from file or inline
@@ -431,6 +459,10 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
             return 1
     else:
         card_text = args.card
+
+    # Enrich with printing data (auto-fill/default)
+    metadata_map = _load_metadata_map_optional()
+    card_text = enrich_or_default(card_text, metadata_map or {})
 
     model_dir = Path("models/transformer/")
     try:
