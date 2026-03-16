@@ -53,7 +53,8 @@ def load_model(model_dir: Path) -> tuple[CardPriceTransformerModel, TransformerC
     Returns (model, config) tuple.
     Raises FileNotFoundError if latest.pt does not exist.
     """
-    model_path = Path(model_dir) / "latest.pt"
+    model_dir = Path(model_dir)
+    model_path = model_dir if model_dir.suffix == ".pt" else model_dir / "latest.pt"
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
