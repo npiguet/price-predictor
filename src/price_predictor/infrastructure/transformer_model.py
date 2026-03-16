@@ -29,7 +29,11 @@ class CardPriceTransformerModel(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_layers)
 
         self.output_dropout = nn.Dropout(config.dropout)
-        self.output_head = nn.Linear(config.d_model, 1)
+        self.output_head = nn.Sequential(
+            nn.Linear(config.d_model, config.regression_hidden_dim),
+            nn.ReLU(),
+            nn.Linear(config.regression_hidden_dim, 1),
+        )
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         """Run forward pass.
@@ -51,8 +55,9 @@ class CardPriceTransformerModel(nn.Module):
         padding_mask = attention_mask == 0
         x = self.encoder(x, src_key_padding_mask=padding_mask)
 
-        # CLS extraction (position 0)
-        cls_output = x[:, 0, :]
-        cls_output = self.output_dropout(cls_output)
-        logits = self.output_head(cls_output).squeeze(-1)
+        # Masked mean pooling over all non-padding positions
+        mask = attention_mask.unsqueeze(-1).float()  # (batch, seq, 1)
+        pooled = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+        pooled = self.output_dropout(pooled)
+        logits = self.output_head(pooled).squeeze(-1)
         return logits

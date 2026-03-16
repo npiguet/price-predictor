@@ -148,7 +148,7 @@ def _train_loop(
         return 1.0
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    loss_fn = torch.nn.MSELoss()
+    loss_fn = torch.nn.HuberLoss(delta=1.0)
 
     best_val_loss = float("inf")
     best_epoch = 0

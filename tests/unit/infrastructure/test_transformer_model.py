@@ -71,3 +71,42 @@ class TestCardPriceTransformerModelForward:
             out_half = model(input_ids, mask_half)
         # Different masks should generally produce different outputs
         assert not torch.allclose(out_full, out_half)
+
+    def test_mean_pooling_ignores_padding(self):
+        """Mean pooling must exclude masked (padding) positions from the average."""
+        config = _make_config(dropout=0.0)
+        model = CardPriceTransformerModel(config)
+        model.eval()
+        seq_len = config.max_seq_len
+
+        # Build two inputs that differ only in their padding region
+        input_ids = torch.randint(0, config.vocab_size, (1, seq_len))
+        mask = torch.zeros(1, seq_len)
+        mask[0, :seq_len // 2] = 1  # only first half is real
+
+        # Second input has different token IDs in the masked region
+        input_ids_alt = input_ids.clone()
+        input_ids_alt[0, seq_len // 2:] = (input_ids_alt[0, seq_len // 2:] + 1) % config.vocab_size
+
+        with torch.no_grad():
+            out1 = model(input_ids, mask)
+            out2 = model(input_ids_alt, mask)
+
+        # Outputs should be identical — masked positions must not contribute
+        assert torch.allclose(out1, out2, atol=1e-5), (
+            "Mean pooling did not ignore padding positions: outputs differ despite identical real tokens"
+        )
+
+    def test_output_head_is_sequential(self):
+        """Regression head must be a Sequential with Linear → ReLU → Linear."""
+        config = _make_config()
+        model = CardPriceTransformerModel(config)
+        head = model.output_head
+        assert isinstance(head, torch.nn.Sequential), "output_head must be nn.Sequential"
+        children = list(head.children())
+        assert len(children) == 3, f"expected 3 layers in head, got {len(children)}"
+        assert isinstance(children[0], torch.nn.Linear)
+        assert isinstance(children[1], torch.nn.ReLU)
+        assert isinstance(children[2], torch.nn.Linear)
+        assert children[0].out_features == config.regression_hidden_dim
+        assert children[2].out_features == 1

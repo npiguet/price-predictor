@@ -114,3 +114,21 @@ A user wants to predict the price of an unknown card (a spoiler for a future set
 - **SC-002**: For any known card, the auto-filled printing data matches the values in AllPrintings.json for the cheapest printing (100% accuracy).
 - **SC-003**: Predictions for unknown cards with no metadata provided use the correct default values for all five fields.
 - **SC-004**: The retrained models are evaluated against the models trained without metadata (measured by existing evaluation metrics: MAE, median percentage error, top-20% overlap). This comparison is **informational only** — accuracy regression does not block the feature; the metadata fields are retained regardless of impact on prediction accuracy.
+- **SC-005**: After retraining with the transformer architectural improvements (FR-009–FR-011), the transformer model metrics are compared against the post-009 baseline. This comparison is **informational only** — the architecture is retained regardless of the result.
+
+---
+
+## Transformer Architecture Improvements
+
+*Added post-evaluation, 2026-03-16. Triggered by evaluation findings after the initial 009 retrain: the transformer model improved more than sklearn on relative terms but remained weaker in absolute terms. Three low-effort architectural improvements were identified that do not change the input data format.*
+
+### Functional Requirements
+
+- **FR-009**: The transformer model MUST use masked mean pooling instead of CLS extraction (position 0) for the sequence representation fed into the regression head. Mean pooling averages the encoder output over all non-padding positions, weighted by the attention mask.
+- **FR-010**: The transformer regression head MUST be a two-layer MLP: `Linear(d_model → regression_hidden_dim) → ReLU → Linear(regression_hidden_dim → 1)`. `regression_hidden_dim` MUST be a field in `TransformerConfig` with default `64`.
+- **FR-011**: The transformer training loop MUST use Huber loss with `delta=1.0` instead of MSE loss. Huber loss reduces the influence of extreme price outliers during training.
+
+### Key Entities
+
+- **Masked Mean Pooling**: Computes a weighted average of all encoder output vectors, where padding positions (attention mask = 0) contribute zero weight. Produces a single 128-dim vector that incorporates information from the full sequence rather than only position 0.
+- **Regression Hidden Dim**: Intermediate dimension of the two-layer regression head. Stored in `TransformerConfig` so the architecture can be reconstructed from saved checkpoints.

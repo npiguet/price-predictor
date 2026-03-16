@@ -125,6 +125,21 @@
 
 ---
 
+## Phase 7: Transformer Architecture Improvements
+
+**Purpose**: Apply three architectural improvements to the transformer model identified post-evaluation: mean pooling, deeper regression head, Huber loss. No input data changes — requires retraining.
+
+**CRITICAL**: T042 depends on T040 (config field must exist before model uses it). T041 and T043 are independent and can run in parallel.
+
+- [x] T040 Add `regression_hidden_dim: int = 64` field to `TransformerConfig` in `src/price_predictor/domain/entities.py` with `> 0` validation in `__post_init__`
+- [x] T041 [P] Add unit tests in `tests/unit/infrastructure/test_transformer_model.py`: (a) `test_mean_pooling_ignores_padding` — build batch where masked positions have extreme values, verify output equals unmasked-only run; (b) `test_output_head_is_sequential` — assert `model.output_head` is `nn.Sequential` with 3 children (Linear, ReLU, Linear)
+- [x] T042 Implement in `src/price_predictor/infrastructure/transformer_model.py`: (a) replace CLS extraction (`x[:, 0, :]`) with masked mean pooling (`(x * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)` where `mask = attention_mask.unsqueeze(-1).float()`); (b) replace `nn.Linear(config.d_model, 1)` output_head with `nn.Sequential(Linear(d_model, regression_hidden_dim), ReLU, Linear(regression_hidden_dim, 1))`
+- [x] T043 [P] Replace `torch.nn.MSELoss()` with `torch.nn.HuberLoss(delta=1.0)` in `src/price_predictor/application/train_transformer.py`
+- [x] T044 Run full test suite (`cd src && pytest`) and fix any failures — 317 passed, 3 skipped
+- [ ] T045 [P] Retrain transformer model on enriched data with new architecture; run `evaluate transformer`; log metrics vs post-009 baseline per SC-005 (informational only)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
