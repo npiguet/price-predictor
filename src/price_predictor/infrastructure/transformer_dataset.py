@@ -6,7 +6,8 @@ import math
 
 import torch
 from torch.utils.data import Dataset
-from transformers import BertTokenizer
+
+from price_predictor.domain.tokenizer import MtgTokenizer
 
 
 class TransformerTrainingDataset(Dataset):
@@ -16,25 +17,17 @@ class TransformerTrainingDataset(Dataset):
         self,
         card_tuples: list[tuple[str, str, float]],
         max_seq_len: int,
+        tokenizer: MtgTokenizer,
     ) -> None:
         """Construct dataset from (card_name, text_content, price_eur) tuples."""
-        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-
         all_input_ids = []
         all_attention_masks = []
         all_targets = []
 
         for _name, text, price in card_tuples:
-            encoded = tokenizer(
-                text,
-                max_length=max_seq_len,
-                truncation=True,
-                padding="max_length",
-                return_attention_mask=True,
-                return_tensors="pt",
-            )
-            all_input_ids.append(encoded["input_ids"].squeeze(0))
-            all_attention_masks.append(encoded["attention_mask"].squeeze(0))
+            input_ids, attention_mask = tokenizer.encode(text, max_seq_len)
+            all_input_ids.append(torch.tensor(input_ids, dtype=torch.long))
+            all_attention_masks.append(torch.tensor(attention_mask, dtype=torch.long))
             all_targets.append(math.log(price + 2))
 
         self.input_ids = torch.stack(all_input_ids)

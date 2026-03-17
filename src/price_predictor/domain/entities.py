@@ -119,7 +119,10 @@ class TransformerConfig:
     regression_hidden_dim: int = 64
 
     def __post_init__(self) -> None:
-        for name in ("d_model", "n_layers", "n_heads", "ff_dim", "max_seq_len", "vocab_size", "regression_hidden_dim"):
+        for name in (
+            "d_model", "n_layers", "n_heads", "ff_dim",
+            "max_seq_len", "vocab_size", "regression_hidden_dim",
+        ):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)}")
         if self.d_model % self.n_heads != 0:

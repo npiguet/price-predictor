@@ -14,6 +14,7 @@ from price_predictor.infrastructure.cli import (
     run_serve,
     run_train_sklearn,
     run_train_transformer_new,
+    run_vocabulary,
 )
 
 
@@ -63,6 +64,8 @@ def main() -> int:
     elif args.command == "serve":
         _configure_logging()
         return run_serve(args)
+    elif args.command == "vocabulary":
+        return run_vocabulary(args)
     elif args.command == "convert":
         return run_convert(args)
     elif args.command == "check-convert":

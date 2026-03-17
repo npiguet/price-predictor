@@ -42,12 +42,14 @@ def create_app(
     model_artifact: dict[str, Any],
     transformer_artifact: dict[str, Any] | None = None,
     metadata_map: dict | None = None,
+    tokenizer: Any | None = None,
 ) -> FastAPI:
     """Create a FastAPI application with the given model artifact(s).
 
     Args:
         model_artifact: Dict with 'model', 'feature_engineering', and 'model_version' keys.
         transformer_artifact: Optional dict with 'model', 'config', and 'model_version' keys.
+        tokenizer: Optional MtgTokenizer for transformer predictions.
 
     Returns:
         Configured FastAPI application.
@@ -56,6 +58,7 @@ def create_app(
     app.state.model_artifact = model_artifact
     app.state.transformer_artifact = transformer_artifact
     app.state.metadata_map = metadata_map or {}
+    app.state.tokenizer = tokenizer
 
     @app.post("/api/v1/predict")
     async def predict(request: Request) -> Response:
@@ -100,27 +103,28 @@ def create_app(
             if t_artifact is not None:
                 try:
                     import torch
-                    from transformers import BertTokenizer
 
                     t_model = t_artifact["model"]
                     t_config = t_artifact["config"]
                     t_version = t_artifact["model_version"]
 
-                    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-                    encoded = tokenizer(
-                        enriched_body,
-                        max_length=t_config.max_seq_len,
-                        truncation=True,
-                        padding="max_length",
-                        return_tensors="pt",
+                    tok = request.app.state.tokenizer
+                    if tok is None:
+                        raise RuntimeError("Tokenizer not loaded — run 'vocabulary' first")
+
+                    input_ids_list, attention_mask_list = tok.encode(
+                        enriched_body, t_config.max_seq_len
                     )
 
                     try:
                         device = next(t_model.parameters()).device
                     except StopIteration:
                         device = torch.device("cpu")
-                    input_ids = encoded["input_ids"].to(device)
-                    attention_mask = encoded["attention_mask"].to(device)
+
+                    input_ids = torch.tensor([input_ids_list], dtype=torch.long).to(device)
+                    attention_mask = torch.tensor(
+                        [attention_mask_list], dtype=torch.long
+                    ).to(device)
 
                     t_model.eval()
                     with torch.no_grad():

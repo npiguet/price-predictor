@@ -41,7 +41,7 @@ class TestEvaluateTransformerParser:
 
 class TestRunEvaluateTransformerNew:
     @patch("price_predictor.application.evaluate_transformer.evaluate_transformer")
-    def test_success_prints_json(self, mock_eval, capsys):
+    def test_success_prints_json(self, mock_eval, capsys, tmp_path):
         from price_predictor.infrastructure.cli import run_evaluate_transformer_new
 
         mock_result = MagicMock()
@@ -54,12 +54,16 @@ class TestRunEvaluateTransformerNew:
         mock_result.per_card = None
         mock_eval.return_value = mock_result
 
+        vocab_path = tmp_path / "vocab.txt"
+        vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+
         import argparse
         args = argparse.Namespace(
             model_path="./models/transformer/",
             output_dir="./output",
             prices_path="resources/AllPricesToday.json",
             printings_path="resources/AllPrintings.json",
+            vocab_path=str(vocab_path),
             random_seed=42,
         )
         exit_code = run_evaluate_transformer_new(args)

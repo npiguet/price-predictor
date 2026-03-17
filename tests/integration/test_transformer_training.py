@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from price_predictor.domain.entities import TransformerConfig
+from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from price_predictor.infrastructure.transformer_store import save_model, load_model
@@ -25,19 +26,30 @@ def _load_fixture_texts() -> list[tuple[str, str, float]]:
     ]
 
 
+def _make_tokenizer(vocab_size: int = 512) -> MtgTokenizer:
+    """Build a small fixture tokenizer."""
+    vocab = {"[PAD]": 0, "[UNK]": 1}
+    for i in range(vocab_size - 2):
+        vocab[f"tok_{i}"] = i + 2
+    return MtgTokenizer(vocab)
+
+
 @pytest.mark.integration
 class TestTransformerTrainingIntegration:
     def test_train_tiny_model_and_save(self, tmp_path: Path):
         """Train a 2-epoch model on 3 fixture cards and verify artifact."""
         card_tuples = _load_fixture_texts()
         max_seq_len = 64
+        tokenizer = _make_tokenizer(vocab_size=512)
 
-        dataset = TransformerTrainingDataset(card_tuples, max_seq_len=max_seq_len)
+        dataset = TransformerTrainingDataset(
+            card_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer
+        )
         assert len(dataset) == 3
 
         config = TransformerConfig(
             d_model=32, n_layers=1, n_heads=2, ff_dim=64,
-            max_seq_len=max_seq_len, vocab_size=30522, dropout=0.0,
+            max_seq_len=max_seq_len, vocab_size=tokenizer.vocab_size, dropout=0.0,
         )
         model = CardPriceTransformerModel(config)
         model.train()

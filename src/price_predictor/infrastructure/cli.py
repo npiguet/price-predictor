@@ -61,6 +61,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--epochs", type=int, default=20)
     train_transformer.add_argument("--lr", type=float, default=1e-4)
     train_transformer.add_argument("--patience", type=int, default=5)
+    train_transformer.add_argument("--vocab-path", type=str,
+                                   default="models/transformer/vocab.txt",
+                                   help="Path to vocab.txt built by 'vocabulary' command")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -75,6 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Path to converted card text file")
         group.add_argument("--card", "-c", type=str,
                            help="Inline multiline converted card text")
+        if model_name == "transformer":
+            p.add_argument("--vocab-path", type=str,
+                           default="models/transformer/vocab.txt",
+                           help="Path to vocab.txt")
 
     # ── evaluate {model} ─────────────────────────────────────────
     evaluate_parser = subparsers.add_parser("evaluate",
@@ -95,6 +102,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_shared_evaluate_args(eval_transformer)
     eval_transformer.add_argument("--model-path", type=str,
                                   default="./models/transformer/")
+    eval_transformer.add_argument("--vocab-path", type=str,
+                                  default="models/transformer/vocab.txt",
+                                  help="Path to vocab.txt")
 
     # ── serve ─────────────────────────────────────────────────────
     serve_parser = subparsers.add_parser("serve",
@@ -107,6 +117,26 @@ def build_parser() -> argparse.ArgumentParser:
                               default="resources/AllPricesToday.json")
     serve_parser.add_argument("--host", type=str, default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8000)
+    serve_parser.add_argument("--vocab-path", type=str,
+                              default="models/transformer/vocab.txt",
+                              help="Path to vocab.txt for transformer predictions")
+
+    # ── vocabulary ────────────────────────────────────────────────
+    vocab_parser = subparsers.add_parser(
+        "vocabulary", help="Build custom MTG tokenizer vocabulary from card corpus"
+    )
+    vocab_parser.add_argument(
+        "--output-dir", type=str, default="models/transformer/",
+        help="Directory where vocab.txt is written",
+    )
+    vocab_parser.add_argument(
+        "--cards-path", type=str, default="./output",
+        help="Path to converted card corpus (directory of .txt files)",
+    )
+    vocab_parser.add_argument(
+        "--freq-threshold", type=int, default=5,
+        help="Minimum corpus occurrences for a word to be included as a token",
+    )
 
     # ── convert ───────────────────────────────────────────────────
     convert_parser = subparsers.add_parser(
@@ -146,6 +176,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     return parser
+
+
+def run_vocabulary(args: argparse.Namespace) -> int:
+    """Execute the vocabulary command — build MTG tokenizer vocabulary from card corpus."""
+    from price_predictor.application.build_vocabulary import build_vocabulary
+    from price_predictor.infrastructure.tokenizer_store import save_vocabulary
+
+    cards_path = Path(args.cards_path)
+    if not cards_path.exists():
+        print(f"Error: Cards path not found: {cards_path}", file=sys.stderr)
+        return 1
+
+    txt_files = list(cards_path.rglob("*.txt"))
+    if not txt_files:
+        print(f"Error: No .txt files found in {cards_path}", file=sys.stderr)
+        return 1
+
+    output_dir = Path(args.output_dir)
+    try:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"Error: Could not create output directory {output_dir}: {e}", file=sys.stderr)
+        return 2
+
+    result = build_vocabulary(cards_path, freq_threshold=args.freq_threshold)
+    vocab_path = output_dir / "vocab.txt"
+    save_vocabulary(result.vocab, vocab_path)
+
+    output = {
+        "vocab_path": str(vocab_path),
+        "vocab_size": result.vocab_size,
+        "domain_token_count": result.domain_token_count,
+        "freq_threshold_token_count": result.freq_threshold_token_count,
+        "coverage_pct": result.coverage_pct,
+        "unk_pct": result.unk_pct,
+    }
+    print(json.dumps(output, indent=2))
+    return 0
 
 
 def run_serve(args: argparse.Namespace) -> int:
@@ -192,6 +260,25 @@ def run_serve(args: argparse.Namespace) -> int:
     else:
         print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
 
+    # Load custom tokenizer for transformer predictions
+    tokenizer = None
+    vocab_path = Path(args.vocab_path)
+    if vocab_path.exists():
+        try:
+            from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+            tokenizer = load_tokenizer(vocab_path)
+            print(
+                f"Tokenizer loaded from {vocab_path} ({tokenizer.vocab_size} tokens).",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"Warning: Failed to load tokenizer: {e}", file=sys.stderr)
+    else:
+        print(
+            f"Tokenizer vocab not found at {vocab_path} — transformer encoding may fail.",
+            file=sys.stderr,
+        )
+
     # Build metadata map for auto-fill (optional — graceful if files missing)
     metadata_map = None
     printings_path = Path(args.printings_path)
@@ -208,7 +295,7 @@ def run_serve(args: argparse.Namespace) -> int:
         print("Metadata files not found — auto-fill disabled.", file=sys.stderr)
 
     app = create_app(artifact, transformer_artifact=transformer_artifact,
-                      metadata_map=metadata_map)
+                      metadata_map=metadata_map, tokenizer=tokenizer)
     print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
@@ -342,12 +429,22 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
     """Train the transformer model using converted card text files."""
     from price_predictor.application.train_transformer import train_transformer
 
+    vocab_path = Path(args.vocab_path)
+    if not vocab_path.exists():
+        print(
+            f"Error: Vocabulary file not found at {vocab_path}. "
+            "Run 'python -m price_predictor vocabulary' first.",
+            file=sys.stderr,
+        )
+        return 1
+
     try:
         train_transformer(
             output_dir=Path(args.output_dir),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
             model_output=Path(args.model_output),
+            vocab_path=vocab_path,
             batch_size=args.batch_size,
             epochs=args.epochs,
             lr=args.lr,
@@ -445,6 +542,7 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     """Predict with the transformer model using raw card text."""
     from price_predictor.application.card_enrichment import enrich_or_default
     from price_predictor.application.predict_transformer import PredictTransformerUseCase
+    from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 
     # Read card text from file or inline
     if args.file:
@@ -464,10 +562,25 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     metadata_map = _load_metadata_map_optional()
     card_text = enrich_or_default(card_text, metadata_map or {})
 
+    vocab_path = Path(args.vocab_path)
+    if not vocab_path.exists():
+        print(
+            f"Error: Vocabulary file not found at {vocab_path}. "
+            "Run 'python -m price_predictor vocabulary' first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        tokenizer = load_tokenizer(vocab_path)
+    except Exception as e:
+        print(f"Error: Failed to load tokenizer: {e}", file=sys.stderr)
+        return 1
+
     model_dir = Path("models/transformer/")
     try:
         use_case = PredictTransformerUseCase()
-        result = use_case.execute(card_text, model_dir)
+        result = use_case.execute(card_text, model_dir, tokenizer=tokenizer)
     except FileNotFoundError:
         print(
             f"Error: Model not found at {model_dir}. Run 'train transformer' first.",
@@ -540,6 +653,15 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
     """Evaluate the transformer model on held-out validation data."""
     from price_predictor.application.evaluate_transformer import evaluate_transformer
 
+    vocab_path = Path(args.vocab_path)
+    if not vocab_path.exists():
+        print(
+            f"Error: Vocabulary file not found at {vocab_path}. "
+            "Run 'python -m price_predictor vocabulary' first.",
+            file=sys.stderr,
+        )
+        return 1
+
     model_path = Path(args.model_path)
     try:
         result = evaluate_transformer(
@@ -547,6 +669,7 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
             output_dir=Path(args.output_dir),
             prices_path=Path(args.prices_path),
             printings_path=Path(args.printings_path),
+            vocab_path=vocab_path,
             random_seed=args.random_seed,
         )
     except FileNotFoundError:

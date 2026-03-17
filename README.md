@@ -37,11 +37,44 @@ ls ../forge/forge-gui/res/cardsfolder/
 
 All commands are run as `python -m price_predictor <subcommand>`.
 
+### Build domain vocabulary (required before training the transformer)
+
+Scans the converted card corpus and builds a compact, MTG-specific word-level
+vocabulary stored as `models/transformer/vocab.txt`. This step is required
+before training or running the transformer model.
+
+**Inputs**: Converted card text files in `./output/` (from `convert`).
+**Output**: `models/transformer/vocab.txt` (one token per line, ~5,000 tokens).
+
+```bash
+python -m price_predictor vocabulary
+```
+
+Options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--output-dir` | `models/transformer/` | Directory where `vocab.txt` is written |
+| `--cards-path` | `./output` | Path to converted card corpus |
+| `--freq-threshold` | `5` | Min corpus occurrences for a word to be included |
+
+**Output** (JSON to stdout):
+```json
+{
+  "vocab_path": "models/transformer/vocab.txt",
+  "vocab_size": 5064,
+  "domain_token_count": 41,
+  "freq_threshold_token_count": 4961,
+  "coverage_pct": 98.4,
+  "unk_pct": 1.6
+}
+```
+
 ### Train a model
 
 Reads converted card text files, joins them with Cardmarket EUR prices from
 MTGJSON data, and trains a prediction model. Two model types are available:
-`sklearn` (Gradient Boosted Trees) and `transformer` (BERT-based encoder).
+`sklearn` (Gradient Boosted Trees) and `transformer` (custom word-level tokenizer).
 
 **Inputs**: Converted card text files in `./output/` (from `convert`),
 `AllPrintings.json` (name-to-UUID mapping), `AllPricesToday.json` (EUR prices).
@@ -50,7 +83,8 @@ MTGJSON data, and trains a prediction model. Two model types are available:
 # Train the sklearn model
 python -m price_predictor train sklearn
 
-# Train the transformer model
+# Train the transformer model (requires vocabulary to be built first)
+python -m price_predictor vocabulary           # step 1: build vocab
 python -m price_predictor train transformer --epochs 20 --batch-size 64
 ```
 
@@ -59,7 +93,7 @@ with timestamped filenames and a `latest` copy.
 
 Options: `--output-dir`, `--prices-path`, `--printings-path`, `--model-output`,
 `--test-split`, `--random-seed`. Transformer adds `--batch-size`, `--epochs`,
-`--lr`, `--patience`. See `python -m price_predictor train sklearn --help`.
+`--lr`, `--patience`, `--vocab-path`. See `python -m price_predictor train sklearn --help`.
 
 ### Predict a card price
 
@@ -103,6 +137,7 @@ python -m price_predictor serve
 Options: `--model-path` (default: `models/sklearn/latest.joblib`),
 `--printings-path` (default: `resources/AllPrintings.json`),
 `--prices-path` (default: `resources/AllPricesToday.json`),
+`--vocab-path` (default: `models/transformer/vocab.txt`),
 `--host` (default: `0.0.0.0`), `--port` (default: `8000`).
 
 The server loads AllPrintings and AllPricesToday at startup to build a metadata

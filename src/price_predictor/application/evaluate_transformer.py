@@ -15,6 +15,7 @@ from price_predictor.infrastructure.mtgjson_loader import (
     build_metadata_map,
     build_name_to_uuids,
 )
+from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
 
@@ -93,11 +94,13 @@ def evaluate_transformer(
     output_dir: Path,
     prices_path: Path,
     printings_path: Path,
+    vocab_path: Path = Path("models/transformer/vocab.txt"),
     random_seed: int = 42,
 ) -> TransformerEvalResult:
     """Load a saved transformer model and evaluate on the validation split."""
     logger.info("Loading transformer model from %s...", model_dir)
     model, config = load_model(model_dir)
+    tokenizer = load_tokenizer(vocab_path)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     model.eval()
@@ -121,7 +124,9 @@ def evaluate_transformer(
 
     logger.info("Validation set: %d cards", len(val_data))
 
-    dataset = TransformerTrainingDataset(val_data, max_seq_len=config.max_seq_len)
+    dataset = TransformerTrainingDataset(
+        val_data, max_seq_len=config.max_seq_len, tokenizer=tokenizer
+    )
     loader = DataLoader(dataset, batch_size=64, shuffle=False)
 
     all_predictions = []

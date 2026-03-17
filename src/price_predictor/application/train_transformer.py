@@ -12,14 +12,15 @@ import numpy as np
 import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from transformers import BertTokenizer
 
 from price_predictor.application.card_enrichment import enrich_card_text
 from price_predictor.domain.entities import TransformerConfig
+from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.mtgjson_loader import (
     build_metadata_map,
     build_name_to_uuids,
 )
+from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from price_predictor.infrastructure.transformer_store import save_model
@@ -96,7 +97,7 @@ def _match_cards_to_texts(
     return matched
 
 
-def analyze_sequence_lengths(card_texts: list[str]) -> tuple[int, dict]:
+def analyze_sequence_lengths(card_texts: list[str], tokenizer: MtgTokenizer) -> tuple[int, dict]:
     """Analyze token length distribution and compute max_seq_len.
 
     Returns (max_seq_len, stats_dict) where max_seq_len is the maximum token
@@ -104,8 +105,7 @@ def analyze_sequence_lengths(card_texts: list[str]) -> tuple[int, dict]:
     to a minimum of 64. This ensures zero truncation — every card is fully
     represented.
     """
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    lengths = [len(tokenizer.encode(text)) for text in card_texts]
+    lengths = [len(tokenizer._tokenize(text)) for text in card_texts]
 
     p95 = int(np.percentile(lengths, 95))
     p99 = int(np.percentile(lengths, 99))
@@ -221,6 +221,7 @@ def train_transformer(
     prices_path: Path,
     printings_path: Path,
     model_output: Path = Path("models/transformer/"),
+    vocab_path: Path = Path("models/transformer/vocab.txt"),
     batch_size: int = 64,
     epochs: int = 20,
     lr: float = 1e-4,
@@ -229,6 +230,9 @@ def train_transformer(
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
+
+    # 0. Load tokenizer
+    tokenizer = load_tokenizer(vocab_path)
 
     # 1. Read converted text files and match to prices (with metadata enrichment)
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
@@ -247,7 +251,7 @@ def train_transformer(
 
     # 2. Analyze sequence lengths
     texts = [text for _, text, _ in matched]
-    max_seq_len, stats = analyze_sequence_lengths(texts)
+    max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
     logger.info(
         "Token length stats: p95=%d, p99=%d, max=%d",
         stats["p95"], stats["p99"], stats["max"],
@@ -264,8 +268,12 @@ def train_transformer(
     logger.info("Split: %d train, %d validation", len(train_data), len(val_data))
 
     # 4. Build datasets
-    train_dataset = TransformerTrainingDataset(train_data, max_seq_len=max_seq_len)
-    val_dataset = TransformerTrainingDataset(val_data, max_seq_len=max_seq_len)
+    train_dataset = TransformerTrainingDataset(
+        train_data, max_seq_len=max_seq_len, tokenizer=tokenizer
+    )
+    val_dataset = TransformerTrainingDataset(
+        val_data, max_seq_len=max_seq_len, tokenizer=tokenizer
+    )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -277,7 +285,7 @@ def train_transformer(
         n_heads=4,
         ff_dim=512,
         max_seq_len=max_seq_len,
-        vocab_size=30522,
+        vocab_size=tokenizer.vocab_size,
         dropout=0.1,
     )
 

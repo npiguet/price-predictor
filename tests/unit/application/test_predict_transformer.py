@@ -11,6 +11,7 @@ import pytest
 
 from price_predictor.application.predict_transformer import PredictTransformerUseCase
 from price_predictor.domain.entities import PriceEstimate, TransformerConfig
+from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 
 
@@ -30,95 +31,75 @@ def _make_model(config: TransformerConfig) -> CardPriceTransformerModel:
     return model
 
 
-def _fake_tokenizer_call(max_length: int):
-    """Return a mock tokenizer __call__ that produces valid tensors."""
-    def _tokenize(text, max_length=max_length, truncation=True, padding="max_length", return_tensors="pt"):
-        input_ids = torch.ones(1, max_length, dtype=torch.long)
-        attention_mask = torch.ones(1, max_length, dtype=torch.long)
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-    return _tokenize
+def _make_tokenizer(vocab_size: int = 100) -> MtgTokenizer:
+    """Build a fixture MtgTokenizer."""
+    vocab = {"[PAD]": 0, "[UNK]": 1}
+    for i in range(vocab_size - 2):
+        vocab[f"tok_{i}"] = i + 2
+    return MtgTokenizer(vocab)
 
 
 class TestPredictTransformerUseCase:
     """Tests for the transformer-based price prediction use case."""
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
     def test_prediction_returns_positive_price_and_model_version(
-        self, mock_load_model, mock_bert_tokenizer,
+        self, mock_load_model,
     ):
         config = _make_config()
         model = _make_model(config)
         mock_load_model.return_value = (model, config)
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.side_effect = _fake_tokenizer_call(config.max_seq_len)
-        mock_bert_tokenizer.from_pretrained.return_value = mock_tokenizer
+        tokenizer = _make_tokenizer(config.vocab_size)
 
         use_case = PredictTransformerUseCase()
-        result = use_case.execute("Lightning Bolt R Instant", Path("models/transformer"))
+        result = use_case.execute("Lightning Bolt R Instant", Path("models/transformer"),
+                                   tokenizer=tokenizer)
 
         assert isinstance(result, PriceEstimate)
         assert result.predicted_price_eur >= 0
         assert result.model_version == "transformer"
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
-    def test_prediction_handles_short_text(
-        self, mock_load_model, mock_bert_tokenizer,
-    ):
+    def test_prediction_handles_short_text(self, mock_load_model):
         config = _make_config()
         model = _make_model(config)
         mock_load_model.return_value = (model, config)
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.side_effect = _fake_tokenizer_call(config.max_seq_len)
-        mock_bert_tokenizer.from_pretrained.return_value = mock_tokenizer
+        tokenizer = _make_tokenizer(config.vocab_size)
 
         use_case = PredictTransformerUseCase()
-        result = use_case.execute("X", Path("models/transformer"))
+        result = use_case.execute("X", Path("models/transformer"), tokenizer=tokenizer)
 
         assert isinstance(result, PriceEstimate)
         assert result.predicted_price_eur >= 0
         assert result.model_version
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
-    def test_prediction_handles_long_text(
-        self, mock_load_model, mock_bert_tokenizer,
-    ):
+    def test_prediction_handles_long_text(self, mock_load_model):
         config = _make_config()
         model = _make_model(config)
         mock_load_model.return_value = (model, config)
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.side_effect = _fake_tokenizer_call(config.max_seq_len)
-        mock_bert_tokenizer.from_pretrained.return_value = mock_tokenizer
+        tokenizer = _make_tokenizer(config.vocab_size)
 
         long_text = "Whenever a creature enters the battlefield under your control, " * 200
         use_case = PredictTransformerUseCase()
-        result = use_case.execute(long_text, Path("models/v2"))
+        result = use_case.execute(long_text, Path("models/v2"), tokenizer=tokenizer)
 
         assert isinstance(result, PriceEstimate)
         assert result.predicted_price_eur >= 0
         assert result.model_version == "v2"
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
-    def test_model_not_found_raises_file_not_found_error(
-        self, mock_load_model, mock_bert_tokenizer,
-    ):
+    def test_model_not_found_raises_file_not_found_error(self, mock_load_model):
         mock_load_model.side_effect = FileNotFoundError("Model file not found")
+        tokenizer = _make_tokenizer()
 
         use_case = PredictTransformerUseCase()
         with pytest.raises(FileNotFoundError):
-            use_case.execute("Some card text", Path("nonexistent/model"))
+            use_case.execute("Some card text", Path("nonexistent/model"),
+                              tokenizer=tokenizer)
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
-    def test_shifted_log_to_eur_conversion(
-        self, mock_load_model, mock_bert_tokenizer,
-    ):
+    def test_shifted_log_to_eur_conversion(self, mock_load_model):
         """Verify the shifted-log inverse: exp(pred) - 2, clamped >= 0."""
         config = _make_config()
         model = MagicMock()
@@ -130,21 +111,16 @@ class TestPredictTransformerUseCase:
         shifted_log_value = math.log(target_price + 2)
         model.return_value = torch.tensor(shifted_log_value)
         mock_load_model.return_value = (model, config)
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.side_effect = _fake_tokenizer_call(config.max_seq_len)
-        mock_bert_tokenizer.from_pretrained.return_value = mock_tokenizer
+        tokenizer = _make_tokenizer(config.vocab_size)
 
         use_case = PredictTransformerUseCase()
-        result = use_case.execute("Test card", Path("models/transformer"))
+        result = use_case.execute("Test card", Path("models/transformer"),
+                                   tokenizer=tokenizer)
 
         assert abs(result.predicted_price_eur - target_price) < 0.01
 
-    @patch("price_predictor.application.predict_transformer.BertTokenizer")
     @patch("price_predictor.application.predict_transformer.load_model")
-    def test_negative_prediction_clamped_to_zero(
-        self, mock_load_model, mock_bert_tokenizer,
-    ):
+    def test_negative_prediction_clamped_to_zero(self, mock_load_model):
         """If exp(pred) - 2 is negative, the price should be clamped to 0."""
         config = _make_config()
         model = MagicMock()
@@ -154,12 +130,24 @@ class TestPredictTransformerUseCase:
         # A very negative shifted-log prediction results in exp(pred) - 2 < 0
         model.return_value = torch.tensor(-10.0)
         mock_load_model.return_value = (model, config)
-
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.side_effect = _fake_tokenizer_call(config.max_seq_len)
-        mock_bert_tokenizer.from_pretrained.return_value = mock_tokenizer
+        tokenizer = _make_tokenizer(config.vocab_size)
 
         use_case = PredictTransformerUseCase()
-        result = use_case.execute("Test card", Path("models/transformer"))
+        result = use_case.execute("Test card", Path("models/transformer"),
+                                   tokenizer=tokenizer)
 
         assert result.predicted_price_eur == 0.0
+
+    @patch("price_predictor.application.predict_transformer.load_model")
+    def test_uses_tokenizer_parameter_for_encoding(self, mock_load_model):
+        """PredictTransformerUseCase.execute() uses the provided tokenizer, not BertTokenizer."""
+        config = _make_config()
+        model = _make_model(config)
+        mock_load_model.return_value = (model, config)
+        tokenizer = _make_tokenizer(config.vocab_size)
+
+        use_case = PredictTransformerUseCase()
+        # Should not raise — proves tokenizer parameter is used
+        result = use_case.execute("flying creature", Path("models/transformer"),
+                                   tokenizer=tokenizer)
+        assert result is not None

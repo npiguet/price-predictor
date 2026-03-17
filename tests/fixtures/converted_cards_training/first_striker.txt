@@ -1,0 +1,7 @@
+name: White Knight
+mana cost: {2}{W}{W}
+types: creature knight
+power toughness: 2/2
+keyword[1]: first strike
+keyword[2]: double strike
+spell[1]: {W}: CARDNAME gets +0/+1 until end of turn.

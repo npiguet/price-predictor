@@ -9,41 +9,57 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+def _make_fixture_tokenizer(vocab_size: int = 512) -> "MtgTokenizer":
+    """Build a fixture MtgTokenizer with a given vocab size."""
+    from price_predictor.domain.tokenizer import MtgTokenizer
+
+    vocab = {"[PAD]": 0, "[UNK]": 1}
+    for i in range(vocab_size - 2):
+        vocab[f"token_{i}"] = i + 2
+    return MtgTokenizer(vocab)
+
+
 class TestAnalyzeSequenceLengths:
     def test_returns_multiple_of_8(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
+        tokenizer = _make_fixture_tokenizer()
         texts = ["hello world"] * 100
-        max_seq_len, stats = analyze_sequence_lengths(texts)
+        max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len % 8 == 0
 
     def test_minimum_is_64(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
+        tokenizer = _make_fixture_tokenizer()
         texts = ["hi"] * 100  # Very short texts
-        max_seq_len, stats = analyze_sequence_lengths(texts)
+        max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len >= 64
 
     def test_stats_contain_expected_keys(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
+        tokenizer = _make_fixture_tokenizer()
         texts = ["hello world token test"] * 100
-        _, stats = analyze_sequence_lengths(texts)
+        _, stats = analyze_sequence_lengths(texts, tokenizer)
         assert "p95" in stats
         assert "p99" in stats
         assert "max" in stats
 
     def test_max_seq_len_covers_all_cards(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
+        tokenizer = _make_fixture_tokenizer()
         texts = ["word " * i for i in range(1, 101)]
-        max_seq_len, stats = analyze_sequence_lengths(texts)
+        max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len >= stats["max"]
 
     def test_p95_less_than_or_equal_to_max(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
+        tokenizer = _make_fixture_tokenizer()
         texts = ["word " * i for i in range(1, 101)]
-        _, stats = analyze_sequence_lengths(texts)
+        _, stats = analyze_sequence_lengths(texts, tokenizer)
         assert stats["p95"] <= stats["max"]
 
 
 class TestTrainTransformer:
+    @patch("price_predictor.application.train_transformer.load_tokenizer")
     @patch("price_predictor.application.train_transformer.build_name_to_uuids")
     @patch("price_predictor.application.train_transformer.build_metadata_map")
     @patch("price_predictor.application.train_transformer._match_cards_to_texts")
@@ -58,9 +74,13 @@ class TestTrainTransformer:
     def test_returns_train_result_with_expected_fields(
         self, mock_save, mock_train_loop, mock_split, mock_torch,
         mock_model_cls, mock_dataloader, mock_dataset_cls, mock_analyze,
-        mock_match, mock_metadata_map, mock_name_uuids
+        mock_match, mock_metadata_map, mock_name_uuids, mock_load_tokenizer,
+        tmp_path
     ):
         from price_predictor.application.train_transformer import train_transformer
+
+        tokenizer = _make_fixture_tokenizer(vocab_size=512)
+        mock_load_tokenizer.return_value = tokenizer
 
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(20)]
         mock_name_uuids.return_value = ({}, {})
@@ -75,11 +95,15 @@ class TestTrainTransformer:
         mock_train_loop.return_value = (1, 0.1, False, 5)
         mock_save.return_value = ("20260101-120000", Path("models/transformer/20260101-120000.pt"))
 
+        vocab_path = tmp_path / "vocab.txt"
+        vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+
         result = train_transformer(
             output_dir=Path("output/"),
             prices_path=Path("fake/prices.json"),
             printings_path=Path("fake/printings.json"),
             model_output=Path("models/transformer/"),
+            vocab_path=vocab_path,
         )
 
         assert result.card_count == 20
@@ -88,11 +112,73 @@ class TestTrainTransformer:
         assert result.best_epoch == 1
         assert result.best_val_loss == 0.1
 
+    @patch("price_predictor.application.train_transformer.load_tokenizer")
+    @patch("price_predictor.application.train_transformer.build_name_to_uuids")
+    @patch("price_predictor.application.train_transformer.build_metadata_map")
+    @patch("price_predictor.application.train_transformer._match_cards_to_texts")
+    def test_vocab_size_equals_tokenizer_vocab_size(
+        self, mock_match, mock_metadata_map, mock_name_uuids, mock_load_tokenizer,
+        tmp_path
+    ):
+        """TransformerConfig.vocab_size should equal tokenizer.vocab_size (not 30522)."""
+        from unittest.mock import call
+        from price_predictor.application.train_transformer import train_transformer
+        from price_predictor.domain.entities import TransformerConfig
+
+        tokenizer = _make_fixture_tokenizer(vocab_size=512)
+        mock_load_tokenizer.return_value = tokenizer
+
+        matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(5)]
+        mock_name_uuids.return_value = ({}, {})
+        mock_metadata_map.return_value = ({}, {})
+        mock_match.return_value = matched
+
+        vocab_path = tmp_path / "vocab.txt"
+        vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+
+        captured_configs = []
+
+        with patch("price_predictor.application.train_transformer.analyze_sequence_lengths") as mock_analyze, \
+             patch("price_predictor.application.train_transformer.TransformerTrainingDataset"), \
+             patch("price_predictor.application.train_transformer.DataLoader"), \
+             patch("price_predictor.application.train_transformer.CardPriceTransformerModel") as mock_model_cls, \
+             patch("price_predictor.application.train_transformer.torch") as mock_torch, \
+             patch("price_predictor.application.train_transformer.train_test_split") as mock_split, \
+             patch("price_predictor.application.train_transformer._train_loop") as mock_loop, \
+             patch("price_predictor.application.train_transformer.save_model") as mock_save:
+
+            mock_analyze.return_value = (64, {"p95": 10, "p99": 15, "max": 20})
+            mock_split.return_value = (matched[:4], matched[4:])
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.device.return_value = MagicMock()
+            mock_torch.manual_seed = MagicMock()
+            mock_loop.return_value = (1, 0.1, False, 5)
+            mock_save.return_value = ("v1", Path("models/transformer/v1.pt"))
+
+            def capture_config(config):
+                captured_configs.append(config)
+                return MagicMock()
+
+            mock_model_cls.side_effect = capture_config
+
+            train_transformer(
+                output_dir=Path("output/"),
+                prices_path=Path("fake/prices.json"),
+                printings_path=Path("fake/printings.json"),
+                model_output=Path("models/transformer/"),
+                vocab_path=vocab_path,
+            )
+
+        assert len(captured_configs) == 1
+        config = captured_configs[0]
+        assert config.vocab_size == 512
+        assert config.vocab_size != 30522
+
     @patch("price_predictor.application.train_transformer.build_name_to_uuids")
     @patch("price_predictor.application.train_transformer.build_metadata_map")
     @patch("price_predictor.application.train_transformer._match_cards_to_texts")
     def test_insufficient_data_raises(
-        self, mock_match, mock_metadata_map, mock_name_uuids
+        self, mock_match, mock_metadata_map, mock_name_uuids, tmp_path
     ):
         from price_predictor.application.train_transformer import train_transformer
 
@@ -100,13 +186,19 @@ class TestTrainTransformer:
         mock_metadata_map.return_value = ({}, {})
         mock_match.return_value = [("Card 1", "text", 1.0)]  # Only 1 card
 
+        vocab_path = tmp_path / "vocab.txt"
+        vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+
         with pytest.raises(ValueError, match="Insufficient"):
-            train_transformer(
-                output_dir=Path("output/"),
-                prices_path=Path("fake/prices.json"),
-                printings_path=Path("fake/printings.json"),
-                model_output=Path("models/transformer/"),
-            )
+            with patch("price_predictor.application.train_transformer.load_tokenizer") as mock_tok:
+                mock_tok.return_value = _make_fixture_tokenizer()
+                train_transformer(
+                    output_dir=Path("output/"),
+                    prices_path=Path("fake/prices.json"),
+                    printings_path=Path("fake/printings.json"),
+                    model_output=Path("models/transformer/"),
+                    vocab_path=vocab_path,
+                )
 
 
 class TestMatchCardsToTextsMetadata:

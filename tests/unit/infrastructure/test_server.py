@@ -251,7 +251,14 @@ class TestDualModelResponse:
 
         transformer_artifact = {"model": mock_transformer, "config": mock_config, "model_version": "transformer-v1"}
 
-        app = create_app(sklearn_artifact, transformer_artifact=transformer_artifact)
+        from price_predictor.domain.tokenizer import MtgTokenizer
+        tok = MtgTokenizer({"[PAD]": 0, "[UNK]": 1, "name": 2, "lightning": 3, "bolt": 4,
+                             "{R}": 5, "types": 6, "instant": 7, "cardname": 8, "deals": 9,
+                             "3": 10, "damage": 11, "to": 12, "any": 13, "target": 14,
+                             "mana": 15, "cost": 16})
+
+        app = create_app(sklearn_artifact, transformer_artifact=transformer_artifact,
+                          tokenizer=tok)
         client = TestClient(app)
 
         response = client.post(

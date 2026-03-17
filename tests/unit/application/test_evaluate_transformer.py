@@ -19,17 +19,29 @@ def _make_config(**overrides) -> TransformerConfig:
     return TransformerConfig(**defaults)
 
 
+def _make_fixture_tokenizer(vocab_size: int = 30522) -> "MtgTokenizer":
+    from price_predictor.domain.tokenizer import MtgTokenizer
+    vocab = {"[PAD]": 0, "[UNK]": 1}
+    for i in range(vocab_size - 2):
+        vocab[f"tok_{i}"] = i + 2
+    return MtgTokenizer(vocab)
+
+
 class TestEvaluateTransformer:
+    @patch("price_predictor.application.evaluate_transformer.load_tokenizer")
     @patch("price_predictor.application.evaluate_transformer.load_model")
     @patch("price_predictor.application.evaluate_transformer.build_metadata_map")
     @patch("price_predictor.application.evaluate_transformer.build_name_to_uuids")
     @patch("price_predictor.application.evaluate_transformer._match_texts_to_prices")
     def test_returns_eval_result_with_metrics(
-        self, mock_match, mock_name_uuids, mock_metadata_map, mock_load, tmp_path
+        self, mock_match, mock_name_uuids, mock_metadata_map, mock_load,
+        mock_load_tokenizer, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
 
         config = _make_config()
+        tokenizer = _make_fixture_tokenizer()
+        mock_load_tokenizer.return_value = tokenizer
 
         # Create a mock model that returns fixed shifted-log predictions
         mock_model = MagicMock()
@@ -49,11 +61,15 @@ class TestEvaluateTransformer:
         matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(25)]
         mock_match.return_value = matched
 
+        vocab_path = tmp_path / "vocab.txt"
+        vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
+
         result = evaluate_transformer(
             model_dir=Path("fake/model"),
             output_dir=tmp_path,
             prices_path=Path("fake/prices.json"),
             printings_path=Path("fake/printings.json"),
+            vocab_path=vocab_path,
             random_seed=42,
         )
 

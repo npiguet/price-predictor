@@ -7,7 +7,40 @@ import math
 import torch
 import pytest
 
+from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
+
+
+def _make_tokenizer() -> MtgTokenizer:
+    """Build a small tokenizer for tests."""
+    vocab = {
+        "[PAD]": 0,
+        "[UNK]": 1,
+        "cardname": 2,
+        "name": 3,
+        "mana": 4,
+        "cost": 5,
+        "types": 6,
+        "instant": 7,
+        "creature": 8,
+        "bear": 9,
+        "legendary": 10,
+        "planeswalker": 11,
+        "jace": 12,
+        "{R}": 13,
+        "{1}": 14,
+        "{G}": 15,
+        "{2}": 16,
+        "{U}": 17,
+        "lightning": 18,
+        "bolt": 19,
+        "grizzly": 20,
+        "bears": 21,
+        "word": 22,
+        "short": 23,
+        "card": 24,
+    }
+    return MtgTokenizer(vocab)
 
 
 SAMPLE_CARDS = [
@@ -19,61 +52,91 @@ SAMPLE_CARDS = [
 
 class TestTransformerTrainingDataset:
     def test_length_matches_input(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         assert len(ds) == 3
 
     def test_getitem_returns_expected_keys(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert "input_ids" in item
         assert "attention_mask" in item
         assert "target" in item
 
     def test_input_ids_shape(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert item["input_ids"].shape == (64,)
 
     def test_attention_mask_shape(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert item["attention_mask"].shape == (64,)
 
     def test_target_is_scalar(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert item["target"].shape == ()
 
     def test_shifted_log_target_transform(self):
         """Target should be log(price + 2)."""
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         for i, (_, _, price) in enumerate(SAMPLE_CARDS):
             expected = math.log(price + 2)
             actual = ds[i]["target"].item()
             assert abs(actual - expected) < 1e-5, f"Card {i}: expected {expected}, got {actual}"
 
     def test_input_ids_are_integers(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert item["input_ids"].dtype == torch.long
 
     def test_attention_mask_is_binary(self):
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64)
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         unique_vals = item["attention_mask"].unique()
         assert all(v in (0, 1) for v in unique_vals)
 
     def test_padding_produces_zeros_in_mask(self):
         """Short text padded to max_seq_len should have trailing zeros in mask."""
+        tok = _make_tokenizer()
         short_cards = [("Short", "name: short card", 1.0)]
-        ds = TransformerTrainingDataset(short_cards, max_seq_len=64)
+        ds = TransformerTrainingDataset(short_cards, max_seq_len=64, tokenizer=tok)
         mask = ds[0]["attention_mask"]
         # There should be some padding (zeros) for such a short text
         assert (mask == 0).any()
 
     def test_truncation_to_max_seq_len(self):
         """Even with very long text, input_ids should not exceed max_seq_len."""
+        tok = _make_tokenizer()
         long_text = "word " * 500
         long_cards = [("Long Card", long_text, 1.0)]
-        ds = TransformerTrainingDataset(long_cards, max_seq_len=32)
+        ds = TransformerTrainingDataset(long_cards, max_seq_len=32, tokenizer=tok)
         assert ds[0]["input_ids"].shape == (32,)
+
+    def test_accepts_mtg_tokenizer_parameter(self):
+        """TransformerTrainingDataset.__init__ accepts tokenizer: MtgTokenizer parameter."""
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS[:1], max_seq_len=32, tokenizer=tok)
+        assert len(ds) == 1
+
+    def test_attention_mask_matches_padding_positions(self):
+        """attention_mask should be 0 exactly where input_ids is PAD_ID (0)."""
+        tok = _make_tokenizer()
+        short_cards = [("Short", "name: short card", 1.0)]
+        ds = TransformerTrainingDataset(short_cards, max_seq_len=32, tokenizer=tok)
+        item = ds[0]
+        ids = item["input_ids"]
+        mask = item["attention_mask"]
+        for i in range(len(ids)):
+            if ids[i].item() == MtgTokenizer.PAD_ID:
+                assert mask[i].item() == 0
+            # Note: real tokens could also happen to have ID 0 only if PAD is used,
+            # but since PAD is ID 0, we just check padding alignment
