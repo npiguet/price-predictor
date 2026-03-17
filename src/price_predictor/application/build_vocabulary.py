@@ -1,12 +1,12 @@
 """Build MTG domain vocabulary from a converted card corpus.
 
-Corpus results (full ./output/ at freq_threshold=5, 2026-03-17, pre-enrichment-fix):
-  vocab_size=5064, coverage_pct=98.4%, unk_pct=1.6%
-  SC-001 PASS (5064 < 10000), SC-002 PASS (98.4% >= 95%)
+Corpus results (full ./output/ at freq_threshold=5, 2026-03-17):
+  vocab_size=2451, coverage_pct=99.5%, unk_pct=0.5%
+  SC-001 PASS (2451 < 10000), SC-002 PASS (99.5% >= 95%)
 
-Note: vocab was rebuilt after adding printing-data fixed-domain terms (rarity,
-format names, field names) which were missing from the raw card corpus but are
-present in enriched training texts.
+name: lines are stripped before frequency counting (mirroring MtgTokenizer)
+so card-name proper nouns never enter the vocab. This pruned ~3,200 slots
+vs earlier builds that included name-line tokens.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+
+from price_predictor.domain.tokenizer import _NAME_LINE_RE
 
 # Multi-word keywords derived from forge.game.keyword.Keyword enum.
 # Entries whose display name contains a space, normalized to:
@@ -152,7 +154,12 @@ def _replace_multi_word_keywords(text: str) -> str:
 
 
 def _tokenize_text(text: str) -> list[str]:
-    """Full tokenization pipeline: normalize → replace keywords → split."""
+    """Full tokenization pipeline: normalize → replace keywords → split.
+
+    Mirrors MtgTokenizer._tokenize so the vocabulary only contains tokens
+    that can actually appear at training/inference time.
+    """
+    text = _NAME_LINE_RE.sub("name: cardname", text)
     text = _selective_normalize(text)
     text = _replace_multi_word_keywords(text)
     return re.findall(r"[a-z_]+|\{[^}]+\}|\d+|[^\s\w]", text)
