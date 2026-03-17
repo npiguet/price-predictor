@@ -227,6 +227,7 @@ def train_transformer(
     lr: float = 1e-4,
     patience: int = 5,
     random_seed: int = 42,
+    log_offset: float = 2.0,
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
@@ -269,10 +270,10 @@ def train_transformer(
 
     # 4. Build datasets
     train_dataset = TransformerTrainingDataset(
-        train_data, max_seq_len=max_seq_len, tokenizer=tokenizer
+        train_data, max_seq_len=max_seq_len, tokenizer=tokenizer, log_offset=log_offset
     )
     val_dataset = TransformerTrainingDataset(
-        val_data, max_seq_len=max_seq_len, tokenizer=tokenizer
+        val_data, max_seq_len=max_seq_len, tokenizer=tokenizer, log_offset=log_offset
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -287,6 +288,7 @@ def train_transformer(
         max_seq_len=max_seq_len,
         vocab_size=tokenizer.vocab_size,
         dropout=0.1,
+        log_offset=log_offset,
     )
 
     if not torch.cuda.is_available():

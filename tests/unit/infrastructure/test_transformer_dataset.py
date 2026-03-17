@@ -83,11 +83,12 @@ class TestTransformerTrainingDataset:
         assert item["target"].shape == ()
 
     def test_shifted_log_target_transform(self):
-        """Target should be log(price + 2)."""
+        """Target should be log(price + log_offset) using the configured offset."""
         tok = _make_tokenizer()
-        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
+        log_offset = 0.5
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok, log_offset=log_offset)
         for i, (_, _, price) in enumerate(SAMPLE_CARDS):
-            expected = math.log(price + 2)
+            expected = math.log(price + log_offset)
             actual = ds[i]["target"].item()
             assert abs(actual - expected) < 1e-5, f"Card {i}: expected {expected}, got {actual}"
 

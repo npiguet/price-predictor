@@ -125,7 +125,8 @@ def evaluate_transformer(
     logger.info("Validation set: %d cards", len(val_data))
 
     dataset = TransformerTrainingDataset(
-        val_data, max_seq_len=config.max_seq_len, tokenizer=tokenizer
+        val_data, max_seq_len=config.max_seq_len, tokenizer=tokenizer,
+        log_offset=config.log_offset,
     )
     loader = DataLoader(dataset, batch_size=64, shuffle=False)
 
@@ -145,9 +146,9 @@ def evaluate_transformer(
     predictions = torch.cat(all_predictions).numpy()
     targets = torch.cat(all_targets).numpy()
 
-    # Convert from shifted-log space back to EUR: exp(x) - 2
-    predicted_prices = np.exp(predictions) - 2
-    actual_prices = np.exp(targets) - 2
+    # Convert from shifted-log space back to EUR: exp(x) - log_offset
+    predicted_prices = np.exp(predictions) - config.log_offset
+    actual_prices = np.exp(targets) - config.log_offset
 
     # Clamp to non-negative
     predicted_prices = np.maximum(predicted_prices, 0.0)
@@ -160,8 +161,8 @@ def evaluate_transformer(
     pct_errors = np.abs(predicted_prices - actual_prices) / np.maximum(actual_prices, 0.01) * 100
     median_percentage_error = float(np.median(pct_errors))
 
-    # Median absolute error in shifted-log space: median(|log(actual+2) - log(predicted+2)|)
-    log_errors = np.abs(np.log(actual_prices + 2) - np.log(predicted_prices + 2))
+    # Median absolute error in shifted-log space
+    log_errors = np.abs(np.log(actual_prices + config.log_offset) - np.log(predicted_prices + config.log_offset))
     median_log_error = float(np.median(log_errors))
 
     # Top-20% overlap

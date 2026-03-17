@@ -64,6 +64,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--vocab-path", type=str,
                                    default="models/transformer/vocab.txt",
                                    help="Path to vocab.txt built by 'vocabulary' command")
+    train_transformer.add_argument("--log-offset", type=float, default=2.0,
+                                   help="Offset used in log(price + offset) target transform "
+                                        "(stored in model artifact; use 0.5 for better high-price signal)")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -472,6 +475,7 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             lr=args.lr,
             patience=args.patience,
             random_seed=args.random_seed,
+            log_offset=args.log_offset,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

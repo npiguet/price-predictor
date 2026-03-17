@@ -107,7 +107,15 @@ class TrainedModel:
 
 @dataclass(frozen=True)
 class TransformerConfig:
-    """Immutable configuration for reconstructing a transformer model architecture."""
+    """Immutable configuration for reconstructing a transformer model architecture.
+
+    log_offset controls the price transform used during training and inference:
+        target  = log(price + log_offset)
+        inverse = exp(prediction) - log_offset
+
+    A smaller offset (e.g. 0.5) gives more gradient signal to mid/high-price
+    cards; the default of 2.0 preserves backward compatibility.
+    """
 
     d_model: int
     n_layers: int
@@ -117,6 +125,7 @@ class TransformerConfig:
     vocab_size: int
     dropout: float
     regression_hidden_dim: int = 64
+    log_offset: float = 2.0
 
     def __post_init__(self) -> None:
         for name in (
@@ -131,3 +140,5 @@ class TransformerConfig:
             )
         if not (0.0 <= self.dropout < 1.0):
             raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")
+        if self.log_offset <= 0.0:
+            raise ValueError(f"log_offset must be > 0, got {self.log_offset}")

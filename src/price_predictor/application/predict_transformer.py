@@ -47,7 +47,7 @@ class PredictTransformerUseCase:
         with torch.no_grad():
             shifted_log_pred = model(input_ids_t, attention_mask_t).item()
 
-        predicted_price = round(float(math.exp(shifted_log_pred) - 2), 2)
+        predicted_price = round(float(math.exp(shifted_log_pred) - config.log_offset), 2)
         predicted_price = max(predicted_price, 0.0)
 
         # Extract version from model directory name
