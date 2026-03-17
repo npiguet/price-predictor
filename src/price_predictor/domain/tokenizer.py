@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+_NAME_LINE_RE = re.compile(r"(?m)^name:.*$")
+
 
 class MtgTokenizer:
     """Word-level tokenizer for MTG card text.
@@ -12,6 +14,11 @@ class MtgTokenizer:
     Mana symbols (e.g. {W}, {R}) are preserved as-is; all other text is
     lowercased. Multi-word keywords (e.g. "first strike") are replaced with
     their underscore form ("first_strike") before splitting.
+
+    Card names on ``name:`` lines are replaced with the ``cardname`` placeholder
+    before tokenization. The actual card name is arbitrary and almost always
+    produces UNK tokens; stripping it removes noise without losing any
+    mechanically useful information.
     """
 
     PAD = "[PAD]"
@@ -73,12 +80,17 @@ class MtgTokenizer:
         """Normalize text and split into tokens.
 
         Steps:
+        0. Replace card name values on ``name:`` lines with ``cardname``.
         1. Selective lowercasing: split on brace-enclosed groups, lowercase
            non-brace parts, keep mana symbols (e.g. {W}) as-is.
         2. Replace multi-word keywords (sorted longest-first): "first strike"
            → "first_strike".
         3. Regex split into individual tokens.
         """
+        # 0. Strip card names from name: lines — they're arbitrary proper nouns
+        #    that almost always produce UNK tokens with no mechanical signal.
+        text = _NAME_LINE_RE.sub("name: cardname", text)
+
         # 1. Selective normalize
         parts = re.split(r"(\{[^}]+\})", text)
         text = "".join(p if p.startswith("{") else p.lower() for p in parts)

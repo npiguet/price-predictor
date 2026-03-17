@@ -182,6 +182,47 @@ class TestMtgTokenizerEncodeEdgeCases:
         assert 11 not in ids
 
 
+class TestNameLineNormalization:
+    """name: lines have their value replaced with 'cardname' before tokenization."""
+
+    def test_card_name_words_not_in_token_stream(self):
+        tok = _make_tokenizer()
+        tokens = tok._tokenize("name: kumano faces kakkazan\ntypes: creature")
+        assert "kumano" not in tokens
+        assert "faces" not in tokens
+        assert "kakkazan" not in tokens
+
+    def test_cardname_placeholder_present_after_name_line(self):
+        tok = _make_tokenizer()
+        tokens = tok._tokenize("name: lightning bolt\ntypes: instant")
+        assert "cardname" in tokens
+
+    def test_both_name_lines_normalized_in_double_faced_card(self):
+        tok = _make_tokenizer()
+        text = "name: delver of secrets\ntypes: creature\n\nALTERNATE\n\nname: insectile aberration\ntypes: creature"
+        tokens = tok._tokenize(text)
+        assert "delver" not in tokens
+        assert "insectile" not in tokens
+        assert "aberration" not in tokens
+        assert tokens.count("cardname") == 2
+
+    def test_name_line_mid_text_not_affected(self):
+        """'name:' only matches at line start — mid-sentence occurrences are untouched."""
+        tok = _make_tokenizer()
+        # "flying" should still appear; "name:" mid-sentence won't match ^name:
+        tokens = tok._tokenize("keyword: flying\nname: test card\nother: text")
+        assert "flying" in tokens
+        assert "cardname" in tokens
+
+    def test_name_line_normalized_in_encode(self):
+        tok = _make_tokenizer()
+        ids, mask = tok.encode("name: xyzzy_unknown_card\nkeyword: flying", max_length=16)
+        # UNK should not appear for the card name; cardname (2) should be present
+        assert 2 in ids  # cardname
+        # flying (4) should be present
+        assert 4 in ids
+
+
 class TestMtgTokenizerDecode:
     def test_decode_stops_at_pad(self):
         tok = _make_tokenizer()
