@@ -128,11 +128,11 @@ class TestEndToEnd:
         # Load the artifact and verify feature count
         artifact = joblib.load(model_path)
         fe = artifact["feature_engineering"]
-        # Dense features should be 93 (76 old + 17 printing data)
+        # Dense features should be 95 (76 old + 18 printing data + 1 has_mana_cost)
         # TF-IDF vocab may be smaller than 500 on small fixture data
         tfidf_count = len(fe._tfidf.vocabulary_)
         dense_count = fe.get_feature_count() - tfidf_count
-        assert dense_count == 93  # 76 old dense + 17 printing data
+        assert dense_count == 95  # 76 old dense + 18 printing data + 1 has_mana_cost
 
         # Predict with a card that has no printing_data -- should still work
         card_without_pd = Card(

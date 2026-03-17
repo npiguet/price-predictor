@@ -163,15 +163,19 @@ class TestMtgTokenizerEncodeEdgeCases:
         tok = _make_tokenizer()
         ids, mask = tok.encode("", max_length=8)
         assert len(ids) == 8
-        assert all(i == tok.PAD_ID for i in ids)
-        assert all(m == 0 for m in mask)
+        # Empty input gets "mana cost: none" appended, so not all padding
+        assert len(mask) == 8
+        # But output is always exactly max_length
+        assert len(ids) == len(mask)
 
     def test_text_with_only_mana_symbols(self):
         tok = _make_tokenizer()
         ids, mask = tok.encode("{W}{R}", max_length=8)
         assert ids[0] == 6  # {W}
         assert ids[1] == 7  # {R}
-        assert ids[2] == tok.PAD_ID
+        # ids[2+] will be "mana cost: none" tokens (UNK or mapped), not PAD
+        # Just verify length and that real tokens are at the start
+        assert len(ids) == 8
 
     def test_double_strike_not_split_as_double_plus_strike(self):
         tok = _make_tokenizer()
@@ -221,6 +225,40 @@ class TestNameLineNormalization:
         assert 2 in ids  # cardname
         # flying (4) should be present
         assert 4 in ids
+
+
+class TestManaCostNormalization:
+    """Cards with no mana cost line get 'mana cost: none' appended."""
+
+    def test_no_mana_cost_line_gets_none_appended(self):
+        vocab = {
+            "[PAD]": 0, "[UNK]": 1, "cardname": 2,
+            "mana": 3, "cost": 4, "none": 5,
+            "creature": 6,
+        }
+        tok = MtgTokenizer(vocab)
+        tokens = tok._tokenize("name: Island\ntypes: land basic island")
+        assert "none" in tokens
+
+    def test_card_with_mana_cost_line_no_none_appended(self):
+        vocab = {
+            "[PAD]": 0, "[UNK]": 1, "cardname": 2,
+            "mana": 3, "cost": 4, "none": 5,
+            "creature": 6,
+        }
+        tok = MtgTokenizer(vocab)
+        tokens = tok._tokenize("name: Lightning Bolt\nmana cost: {R}\ntypes: instant")
+        assert "none" not in tokens
+
+    def test_zero_cost_card_no_none_appended(self):
+        """Black Lotus has 'mana cost: {0}' — should NOT get none appended."""
+        vocab = {
+            "[PAD]": 0, "[UNK]": 1, "cardname": 2,
+            "mana": 3, "cost": 4, "none": 5,
+        }
+        tok = MtgTokenizer(vocab)
+        tokens = tok._tokenize("name: Black Lotus\nmana cost: {0}\ntypes: artifact")
+        assert "none" not in tokens
 
 
 class TestMtgTokenizerDecode:

@@ -90,6 +90,7 @@ class FeatureEngineering:
         # Mana cost features
         mc = card.mana_cost
         if mc is not None:
+            features.append(1.0)  # has_mana_cost
             features.append(mc.total_mana_value)
             features.extend([float(mc.w), float(mc.u), float(mc.b), float(mc.r), float(mc.g)])
             features.append(float(mc.color_count))
@@ -99,7 +100,7 @@ class FeatureEngineering:
             features.append(float(mc.has_hybrid))
             features.append(float(mc.has_phyrexian))
         else:
-            features.extend([0.0] * 12)  # All mana features = 0
+            features.extend([0.0] * 13)  # has_mana_cost=0, all other mana features = 0
 
         # Card type multi-hot
         for ct in CARD_TYPES:
@@ -170,11 +171,11 @@ class FeatureEngineering:
 
     def get_feature_count(self) -> int:
         """Return the total number of features produced by transform."""
-        # Dense features: 12 (mana) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
+        # Dense features: 13 (mana: has_mana_cost + 12) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
         #   + 30 (keywords) + 1 (kw count) + 1 (text len)
         #   + 2 (power/toughness) + 2 (star indicators) + 1 (loyalty) + 1 (ability count)
-        #   + 6 (layout) + 18 (printing data: +1 for is_abu)
-        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 18
+        #   + 6 (layout) + 18 (printing data: is_reserved, is_abu, 4 rarity, printings, legalities_count, 10 formats)
+        dense = 13 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 18
         if self._is_fitted and hasattr(self._tfidf, "vocabulary_"):
             tfidf = len(self._tfidf.vocabulary_)
         else:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 _NAME_LINE_RE = re.compile(r"(?m)^name:.*$")
+_MANA_COST_LINE_RE = re.compile(r"(?m)^mana cost:", re.IGNORECASE)
 
 
 class MtgTokenizer:
@@ -90,6 +91,11 @@ class MtgTokenizer:
         # 0. Strip card names from name: lines — they're arbitrary proper nouns
         #    that almost always produce UNK tokens with no mechanical signal.
         text = _NAME_LINE_RE.sub("name: cardname", text)
+
+        # 0b. If no mana cost line exists, insert one with "none" so the model
+        #     can distinguish "no mana cost" (lands) from "{0}" (Black Lotus).
+        if not _MANA_COST_LINE_RE.search(text):
+            text = text + "\nmana cost: none"
 
         # 1. Selective normalize
         parts = re.split(r"(\{[^}]+\})", text)

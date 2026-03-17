@@ -120,8 +120,10 @@ class TestFeatureEngineeringTransform:
             toughness="3",
         )
         result = fitted_fe.transform([card])
-        # First feature is mana value
-        assert result[0, 0] == 4.0  # 2 + W + W = 4
+        # Feature 0: has_mana_cost = 1.0
+        assert result[0, 0] == 1.0
+        # Feature 1: total_mana_value = 4 (2 + W + W)
+        assert result[0, 1] == 4.0
 
     def test_color_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -132,14 +134,14 @@ class TestFeatureEngineeringTransform:
             toughness="2",
         )
         result = fitted_fe.transform([card])
-        # Features [1..5] are W, U, B, R, G
-        assert result[0, 1] == 0.0  # W
-        assert result[0, 2] == 1.0  # U
-        assert result[0, 3] == 0.0  # B
-        assert result[0, 4] == 1.0  # R
-        assert result[0, 5] == 0.0  # G
-        # Feature [6] is color_count
-        assert result[0, 6] == 2.0
+        # Features [2..6] are W, U, B, R, G
+        assert result[0, 2] == 0.0  # W
+        assert result[0, 3] == 1.0  # U
+        assert result[0, 4] == 0.0  # B
+        assert result[0, 5] == 1.0  # R
+        assert result[0, 6] == 0.0  # G
+        # Feature [7] is color_count
+        assert result[0, 7] == 2.0
 
     def test_land_no_mana_cost(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -150,8 +152,8 @@ class TestFeatureEngineeringTransform:
             mana_cost=None,
         )
         result = fitted_fe.transform([card])
-        # All mana features (0..11) should be 0
-        for i in range(12):
+        # All mana features (0..12) should be 0 (has_mana_cost=0, rest=0)
+        for i in range(13):
             assert result[0, i] == 0.0
 
     def test_type_encoding(self, fitted_fe: FeatureEngineering) -> None:
@@ -163,11 +165,11 @@ class TestFeatureEngineeringTransform:
             toughness="1",
         )
         result = fitted_fe.transform([card])
-        # Types start at index 12: Creature, Instant, Sorcery, Enchantment, ...
-        assert result[0, 12] == 1.0   # Creature
-        assert result[0, 13] == 0.0   # Instant
-        assert result[0, 14] == 0.0   # Sorcery
-        assert result[0, 15] == 1.0   # Enchantment
+        # Types start at index 13: Creature, Instant, Sorcery, Enchantment, ...
+        assert result[0, 13] == 1.0   # Creature
+        assert result[0, 14] == 0.0   # Instant
+        assert result[0, 15] == 0.0   # Sorcery
+        assert result[0, 16] == 1.0   # Enchantment
 
     def test_supertype_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -179,10 +181,10 @@ class TestFeatureEngineeringTransform:
             toughness="2",
         )
         result = fitted_fe.transform([card])
-        # Supertypes at index 25: Legendary, Basic, Snow, World, Ongoing, Host
-        assert result[0, 25] == 1.0  # Legendary
-        assert result[0, 26] == 0.0  # Basic
-        assert result[0, 27] == 0.0  # Snow
+        # Supertypes at index 26: Legendary, Basic, Snow, World, Ongoing, Host
+        assert result[0, 26] == 1.0  # Legendary
+        assert result[0, 27] == 0.0  # Basic
+        assert result[0, 28] == 0.0  # Snow
 
     def test_colorless_mana_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -194,14 +196,36 @@ class TestFeatureEngineeringTransform:
             toughness="2",
         )
         result = fitted_fe.transform([card])
-        # Feature 0: total_mana_value = 3
-        assert result[0, 0] == 3.0
-        # Feature 7: generic_mana = 2
-        assert result[0, 7] == 2.0
-        # Feature 8: colorless_mana = 1
-        assert result[0, 8] == 1.0
-        # Feature 6: color_count = 0
-        assert result[0, 6] == 0.0
+        # Feature 0: has_mana_cost = 1.0
+        assert result[0, 0] == 1.0
+        # Feature 1: total_mana_value = 3
+        assert result[0, 1] == 3.0
+        # Feature 8: generic_mana = 2
+        assert result[0, 8] == 2.0
+        # Feature 9: colorless_mana = 1
+        assert result[0, 9] == 1.0
+        # Feature 7: color_count = 0
+        assert result[0, 7] == 0.0
+
+    def test_has_mana_cost_distinguishes_zero_cost_from_no_cost(
+        self, fitted_fe: FeatureEngineering
+    ) -> None:
+        """has_mana_cost (feature 0) is 1.0 for {0}-cost cards, 0.0 for lands."""
+        zero_cost = Card(
+            name="Black Lotus",
+            types=["Artifact"],
+            mana_cost=ManaCost.parse("0"),
+        )
+        no_cost = Card(
+            name="Island",
+            types=["Land"],
+            supertypes=["Basic"],
+            mana_cost=None,
+        )
+        result_zero = fitted_fe.transform([zero_cost])
+        result_none = fitted_fe.transform([no_cost])
+        assert result_zero[0, 0] == 1.0  # has mana cost
+        assert result_none[0, 0] == 0.0  # no mana cost
 
     def test_star_power_indicator(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -241,10 +265,10 @@ class TestFeatureEngineeringTransform:
             oracle_text="Draw four cards.",
         )
         result = fitted_fe.transform([card])
-        # Types at index 12+: Creature(12)..Battle(19), Scheme(20)
-        assert result[0, 20] == 1.0  # Scheme
+        # Types at index 13+: Creature(13)..Battle(20), Scheme(21)
+        assert result[0, 21] == 1.0  # Scheme
         # All other types should be 0
-        for i in range(12, 20):
+        for i in range(13, 21):
             assert result[0, i] == 0.0
 
     def test_layout_encoding(self, fitted_fe: FeatureEngineering) -> None:
@@ -347,14 +371,14 @@ class TestPrintingDataFeatures:
                 f"Printing data feature at offset {i}: expected 0.0, got {row[pd_start + i]}"
             )
 
-    def test_feature_count_increased_by_18(
+    def test_feature_count_increased_by_19(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """Dense feature count is 94 (was 76 before printing data).
-        The 18 extra features come from printing data (+1 for is_abu vs old 17)."""
+        """Dense feature count is 95 (was 76 before printing data + has_mana_cost).
+        The 19 extra features: 18 printing data + 1 has_mana_cost flag."""
         tfidf_count = len(fitted_fe._tfidf.vocabulary_)
         total = fitted_fe.get_feature_count()
         dense_count = total - tfidf_count
-        assert dense_count == 94
+        assert dense_count == 95
         old_dense_count = 76
-        assert dense_count - old_dense_count == 18
+        assert dense_count - old_dense_count == 19

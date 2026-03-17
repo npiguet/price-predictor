@@ -17,7 +17,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from price_predictor.domain.tokenizer import _NAME_LINE_RE
+from price_predictor.domain.tokenizer import _NAME_LINE_RE, _MANA_COST_LINE_RE
 
 # Multi-word keywords derived from forge.game.keyword.Keyword enum.
 # Entries whose display name contains a space, normalized to:
@@ -100,6 +100,9 @@ _PRINTING_DATA_TERMS: tuple[str, ...] = (
     "pioneer",
     "standard",
     "vintage",
+    # Mana cost sentinel: cards with no mana cost line get "mana cost: none"
+    # inserted by MtgTokenizer so lands are distinguishable from {0}-cost cards.
+    "none",
 )
 
 _MANA_SYMBOL_PATTERN = re.compile(r"\{[^}]+\}")
@@ -161,6 +164,8 @@ def _tokenize_text(text: str) -> list[str]:
     that can actually appear at training/inference time.
     """
     text = _NAME_LINE_RE.sub("name: cardname", text)
+    if not _MANA_COST_LINE_RE.search(text):
+        text = text + "\nmana cost: none"
     text = _selective_normalize(text)
     text = _replace_multi_word_keywords(text)
     return re.findall(r"[a-z_]+|\{[^}]+\}|\d+|[^\s\w]", text)
