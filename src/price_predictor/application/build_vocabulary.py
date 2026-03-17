@@ -1,12 +1,17 @@
 """Build MTG domain vocabulary from a converted card corpus.
 
-Corpus results (full ./output/ at freq_threshold=5, 2026-03-17):
+Corpus results (full ./output/ at freq_threshold=5, 2026-03-17, pre-enrichment-fix):
   vocab_size=5064, coverage_pct=98.4%, unk_pct=1.6%
   SC-001 PASS (5064 < 10000), SC-002 PASS (98.4% >= 95%)
+
+Note: vocab was rebuilt after adding printing-data fixed-domain terms (rarity,
+format names, field names) which were missing from the raw card corpus but are
+present in enriched training texts.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -63,7 +68,57 @@ _COLOR_NAMES: tuple[str, ...] = (
     "white",
 )
 
+# Printing-data field names and values added by card_enrichment.py at training
+# time. These never appear in raw converted card texts, so they would always be
+# UNK without explicit seeding — causing rarity, reserved list, and legality
+# information to be completely invisible to the model.
+_PRINTING_DATA_TERMS: tuple[str, ...] = (
+    # Boolean values (used by reserved:)
+    "false",
+    "true",
+    # Rarity values
+    "common",
+    "mythic",
+    "rare",
+    "uncommon",
+    # Enrichment field names
+    "legalities",
+    "printings",
+    "rarity",
+    "reserved",
+    # Format names (used in legalities: line)
+    "brawl",
+    "commander",
+    "legacy",
+    "modern",
+    "oathbreaker",
+    "pauper",
+    "penny",
+    "pioneer",
+    "standard",
+    "vintage",
+)
+
 _MANA_SYMBOL_PATTERN = re.compile(r"\{[^}]+\}")
+_LETTER_FRAGMENT_PATTERN = re.compile(r"[a-z]+")
+
+
+def _extract_set_code_tokens(printings_path: Path) -> list[str]:
+    """Extract alphabetic token fragments from all set codes in AllPrintings.json.
+
+    Set codes tokenize as letter sequences: "2XM" → ["xm"], "ELD" → ["eld"],
+    "M21" → ["m"]. Digit sequences are already well-covered by mana costs in
+    the corpus and are skipped here.
+
+    Returns a sorted, deduplicated list of letter-sequence tokens.
+    """
+    with open(printings_path, encoding="utf-8") as f:
+        data = json.load(f)
+    tokens: set[str] = set()
+    for code in data.get("data", {}).keys():
+        for fragment in _LETTER_FRAGMENT_PATTERN.findall(code.lower()):
+            tokens.add(fragment)
+    return sorted(tokens)
 
 
 @dataclass(frozen=True)
@@ -106,6 +161,7 @@ def _tokenize_text(text: str) -> list[str]:
 def build_vocabulary(
     cards_path: Path,
     freq_threshold: int = 5,
+    printings_path: Path | None = None,
 ) -> VocabBuildResult:
     """Build a compact MTG domain vocabulary from the converted card corpus.
 
@@ -113,13 +169,18 @@ def build_vocabulary(
       0: [PAD]
       1: [UNK]
       2: cardname
-      3+: fixed domain terms (zones, colors, multi-word keywords) — alphabetical
+      3+: fixed domain terms (zones, colors, multi-word keywords,
+          printing-data terms) — alphabetical within each group
+      then: set-code letter fragments from AllPrintings (if printings_path given)
       then: corpus-frequency tokens (desc freq, alpha tie-break)
       then: any remaining mana symbols not yet included
 
     Args:
         cards_path: Directory containing converted card .txt files.
         freq_threshold: Minimum corpus frequency for a word to be included.
+        printings_path: Optional path to AllPrintings.json. When supplied,
+            alphabetic fragments of every set code are seeded into the fixed
+            domain section so set codes in enriched training texts are never UNK.
 
     Returns:
         VocabBuildResult with vocab dict and coverage statistics.
@@ -147,9 +208,17 @@ def build_vocabulary(
     for kw in sorted(MULTI_WORD_KEYWORDS):
         _add(kw)
 
+    for term in sorted(_PRINTING_DATA_TERMS):
+        _add(term)
+
+    # 4. Set-code letter fragments from AllPrintings (optional)
+    if printings_path is not None:
+        for token in _extract_set_code_tokens(printings_path):
+            _add(token)
+
     domain_token_count = len(vocab)
 
-    # 4. Scan corpus
+    # 5. Scan card corpus
     txt_files = list(cards_path.rglob("*.txt"))
 
     token_counts: Counter[str] = Counter()
@@ -164,7 +233,7 @@ def build_vocabulary(
         token_counts.update(tokens)
         total_token_occurrences += len(tokens)
 
-    # 5. Add corpus tokens meeting freq_threshold (sorted by desc freq, alpha tie-break)
+    # 6. Add corpus tokens meeting freq_threshold (sorted by desc freq, alpha tie-break)
     freq_tokens = [
         (token, count)
         for token, count in token_counts.items()

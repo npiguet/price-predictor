@@ -137,6 +137,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--freq-threshold", type=int, default=5,
         help="Minimum corpus occurrences for a word to be included as a token",
     )
+    vocab_parser.add_argument(
+        "--printings-path", type=str, default="resources/AllPrintings.json",
+        help=(
+            "Path to AllPrintings.json. When present, alphabetic fragments of "
+            "every set code are seeded into the vocabulary so enriched training "
+            "texts never produce UNK for set codes. Silently skipped if absent."
+        ),
+    )
 
     # ── convert ───────────────────────────────────────────────────
     convert_parser = subparsers.add_parser(
@@ -200,7 +208,21 @@ def run_vocabulary(args: argparse.Namespace) -> int:
         print(f"Error: Could not create output directory {output_dir}: {e}", file=sys.stderr)
         return 2
 
-    result = build_vocabulary(cards_path, freq_threshold=args.freq_threshold)
+    printings_path_raw = getattr(args, "printings_path", "resources/AllPrintings.json")
+    printings_path: Path | None = Path(printings_path_raw)
+    if not printings_path.exists():
+        print(
+            f"Note: AllPrintings.json not found at {printings_path} — "
+            "set-code tokens will not be seeded.",
+            file=sys.stderr,
+        )
+        printings_path = None
+
+    result = build_vocabulary(
+        cards_path,
+        freq_threshold=args.freq_threshold,
+        printings_path=printings_path,
+    )
     vocab_path = output_dir / "vocab.txt"
     save_vocabulary(result.vocab, vocab_path)
 

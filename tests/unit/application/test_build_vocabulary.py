@@ -237,3 +237,96 @@ class TestSC003DomainCoverage:
             result = build_vocabulary(tmp_path, freq_threshold=1)
             for term in ("creature", "flying", "battlefield", "legendary"):
                 assert term in result.vocab, f"Missing domain term: {term!r}"
+
+
+class TestPrintingDataTerms:
+    """Printing-data field names/values are always seeded regardless of corpus."""
+
+    def test_rarity_values_always_present(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        result = build_vocabulary(tmp_path, freq_threshold=1)
+        for rarity in ("common", "uncommon", "rare", "mythic"):
+            assert rarity in result.vocab, f"Missing rarity token: {rarity!r}"
+
+    def test_format_names_always_present(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        result = build_vocabulary(tmp_path, freq_threshold=1)
+        for fmt in (
+            "standard", "pioneer", "modern", "brawl", "legacy",
+            "vintage", "pauper", "commander", "penny", "oathbreaker",
+        ):
+            assert fmt in result.vocab, f"Missing format token: {fmt!r}"
+
+    def test_enrichment_field_names_always_present(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        result = build_vocabulary(tmp_path, freq_threshold=1)
+        for field in ("reserved", "rarity", "printings", "legalities", "true", "false"):
+            assert field in result.vocab, f"Missing enrichment field token: {field!r}"
+
+
+class TestSetCodeExtraction:
+    """Set-code letter fragments are seeded when printings_path is provided."""
+
+    def _make_fake_printings(self, tmp_path: Path, set_codes: list[str]) -> Path:
+        import json
+        path = tmp_path / "AllPrintings.json"
+        path.write_text(
+            json.dumps({"data": {code: {"cards": []} for code in set_codes}}),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_set_code_fragments_seeded_from_printings(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        (cards_dir / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        printings = self._make_fake_printings(tmp_path, ["ELD", "NEO", "2XM"])
+        result = build_vocabulary(cards_dir, freq_threshold=1, printings_path=printings)
+        # "ELD" → "eld", "NEO" → "neo", "2XM" → "xm"
+        assert "eld" in result.vocab
+        assert "neo" in result.vocab
+        assert "xm" in result.vocab
+
+    def test_set_code_tokens_in_domain_count(self, tmp_path: Path):
+        """Set-code tokens count toward domain_token_count, not freq_threshold count."""
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        (cards_dir / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        without = build_vocabulary(cards_dir, freq_threshold=1)
+        printings = self._make_fake_printings(tmp_path, ["ZZZQ"])
+        with_codes = build_vocabulary(
+            cards_dir, freq_threshold=1, printings_path=printings
+        )
+        # "ZZZQ" → "zzzq" is a novel token; domain count should be larger
+        assert with_codes.domain_token_count >= without.domain_token_count
+        assert "zzzq" in with_codes.vocab
+
+    def test_no_printings_path_skips_set_codes(self, tmp_path: Path):
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        result = build_vocabulary(tmp_path, freq_threshold=1, printings_path=None)
+        # "zzzq" should not be in vocab since no printings file was given
+        assert "zzzq" not in result.vocab
