@@ -59,6 +59,7 @@ src/price_predictor/infrastructure/tokenizer_store.py # load_tokenizer / save_vo
 src/price_predictor/infrastructure/transformer_dataset.py  # Replace BertTokenizer
 src/price_predictor/application/train_transformer.py       # Replace BertTokenizer, dynamic vocab_size
 src/price_predictor/application/predict_transformer.py     # Replace BertTokenizer
+src/price_predictor/application/evaluate_transformer.py    # Accept vocab_path, pass tokenizer to dataset
 src/price_predictor/infrastructure/server.py               # Replace BertTokenizer
 src/price_predictor/infrastructure/cli.py                  # Add vocabulary command + --vocab-path
 
@@ -185,7 +186,7 @@ Load `MtgTokenizer` in `create_app()` from `vocab_path` stored in `app.state`; p
 | `domain/tokenizer.py` | `MtgTokenizer` class |
 | `application/build_vocabulary.py` | `VocabularyBuilder`, `VocabBuildResult`, `MULTI_WORD_KEYWORDS` |
 | `infrastructure/tokenizer_store.py` | `load_tokenizer`, `save_vocabulary` |
-| Updated pipeline files | 5 files with `BertTokenizer` replaced |
+| Updated pipeline files | 6 files with `BertTokenizer` replaced or updated for `vocab_path` |
 | Updated `cli.py` | `vocabulary` subcommand + `--vocab-path` on 4 commands |
 | Unit + integration tests | Full test coverage per Constitution Principle I |
 | Updated `README.md` | New `vocabulary` workflow, updated transformer workflow |
