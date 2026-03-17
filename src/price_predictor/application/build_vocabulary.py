@@ -84,6 +84,7 @@ _PRINTING_DATA_TERMS: tuple[str, ...] = (
     "rare",
     "uncommon",
     # Enrichment field names
+    "abu",
     "legalities",
     "printings",
     "rarity",

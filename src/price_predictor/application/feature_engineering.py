@@ -153,6 +153,7 @@ class FeatureEngineering:
         pd = card.printing_data
         if pd is not None:
             features.append(1.0 if pd.is_reserved else 0.0)
+            features.append(1.0 if pd.is_abu else 0.0)
             # Rarity one-hot (4: common/uncommon/rare/mythic)
             effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
             for r in RARITIES:
@@ -163,7 +164,7 @@ class FeatureEngineering:
             for fmt in RECOGNIZED_FORMATS:
                 features.append(1.0 if fmt in legalities_set else 0.0)
         else:
-            features.extend([0.0] * 17)
+            features.extend([0.0] * 18)
 
         return features, None
 
@@ -172,8 +173,8 @@ class FeatureEngineering:
         # Dense features: 12 (mana) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
         #   + 30 (keywords) + 1 (kw count) + 1 (text len)
         #   + 2 (power/toughness) + 2 (star indicators) + 1 (loyalty) + 1 (ability count)
-        #   + 6 (layout) + 17 (printing data)
-        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 17
+        #   + 6 (layout) + 18 (printing data: +1 for is_abu)
+        dense = 12 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 18
         if self._is_fitted and hasattr(self._tfidf, "vocabulary_"):
             tfidf = len(self._tfidf.vocabulary_)
         else:

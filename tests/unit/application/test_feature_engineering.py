@@ -261,12 +261,12 @@ class TestFeatureEngineeringTransform:
 
 
 class TestPrintingDataFeatures:
-    """Tests for the 17 printing-data features appended to the dense vector."""
+    """Tests for the 18 printing-data features appended to the dense vector."""
 
-    def test_card_with_printing_data_produces_17_additional_features(
+    def test_card_with_printing_data_produces_18_additional_features(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """A Card with printing_data populated produces 17 additional dense features
+        """A Card with printing_data populated produces 18 additional dense features
         at the END of the feature vector, with correct values."""
         pd = PrintingData(
             is_reserved=True,
@@ -274,6 +274,7 @@ class TestPrintingDataFeatures:
             printings_count=3,
             set_code="uma",
             legalities=["commander", "legacy"],
+            is_abu=True,
         )
         card = Card(
             name="Test Reserved",
@@ -287,45 +288,45 @@ class TestPrintingDataFeatures:
         total_features = fitted_fe.get_feature_count()
         assert result.shape == (1, total_features)
 
-        # The 17 printing data features are at the end of the dense block,
+        # The 18 printing data features are at the end of the dense block,
         # just before the TF-IDF features.
-        # The fitted TF-IDF vocab may be smaller than 500 (depends on training data).
         tfidf_count = len(fitted_fe._tfidf.vocabulary_)
         dense_count = total_features - tfidf_count
-        # Printing data starts at dense_count - 17
-        pd_start = dense_count - 17
+        pd_start = dense_count - 18
 
         row = result[0]
 
         # is_reserved = 1.0
         assert row[pd_start] == 1.0
+        # is_abu = 1.0
+        assert row[pd_start + 1] == 1.0
 
         # rarity one-hot: common=0, uncommon=0, rare=0, mythic=1
-        assert row[pd_start + 1] == 0.0  # common
-        assert row[pd_start + 2] == 0.0  # uncommon
-        assert row[pd_start + 3] == 0.0  # rare
-        assert row[pd_start + 4] == 1.0  # mythic
+        assert row[pd_start + 2] == 0.0  # common
+        assert row[pd_start + 3] == 0.0  # uncommon
+        assert row[pd_start + 4] == 0.0  # rare
+        assert row[pd_start + 5] == 1.0  # mythic
 
         # printings_count = 3.0
-        assert row[pd_start + 5] == 3.0
+        assert row[pd_start + 6] == 3.0
 
         # legalities_count = 2.0
-        assert row[pd_start + 6] == 2.0
+        assert row[pd_start + 7] == 2.0
 
         # format multi-hot (10 positions matching RECOGNIZED_FORMATS order)
         # RECOGNIZED_FORMATS = ("standard", "pioneer", "modern", "brawl", "legacy",
         #                       "vintage", "pauper", "commander", "penny", "oathbreaker")
-        fmt_start = pd_start + 7
+        fmt_start = pd_start + 8
         for i, fmt in enumerate(RECOGNIZED_FORMATS):
             expected = 1.0 if fmt in ("commander", "legacy") else 0.0
             assert row[fmt_start + i] == expected, (
                 f"Format {fmt} at position {i}: expected {expected}, got {row[fmt_start + i]}"
             )
 
-    def test_card_without_printing_data_produces_17_zeros(
+    def test_card_without_printing_data_produces_18_zeros(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """A Card with printing_data=None produces 17 zeros at the end of the dense block."""
+        """A Card with printing_data=None produces 18 zeros at the end of the dense block."""
         card = Card(
             name="No Printing Data",
             types=["Creature"],
@@ -338,27 +339,22 @@ class TestPrintingDataFeatures:
         total_features = fitted_fe.get_feature_count()
         tfidf_count = len(fitted_fe._tfidf.vocabulary_)
         dense_count = total_features - tfidf_count
-        pd_start = dense_count - 17
+        pd_start = dense_count - 18
 
         row = result[0]
-        for i in range(17):
+        for i in range(18):
             assert row[pd_start + i] == 0.0, (
                 f"Printing data feature at offset {i}: expected 0.0, got {row[pd_start + i]}"
             )
 
-    def test_feature_count_increased_by_17(
+    def test_feature_count_increased_by_18(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """Dense feature count is 93 (was 76 before printing data).
-        The 17 extra features come from printing data.
-        With a full 500-word TF-IDF vocabulary: 93 + 500 = 593.
-        With the test fixture's small vocabulary, we verify
-        dense = 93 and that it is exactly 17 more than the old 76."""
+        """Dense feature count is 94 (was 76 before printing data).
+        The 18 extra features come from printing data (+1 for is_abu vs old 17)."""
         tfidf_count = len(fitted_fe._tfidf.vocabulary_)
         total = fitted_fe.get_feature_count()
         dense_count = total - tfidf_count
-        # Dense features should be 93 (76 old + 17 printing data)
-        assert dense_count == 93
-        # The increase from the old dense count (76) is exactly 17
+        assert dense_count == 94
         old_dense_count = 76
-        assert dense_count - old_dense_count == 17
+        assert dense_count - old_dense_count == 18

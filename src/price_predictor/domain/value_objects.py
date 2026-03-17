@@ -25,6 +25,7 @@ class PrintingData:
     printings_count: int = 1
     set_code: str = "ukn"
     legalities: list[str] = field(default_factory=list)
+    is_abu: bool = False
 
     def __post_init__(self) -> None:
         if self.rarity not in VALID_RARITIES:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from price_predictor.domain.value_objects import RECOGNIZED_FORMATS, PrintingData
 
-# The 5 printing data field keys as they appear in card text
-_FIELD_KEYS = ("reserved", "rarity", "printings", "set", "legalities")
+# The 6 printing data field keys as they appear in card text
+_FIELD_KEYS = ("reserved", "rarity", "printings", "set", "legalities", "abu")
 
 
 def enrich_card_text(text: str, printing_data: PrintingData) -> str:
@@ -17,6 +17,7 @@ def enrich_card_text(text: str, printing_data: PrintingData) -> str:
         f"printings: {printing_data.printings_count}",
         f"set: {printing_data.set_code}",
         f"legalities: {legalities_str}",
+        f"abu: {'true' if printing_data.is_abu else 'false'}",
     ]
     stripped = text.rstrip()
     return stripped + "\n" + "\n".join(lines)
@@ -75,12 +76,15 @@ def extract_printing_data_from_text(text: str) -> PrintingData | None:
     else:
         legalities = []
 
+    is_abu = fields.get("abu", "false").lower() == "true"
+
     return PrintingData(
         is_reserved=is_reserved,
         rarity=rarity,
         printings_count=printings_count,
         set_code=set_code,
         legalities=legalities,
+        is_abu=is_abu,
     )
 
 
@@ -152,12 +156,19 @@ def enrich_or_default(
     else:
         legalities = list(base.legalities)
 
+    is_abu = (
+        existing["abu"].lower() == "true"
+        if "abu" in existing
+        else base.is_abu
+    )
+
     merged = PrintingData(
         is_reserved=is_reserved,
         rarity=rarity,
         printings_count=printings_count,
         set_code=set_code,
         legalities=legalities,
+        is_abu=is_abu,
     )
 
     # Strip any existing printing data lines from text before re-appending

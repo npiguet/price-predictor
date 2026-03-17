@@ -19,23 +19,25 @@ SAMPLE_CARD_TEXT = (
 
 
 class TestEnrichCardText:
-    def test_appends_five_lines(self) -> None:
+    def test_appends_six_lines(self) -> None:
         pd = PrintingData(
             is_reserved=True,
             rarity="common",
             printings_count=5,
             set_code="7ed",
             legalities=["commander", "legacy"],
+            is_abu=True,
         )
         result = enrich_card_text(SAMPLE_CARD_TEXT, pd)
         lines = result.splitlines()
-        # Original text has 4 lines; enrichment adds 5 -> 9 total
-        assert len(lines) == 9
+        # Original text has 4 lines; enrichment adds 6 -> 10 total
+        assert len(lines) == 10
         assert lines[4] == "reserved: true"
         assert lines[5] == "rarity: common"
         assert lines[6] == "printings: 5"
         assert lines[7] == "set: 7ed"
         assert lines[8] == "legalities: commander, legacy"
+        assert lines[9] == "abu: true"
 
     def test_reserved_false(self) -> None:
         pd = PrintingData(

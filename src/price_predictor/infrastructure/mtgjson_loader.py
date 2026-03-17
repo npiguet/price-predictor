@@ -11,6 +11,18 @@ from price_predictor.domain.value_objects import RECOGNIZED_FORMATS, PrintingDat
 
 logger = logging.getLogger(__name__)
 
+# Set codes for Alpha, Beta, and Unlimited — the three original core sets.
+# A card whose only tournament-legal printings are in these sets gets is_abu=True.
+_ABU_SET_CODES = frozenset({"lea", "leb", "2ed"})
+
+
+def _is_constructed_legal(legalities: dict) -> bool:
+    """Return True if the card is Legal or Restricted in at least one constructed format."""
+    return any(
+        legalities.get(fmt, "") in ("Legal", "Restricted")
+        for fmt in RECOGNIZED_FORMATS
+    )
+
 
 def build_name_to_uuids(
     allprintings_path: Path,
@@ -51,12 +63,14 @@ def build_name_to_uuids(
                 if name not in mapping:
                     mapping[name] = []
                 mapping[name].append(uuid)
+                raw_legalities = card.get("legalities", {})
                 uuid_meta[uuid] = {
                     "rarity": card.get("rarity", ""),
                     "setCode": card.get("setCode", set_code),
                     "isReserved": card.get("isReserved", False),
-                    "legalities": card.get("legalities", {}),
+                    "legalities": raw_legalities,
                     "printings": card.get("printings", []),
+                    "is_constructed_legal": _is_constructed_legal(raw_legalities),
                 }
 
     logger.info("Built name-to-UUID mapping (%d card names)", len(mapping))
@@ -109,9 +123,17 @@ def build_price_map(
 
 
 def build_price_map_with_uuids(
-    allprices_path: Path, name_to_uuids: dict[str, list[str]]
+    allprices_path: Path,
+    name_to_uuids: dict[str, list[str]],
+    legal_uuids: set[str] | None = None,
 ) -> tuple[dict[str, float], dict[str, str]]:
     """Build price map AND track which UUID produced the cheapest price.
+
+    Args:
+        legal_uuids: When provided, only UUIDs in this set are considered for
+            price selection. Used to exclude non-constructed-legal printings
+            (Collector's Edition, 30th Anniversary, etc.) whose prices do not
+            reflect the actual tournament card market.
 
     Returns:
         (price_map, cheapest_uuid_map) where price_map is name->price
@@ -130,7 +152,8 @@ def build_price_map_with_uuids(
         best_price: float | None = None
         best_uuid: str | None = None
 
-        for uuid in uuids:
+        candidate_uuids = [u for u in uuids if legal_uuids is None or u in legal_uuids]
+        for uuid in candidate_uuids:
             uuid_data = prices_data.get(uuid, {})
             paper = uuid_data.get("paper", {})
             cardmarket = paper.get("cardmarket", {})
@@ -150,7 +173,7 @@ def build_price_map_with_uuids(
             selected_price = max(best_price, 0.01)
             result[name] = selected_price
             cheapest_uuids[name] = best_uuid
-            if len(uuids) > 1:
+            if len(candidate_uuids) > 1:
                 multi_printing_count += 1
                 logger.debug(
                     "  %s: selected €%.2f from uuid %s",
@@ -187,7 +210,19 @@ def build_metadata_map(
         derived from the cheapest printing's data.
     """
     name_to_uuids, uuid_meta = build_name_to_uuids(allprintings_path)
-    price_map, cheapest_uuids = build_price_map_with_uuids(allprices_path, name_to_uuids)
+
+    legal_uuids = {
+        uuid for uuid, meta in uuid_meta.items()
+        if meta.get("is_constructed_legal", False)
+    }
+    logger.info(
+        "Constructed-legal UUIDs: %d of %d total",
+        len(legal_uuids), len(uuid_meta),
+    )
+
+    price_map, cheapest_uuids = build_price_map_with_uuids(
+        allprices_path, name_to_uuids, legal_uuids=legal_uuids,
+    )
 
     metadata_map: dict[str, PrintingData] = {}
     for name, cheapest_uuid in cheapest_uuids.items():
@@ -221,12 +256,22 @@ def build_metadata_map(
             if raw_legalities.get(fmt, "") == "Legal"
         )
 
+        # is_abu: all tournament-legal printings of this card are in Alpha/Beta/Unlimited
+        card_legal_uuids = [u for u in name_to_uuids.get(name, []) if u in legal_uuids]
+        legal_set_codes = {
+            uuid_meta[u]["setCode"].lower()
+            for u in card_legal_uuids
+            if u in uuid_meta
+        }
+        is_abu = bool(legal_set_codes) and legal_set_codes.issubset(_ABU_SET_CODES)
+
         metadata_map[name] = PrintingData(
             is_reserved=is_reserved,
             rarity=rarity,
             printings_count=printings_count,
             set_code=set_code,
             legalities=legalities,
+            is_abu=is_abu,
         )
 
     logger.info("Built metadata map (%d cards)", len(metadata_map))
