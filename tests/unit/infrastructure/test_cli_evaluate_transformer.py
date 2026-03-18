@@ -52,6 +52,7 @@ class TestRunEvaluateTransformerNew:
         mock_result.top_20_overlap = 0.45
         mock_result.sample_count = 4032
         mock_result.per_card = None
+        mock_result.per_bucket = None
         mock_eval.return_value = mock_result
 
         vocab_path = tmp_path / "vocab.txt"

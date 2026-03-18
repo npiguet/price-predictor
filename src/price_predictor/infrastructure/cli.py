@@ -718,4 +718,17 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
         "sample_count": result.sample_count,
     }
     print(json.dumps(output, indent=2))
+
+    if result.per_bucket:
+        print("\nPer-bucket breakdown:")
+        print(f"  {'Bucket':<10} {'n':>6}   {'med%err':>8}   {'med|log|':>9}   {'med_signed_log':>15}")
+        print(f"  {'-'*10} {'-'*6}   {'-'*8}   {'-'*9}   {'-'*15}")
+        for b in result.per_bucket:
+            sign = "+" if b.median_signed_log_error >= 0 else ""
+            print(
+                f"  {b.label:<10} {b.count:>6}    {b.median_pct_error:>7.1f}%"
+                f"      {b.median_log_error:>6.3f}"
+                f"          {sign}{b.median_signed_log_error:>6.3f}"
+            )
+
     return 0

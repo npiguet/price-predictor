@@ -22,6 +22,25 @@ from price_predictor.infrastructure.transformer_store import load_model
 logger = logging.getLogger(__name__)
 
 
+_PRICE_BUCKETS: list[tuple[float, float, str]] = [
+    (0.0,   2.0,          "<€2"),
+    (2.0,   10.0,         "€2–10"),
+    (10.0,  50.0,         "€10–50"),
+    (50.0,  float("inf"), ">€50"),
+]
+
+
+@dataclass
+class BucketMetrics:
+    """Per-price-bucket evaluation metrics."""
+
+    label: str
+    count: int
+    median_pct_error: float
+    median_log_error: float
+    median_signed_log_error: float  # negative = underprediction
+
+
 @dataclass
 class TransformerEvalResult:
     """Result of a transformer evaluation run."""
@@ -32,6 +51,7 @@ class TransformerEvalResult:
     median_abs_error_log: float
     top_20_overlap: float
     sample_count: int
+    per_bucket: list[BucketMetrics] | None = None
     per_card: list[dict] | None = None
 
 
@@ -171,6 +191,25 @@ def evaluate_transformer(
     predicted_top_indices = set(np.argsort(predicted_prices.flatten())[-n_top:])
     top_20_overlap = float(len(actual_top_indices & predicted_top_indices) / n_top)
 
+    # Per-bucket metrics
+    signed_log_errors = (
+        np.log(np.maximum(predicted_prices, 0.01))
+        - np.log(np.maximum(actual_prices, 0.01))
+    )
+    per_bucket = []
+    for lo, hi, label in _PRICE_BUCKETS:
+        mask = (actual_prices >= lo) & (actual_prices < hi)
+        n = int(mask.sum())
+        if n == 0:
+            continue
+        per_bucket.append(BucketMetrics(
+            label=label,
+            count=n,
+            median_pct_error=round(float(np.median(pct_errors[mask])), 1),
+            median_log_error=round(float(np.median(log_errors[mask])), 3),
+            median_signed_log_error=round(float(np.median(signed_log_errors[mask])), 3),
+        ))
+
     # Per-card breakdown
     per_card = []
     for i, (name, _text, _price) in enumerate(val_data):
@@ -196,5 +235,6 @@ def evaluate_transformer(
         median_abs_error_log=round(median_log_error, 3),
         top_20_overlap=round(top_20_overlap, 2),
         sample_count=len(val_data),
+        per_bucket=per_bucket,
         per_card=per_card,
     )
