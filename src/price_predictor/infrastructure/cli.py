@@ -67,6 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--log-offset", type=float, default=2.0,
                                    help="Offset used in log(price + offset) target transform "
                                         "(stored in model artifact; use 0.5 for better high-price signal)")
+    train_transformer.add_argument("--dropout", type=float, default=0.1,
+                                   help="Dropout rate for embeddings and transformer layers (default: 0.1; "
+                                        "try 0.05 or 0.0 for small datasets)")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -476,6 +479,7 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             patience=args.patience,
             random_seed=args.random_seed,
             log_offset=args.log_offset,
+            dropout=args.dropout,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

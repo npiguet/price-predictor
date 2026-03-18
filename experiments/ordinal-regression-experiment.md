@@ -150,3 +150,83 @@ The >€50 improvement over baseline (−3.275 → −2.308) came from architect
 With ~85 expensive training cards vs ~22k cheap ones, there is simply not enough data for the model to learn what distinguishes a €100 card from a €10 card. Rebalancing changes *how often* the model sees expensive cards, but the model still cannot generalize reliably from 85 examples of a complex multi-factor phenomenon.
 
 The most promising remaining direction is **domain-specific features** that are strong, explicit signals for expensive cards: reserve list membership, set code (Alpha/Beta/Unlimited/Limited), Power Nine membership. These are categorical facts that would require only a handful of examples to learn from once exposed explicitly as features.
+
+---
+
+## Pooling method experiments — March 2026
+
+After rolling back to the simple scalar architecture, three pooling strategies were compared. All results use the same transformer encoder (d_model=128, 4 layers, 4 heads) and output head (`Linear → ReLU → Linear`).
+
+**Important metric note:** `median_abs_error_log` uses `log(price + 2.0)`, which heavily compresses errors for cheap cards. A 3.3× prediction error on a €0.10 card appears as 0.10 in shifted log space. The `med_signed_log` column (raw `log(price)`, no offset, negative = underprediction) is the honest per-bucket measure used for comparison throughout.
+
+### 1. Mean pooling
+
+Sum non-padding token representations, divide by real token count.
+
+```
+MAE: €2.78   median_abs_error_log: 0.044   top_20_overlap: 0.62
+
+Bucket   med_signed_log
+<€2        +0.379
+€2–10      -1.229
+€10–50     -1.471
+>€50       -3.018
+```
+
+Best for cheap cards. Worst for expensive cards.
+
+---
+
+### 2. Max pooling
+
+Per dimension, take the maximum value across all non-padding positions (padding filled with −∞).
+
+```
+MAE: €2.35   median_abs_error_log: 0.128   top_20_overlap: 0.63
+
+Bucket   med_signed_log
+<€2        +1.196
+€2–10      -1.158
+€10–50     -1.817
+>€50       -2.644
+```
+
+Better for expensive cards, significantly worse for cheap cards (+1.196 vs +0.379). The improved `median_abs_error_log` is a metric artifact from the log+offset compression, not a genuine overall improvement.
+
+---
+
+### 3. Concatenated max + mean pooling (current)
+
+Both poolings computed independently, concatenated to a `2×d_model` vector fed into the output head (`Linear(2×d_model → 64) → ReLU → Linear(64 → 1)`).
+
+```
+MAE: €2.45   median_abs_error_log: 0.053   top_20_overlap: 0.62
+
+Bucket   med_signed_log
+<€2        +0.493
+€2–10      -1.253
+€10–50     -1.818
+>€50       -2.621
+```
+
+The >€50 bucket is the best observed (−2.621), slightly beating max pooling alone (−2.644). Cheap card error (+0.493) is between mean (+0.379) and max (+1.196) — the head partially learned to temper the max pooling bias. This approach was kept.
+
+**Attention pooling** (learned scalar scores per position, softmax weights) was also tried as a third concatenated pooling. It did not improve results over max + mean and was removed.
+
+---
+
+### 4. Dropout ablation
+
+Tested `--dropout 0.05` and `--dropout 0.0` against the default `0.1`, all with concatenated max + mean pooling.
+
+```
+Bucket        dropout=0.1   dropout=0.05   dropout=0.0
+<€2             +0.493        +0.687         +0.452
+€2–10           -1.253        -1.310         -1.207
+€10–50          -1.818        -1.988         -1.814
+>€50            -2.621        -2.071         -2.607
+```
+
+`dropout=0.05` produced the best-ever >€50 result (−2.071) but at the cost of significantly worse cheap cards (+0.687). `dropout=0.0` is nearly identical to 0.1. The default 0.1 was retained as the best overall.
+
+The suggestion that lower dropout helps small datasets is partially correct: it did help the expensive card signal, but made the cheap majority worse — the same tradeoff seen in every other rebalancing attempt.

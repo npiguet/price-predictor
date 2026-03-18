@@ -72,8 +72,8 @@ class TestCardPriceTransformerModelForward:
         # Different masks should generally produce different outputs
         assert not torch.allclose(out_full, out_half)
 
-    def test_max_pooling_ignores_padding(self):
-        """Max pooling must exclude masked (padding) positions from the max."""
+    def test_pooling_ignores_padding(self):
+        """Both max and mean pooling must exclude masked (padding) positions."""
         config = _make_config(dropout=0.0)
         model = CardPriceTransformerModel(config)
         model.eval()
@@ -94,7 +94,7 @@ class TestCardPriceTransformerModelForward:
 
         # Outputs should be identical — masked positions must not contribute
         assert torch.allclose(out1, out2, atol=1e-5), (
-            "Mean pooling did not ignore padding positions: outputs differ despite identical real tokens"
+            "Pooling did not ignore padding positions: outputs differ despite identical real tokens"
         )
 
     def test_output_head_is_sequential(self):

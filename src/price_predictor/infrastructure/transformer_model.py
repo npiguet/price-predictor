@@ -30,7 +30,7 @@ class CardPriceTransformerModel(nn.Module):
 
         self.output_dropout = nn.Dropout(config.dropout)
         self.output_head = nn.Sequential(
-            nn.Linear(config.d_model, config.regression_hidden_dim),
+            nn.Linear(2 * config.d_model, config.regression_hidden_dim),
             nn.ReLU(),
             nn.Linear(config.regression_hidden_dim, 1),
         )
@@ -55,11 +55,18 @@ class CardPriceTransformerModel(nn.Module):
         padding_mask = attention_mask == 0
         x = self.encoder(x, src_key_padding_mask=padding_mask)
 
-        # Masked max pooling over all non-padding positions
-        # Padding positions are filled with -inf so they never win the max
         padding_mask_3d = (attention_mask == 0).unsqueeze(-1)  # (batch, seq, 1)
-        x_masked = x.masked_fill(padding_mask_3d, float("-inf"))
-        pooled = x_masked.max(dim=1).values  # (batch, d_model)
+
+        # Max pooling: padding filled with -inf so it never wins
+        x_max = x.masked_fill(padding_mask_3d, float("-inf"))
+        max_pooled = x_max.max(dim=1).values  # (batch, d_model)
+
+        # Mean pooling: padding zeroed out, divide by real token count
+        x_mean = x.masked_fill(padding_mask_3d, 0.0)
+        lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
+        mean_pooled = x_mean.sum(dim=1) / lengths  # (batch, d_model)
+
+        pooled = torch.cat([max_pooled, mean_pooled], dim=-1)  # (batch, 2*d_model)
         pooled = self.output_dropout(pooled)
         logits = self.output_head(pooled).squeeze(-1)
         return logits

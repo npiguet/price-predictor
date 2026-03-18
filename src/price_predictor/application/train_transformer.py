@@ -228,6 +228,7 @@ def train_transformer(
     patience: int = 5,
     random_seed: int = 42,
     log_offset: float = 2.0,
+    dropout: float = 0.1,
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
@@ -287,7 +288,7 @@ def train_transformer(
         ff_dim=512,
         max_seq_len=max_seq_len,
         vocab_size=tokenizer.vocab_size,
-        dropout=0.1,
+        dropout=dropout,
         log_offset=log_offset,
     )
 
