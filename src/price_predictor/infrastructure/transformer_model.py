@@ -55,9 +55,11 @@ class CardPriceTransformerModel(nn.Module):
         padding_mask = attention_mask == 0
         x = self.encoder(x, src_key_padding_mask=padding_mask)
 
-        # Masked mean pooling over all non-padding positions
-        mask = attention_mask.unsqueeze(-1).float()  # (batch, seq, 1)
-        pooled = (x * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
+        # Masked max pooling over all non-padding positions
+        # Padding positions are filled with -inf so they never win the max
+        padding_mask_3d = (attention_mask == 0).unsqueeze(-1)  # (batch, seq, 1)
+        x_masked = x.masked_fill(padding_mask_3d, float("-inf"))
+        pooled = x_masked.max(dim=1).values  # (batch, d_model)
         pooled = self.output_dropout(pooled)
         logits = self.output_head(pooled).squeeze(-1)
         return logits

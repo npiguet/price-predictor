@@ -72,8 +72,8 @@ class TestCardPriceTransformerModelForward:
         # Different masks should generally produce different outputs
         assert not torch.allclose(out_full, out_half)
 
-    def test_mean_pooling_ignores_padding(self):
-        """Mean pooling must exclude masked (padding) positions from the average."""
+    def test_max_pooling_ignores_padding(self):
+        """Max pooling must exclude masked (padding) positions from the max."""
         config = _make_config(dropout=0.0)
         model = CardPriceTransformerModel(config)
         model.eval()
