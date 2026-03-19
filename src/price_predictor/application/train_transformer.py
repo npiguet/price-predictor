@@ -269,6 +269,10 @@ def train_transformer(
     log_offset: float = 2.0,
     dropout: float = 0.1,
     sampler_exponent: float = 1.0,
+    d_model: int = 128,
+    n_layers: int = 4,
+    n_heads: int = 4,
+    ff_dim: int = 512,
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
@@ -335,10 +339,10 @@ def train_transformer(
 
     # 5. Build model
     config = TransformerConfig(
-        d_model=128,
-        n_layers=4,
-        n_heads=4,
-        ff_dim=512,
+        d_model=d_model,
+        n_layers=n_layers,
+        n_heads=n_heads,
+        ff_dim=ff_dim,
         max_seq_len=max_seq_len,
         vocab_size=tokenizer.vocab_size,
         dropout=dropout,

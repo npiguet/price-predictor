@@ -73,8 +73,16 @@ def build_parser() -> argparse.ArgumentParser:
                                         "try 0.05 or 0.0 for small datasets)")
     train_transformer.add_argument("--sampler-exponent", type=float, default=1.0,
                                    help="Exponent for price-bucket oversampling: "
-                                        "0.0=uniform, 0.5=sqrt (default), 1.0=full inverse. "
+                                        "0.0=uniform, 0.5=sqrt, 1.0=full inverse (default). "
                                         "Higher values oversample expensive cards more aggressively.")
+    train_transformer.add_argument("--d-model", type=int, default=128,
+                                   help="Embedding dimension (default: 128). Must be divisible by n-heads.")
+    train_transformer.add_argument("--n-layers", type=int, default=4,
+                                   help="Number of transformer encoder layers (default: 4).")
+    train_transformer.add_argument("--n-heads", type=int, default=4,
+                                   help="Number of attention heads (default: 4). Must divide d-model evenly.")
+    train_transformer.add_argument("--ff-dim", type=int, default=512,
+                                   help="Feed-forward inner dimension (default: 512, typically 4×d-model).")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -553,6 +561,10 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             log_offset=args.log_offset,
             dropout=args.dropout,
             sampler_exponent=args.sampler_exponent,
+            d_model=args.d_model,
+            n_layers=args.n_layers,
+            n_heads=args.n_heads,
+            ff_dim=args.ff_dim,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
