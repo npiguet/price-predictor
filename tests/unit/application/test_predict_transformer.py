@@ -12,6 +12,7 @@ import pytest
 from price_predictor.application.predict_transformer import PredictTransformerUseCase
 from price_predictor.domain.entities import PriceEstimate, TransformerConfig
 from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 
 
@@ -58,6 +59,21 @@ class TestPredictTransformerUseCase:
         assert isinstance(result, PriceEstimate)
         assert result.predicted_price_eur >= 0
         assert result.model_version == "transformer"
+
+    @patch("price_predictor.application.predict_transformer.load_model")
+    def test_prediction_with_printing_data(self, mock_load_model):
+        config = _make_config()
+        model = _make_model(config)
+        mock_load_model.return_value = (model, config)
+        tokenizer = _make_tokenizer(config.vocab_size)
+        pd = PrintingData(rarity="mythic", printings_count=1, release_year=2021)
+
+        use_case = PredictTransformerUseCase()
+        result = use_case.execute("Lightning Bolt R Instant", Path("models/transformer"),
+                                   tokenizer=tokenizer, printing_data=pd)
+
+        assert isinstance(result, PriceEstimate)
+        assert result.predicted_price_eur >= 0
 
     @patch("price_predictor.application.predict_transformer.load_model")
     def test_prediction_handles_short_text(self, mock_load_model):
@@ -151,3 +167,17 @@ class TestPredictTransformerUseCase:
         result = use_case.execute("flying creature", Path("models/transformer"),
                                    tokenizer=tokenizer)
         assert result is not None
+
+    @patch("price_predictor.application.predict_transformer.load_model")
+    def test_defaults_used_when_no_printing_data(self, mock_load_model):
+        """When printing_data is None, PrintingData.defaults() is used (no crash)."""
+        config = _make_config()
+        model = _make_model(config)
+        mock_load_model.return_value = (model, config)
+        tokenizer = _make_tokenizer(config.vocab_size)
+
+        use_case = PredictTransformerUseCase()
+        result = use_case.execute("flying creature", Path("models/transformer"),
+                                   tokenizer=tokenizer, printing_data=None)
+        assert result is not None
+        assert result.predicted_price_eur >= 0

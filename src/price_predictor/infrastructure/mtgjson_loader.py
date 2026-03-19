@@ -45,6 +45,18 @@ def build_name_to_uuids(
     sets_data = data.get("data", {})
     for set_code, set_info in sets_data.items():
         cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
+
+        # Extract release year from set-level data; fallback to 1993
+        release_year = 1993
+        if isinstance(set_info, dict):
+            raw_date = set_info.get("releaseDate", "")
+            try:
+                release_year = int(str(raw_date)[:4])
+                if release_year < 1993:
+                    release_year = 1993
+            except (ValueError, TypeError):
+                release_year = 1993
+
         for card in cards:
             # Apply filters
             availability = card.get("availability", [])
@@ -71,6 +83,7 @@ def build_name_to_uuids(
                     "legalities": raw_legalities,
                     "printings": card.get("printings", []),
                     "is_constructed_legal": _is_constructed_legal(raw_legalities),
+                    "releaseYear": release_year,
                 }
 
     logger.info("Built name-to-UUID mapping (%d card names)", len(mapping))
@@ -242,10 +255,10 @@ def build_metadata_map(
         printings_list = meta.get("printings", [])
         printings_count = max(len(printings_list), 1)
 
-        # set code: lowercase
-        set_code = meta.get("setCode", "ukn").lower()
-        if not set_code:
-            set_code = "ukn"
+        # release year
+        release_year = meta.get("releaseYear", 1993)
+        if not isinstance(release_year, int) or release_year < 1993:
+            release_year = 1993
 
         # legalities: filter to recognized formats, only "Legal" status
         raw_legalities = meta.get("legalities", {})
@@ -269,7 +282,7 @@ def build_metadata_map(
             is_reserved=is_reserved,
             rarity=rarity,
             printings_count=printings_count,
-            set_code=set_code,
+            release_year=release_year,
             legalities=legalities,
             is_abu=is_abu,
         )

@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from urllib.request import Request, urlopen
 
 
 def _add_shared_train_args(parser: argparse.ArgumentParser) -> None:
@@ -70,6 +71,10 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--dropout", type=float, default=0.1,
                                    help="Dropout rate for embeddings and transformer layers (default: 0.1; "
                                         "try 0.05 or 0.0 for small datasets)")
+    train_transformer.add_argument("--sampler-exponent", type=float, default=1.0,
+                                   help="Exponent for price-bucket oversampling: "
+                                        "0.0=uniform, 0.5=sqrt (default), 1.0=full inverse. "
+                                        "Higher values oversample expensive cards more aggressively.")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -241,6 +246,73 @@ def run_vocabulary(args: argparse.Namespace) -> int:
         "unk_pct": result.unk_pct,
     }
     print(json.dumps(output, indent=2))
+    return 0
+
+
+def run_eval(args: argparse.Namespace) -> int:
+    """Execute the eval command — send a card file to the prediction endpoint."""
+    from urllib.error import HTTPError, URLError
+
+    file_path = Path(args.file)
+    if not file_path.exists():
+        print(f"Error: File not found: {file_path}", file=sys.stderr)
+        return 1
+    if not file_path.is_file():
+        print(f"Error: Path is not a file: {file_path}", file=sys.stderr)
+        return 1
+
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(f"Error: Could not read file: {e}", file=sys.stderr)
+        return 1
+
+    req = Request(
+        args.endpoint,
+        data=content.encode("utf-8"),
+        headers={"Content-Type": "text/plain"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        try:
+            error_data = json.loads(e.read().decode("utf-8"))
+            msg = error_data.get("error", str(e))
+        except Exception:
+            msg = str(e)
+        print(
+            f"Error: Prediction service returned error ({e.code}): {msg}",
+            file=sys.stderr,
+        )
+        return 2
+    except URLError:
+        print(
+            f"Error: Could not connect to prediction service at {args.endpoint}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if "sklearn" in data:
+        sklearn = data["sklearn"]
+        print("sklearn:")
+        print(f"  Predicted price: \u20ac{sklearn['predicted_price_eur']}")
+        print(f"  Model version:   {sklearn['model_version']}")
+        transformer = data.get("transformer")
+        if transformer is not None:
+            print("transformer:")
+            print(f"  Predicted price: \u20ac{transformer['predicted_price_eur']}")
+            print(f"  Model version:   {transformer['model_version']}")
+        else:
+            print("transformer:")
+            print("  not available")
+    else:
+        price = data["predicted_price_eur"]
+        version = data["model_version"]
+        print(f"Predicted price: \u20ac{price}")
+        print(f"Model version:   {version}")
     return 0
 
 
@@ -480,6 +552,7 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             random_seed=args.random_seed,
             log_offset=args.log_offset,
             dropout=args.dropout,
+            sampler_exponent=args.sampler_exponent,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -509,10 +582,6 @@ def _load_metadata_map_optional() -> dict | None:
 
 def run_predict_sklearn(args: argparse.Namespace) -> int:
     """Predict with the sklearn model using converted card text."""
-    from price_predictor.application.card_enrichment import (
-        enrich_or_default,
-        extract_printing_data_from_text,
-    )
     from price_predictor.application.predict import PredictPriceUseCase
     from price_predictor.infrastructure.converted_card_parser import parse_converted_text
     from price_predictor.infrastructure.model_store import ModelNotFoundError
@@ -531,20 +600,19 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
     else:
         card_text = args.card
 
-    # Enrich with printing data (auto-fill/default)
-    metadata_map = _load_metadata_map_optional()
-    enriched_text = enrich_or_default(card_text, metadata_map or {})
-
     try:
-        card = parse_converted_text(enriched_text)
-        # Attach printing data for feature engineering
-        pd = extract_printing_data_from_text(enriched_text)
-        if pd is not None:
-            from dataclasses import replace
-            card = replace(card, printing_data=pd)
+        card = parse_converted_text(card_text)
     except ValueError as e:
         print(f"Error: Failed to parse card text: {e}", file=sys.stderr)
         return 1
+
+    # Look up PrintingData from metadata_map and attach to card
+    metadata_map = _load_metadata_map_optional()
+    if metadata_map:
+        printing_data = metadata_map.get(card.name) or metadata_map.get(card.name.lower())
+        if printing_data is not None:
+            from dataclasses import replace
+            card = replace(card, printing_data=printing_data)
 
     model_path = Path("models/sklearn/latest.joblib")
     try:
@@ -570,8 +638,8 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
 
 def run_predict_transformer(args: argparse.Namespace) -> int:
     """Predict with the transformer model using raw card text."""
-    from price_predictor.application.card_enrichment import enrich_or_default
     from price_predictor.application.predict_transformer import PredictTransformerUseCase
+    from price_predictor.domain.value_objects import PrintingData
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 
     # Read card text from file or inline
@@ -588,9 +656,19 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     else:
         card_text = args.card
 
-    # Enrich with printing data (auto-fill/default)
+    # Look up PrintingData from metadata_map (side-channel, not in card text)
+    printing_data: PrintingData = PrintingData.defaults()
     metadata_map = _load_metadata_map_optional()
-    card_text = enrich_or_default(card_text, metadata_map or {})
+    if metadata_map:
+        # Extract card name from text to look up metadata
+        for line in card_text.splitlines():
+            stripped = line.strip()
+            if stripped.lower().startswith("name:"):
+                card_name = stripped[len("name:"):].strip()
+                pd = metadata_map.get(card_name) or metadata_map.get(card_name.lower())
+                if pd is not None:
+                    printing_data = pd
+                break
 
     vocab_path = Path(args.vocab_path)
     if not vocab_path.exists():
@@ -610,7 +688,8 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     model_dir = Path("models/transformer/")
     try:
         use_case = PredictTransformerUseCase()
-        result = use_case.execute(card_text, model_dir, tokenizer=tokenizer)
+        result = use_case.execute(card_text, model_dir, tokenizer=tokenizer,
+                                  printing_data=printing_data)
     except FileNotFoundError:
         print(
             f"Error: Model not found at {model_dir}. Run 'train transformer' first.",

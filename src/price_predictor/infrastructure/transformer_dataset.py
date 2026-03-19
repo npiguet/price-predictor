@@ -8,10 +8,14 @@ import torch
 from torch.utils.data import Dataset
 
 from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.value_objects import PrintingData
+from price_predictor.infrastructure.metadata_encoder import encode_metadata
+
+_META_DIM = 15
 
 
 class TransformerTrainingDataset(Dataset):
-    """Dataset wrapping tokenized card texts paired with shifted-log prices."""
+    """Dataset wrapping tokenized card texts paired with shifted-log prices and metadata."""
 
     def __init__(
         self,
@@ -19,6 +23,7 @@ class TransformerTrainingDataset(Dataset):
         max_seq_len: int,
         tokenizer: MtgTokenizer,
         log_offset: float = 2.0,
+        printing_data_list: list[PrintingData] | None = None,
     ) -> None:
         """Construct dataset from (card_name, text_content, price_eur) tuples.
 
@@ -26,20 +31,30 @@ class TransformerTrainingDataset(Dataset):
             log_offset: Offset used in log(price + log_offset) target transform.
                 Must match the value stored in TransformerConfig so that inference
                 applies the correct inverse transform.
+            printing_data_list: Optional per-card PrintingData for side-channel
+                metadata. When None, zero-filled tensors of shape (_META_DIM,)
+                are used.
         """
         all_input_ids = []
         all_attention_masks = []
         all_targets = []
+        all_meta = []
 
-        for _name, text, price in card_tuples:
+        for i, (_name, text, price) in enumerate(card_tuples):
             input_ids, attention_mask = tokenizer.encode(text, max_seq_len)
             all_input_ids.append(torch.tensor(input_ids, dtype=torch.long))
             all_attention_masks.append(torch.tensor(attention_mask, dtype=torch.long))
             all_targets.append(math.log(price + log_offset))
 
+            if printing_data_list is not None:
+                all_meta.append(encode_metadata(printing_data_list[i]))
+            else:
+                all_meta.append(torch.zeros(_META_DIM, dtype=torch.float32))
+
         self.input_ids = torch.stack(all_input_ids)
         self.attention_masks = torch.stack(all_attention_masks)
         self.targets = torch.tensor(all_targets, dtype=torch.float32)
+        self.meta = torch.stack(all_meta)
 
     def __len__(self) -> int:
         return len(self.targets)
@@ -49,4 +64,5 @@ class TransformerTrainingDataset(Dataset):
             "input_ids": self.input_ids[idx],
             "attention_mask": self.attention_masks[idx],
             "target": self.targets[idx],
+            "meta": self.meta[idx],
         }

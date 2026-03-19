@@ -276,12 +276,12 @@ class TestBuildMetadataMap:
         self, allprintings_path: Path, allprices_path: Path
     ) -> None:
         # Grizzly Bears: cheapest is 7ED uuid (bbbbbbbb-1111...) at 0.10
-        # 7ED has setCode "7ED" and rarity "common"
+        # 7ED was released in 2001, rarity "common"
         metadata_map, price_map = build_metadata_map(allprintings_path, allprices_path)
         bears = metadata_map["Grizzly Bears"]
         assert isinstance(bears, PrintingData)
         assert bears.rarity == "common"
-        assert bears.set_code == "7ed"
+        assert bears.release_year == 2001
         # Grizzly Bears has 5 printings: ["10E", "7ED", "LEA", "LEB", "2ED"]
         assert bears.printings_count == 5
         # Verify the price map has the correct cheapest price

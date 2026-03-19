@@ -58,7 +58,9 @@ class TestEvaluateTransformer:
         mock_name_uuids.return_value = ({}, {})
 
         # _match_texts_to_prices returns 25 matched cards (reads files directly)
-        matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(25)]
+        from price_predictor.domain.value_objects import PrintingData
+        pd = PrintingData()
+        matched = [(f"Card {i}", f"name: card {i}", float(i + 1), pd) for i in range(25)]
         mock_match.return_value = matched
 
         vocab_path = tmp_path / "vocab.txt"

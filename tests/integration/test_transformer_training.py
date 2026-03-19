@@ -62,7 +62,7 @@ class TestTransformerTrainingIntegration:
         for epoch in range(2):
             for batch in loader:
                 optimizer.zero_grad()
-                preds = model(batch["input_ids"], batch["attention_mask"])
+                preds = model(batch["input_ids"], batch["attention_mask"], batch["meta"])
                 loss = loss_fn(preds, batch["target"])
                 loss.backward()
                 optimizer.step()
@@ -86,6 +86,7 @@ class TestTransformerTrainingIntegration:
             pred = loaded_model(
                 sample["input_ids"].unsqueeze(0),
                 sample["attention_mask"].unsqueeze(0),
+                sample["meta"].unsqueeze(0),
             )
             assert pred.shape == (1,)
             assert torch.isfinite(pred).all()

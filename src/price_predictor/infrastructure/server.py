@@ -13,10 +13,6 @@ import numpy as np
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from price_predictor.application.card_enrichment import (
-    enrich_or_default,
-    extract_printing_data_from_text,
-)
 from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
 logger = logging.getLogger(__name__)
@@ -36,6 +32,15 @@ def _build_log_entry(
     }
     entry.update(extra)
     return entry
+
+
+def _extract_card_name_from_text(text: str) -> str | None:
+    """Extract card name from a 'name: ...' line in card text."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("name:"):
+            return stripped[len("name:"):].strip()
+    return None
 
 
 def create_app(
@@ -65,16 +70,22 @@ def create_app(
         start = time.perf_counter()
         body = (await request.body()).decode("utf-8")
 
-        # Enrich card text with printing data (auto-fill/default)
-        enriched_body = enrich_or_default(body, request.app.state.metadata_map)
+        # Look up PrintingData from metadata_map for the card in the request
+        from price_predictor.domain.value_objects import PrintingData
+        printing_data: PrintingData | None = None
+        card_name_for_lookup = _extract_card_name_from_text(body)
+        meta_map = request.app.state.metadata_map
+        if card_name_for_lookup and meta_map:
+            pd = meta_map.get(card_name_for_lookup) or meta_map.get(card_name_for_lookup.lower())
+            if pd is not None:
+                printing_data = pd
 
         try:
-            card = parse_converted_text(enriched_body)
-            # Attach printing data to Card for sklearn feature engineering
-            pd = extract_printing_data_from_text(enriched_body)
-            if pd is not None:
+            card = parse_converted_text(body)
+            # Attach PrintingData for sklearn feature engineering
+            if printing_data is not None:
                 from dataclasses import replace
-                card = replace(card, printing_data=pd)
+                card = replace(card, printing_data=printing_data)
         except (ValueError, TypeError) as e:
             latency_ms = (time.perf_counter() - start) * 1000
             logger.info(json.dumps(_build_log_entry(
@@ -103,6 +114,7 @@ def create_app(
             if t_artifact is not None:
                 try:
                     import torch
+                    from price_predictor.infrastructure.metadata_encoder import encode_metadata
 
                     t_model = t_artifact["model"]
                     t_config = t_artifact["config"]
@@ -113,8 +125,9 @@ def create_app(
                         raise RuntimeError("Tokenizer not loaded — run 'vocabulary' first")
 
                     input_ids_list, attention_mask_list = tok.encode(
-                        enriched_body, t_config.max_seq_len
+                        body, t_config.max_seq_len
                     )
+                    meta = encode_metadata(printing_data or PrintingData.defaults())
 
                     try:
                         device = next(t_model.parameters()).device
@@ -125,12 +138,13 @@ def create_app(
                     attention_mask = torch.tensor(
                         [attention_mask_list], dtype=torch.long
                     ).to(device)
+                    meta_t = meta.unsqueeze(0).to(device)
 
                     t_model.eval()
                     with torch.no_grad():
-                        shifted_log_pred = t_model(input_ids, attention_mask).item()
+                        shifted_log_pred = t_model(input_ids, attention_mask, meta_t).item()
 
-                    t_price = round(float(math.exp(shifted_log_pred) - 2), 2)
+                    t_price = round(float(math.exp(shifted_log_pred) - t_config.log_offset), 2)
                     t_price = max(t_price, 0.0)
                     transformer_result = {
                         "predicted_price_eur": t_price,

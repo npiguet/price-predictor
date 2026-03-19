@@ -13,6 +13,7 @@ from price_predictor.application.predict import PredictPriceUseCase
 from price_predictor.application.train import TrainModelUseCase
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import ManaCost, PrintingData
+from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 from price_predictor.infrastructure.model_store import load_model
 from price_predictor.infrastructure.server import create_app
 
@@ -80,14 +81,9 @@ class TestServerIntegration:
         )
         service_price = response.json()["sklearn"]["predicted_price_eur"]
 
-        # Same card through standalone use case
-        card = Card(
-            name="Lightning Bolt",
-            types=["Instant"],
-            mana_cost=ManaCost.parse("R"),
-            oracle_text="Lightning Bolt deals 3 damage to any target.",
-            ability_count=1,
-        )
+        # Same card through standalone use case — parse from identical text so
+        # oracle_text and all fields match exactly what the server sees
+        card = parse_converted_text(BOLT_SCRIPT)
         use_case = PredictPriceUseCase()
         standalone = use_case.execute(card, model_path)
 
@@ -153,7 +149,7 @@ def metadata_map() -> dict[str, PrintingData]:
             is_reserved=False,
             rarity="common",
             printings_count=12,
-            set_code="a25",
+            release_year=2018,
             legalities=["commander", "legacy", "modern", "pauper", "penny", "vintage"],
         ),
     }

@@ -19,6 +19,11 @@ def _make_fixture_tokenizer(vocab_size: int = 512) -> "MtgTokenizer":
     return MtgTokenizer(vocab)
 
 
+def _make_printing_data():
+    from price_predictor.domain.value_objects import PrintingData
+    return PrintingData(rarity="rare", printings_count=1, release_year=2020)
+
+
 class TestAnalyzeSequenceLengths:
     def test_returns_multiple_of_8(self):
         from price_predictor.application.train_transformer import analyze_sequence_lengths
@@ -78,11 +83,13 @@ class TestTrainTransformer:
         tmp_path
     ):
         from price_predictor.application.train_transformer import train_transformer
+        from price_predictor.domain.value_objects import PrintingData
 
         tokenizer = _make_fixture_tokenizer(vocab_size=512)
         mock_load_tokenizer.return_value = tokenizer
 
-        matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(20)]
+        pd = _make_printing_data()
+        matched = [(f"Card {i}", f"name: card {i}", float(i + 1), pd) for i in range(20)]
         mock_name_uuids.return_value = ({}, {})
         mock_metadata_map.return_value = ({}, {})
         mock_match.return_value = matched
@@ -121,14 +128,14 @@ class TestTrainTransformer:
         tmp_path
     ):
         """TransformerConfig.vocab_size should equal tokenizer.vocab_size (not 30522)."""
-        from unittest.mock import call
         from price_predictor.application.train_transformer import train_transformer
         from price_predictor.domain.entities import TransformerConfig
 
         tokenizer = _make_fixture_tokenizer(vocab_size=512)
         mock_load_tokenizer.return_value = tokenizer
 
-        matched = [(f"Card {i}", f"name: card {i}", float(i + 1)) for i in range(5)]
+        pd = _make_printing_data()
+        matched = [(f"Card {i}", f"name: card {i}", float(i + 1), pd) for i in range(5)]
         mock_name_uuids.return_value = ({}, {})
         mock_metadata_map.return_value = ({}, {})
         mock_match.return_value = matched
@@ -181,10 +188,12 @@ class TestTrainTransformer:
         self, mock_match, mock_metadata_map, mock_name_uuids, tmp_path
     ):
         from price_predictor.application.train_transformer import train_transformer
+        from price_predictor.domain.value_objects import PrintingData
 
         mock_name_uuids.return_value = ({}, {})
         mock_metadata_map.return_value = ({}, {})
-        mock_match.return_value = [("Card 1", "text", 1.0)]  # Only 1 card
+        pd = _make_printing_data()
+        mock_match.return_value = [("Card 1", "text", 1.0, pd)]  # Only 1 card
 
         vocab_path = tmp_path / "vocab.txt"
         vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
@@ -201,16 +210,14 @@ class TestTrainTransformer:
                 )
 
 
-class TestMatchCardsToTextsMetadata:
-    """Tests for metadata enrichment in _match_cards_to_texts."""
+class TestMatchCardsToTexts:
+    """Tests for _match_cards_to_texts."""
 
-    def test_metadata_map_enriches_text_with_printing_data_lines(self, tmp_path: Path):
-        """When _match_cards_to_texts is called with a metadata_map, the returned
-        texts contain printing data lines (reserved:, rarity:, printings:, set:, legalities:)."""
+    def test_returns_printing_data_from_metadata_map(self, tmp_path: Path):
+        """When metadata_map is provided, the returned tuple includes the PrintingData."""
         from price_predictor.application.train_transformer import _match_cards_to_texts
         from price_predictor.domain.value_objects import PrintingData
 
-        # Create a temporary text file with a card
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
         (cards_dir / "test_card.txt").write_text(
@@ -218,38 +225,29 @@ class TestMatchCardsToTextsMetadata:
             encoding="utf-8",
         )
 
-        # Build a small name_to_uuids and price_map
         name_to_uuids = {"Test Card": ["uuid-1234"]}
         price_map = {"Test Card": 1.50}
-
-        # Build a metadata_map
-        metadata_map = {
-            "Test Card": PrintingData(
-                is_reserved=True,
-                rarity="rare",
-                printings_count=5,
-                set_code="m21",
-                legalities=["commander", "modern", "legacy"],
-            ),
-        }
+        expected_pd = PrintingData(
+            is_reserved=True,
+            rarity="rare",
+            printings_count=5,
+            release_year=2021,
+            legalities=["commander", "modern", "legacy"],
+        )
+        metadata_map = {"Test Card": expected_pd}
 
         matched = _match_cards_to_texts(cards_dir, name_to_uuids, price_map, metadata_map)
 
         assert len(matched) == 1
-        card_name, text, price = matched[0]
+        card_name, text, price, printing_data = matched[0]
         assert card_name == "Test Card"
         assert price == 1.50
+        assert printing_data is expected_pd
 
-        # Verify the text contains printing data lines
-        assert "reserved: true" in text
-        assert "rarity: rare" in text
-        assert "printings: 5" in text
-        assert "set: m21" in text
-        assert "legalities: commander, modern, legacy" in text
-
-    def test_no_metadata_map_leaves_text_unchanged(self, tmp_path: Path):
-        """When metadata_map is None, the text is returned without printing data lines."""
+    def test_no_metadata_map_returns_defaults(self, tmp_path: Path):
+        """When metadata_map is None, PrintingData.defaults() is used."""
         from price_predictor.application.train_transformer import _match_cards_to_texts
+        from price_predictor.domain.value_objects import PrintingData
 
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
@@ -262,10 +260,34 @@ class TestMatchCardsToTextsMetadata:
         matched = _match_cards_to_texts(cards_dir, name_to_uuids, price_map, metadata_map=None)
 
         assert len(matched) == 1
-        _, text, _ = matched[0]
-        # No printing data lines should be present
+        _, text, _, printing_data = matched[0]
+        defaults = PrintingData.defaults()
+        assert printing_data.rarity == defaults.rarity
+        assert printing_data.printings_count == defaults.printings_count
+
+    def test_text_does_not_contain_metadata_lines(self, tmp_path: Path):
+        """Card text returned should NOT contain printing data lines — they're in the tensor."""
+        from price_predictor.application.train_transformer import _match_cards_to_texts
+        from price_predictor.domain.value_objects import PrintingData
+
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        (cards_dir / "test_card.txt").write_text(
+            "name: Test Card\nmana cost: {1}{G}\ntypes: creature\n",
+            encoding="utf-8",
+        )
+
+        name_to_uuids = {"Test Card": ["uuid-1234"]}
+        price_map = {"Test Card": 1.50}
+        metadata_map = {
+            "Test Card": PrintingData(rarity="rare", printings_count=5, release_year=2021),
+        }
+
+        matched = _match_cards_to_texts(cards_dir, name_to_uuids, price_map, metadata_map)
+        _, text, _, _ = matched[0]
+
+        # Text should be clean card text only
         assert "reserved:" not in text
         assert "rarity:" not in text
         assert "printings:" not in text
-        assert "set:" not in text
         assert "legalities:" not in text

@@ -18,12 +18,12 @@ VALID_RARITIES = frozenset({
 
 @dataclass(frozen=True)
 class PrintingData:
-    """Printing context for a card: reserve list, rarity, reprint count, set, legalities."""
+    """Printing context for a card: reserve list, rarity, reprint count, release year, legalities."""
 
     is_reserved: bool = False
     rarity: str = "rare"
     printings_count: int = 1
-    set_code: str = "ukn"
+    release_year: int = 1993
     legalities: list[str] = field(default_factory=list)
     is_abu: bool = False
 
@@ -34,8 +34,8 @@ class PrintingData:
             )
         if self.printings_count < 1:
             raise ValueError(f"printings_count must be >= 1, got {self.printings_count}")
-        if not self.set_code:
-            raise ValueError("set_code must not be empty")
+        if self.release_year < 1993:
+            raise ValueError(f"release_year must be >= 1993, got {self.release_year}")
         for fmt in self.legalities:
             if fmt not in RECOGNIZED_FORMATS:
                 raise ValueError(
@@ -44,12 +44,12 @@ class PrintingData:
 
     @classmethod
     def defaults(cls) -> PrintingData:
-        """Return a PrintingData with all default values (FR-005)."""
+        """Return a PrintingData with all default values."""
         return cls(
             is_reserved=False,
             rarity="rare",
             printings_count=1,
-            set_code="ukn",
+            release_year=1993,
             legalities=list(RECOGNIZED_FORMATS),
         )
 

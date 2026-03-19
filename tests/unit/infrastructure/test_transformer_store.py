@@ -47,6 +47,7 @@ class TestTransformerStore:
         assert loaded_config.ff_dim == config.ff_dim
         assert loaded_config.vocab_size == config.vocab_size
         assert loaded_config.dropout == config.dropout
+        assert loaded_config.meta_dim == config.meta_dim
 
     def test_roundtrip_preserves_weights(self, tmp_path: Path):
         config = _make_config()
@@ -54,13 +55,14 @@ class TestTransformerStore:
         model.eval()
         input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
         mask = torch.ones(1, config.max_seq_len)
+        meta = torch.zeros(1, config.meta_dim)
         with torch.no_grad():
-            original_output = model(input_ids, mask)
+            original_output = model(input_ids, mask, meta)
         save_model(model, config, tmp_path)
         loaded_model, _ = load_model(tmp_path)
         loaded_model.eval()
         with torch.no_grad():
-            loaded_output = loaded_model(input_ids, mask)
+            loaded_output = loaded_model(input_ids, mask, meta)
         assert torch.allclose(original_output, loaded_output)
 
     def test_load_missing_file_raises_error(self, tmp_path: Path):

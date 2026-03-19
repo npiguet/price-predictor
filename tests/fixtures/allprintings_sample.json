@@ -5,6 +5,7 @@
   },
   "data": {
     "10E": {
+      "releaseDate": "2007-07-13",
       "cards": [
         {
           "name": "Grizzly Bears",
@@ -70,6 +71,7 @@
       ]
     },
     "7ED": {
+      "releaseDate": "2001-04-11",
       "cards": [
         {
           "name": "Grizzly Bears",
@@ -93,6 +95,7 @@
       ]
     },
     "A25": {
+      "releaseDate": "2018-03-16",
       "cards": [
         {
           "name": "Lightning Bolt",
@@ -135,6 +138,7 @@
       ]
     },
     "2XM": {
+      "releaseDate": "2020-08-07",
       "cards": [
         {
           "name": "Lightning Bolt",
@@ -159,6 +163,7 @@
       ]
     },
     "WWK": {
+      "releaseDate": "2010-02-05",
       "cards": [
         {
           "name": "Jace, the Mind Sculptor",
@@ -181,6 +186,7 @@
       ]
     },
     "ISD": {
+      "releaseDate": "2011-09-30",
       "cards": [
         {
           "name": "Delver of Secrets",
@@ -206,6 +212,7 @@
       ]
     },
     "C21": {
+      "releaseDate": "2021-04-23",
       "cards": [
         {
           "name": "Sol Ring",
@@ -228,6 +235,7 @@
       ]
     },
     "C20": {
+      "releaseDate": "2020-04-17",
       "cards": [
         {
           "name": "Sol Ring",
@@ -250,6 +258,7 @@
       ]
     },
     "MH2": {
+      "releaseDate": "2021-06-18",
       "cards": [
         {
           "name": "Ragavan, Nimble Pilferer",
@@ -272,6 +281,7 @@
       ]
     },
     "RNA": {
+      "releaseDate": "2019-01-25",
       "cards": [
         {
           "name": "Breeding Pool",
@@ -296,6 +306,7 @@
       ]
     },
     "MH1": {
+      "releaseDate": "2019-06-14",
       "cards": [
         {
           "name": "Fire // Ice",
@@ -319,6 +330,7 @@
       ]
     },
     "OGW": {
+      "releaseDate": "2016-01-22",
       "cards": [
         {
           "name": "Matter Reshaper",
@@ -342,6 +354,7 @@
       ]
     },
     "UNH": {
+      "releaseDate": "2004-11-19",
       "cards": [
         {
           "name": "AWOL",
@@ -358,6 +371,7 @@
       ]
     },
     "PRM": {
+      "releaseDate": "2008-01-01",
       "cards": [
         {
           "name": "Swords to Plowshares",
@@ -378,6 +392,7 @@
       ]
     },
     "ZPC": {
+      "releaseDate": "2022-01-01",
       "cards": [
         {
           "name": "Zero Price Card",
@@ -397,6 +412,7 @@
       ]
     },
     "SCC": {
+      "releaseDate": "2022-01-01",
       "cards": [
         {
           "name": "Sub Cent Card",
@@ -413,6 +429,7 @@
       ]
     },
     "NPC": {
+      "releaseDate": "2022-01-01",
       "cards": [
         {
           "name": "No Price Card",

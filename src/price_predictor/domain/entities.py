@@ -126,11 +126,12 @@ class TransformerConfig:
     dropout: float
     regression_hidden_dim: int = 64
     log_offset: float = 2.0
+    meta_dim: int = 15
 
     def __post_init__(self) -> None:
         for name in (
             "d_model", "n_layers", "n_heads", "ff_dim",
-            "max_seq_len", "vocab_size", "regression_hidden_dim",
+            "max_seq_len", "vocab_size", "regression_hidden_dim", "meta_dim",
         ):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be > 0, got {getattr(self, name)}")

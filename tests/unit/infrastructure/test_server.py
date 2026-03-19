@@ -248,6 +248,7 @@ class TestDualModelResponse:
         mock_transformer.parameters = MagicMock(return_value=iter([param]))
         mock_config = MagicMock()
         mock_config.max_seq_len = 64
+        mock_config.log_offset = 2.0
 
         transformer_artifact = {"model": mock_transformer, "config": mock_config, "model_version": "transformer-v1"}
 

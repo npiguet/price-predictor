@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
-from price_predictor.application.card_enrichment import enrich_card_text
+from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.mtgjson_loader import (
     build_metadata_map,
     build_name_to_uuids,
@@ -23,7 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 _PRICE_BUCKETS: list[tuple[float, float, str]] = [
-    (0.0,   2.0,          "<€2"),
+    (0.0,   0.1,          "<€0.10"),
+    (0.1,   0.5,          "€0.10–0.50"),
+    (0.5,   2.0,          "€0.50–2"),
     (2.0,   10.0,         "€2–10"),
     (10.0,  50.0,         "€10–50"),
     (50.0,  float("inf"), ">€50"),
@@ -60,10 +62,10 @@ def _match_texts_to_prices(
     name_to_uuids: dict,
     price_map: dict,
     metadata_map: dict | None = None,
-) -> list[tuple[str, str, float]]:
-    """Read converted text files directly and match to prices by name.
+) -> list[tuple[str, str, float, PrintingData]]:
+    """Read converted text files directly and match to prices and PrintingData by name.
 
-    No Card parsing needed — the transformer ingests raw text.
+    Returns list of (card_name, text, price_eur, printing_data) tuples.
     """
     lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
     matched = []
@@ -98,11 +100,12 @@ def _match_texts_to_prices(
         if canonical is None or canonical not in price_map:
             continue
 
-        # Enrich text with printing data if metadata available
+        # Look up PrintingData from metadata_map
+        printing_data = PrintingData.defaults()
         if metadata_map and canonical in metadata_map:
-            text = enrich_card_text(text, metadata_map[canonical])
+            printing_data = metadata_map[canonical]
 
-        matched.append((card_name, text, price_map[canonical]))
+        matched.append((card_name, text, price_map[canonical], printing_data))
 
     if skipped > 0:
         logger.info("Skipped %d text files (unreadable or missing name)", skipped)
@@ -125,7 +128,7 @@ def evaluate_transformer(
     model.to(device)
     model.eval()
 
-    # Read text files directly and match to prices (with metadata enrichment)
+    # Read text files directly and match to prices and PrintingData
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
     name_to_uuids, _uuid_meta = build_name_to_uuids(printings_path)
 
@@ -144,9 +147,12 @@ def evaluate_transformer(
 
     logger.info("Validation set: %d cards", len(val_data))
 
+    val_tuples = [(n, t, p) for n, t, p, _ in val_data]
+    val_pd = [pd for _, _, _, pd in val_data]
+
     dataset = TransformerTrainingDataset(
-        val_data, max_seq_len=config.max_seq_len, tokenizer=tokenizer,
-        log_offset=config.log_offset,
+        val_tuples, max_seq_len=config.max_seq_len, tokenizer=tokenizer,
+        log_offset=config.log_offset, printing_data_list=val_pd,
     )
     loader = DataLoader(dataset, batch_size=64, shuffle=False)
 
@@ -158,8 +164,9 @@ def evaluate_transformer(
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
             targets = batch["target"]
+            meta = batch["meta"].to(device)
 
-            outputs = model(input_ids, attention_mask)
+            outputs = model(input_ids, attention_mask, meta)
             all_predictions.append(outputs.cpu())
             all_targets.append(targets)
 
@@ -212,7 +219,7 @@ def evaluate_transformer(
 
     # Per-card breakdown
     per_card = []
-    for i, (name, _text, _price) in enumerate(val_data):
+    for i, (name, _text, _price, _pd) in enumerate(val_data):
         per_card.append({
             "name": name,
             "actual_price_eur": round(float(actual_prices[i]), 2),

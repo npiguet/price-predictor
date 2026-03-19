@@ -161,7 +161,7 @@ class TestEndToEnd:
                 is_reserved=False,
                 rarity="rare",
                 printings_count=2,
-                set_code="tst",
+                release_year=2020,
                 legalities=["commander", "legacy", "vintage", "modern"],
             ),
         )

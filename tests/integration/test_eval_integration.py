@@ -55,7 +55,7 @@ def _fake_urlopen(test_client: TestClient):
     def _urlopen(request, **kwargs):
         body = request.data.decode("utf-8") if isinstance(request.data, bytes) else request.data
         response = test_client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=body,
             headers={"Content-Type": "text/plain"},
         )
@@ -154,16 +154,16 @@ class TestEvalIntegration:
 
         # Get price directly from endpoint
         direct_response = integration_client.post(
-            "/api/v1/evaluate",
+            "/api/v1/predict",
             content=card_text,
             headers={"Content-Type": "text/plain"},
         )
-        direct_price = direct_response.json()["predicted_price_eur"]
+        direct_price = direct_response.json()["sklearn"]["predicted_price_eur"]
 
         # Get price via CLI
         args = argparse.Namespace(
             file=str(card_file),
-            endpoint="http://localhost:8000/api/v1/evaluate",
+            endpoint="http://localhost:8000/api/v1/predict",
         )
 
         with patch(

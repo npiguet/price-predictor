@@ -8,6 +8,7 @@ import torch
 import pytest
 
 from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 
 
@@ -49,6 +50,12 @@ SAMPLE_CARDS = [
     ("Jace, the Mind Sculptor", "name: jace, the mind sculptor\nmana cost: {2}{U}{U}\ntypes: legendary planeswalker jace\nloyalty: 3\nplaneswalker[1]: [+2]: look at the top card of target player's library.", 45.00),
 ]
 
+SAMPLE_PRINTING_DATA = [
+    PrintingData(rarity="uncommon", printings_count=3, release_year=2018),
+    PrintingData(rarity="common", printings_count=5, release_year=2001),
+    PrintingData(rarity="mythic", printings_count=2, release_year=2018, is_reserved=False),
+]
+
 
 class TestTransformerTrainingDataset:
     def test_length_matches_input(self):
@@ -63,6 +70,7 @@ class TestTransformerTrainingDataset:
         assert "input_ids" in item
         assert "attention_mask" in item
         assert "target" in item
+        assert "meta" in item
 
     def test_input_ids_shape(self):
         tok = _make_tokenizer()
@@ -81,6 +89,37 @@ class TestTransformerTrainingDataset:
         ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
         assert item["target"].shape == ()
+
+    def test_meta_shape_without_printing_data(self):
+        """When printing_data_list is None, meta should be zero vector of shape (15,)."""
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
+        item = ds[0]
+        assert item["meta"].shape == (15,)
+        assert (item["meta"] == 0.0).all()
+
+    def test_meta_shape_with_printing_data(self):
+        """When printing_data_list is provided, meta should be encoded tensor of shape (15,)."""
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(
+            SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
+            printing_data_list=SAMPLE_PRINTING_DATA,
+        )
+        item = ds[0]
+        assert item["meta"].shape == (15,)
+        assert item["meta"].dtype == torch.float32
+
+    def test_meta_values_differ_with_printing_data(self):
+        """Meta tensors should reflect the PrintingData values."""
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(
+            SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
+            printing_data_list=SAMPLE_PRINTING_DATA,
+        )
+        meta_bolt = ds[0]["meta"]  # uncommon, printings=3
+        meta_bears = ds[1]["meta"]  # common, printings=5
+        # rarity slot differs: uncommon=0.33, common=0.0
+        assert not torch.allclose(meta_bolt, meta_bears)
 
     def test_shifted_log_target_transform(self):
         """Target should be log(price + log_offset) using the configured offset."""

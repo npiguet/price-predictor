@@ -296,7 +296,7 @@ class TestPrintingDataFeatures:
             is_reserved=True,
             rarity="mythic",
             printings_count=3,
-            set_code="uma",
+            release_year=2018,
             legalities=["commander", "legacy"],
             is_abu=True,
         )

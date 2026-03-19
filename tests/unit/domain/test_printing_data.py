@@ -16,13 +16,13 @@ class TestPrintingDataConstruction:
             is_reserved=True,
             rarity="uncommon",
             printings_count=5,
-            set_code="a25",
+            release_year=2018,
             legalities=["commander", "legacy", "modern"],
         )
         assert pd.is_reserved is True
         assert pd.rarity == "uncommon"
         assert pd.printings_count == 5
-        assert pd.set_code == "a25"
+        assert pd.release_year == 2018
         assert pd.legalities == ["commander", "legacy", "modern"]
 
     def test_default_field_values(self) -> None:
@@ -30,7 +30,7 @@ class TestPrintingDataConstruction:
         assert pd.is_reserved is False
         assert pd.rarity == "rare"
         assert pd.printings_count == 1
-        assert pd.set_code == "ukn"
+        assert pd.release_year == 1993
         assert pd.legalities == []
 
 
@@ -47,9 +47,13 @@ class TestPrintingDataValidation:
         with pytest.raises(ValueError, match="printings_count"):
             PrintingData(printings_count=-3)
 
-    def test_empty_set_code_raises_value_error(self) -> None:
-        with pytest.raises(ValueError, match="set_code"):
-            PrintingData(set_code="")
+    def test_release_year_below_1993_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="release_year"):
+            PrintingData(release_year=1992)
+
+    def test_release_year_1993_is_valid(self) -> None:
+        pd = PrintingData(release_year=1993)
+        assert pd.release_year == 1993
 
     def test_unrecognized_format_in_legalities_raises_value_error(self) -> None:
         with pytest.raises(ValueError, match="legality.*not in RECOGNIZED_FORMATS"):
@@ -62,7 +66,7 @@ class TestPrintingDataDefaults:
         assert d.is_reserved is False
         assert d.rarity == "rare"
         assert d.printings_count == 1
-        assert d.set_code == "ukn"
+        assert d.release_year == 1993
         assert d.legalities == list(RECOGNIZED_FORMATS)
 
     def test_defaults_legalities_contains_all_recognized_formats(self) -> None:

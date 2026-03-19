@@ -9,7 +9,11 @@ from price_predictor.domain.entities import TransformerConfig
 
 
 class CardPriceTransformerModel(nn.Module):
-    """Transformer encoder that predicts shifted-log card prices from token IDs."""
+    """Transformer encoder that predicts shifted-log card prices from token IDs.
+
+    Architecture: cat([max_pooled(d_model), mean_pooled(d_model), meta(meta_dim)])
+    → Linear(2*d_model + meta_dim, regression_hidden_dim) → ReLU → Linear(..., 1)
+    """
 
     def __init__(self, config: TransformerConfig) -> None:
         super().__init__()
@@ -29,18 +33,25 @@ class CardPriceTransformerModel(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_layers)
 
         self.output_dropout = nn.Dropout(config.dropout)
+        head_input_dim = 2 * config.d_model + config.meta_dim
         self.output_head = nn.Sequential(
-            nn.Linear(2 * config.d_model, config.regression_hidden_dim),
+            nn.Linear(head_input_dim, config.regression_hidden_dim),
             nn.ReLU(),
             nn.Linear(config.regression_hidden_dim, 1),
         )
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        meta: torch.Tensor,
+    ) -> torch.Tensor:
         """Run forward pass.
 
         Args:
-            input_ids: (batch_size, seq_len) token IDs from BERT tokenizer.
+            input_ids: (batch_size, seq_len) token IDs.
             attention_mask: (batch_size, seq_len) 1 for real tokens, 0 for padding.
+            meta: (batch_size, meta_dim) side-channel metadata vector.
 
         Returns:
             (batch_size,) predictions in shifted-log-price space.
@@ -66,7 +77,7 @@ class CardPriceTransformerModel(nn.Module):
         lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
         mean_pooled = x_mean.sum(dim=1) / lengths  # (batch, d_model)
 
-        pooled = torch.cat([max_pooled, mean_pooled], dim=-1)  # (batch, 2*d_model)
+        pooled = torch.cat([max_pooled, mean_pooled, meta], dim=-1)  # (batch, 2*d_model + meta_dim)
         pooled = self.output_dropout(pooled)
         logits = self.output_head(pooled).squeeze(-1)
         return logits
