@@ -59,9 +59,9 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--model-output", type=str,
                                    default="./models/transformer/")
     train_transformer.add_argument("--batch-size", type=int, default=64)
-    train_transformer.add_argument("--epochs", type=int, default=20)
+    train_transformer.add_argument("--epochs", type=int, default=100)
     train_transformer.add_argument("--lr", type=float, default=1e-4)
-    train_transformer.add_argument("--patience", type=int, default=5)
+    train_transformer.add_argument("--patience", type=int, default=20)
     train_transformer.add_argument("--vocab-path", type=str,
                                    default="models/transformer/vocab.txt",
                                    help="Path to vocab.txt built by 'vocabulary' command")
@@ -75,14 +75,14 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Exponent for price-bucket oversampling: "
                                         "0.0=uniform, 0.5=sqrt, 1.0=full inverse (default). "
                                         "Higher values oversample expensive cards more aggressively.")
-    train_transformer.add_argument("--d-model", type=int, default=128,
-                                   help="Embedding dimension (default: 128). Must be divisible by n-heads.")
-    train_transformer.add_argument("--n-layers", type=int, default=4,
-                                   help="Number of transformer encoder layers (default: 4).")
+    train_transformer.add_argument("--d-model", type=int, default=256,
+                                   help="Embedding dimension (default: 256). Must be divisible by n-heads.")
+    train_transformer.add_argument("--n-layers", type=int, default=6,
+                                   help="Number of transformer encoder layers (default: 6).")
     train_transformer.add_argument("--n-heads", type=int, default=4,
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
-    train_transformer.add_argument("--ff-dim", type=int, default=512,
-                                   help="Feed-forward inner dimension (default: 512, typically 4×d-model).")
+    train_transformer.add_argument("--ff-dim", type=int, default=1024,
+                                   help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
