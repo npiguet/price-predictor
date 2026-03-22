@@ -737,6 +737,22 @@ class RulesParserTest {
         assertTrue(options.get(1).formatLine().contains("gain 3 life"));
     }
 
+    // --- Pattern 3: Draft-only cards must not duplicate lines as text: fallback ---
+
+    @Test
+    void draftOnlyCardNoDuplicateTextFallback() {
+        // Cogwork Librarian has only Draft: fields and no game-engine abilities.
+        // It should emit exactly those 2 draft lines — the oracle fallback must NOT
+        // also fire and add the same content again as text: lines.
+        CardFace card = face("c/cogwork_librarian.txt");
+        var draft = abilitiesOfType(card, AbilityType.DRAFT);
+        assertEquals(2, draft.size(), "Should have exactly 2 draft lines: " + card.abilities());
+        assertEquals(0, countOfType(card, AbilityType.TEXT),
+                "Should have no text: fallback duplicates: " + card.abilities());
+        assertEquals(2, card.abilities().size(),
+                "Total abilities should be exactly 2: " + card.abilities());
+    }
+
     // --- Adventure SA filtering ---
 
     @Test

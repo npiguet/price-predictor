@@ -93,7 +93,10 @@ public class RulesParser {
         // Apply oracle fallback: if the primary face produced no ability lines and no
         // non-ability text (e.g. Draft/conspiracy cards whose game-engine abilities are
         // not represented as standard Forge abilities), emit the Oracle text directly.
-        if (frontOracle != null && !frontOracle.isEmpty()) {
+        // Skip oracle fallback when draft lines are present: draft-only cards (e.g. Cogwork
+        // Librarian) produce their content via applyDraftLines(); firing the oracle fallback
+        // too would duplicate those lines as both draft: and text: entries.
+        if (frontOracle != null && !frontOracle.isEmpty() && frontDraftLines.isEmpty()) {
             result = applyOracleFallbackIfNeeded(result, frontOracle, frontName);
         }
         // Prepend Draft: lines (if any) as TEXT abilities on the primary face.
