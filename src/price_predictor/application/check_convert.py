@@ -19,6 +19,21 @@ _REMINDER_TEXT = re.compile(r"\s*\([^)]*\)")
 _WHITESPACE = re.compile(r"\s+")
 _NON_ALNUM = re.compile(r"[^a-z0-9{} ]+")
 
+# Oracle uses portmanteau landwalk names ("swampwalk") but our converter outputs
+# the split form ("landwalk swamp"). Normalise oracle text to the split form so
+# both sides compare equal.  Order matters: longer phrases before shorter ones.
+_LANDWALK_MAP: list[tuple[str, str]] = [
+    ("legendary landwalk", "landwalk legendary land"),
+    ("nonbasic landwalk",  "landwalk nonbasic land"),
+    ("snow landwalk",      "landwalk snow land"),
+    ("swampwalk",          "landwalk swamp"),
+    ("forestwalk",         "landwalk forest"),
+    ("islandwalk",         "landwalk island"),
+    ("mountainwalk",       "landwalk mountain"),
+    ("plainswalk",         "landwalk plains"),
+    ("desertwalk",         "landwalk desert"),
+]
+
 # Mapping from basic land subtypes to their intrinsic mana ability text
 _LAND_TYPE_MANA: dict[str, str] = {
     "Plains": "{W}",
@@ -49,6 +64,10 @@ def _normalize(text: str, card_name: str | None = None) -> str:
     text = text.lower()
     # Strip reminder text (parenthesized)
     text = _REMINDER_TEXT.sub("", text)
+    # Normalise landwalk portmanteaus: oracle says "swampwalk", converter outputs
+    # "landwalk swamp". Map oracle form to converter form before further processing.
+    for oracle_form, converted_form in _LANDWALK_MAP:
+        text = text.replace(oracle_form, converted_form)
     # Replace card name with placeholder
     if card_name:
         text = text.replace(card_name.lower(), "cardname")

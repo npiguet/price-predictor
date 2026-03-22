@@ -194,6 +194,28 @@ class TestCheckCard:
         result = check_card(converted, forge)
         assert result.similarity > 0.9
 
+    def test_landwalk_portmanteau_normalized(self):
+        # Oracle uses portmanteau forms ("Swampwalk", "Forestwalk", etc.)
+        # but our converter outputs the split form ("landwalk swamp", "landwalk forest").
+        # The checker must normalize oracle portmanteaus before comparing.
+        for oracle_word, converted_word in [
+            ("Swampwalk", "landwalk swamp"),
+            ("Forestwalk", "landwalk forest"),
+            ("Islandwalk", "landwalk island"),
+            ("Mountainwalk", "landwalk mountain"),
+            ("Plainswalk", "landwalk plains"),
+            ("Desertwalk", "landwalk desert"),
+            ("Legendary landwalk", "landwalk legendary land"),
+            ("Nonbasic landwalk", "landwalk nonbasic land"),
+        ]:
+            forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_word}\n"
+            converted = f"name: test card\ntypes: creature\nstatic: {converted_word}\n"
+            result = check_card(converted, forge)
+            assert result.similarity > 0.8, (
+                f"Oracle '{oracle_word}' vs converted '{converted_word}' "
+                f"should normalize to same text, got {result.similarity:.2%}"
+            )
+
     def test_text_key_counted_as_ability_line(self):
         # "text" is intentionally NOT in _HEADER_KEYS so text: values are treated
         # as oracle-relevant content (conspiracy abilities, casting restrictions, etc.)
