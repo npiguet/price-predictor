@@ -37,6 +37,15 @@ public final class AbilityDescription {
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
     }
 
+    /**
+     * Replace Forge-internal VERT placeholder with " | " so dice-outcome descriptions
+     * render correctly (e.g. "1—9 VERT Tap all…" → "1—9 | Tap all…").
+     */
+    public static String replaceVert(String text) {
+        if (text == null) return null;
+        return text.replace(" VERT ", " | ").replace("VERT", "");
+    }
+
     /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
     public static String applyCasing(String text) {
         if (text == null) {

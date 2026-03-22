@@ -10,7 +10,9 @@ from pathlib import Path
 # Lines in converted output that are metadata, not ability text
 _HEADER_KEYS = frozenset({
     "name", "mana cost", "types", "power toughness",
-    "loyalty", "defense", "colors", "layout", "text",
+    "loyalty", "defense", "colors", "layout",
+    # "text" is intentionally excluded: text: values represent oracle-relevant card content
+    # (casting restrictions, conspiracy abilities, etc.) and must be counted as ability lines.
 })
 
 _REMINDER_TEXT = re.compile(r"\s*\([^)]*\)")
@@ -83,6 +85,8 @@ def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
     types_line = None
     for line in forge_text.splitlines():
         line = line.strip()
+        if line == "ALTERNATE":
+            break  # Only compare front face; back-face oracle is a separate card face
         if line.startswith("Name:"):
             card_name = line[5:].strip()
         elif line.startswith("Types:"):
@@ -186,7 +190,7 @@ def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
     norm_converted = " ".join(converted_parts)
 
     similarity = SequenceMatcher(
-        None, norm_oracle, norm_converted,
+        None, norm_oracle, norm_converted, autojunk=False,
     ).ratio()
 
     return CardCheckResult(

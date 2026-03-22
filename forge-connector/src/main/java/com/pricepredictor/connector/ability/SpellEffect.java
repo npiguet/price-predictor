@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.ActionCounter;
 import forge.game.spellability.SpellAbility;
 
 import java.util.List;
@@ -23,6 +24,30 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     @Override
     public AbilityType type() {
         return AbilityType.SPELL;
+    }
+
+    /**
+     * Format the entire SpellEffect sub-tree as a single {@code spell[N]} line.
+     * All descriptions in the chain are concatenated with a space, matching how
+     * MTG oracle text presents sequential sub-effects as one ability paragraph.
+     * The internal tree structure (sub-abilities) is preserved; only the text
+     * output is flattened.
+     */
+    @Override
+    public String formatBlock(ActionCounter counter) {
+        return type().getOutputPrefix() + "[" + counter.next() + "]: " + collectChainText(this);
+    }
+
+    /** Recursively collect and join descriptions from this node and all descendants. */
+    private static String collectChainText(Ability node) {
+        StringBuilder sb = new StringBuilder(node.descriptionText());
+        for (Ability child : node.subAbilities()) {
+            String childText = collectChainText(child);
+            if (!childText.isEmpty()) {
+                sb.append(' ').append(childText);
+            }
+        }
+        return sb.toString();
     }
 
     /**

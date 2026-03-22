@@ -737,6 +737,82 @@ class RulesParserTest {
         assertTrue(options.get(1).formatLine().contains("gain 3 life"));
     }
 
+    // --- Pattern A: Haunt keyword ---
+
+    @Test
+    void hauntNonCreatureEmitsSpellEffectAndTriggers() {
+        // Seize the Soul is a non-creature haunt spell.
+        // Expected: 1 SPELL (the primary effect) + 2 TRIGGERED (haunt keyword + haunted-dies trigger).
+        CardFace card = face("s/seize_the_soul.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertEquals(1, spells.size(), "Non-creature haunt should emit one SPELL: " + card.abilities());
+        assertEquals(2, triggered.size(), "Non-creature haunt should emit two TRIGGERED: " + card.abilities());
+        assertTrue(spells.get(0).descriptionText().contains("destroy target nonwhite"));
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().equals("haunt")),
+                "One TRIGGERED should be the haunt keyword line: " + triggered);
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("haunts dies")
+                && a.descriptionText().contains("destroy target nonwhite")),
+                "One TRIGGERED should be the haunted-dies trigger with effect: " + triggered);
+    }
+
+    @Test
+    void hauntCreatureEmitsKeywordAndTrigger() {
+        // Blind Hunter is a creature with haunt.
+        // Expected: no SPELL, 2 TRIGGERED (haunt keyword + haunted-dies trigger), plus flying STATIC.
+        CardFace card = face("b/blind_hunter.txt");
+        assertEquals(0, countOfType(card, AbilityType.SPELL),
+                "Creature haunt should not emit a SPELL: " + card.abilities());
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertEquals(2, triggered.size(), "Creature haunt should emit two TRIGGERED: " + card.abilities());
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().equals("haunt")),
+                "One TRIGGERED should be the haunt keyword line: " + triggered);
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("haunts dies")
+                && a.descriptionText().contains("loses 2 life")),
+                "One TRIGGERED should be the haunted-dies trigger with effect: " + triggered);
+    }
+
+    // --- Pattern B: Visit / Attraction keyword ---
+
+    @Test
+    void visitAttractionEmitsFullTriggerDescription() {
+        // Storybook Ride is an Attraction with Visit keyword.
+        // Expected: 1 TRIGGERED whose description starts with "visit —" and contains the exile effect.
+        CardFace card = face("s/storybook_ride.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Visit attraction should emit a TRIGGERED: " + card.abilities());
+        Ability visit = triggered.get(0);
+        assertTrue(visit.descriptionText().toLowerCase().contains("visit"),
+                "Visit triggered description should contain 'visit': " + visit.descriptionText());
+        assertTrue(visit.descriptionText().contains("exile the top"),
+                "Visit triggered description should contain the exile effect: " + visit.descriptionText());
+        assertFalse(visit.descriptionText().equalsIgnoreCase("visit:trigexile"),
+                "Visit should not be emitted as raw 'visit:trigexile': " + visit.descriptionText());
+    }
+
+    // --- Pattern C: Dice roll ResultSubAbilities ---
+
+    @Test
+    void diceRollEmitsOutcomesWithVertReplaced() {
+        // Cone of Cold rolls a d20 with 3 outcome ranges.
+        // Expected: 4 SPELL abilities (1 "roll a d20" + 3 outcomes with | instead of VERT).
+        CardFace card = face("c/cone_of_cold.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(4, spells.size(), "Dice roll card should emit 4 SPELL (roll + 3 outcomes): " + card.abilities());
+        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("roll a d20")),
+                "Should have 'roll a d20' spell: " + spells);
+        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("1") && a.descriptionText().contains("tap all")),
+                "Should have 1-9 outcome: " + spells);
+        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("10") && a.descriptionText().contains("don't untap")),
+                "Should have 10-19 outcome: " + spells);
+        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("20") && a.descriptionText().contains("don't untap")),
+                "Should have 20 outcome: " + spells);
+        assertTrue(spells.stream().noneMatch(a -> a.descriptionText().contains("VERT")),
+                "No outcome description should contain 'VERT': " + spells);
+        assertTrue(spells.stream().anyMatch(a -> a.descriptionText().contains("|")),
+                "Outcome descriptions should use '|' separator: " + spells);
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {

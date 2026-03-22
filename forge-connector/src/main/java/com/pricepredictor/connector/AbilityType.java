@@ -30,6 +30,7 @@ public enum AbilityType {
     ALTERNATE_COST("alternate cost", false),
     COST_REDUCTION("cost reduction", false),
     ADDITIONAL_COST("additional cost", false),
+    DRAFT("draft", false),
     SPELL("spell", true),
     PLANESWALKER("planeswalker", true) {
         @Override public String formatDescription(String desc) {
