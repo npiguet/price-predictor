@@ -194,6 +194,41 @@ class TestCheckCard:
         result = check_card(converted, forge)
         assert result.similarity > 0.9
 
+    def test_text_key_counted_as_ability_line(self):
+        # "text" is intentionally NOT in _HEADER_KEYS so text: values are treated
+        # as oracle-relevant content (conspiracy abilities, casting restrictions, etc.)
+        forge = (
+            "Name:Conspiracy Card\n"
+            "Types:Conspiracy\n"
+            "Oracle:Hidden agenda (Start the game with this conspiracy face down in the command zone.)\n"
+        )
+        converted = (
+            "name: conspiracy card\n"
+            "types: conspiracy\n"
+            "text: hidden agenda\n"
+        )
+        result = check_card(converted, forge)
+        assert result.converted_lines == 1, "text: line must be counted as an ability line"
+        assert result.similarity > 0.8
+
+    def test_autojunk_off_long_similar_strings(self):
+        # With autojunk=True (the Python default), SequenceMatcher marks frequently-
+        # occurring characters as junk on strings > ~200 chars, producing near-zero
+        # similarity even for nearly-identical texts. autojunk=False must be used.
+        long_ability = (
+            "whenever a creature enters the battlefield under your control, "
+            "you may pay {1}{G}. if you do, draw a card and you gain 1 life. "
+            "this ability triggers only once each turn and cannot be countered "
+            "by spells or abilities your opponents control during their turns."
+        )
+        forge = f"Name:Long Card\nTypes:Enchantment\nOracle:{long_ability}\n"
+        converted = f"name: long card\ntypes: enchantment\nstatic: {long_ability.lower()}\n"
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Long similar strings should score high similarity, got {result.similarity:.2%}. "
+            "Check that SequenceMatcher uses autojunk=False."
+        )
+
     def test_multi_face_only_checks_first_face(self):
         forge = (
             "Name:Front Face\n"

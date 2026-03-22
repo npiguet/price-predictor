@@ -737,6 +737,60 @@ class RulesParserTest {
         assertTrue(options.get(1).formatLine().contains("gain 3 life"));
     }
 
+    // --- Adventure SA filtering ---
+
+    @Test
+    void adventureMainFaceExcludesAdventureSa() {
+        // Bonecrusher Giant (main face) + Stomp (adventure face).
+        // The main face should only contain Bonecrusher Giant's triggered ability,
+        // NOT Stomp's spell ability ("damage can't be prevented this turn").
+        MultiCard result = convertFromFile("b/bonecrusher_giant_stomp.txt");
+        assertEquals("adventure", result.layout());
+        CardFace main = result.faces().get(0);
+        assertEquals("bonecrusher giant", main.name());
+        // Main face should have the triggered ability
+        assertFalse(abilitiesOfType(main, AbilityType.TRIGGERED).isEmpty(),
+                "Main face should have its triggered ability: " + main.abilities());
+        // Main face must NOT contain Stomp's spell
+        assertTrue(abilitiesOfType(main, AbilityType.SPELL).isEmpty(),
+                "Main face must not include adventure spell: " + main.abilities());
+        assertFalse(main.abilities().stream()
+                        .anyMatch(a -> a.descriptionText().contains("damage can't be prevented")),
+                "Stomp's effect must not leak onto main face: " + main.abilities());
+        // Adventure face should have the spell
+        CardFace adventure = result.faces().get(1);
+        assertEquals("stomp", adventure.name());
+        assertFalse(abilitiesOfType(adventure, AbilityType.SPELL).isEmpty(),
+                "Adventure face should have its spell: " + adventure.abilities());
+    }
+
+    // --- Draft lines ---
+
+    @Test
+    void draftLinesEmittedBeforeOtherAbilities() {
+        // Aether Searcher has two Draft: lines and one triggered ability.
+        // All three should appear; draft lines should precede the triggered ability.
+        CardFace card = face("a/aether_searcher.txt");
+        var draft = abilitiesOfType(card, AbilityType.DRAFT);
+        assertEquals(2, draft.size(), "Should have 2 draft lines: " + card.abilities());
+        assertTrue(draft.get(0).descriptionText().contains("reveal CARDNAME as you draft it"),
+                "First draft line: " + draft.get(0).descriptionText());
+        assertTrue(draft.get(1).descriptionText().contains("reveal the next card you draft"),
+                "Second draft line: " + draft.get(1).descriptionText());
+        // Triggered ability should also still be present
+        assertFalse(abilitiesOfType(card, AbilityType.TRIGGERED).isEmpty(),
+                "Triggered ability should also be emitted: " + card.abilities());
+        // Draft lines must come first
+        int lastDraftIdx = -1, firstTriggeredIdx = -1;
+        for (int i = 0; i < card.abilities().size(); i++) {
+            AbilityType t = card.abilities().get(i).type();
+            if (t == AbilityType.DRAFT) lastDraftIdx = i;
+            else if (t == AbilityType.TRIGGERED && firstTriggeredIdx == -1) firstTriggeredIdx = i;
+        }
+        assertTrue(lastDraftIdx < firstTriggeredIdx,
+                "Draft lines must precede triggered ability: " + card.abilities());
+    }
+
     // --- Pattern A: Haunt keyword ---
 
     @Test
