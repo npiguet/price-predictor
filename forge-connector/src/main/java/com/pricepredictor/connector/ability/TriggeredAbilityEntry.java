@@ -4,6 +4,7 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.ability.ApiType;
+import forge.game.keyword.Keyword;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
@@ -22,7 +23,19 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
     }
 
     public static TriggeredAbilityEntry of(Trigger trigger) {
-        if (trigger.getKeyword() != null) return null;
+        // Skip keyword-associated triggers except for Tribute's "if tribute wasn't paid" ability.
+        // Most keyword triggers merely restate the keyword (already output by StandardKeyword),
+        // but Tribute's TrigNotTribute trigger is a distinct oracle ability.
+        if (trigger.getKeyword() != null) {
+            if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
+            // For Tribute, TriggerDescription is the full oracle text (built directly from
+            // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
+            // Return with empty children — the description is self-contained.
+            String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
+            if (normalized == null) return null;
+            AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
+            return new TriggeredAbilityEntry(effectiveType, normalized, List.of());
+        }
         String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
         if (normalized == null) return null;
         AbilityType effectiveType = trigger.isStatic()

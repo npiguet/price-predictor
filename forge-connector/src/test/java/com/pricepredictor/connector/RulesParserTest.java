@@ -905,6 +905,41 @@ class RulesParserTest {
                 "Outcome descriptions should use '|' separator: " + spells);
     }
 
+    // --- Pattern 4: Tribute "if tribute wasn't paid" trigger ---
+
+    @Test
+    void tributeNotPaidTriggerIsIncluded() {
+        // Pharagax Giant: K:Tribute:2 + SVar:TrigNotTribute (fires when tribute wasn't paid).
+        // The keyword outputs "tribute 2"; the TrigNotTribute trigger must also be emitted
+        // as a separate TRIGGERED ability — it is distinct oracle text not covered by the keyword.
+        CardFace card = face("p/pharagax_giant.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertEquals(2, triggered.size(),
+                "Should have 2 TRIGGERED: keyword tribute + TrigNotTribute: " + card.abilities());
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("tribute")),
+                "One TRIGGERED should be the tribute keyword: " + triggered);
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("tribute wasn't paid")),
+                "One TRIGGERED should be the 'if tribute wasn't paid' effect: " + triggered);
+    }
+
+    // --- Pattern 4: RepeatSubAbility chain walking ---
+
+    @Test
+    void repeatSubAbilityDescriptionIsIncluded() {
+        // March of Souls: main SA destroys all creatures, then a RepeatEach SVar per player
+        // creates spirit tokens. The spirit-token text lives in a RepeatSubAbility SVar and
+        // must be concatenated into the single spell line via collectChainText (formatBlock).
+        CardFace card = face("m/march_of_souls.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have exactly one SPELL: " + card.abilities());
+        // Use formatText (which calls formatBlock) to get the fully concatenated chain text.
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("destroy all creatures"),
+                "Output should contain 'destroy all creatures': " + formatted);
+        assertTrue(formatted.contains("spirit"),
+                "Output should contain spirit-token text from RepeatSubAbility: " + formatted);
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {
