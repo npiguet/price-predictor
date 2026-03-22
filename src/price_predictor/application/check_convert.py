@@ -18,6 +18,11 @@ _HEADER_KEYS = frozenset({
 _REMINDER_TEXT = re.compile(r"\s*\([^)]*\)")
 _WHITESPACE = re.compile(r"\s+")
 _NON_ALNUM = re.compile(r"[^a-z0-9{} ]+")
+# Oracle spells out the additional-cost preamble; our converter strips it and uses the
+# "additional cost:" key instead.  Remove it from oracle text before comparison.
+_ADDITIONAL_COST_PREFIX = re.compile(
+    r"^as an additional cost to cast this spell[,\s]+"
+)
 
 # Oracle uses portmanteau landwalk names ("swampwalk") but our converter outputs
 # the split form ("landwalk swamp"). Normalise oracle text to the split form so
@@ -64,6 +69,9 @@ def _normalize(text: str, card_name: str | None = None) -> str:
     text = text.lower()
     # Strip reminder text (parenthesized)
     text = _REMINDER_TEXT.sub("", text)
+    # Strip "as an additional cost to cast this spell, " prefix: oracle includes it but
+    # our converter drops it (using the "additional cost:" key instead).
+    text = _ADDITIONAL_COST_PREFIX.sub("", text)
     # Normalise landwalk portmanteaus: oracle says "swampwalk", converter outputs
     # "landwalk swamp". Map oracle form to converter form before further processing.
     for oracle_form, converted_form in _LANDWALK_MAP:

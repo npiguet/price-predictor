@@ -233,6 +233,30 @@ class TestCheckCard:
         assert result.converted_lines == 1, "text: line must be counted as an ability line"
         assert result.similarity > 0.8
 
+    def test_additional_cost_prefix_stripped_from_oracle(self):
+        # Oracle says "As an additional cost to cast this spell, sacrifice a creature."
+        # but our converter outputs just "sacrifice a creature." under the key "additional cost:".
+        # The checker must strip the oracle prefix so both sides compare equal.
+        forge = (
+            "Name:Bone Splinters\n"
+            "ManaCost:B\n"
+            "Types:Sorcery\n"
+            "Oracle:As an additional cost to cast this spell, sacrifice a creature."
+            "\\nDestroy target creature.\n"
+        )
+        converted = (
+            "name: bone splinters\n"
+            "mana cost: {B}\n"
+            "types: sorcery\n"
+            "additional cost: sacrifice a creature.\n"
+            "spell[1]: destroy target creature.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Additional cost prefix should be stripped from oracle before comparison, "
+            f"got {result.similarity:.2%}"
+        )
+
     def test_autojunk_off_long_similar_strings(self):
         # With autojunk=True (the Python default), SequenceMatcher marks frequently-
         # occurring characters as junk on strings > ~200 chars, producing near-zero
