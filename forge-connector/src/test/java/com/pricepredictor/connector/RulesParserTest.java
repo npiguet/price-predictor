@@ -647,24 +647,29 @@ class RulesParserTest {
     @Test
     void spellWithMultipleSubAbilityDescriptions() {
         // Seed Spark has SpellDescription on both the main SP$ and on a SubAbility SVar.
-        // Both should be emitted as separate spell lines.
+        // The root SP$ becomes one SpellEffect with the sub-ability as a child.
         CardFace card = face("s/seed_spark.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
-        assertEquals(2, spells.size());
-        assertTrue(spells.get(0).descriptionText().contains("destroy target artifact or enchantment"));
-        assertTrue(spells.get(1).descriptionText().contains("create two 1/1 green saproling"));
+        assertEquals(1, spells.size());
+        Ability root = spells.get(0);
+        assertTrue(root.descriptionText().contains("destroy target artifact or enchantment"));
+        assertEquals(1, root.subAbilities().size());
+        assertTrue(root.subAbilities().get(0).descriptionText().contains("create two 1/1 green saproling"));
     }
 
     @Test
     void activatedAbilityWithSubAbilityDescription() {
         // Saprazzan Breaker's activated ability has SpellDescription on both the
-        // main AB$ and a sub-ability SVar. Both should be included in one line.
+        // main AB$ and a sub-ability SVar. The root holds the main description;
+        // the sub-ability description becomes a child SpellEffect node.
         CardFace card = face("s/saprazzan_breaker.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
-        String line = activated.get(0).descriptionText();
-        assertTrue(line.contains("mill a card"), "Should contain main description: " + line);
-        assertTrue(line.contains("can't be blocked this turn"), "Should contain sub-ability description: " + line);
+        Ability root = activated.get(0);
+        assertTrue(root.descriptionText().contains("mill a card"), "Should contain main description: " + root.descriptionText());
+        assertFalse(root.descriptionText().contains("can't be blocked this turn"), "Root should not contain sub-ability description: " + root.descriptionText());
+        assertEquals(1, root.subAbilities().size());
+        assertTrue(root.subAbilities().get(0).descriptionText().contains("can't be blocked this turn"), "Sub-ability should contain sub-ability description");
     }
 
     @Test

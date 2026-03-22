@@ -5,27 +5,43 @@ import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
- * Spell effect ability. Factory walks the sub-ability chain to collect all
- * SpellDescription fragments, emitting one SpellEffect per fragment.
+ * Spell effect ability. Factory walks the sub-ability chain recursively, building
+ * a tree of SpellEffect nodes — one per SpellDescription fragment. Nodes without a
+ * description are transparent: their children are promoted upward.
  */
-public record SpellEffect(String descriptionText) implements Ability {
+public record SpellEffect(String descriptionText, List<Ability> subAbilities) implements Ability {
+
+    public SpellEffect {
+        Objects.requireNonNull(subAbilities);
+        subAbilities = List.copyOf(subAbilities);
+    }
 
     @Override
     public AbilityType type() {
         return AbilityType.SPELL;
     }
 
+    /**
+     * Recursively walks a SpellAbility chain, returning 0 or 1 tree nodes.
+     * Nodes with no SpellDescription are transparent: their children are promoted.
+     */
     public static List<Ability> fromChain(SpellAbility sa) {
-        List<Ability> abilities = new ArrayList<>();
-        for (String spellDesc : SpellAbilityUtils.collectParamInChain(sa, "SpellDescription")) {
-            String stripped = AbilityDescription.stripReminderText(spellDesc);
-            if (stripped == null || stripped.isEmpty()) continue;
-            abilities.add(new SpellEffect(AbilityDescription.applyCasing(stripped)));
+        if (sa == null) return List.of();
+
+        String rawDesc = sa.getParam("SpellDescription");
+        String stripped = (rawDesc != null) ? AbilityDescription.stripReminderText(rawDesc) : null;
+        boolean hasDesc = stripped != null && !stripped.isEmpty();
+
+        List<Ability> children = fromChain(sa.getSubAbility());
+
+        if (hasDesc) {
+            return List.of(new SpellEffect(AbilityDescription.applyCasing(stripped), children));
+        } else {
+            return children;
         }
-        return abilities;
     }
 }

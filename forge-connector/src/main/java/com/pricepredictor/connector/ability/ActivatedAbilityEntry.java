@@ -5,24 +5,32 @@ import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.spellability.SpellAbility;
 
+import java.util.List;
+import java.util.Objects;
+
 /**
  * Activated or planeswalker ability built from a SpellAbility.
- * Walks the sub-ability chain to collect all SpellDescription fragments.
+ * The root description is taken from sa.getDescription() (cost + root SpellDescription only).
+ * Sub-ability descriptions become child SpellEffect nodes via SpellEffect.fromChain().
  */
-public record ActivatedAbilityEntry(AbilityType type, String descriptionText) implements Ability {
+public record ActivatedAbilityEntry(AbilityType type, String descriptionText, List<Ability> subAbilities) implements Ability {
+
+    public ActivatedAbilityEntry {
+        Objects.requireNonNull(subAbilities);
+        subAbilities = List.copyOf(subAbilities);
+    }
 
     public static ActivatedAbilityEntry of(SpellAbility sa) {
         if (sa.getParam("SpellDescription") == null
                 || sa.getParam("SpellDescription").isEmpty()) {
             return null;
         }
-        String desc = sa.getDescription();
-        for (String subDesc : SpellAbilityUtils.collectParamInChain(sa.getSubAbility(), "SpellDescription")) {
-            desc = desc + " " + subDesc;
-        }
+        String rootDesc = sa.getDescription();
         AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
-        String normalized = AbilityDescription.normalize(desc);
+        String normalized = AbilityDescription.normalize(rootDesc);
         if (normalized == null) return null;
-        return new ActivatedAbilityEntry(type, type.formatDescription(normalized));
+
+        List<Ability> children = SpellEffect.fromChain(sa.getSubAbility());
+        return new ActivatedAbilityEntry(type, type.formatDescription(normalized), children);
     }
 }
