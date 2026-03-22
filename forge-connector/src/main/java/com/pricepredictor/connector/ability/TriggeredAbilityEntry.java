@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
@@ -28,8 +29,20 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
 
         SpellAbility execute = trigger.getOverridingAbility();
-        List<Ability> children = SpellEffect.fromChain(execute);
 
+        // If the raw TriggerDescription contains the "ABILITY" placeholder and the
+        // execute SVar is a Charm (choose-one), expand it: replace the placeholder
+        // with "choose one —" and attach the charm choices as OPTION sub-abilities.
+        String rawDesc = trigger.getParam("TriggerDescription");
+        if (rawDesc != null && rawDesc.contains("ABILITY")
+                && execute != null && execute.getApi() == ApiType.Charm) {
+            String expanded = rawDesc.replace("ABILITY", "choose one \u2014");
+            normalized = AbilityDescription.normalize(expanded);
+            List<Ability> options = CharmAbility.optionsFrom(execute);
+            return new TriggeredAbilityEntry(effectiveType, normalized, options);
+        }
+
+        List<Ability> children = SpellEffect.fromChain(execute);
         return new TriggeredAbilityEntry(effectiveType, normalized, children);
     }
 }

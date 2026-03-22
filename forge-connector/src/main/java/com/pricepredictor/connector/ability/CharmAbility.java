@@ -66,4 +66,21 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         }
         return result;
     }
+
+    /**
+     * Return only the OPTION sub-abilities for a charm SA (no wrapper).
+     * Used when the parent description already exists (e.g. triggered charm).
+     */
+    static List<Ability> optionsFrom(SpellAbility sa) {
+        List<Ability> options = new ArrayList<>();
+        var choices = sa.getAdditionalAbilityList("Choices");
+        if (choices == null) return options;
+        for (var choice : choices) {
+            String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
+            if (desc != null) desc = AbilityDescription.stripReminderText(desc);
+            if (desc == null || desc.isEmpty()) continue;
+            options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(desc)));
+        }
+        return options;
+    }
 }

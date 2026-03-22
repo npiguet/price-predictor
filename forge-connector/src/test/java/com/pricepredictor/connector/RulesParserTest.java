@@ -791,6 +791,28 @@ class RulesParserTest {
                 "Draft lines must precede triggered ability: " + card.abilities());
     }
 
+    // --- Pattern 1: ABILITY placeholder → choose-one charm expansion ---
+
+    @Test
+    void chooseOneTriggerExpandsAbilityPlaceholder() {
+        // Suncleanser: "When CARDNAME enters, ABILITY" where Execute$ is a DB$ Charm.
+        // Should emit: TRIGGERED with "choose one" + 2 OPTION sub-abilities.
+        CardFace card = face("s/suncleanser.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Should have triggered ability: " + card.abilities());
+        Ability t = triggered.get(0);
+        assertTrue(t.descriptionText().contains("choose one"),
+                "ABILITY placeholder must be replaced with 'choose one': " + t.descriptionText());
+        List<Ability> options = t.subAbilities();
+        assertEquals(2, options.size(), "Should have 2 charm options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION),
+                "Options must be OPTION type: " + options);
+        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("remove all counters")),
+                "Option 1 must mention counter removal: " + options);
+        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("loses all counters")),
+                "Option 2 must mention opponent losing counters: " + options);
+    }
+
     // --- Pattern A: Haunt keyword ---
 
     @Test
