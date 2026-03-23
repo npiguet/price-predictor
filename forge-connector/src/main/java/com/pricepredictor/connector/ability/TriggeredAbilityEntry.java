@@ -50,7 +50,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         if (rawDesc != null && rawDesc.contains("ABILITY")
                 && execute != null && execute.getApi() == ApiType.Charm) {
             String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
-            if (charmHeader == null) charmHeader = "choose one \u2014";
+            if (charmHeader == null) charmHeader = "choose one";
             String expanded = rawDesc.replace("ABILITY", charmHeader);
             normalized = AbilityDescription.normalize(expanded);
             List<Ability> options = CharmAbility.optionsFrom(execute);

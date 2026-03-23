@@ -29,6 +29,8 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         String charmDesc = sa.getParam("SpellDescription");
         if (charmDesc != null && !charmDesc.isEmpty()) {
             charmDesc = AbilityDescription.stripReminderText(charmDesc);
+            // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
+            charmDesc = charmDesc.replaceAll("\\s*\u2014\\s*$", "").trim();
         }
         if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
             String total = sa.getParam("Pawprint");
@@ -76,11 +78,12 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      * Synthesize a "choose N —" header from CharmNum / MinCharmNum params.
      * Returns null if CharmNum is a variable/expression (can't determine statically).
      * Logic:
-     *   MinCharmNum=0 → "choose up to N —"
-     *   MinCharmNum=1, CharmNum=2 → "choose one or both —"
-     *   MinCharmNum=1, CharmNum≥3 → "choose one or more —"
-     *   no MinCharmNum (exact) → "choose N —"
-     *   no CharmNum → "choose one —" (default)
+     *   MinCharmNum=0 → "choose up to N"
+     *   MinCharmNum=1, CharmNum=2 → "choose one or both"
+     *   MinCharmNum=1, CharmNum≥3 → "choose one or more"
+     *   no MinCharmNum (exact) → "choose N"
+     *   no CharmNum → "choose one" (default)
+     * No trailing em-dash: the header stands on its own line.
      */
     static String synthesizeCharmHeader(SpellAbility sa) {
         String numStr = sa.getParam("CharmNum");
@@ -94,18 +97,18 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         }
         if (num == -1) {
             // CharmNum absent → default choose one
-            if (minNum == 0) return "Choose up to one \u2014";
-            return "Choose one \u2014";
+            if (minNum == 0) return "Choose up to one";
+            return "Choose one";
         }
         if (minNum == 0) {
-            return "Choose up to " + numberWord(num) + " \u2014";
+            return "Choose up to " + numberWord(num);
         }
         if (minNum == 1) {
-            if (num == 2) return "Choose one or both \u2014";
-            if (num >= 3) return "Choose one or more \u2014";
+            if (num == 2) return "Choose one or both";
+            if (num >= 3) return "Choose one or more";
         }
         // No MinCharmNum (or minNum == num): choose exactly N
-        return "Choose " + numberWord(num) + " \u2014";
+        return "Choose " + numberWord(num);
     }
 
     private static int parseSimpleInt(String s) {
