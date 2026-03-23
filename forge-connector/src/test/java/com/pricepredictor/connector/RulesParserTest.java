@@ -905,6 +905,33 @@ class RulesParserTest {
                 "Outcome descriptions should use '|' separator: " + spells);
     }
 
+    // --- Pattern 6: Activated dice-roll result sub-abilities as OPTION ---
+
+    @Test
+    void activatedDiceRollEmitsOutcomesAsOptions() {
+        // Treasure Chest: activated RollDice with 4 result ranges.
+        // Expected: 1 ACTIVATED with a single-line description and 4 OPTION sub-abilities.
+        CardFace card = face("t/treasure_chest.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size(), "Should have exactly 1 ACTIVATED: " + card.abilities());
+        Ability act = activated.get(0);
+        assertFalse(act.descriptionText().contains("\n"),
+                "Activated description must be single-line (no embedded newlines): " + act.descriptionText());
+        assertTrue(act.descriptionText().contains("roll a d20"),
+                "Activated description should contain 'roll a d20': " + act.descriptionText());
+        List<Ability> options = act.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(4, options.size(), "Should have 4 OPTION sub-abilities: " + act.subAbilities());
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().contains("1") && a.descriptionText().contains("lose 3 life")),
+                "Should have '1 | ... lose 3 life' option: " + options);
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().contains("2") && a.descriptionText().contains("treasure")),
+                "Should have '2—9 | ... treasure' option: " + options);
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().contains("10") && a.descriptionText().contains("gain 3 life")),
+                "Should have '10—19 | ... gain 3 life' option: " + options);
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().contains("20") && a.descriptionText().contains("library")),
+                "Should have '20 | ... library' option: " + options);
+    }
+
     // --- Pattern 4: Tribute "if tribute wasn't paid" trigger ---
 
     @Test
@@ -938,6 +965,43 @@ class RulesParserTest {
                 "Output should contain 'destroy all creatures': " + formatted);
         assertTrue(formatted.contains("spirit"),
                 "Output should contain spirit-token text from RepeatSubAbility: " + formatted);
+    }
+
+    // --- Pattern 7: CharmNum-based "choose N" header synthesis ---
+
+    @Test
+    void chooseTwoCharmEmitsChooseTwoHeader() {
+        // Atarka's Command: CharmNum$ 2 (no MinCharmNum) — exactly two modes.
+        // Expected: 1 SPELL with "choose two" in description + 4 OPTION sub-abilities.
+        CardFace card = face("a/atarkas_command.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
+        Ability spell = spells.get(0);
+        assertTrue(spell.descriptionText().contains("choose two"),
+                "Spell description should contain 'choose two': " + spell.descriptionText());
+        List<Ability> options = spell.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(4, options.size(), "Should have 4 OPTION sub-abilities: " + spell.subAbilities());
+    }
+
+    @Test
+    void chooseOneOrBothCharmEmitsCorrectHeader() {
+        // Against All Odds: MinCharmNum$ 1, CharmNum$ 2 — "choose one or both".
+        CardFace card = face("a/against_all_odds.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
+        assertTrue(spells.get(0).descriptionText().contains("choose one or both"),
+                "Spell description should contain 'choose one or both': " + spells.get(0).descriptionText());
+    }
+
+    @Test
+    void chooseUpToOneCharmEmitsCorrectHeader() {
+        // Ertai Resurrected trigger: MinCharmNum$ 0, no CharmNum — "choose up to one".
+        // The charm is in a triggered sub-ability; check the full formatted text.
+        CardFace card = face("e/ertai_resurrected.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("choose up to one"),
+                "Output should contain 'choose up to one': " + formatted);
     }
 
     // --- Helpers ---

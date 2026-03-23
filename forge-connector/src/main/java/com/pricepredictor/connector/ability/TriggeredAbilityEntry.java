@@ -49,7 +49,9 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         String rawDesc = trigger.getParam("TriggerDescription");
         if (rawDesc != null && rawDesc.contains("ABILITY")
                 && execute != null && execute.getApi() == ApiType.Charm) {
-            String expanded = rawDesc.replace("ABILITY", "choose one \u2014");
+            String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
+            if (charmHeader == null) charmHeader = "choose one \u2014";
+            String expanded = rawDesc.replace("ABILITY", charmHeader);
             normalized = AbilityDescription.normalize(expanded);
             List<Ability> options = CharmAbility.optionsFrom(execute);
             return new TriggeredAbilityEntry(effectiveType, normalized, options);

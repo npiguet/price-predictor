@@ -38,6 +38,11 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             }
         }
 
+        // Synthesize "choose N —" header from CharmNum/MinCharmNum when SpellDescription is absent.
+        if (charmDesc == null || charmDesc.isEmpty()) {
+            charmDesc = synthesizeCharmHeader(sa);
+        }
+
         // Collect charm choices as sub-abilities
         List<Ability> choiceSubs = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
@@ -65,6 +70,59 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             result.addAll(choiceSubs);
         }
         return result;
+    }
+
+    /**
+     * Synthesize a "choose N —" header from CharmNum / MinCharmNum params.
+     * Returns null if CharmNum is a variable/expression (can't determine statically).
+     * Logic:
+     *   MinCharmNum=0 → "choose up to N —"
+     *   MinCharmNum=1, CharmNum=2 → "choose one or both —"
+     *   MinCharmNum=1, CharmNum≥3 → "choose one or more —"
+     *   no MinCharmNum (exact) → "choose N —"
+     *   no CharmNum → "choose one —" (default)
+     */
+    static String synthesizeCharmHeader(SpellAbility sa) {
+        String numStr = sa.getParam("CharmNum");
+        String minNumStr = sa.getParam("MinCharmNum");
+        int num = parseSimpleInt(numStr);    // -1 if null or non-integer
+        int minNum = parseSimpleInt(minNumStr); // -1 if null or not set
+
+        if (num == -1 && numStr != null) {
+            // CharmNum is a variable/expression — can't synthesize
+            return null;
+        }
+        if (num == -1) {
+            // CharmNum absent → default choose one
+            if (minNum == 0) return "Choose up to one \u2014";
+            return "Choose one \u2014";
+        }
+        if (minNum == 0) {
+            return "Choose up to " + numberWord(num) + " \u2014";
+        }
+        if (minNum == 1) {
+            if (num == 2) return "Choose one or both \u2014";
+            if (num >= 3) return "Choose one or more \u2014";
+        }
+        // No MinCharmNum (or minNum == num): choose exactly N
+        return "Choose " + numberWord(num) + " \u2014";
+    }
+
+    private static int parseSimpleInt(String s) {
+        if (s == null) return -1;
+        try { return Integer.parseInt(s.trim()); }
+        catch (NumberFormatException e) { return -1; }
+    }
+
+    private static String numberWord(int n) {
+        return switch (n) {
+            case 1 -> "one";
+            case 2 -> "two";
+            case 3 -> "three";
+            case 4 -> "four";
+            case 5 -> "five";
+            default -> String.valueOf(n);
+        };
     }
 
     /**
