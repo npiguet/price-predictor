@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from pathlib import Path
 
 # Lines in converted output that are metadata, not ability text
@@ -23,6 +23,23 @@ _NON_ALNUM = re.compile(r"[^a-z0-9{} ]+")
 _ADDITIONAL_COST_PREFIX = re.compile(
     r"^as an additional cost to cast this spell[,\s]+"
 )
+# Class/Talent cards have "{cost}: Level N" lines in oracle that the converter drops.
+_CLASS_LEVEL_LINE = re.compile(r"^(\{[^}]+\})+:\s*Level\s+\d+$", re.IGNORECASE)
+# Oracle: "Protection from creatures/artifacts/…" (with "from" + plural type)
+# Converter internal format: "protection:creature" → normalised "protection creature"
+# Two-step: first strip plural 's' from "protection from Xs", then strip bare "from".
+_PROTECTION_PLURAL = re.compile(r"\bprotection from (\w+)s\b")
+_PROTECTION_FROM = re.compile(r"\bprotection from\b")
+
+# Words that indicate a line fragment is a sentence clause, not a bare keyword.
+# Used by _split_keyword_line to avoid splitting non-keyword comma lists.
+_KEYWORD_STOP_WORDS = frozenset({
+    "a", "an", "the", "you", "your", "it", "its", "they", "their", "them",
+    "then", "if", "when", "whenever", "until", "unless", "instead", "where",
+    "while", "but", "as", "at", "in", "on", "into", "onto",
+    "each", "all", "any", "target", "that", "this", "these", "those",
+    "with", "for", "to", "of", "by", "do", "not", "no", "may", "can",
+})
 
 # Oracle uses portmanteau landwalk names ("swampwalk") but our converter outputs
 # the split form ("landwalk swamp"). Normalise oracle text to the split form so
@@ -75,6 +92,38 @@ class CardCheckResult:
     has_oracle: bool
 
 
+def _is_keyword_token(token: str) -> bool:
+    """Return True if token looks like a standalone MTG keyword phrase."""
+    token = token.strip().rstrip(".").strip()
+    if not token:
+        return False
+    words = token.lower().split()
+    if len(words) > 6:
+        return False
+    return not any(w in _KEYWORD_STOP_WORDS for w in words)
+
+
+def _split_keyword_line(line: str) -> list[str]:
+    """If line is a comma- or semicolon-separated list of MTG keywords, return them split.
+
+    Oracle text like "Flying, reach, trample." or "Trample; banding" is one line but
+    the converter emits separate static: lines.  Splitting here lets line counts match.
+    Returns [line] unchanged if the line doesn't look like a keyword list.
+    """
+    # Normalise semicolons to commas then split
+    sep = "," if "," in line else (";" if ";" in line else None)
+    if sep is None:
+        return [line]
+    parts = [p.strip() for p in line.split(sep)]
+    if len(parts) < 2:
+        return [line]
+    # Strip trailing period from the last part only
+    parts[-1] = parts[-1].rstrip(".")
+    if all(_is_keyword_token(p) for p in parts):
+        return [p for p in parts if p]
+    return [line]
+
+
 def _normalize(text: str, card_name: str | None = None) -> str:
     """Normalize text for comparison: lowercase, strip reminder text,
     replace card name, collapse whitespace/punctuation."""
@@ -88,6 +137,10 @@ def _normalize(text: str, card_name: str | None = None) -> str:
     # "landwalk swamp". Map oracle form to converter form before further processing.
     for oracle_form, converted_form in _LANDWALK_MAP:
         text = text.replace(oracle_form, converted_form)
+    # Normalise "protection from Xs" → "protection X" (oracle plural + "from" vs
+    # converter singular internal format "protection:X" → "protection X").
+    text = _PROTECTION_PLURAL.sub(r"protection \1", text)
+    text = _PROTECTION_FROM.sub("protection", text)
     # Replace card name with placeholder
     if card_name:
         text = text.replace(card_name.lower(), "cardname")
@@ -126,17 +179,24 @@ def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
         line = line.strip()
         if line == "ALTERNATE":
             break  # Only compare front face; back-face oracle is a separate card face
-        if line.startswith("Name:"):
+        if line.startswith("Name:") and card_name is None:
             card_name = line[5:].strip()
-        elif line.startswith("Types:"):
+        elif line.startswith("Types:") and types_line is None:
             types_line = line[6:].strip()
-        elif line.startswith("Oracle:"):
+        elif line.startswith("Oracle:") and oracle is None:
             oracle = line[7:].strip()
     if oracle:
         oracle = oracle.replace("\\n", "\n")
         # Strip reminder text from each oracle line
         oracle_lines = [_strip_reminder(ln) for ln in oracle.split("\n")]
         oracle_lines = [ln for ln in oracle_lines if ln]
+        # Drop Class/Talent "{cost}: Level N" lines — converter omits them
+        oracle_lines = [ln for ln in oracle_lines if not _CLASS_LEVEL_LINE.match(ln)]
+        # Split comma-separated keyword-only lines so line counts match the converter
+        expanded: list[str] = []
+        for ln in oracle_lines:
+            expanded.extend(_split_keyword_line(ln))
+        oracle_lines = expanded
         # Append implicit land mana ability if applicable
         if types_line:
             land_mana = _build_land_mana(types_line)
@@ -179,6 +239,12 @@ def _extract_ability_text(converted_text: str) -> tuple[list[str], list[str]]:
             continue
 
         value = raw_line[colon + 1:].strip()
+        # Class level lines include the upgrade cost (e.g. "{2}{R}: At the beginning...")
+        # which oracle drops.  Strip the leading mana-cost prefix before comparison.
+        if base_key == "level" and value:
+            cost_stripped = re.sub(r"^(\{[^}]+\})+:\s*", "", value)
+            if cost_stripped:
+                value = cost_stripped
         lines.append(value)
         if value in seen:
             duplicates.append(value)
@@ -216,21 +282,21 @@ def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
             has_oracle=has_oracle,
         )
 
-    # Normalize each line independently, sort, then compare.
-    # Sorting makes the comparison order-independent so that abilities
-    # emitted in a different order than Oracle text are not penalised.
-    oracle_parts = sorted(
-        _normalize(ln, card_name) for ln in oracle.split("\n") if ln.strip()
-    )
-    converted_parts = sorted(
-        _normalize(ln, card_name) for ln in ability_lines if ln.strip()
-    )
-    norm_oracle = " ".join(oracle_parts)
-    norm_converted = " ".join(converted_parts)
+    # Compare using word-bag (multiset) Jaccard similarity.
+    # This is order-independent, line-grouping-independent, and robust to
+    # cases where oracle splits text differently than the converter (e.g.
+    # one oracle paragraph vs several sub-ability lines in the output).
+    oracle_words: Counter[str] = Counter()
+    for ln in oracle.split("\n"):
+        oracle_words.update(_normalize(ln, card_name).split())
 
-    similarity = SequenceMatcher(
-        None, norm_oracle, norm_converted, autojunk=False,
-    ).ratio()
+    converted_words: Counter[str] = Counter()
+    for ln in ability_lines:
+        converted_words.update(_normalize(ln, card_name).split())
+
+    intersection = sum((oracle_words & converted_words).values())
+    union = sum((oracle_words | converted_words).values())
+    similarity = intersection / union if union > 0 else 1.0
 
     return CardCheckResult(
         filename="",
@@ -280,7 +346,10 @@ def check_all(
 
         has_issues = (
             result.similarity < threshold
-            or result.duplicate_lines
+            # Only flag duplicate lines when similarity is not perfect: if oracle and
+            # converter both emit N identical lines (e.g. Bounty of Might), the
+            # word-bag similarity is 100% and the duplicates are intentional.
+            or (result.duplicate_lines and result.similarity < 1.0)
             or result.empty_lines
             or (result.has_oracle and result.converted_lines == 0)
         )

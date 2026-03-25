@@ -8,6 +8,7 @@ import forge.game.keyword.Keyword;
 import forge.game.spellability.SpellAbility;
 import forge.game.trigger.Trigger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -57,7 +58,42 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             return new TriggeredAbilityEntry(effectiveType, normalized, options);
         }
 
-        List<Ability> children = SpellEffect.fromChain(execute);
+        // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
+        // is the authoritative oracle text for triggered abilities.  Walking the chain would
+        // re-emit SVars that are already covered by ETBReplacement / replacement keywords,
+        // causing duplicates (e.g. sigarda's_splendor's NoteNum SVar).
+        // Dice-outcome options are the one exception — they represent distinct result lines.
+        List<Ability> children = execute != null ? diceOutcomesAsOptions(execute) : List.of();
         return new TriggeredAbilityEntry(effectiveType, normalized, children);
+    }
+
+    /**
+     * Expand {@code ResultSubAbilities} dice-outcome entries into OPTION sub-abilities.
+     * Mirrors {@code ActivatedAbilityEntry.diceOutcomesAsOptions()}.
+     */
+    private static List<Ability> diceOutcomesAsOptions(SpellAbility sa) {
+        // Walk the sub-ability chain to find a SA with ResultSubAbilities.
+        // Some cards (e.g. journey_to_the_lost_city) have the dice SA as a sub-ability.
+        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+            String resultSubAbilities = cur.getParam("ResultSubAbilities");
+            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
+            List<Ability> result = new ArrayList<>();
+            for (String entry : resultSubAbilities.split(",")) {
+                String[] kv = entry.trim().split(":", 2);
+                if (kv.length < 2) continue;
+                String range = kv[0].trim();
+                SpellAbility sub = cur.getAdditionalAbility(range);
+                if (sub == null) continue;
+                String rawDesc = sub.getParam("SpellDescription");
+                if (rawDesc == null || rawDesc.isEmpty()) continue;
+                String desc = AbilityDescription.replaceVert(rawDesc);
+                String normalized = AbilityDescription.normalize(desc);
+                if (normalized != null) {
+                    result.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(normalized)));
+                }
+            }
+            return result;
+        }
+        return List.of();
     }
 }

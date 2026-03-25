@@ -42,6 +42,27 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
                 title = "Affinity for " + kti.getTypeDescription();
             }
+            if (kw == Keyword.PROTECTION) {
+                // getOriginal() returns the raw script keyword, e.g.:
+                //   "Protection:Creature"         (simple type)
+                //   "Protection:Card.MultiColor:multicolored"  (filter with description)
+                // Build "Protection from <target>" from it.
+                // Color-based protection ("K:Protection from white") already has the
+                // correct format in getOriginal(), so no special-casing needed there.
+                String original = ki.getOriginal();
+                int firstColon = original.indexOf(':');
+                if (firstColon >= 0) {
+                    String details = original.substring(firstColon + 1);
+                    // If the details contain a second colon, the text after it is the
+                    // human-readable target (e.g. "Card.MultiColor:multicolored" → "multicolored").
+                    int innerColon = details.indexOf(':');
+                    if (innerColon >= 0) {
+                        details = details.substring(innerColon + 1);
+                    }
+                    title = "Protection from " + details.toLowerCase();
+                }
+                // else: getOriginal() had no colon (shouldn't happen), leave title as-is
+            }
         }
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());

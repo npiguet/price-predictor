@@ -22,6 +22,7 @@ import forge.card.CardSplitType;
 import forge.card.CardStateName;
 import forge.card.ICardFace;
 import forge.card.mana.ManaCost;
+import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
@@ -188,6 +189,14 @@ public class RulesParser {
             } else if (sa.isActivatedAbility()) {
                 addIfNotNull(abilities, ActivatedAbilityEntry.of(sa));
             } else if (sa.isSpell()) {
+                // Skip SAs that are handled by the triggers or replacements loops.
+                // ImmediateTrigger SAs fire immediately on enter and are also registered
+                // as triggers; ETBReplacement SAs are also replacement effects.
+                // Both appear in card.getSpellAbilities() AND in getTriggers()/
+                // getReplacementEffects(), so without this guard they double-emit.
+                if (sa.getApi() == ApiType.ImmediateTrigger) continue;
+                String mode = sa.getParam("Mode");
+                if ("ETBReplacement".equals(mode)) continue;
                 addIfNotNull(abilities, SpellAdditionalCost.of(sa));
                 abilities.addAll(SpellEffect.fromChain(sa));
                 abilities.addAll(diceOutcomesFromSA(sa));
@@ -195,7 +204,19 @@ public class RulesParser {
         }
 
         // --- Traits — direct wrapping ---
+        // Track Execute SVar names seen from primary (non-secondary) triggers.
+        // When a secondary trigger re-uses the same Execute SVar, it is the "blocks" half of an
+        // "attacks or blocks" pair — the primary already covers both, so skip the secondary.
+        Set<String> primaryExecuteSVars = new HashSet<>();
         for (Trigger t : card.getTriggers()) {
+            String exec = t.getParam("Execute");
+            if ("True".equalsIgnoreCase(t.getParam("Secondary"))
+                    && exec != null && primaryExecuteSVars.contains(exec)) {
+                continue; // secondary of an "attacks or blocks" pair — skip duplicate
+            }
+            if (exec != null && !"True".equalsIgnoreCase(t.getParam("Secondary"))) {
+                primaryExecuteSVars.add(exec);
+            }
             addIfNotNull(abilities, TriggeredAbilityEntry.of(t));
         }
         for (StaticAbility s : card.getStaticAbilities()) {
@@ -261,16 +282,51 @@ public class RulesParser {
             String desc = buildAlternateAdditionalCostDescription(original);
             abilities.add(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
         } else if (original.startsWith("Visit:")) {
-            // Attraction visit keyword — the trigger's TriggerDescription already contains
-            // "Visit — [effect text]", which after normalization matches the oracle.
+            // Attraction visit keyword.  Use only the first line of TriggerDescription as the
+            // header (charm-based visits embed bullet lines after a \n).  When the overriding
+            // ability is a Charm, expand its choices as OPTION sub-abilities.
             for (Trigger t : ki.getTriggers()) {
                 String tDesc = t.getParam("TriggerDescription");
                 if (tDesc == null || "Blank".equals(tDesc)) continue;
+                int nl = tDesc.indexOf('\n');
+                if (nl >= 0) tDesc = tDesc.substring(0, nl);
                 String normalized = AbilityDescription.normalize(tDesc);
                 if (normalized == null || normalized.isEmpty()) continue;
-                List<Ability> children = SpellEffect.fromChain(t.getOverridingAbility());
+                SpellAbility overriding = t.getOverridingAbility();
+                List<Ability> children;
+                if (overriding != null && overriding.getApi() == ApiType.Charm) {
+                    children = CharmAbility.optionsFrom(overriding);
+                } else {
+                    children = SpellEffect.fromChain(overriding);
+                }
                 abilities.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
                         AbilityDescription.applyCasing(normalized), children));
+            }
+        } else if (original.startsWith("MayEffectFromOpeningHand:")
+                || original.startsWith("MayEffectFromOpeningDeck:")) {
+            // "MayEffectFromOpeningHand:SvarName" / "MayEffectFromOpeningDeck:SvarName"
+            // The Forge game engine processes this keyword at game-start (GameAction.java) rather
+            // than registering it as a standard trigger/spell.  We look up the description by
+            // building an SA from the named SVar; fall back to a RevealCard SVar used by
+            // Chancellor-cycle cards where the named SVar lacks a SpellDescription.
+            String svarName = original.split(":", 3)[1];
+            Card hostCard = ki.getHostCard();
+            if (hostCard != null) {
+                String desc = null;
+                if (hostCard.hasSVar(svarName)) {
+                    SpellAbility svarSa = AbilityFactory.getAbility(hostCard, svarName);
+                    if (svarSa != null) desc = svarSa.getParam("SpellDescription");
+                }
+                if ((desc == null || desc.isEmpty()) && hostCard.hasSVar("RevealCard")) {
+                    SpellAbility revealSa = AbilityFactory.getAbility(hostCard, "RevealCard");
+                    if (revealSa != null) desc = revealSa.getParam("SpellDescription");
+                }
+                if (desc != null && !desc.isEmpty()) {
+                    String normalized = AbilityDescription.normalize(desc);
+                    if (normalized != null)
+                        abilities.add(new TextAbility(AbilityType.TRIGGERED,
+                                AbilityDescription.applyCasing(normalized)));
+                }
             }
         } else {
             abilities.add(StandardKeyword.of(ki, Keyword.UNDEFINED));
@@ -407,25 +463,29 @@ public class RulesParser {
      * are replaced so "1—9 VERT Tap all…" becomes "1—9 | Tap all…".
      */
     private static List<Ability> diceOutcomesFromSA(SpellAbility sa) {
-        String resultSubAbilities = sa.getParam("ResultSubAbilities");
-        if (resultSubAbilities == null || resultSubAbilities.isEmpty()) return List.of();
-
-        List<Ability> result = new ArrayList<>();
-        for (String entry : resultSubAbilities.split(",")) {
-            String[] kv = entry.trim().split(":", 2);
-            if (kv.length < 2) continue;
-            String range = kv[0].trim();
-            SpellAbility sub = sa.getAdditionalAbility(range);
-            if (sub == null) continue;
-            String rawDesc = sub.getParam("SpellDescription");
-            if (rawDesc == null || rawDesc.isEmpty()) continue;
-            String desc = AbilityDescription.replaceVert(rawDesc);
-            String normalized = AbilityDescription.normalize(desc);
-            if (normalized != null) {
-                result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
+        // Walk the sub-ability chain to find a SA with ResultSubAbilities.
+        // Some cards place the RollDice SA (with ResultSubAbilities) as a sub-ability of the root SA.
+        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+            String resultSubAbilities = cur.getParam("ResultSubAbilities");
+            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
+            List<Ability> result = new ArrayList<>();
+            for (String entry : resultSubAbilities.split(",")) {
+                String[] kv = entry.trim().split(":", 2);
+                if (kv.length < 2) continue;
+                String range = kv[0].trim();
+                SpellAbility sub = cur.getAdditionalAbility(range);
+                if (sub == null) continue;
+                String rawDesc = sub.getParam("SpellDescription");
+                if (rawDesc == null || rawDesc.isEmpty()) continue;
+                String desc = AbilityDescription.replaceVert(rawDesc);
+                String normalized = AbilityDescription.normalize(desc);
+                if (normalized != null) {
+                    result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
+                }
             }
+            return result;
         }
-        return result;
+        return List.of();
     }
 
     /** Remove abilities whose descriptionText duplicates an earlier entry. */

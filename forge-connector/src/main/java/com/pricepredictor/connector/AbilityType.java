@@ -117,10 +117,16 @@ public enum AbilityType {
         return map;
     }
 
+    // Keywords that should always be classified as STATIC regardless of trigger presence.
+    private static final Set<Keyword> FORCE_STATIC_KEYWORDS = EnumSet.of(
+            Keyword.WARD  // Ward is effectively a static ability in oracle, not triggered
+    );
+
     /** Classify a keyword into an AbilityType. Cost keywords get a fixed type, others by trait presence. */
     public static AbilityType classifyKeyword(Keyword kw, boolean hasAbilities, boolean hasTriggers) {
         AbilityType costType = KEYWORD_COST_TYPES.get(kw);
         if (costType != null) return costType;
+        if (FORCE_STATIC_KEYWORDS.contains(kw)) return STATIC;
         if (hasAbilities) return ACTIVATED;
         if (hasTriggers) return TRIGGERED;
         return STATIC;

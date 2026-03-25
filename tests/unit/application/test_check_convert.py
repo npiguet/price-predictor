@@ -257,10 +257,8 @@ class TestCheckCard:
             f"got {result.similarity:.2%}"
         )
 
-    def test_autojunk_off_long_similar_strings(self):
-        # With autojunk=True (the Python default), SequenceMatcher marks frequently-
-        # occurring characters as junk on strings > ~200 chars, producing near-zero
-        # similarity even for nearly-identical texts. autojunk=False must be used.
+    def test_long_identical_strings_score_high(self):
+        # Word-bag Jaccard on long but identical ability text must still score high.
         long_ability = (
             "whenever a creature enters the battlefield under your control, "
             "you may pay {1}{G}. if you do, draw a card and you gain 1 life. "
@@ -271,8 +269,106 @@ class TestCheckCard:
         converted = f"name: long card\ntypes: enchantment\nstatic: {long_ability.lower()}\n"
         result = check_card(converted, forge)
         assert result.similarity > 0.8, (
-            f"Long similar strings should score high similarity, got {result.similarity:.2%}. "
-            "Check that SequenceMatcher uses autojunk=False."
+            f"Long similar strings should score high similarity, got {result.similarity:.2%}."
+        )
+
+    def test_protection_from_normalized_to_match_converter(self):
+        # Oracle says "Protection from creatures" but converter outputs "protection:creature"
+        # (Forge internal format: no "from", singular type).  The checker must normalise
+        # "protection from Xs" → "protection X" so both sides compare equal.
+        for oracle_text, converted_text in [
+            ("Protection from creatures",     "protection:creature"),
+            ("Protection from artifacts",     "protection:artifact"),
+            ("Protection from enchantments",  "protection:enchantment"),
+            ("Protection from Dragons",       "protection:dragon"),
+            ("Protection from instants",      "protection:instant"),
+            ("Protection from spells",        "protection:spell"),
+            ("Protection from multicolored",  "protection:multicolored"),
+            ("Protection from monocolored",   "protection:monocolored"),
+            ("Protection from everything",    "protection:everything"),
+        ]:
+            forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_text}\n"
+            converted = f"name: test card\ntypes: creature\nstatic: {converted_text}\n"
+            result = check_card(converted, forge)
+            assert result.similarity > 0.8, (
+                f"Oracle '{oracle_text}' vs converted '{converted_text}' "
+                f"should normalise to same text, got {result.similarity:.2%}"
+            )
+
+    def test_protection_plus_keyword_normalized(self):
+        # "Flying, protection from enchantments." (one oracle line split into two)
+        # must compare well against two separate static: lines.
+        forge = (
+            "Name:Azorius First-Wing\n"
+            "Types:Creature Griffin\n"
+            "Oracle:Flying, protection from enchantments.\n"
+        )
+        converted = (
+            "name: azorius first-wing\n"
+            "types: creature griffin\n"
+            "static: flying\n"
+            "static: protection:enchantment\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Flying + protection from enchantments should normalise correctly, "
+            f"got {result.similarity:.2%}"
+        )
+
+    def test_perfect_similarity_with_intentional_duplicate_lines_not_flagged(self):
+        # Cards like Bounty of Might have 3 identical oracle lines (same effect,
+        # different targets). The converter correctly emits 3 identical spell[N]: lines.
+        # duplicate_lines fires, but similarity is 100%: should NOT count as an issue.
+        oracle_line = "Target creature gets +3/+3 until end of turn."
+        forge = (
+            f"Name:Bounty of Might\nTypes:Instant\n"
+            f"Oracle:{oracle_line}\\n{oracle_line}\\n{oracle_line}\n"
+        )
+        converted = (
+            "name: bounty of might\ntypes: instant\n"
+            f"spell[1]: {oracle_line.lower()}\n"
+            f"spell[2]: {oracle_line.lower()}\n"
+            f"spell[3]: {oracle_line.lower()}\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.99, f"Expected ~100% similarity, got {result.similarity:.2%}"
+        assert len(result.duplicate_lines) == 2, "Should detect 2 duplicates"
+        # The real test: check_all must NOT treat this as an issue.
+        from price_predictor.application.check_convert import check_all
+        import tempfile, pathlib
+        with tempfile.TemporaryDirectory() as tmp:
+            tp = pathlib.Path(tmp)
+            out_dir = tp / "output" / "b"
+            cards_dir = tp / "cards" / "b"
+            out_dir.mkdir(parents=True)
+            cards_dir.mkdir(parents=True)
+            (out_dir / "bounty_of_might.txt").write_text(converted)
+            (cards_dir / "bounty_of_might.txt").write_text(forge)
+            issues = check_all(tp / "output", tp / "cards", threshold=0.5)
+        assert len(issues) == 0, (
+            f"100%-similarity card with intentional duplicate lines should not be flagged; "
+            f"got issues: {issues}"
+        )
+
+    def test_specialize_oracle_uses_front_face(self):
+        """_extract_oracle() must not overwrite oracle with a SPECIALIZE face's Oracle line."""
+        forge = (
+            "Name:Test Specialize Card\n"
+            "Types:Creature\n"
+            "Oracle:Front face oracle text.\n"
+            "SPECIALIZE:WHITE\n"
+            "Name:Test Specialize Card\n"
+            "Types:Creature\n"
+            "Oracle:Specialize oracle text that should be ignored.\n"
+        )
+        converted = (
+            "name: test specialize card\n"
+            "types: creature\n"
+            "spell[1]: front face oracle text.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Should compare against front-face oracle only, got {result.similarity:.2%}"
         )
 
     def test_multi_face_only_checks_first_face(self):
@@ -295,6 +391,73 @@ class TestCheckCard:
         )
         result = check_card(converted, forge)
         assert result.similarity > 0.8
+
+
+    def test_comma_separated_keywords_split_into_individual_lines(self):
+        # Oracle "Flying, reach, trample." is 1 line but converter emits 3 separate
+        # static: lines.  The checker must split oracle so line counts match.
+        forge = (
+            "Name:Dragon Sniper\n"
+            "Types:Creature Dragon\n"
+            "Oracle:Flying, reach, trample.\n"
+        )
+        converted = (
+            "name: dragon sniper\n"
+            "types: creature dragon\n"
+            "static: flying\n"
+            "static: reach\n"
+            "static: trample\n"
+        )
+        result = check_card(converted, forge)
+        assert result.oracle_lines == 3, (
+            f"Oracle 'Flying, reach, trample.' should split into 3 lines, "
+            f"got {result.oracle_lines}"
+        )
+        assert result.similarity > 0.8, f"Got {result.similarity:.2%}"
+
+    def test_comma_separated_sentence_not_split(self):
+        # "Sacrifice a creature, then draw two cards." should NOT be split —
+        # "a" is a stop word that indicates it's a sentence, not a keyword list.
+        forge = (
+            "Name:Test Card\n"
+            "Types:Sorcery\n"
+            "Oracle:Sacrifice a creature, then draw two cards.\n"
+        )
+        converted = (
+            "name: test card\n"
+            "types: sorcery\n"
+            "spell[1]: sacrifice a creature, then draw two cards.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.oracle_lines == 1, (
+            f"Sentence with comma should not be split, got {result.oracle_lines} lines"
+        )
+
+    def test_class_level_lines_dropped_from_oracle(self):
+        # Class/Talent cards have "{cost}: Level N" lines in oracle that the
+        # converter omits entirely.  The checker must drop them before comparison.
+        forge = (
+            "Name:Blacksmith's Talent\n"
+            "Types:Enchantment Class\n"
+            "Oracle:First level ability."
+            "\\n{1}{R}: Level 2"
+            "\\nSecond level ability."
+            "\\n{3}{R}: Level 3"
+            "\\nThird level ability.\n"
+        )
+        converted = (
+            "name: blacksmith's talent\n"
+            "types: enchantment class\n"
+            "level[1]: first level ability.\n"
+            "level[2]: second level ability.\n"
+            "level[3]: third level ability.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.oracle_lines == 3, (
+            f"Class level lines should be dropped: expected 3 oracle lines, "
+            f"got {result.oracle_lines}"
+        )
+        assert result.similarity > 0.8, f"Got {result.similarity:.2%}"
 
 
 class TestCheckAll:

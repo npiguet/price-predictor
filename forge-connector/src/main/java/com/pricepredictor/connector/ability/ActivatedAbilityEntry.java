@@ -22,23 +22,55 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
     }
 
     public static ActivatedAbilityEntry of(SpellAbility sa) {
+        AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
+
         if (sa.getParam("SpellDescription") == null
                 || sa.getParam("SpellDescription").isEmpty()) {
-            return null;
+            // Some activated abilities have no SpellDescription on the root SA but carry their
+            // description on a SubAbility$ SVar (e.g. Arachnus Spinner).  Walk the sub-chain;
+            // if it produces nodes, concatenate their text into the cost-based root description.
+            List<Ability> subChain = SpellEffect.fromChain(sa.getSubAbility());
+            if (subChain.isEmpty()) return null;
+            String rootDesc = sa.getDescription();
+            if (rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
+            int nl = rootDesc.indexOf('\n');
+            if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
+            String normalized = AbilityDescription.normalize(rootDesc);
+            String subText = collectChainText(subChain.get(0));
+            String fullDesc = (normalized != null && !normalized.isEmpty())
+                    ? normalized + " " + subText : subText;
+            if (fullDesc.isEmpty()) return null;
+            return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
+                    diceOutcomesAsOptions(sa));
         }
+
         String rootDesc = sa.getDescription();
         // For dice-roll activated abilities, getDescription() appends outcome lines after a
         // newline. Strip them here; they will be re-emitted as OPTION sub-abilities below.
         int nl = rootDesc.indexOf('\n');
         if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
 
-        AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
         String normalized = AbilityDescription.normalize(rootDesc);
         if (normalized == null) return null;
 
-        List<Ability> children = new ArrayList<>(SpellEffect.fromChain(sa.getSubAbility()));
-        children.addAll(diceOutcomesAsOptions(sa));
-        return new ActivatedAbilityEntry(type, type.formatDescription(normalized), children);
+        // Concatenate sub-ability chain descriptions into the root line so that oracle
+        // lines (one paragraph = one activated ability) are not over-split.
+        List<Ability> subEffects = SpellEffect.fromChain(sa.getSubAbility());
+        String subText = subEffects.isEmpty() ? "" : collectChainText(subEffects.get(0));
+        String fullDesc = subText.isEmpty() ? normalized : normalized + " " + subText;
+
+        List<Ability> children = diceOutcomesAsOptions(sa);
+        return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc), children);
+    }
+
+    /** Recursively collect and join descriptions from an ability node and all its descendants. */
+    private static String collectChainText(Ability node) {
+        StringBuilder sb = new StringBuilder(node.descriptionText());
+        for (Ability child : node.subAbilities()) {
+            String ct = collectChainText(child);
+            if (!ct.isEmpty()) sb.append(' ').append(ct);
+        }
+        return sb.toString();
     }
 
     /**
@@ -47,24 +79,27 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
      * so activated dice-roll results are formatted as {@code option[N]: range | description}.
      */
     private static List<Ability> diceOutcomesAsOptions(SpellAbility sa) {
-        String resultSubAbilities = sa.getParam("ResultSubAbilities");
-        if (resultSubAbilities == null || resultSubAbilities.isEmpty()) return List.of();
-
-        List<Ability> result = new ArrayList<>();
-        for (String entry : resultSubAbilities.split(",")) {
-            String[] kv = entry.trim().split(":", 2);
-            if (kv.length < 2) continue;
-            String range = kv[0].trim();
-            SpellAbility sub = sa.getAdditionalAbility(range);
-            if (sub == null) continue;
-            String rawDesc = sub.getParam("SpellDescription");
-            if (rawDesc == null || rawDesc.isEmpty()) continue;
-            String desc = AbilityDescription.replaceVert(rawDesc);
-            String normalized = AbilityDescription.normalize(desc);
-            if (normalized != null) {
-                result.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(normalized)));
+        // Walk the sub-ability chain to find a SA with ResultSubAbilities.
+        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+            String resultSubAbilities = cur.getParam("ResultSubAbilities");
+            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
+            List<Ability> result = new ArrayList<>();
+            for (String entry : resultSubAbilities.split(",")) {
+                String[] kv = entry.trim().split(":", 2);
+                if (kv.length < 2) continue;
+                String range = kv[0].trim();
+                SpellAbility sub = cur.getAdditionalAbility(range);
+                if (sub == null) continue;
+                String rawDesc = sub.getParam("SpellDescription");
+                if (rawDesc == null || rawDesc.isEmpty()) continue;
+                String desc = AbilityDescription.replaceVert(rawDesc);
+                String normalized = AbilityDescription.normalize(desc);
+                if (normalized != null) {
+                    result.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(normalized)));
+                }
             }
+            return result;
         }
-        return result;
+        return List.of();
     }
 }

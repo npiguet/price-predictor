@@ -54,6 +54,14 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
                 if (choiceDesc != null) {
                     choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
                 }
+                // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
+                // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
+                String precostDesc = choice.getParam("PrecostDesc");
+                if (precostDesc != null && !precostDesc.isEmpty()) {
+                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
+                            ? precostDesc + " \u2014 " + choiceDesc
+                            : precostDesc;
+                }
                 String pawprint = choice.getParam("Pawprint");
                 if (pawprint != null) {
                     choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
@@ -132,7 +140,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
      * Return only the OPTION sub-abilities for a charm SA (no wrapper).
      * Used when the parent description already exists (e.g. triggered charm).
      */
-    static List<Ability> optionsFrom(SpellAbility sa) {
+    public static List<Ability> optionsFrom(SpellAbility sa) {
         List<Ability> options = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;

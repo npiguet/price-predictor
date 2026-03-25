@@ -123,6 +123,24 @@ class RulesParserTest {
     }
 
     @Test
+    void protectionKeywordTypeUsesFromFormat() {
+        // K:Protection:Creature should emit "protection from creature", not the
+        // internal Forge filter syntax "protection:creature".
+        var statics = abilitiesOfType(face("b/beloved_chaplain.txt"), AbilityType.STATIC);
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from")),
+                "Protection should use 'protection from X' format, not 'protection:X': " + statics);
+    }
+
+    @Test
+    void protectionKeywordFilterExpressionUsesHumanReadableTarget() {
+        // K:Protection:Card.MultiColor:multicolored should emit
+        // "protection from multicolored", not "protection:card.multicolor:multicolored".
+        var statics = abilitiesOfType(face("e/enemy_of_the_guildpact.txt"), AbilityType.STATIC);
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from multicolored")),
+                "Filter-based protection should use human-readable target: " + statics);
+    }
+
+    @Test
     void activatedAbility() {
         CardFace card = face("l/llanowar_elves.txt");
         String output = card.formatText();
@@ -660,16 +678,17 @@ class RulesParserTest {
     @Test
     void activatedAbilityWithSubAbilityDescription() {
         // Saprazzan Breaker's activated ability has SpellDescription on both the
-        // main AB$ and a sub-ability SVar. The root holds the main description;
-        // the sub-ability description becomes a child SpellEffect node.
+        // main AB$ and a sub-ability SVar. Both descriptions are concatenated into
+        // the single activated line so one oracle paragraph maps to one output line.
         CardFace card = face("s/saprazzan_breaker.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size(), "Should be exactly one activated ability, got: " + card.abilities());
         Ability root = activated.get(0);
         assertTrue(root.descriptionText().contains("mill a card"), "Should contain main description: " + root.descriptionText());
-        assertFalse(root.descriptionText().contains("can't be blocked this turn"), "Root should not contain sub-ability description: " + root.descriptionText());
-        assertEquals(1, root.subAbilities().size());
-        assertTrue(root.subAbilities().get(0).descriptionText().contains("can't be blocked this turn"), "Sub-ability should contain sub-ability description");
+        assertTrue(root.descriptionText().contains("can't be blocked this turn"),
+                "Sub-ability text should be concatenated into root description: " + root.descriptionText());
+        assertTrue(root.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
+                "No SPELL sub-abilities should remain after concatenation: " + root.subAbilities());
     }
 
     @Test
@@ -967,6 +986,145 @@ class RulesParserTest {
                 "Output should contain spirit-token text from RepeatSubAbility: " + formatted);
     }
 
+    // --- Pattern 8a: Activated ability with description on SubAbility$ ---
+
+    @Test
+    void activatedAbilityWithDescriptionOnSubAbility() {
+        // Arachnus Spinner: activated ability has no SpellDescription on the root SA;
+        // the description lives on SubAbility$ DBChange.
+        CardFace card = face("a/arachnus_spinner.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size(),
+                "Arachnus Spinner should have 1 ACTIVATED ability: " + card.abilities());
+        String formatted = card.formatText();
+        assertTrue(formatted.toLowerCase().contains("search"),
+                "Activated ability text should include 'search': " + formatted);
+    }
+
+    // --- Pattern 8b: Visit trigger with Charm overriding ability ---
+
+    @Test
+    void visitCharmExpandsToOptionSubAbilities() {
+        // Balloon Stand: Visit trigger whose overriding ability is a Charm SA.
+        // Expected: 1 TRIGGERED with "visit" in header and 2 OPTION sub-abilities,
+        // not embedded bullet text inside the triggered description.
+        CardFace card = face("b/balloon_stand.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertEquals(1, triggered.size(),
+                "Balloon Stand should have 1 TRIGGERED ability: " + card.abilities());
+        Ability visit = triggered.get(0);
+        assertTrue(visit.descriptionText().toLowerCase().contains("visit"),
+                "Triggered ability should have 'visit' in description: " + visit.descriptionText());
+        List<Ability> options = visit.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertEquals(2, options.size(),
+                "Visit charm should expand to 2 OPTION sub-abilities: " + visit.subAbilities());
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().toLowerCase().contains("balloon")),
+                "Should have a Balloon option: " + options);
+    }
+
+    // --- Pattern 9a: Tiered charm — PrecostDesc prepended to option text ---
+
+    @Test
+    void tieredCharmIncludesPrecostDescInOptionText() {
+        // Vincent's Limit Break: Tiered charm with PrecostDesc$ on each choice SVar.
+        // Option text must include the PrecostDesc name, not just the raw P/T string.
+        CardFace card = face("v/vincents_limit_break.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.toLowerCase().contains("galian beast"),
+                "Tiered charm option should include 'Galian Beast': " + formatted);
+        assertTrue(formatted.toLowerCase().contains("death gigas"),
+                "Tiered charm option should include 'Death Gigas': " + formatted);
+        assertTrue(formatted.toLowerCase().contains("hellmasker"),
+                "Tiered charm option should include 'Hellmasker': " + formatted);
+    }
+
+    // --- Pattern 9b: MayEffectFromOpeningHand keyword ---
+
+    @Test
+    void mayEffectFromOpeningHandEmitsTriggeredAbility() {
+        // Chancellor of the Tangle: MayEffectFromOpeningHand:ManaOnMain where ManaOnMain
+        // has no SpellDescription; description is on the RevealCard SVar fallback.
+        CardFace card = face("c/chancellor_of_the_tangle.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertTrue(triggered.stream().anyMatch(a ->
+                        a.descriptionText().toLowerCase().contains("may reveal")),
+                "Should have a TRIGGERED ability containing 'may reveal': " + triggered);
+    }
+
+    // --- Pattern J: Sub-ability text concatenated into activated line ---
+
+    @Test
+    void activatedAbilitySubChainConcatenatedNotSplit() {
+        // fleshformer: oracle=1 line but converter previously emitted 2 (root + sub-ability).
+        // After fix, sub-ability text must be concatenated into the root line.
+        CardFace card = face("f/fleshformer.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size(), "fleshformer should have exactly 1 ACTIVATED: " + card.abilities());
+        // No SPELL sub-abilities should exist (concatenated into root)
+        long spellSubs = activated.get(0).subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).count();
+        assertEquals(0, spellSubs,
+                "No SPELL sub-abilities should remain after concatenation: " + activated.get(0).subAbilities());
+    }
+
+    @Test
+    void grinningSorcAbilityIsSingleLine() {
+        // grinning_totem: oracle=1 line; converter must not split into 2 spell lines.
+        CardFace card = face("g/grinning_totem.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size(), "grinning_totem should have exactly 1 ACTIVATED: " + card.abilities());
+        long spellSubs = activated.get(0).subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.SPELL).count();
+        assertEquals(0, spellSubs,
+                "No SPELL sub-abilities after concatenation: " + activated.get(0).subAbilities());
+    }
+
+    // --- Pattern A: Triggered dice-roll ResultSubAbilities as OPTION ---
+
+    @Test
+    void triggeredDiceRollEmitsOutcomesAsOptions() {
+        // Swarming Goblins: triggered RollDice with 3 result ranges.
+        // Expected: 1 TRIGGERED with roll-a-d20 header and 3 OPTION sub-abilities.
+        CardFace card = face("s/swarming_goblins.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Should have at least 1 TRIGGERED: " + card.abilities());
+        // Find the one with dice-roll options
+        Ability diceTriggered = triggered.stream()
+                .filter(a -> !a.subAbilities().stream()
+                        .filter(s -> s.type() == AbilityType.OPTION).toList().isEmpty())
+                .findFirst()
+                .orElse(null);
+        assertNotNull(diceTriggered,
+                "Should have a TRIGGERED with OPTION sub-abilities: " + triggered);
+        List<Ability> options = diceTriggered.subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertTrue(options.size() >= 2,
+                "Should have at least 2 OPTION sub-abilities for dice results: " + options);
+    }
+
+    // --- Pattern B: ETBReplacement / ImmediateTrigger no duplicates ---
+
+    @Test
+    void etbReplacementNoDuplicateSpellLine() {
+        // Sigarda's Splendor: has an ETBReplacement/ImmediateTrigger SVar that is
+        // processed both by the triggers/replacements loop and (incorrectly) by the
+        // spell loop.  After the fix, no ability text should appear twice.
+        CardFace card = face("s/sigardas_splendor.txt");
+        String formatted = card.formatText();
+        // Collect all non-header values from formatted output
+        long duplicateCount = java.util.Arrays.stream(formatted.split("\n"))
+                .filter(line -> line.contains(":"))
+                .map(line -> {
+                    int colon = line.indexOf(':');
+                    return line.substring(colon + 1).strip();
+                })
+                .collect(java.util.stream.Collectors.groupingBy(v -> v, java.util.stream.Collectors.counting()))
+                .values().stream().filter(count -> count > 1).count();
+        assertEquals(0, duplicateCount,
+                "sigarda's_splendor should have no duplicate ability lines: " + formatted);
+    }
+
     // --- Pattern 7: CharmNum-based "choose N" header synthesis ---
 
     @Test
@@ -1002,6 +1160,37 @@ class RulesParserTest {
         String formatted = card.formatText();
         assertTrue(formatted.contains("choose up to one"),
                 "Output should contain 'choose up to one': " + formatted);
+    }
+
+    // --- Pattern F: Saga chapter content resolved from execute SVar ---
+
+    @Test
+    void sagaChapterWithHeaderOnlyTriggerDescriptionResolvesContent() {
+        // ballad_of_the_black_flag: TriggerDescription is just "I, II, III —" with
+        // the effect on the execute SVar.  Chapter lines must include the effect text.
+        CardFace card = face("b/ballad_of_the_black_flag.txt");
+        var chapters = abilitiesOfType(card, AbilityType.CHAPTER);
+        assertFalse(chapters.isEmpty(), "Should have CHAPTER abilities: " + card.abilities());
+        // At least one chapter must have non-empty effect text after the roman numeral header
+        assertTrue(chapters.stream().anyMatch(c -> {
+            String desc = c.descriptionText();
+            int dash = desc.indexOf('\u2014');
+            return dash >= 0 && !desc.substring(dash + 1).trim().isEmpty();
+        }), "At least one chapter should have effect text after em-dash: " + chapters);
+    }
+
+    // --- Pattern E: Ward keyword classified as STATIC ---
+
+    @Test
+    void wardKeywordClassifiedAsStatic() {
+        // calim_djinn_emperor: K:Ward:2 should emit "static: ward {2}", not "triggered: ward {2}".
+        CardFace card = face("c/calim_djinn_emperor.txt");
+        var statics = abilitiesOfType(card, AbilityType.STATIC);
+        assertTrue(statics.stream().anyMatch(a -> a.descriptionText().toLowerCase().contains("ward")),
+                "Ward should be classified as STATIC: " + card.abilities());
+        assertEquals(0, abilitiesOfType(card, AbilityType.TRIGGERED).stream()
+                        .filter(a -> a.descriptionText().toLowerCase().contains("ward")).count(),
+                "Ward must NOT appear as TRIGGERED: " + card.abilities());
     }
 
     // --- Helpers ---

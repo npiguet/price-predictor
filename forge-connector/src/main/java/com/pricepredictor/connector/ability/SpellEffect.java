@@ -3,7 +3,6 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
-import com.pricepredictor.connector.ActionCounter;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -28,30 +27,6 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     }
 
     /**
-     * Format the entire SpellEffect sub-tree as a single {@code spell[N]} line.
-     * All descriptions in the chain are concatenated with a space, matching how
-     * MTG oracle text presents sequential sub-effects as one ability paragraph.
-     * The internal tree structure (sub-abilities) is preserved; only the text
-     * output is flattened.
-     */
-    @Override
-    public String formatBlock(ActionCounter counter) {
-        return type().getOutputPrefix() + "[" + counter.next() + "]: " + collectChainText(this);
-    }
-
-    /** Recursively collect and join descriptions from this node and all descendants. */
-    private static String collectChainText(Ability node) {
-        StringBuilder sb = new StringBuilder(node.descriptionText());
-        for (Ability child : node.subAbilities()) {
-            String childText = collectChainText(child);
-            if (!childText.isEmpty()) {
-                sb.append(' ').append(childText);
-            }
-        }
-        return sb.toString();
-    }
-
-    /**
      * Recursively walks a SpellAbility chain, returning 0 or 1 tree nodes.
      * Nodes with no SpellDescription are transparent: their children are promoted.
      * Also walks {@code RepeatSubAbility} (used by RepeatEach/Repeat) alongside the
@@ -70,7 +45,14 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
             List<Ability> repeatChildren = fromChain(repeatSub);
             if (!repeatChildren.isEmpty()) {
                 children = new ArrayList<>(children);
-                children.addAll(repeatChildren);
+                String parentCased = hasDesc ? AbilityDescription.applyCasing(stripped) : null;
+                for (Ability rc : repeatChildren) {
+                    // Skip repeat-sub children whose description duplicates the parent SA.
+                    // Some cards (e.g. Hoarder's Greed) copy the root SpellDescription onto
+                    // the RepeatSubAbility SVar for stack-display; including it would double-emit.
+                    if (parentCased != null && parentCased.equals(rc.descriptionText())) continue;
+                    children.add(rc);
+                }
             }
         }
 
