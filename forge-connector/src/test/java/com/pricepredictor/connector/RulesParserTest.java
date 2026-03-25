@@ -1193,6 +1193,38 @@ class RulesParserTest {
                 "Ward must NOT appear as TRIGGERED: " + card.abilities());
     }
 
+    // --- Pattern I: Missing spell effect after additional cost ---
+
+    @Test
+    void sheoldredRestorationEmitsSpellEffect() {
+        // TriggerDescription$ on root spell SA must be used as the spell description
+        var spells = abilitiesOfType(face("s/sheoldreds_restoration.txt"), AbilityType.SPELL);
+        assertTrue(spells.stream().anyMatch(
+                a -> a.descriptionText().toLowerCase().contains("return target creature card")),
+                "sheoldred's restoration spell effect missing: " + spells);
+    }
+
+    @Test
+    void vincentLimitBreakEmitsAdditionalDescription() {
+        // AdditionalDescription$ on Charm SA must become the main spell line
+        var spells = abilitiesOfType(face("v/vincents_limit_break.txt"), AbilityType.SPELL);
+        assertTrue(spells.stream().anyMatch(
+                a -> a.descriptionText().toLowerCase().contains("until end of turn")),
+                "vincent's limit break missing AdditionalDescription: " + spells);
+    }
+
+    @Test
+    void vincentLimitBreakOptionsIncludeModeCost() {
+        // Tiered charm options must include the ModeCost in "Name — {cost} — P/T" format
+        var spells = abilitiesOfType(face("v/vincents_limit_break.txt"), AbilityType.SPELL);
+        assertFalse(spells.isEmpty(), "vincent's limit break should have a SPELL: " + spells);
+        var options = spells.get(0).subAbilities().stream()
+                .filter(a -> a.type() == AbilityType.OPTION).toList();
+        assertTrue(options.stream().anyMatch(
+                a -> a.descriptionText().contains("{0}") || a.descriptionText().contains("{1}")),
+                "vincent's limit break options missing ModeCost: " + options);
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {

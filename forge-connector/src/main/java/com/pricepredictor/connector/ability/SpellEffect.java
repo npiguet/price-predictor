@@ -36,6 +36,9 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         if (sa == null) return List.of();
 
         String rawDesc = sa.getParam("SpellDescription");
+        if (rawDesc == null || rawDesc.isEmpty()) {
+            rawDesc = sa.getParam("TriggerDescription");
+        }
         String stripped = (rawDesc != null) ? AbilityDescription.stripReminderText(rawDesc) : null;
         boolean hasDesc = stripped != null && !stripped.isEmpty();
 

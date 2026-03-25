@@ -40,6 +40,13 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             }
         }
 
+        if (charmDesc == null || charmDesc.isEmpty()) {
+            String additionalDesc = sa.getParam("AdditionalDescription");
+            if (additionalDesc != null && !additionalDesc.isEmpty()) {
+                charmDesc = AbilityDescription.stripReminderText(additionalDesc);
+            }
+        }
+
         // Synthesize "choose N —" header from CharmNum/MinCharmNum when SpellDescription is absent.
         if (charmDesc == null || charmDesc.isEmpty()) {
             charmDesc = synthesizeCharmHeader(sa);
@@ -61,6 +68,13 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
                     choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
                             ? precostDesc + " \u2014 " + choiceDesc
                             : precostDesc;
+                }
+                String modeCost = choice.getParam("ModeCost");
+                if (modeCost != null && !modeCost.isEmpty()) {
+                    String costToken = "{" + modeCost.trim() + "}";
+                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
+                            ? costToken + " \u2014 " + choiceDesc
+                            : costToken;
                 }
                 String pawprint = choice.getParam("Pawprint");
                 if (pawprint != null) {
