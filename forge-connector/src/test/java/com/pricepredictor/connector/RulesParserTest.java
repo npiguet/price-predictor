@@ -1401,6 +1401,113 @@ class RulesParserTest {
                 "Must include count clause: " + specialize.descriptionText());
     }
 
+    // --- Pattern 3: Craft ability terse format ---
+
+    @Test
+    void craftWithIslandTypeAndCost() {
+        // Waterlogged Hulk: K:Craft:3 U ExileCtrlOrGrave<1/Island.Other>
+        CardFace card = face("w/waterlogged_hulk_watertight_gondola.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with island"),
+                "Must include type 'island': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{3}{U}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithArtifactTypeAndCost() {
+        // Oteclan Landmark: K:Craft:2 W ExileCtrlOrGrave<1/Artifact.Other>
+        CardFace card = face("o/oteclan_landmark_oteclan_levitator.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with artifact"),
+                "Must include type 'artifact': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{2}{W}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithCreatureTypeAndCost() {
+        // Tithing Blade: K:Craft:4 B ExileCtrlOrGrave<1/Creature.Other>
+        CardFace card = face("t/tithing_blade_consuming_sepulcher.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with creature"),
+                "Must include type 'creature': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{4}{B}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithArtifactMulticolorCost() {
+        // Dire Flail: K:Craft:3 R R ExileCtrlOrGrave<1/Artifact.Other>
+        CardFace card = face("d/dire_flail_dire_blunderbuss.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with artifact"),
+                "Must include type 'artifact': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{3}{R}{R}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithVariableCountOneOrMore() {
+        // Sunbird Standard: K:Craft:5 XMin1 ExileCtrlOrGrave<X/Permanent.Other/permanent>
+        CardFace card = face("s/sunbird_standard_sunbird_effigy.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with one or more"),
+                "Must include 'one or more': " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{5}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithExplicitMultiTypeDescription() {
+        // Throne of the Grim Captain: K:Craft:4 ExileCtrlOrGrave<…>:a Dinosaur, a Merfolk, a Pirate, and a Vampire:the four
+        CardFace card = face("t/throne_of_the_grim_captain_the_grim_captain.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with a dinosaur"),
+                "Must include explicit type description: " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{4}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
+    @Test
+    void craftWithTypeShareConstraintDescription() {
+        // Eye of Ojer Taq: K:Craft:6 ExileCtrlOrGrave<2/…>:two that share a card type:the two
+        CardFace card = face("e/eye_of_ojer_taq_apex_observatory.txt");
+        Ability craft = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("craft"))
+                .findFirst().orElseThrow();
+        assertTrue(craft.descriptionText().contains("craft with two that share a card type"),
+                "Must include constraint description: " + craft.descriptionText());
+        assertTrue(craft.descriptionText().contains("{6}"),
+                "Must include mana cost: " + craft.descriptionText());
+        assertFalse(craft.descriptionText().contains("exile"),
+                "Must not include verbose exile clause: " + craft.descriptionText());
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {

@@ -42,6 +42,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             if (kw == Keyword.AFFINITY && ki instanceof KeywordWithTypeInterface kti) {
                 title = "Affinity for " + kti.getTypeDescription();
             }
+            if (kw == Keyword.CRAFT) {
+                title = buildCraftTitle(ki.getOriginal());
+            }
             if (kw == Keyword.PROTECTION) {
                 // getOriginal() returns the raw script keyword, e.g.:
                 //   "Protection:Creature"         (simple type)
@@ -72,6 +75,58 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
+    }
+
+    /**
+     * Build the terse oracle title for a Craft keyword: "Craft with <typeDesc> <manaCost>".
+     *
+     * ki.getOriginal() format: "Craft:<costPart>[:<typeDesc>[:<replaceDesc>]]"
+     * where costPart contains mana tokens and ExileCtrlOrGrave<…> exile specs.
+     *
+     * Three sub-patterns for the type description:
+     *   - Explicit: parts[2] present and non-empty → use as-is
+     *   - Variable count: costPart contains "XMin" → "one or more"
+     *   - Simple type: extract first word of TYPE from ExileCtrlOrGrave<N/TYPE.suffix>
+     */
+    private static String buildCraftTitle(String original) {
+        String[] parts = original.split(":", 4);
+        if (parts.length < 2) return original;
+
+        String costPart = parts[1];
+
+        // Mana: strip all ExileCtrlOrGrave<…> specs and XMin\d+ constraint tokens
+        String mana = costPart
+                .replaceAll("ExileCtrlOrGrave<[^>]*>", "")
+                .replaceAll("XMin\\d+", "")
+                .trim();
+        String manaCostStr = new Cost(mana, false).toSimpleString();
+
+        // Type description (three sub-patterns)
+        String typeDesc;
+        if (parts.length >= 3 && !parts[2].isEmpty()) {
+            // Explicit human-readable description in k[2] (Throne of Grim Captain, Eye of Ojer Taq)
+            typeDesc = parts[2];
+        } else if (costPart.contains("XMin")) {
+            // Variable-count exile (Sunbird Standard): "one or more"
+            typeDesc = "one or more";
+        } else {
+            // Simple type: extract first word before '.' or '+' from ExileCtrlOrGrave<N/TYPE…>
+            int ecoIdx = costPart.indexOf("ExileCtrlOrGrave<");
+            int slashIdx = ecoIdx >= 0 ? costPart.indexOf('/', ecoIdx) : -1;
+            if (slashIdx >= 0) {
+                int typeStart = slashIdx + 1;
+                int typeEnd = typeStart;
+                while (typeEnd < costPart.length()
+                        && ".+>/<".indexOf(costPart.charAt(typeEnd)) < 0) {
+                    typeEnd++;
+                }
+                typeDesc = costPart.substring(typeStart, typeEnd);
+            } else {
+                typeDesc = "artifact"; // fallback
+            }
+        }
+
+        return "Craft with " + typeDesc + " " + manaCostStr;
     }
 
     /**
