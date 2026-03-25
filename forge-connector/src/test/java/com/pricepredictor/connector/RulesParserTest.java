@@ -1242,6 +1242,20 @@ class RulesParserTest {
     }
 
     @Test
+    void deeplyNestedImmediatelyTriggeredChooseOneExpandsAbilityPlaceholder() {
+        // Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger → Charm, TriggerDescription ends with "ABILITY"
+        CardFace card = face("c/cemetery_desecrator.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty());
+        Ability t = triggered.get(0);
+        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
+        assertTrue(t.descriptionText().contains("choose one"), "Must say 'choose one': " + t.descriptionText());
+        List<Ability> options = t.subAbilities();
+        assertEquals(2, options.size(), "Must have 2 options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
+    }
+
+    @Test
     void immediatelyTriggeredChooseOneExpandsAbilityPlaceholder() {
         // Hylda: ImmediateTrigger → Charm (default choose one), 3 choices
         CardFace card = face("h/hylda_of_the_icy_crown.txt");

@@ -58,11 +58,12 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             return new TriggeredAbilityEntry(effectiveType, normalized, options);
         }
 
-        // Handle ImmediateTrigger → Charm (e.g. Caesar, Hylda).
-        if (rawDesc != null && rawDesc.contains("ABILITY")
-                && execute != null && execute.getApi() == ApiType.ImmediateTrigger) {
-            SpellAbility nestedCharm = execute.getAdditionalAbility("Execute");
-            if (nestedCharm != null && nestedCharm.getApi() == ApiType.Charm) {
+        // Handle ImmediateTrigger → Charm anywhere in the execute SubAbility chain
+        // (e.g. Caesar, Hylda: direct; Cemetery Desecrator: ChangeZone → SubAbility → ImmediateTrigger).
+        if (rawDesc != null && rawDesc.contains("ABILITY") && execute != null) {
+            SpellAbility immTrig = findImmediateTriggerWithCharm(execute);
+            if (immTrig != null) {
+                SpellAbility nestedCharm = immTrig.getAdditionalAbility("Execute");
                 String charmHeader = CharmAbility.synthesizeCharmHeader(nestedCharm);
                 if (charmHeader == null) charmHeader = "choose one";
                 String expanded = rawDesc.replace("ABILITY", charmHeader);
@@ -126,6 +127,20 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             }
         }
         return List.of();
+    }
+
+    /**
+     * Walk the SubAbility chain of {@code sa} to find an ImmediateTrigger whose Execute is a Charm.
+     * Returns that ImmediateTrigger SA, or null if not found.
+     */
+    private static SpellAbility findImmediateTriggerWithCharm(SpellAbility sa) {
+        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+            if (cur.getApi() == ApiType.ImmediateTrigger) {
+                SpellAbility exec = cur.getAdditionalAbility("Execute");
+                if (exec != null && exec.getApi() == ApiType.Charm) return cur;
+            }
+        }
+        return null;
     }
 
     /**
