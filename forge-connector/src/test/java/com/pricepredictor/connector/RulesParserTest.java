@@ -1321,6 +1321,86 @@ class RulesParserTest {
         assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("20")));
     }
 
+    // --- Pattern 2: cost-reduction clause on keyword activated abilities ---
+
+    @Test
+    void equipReduceCostAppendsText() {
+        // Plate Armor: K:Equip:3:::ReduceCost$ Y:This ability costs {1} less…
+        CardFace card = face("p/plate_armor.txt");
+        Ability equip = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("equip"))
+                .findFirst().orElseThrow();
+        assertTrue(equip.descriptionText().contains("costs {1} less"),
+                "Must include cost reduction: " + equip.descriptionText());
+        assertTrue(equip.descriptionText().contains("each other equipment"),
+                "Must include count clause: " + equip.descriptionText());
+    }
+
+    @Test
+    void equipVariableReduceCostAppendsText() {
+        // Belt of Giant Strength: ReduceCost$ X:This ability costs {X} less…
+        CardFace card = face("b/belt_of_giant_strength.txt");
+        Ability equip = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("equip"))
+                .findFirst().orElseThrow();
+        assertTrue(equip.descriptionText().contains("costs {X} less"),
+                "Must include variable cost reduction: " + equip.descriptionText());
+        assertTrue(equip.descriptionText().contains("power of the creature"),
+                "Must include power clause: " + equip.descriptionText());
+    }
+
+    @Test
+    void adaptReduceCostAppendsText() {
+        // Pteramander: K:Adapt:4:7 U:X:instant and sorcery card in your graveyard
+        CardFace card = face("p/pteramander.txt");
+        Ability adapt = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("adapt"))
+                .findFirst().orElseThrow();
+        assertTrue(adapt.descriptionText().contains("costs {1} less"),
+                "Must include cost reduction: " + adapt.descriptionText());
+        assertTrue(adapt.descriptionText().contains("instant and sorcery card in your graveyard"),
+                "Must include count clause: " + adapt.descriptionText());
+    }
+
+    @Test
+    void adaptArtifactReduceCostAppendsText() {
+        // Etherium Pteramander: K:Adapt:4:6 B:X:other artifact you control
+        CardFace card = face("e/etherium_pteramander.txt");
+        Ability adapt = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("adapt"))
+                .findFirst().orElseThrow();
+        assertTrue(adapt.descriptionText().contains("costs {1} less"),
+                "Must include cost reduction: " + adapt.descriptionText());
+        assertTrue(adapt.descriptionText().contains("other artifact you control"),
+                "Must include count clause: " + adapt.descriptionText());
+    }
+
+    @Test
+    void monstrosityReduceCostAppendsText() {
+        // Grim Giganotosaurus: K:Monstrosity:10:10 B G:X:creature with power 4 or greater…
+        CardFace card = face("g/grim_giganotosaurus.txt");
+        Ability monstrosity = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("monstrosity"))
+                .findFirst().orElseThrow();
+        assertTrue(monstrosity.descriptionText().contains("costs {1} less"),
+                "Must include cost reduction: " + monstrosity.descriptionText());
+        assertTrue(monstrosity.descriptionText().contains("creature with power 4"),
+                "Must include count clause: " + monstrosity.descriptionText());
+    }
+
+    @Test
+    void specializeReduceCostAppendsText() {
+        // Imoen, Trickster Friend: K:Specialize:5::This ability costs {3} less…:ReduceCost$ X
+        CardFace card = face("i/imoen_trickster_friend.txt");
+        Ability specialize = abilitiesOfType(card, AbilityType.ACTIVATED).stream()
+                .filter(a -> a.descriptionText().contains("specialize"))
+                .findFirst().orElseThrow();
+        assertTrue(specialize.descriptionText().contains("costs {3} less"),
+                "Must include cost reduction: " + specialize.descriptionText());
+        assertTrue(specialize.descriptionText().contains("instant and/or sorcery cards in your graveyard"),
+                "Must include count clause: " + specialize.descriptionText());
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {
