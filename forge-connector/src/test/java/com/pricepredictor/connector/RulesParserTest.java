@@ -1225,6 +1225,88 @@ class RulesParserTest {
                 "vincent's limit break options missing ModeCost: " + options);
     }
 
+    // --- Pattern 1 extension: ABILITY placeholder via nested structures ---
+
+    @Test
+    void immediatelyTriggeredChooseTwoExpandsAbilityPlaceholder() {
+        // Caesar: ImmediateTrigger → Charm(CharmNum=2), TriggerDescription ends with "ABILITY"
+        CardFace card = face("c/caesar_legions_emperor.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty());
+        Ability t = triggered.get(0);
+        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
+        assertTrue(t.descriptionText().contains("choose two"), "Must say 'choose two': " + t.descriptionText());
+        List<Ability> options = t.subAbilities();
+        assertEquals(3, options.size(), "Must have 3 options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
+    }
+
+    @Test
+    void immediatelyTriggeredChooseOneExpandsAbilityPlaceholder() {
+        // Hylda: ImmediateTrigger → Charm (default choose one), 3 choices
+        CardFace card = face("h/hylda_of_the_icy_crown.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty());
+        Ability t = triggered.stream()
+                .filter(a -> a.descriptionText().contains("tap an untapped creature"))
+                .findFirst().orElseThrow();
+        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
+        assertTrue(t.descriptionText().contains("choose one"), "Must say 'choose one': " + t.descriptionText());
+        assertEquals(3, t.subAbilities().size(), "Must have 3 options: " + t.subAbilities());
+    }
+
+    @Test
+    void hauntCharmExpandsAbilityPlaceholder() {
+        // Orzhov Pontiff: Haunt SVar is DB$ Charm, no SpellDescription → ABILITY stays unexpanded today
+        CardFace card = face("o/orzhov_pontiff.txt");
+        // The haunted-dies triggered ability should mention "choose one", not "ABILITY"
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        Ability hauntTrig = triggered.stream()
+                .filter(a -> a.descriptionText().contains("haunts dies"))
+                .findFirst().orElseThrow();
+        assertFalse(hauntTrig.descriptionText().contains("ABILITY"),
+                "ABILITY must be replaced: " + hauntTrig.descriptionText());
+        assertTrue(hauntTrig.descriptionText().contains("choose one"),
+                "Must say 'choose one': " + hauntTrig.descriptionText());
+        assertEquals(2, hauntTrig.subAbilities().size(), "Must have 2 options: " + hauntTrig.subAbilities());
+        assertTrue(hauntTrig.subAbilities().stream().allMatch(o -> o.type() == AbilityType.OPTION));
+    }
+
+    @Test
+    void chapterCharmExpandsAbilityPlaceholder() {
+        // Life of Toshiro: Chapter I/II execute is DB$ Charm, SpellDescription$ ABILITY
+        MultiCard card = convertFromFile("l/life_of_toshiro_umezawa_memory_of_toshiro.txt");
+        CardFace front = card.faces().get(0);
+        var chapters = abilitiesOfType(front, AbilityType.CHAPTER);
+        // Find chapter I/II (the charm chapter)
+        Ability charmChapter = chapters.stream()
+                .filter(c -> c.descriptionText().contains("I") && c.descriptionText().contains("II"))
+                .findFirst().orElseThrow();
+        assertFalse(charmChapter.descriptionText().contains("ABILITY"),
+                "ABILITY must be replaced: " + charmChapter.descriptionText());
+        assertTrue(charmChapter.descriptionText().contains("choose one"),
+                "Must say 'choose one': " + charmChapter.descriptionText());
+        assertEquals(3, charmChapter.subAbilities().size(),
+                "Must have 3 charm options: " + charmChapter.subAbilities());
+        assertTrue(charmChapter.subAbilities().stream().allMatch(o -> o.type() == AbilityType.OPTION));
+    }
+
+    @Test
+    void diceRollTriggerExpandsAbilityPlaceholder() {
+        // Delina: Trigger → Repeat → RollDice, TriggerDescription ends with "ABILITY"
+        CardFace card = face("d/delina_wild_mage.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty());
+        Ability t = triggered.get(0);
+        assertFalse(t.descriptionText().contains("ABILITY"), "ABILITY must be replaced: " + t.descriptionText());
+        assertTrue(t.descriptionText().contains("roll"), "Must mention dice roll: " + t.descriptionText());
+        List<Ability> options = t.subAbilities();
+        assertEquals(2, options.size(), "Must have 2 dice-roll options: " + options);
+        assertTrue(options.stream().allMatch(o -> o.type() == AbilityType.OPTION));
+        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("14")));
+        assertTrue(options.stream().anyMatch(o -> o.descriptionText().contains("20")));
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {

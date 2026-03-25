@@ -58,12 +58,36 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             return new TriggeredAbilityEntry(effectiveType, normalized, options);
         }
 
+        // Handle ImmediateTrigger → Charm (e.g. Caesar, Hylda).
+        if (rawDesc != null && rawDesc.contains("ABILITY")
+                && execute != null && execute.getApi() == ApiType.ImmediateTrigger) {
+            SpellAbility nestedCharm = execute.getAdditionalAbility("Execute");
+            if (nestedCharm != null && nestedCharm.getApi() == ApiType.Charm) {
+                String charmHeader = CharmAbility.synthesizeCharmHeader(nestedCharm);
+                if (charmHeader == null) charmHeader = "choose one";
+                String expanded = rawDesc.replace("ABILITY", charmHeader);
+                normalized = AbilityDescription.normalize(expanded);
+                List<Ability> options = CharmAbility.optionsFrom(nestedCharm);
+                return new TriggeredAbilityEntry(effectiveType, normalized, options);
+            }
+        }
+
         // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
         // is the authoritative oracle text for triggered abilities.  Walking the chain would
         // re-emit SVars that are already covered by ETBReplacement / replacement keywords,
         // causing duplicates (e.g. sigarda's_splendor's NoteNum SVar).
         // Dice-outcome options are the one exception — they represent distinct result lines.
         List<Ability> children = execute != null ? diceOutcomesAsOptions(execute) : List.of();
+
+        // If ABILITY placeholder remains and dice outcomes were found, replace with dice-roll description.
+        if (rawDesc != null && rawDesc.contains("ABILITY") && !children.isEmpty()) {
+            String diceDesc = findDiceRollDescription(execute);
+            if (diceDesc != null) {
+                normalized = AbilityDescription.normalize(
+                        rawDesc.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)));
+            }
+        }
+
         return new TriggeredAbilityEntry(effectiveType, normalized, children);
     }
 
@@ -76,24 +100,49 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         // Some cards (e.g. journey_to_the_lost_city) have the dice SA as a sub-ability.
         for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
             String resultSubAbilities = cur.getParam("ResultSubAbilities");
-            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
-            List<Ability> result = new ArrayList<>();
-            for (String entry : resultSubAbilities.split(",")) {
-                String[] kv = entry.trim().split(":", 2);
-                if (kv.length < 2) continue;
-                String range = kv[0].trim();
-                SpellAbility sub = cur.getAdditionalAbility(range);
-                if (sub == null) continue;
-                String rawDesc = sub.getParam("SpellDescription");
-                if (rawDesc == null || rawDesc.isEmpty()) continue;
-                String desc = AbilityDescription.replaceVert(rawDesc);
-                String normalized = AbilityDescription.normalize(desc);
-                if (normalized != null) {
-                    result.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(normalized)));
+            if (resultSubAbilities != null && !resultSubAbilities.isEmpty()) {
+                List<Ability> result = new ArrayList<>();
+                for (String entry : resultSubAbilities.split(",")) {
+                    String[] kv = entry.trim().split(":", 2);
+                    if (kv.length < 2) continue;
+                    String range = kv[0].trim();
+                    SpellAbility sub = cur.getAdditionalAbility(range);
+                    if (sub == null) continue;
+                    String rawDesc = sub.getParam("SpellDescription");
+                    if (rawDesc == null || rawDesc.isEmpty()) continue;
+                    String desc = AbilityDescription.replaceVert(rawDesc);
+                    String normalized = AbilityDescription.normalize(desc);
+                    if (normalized != null) {
+                        result.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(normalized)));
+                    }
                 }
+                return result;
             }
-            return result;
+            // Also check RepeatSubAbility (e.g. Delina, Wild Mage)
+            SpellAbility repeatSub = cur.getAdditionalAbility("RepeatSubAbility");
+            if (repeatSub != null) {
+                List<Ability> fromRepeat = diceOutcomesAsOptions(repeatSub);
+                if (!fromRepeat.isEmpty()) return fromRepeat;
+            }
         }
         return List.of();
+    }
+
+    /**
+     * Walk SubAbility and RepeatSubAbility chains to find the SA with ResultSubAbilities.
+     * Returns its SpellDescription, or null if not found.
+     */
+    private static String findDiceRollDescription(SpellAbility sa) {
+        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
+            if (cur.getParam("ResultSubAbilities") != null) {
+                return cur.getParam("SpellDescription");
+            }
+            SpellAbility repeatSub = cur.getAdditionalAbility("RepeatSubAbility");
+            if (repeatSub != null) {
+                String desc = findDiceRollDescription(repeatSub);
+                if (desc != null) return desc;
+            }
+        }
+        return null;
     }
 }

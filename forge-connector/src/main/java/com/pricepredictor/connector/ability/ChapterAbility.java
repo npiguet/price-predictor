@@ -3,16 +3,28 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import forge.game.ability.ApiType;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Chapter ability from a Saga. One ChapterAbility per trigger, with uppercased Roman prefix.
  */
-public record ChapterAbility(String descriptionText) implements Ability {
+public record ChapterAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
+
+    public ChapterAbility {
+        Objects.requireNonNull(subAbilities);
+        subAbilities = List.copyOf(subAbilities);
+    }
+
+    /** Convenience constructor: no sub-abilities. */
+    public ChapterAbility(String descriptionText) {
+        this(descriptionText, List.of());
+    }
 
     @Override
     public AbilityType type() {
@@ -29,6 +41,23 @@ public record ChapterAbility(String descriptionText) implements Ability {
             // If TriggerDescription is just a chapter header (nothing after the em-dash),
             // resolve the execute SVar's SpellDescription to fill chapter content.
             String stripped = AbilityDescription.stripReminderText(trigDesc).trim();
+
+            // If TriggerDescription contains the ABILITY placeholder and execute is a Charm,
+            // replace with charm header and attach OPTION sub-abilities.
+            if (stripped.contains("ABILITY")) {
+                SpellAbility execute = trigger.getOverridingAbility();
+                if (execute != null && execute.getApi() == ApiType.Charm) {
+                    String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
+                    if (charmHeader == null) charmHeader = "choose one";
+                    stripped = stripped.replace("ABILITY", charmHeader);
+                    List<Ability> options = CharmAbility.optionsFrom(execute);
+                    String normalized = AbilityDescription.normalize(stripped);
+                    if (normalized == null) continue;
+                    abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), options));
+                    continue;
+                }
+            }
+
             if (isHeaderOnly(stripped)) {
                 SpellAbility execute = trigger.getOverridingAbility();
                 if (execute != null) {
