@@ -282,25 +282,46 @@ public class RulesParser {
             String desc = buildAlternateAdditionalCostDescription(original);
             abilities.add(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
         } else if (original.startsWith("Visit:")) {
-            // Attraction visit keyword.  Use only the first line of TriggerDescription as the
-            // header (charm-based visits embed bullet lines after a \n).  When the overriding
-            // ability is a Charm, expand its choices as OPTION sub-abilities.
+            // Attraction visit keyword.  For Charm-based visits, use TriggerDescription as the
+            // header and expand Charm options as OPTION sub-abilities (existing behaviour).
+            // For non-Charm visits, derive the header from the Execute SA's SpellDescription:
+            // Forge generates TriggerDescription = "Visit — " + SpellDescription, so when
+            // SpellDescription already starts with "Visit — " the result is doubled.
+            // Using SpellDescription directly with an ensured single "Visit — " prefix avoids
+            // the doubled header.  Children are always empty: the SpellDescription is the
+            // complete oracle text and SpellEffect.fromChain would only duplicate it.
             for (Trigger t : ki.getTriggers()) {
-                String tDesc = t.getParam("TriggerDescription");
-                if (tDesc == null || "Blank".equals(tDesc)) continue;
-                int nl = tDesc.indexOf('\n');
-                if (nl >= 0) tDesc = tDesc.substring(0, nl);
-                String normalized = AbilityDescription.normalize(tDesc);
-                if (normalized == null || normalized.isEmpty()) continue;
                 SpellAbility overriding = t.getOverridingAbility();
+                String header;
                 List<Ability> children;
                 if (overriding != null && overriding.getApi() == ApiType.Charm) {
+                    String tDesc = t.getParam("TriggerDescription");
+                    if (tDesc == null || "Blank".equals(tDesc)) continue;
+                    int nl = tDesc.indexOf('\n');
+                    if (nl >= 0) tDesc = tDesc.substring(0, nl);
+                    header = AbilityDescription.normalize(tDesc);
                     children = CharmAbility.optionsFrom(overriding);
                 } else {
-                    children = SpellEffect.fromChain(overriding);
+                    String spellDesc = overriding != null ? overriding.getParam("SpellDescription") : null;
+                    if (spellDesc == null || spellDesc.isEmpty()) {
+                        // Fallback: use TriggerDescription (may have doubled prefix but better than nothing)
+                        String tDesc = t.getParam("TriggerDescription");
+                        if (tDesc == null || "Blank".equals(tDesc)) continue;
+                        int nl = tDesc.indexOf('\n');
+                        if (nl >= 0) tDesc = tDesc.substring(0, nl);
+                        header = AbilityDescription.normalize(tDesc);
+                    } else {
+                        // Ensure exactly one "Visit — " prefix.
+                        if (!spellDesc.startsWith("Visit — ")) {
+                            spellDesc = "Visit — " + spellDesc;
+                        }
+                        header = AbilityDescription.normalize(spellDesc);
+                    }
+                    children = List.of();
                 }
+                if (header == null || header.isEmpty()) continue;
                 abilities.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
-                        AbilityDescription.applyCasing(normalized), children));
+                        AbilityDescription.applyCasing(header), children));
             }
         } else if (original.startsWith("MayEffectFromOpeningHand:")
                 || original.startsWith("MayEffectFromOpeningDeck:")) {
