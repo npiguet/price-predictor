@@ -25,6 +25,8 @@ _ADDITIONAL_COST_PREFIX = re.compile(
 )
 # Class/Talent cards have "{cost}: Level N" lines in oracle that the converter drops.
 _CLASS_LEVEL_LINE = re.compile(r"^(\{[^}]+\})+:\s*Level\s+\d+$", re.IGNORECASE)
+# text: lines that are purely a [Developer's note: …] bracket — Forge-internal metadata.
+_DEVELOPER_NOTE = re.compile(r"^\[developer's note:[^\]]*\]$", re.IGNORECASE)
 # Oracle: "Protection from creatures/artifacts/…" (with "from" + plural type)
 # Converter internal format: "protection:creature" → normalised "protection creature"
 # Two-step: first strip plural 's' from "protection from Xs", then strip bare "from".
@@ -80,7 +82,24 @@ _SKIP_ORACLE_AGGREGATION: frozenset[str] = frozenset({
     "o/oversoul_of_dusk.txt",       # three color-protection keywords → one oracle compound line
 })
 
-_SKIP_FILES: frozenset[str] = _SKIP_ORACLE_SHORTHAND | _SKIP_ORACLE_AGGREGATION
+# Cards where the Forge script has no SpellDescription for the main spell effect —
+# the converter correctly emits the additional cost but cannot produce a spell-effect line.
+_SKIP_MISSING_DESCRIPTION: frozenset[str] = frozenset({
+    "c/crashing_wave.txt",  # A:SP$ Tap + DBPutCounter SVars have no description
+})
+
+# Cards whose Forge implementation uses unofficial errata that diverges fundamentally
+# from the printed oracle text; mismatch is not fixable without altering the oracle.
+_SKIP_UNOFFICIAL_ERRATA: frozenset[str] = frozenset({
+    "n/1996_world_champion.txt",  # EDH Silver errata: ETB choose-opponent + emblem not in oracle
+})
+
+_SKIP_FILES: frozenset[str] = (
+    _SKIP_ORACLE_SHORTHAND
+    | _SKIP_ORACLE_AGGREGATION
+    | _SKIP_MISSING_DESCRIPTION
+    | _SKIP_UNOFFICIAL_ERRATA
+)
 
 # Mapping from basic land subtypes to their intrinsic mana ability text
 _LAND_TYPE_MANA: dict[str, str] = {
@@ -142,6 +161,7 @@ def _normalize(text: str, card_name: str | None = None) -> str:
     """Normalize text for comparison: lowercase, strip reminder text,
     replace card name, collapse whitespace/punctuation."""
     text = text.lower()
+    text = text.replace("nickname", "cardname")
     # Strip reminder text (parenthesized)
     text = _REMINDER_TEXT.sub("", text)
     # Strip "as an additional cost to cast this spell, " prefix: oracle includes it but
@@ -206,6 +226,13 @@ def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
         oracle_lines = [ln for ln in oracle_lines if ln]
         # Drop Class/Talent "{cost}: Level N" lines — converter omits them
         oracle_lines = [ln for ln in oracle_lines if not _CLASS_LEVEL_LINE.match(ln)]
+        # Replace card name and NICKNAME with CARDNAME before splitting, so card names
+        # containing commas (e.g., "Silvos, Rogue Elemental") do not cause incorrect splits.
+        if card_name:
+            oracle_lines = [
+                ln.replace(card_name, "CARDNAME").replace("NICKNAME", "CARDNAME")
+                for ln in oracle_lines
+            ]
         # Split comma-separated keyword-only lines so line counts match the converter
         expanded: list[str] = []
         for ln in oracle_lines:
@@ -253,6 +280,10 @@ def _extract_ability_text(converted_text: str) -> tuple[list[str], list[str]]:
             continue
 
         value = raw_line[colon + 1:].strip()
+        # Skip text: lines that are purely a [Developer's note: …] — Forge-internal metadata,
+        # not oracle content; the Java converter should strip these, but guard here too.
+        if base_key == "text" and _DEVELOPER_NOTE.match(value):
+            continue
         # Class level lines include the upgrade cost (e.g. "{2}{R}: At the beginning...")
         # which oracle drops.  Strip the leading mana-cost prefix before comparison.
         if base_key == "level" and value:

@@ -433,6 +433,72 @@ class TestCheckCard:
             f"Sentence with comma should not be split, got {result.oracle_lines} lines"
         )
 
+    def test_card_name_with_comma_not_split(self):
+        # Oracle: "{G}: Regenerate Silvos, Rogue Elemental." — the comma is inside the card name.
+        # After card-name substitution (Silvos, Rogue Elemental → CARDNAME), there is no comma
+        # left, so _split_keyword_line must not produce more than 1 oracle line.
+        forge = (
+            "Name:Silvos, Rogue Elemental\n"
+            "ManaCost:3 G G G\n"
+            "Types:Legendary Creature Elemental\n"
+            "Oracle:Trample\\n{G}: Regenerate Silvos, Rogue Elemental.\n"
+        )
+        converted = (
+            "name: silvos, rogue elemental\n"
+            "mana cost: {3}{G}{G}{G}\n"
+            "types: legendary creature elemental\n"
+            "static: trample\n"
+            "activated[1]: {G}: regenerate CARDNAME.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.oracle_lines == 2, (
+            f"Oracle should have 2 lines (trample + regenerate CARDNAME), got {result.oracle_lines}"
+        )
+        assert result.similarity > 0.8, f"Got {result.similarity:.2%}"
+
+    def test_nickname_in_converter_matches_cardname_in_oracle(self):
+        # Converter may output NICKNAME; oracle uses the card name; both should normalize to CARDNAME.
+        forge = (
+            "Name:Test Card\n"
+            "Types:Creature\n"
+            "Oracle:Test Card gets +2/+2 until end of turn.\n"
+        )
+        converted = (
+            "name: test card\n"
+            "types: creature\n"
+            "activated[1]: {1}: NICKNAME gets +2/+2 until end of turn.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"NICKNAME in converter should match card name in oracle, got {result.similarity:.2%}"
+        )
+
+    def test_developer_note_in_text_not_counted(self):
+        # A text: line containing only [Developer's note: …] should not be counted
+        # as an ability line for comparison purposes (it is not oracle content).
+        forge = (
+            "Name:Celestine Cave Witch\n"
+            "Types:Creature Human Warlock\n"
+            "Oracle:When Celestine Cave Witch enters, create two 1/1 black Insect tokens."
+            "\\nWhenever Celestine Cave Witch attacks, you may sacrifice an Insect."
+            " When you do, curse defending player.\n"
+        )
+        converted = (
+            "name: celestine cave witch\n"
+            "types: creature human warlock\n"
+            "text: [developer's note: while intent is clear, the card doesn't work as intended"
+            " if the rules text is followed exactly as printed.]\n"
+            "triggered: when CARDNAME enters, create two 1/1 black insect tokens.\n"
+            "triggered: whenever CARDNAME attacks, you may sacrifice an insect."
+            " when you do, curse defending player.\n"
+        )
+        result = check_card(converted, forge)
+        assert result.converted_lines == 2, (
+            f"Developer's note text: line should not count as an ability line, "
+            f"got {result.converted_lines}"
+        )
+        assert result.similarity > 0.8, f"Got {result.similarity:.2%}"
+
     def test_class_level_lines_dropped_from_oracle(self):
         # Class/Talent cards have "{cost}: Level N" lines in oracle that the
         # converter omits entirely.  The checker must drop them before comparison.

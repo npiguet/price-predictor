@@ -76,6 +76,9 @@ public final class AbilityDescription {
         // Restore placeholders to uppercase (word-boundary-aware to avoid corrupting substrings)
         lowered = PLACEHOLDER_WORD.matcher(lowered).replaceAll(mr -> mr.group().toUpperCase());
 
+        // Normalize NICKNAME to CARDNAME: both refer to the card's own name; use one placeholder.
+        lowered = lowered.replace("NICKNAME", "CARDNAME");
+
         // Restore variable X to uppercase (standalone X not inside words like "exile")
         lowered = VARIABLE_X.matcher(lowered).replaceAll("X");
 

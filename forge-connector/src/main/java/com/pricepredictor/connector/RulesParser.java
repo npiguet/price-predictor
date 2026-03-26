@@ -255,6 +255,11 @@ public class RulesParser {
         String defense = nullIfEmpty(face.getDefense());
 
         String text = nullIfEmpty(face.getNonAbilityText());
+        if (text != null) {
+            // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
+            text = text.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip();
+            if (text.isEmpty()) text = null;
+        }
         if (text != null) text = AbilityDescription.applyCasing(text);
 
         return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, null, text, abilities);

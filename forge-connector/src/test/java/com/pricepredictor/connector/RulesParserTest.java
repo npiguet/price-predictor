@@ -1839,6 +1839,59 @@ class RulesParserTest {
                 "Each of the two hexproof keywords must produce its own static line: " + statics);
     }
 
+    // --- Pattern 8: Missing spell description / Pattern 9: NICKNAME / Pattern 10: Developer note ---
+
+    @Test
+    void crashingWaveAdditionalCostPresentNoSpellEffect() {
+        // A:SP$ Tap has no SpellDescription/StackDescription → no spell effect can be emitted.
+        var card = face("c/crashing_wave.txt");
+        assertEquals(1, countOfType(card, AbilityType.ADDITIONAL_COST));
+        assertTrue(abilitiesOfType(card, AbilityType.ADDITIONAL_COST).get(0)
+                   .descriptionText().contains("waterbend"));
+        assertEquals(0, countOfType(card, AbilityType.SPELL),
+                     "No SpellDescription in Forge script → no spell effect emitted: " + card.abilities());
+    }
+
+    @Test
+    void silvosActivatedAbilityUsesCardnamePlaceholder() {
+        // SpellDescription$ Regenerate CARDNAME. — Java side already correct.
+        var card = face("s/silvos_rogue_elemental.txt");
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertTrue(activated.get(0).descriptionText().contains("regenerate"));
+        assertFalse(activated.get(0).descriptionText().toLowerCase().contains("silvos"),
+                    "Card name must be replaced, not kept literal: " + activated);
+    }
+
+    @Test
+    void nicknameReplacedWithCardname() {
+        // NICKNAME is a Forge alias for the card name — must appear as CARDNAME in output.
+        CardFace card = convert(
+            "Name:Test Card", "ManaCost:1", "Types:Creature Human", "PT:1/1",
+            "A:AB$ Pump | Cost$ 1 | SpellDescription$ NICKNAME gets +2/+2 until end of turn.",
+            "Oracle:Test Card gets +2/+2 until end of turn."
+        ).faces().get(0);
+        var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
+        assertEquals(1, activated.size());
+        assertTrue(activated.get(0).descriptionText().contains("CARDNAME"),
+                   "NICKNAME must be replaced with CARDNAME: " + activated);
+        assertFalse(activated.get(0).descriptionText().contains("NICKNAME"),
+                    "NICKNAME must not remain in output: " + activated);
+    }
+
+    @Test
+    void developerNoteStrippedFromTextField() {
+        // Text:[Developer's note: …] is not oracle content; must not be emitted.
+        var card = face("c/celestine_cave_witch.txt");
+        assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
+    }
+
+    @Test
+    void goblinPolkaBandDeveloperNoteStripped() {
+        var card = face("g/goblin_polka_band.txt");
+        assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {
