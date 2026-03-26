@@ -1,17 +1,10 @@
 package com.pricepredictor.connector;
 
 import forge.game.cost.Cost;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Integration tests for Forge's Cost class.
- * Requires the full Forge transitive dependency chain (Guava, etc.) on the classpath.
- * Run via: mvn test -Pintegration
- */
-@Tag("integration")
 class CostTranslationTest {
 
     @Test
