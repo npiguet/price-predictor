@@ -1508,6 +1508,236 @@ class RulesParserTest {
                 "Must not include verbose exile clause: " + craft.descriptionText());
     }
 
+    // --- Pattern 4: Missing secondary effects ---
+
+    // Regression: delayed-trigger execute SVars must not bleed into the trigger description.
+    // DelTrigBlocked/DelTrigBlocker have TriggerDescription$ which is already summarised
+    // in the root TriggerDescription; concatenating it would duplicate the text.
+    @Test
+    void delayedTriggerExecuteNotConcatenatedIntoTrigger() {
+        CardFace card = face("s/sawtooth_ogre.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
+        for (Ability t : triggered) {
+            String desc = t.descriptionText();
+            // "1 damage" must appear exactly once — duplication would cause two occurrences.
+            int first = desc.indexOf("1 damage");
+            assertTrue(first >= 0, "Must contain '1 damage': " + desc);
+            assertEquals(-1, desc.indexOf("1 damage", first + 1),
+                    "Damage clause must not be duplicated: " + desc);
+        }
+    }
+
+    @Test
+    void delayedTriggerDestroyNotConcatenatedIntoTrigger() {
+        CardFace card = face("t/tangle_asp.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
+        for (Ability t : triggered) {
+            String desc = t.descriptionText();
+            // "destroy" must appear exactly once — duplication would cause two occurrences.
+            int first = desc.indexOf("destroy");
+            assertTrue(first >= 0, "Must contain 'destroy': " + desc);
+            assertEquals(-1, desc.indexOf("destroy", first + 1),
+                    "Destroy clause must not be duplicated: " + desc);
+        }
+    }
+
+    // Regression: StackDescription on a sub-ability that copies parent SpellDescription verbatim
+    // must not produce a duplicate spell line (e.g. Bifurcate DBChangeZone StackDescription).
+    @Test
+    void stackDescriptionDuplicatingParentNotEmitted() {
+        CardFace card = face("b/bifurcate.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
+        String desc = spells.get(0).descriptionText();
+        // "search" must appear exactly once (StackDescription duplication would cause two)
+        int first = desc.indexOf("search");
+        assertTrue(first >= 0, "Must contain 'search': " + desc);
+        assertEquals(-1, desc.indexOf("search", first + 1),
+                "search clause must not be duplicated: " + desc);
+    }
+
+    // Regression: replacement-effect Description$ that exactly matches parent SpellDescription
+    // must not be emitted as a sub-ability (e.g. Shadowbane RepDmg.Description$).
+    @Test
+    void replacementDescriptionDuplicatingParentNotEmitted() {
+        CardFace card = face("s/shadowbane.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
+        // No sub-abilities — the replacement text is identical to the spell description
+        assertEquals(0, spells.get(0).subAbilities().size(),
+                "Duplicate replacement Description$ must not produce sub-ability: " + spells.get(0));
+    }
+
+    // Regression: replacement-effect Description$ that is a suffix of the SpellDescription
+    // must not be emitted again (e.g. Energy Arc RPrevent1).
+    @Test
+    void replacementDescriptionContainedInParentNotEmitted() {
+        CardFace card = face("e/energy_arc.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
+        String desc = spells.get(0).descriptionText();
+        // "prevent" must appear exactly once
+        int first = desc.indexOf("prevent");
+        assertTrue(first >= 0, "Must contain 'prevent': " + desc);
+        assertEquals(-1, desc.indexOf("prevent", first + 1),
+                "prevent clause must not be duplicated: " + desc);
+    }
+
+    // Regression: replacement-effect Description$ containing Forge placeholder EFFECTSOURCE
+    // must not be emitted as oracle text (e.g. Delirium RPrevent1).
+    @Test
+    void replacementDescriptionWithEffectsourceNotEmitted() {
+        CardFace card = face("d/delirium.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
+        String formatted = card.formatText();
+        // "prevent" must appear exactly once (from SpellDescription, not from replacement SVar)
+        int first = formatted.indexOf("prevent");
+        assertTrue(first >= 0, "Must contain 'prevent': " + formatted);
+        assertEquals(-1, formatted.indexOf("prevent", first + 1),
+                "prevent clause from EFFECTSOURCE replacement must not duplicate: " + formatted);
+    }
+
+    // Regression: a trigger SVar referenced in DB$ Effect.Triggers$ that has TriggerZones$
+    // must not be emitted as a spell sub-ability (it's also a top-level T: trigger).
+    @Test
+    void triggerZonesSVarNotEmittedAsSpellSubAbility() {
+        CardFace card = face("e/ertais_meddling.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertFalse(spells.isEmpty(), "Should have SPELL: " + card.abilities());
+        // The spell sub-ability should not duplicate the triggered ability
+        for (Ability spell : spells) {
+            assertFalse(spell.descriptionText().contains("beginning of each"),
+                    "TriggerZones trigger must not be embedded in spell line: " + spell.descriptionText());
+            assertTrue(spell.subAbilities().isEmpty(),
+                    "Spell must not have sub-abilities from zone-scoped triggers: " + spell);
+        }
+    }
+
+    // Regression: identical SpellDescription values across a sub-ability chain must all
+    // be emitted — each represents a distinct oracle effect (e.g. Bounty of Might x3).
+    @Test
+    void identicalSpellDescriptionsInChainAllEmitted() {
+        CardFace card = face("b/bounty_of_might.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertEquals(1, spells.size(), "Should have 1 SPELL: " + card.abilities());
+        // The single SPELL ability has a nested sub-ability chain representing all 3 effects.
+        // collectChainText must produce all 3 repetitions (not deduplicated away).
+        String formatted = card.formatText();
+        // Count occurrences of "+3/+3" — must appear 3 times
+        int count = 0, idx = 0;
+        while ((idx = formatted.indexOf("+3/+3", idx)) >= 0) { count++; idx++; }
+        assertEquals(3, count, "All 3 identical pump effects must be present: " + formatted);
+    }
+
+    @Test
+    void triggerExecuteChainTrailingTextConcatenated() {
+        // Oil-Gorger Troll: execute chain (TrigGainLife → DBDraw) has SpellDescription
+        // that must be concatenated into the trigger description.
+        CardFace card = face("o/oil_gorger_troll.txt");
+        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
+        assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
+        Ability t = triggered.get(0);
+        assertTrue(t.descriptionText().contains("you gain 3 life"),
+                "Must contain first action: " + t.descriptionText());
+        assertTrue(t.descriptionText().contains("oil counter"),
+                "Must contain trailing execute chain text: " + t.descriptionText());
+    }
+
+    @Test
+    void effectTriggerDescriptionEmittedAsSecondSpellLine() {
+        // Mage Hunters' Onslaught: DB$ Effect with Triggers$ TrigBlocking.
+        // TriggerDescription of TrigBlocking must appear as a second spell line.
+        CardFace card = face("m/mage_hunters_onslaught.txt");
+        var spells = abilitiesOfType(card, AbilityType.SPELL);
+        assertFalse(spells.isEmpty(), "Should have SPELL: " + card.abilities());
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("destroy target creature or planeswalker"),
+                "Must contain first effect: " + formatted);
+        assertTrue(formatted.contains("whenever a creature blocks"),
+                "Must contain trigger description from Effect SVar: " + formatted);
+    }
+
+    @Test
+    void effectTriggerDescriptionConcatenatedIntoSpellLine() {
+        // Reckless Blaze: DB$ Effect with Triggers$ DiesTrig.
+        // TriggerDescription must appear in the output (oracle=1 single paragraph).
+        CardFace card = face("r/reckless_blaze.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("deals 5 damage to each creature"),
+                "Must contain main effect: " + formatted);
+        assertTrue(formatted.contains("dies this turn"),
+                "Must contain trigger description from Effect SVar: " + formatted);
+    }
+
+    @Test
+    void effectReplacementDescriptionConcatenated() {
+        // Dazzling Reflection: DB$ Effect with ReplacementEffects$ Dazzle.
+        // Dazzle's Description$ must appear in the output.
+        CardFace card = face("d/dazzling_reflection.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("you gain life equal to target creature"),
+                "Must contain main effect: " + formatted);
+        assertTrue(formatted.contains("prevent that damage"),
+                "Must contain replacement Description$ from Effect SVar: " + formatted);
+    }
+
+    @Test
+    void stackDescriptionFallbackForSubAbility() {
+        // Transgress the Mind: ExileCard SVar has StackDescription but no SpellDescription.
+        // Must concatenate the StackDescription text into the spell line.
+        CardFace card = face("t/transgress_the_mind.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("target player reveals their hand"),
+                "Must contain root spell description: " + formatted);
+        assertTrue(formatted.contains("mana value 3 or greater"),
+                "Must contain sub-ability StackDescription text: " + formatted);
+    }
+
+    // Regression: replacement-effect Description$ containing EFFECTSOURCE in an activated ability
+    // must not be emitted even when ActivatedAbilityEntry calls fromChain() without parentDesc.
+    @Test
+    void replacementDescriptionWithEffectsourceNotEmittedFromActivatedAbility() {
+        // Stuffy Doll Avatar: SelflessDamage.Description$ contains EFFECTSOURCE placeholder.
+        // ActivatedAbilityEntry calls fromChain(sub) without parentDesc so parentDesc=null;
+        // the effectsource guard must fire before the parentDesc null check.
+        CardFace card = face("s/stuffy_doll_avatar.txt");
+        String formatted = card.formatText();
+        assertFalse(formatted.contains("effectsource"),
+                "EFFECTSOURCE placeholder must not appear in output: " + formatted);
+    }
+
+    // Regression: DB$ Effect SA whose SpellDescription is entirely reminder text (strips to empty)
+    // must not trigger collectEffectDescriptions — its replacement children are already covered.
+    @Test
+    void replacementDescriptionOfAllReminderTextEffectNotEmitted() {
+        // Sarah's Wings: NoDamage SVar has SpellDescription$ = "(Players with flying can't...)"
+        // which is entirely reminder text. collectEffectDescriptions must not run on it.
+        CardFace card = face("s/sarahs_wings.txt");
+        String formatted = card.formatText();
+        assertTrue(formatted.contains("flying"),
+                "Must contain flying grant: " + formatted);
+        assertFalse(formatted.contains("prevent all damage"),
+                "RPrevent.Description must not be emitted as extra ability: " + formatted);
+    }
+
+    // Regression: replacement-effect Description$ using "this card" instead of CARDNAME
+    // must be treated as redundant with the parent SpellDescription that uses CARDNAME.
+    @Test
+    void replacementDescriptionWithThisCardEquivalentToCardname() {
+        // Eye for an Eye: SelflessDamage.Description$ says "this card deals that much damage"
+        // while SpellDescription says "CARDNAME deals that much damage" — same meaning.
+        CardFace card = face("e/eye_for_an_eye.txt");
+        String formatted = card.formatText();
+        long count = formatted.lines()
+                .filter(l -> l.contains("deals that much damage to that source"))
+                .count();
+        assertEquals(1, count,
+                "The deals-damage effect must appear exactly once (not doubled): " + formatted);
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {

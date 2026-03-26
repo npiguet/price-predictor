@@ -89,7 +89,48 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
             }
         }
 
+        // Sub-pattern 4a: walk execute chain for trailing sub-SpellDescriptions.
+        // Only when the execute SA itself is transparent (has no description of its own):
+        // in that case, sub-ability SpellDescriptions contain oracle text not in TriggerDescription.
+        // Guard: also skip ImmediateTrigger (processed separately) and ETBReplacement (registered
+        // as replacement effects) to avoid duplicates (sigarda's_splendor concern).
+        if (execute != null
+                && isTransparentSA(execute)
+                && execute.getApi() != ApiType.ImmediateTrigger
+                && !"ETBReplacement".equals(execute.getParam("Mode"))) {
+            List<Ability> executeChain = SpellEffect.fromChain(execute);
+            if (!executeChain.isEmpty()) {
+                String extra = collectChainText(executeChain.get(0));
+                if (!extra.isEmpty()) {
+                    normalized = normalized + " " + extra;
+                }
+            }
+        }
         return new TriggeredAbilityEntry(effectiveType, normalized, children);
+    }
+
+    /**
+     * Returns true when a SpellAbility has no description of its own (transparent).
+     * Transparent SAs are safe to walk: extra oracle text comes only from sub-abilities.
+     */
+    private static boolean isTransparentSA(SpellAbility sa) {
+        String spellDesc = sa.getParam("SpellDescription");
+        if (spellDesc != null && !spellDesc.isEmpty()) return false;
+        String trigDesc = sa.getParam("TriggerDescription");
+        if (trigDesc != null && !trigDesc.isEmpty()) return false;
+        String stackDesc = sa.getParam("StackDescription");
+        if (stackDesc != null && !stackDesc.isEmpty() && !stackDesc.equals("None")) return false;
+        return true;
+    }
+
+    /** Recursively collect and join descriptions from an ability node and all its descendants. */
+    private static String collectChainText(Ability node) {
+        StringBuilder sb = new StringBuilder(node.descriptionText());
+        for (Ability child : node.subAbilities()) {
+            String ct = collectChainText(child);
+            if (!ct.isEmpty()) sb.append(' ').append(ct);
+        }
+        return sb.toString();
     }
 
     /**
