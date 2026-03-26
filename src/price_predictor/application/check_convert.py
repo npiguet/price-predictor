@@ -58,8 +58,8 @@ _LANDWALK_MAP: list[tuple[str, str]] = [
 
 # Cards whose Oracle text uses shorthand card-name references (unofficial sets that don't
 # follow standard MTG conventions) rather than rules text. Our converter outputs the full
-# ability text, which is correct; the oracle mismatch is unfixable. Skip them.
-_SKIP_FILES: frozenset[str] = frozenset({
+# ability text, which is correct; the oracle mismatch is unfixable.
+_SKIP_ORACLE_SHORTHAND: frozenset[str] = frozenset({
     "g/growth_charm.txt",
     "i/innistrad_charm.txt",
     "k/kamigawa_charm.txt",
@@ -67,6 +67,20 @@ _SKIP_FILES: frozenset[str] = frozenset({
     "t/theros_charm.txt",
     "u/ulgrotha_charm.txt",
 })
+
+# Cards where Oracle groups multiple protection/hexproof keywords (or same-effect static
+# abilities for different creature types) into a single compound line, but the converter
+# correctly emits each Forge keyword as its own separate static ability.  The word-bag
+# comparison flags these due to the extra "from"/"and" conjunction words in the oracle
+# compound line.  The converter behaviour is intentional and correct.
+_SKIP_ORACLE_AGGREGATION: frozenset[str] = frozenset({
+    "c/caterwauling_boggart.txt",   # two menace statics (Goblin / Elemental) → one oracle line
+    "e/elite_inquisitor.txt",       # three protection keywords → one oracle compound line
+    "j/jaheira_harper_emissary.txt",# two hexproof keywords → one oracle compound line
+    "o/oversoul_of_dusk.txt",       # three color-protection keywords → one oracle compound line
+})
+
+_SKIP_FILES: frozenset[str] = _SKIP_ORACLE_SHORTHAND | _SKIP_ORACLE_AGGREGATION
 
 # Mapping from basic land subtypes to their intrinsic mana ability text
 _LAND_TYPE_MANA: dict[str, str] = {

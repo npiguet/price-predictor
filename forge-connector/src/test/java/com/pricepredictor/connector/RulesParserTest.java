@@ -1812,6 +1812,33 @@ class RulesParserTest {
                 "The deals-damage effect must appear exactly once (not doubled): " + formatted);
     }
 
+    @Test
+    void multiProtectionKeywordsEachEmitSeparateStaticLine() {
+        // Elite Inquisitor has K:Protection:Vampire / K:Protection:Werewolf / K:Protection:Zombie.
+        // Oracle groups them as "Protection from Vampires, from Werewolves, and from Zombies"
+        // (one line), but the converter correctly models each Forge keyword as its own static
+        // ability.  Pin this behaviour so it is not accidentally collapsed.
+        var statics = abilitiesOfType(face("e/elite_inquisitor.txt"), AbilityType.STATIC);
+        long protections = statics.stream()
+                .filter(a -> a.descriptionText().toLowerCase().contains("protection from"))
+                .count();
+        assertEquals(3, protections,
+                "Each of the three protection keywords must produce its own static line: " + statics);
+    }
+
+    @Test
+    void multiHexproofKeywordsEachEmitSeparateStaticLine() {
+        // Jaheira, Harper Emissary has K:Hexproof:Artifact / K:Hexproof:Enchantment.
+        // Oracle groups them as "Hexproof from artifacts and enchantments" (one line), but the
+        // converter correctly models each Forge keyword as its own static ability.
+        var statics = abilitiesOfType(face("j/jaheira_harper_emissary.txt"), AbilityType.STATIC);
+        long hexproofs = statics.stream()
+                .filter(a -> a.descriptionText().toLowerCase().contains("hexproof from"))
+                .count();
+        assertEquals(2, hexproofs,
+                "Each of the two hexproof keywords must produce its own static line: " + statics);
+    }
+
     // --- Helpers ---
 
     private void assertCostsBeforeSpells(CardFace card) {
