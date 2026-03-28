@@ -96,55 +96,52 @@ FIFO eviction with KL divergence monitoring to detect when episodes are too stal
 
 ### Stage 0 - Training Dataset Preparation
 
-The training dataset is pre-generated before training begins. Sealed pools of
-6 booster packs are generated using Forge's internal classes via a forge-connector
-Java bridge. The dataset preparation process is:
+The training dataset is pre-generated before training begins. The preparation
+consists of two independent steps that can be run separately:
 
-1. The Python script invokes a forge-connector Java class that uses Forge's
-   internal classes to generate a configurable number of sealed pools, each
-   consisting of 6 boosters from the same configurable set. The pools are
-   written to a flat text file in the pools-path folder named pools.txt, one
-   pool per line, with card names separated by semicolons. Duplicate card
-   names are allowed since a pool can contain multiple copies of the same 
-   card. Basic lands are not included in the generated pools.
+#### Step 1 - Card Embedding Generation
+The Python application scans cards-path and generates a 512-dimensional embedding
+vector for each card found, following the process described in spec
+006-card-script-parsing. Each embedding is stored as a .npz file named after
+the card (e.g. Lightning-Bolt.npz) in the same cards-path folder. This step is
+skipped for cards that already have a corresponding .npz file, making it safe
+to run incrementally when new cards are added or when the encoder is retrained.
 
-2. The Python application reads pools.txt and converts each pool into a matrix
-   of card embeddings. Each card is looked up by name in cards-path and
-   converted to a 512-dimensional embedding vector using the pretrained card
-   encoder, following the process described in spec 006-card-script-parsing.
+#### Step 2 - Pool Generation
+The Python script invokes a forge-connector Java class that uses Forge's
+internal classes to generate a configurable number of sealed pools, each
+consisting of 6 boosters from the same configurable set. The pools are
+written to a flat text file in pools-path named pools.txt, one pool per
+line, with card names separated by semicolons. Duplicate card names are
+allowed since a pool can contain multiple copies of the same card. Basic
+lands are not included in the generated pools.
 
-3. The 6 basic land slots (Plains, Island, Swamp, Mountain, Forest, Waste) are
-   generated separately into basics-path as individual .npz files, one per
-   basic land type. This step is skipped if the files already exist. The basic
-   land embeddings are set-independent since their Oracle text is identical
-   across all sets.
+At training time, each pool is assembled by reading the .npz embedding file
+for each card in the pool, then appending the 6 basic land embeddings looked
+up by name from cards-path.
 
-4. The converted dataset is stored as a pools.npz file (numpy compressed format)
-   containing a single [N, P, 512] float32 array, where N is the number of
-   generated pools and P is the number of cards per pool (6 × the booster size
-   for the configured set). The format loads efficiently into Python and converts
-   to PyTorch tensors with zero overhead.
-
-The dataset preparation can be launched via the following command:
+The dataset preparation can be launched via the following commands:
 ```bash
-python -m sealed prepare-dataset \
-    --set [set-code] \
-    --size [n-pools] \
+python -m sealed encode-cards \
     --encoder-path [path] \
     --vocab-path [path] \
-    --cards-path [path] \
-    --pools-path [path] \
-    --basics-path [path]
+    --cards-path [path]
+
+python -m sealed generate-pools \
+    --set [set-code] \
+    --size [n-pools] \
+    --pools-path [path]
 ```
 
-Defaults:
-- **--set**: RVR
-- **--size**: 10000
+Defaults for encode-cards:
 - **--encoder-path**: models/price-predictor/transformer/latest.pt
 - **--vocab-path**: models/price-predictor/transformer/vocab.txt
 - **--cards-path**: output/cardsfolder/
+
+Defaults for generate-pools:
+- **--set**: RVR
+- **--size**: 10000
 - **--pools-path**: output/sealed/pools/{set-code}/
-- **--basics-path**: output/sealed/pools/basics/
 
 ### Stage 1 - Picking legal card (aka: Legal deck gate)
 At each pick step, we verify that the model has selected a pool slot that has not already been chosen in the current 
