@@ -50,20 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
                                                  help="Train sklearn model")
     _add_shared_train_args(train_sklearn)
     train_sklearn.add_argument("--model-output", type=str,
-                               default="./models/sklearn/")
+                               default="./models/price-predictor/sklearn/")
 
     # train transformer
     train_transformer = train_subparsers.add_parser("transformer",
                                                      help="Train transformer model")
     _add_shared_train_args(train_transformer)
     train_transformer.add_argument("--model-output", type=str,
-                                   default="./models/transformer/")
+                                   default="./models/price-predictor/transformer/")
     train_transformer.add_argument("--batch-size", type=int, default=64)
     train_transformer.add_argument("--epochs", type=int, default=100)
     train_transformer.add_argument("--lr", type=float, default=1e-4)
     train_transformer.add_argument("--patience", type=int, default=20)
     train_transformer.add_argument("--vocab-path", type=str,
-                                   default="models/transformer/vocab.txt",
+                                   default="models/price-predictor/transformer/vocab.txt",
                                    help="Path to vocab.txt built by 'vocabulary' command")
     train_transformer.add_argument("--log-offset", type=float, default=2.0,
                                    help="Offset used in log(price + offset) target transform "
@@ -99,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Inline multiline converted card text")
         if model_name == "transformer":
             p.add_argument("--vocab-path", type=str,
-                           default="models/transformer/vocab.txt",
+                           default="models/price-predictor/transformer/vocab.txt",
                            help="Path to vocab.txt")
 
     # ── evaluate {model} ─────────────────────────────────────────
@@ -112,7 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
                                                    help="Evaluate sklearn model")
     _add_shared_evaluate_args(eval_sklearn)
     eval_sklearn.add_argument("--model-path", type=str,
-                              default="./models/sklearn/latest.joblib")
+                              default="./models/price-predictor/sklearn/latest.joblib")
     eval_sklearn.add_argument("--output-csv", type=str, default=None)
 
     # evaluate transformer
@@ -120,16 +120,16 @@ def build_parser() -> argparse.ArgumentParser:
         "transformer", help="Evaluate transformer model")
     _add_shared_evaluate_args(eval_transformer)
     eval_transformer.add_argument("--model-path", type=str,
-                                  default="./models/transformer/")
+                                  default="./models/price-predictor/transformer/")
     eval_transformer.add_argument("--vocab-path", type=str,
-                                  default="models/transformer/vocab.txt",
+                                  default="models/price-predictor/transformer/vocab.txt",
                                   help="Path to vocab.txt")
 
     # ── serve ─────────────────────────────────────────────────────
     serve_parser = subparsers.add_parser("serve",
                                          help="Start the prediction REST service")
     serve_parser.add_argument("--model-path", type=str,
-                              default="models/sklearn/latest.joblib")
+                              default="models/price-predictor/sklearn/latest.joblib")
     serve_parser.add_argument("--printings-path", type=str,
                               default="resources/AllPrintings.json")
     serve_parser.add_argument("--prices-path", type=str,
@@ -137,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--host", type=str, default="0.0.0.0")
     serve_parser.add_argument("--port", type=int, default=8000)
     serve_parser.add_argument("--vocab-path", type=str,
-                              default="models/transformer/vocab.txt",
+                              default="models/price-predictor/transformer/vocab.txt",
                               help="Path to vocab.txt for transformer predictions")
 
     # ── vocabulary ────────────────────────────────────────────────
@@ -145,11 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
         "vocabulary", help="Build custom MTG tokenizer vocabulary from card corpus"
     )
     vocab_parser.add_argument(
-        "--output-dir", type=str, default="models/transformer/",
+        "--output-dir", type=str, default="models/price-predictor/transformer/",
         help="Directory where vocab.txt is written",
     )
     vocab_parser.add_argument(
-        "--cards-path", type=str, default="./output",
+        "--cards-path", type=str, default="./output/cardsfolder",
         help="Path to converted card corpus (directory of .txt files)",
     )
     vocab_parser.add_argument(
@@ -348,7 +348,7 @@ def run_serve(args: argparse.Namespace) -> int:
 
     # Try loading transformer model (optional — graceful degradation)
     transformer_artifact = None
-    transformer_dir = Path("models/transformer/")
+    transformer_dir = Path("models/price-predictor/transformer/")
     transformer_pt = transformer_dir / "latest.pt"
     if transformer_pt.exists():
         try:
@@ -626,7 +626,7 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
             from dataclasses import replace
             card = replace(card, printing_data=printing_data)
 
-    model_path = Path("models/sklearn/latest.joblib")
+    model_path = Path("models/price-predictor/sklearn/latest.joblib")
     try:
         use_case = PredictPriceUseCase()
         result = use_case.execute(card, model_path)
@@ -697,7 +697,7 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
         print(f"Error: Failed to load tokenizer: {e}", file=sys.stderr)
         return 1
 
-    model_dir = Path("models/transformer/")
+    model_dir = Path("models/price-predictor/transformer/")
     try:
         use_case = PredictTransformerUseCase()
         result = use_case.execute(card_text, model_dir, tokenizer=tokenizer,
