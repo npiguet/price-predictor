@@ -88,7 +88,7 @@ verifying that it prints human-readable pick sequences.
 ### Edge Cases
 
 - What happens when the pools file is empty or contains fewer entries than one full pool?
-- What happens when a card named in a pool has no corresponding embedding file in cards-path?
+- What happens when a card named in a pool has no corresponding embedding file in cards-path? → Training aborts immediately with an error message identifying the missing card(s).
 - What happens when the model path does not exist yet (first run, no checkpoint)?
 - What happens when training is interrupted mid-episode (e.g. keyboard interrupt between pick steps)?
 - What happens when `best_run` is 1 and the episode terminates on the very first pick? (Reward is `(1/1)×2-1 = 1.0` — intentional per spec.)
@@ -98,11 +98,13 @@ verifying that it prints human-readable pick sequences.
 ### Functional Requirements
 
 - **FR-001**: The sealed module MUST expose a `train` subcommand accepting `--stage`, `--set`, `--pools-path`,
-  `--cards-path`, and `--model-path` arguments, with defaults matching the Stage 0 conventions.
+  `--cards-path`, `--model-path`, and `--batch-size` arguments, with defaults matching the Stage 0 conventions
+  (`--batch-size` defaults to 32).
 - **FR-002**: When `--stage 1` is passed, the system MUST initialize a pool-level transformer model from scratch when
   no checkpoint exists, or resume from the checkpoint at model-path when one is present.
-- **FR-003**: Each training episode MUST sample a pool from the dataset, append the 6 basic land slot embeddings,
-  fill any empty slots with zero vectors, and reshuffle the non-basic-land portion of the pool before each pick step.
+- **FR-003**: Each training episode MUST draw the next pool from the dataset sequentially, looping back to the first
+  pool once all have been used. The episode then appends the 6 basic land slot embeddings, fills any empty slots with
+  zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
 - **FR-004**: Each of the 96 pool slots MUST be represented as a 516-dimensional feature vector: a 512-dimensional
   card embedding, a `picked_flag`, an `available_flag`, an `is_land` flag, and a `basic_land_count` value.
 - **FR-005**: During each pick step, a selection mask MUST be applied to the output logits that prevents re-selection
@@ -115,8 +117,14 @@ verifying that it prints human-readable pick sequences.
   names, per-step shuffle seeds, actions taken, log-probabilities of those actions, and episode reward. FIFO eviction
   MUST apply when the buffer is full.
 - **FR-009**: The system MUST monitor KL divergence on replay buffer entries to detect stale off-policy episodes.
-- **FR-010**: The system MUST save the model state to model-path at the end of each training batch, and MUST save a
-  timestamped checkpoint to the `checkpoints/` subfolder of the model path's parent every 1000 episodes.
+  When stale entries are detected, the system MUST log a warning to stdout and continue training without modifying
+  the buffer.
+- **FR-016**: After each training batch completes, the system MUST print one summary line to stdout containing: total
+  episode count, the `current_run` value for each episode in the batch, the current `best_run`, and the mean reward
+  across the batch.
+- **FR-010**: The system MUST save the model state to model-path at the end of each training batch (every
+  `--batch-size` episodes), and MUST save a timestamped checkpoint to the `checkpoints/` subfolder of the model
+  path's parent every 1000 episodes.
 - **FR-011**: The training loop MUST halt and report Stage 1 completion when the model achieves `current_run = 40` in
   100 consecutive episodes.
 - **FR-012**: The pool transformer MUST use the architecture specified in the sealed-deck-picker design: 8 transformer
@@ -155,6 +163,16 @@ verifying that it prints human-readable pick sequences.
 - **SC-005**: The `sample` command produces human-readable pick sequences that allow qualitative assessment of model
   behavior at any stage of training.
 - **SC-006**: Timestamped checkpoints saved every 1000 episodes allow rollback to any prior training state.
+
+## Clarifications
+
+### Session 2026-03-28
+
+- Q: How many episodes constitute one training batch (PPO update frequency)? → A: Fixed episode count per batch, configurable via `--batch-size` (default 32 episodes).
+- Q: What training progress output is shown on the console? → A: One summary line per batch showing episode count, per-episode current_run values, best_run, and mean batch reward.
+- Q: What action is taken when replay buffer entries are detected as stale via KL divergence? → A: Log a warning to stdout; no further action, training continues normally.
+- Q: What happens when a card named in a pool has no corresponding embedding file in cards-path? → A: Abort immediately with a clear error message identifying the missing card(s).
+- Q: How are pools sampled from the dataset across episodes? → A: Sequential pass through the dataset, looping back to the start when all pools have been used.
 
 ## Assumptions
 
