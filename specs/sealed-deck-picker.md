@@ -78,20 +78,25 @@ PPO (Proximal Policy Optimization) with experience replay:
 
 ## Replay Buffer
 
+Rather than storing full pool embeddings, episodes are stored compactly using
+the pool's card list and per-step shuffle seeds, allowing the exact state at
+each pick step to be reconstructed at training time.
+
 Per episode stored:
 
-| Feature            | Format          | Size        |
-|--------------------|-----------------|-------------|
-| pool embeddings:   | 95 × 512 floats | (~195 KB)   |
-| actions:           | 40 integers     | (160 bytes) |
-| log probabilities: | 40 floats       | (160 bytes) | 
-| reward:            | 1 float         | (4 bytes)   |
-|                    |                 |             |
-| total per episode: |                 | ~195 KB     |
-| buffer size:       | ~1000 episodes  | (~195 MB)   |
+| Feature           | Format                         | Size         |
+|-------------------|--------------------------------|--------------|
+| pool              | semicolon-separated card names | (~1.9 KB)    |
+| shuffle_seeds     | 40 integers                    | (160 bytes)  |
+| actions           | 40 integers                    | (160 bytes)  |
+| log_probabilities | 40 floats                      | (160 bytes)  |
+| reward            | 1 float                        | (4 bytes)    |
+|                   |                                |              |
+| total per episode |                                | ~2.4 KB      |
+| buffer size       | ~1000 episodes                 | (~2.4 MB)    |
 
-FIFO eviction with KL divergence monitoring to detect when episodes are too stale to be useful.
-
+FIFO eviction with KL divergence monitoring to detect when episodes are too
+stale to be useful.
 
 ## Training Curriculum
 
@@ -126,7 +131,8 @@ The dataset preparation can be launched via the following commands:
 python -m sealed encode-cards \
     --encoder-path [path] \
     --vocab-path [path] \
-    --cards-path [path]
+    --cards-path [path] \
+    --clean
 
 python -m sealed generate-pools \
     --set [set-code] \
@@ -144,32 +150,91 @@ Defaults for generate-pools:
 - **--size**: 10000
 - **--pools-path**: output/sealed/pools/{set-code}/
 
-### Stage 1 - Picking legal card (aka: Legal deck gate)
-At each pick step, we verify that the model has selected a pool slot that has not already been chosen in the current 
-episode. Basic land slots are exempt from this check since they can be picked any number of times.
+### Stage 1 - Picking legal cards (aka: Legal Pick Gate)
 
-At the start of each episode, a pool is sampled from the pre-generated dataset
-and the 6 basic land embeddings are appended to it, bringing the pool size to
-96 entries. The card order within the pool is then shuffled to prevent the
-model from learning positional biases.
+This is the first stage of training proper. The pool transformer and PPO training
+loop are initialized at the start of this stage.
 
-During training, the card order within each pool is shuffled before each
-episode to prevent the model from learning positional biases.
+Training proceeds as a sequence of episodes. At the start of each episode a pool
+is sampled from the pre-generated dataset. The 6 basic land embeddings are appended 
+at the end of the pool, bringing it to 96 entries. Empty slots (if any) are filled 
+with zero vectors and placed before the basic lands. Before each pick step, the
+non-basic-land portion of the pool is reshuffled to prevent the model from 
+developing positional biases.
+
+The model is then asked to sequentially pick 40 cards from the pool. At each pick
+step, we verify that the model has selected a pool slot that has not already been
+chosen in the current episode. Basic land slots are exempt from this check since
+they can be picked any number of times.
 
 When an illegal pick is made, the episode terminates immediately.
 
 The reward is calculated as:
-```
-reward = (current_run / best_run) × 2 - 1
-```
+
+    reward = (current_run / best_run) × 2 - 1
 
 Where:
 - current_run: the number of legal picks made in this episode before
   termination (minimum 1, since the first pick is always legal)
-- best_run: a high-water mark tracking the longest legal pick sequence
+- best_run: a high water mark tracking the longest legal pick sequence
   ever achieved, initialized to 1 and never decreasing
 
-When the model consistently reaches current_run = 40 over 100 consecutive episodes, training advances to stage 2.
+When the model reaches current_run = 40 in 100 consecutive episodes,
+training advances to stage 2.
+
+#### Command Line
+
+Training can be launched via the following command:
+```bash
+python -m sealed train \
+    --stage 1 \
+    --set [set-code] \
+    --pools-path [path] \
+    --cards-path [path] \
+    --model-path [path]
+```
+
+Defaults:
+- **--set**: RVR
+- **--pools-path**: output/sealed/pools/{set-code}/
+- **--cards-path**: output/cardsfolder/
+- **--model-path**: models/sealed/stage{stage}/latest.pt
+
+The --stage parameter controls which phase of training is executed, including
+the reward function, termination conditions, and which model components are
+trainable.
+
+#### Model Checkpointing
+
+The model is saved to model-path at the end of each training batch. A timestamped
+checkpoint is also saved every 1000 episodes to the checkpoints/ subfolder of
+model-path's parent folder, e.g. models/sealed/stage1/checkpoints/. This allows
+training to be resumed from any checkpoint and makes it easy to compare
+experiments across stages.
+
+#### Sampling
+
+A sample of the model's current picks can be generated at any time using:
+```bash
+python -m sealed sample \
+    --set [set-code] \
+    --pools-path [path] \
+    --cards-path [path] \
+    --model-path [path] \
+    --n-samples [n]
+```
+
+Defaults:
+- **--set**: RVR
+- **--pools-path**: output/sealed/pools/{set-code}/
+- **--cards-path**: output/cardsfolder/
+- **--model-path**: models/sealed/stage1/latest.pt
+- **--n-samples**: 10
+
+This generates n deck selections from random pools and prints each pick sequence
+as a human-readable list of card names, along with the number of legal picks made
+before the first illegal pick (if any). A completed run of 40 legal picks is
+reported as a success.
 
 ### Stage 2 — Picking playable cards (aka: Heuristic gate)
 Two instant checks computed from the picked deck:
