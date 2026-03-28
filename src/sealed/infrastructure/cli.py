@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/cardsfolder/",
         help="Directory containing .txt card script files (searched recursively)",
     )
+    encode_parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete all existing .npz files before encoding (forces full re-encode)",
+    )
 
     # ── generate-pools ────────────────────────────────────────────
     generate_parser = subparsers.add_parser(
@@ -82,6 +87,12 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     if not cards_path.exists():
         print(f"Error: Cards path not found: {cards_path}", file=sys.stderr)
         return 2
+
+    if args.clean:
+        npz_files = list(cards_path.rglob("*.npz"))
+        print(f"Cleaning {len(npz_files)} existing .npz files...")
+        for f in npz_files:
+            f.unlink()
 
     print(f"Encoding cards in {cards_path}")
 
