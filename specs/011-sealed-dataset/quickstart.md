@@ -40,7 +40,7 @@ python -m sealed encode-cards \
 **Expected output:**
 ```
 Encoding cards in output/cardsfolder/
-Progress: 100/32000 encoded (0 skipped)
+Progress: 100 encoded (0 skipped)
 ...
 Done: 32000 processed, 0 skipped, 0 errors
 ```

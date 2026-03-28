@@ -158,6 +158,6 @@ os.replace(str(tmp), str(path))
 
 ## 5. Progress Reporting
 
-**Decision**: Print a single-line progress update every 100 cards (encode-cards) or every 100 pools (generate-pools), using `\r` overwrite for encode-cards and newline-per-update for generate-pools (since the Java process streams stdout).
+**Decision**: Print a single-line progress update every 100 cards (encode-cards) or every 1000 pools (generate-pools), using `\r` overwrite for encode-cards and newline-per-update for generate-pools (since the Java process streams stdout).
 
-**Rationale**: Simple, no new dependencies. The `\r` approach gives a live counter without scrolling for encode-cards. Generate-pools reads from the Java subprocess's stdout line by line and re-prints each line.
+**Rationale**: Simple, no new dependencies. The `\r` approach gives a live counter without scrolling for encode-cards. Generate-pools reads from the Java subprocess's stdout line by line and re-prints each line. 1000-pool intervals are used for generate-pools to keep output manageable at the 10,000-pool default scale (10 progress lines total).

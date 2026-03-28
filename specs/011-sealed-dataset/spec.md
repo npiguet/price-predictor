@@ -67,7 +67,7 @@ After retraining the price predictor encoder, a researcher deletes stale embeddi
 
 ### Functional Requirements
 
-- **FR-001**: The `encode-cards` command MUST scan a specified folder of card scripts and generate a 512-dimensional embedding for each card found. Before passing a card's text to the encoder, the `name:` line MUST be stripped so that the embedding captures the card's game characteristics rather than its name.
+- **FR-001**: The `encode-cards` command MUST scan a specified folder of card scripts and generate a 2×d_model-dimensional embedding for each card found (512-dimensional when using the default model with d_model=256). Before passing a card's text to the encoder, the `name:` line MUST be stripped so that the embedding captures the card's game characteristics rather than its name.
 - **FR-002**: The `encode-cards` command MUST write each embedding as a file in the same cards folder, using the same filename as the card script but with a `.npz` extension (e.g., `Lightning-Bolt.txt` → `Lightning-Bolt.npz`).
 - **FR-003**: The `encode-cards` command MUST skip any card whose embedding file already exists in the cards folder, making repeated runs safe and incremental.
 - **FR-003a**: The `encode-cards` command MUST write each embedding atomically (write to a temporary file, then rename to final name on success), so that an interrupted run leaves no partial files on disk and a re-run recovers correctly.
@@ -75,7 +75,7 @@ After retraining the price predictor encoder, a researcher deletes stale embeddi
 - **FR-005**: The `generate-pools` command MUST generate a configurable number of sealed pools, each consisting of cards drawn from 6 boosters of a specified set, using Forge's booster generation logic.
 - **FR-006**: The `generate-pools` command MUST write all pools to a single flat text file, one pool per line, with card names separated by semicolons.
 - **FR-007**: The `generate-pools` command MUST filter out any basic lands that Forge's booster generator includes in a pool, so that no basic land names appear in the pools text file.
-- **FR-008**: The `generate-pools` command MUST accept command-line arguments for: the set code, the number of pools to generate, and the output directory path — with documented defaults (set: RVR, count: 10,000, path: output/sealed/pools/{set-code}/).
+- **FR-008**: The `generate-pools` command MUST accept command-line arguments for: the set code, the number of pools to generate, and the output directory path — with documented defaults (set: RVR, count: 10,000, path: output/sealed/pools/{set}/).
 - **FR-009**: The two commands (`encode-cards` and `generate-pools`) MUST be independently executable — neither requires the other to have run first in the same invocation.
 - **FR-010**: Both commands MUST report meaningful progress to the terminal so the researcher knows the operation is proceeding (e.g., a count of cards processed or pools generated).
 - **FR-011**: Both commands MUST report clear, actionable error messages when given invalid inputs (nonexistent paths, unrecognized set codes, etc.) and exit with a non-zero status code.

@@ -52,7 +52,7 @@
 
 - [ ] T007 [P] [US1] Implement `CardEncoder` (strip `name:` line, tokenize via `MtgTokenizer`, call `model.encode()`, return `float32` numpy array) in `src/sealed/domain/card_encoder.py`
 - [ ] T008 [P] [US1] Implement `EmbeddingStore` (`save` with atomic temp-rename pattern from `research.md §3`, `load` returning `np.load(path)["embedding"]`) in `src/sealed/infrastructure/embedding_store.py`
-- [ ] T009 [US1] Implement `EncodeCardsUseCase` (`execute(cards_path, encoder, store) -> EncodeCardsResult` with skip logic, progress every 100 cards via `\r`, error collection) in `src/sealed/application/encode_cards.py`
+- [ ] T009 [US1] Implement `EncodeCardsUseCase` (`execute(cards_path, encoder, store) -> EncodeCardsResult` with skip logic, single-pass progress every 100 cards via `\r` (format: `Progress: N encoded (M skipped)`), error collection) in `src/sealed/application/encode_cards.py`
 - [ ] T010 [US1] Implement `encode-cards` subcommand in `src/sealed/infrastructure/cli.py` (argparse with `--encoder-path`, `--vocab-path`, `--cards-path` and defaults per `contracts/cli.md`; validates paths exist; exits with code 2 on fatal error, code 1 if any card failed)
 - [ ] T011 [US1] Implement `src/sealed/__main__.py` entry point that dispatches to `encode-cards` (and later `generate-pools`) subcommands
 
@@ -70,17 +70,18 @@
 
 - [ ] T012 [P] [US2] Write JUnit 5 unit test for `PoolGenerator` (correct pool count, no basic lands in output, `IllegalArgumentException` for null/unknown set code) in `forge-connector/src/test/java/com/pricepredictor/connector/PoolGeneratorTest.java`
 - [ ] T013 [P] [US2] Write unit tests for `GeneratePoolsUseCase` (output directory created if absent, `PoolConnector.generate` called with correct args) in `tests/unit/sealed/application/test_generate_pools.py`
+- [ ] T014 [P] [US2] Write unit test for `PoolConnector` subprocess error propagation (simulate non-zero JAR exit code, assert `PoolConnector.generate` raises; verify `GeneratePoolsUseCase` propagates the error to the caller) in `tests/unit/sealed/infrastructure/test_pool_connector.py`
 
 ### Implementation for User Story 2
 
-- [ ] T014 [P] [US2] Implement `PoolGenerator` using Forge booster API (`FModel.getMagicDb().getBoosters().get(setCode)` + `UnOpenedProduct.get()`, 6 boosters per pool, `isBasicLand()` filter, null-check for unknown set code) per `research.md §1` in `forge-connector/src/main/java/com/pricepredictor/connector/PoolGenerator.java`
-- [ ] T015 [US2] Implement `PoolMain` CLI entry point (args: `--set`, `--size`, `--pools-path`; initializes Forge environment; writes `pools.txt` with semicolon-separated pool lines; streams progress every 1000 pools to stdout per `contracts/cli.md`; exits 1 on error) in `forge-connector/src/main/java/com/pricepredictor/connector/PoolMain.java`
-- [ ] T016 [US2] Build updated forge-connector JAR via `mvn package -DskipTests` in `forge-connector/` so `PoolMain` is available to the Python subprocess
-- [ ] T017 [P] [US2] Implement `PoolConnector` (resolve JAR path using the same classpath logic as the existing `ConvertMain` invocation, call `java -cp ... com.pricepredictor.connector.PoolMain`, stream stdout line by line) in `src/sealed/infrastructure/pool_connector.py`
-- [ ] T018 [US2] Implement `GeneratePoolsUseCase` (`execute(set_code, pool_count, pools_path, connector)` — `mkdir(parents=True)`, delegate to `connector.generate()`) in `src/sealed/application/generate_pools.py`
-- [ ] T019 [US2] Add `generate-pools` subcommand to `src/sealed/infrastructure/cli.py` (argparse with `--set`, `--size`, `--pools-path` and defaults per `contracts/cli.md`; resolves `{set}` placeholder in default path; exits 2 on JAR-not-found or invalid set code)
+- [ ] T015 [P] [US2] Implement `PoolGenerator` using Forge booster API (`FModel.getMagicDb().getBoosters().get(setCode)` + `UnOpenedProduct.get()`, 6 boosters per pool, `isBasicLand()` filter, null-check for unknown set code) per `research.md §1` in `forge-connector/src/main/java/com/pricepredictor/connector/PoolGenerator.java`
+- [ ] T016 [US2] Implement `PoolMain` CLI entry point (args: `--set`, `--size`, `--pools-path`; initializes Forge environment; writes `pools.txt` with semicolon-separated pool lines; streams progress every 1000 pools to stdout per `contracts/cli.md`; exits 1 on error) in `forge-connector/src/main/java/com/pricepredictor/connector/PoolMain.java`
+- [ ] T017 [US2] Build updated forge-connector JAR via `mvn package -DskipTests` in `forge-connector/` so `PoolMain` is available to the Python subprocess
+- [ ] T018 [P] [US2] Implement `PoolConnector` (resolve JAR path using the same classpath logic as the existing `ConvertMain` invocation, call `java -cp ... com.pricepredictor.connector.PoolMain`, stream stdout line by line; raise on non-zero exit code) in `src/sealed/infrastructure/pool_connector.py`
+- [ ] T019 [US2] Implement `GeneratePoolsUseCase` (`execute(set_code, pool_count, pools_path, connector)` — `mkdir(parents=True)`, delegate to `connector.generate()`) in `src/sealed/application/generate_pools.py`
+- [ ] T020 [US2] Add `generate-pools` subcommand to `src/sealed/infrastructure/cli.py` (argparse with `--set`, `--size`, `--pools-path` and defaults per `contracts/cli.md`; resolves `{set}` placeholder in default path; exits 2 on JAR-not-found or invalid set code)
 
-**Checkpoint**: `python -m sealed generate-pools --set RVR --size 10` produces `output/sealed/pools/RVR/pools.txt` with 10 lines, 84–90 names each, no basic lands.
+**Checkpoint**: `python -m sealed generate-pools --set RVR --size 10` produces `output/sealed/pools/RVR/pools.txt` with 10 lines, 84–90 names each, no basic lands. Non-zero JAR exit raises a clear error and exits with code 2.
 
 ---
 
@@ -92,7 +93,7 @@
 
 *No new implementation is required — this behavior is already delivered by the skip logic in `EncodeCardsUseCase` (US1). This phase adds a targeted test to make the guarantee explicit.*
 
-- [ ] T020 [US3] Add incremental re-encoding test scenario (delete a subset of `.npz` files, re-run encode-cards, assert only deleted cards are re-processed) to `tests/integration/sealed/test_encode_cards_integration.py`
+- [ ] T021 [US3] Add incremental re-encoding test scenario (delete a subset of `.npz` files, re-run encode-cards, assert only deleted cards are re-processed) to `tests/integration/sealed/test_encode_cards_integration.py`
 
 **Checkpoint**: All integration tests pass; incremental re-run reports the expected processed/skipped counts.
 
@@ -102,8 +103,9 @@
 
 **Purpose**: Documentation and end-to-end validation.
 
-- [ ] T021 Update `README.md` with `python -m sealed` module section: `encode-cards` and `generate-pools` commands, default paths, workflow description (encode first, then generate pools), `.npz` embedding format, `pools.txt` format
-- [ ] T022 [P] Run `quickstart.md` validation steps end-to-end on a small fixture set to confirm the documented workflow matches actual behaviour
+- [ ] T022 Update `README.md` with `python -m sealed` module section: `encode-cards` and `generate-pools` commands, default paths, workflow description (encode first, then generate pools), `.npz` embedding format, `pools.txt` format
+- [ ] T023 Add ML process rationale to `README.md`: explain why `cat([max_pool, mean_pool])` pooling was chosen over alternatives (cross-reference `research.md §2`), covering the decision, the rejected alternatives, and the `@torch.no_grad()` inference rationale
+- [ ] T024 [P] Run `quickstart.md` validation steps end-to-end on a small fixture set to confirm the documented workflow matches actual behaviour
 
 ---
 
@@ -126,7 +128,7 @@
 
 ### Within Each User Story
 
-- Tests (T003–T006, T012–T013, T020) written before implementation
+- Tests (T003–T006, T012–T014, T021) written before implementation
 - Domain/infrastructure components (CardEncoder, EmbeddingStore, PoolGenerator, PoolConnector) before use cases
 - Use cases before CLI wiring
 - CLI before `__main__.py` dispatch
@@ -135,9 +137,9 @@
 
 - T003, T004, T005, T006 — all US1 test files, no shared state
 - T007, T008 — CardEncoder and EmbeddingStore touch different files
-- T012, T013 — Java and Python test files are independent
-- T014, T017 — PoolGenerator (Java) and PoolConnector (Python) touch different files
-- T021, T022 — README update and quickstart validation are independent
+- T012, T013, T014 — Java test, Python use-case test, and Python connector test all touch different files
+- T015, T018 — PoolGenerator (Java) and PoolConnector (Python) touch different files
+- T022, T023, T024 — README sections and quickstart validation are independent
 
 ---
 
@@ -162,17 +164,18 @@ Task T011: src/sealed/__main__.py
 ## Parallel Example: User Story 2
 
 ```bash
-# Write tests and start Java implementation together:
+# Write all US2 tests together (all different files):
 Task T012: forge-connector/.../PoolGeneratorTest.java
 Task T013: tests/unit/sealed/application/test_generate_pools.py
-Task T014: forge-connector/.../PoolGenerator.java  (Java, independent)
-Task T017: src/sealed/infrastructure/pool_connector.py  (Python, independent)
+Task T014: tests/unit/sealed/infrastructure/test_pool_connector.py
+Task T015: forge-connector/.../PoolGenerator.java  (Java, independent)
+Task T018: src/sealed/infrastructure/pool_connector.py  (Python, independent)
 # Then sequentially (Java side):
-Task T015: forge-connector/.../PoolMain.java
-Task T016: mvn package (build JAR)
+Task T016: forge-connector/.../PoolMain.java
+Task T017: mvn package (build JAR)
 # Then sequentially (Python side):
-Task T018: src/sealed/application/generate_pools.py
-Task T019: src/sealed/infrastructure/cli.py (add generate-pools subcommand)
+Task T019: src/sealed/application/generate_pools.py
+Task T020: src/sealed/infrastructure/cli.py (add generate-pools subcommand)
 ```
 
 ---
