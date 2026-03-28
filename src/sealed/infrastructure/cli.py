@@ -63,9 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_encode_cards(args: argparse.Namespace) -> int:
     """Execute the encode-cards command."""
-    import torch
-    from price_predictor.domain.entities import TransformerConfig
-    from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
+    from price_predictor.infrastructure.transformer_store import load_model
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
@@ -88,10 +86,7 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     print(f"Encoding cards in {cards_path}")
 
     # Load model
-    checkpoint = torch.load(str(encoder_path), map_location="cpu", weights_only=False)
-    config: TransformerConfig = checkpoint["config"]
-    model = CardPriceTransformerModel(config)
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model, config = load_model(encoder_path)
     model.eval()
 
     # Load tokenizer
