@@ -87,9 +87,9 @@ verifying that it prints human-readable pick sequences.
 
 ### Edge Cases
 
-- What happens when the pools file is empty or contains fewer entries than one full pool?
+- What happens when the pools file is empty or contains fewer entries than one full pool? → Training aborts at startup with a clear error message.
 - What happens when a card named in a pool has no corresponding embedding file in cards-path? → Training aborts immediately with an error message identifying the missing card(s).
-- What happens when the model path does not exist yet (first run, no checkpoint)?
+- What happens when the model path does not exist yet (first run, no checkpoint)? → The model-path directory tree is created automatically.
 - What happens when training is interrupted mid-episode (e.g. keyboard interrupt between pick steps)?
 - What happens when `best_run` is 1 and the episode terminates on the very first pick? (Reward is `(1/1)×2-1 = 1.0` — intentional per spec.)
 
@@ -100,8 +100,11 @@ verifying that it prints human-readable pick sequences.
 - **FR-001**: The sealed module MUST expose a `train` subcommand accepting `--stage`, `--set`, `--pools-path`,
   `--cards-path`, `--model-path`, and `--batch-size` arguments, with defaults matching the Stage 0 conventions
   (`--batch-size` defaults to 32).
-- **FR-002**: When `--stage 1` is passed, the system MUST initialize a pool-level transformer model from scratch when
-  no checkpoint exists, or resume from the checkpoint at model-path when one is present.
+- **FR-002**: When `--stage 1` is passed, the system MUST validate at startup that pools.txt exists and contains at
+  least one valid pool entry, aborting with a clear error message if not. The system then initializes a pool-level
+  transformer model from scratch when no checkpoint exists, or resumes from the checkpoint at model-path when one is
+  present. The model-path directory tree is created automatically if it does not exist. On resume, the sequential
+  pool iteration always restarts from pool 0; pool position is not persisted.
 - **FR-003**: Each training episode MUST draw the next pool from the dataset sequentially, looping back to the first
   pool once all have been used. The episode then appends the 6 basic land slot embeddings, fills any empty slots with
   zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
@@ -166,13 +169,16 @@ verifying that it prints human-readable pick sequences.
 
 ## Clarifications
 
-### Session 2026-03-28
+### Session 2026-03-28 (continued)
 
 - Q: How many episodes constitute one training batch (PPO update frequency)? → A: Fixed episode count per batch, configurable via `--batch-size` (default 32 episodes).
 - Q: What training progress output is shown on the console? → A: One summary line per batch showing episode count, per-episode current_run values, best_run, and mean batch reward.
 - Q: What action is taken when replay buffer entries are detected as stale via KL divergence? → A: Log a warning to stdout; no further action, training continues normally.
 - Q: What happens when a card named in a pool has no corresponding embedding file in cards-path? → A: Abort immediately with a clear error message identifying the missing card(s).
 - Q: How are pools sampled from the dataset across episodes? → A: Sequential pass through the dataset, looping back to the start when all pools have been used.
+- Q: Is the sequential pool position persisted in the checkpoint and restored on resume? → A: No — pool position is not persisted; resume always restarts the sequential iteration from pool 0.
+- Q: What happens when pools.txt is empty or contains no valid pool entries? → A: Abort at startup with a clear error message.
+- Q: What happens when the model-path directory does not exist on first run? → A: Create the directory tree automatically.
 
 ## Assumptions
 
