@@ -1,0 +1,1 @@
+"""Sealed domain layer."""

@@ -1,0 +1,1 @@
+"""Sealed infrastructure layer."""

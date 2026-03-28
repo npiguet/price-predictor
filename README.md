@@ -439,3 +439,91 @@ tests/
 models/             Trained model artifacts (.gitignored)
 resources/          Frozen MTGJSON data files
 ```
+
+---
+
+## `python -m sealed` — Sealed Dataset Preparation
+
+The `sealed` module provides two independent CLI commands for building training data for sealed-deck ML models.
+
+### Workflow
+
+```
+1. encode-cards   → produce one .npz embedding per card script
+2. generate-pools → produce sealed pool lists for a given set
+```
+
+These commands are independent and can run in any order. `encode-cards` must complete before pool embeddings can be assembled downstream.
+
+### encode-cards
+
+Scans a directory of converted card scripts, strips the `name:` line from each card, and produces a `.npz` embedding file alongside every `.txt`. Already-encoded cards are skipped — re-running is safe and fast.
+
+```
+python -m sealed encode-cards \
+    [--encoder-path models/price-predictor/transformer/latest.pt] \
+    [--vocab-path   models/price-predictor/transformer/vocab.txt] \
+    [--cards-path   output/cardsfolder/]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--encoder-path` | `models/price-predictor/transformer/latest.pt` | Pretrained transformer model |
+| `--vocab-path` | `models/price-predictor/transformer/vocab.txt` | Tokenizer vocabulary |
+| `--cards-path` | `output/cardsfolder/` | Card script directory (recursive) |
+
+**Output**: One `.npz` per `.txt` card script in the same directory as the source. Each file stores a single array under the key `"embedding"`.
+
+**`.npz` format**: `np.load(path)["embedding"]` → `float32` array of shape `(2 * d_model,)` (e.g. `(512,)` for a 256-dim model). The embedding is `cat([max_pool, mean_pool])` over transformer encoder outputs with the `name:` line stripped.
+
+**Exit codes**: `0` = success, `1` = one or more cards failed (processing continues), `2` = fatal error (missing model/vocab).
+
+### generate-pools
+
+Invokes the forge-connector JAR to generate sealed pools (6 boosters each) for a given MTG set code. Writes `pools.txt` to the output directory, overwriting any existing file.
+
+```
+python -m sealed generate-pools \
+    [--set        RVR] \
+    [--size       10000] \
+    [--pools-path output/sealed/pools/{set}/]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--set` | `RVR` | MTG set code (e.g. `RVR`, `MH3`, `BLB`) |
+| `--size` | `10000` | Number of pools to generate |
+| `--pools-path` | `output/sealed/pools/{set}/` | Output directory; `{set}` is replaced with the set code |
+
+**`pools.txt` format**: One pool per line, card names separated by semicolons. Basic lands are excluded. Duplicate names within a line are valid.
+
+```
+Ponder;Lightning Bolt;Counterspell;Dark Ritual;...
+Giant Growth;Serra Angel;Wrath of God;...
+```
+
+**Exit codes**: `0` = success, `2` = fatal error (invalid set, JAR not found, Java not on PATH).
+
+### ML rationale — `cat([max_pool, mean_pool])` pooling
+
+The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:
+
+- **Max pooling** (`max_pool`): captures the strongest signal from any individual token — good for rare but important features like mana symbols or keyword abilities.
+- **Mean pooling** (`mean_pool`): averages signal across all tokens — captures the overall "texture" of the card text.
+
+Concatenating both (`cat([max_pool, mean_pool])`) gives a `2 * d_model` vector that combines both views. This is a well-established technique in sentence-embedding literature. Padding tokens are masked out before both operations so they do not contaminate the result.
+
+The `@torch.no_grad()` decorator is applied because `encode-cards` is inference-only — disabling gradient tracking reduces memory usage and speeds up encoding of large card sets.
+
+**Alternatives rejected** (see `specs/011-sealed-dataset/research.md §2`):
+
+| Alternative | Reason rejected |
+|---|---|
+| `[CLS]` token pooling | Our tokenizer has no `[CLS]` token; adding one would change the vocabulary |
+| Max pooling only | Loses the average-magnitude signal that mean pooling captures |
+| Mean pooling only | Loses the peak-feature signal that max pooling captures |
+| Pass zero meta to `forward()` | Confusing and fragile — `encode()` makes the intent explicit |
+
+models/             Trained model artifacts (.gitignored)
+resources/          Frozen MTGJSON data files
+```

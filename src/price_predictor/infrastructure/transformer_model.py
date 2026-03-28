@@ -40,6 +40,27 @@ class CardPriceTransformerModel(nn.Module):
             nn.Linear(config.regression_hidden_dim, 1),
         )
 
+    @torch.no_grad()
+    def encode(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Return pooled card embedding without meta or output head.
+
+        Returns:
+            (batch_size, 2 * d_model) — cat([max_pooled, mean_pooled])
+        """
+        seq_len = input_ids.size(1)
+        positions = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
+        x = self.token_embedding(input_ids) + self.position_embedding(positions)
+        x = self.embed_dropout(x)
+        padding_mask = attention_mask == 0
+        x = self.encoder(x, src_key_padding_mask=padding_mask)
+        padding_mask_3d = (attention_mask == 0).unsqueeze(-1)
+        x_max = x.masked_fill(padding_mask_3d, float("-inf"))
+        max_pooled = x_max.max(dim=1).values
+        x_mean = x.masked_fill(padding_mask_3d, 0.0)
+        lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
+        mean_pooled = x_mean.sum(dim=1) / lengths
+        return torch.cat([max_pooled, mean_pooled], dim=-1)  # (batch, 2*d_model)
+
     def forward(
         self,
         input_ids: torch.Tensor,
