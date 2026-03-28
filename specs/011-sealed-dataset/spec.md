@@ -10,7 +10,7 @@
 
 ### User Story 1 - Encode Card Embeddings (Priority: P1)
 
-A researcher preparing training data runs the `encode-cards` command against a folder of Forge card scripts. The command reads each card's structured Oracle text, generates a 512-dimensional vector representation using the pretrained price predictor encoder, and writes a named embedding file alongside each card script. Cards that already have an embedding file are silently skipped, so the command is safe to re-run after adding new cards.
+A researcher preparing training data runs the `encode-cards` command against a folder of Forge card scripts. The command reads each card's structured text (type line, mana cost, rules text, etc. — excluding the card's name), generates a 512-dimensional vector representation using the pretrained price predictor encoder, and writes a named embedding file alongside each card script. Cards that already have an embedding file are silently skipped, so the command is safe to re-run after adding new cards.
 
 **Why this priority**: Card embeddings are the foundational input for both pool assembly and model training — nothing else in Stage 0 or beyond can proceed without them.
 
@@ -67,7 +67,7 @@ After retraining the price predictor encoder, a researcher deletes stale embeddi
 
 ### Functional Requirements
 
-- **FR-001**: The `encode-cards` command MUST scan a specified folder of card scripts and generate a 512-dimensional embedding for each card found.
+- **FR-001**: The `encode-cards` command MUST scan a specified folder of card scripts and generate a 512-dimensional embedding for each card found. Before passing a card's text to the encoder, the `name:` line MUST be stripped so that the embedding captures the card's game characteristics rather than its name.
 - **FR-002**: The `encode-cards` command MUST write each embedding as a file in the same cards folder, using the same filename as the card script but with a `.npz` extension (e.g., `Lightning-Bolt.txt` → `Lightning-Bolt.npz`).
 - **FR-003**: The `encode-cards` command MUST skip any card whose embedding file already exists in the cards folder, making repeated runs safe and incremental.
 - **FR-003a**: The `encode-cards` command MUST write each embedding atomically (write to a temporary file, then rename to final name on success), so that an interrupted run leaves no partial files on disk and a re-run recovers correctly.

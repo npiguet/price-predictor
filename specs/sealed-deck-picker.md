@@ -14,7 +14,8 @@ increasing complexity.
 # Card Representation
 
 Each card is encoded by your pretrained price predictor transformer, producing a 512-dimensional vector (256 mean pool +
-256 max pool over ~300 tokens of structured Oracle text). This encoder is frozen initially and unfrozen in later
+256 max pool over ~300 tokens of structured card text). The `name:` line is stripped from the card text before encoding
+so that the embedding captures what the card does, not its name. This encoder is frozen initially and unfrozen in later
 training stages.
 
 At the pool level, each of the 96 entries (90 pool cards + 6 basic land slots) is represented as:
