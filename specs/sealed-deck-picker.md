@@ -103,22 +103,27 @@ Java bridge. The dataset preparation process is:
 1. The Python script invokes a forge-connector Java class that uses Forge's
    internal classes to generate a configurable number of sealed pools, each
    consisting of 6 boosters from the same configurable set. The pools are
-   written to a flat text file in the pools-path folder named pools.txt,
-   one pool per line, with card names separated by semicolons. Duplicate card
-   names are allowed since a pool can contain multiple copies of the same card.
+   written to a flat text file in the pools-path folder named pools.txt, one
+   pool per line, with card names separated by semicolons. Duplicate card
+   names are allowed since a pool can contain multiple copies of the same 
+   card. Basic lands are not included in the generated pools.
 
 2. The Python application reads pools.txt and converts each pool into a matrix
    of card embeddings. Each card is looked up by name in cards-path and
    converted to a 512-dimensional embedding vector using the pretrained card
    encoder, following the process described in spec 006-card-script-parsing.
-   The 5 basic land slots are appended to each pool at this stage, bringing
-   the pool size to 95 entries. This means the card encoder never needs to
-   run during training.
 
-3. The converted dataset is stored as a pools.npz file (numpy compressed format)
-   containing a single [N, 95, 516] float32 array, where N is the number of
-   generated pools. The format loads efficiently into Python and converts to
-   PyTorch tensors with zero overhead.
+3. The 6 basic land slots (Plains, Island, Swamp, Mountain, Forest, Waste) are
+   generated separately into basics-path as individual .npz files, one per
+   basic land type. This step is skipped if the files already exist. The basic
+   land embeddings are set-independent since their Oracle text is identical
+   across all sets.
+
+4. The converted dataset is stored as a pools.npz file (numpy compressed format)
+   containing a single [N, P, 512] float32 array, where N is the number of
+   generated pools and P is the number of cards per pool (6 × the booster size
+   for the configured set). The format loads efficiently into Python and converts
+   to PyTorch tensors with zero overhead.
 
 The dataset preparation can be launched via the following command:
 ```bash
@@ -128,7 +133,8 @@ python -m sealed prepare-dataset \
     --encoder-path [path] \
     --vocab-path [path] \
     --cards-path [path] \
-    --pools-path [path]
+    --pools-path [path] \
+    --basics-path [path]
 ```
 
 Defaults:
@@ -138,10 +144,16 @@ Defaults:
 - **--vocab-path**: models/price-predictor/transformer/vocab.txt
 - **--cards-path**: output/cardsfolder/
 - **--pools-path**: output/sealed/pools/{set-code}/
+- **--basics-path**: output/sealed/pools/basics/
 
 ### Stage 1 - Picking legal card (aka: Legal deck gate)
 At each pick step, we verify that the model has selected a pool slot that has not already been chosen in the current 
 episode. Basic land slots are exempt from this check since they can be picked any number of times.
+
+At the start of each episode, a pool is sampled from the pre-generated dataset
+and the 6 basic land embeddings are appended to it, bringing the pool size to
+96 entries. The card order within the pool is then shuffled to prevent the
+model from learning positional biases.
 
 During training, the card order within each pool is shuffled before each
 episode to prevent the model from learning positional biases.
