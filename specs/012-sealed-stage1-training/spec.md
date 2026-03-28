@@ -110,8 +110,11 @@ verifying that it prints human-readable pick sequences.
   zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
 - **FR-004**: Each of the 96 pool slots MUST be represented as a 516-dimensional feature vector: a 512-dimensional
   card embedding, a `picked_flag`, an `available_flag`, an `is_land` flag, and a `basic_land_count` value.
-- **FR-005**: During each pick step, a selection mask MUST be applied to the output logits that prevents re-selection
-  of already-picked non-basic-land slots. Basic land slots MUST remain selectable at every step.
+- **FR-005**: During each pick step, the model MUST sample from the unmasked distribution over all 96 slots. No
+  selection mask is applied to the logits — the model is free to pick any slot, including already-picked ones. The
+  `available_flag = 0` on picked slots serves as an input feature (context for the transformer) but does NOT block
+  selection. This is intentional: Stage 1 teaches the model to avoid illegal picks through the reward signal, not by
+  making them mechanically impossible.
 - **FR-006**: When the model selects an already-picked non-basic-land slot, the episode MUST terminate immediately.
 - **FR-007**: The reward for each episode MUST be computed as `(current_run / best_run) × 2 - 1`, where `current_run`
   is the number of legal picks made (minimum 1) and `best_run` is the high-water mark of all prior runs, initialized
