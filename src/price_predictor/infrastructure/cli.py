@@ -77,8 +77,8 @@ def build_parser() -> argparse.ArgumentParser:
                                         "Higher values oversample expensive cards more aggressively.")
     train_transformer.add_argument("--d-model", type=int, default=256,
                                    help="Embedding dimension (default: 256). Must be divisible by n-heads.")
-    train_transformer.add_argument("--n-layers", type=int, default=6,
-                                   help="Number of transformer encoder layers (default: 6).")
+    train_transformer.add_argument("--n-layers", type=int, default=2,
+                                   help="Number of transformer encoder layers (default: 2).")
     train_transformer.add_argument("--n-heads", type=int, default=4,
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
     train_transformer.add_argument("--ff-dim", type=int, default=1024,
