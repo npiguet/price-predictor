@@ -504,6 +504,78 @@ Giant Growth;Serra Angel;Wrath of God;...
 
 **Exit codes**: `0` = success, `2` = fatal error (invalid set, JAR not found, Java not on PATH).
 
+### train
+
+Runs a PPO reinforcement-learning training loop that teaches the pool-level transformer to make 40 consecutive legal picks from a 96-card sealed pool (Stage 1). Training resumes automatically from the latest checkpoint if one exists.
+
+```
+python -m sealed train \
+    --stage      1 \
+    [--set        RVR] \
+    [--pools-path output/sealed/pools/{set}/] \
+    [--cards-path output/cardsfolder/] \
+    [--model-path models/sealed/stage1/latest.pt] \
+    [--batch-size 32]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--stage` | *(required)* | Training stage; currently only `1` is supported |
+| `--set` | `RVR` | MTG set code for the pool dataset |
+| `--pools-path` | `output/sealed/pools/{set}/` | Directory containing `pools.txt` |
+| `--cards-path` | `output/cardsfolder/` | Directory containing `.npz` embedding files |
+| `--model-path` | `models/sealed/stage1/latest.pt` | Path to load and save the checkpoint |
+| `--batch-size` | `32` | Episodes collected per PPO update |
+
+**Console output** (one line per batch):
+```
+[ep 64] batch runs: 1,3,2,1,...  best_run=5  mean_reward=-0.712
+```
+
+**Checkpoints**: `latest.pt` is overwritten atomically after every batch. Timestamped checkpoints are saved every 1000 episodes under `models/sealed/stage1/checkpoints/`.
+
+**Stage 1 complete** when 100 consecutive episodes achieve 40 legal picks. Exit code `0`.
+
+**Exit codes**: `0` = success, `1` = unknown stage, `2` = missing `pools.txt` or card embeddings.
+
+### sample
+
+Loads a trained checkpoint and prints N human-readable pick sequences with SUCCESS/ILLEGAL PICK results. Useful for qualitative inspection of model behaviour during or after training.
+
+```
+python -m sealed sample \
+    [--set        RVR] \
+    [--pools-path output/sealed/pools/{set}/] \
+    [--cards-path output/cardsfolder/] \
+    [--model-path models/sealed/stage1/latest.pt] \
+    [--n-samples  10]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--set` | `RVR` | MTG set code for the pool dataset |
+| `--pools-path` | `output/sealed/pools/{set}/` | Directory containing `pools.txt` |
+| `--cards-path` | `output/cardsfolder/` | Directory containing `.npz` embedding files |
+| `--model-path` | `models/sealed/stage1/latest.pt` | Checkpoint to load |
+| `--n-samples` | `10` | Number of pick sequences to generate |
+
+**Sample output**:
+```
+Sample 1:
+  Pick  1: Skyknight Legionnaire
+  Pick  2: Mountain
+  ...
+  Pick 40: Swamp
+  Result: SUCCESS (40/40 legal picks)
+
+Sample 2:
+  Pick  1: Counterspell
+  Pick  2: Counterspell
+  Result: ILLEGAL PICK at step 2 (1/40 legal picks)
+```
+
+**Exit codes**: `0` = success (sampling is non-destructive), `2` = missing checkpoint.
+
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
 The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:
