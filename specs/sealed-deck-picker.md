@@ -162,25 +162,50 @@ with zero vectors and placed before the basic lands. Before each pick step, the
 non-basic-land portion of the pool is reshuffled to prevent the model from 
 developing positional biases.
 
-The model is then asked to sequentially pick 40 cards from the pool. At each pick
-step, we verify that the model has selected a pool slot that has not already been
-chosen in the current episode. Basic land slots are exempt from this check since
-they can be picked any number of times.
+The model is asked to sequentially pick 40 cards from the pool. The episode runs
+in two phases, controlled by how many non-land picks have been made so far.
 
-When an illegal pick is made, the episode terminates immediately.
+**Phase 1** (fewer than 23 non-land picks made):
+- Picking any land card (basic land slot, or a pool card whose `type:` line
+  contains "land") terminates the episode immediately.
+- Picking a duplicate non-land also terminates immediately.
+- Non-land picks are recorded normally.
 
-The reward is calculated as:
+**Phase 2** (23 or more non-land picks made):
+- Land picks are now allowed and recorded as actions. Basic land slots can be
+  picked any number of times; non-basic pool lands can only be picked once.
+- Non-land picks are still allowed (but penalised in the reward, see below).
+- Duplicate picks still terminate the episode.
+- The episode completes successfully when 40 total picks have been recorded.
 
-    reward = (current_run / best_run) × 2 - 1
+The rationale: a 40-card sealed deck is ideally 23 spells followed by 17 lands.
+Phase 1 forces the model to exhaust its spell picks before touching lands. Phase 2
+rewards it for filling the remaining slots with lands rather than extra spells.
+
+#### Reward function
+
+    effective_run = n_total - max(n_spell - 23, 0)
+    reward = (effective_run / best_run) × 2 - 1
 
 Where:
-- current_run: the number of legal picks made in this episode before
-  termination (minimum 1, since the first pick is always legal)
-- best_run: a high water mark tracking the longest legal pick sequence
-  ever achieved, initialized to 1 and never decreasing
+- `n_total`: total picks recorded in the episode
+- `n_spell`: non-land picks among those (lands never count toward n_spell)
+- `effective_run`: `n_total` reduced by one for each non-land pick past 23;
+  peaks at 40 for a perfect 23-spell + 17-land run
+- `best_run`: high-water mark of `n_total` (raw pick count) across all episodes,
+  initialised to 1 and never decreasing
 
-When the model reaches current_run = 40 in 100 consecutive episodes,
-training advances to stage 2.
+Key properties:
+- Any full 40-pick run yields `effective_run ≥ 23`, so `reward > 0` once
+  `best_run ≤ 46` (which is always true).
+- Maximum reward is only achieved with exactly 23 spells and 17 lands.
+- Each non-land pick past 23 costs exactly as much as a missing land pick.
+- Before phase 2 is reached (n_spell < 23), `effective_run = n_total = n_spell`
+  and the formula reduces to the original `(n_spell / best_run) × 2 - 1`.
+
+When `n_total = 40` in 100 consecutive episodes, training advances to stage 2.
+The land/spell composition is not checked for advancement — any 40-pick run
+counts, since the reward function already incentivises the right ratio.
 
 #### Command Line
 

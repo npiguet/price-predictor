@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import time
 
 import numpy as np
 import torch
@@ -30,9 +31,31 @@ class _EmbeddingAdapter:
     def __init__(self, store: EmbeddingStore, cards_path: Path) -> None:
         self._store = store
         self._cards_path = cards_path
+        self.total_load_s: float = 0.0
+        self._land_cache: dict[str, bool] = {}
 
     def get_embedding(self, card_name: str) -> np.ndarray:
-        return self._store.load(card_npz_path(self._cards_path, card_name))
+        t0 = time.perf_counter()
+        result = self._store.load(card_npz_path(self._cards_path, card_name))
+        self.total_load_s += time.perf_counter() - t0
+        return result
+
+    def is_land(self, card_name: str) -> bool:
+        if card_name in self._land_cache:
+            return self._land_cache[card_name]
+        txt_path = card_npz_path(self._cards_path, card_name).with_suffix(".txt")
+        result = False
+        if txt_path.exists():
+            for line in txt_path.read_text(encoding="utf-8").splitlines():
+                low = line.lower()
+                if low.startswith("type") and "land" in low:
+                    result = True
+                    break
+        self._land_cache[card_name] = result
+        return result
+
+    def reset_timing(self) -> None:
+        self.total_load_s = 0.0
 
 
 class TrainStage1UseCase:
@@ -112,6 +135,9 @@ class TrainStage1UseCase:
         pool_idx = 0
 
         while True:
+            card_port.reset_timing()
+
+            t0 = time.perf_counter()
             batch_episodes = []
             for _ in range(batch_size):
                 pool_names = pools[pool_idx % len(pools)]
@@ -124,25 +150,30 @@ class TrainStage1UseCase:
                     best_run=state.best_run,
                 )
                 state.episode_count += 1
-                current_run = len(ep.actions)
 
-                if current_run > state.best_run:
-                    state.best_run = current_run
+                if len(ep.actions) > state.best_run:
+                    state.best_run = len(ep.actions)
 
-                if current_run == MAX_COMPLETE_RUN:
+                if len(ep.actions) >= MAX_COMPLETE_RUN:
                     state.consecutive_successes += 1
                 else:
                     state.consecutive_successes = 0
 
                 batch_episodes.append(ep)
+            t_collect = time.perf_counter() - t0
 
-            result = trainer.update(batch_episodes, card_port, state.best_run)
+            t0 = time.perf_counter()
+            result = trainer.update(batch_episodes, card_port)
+            t_update = time.perf_counter() - t0
+
+            t_embed = card_port.total_load_s
             state.reward_baseline = trainer.reward_baseline
 
             runs_str = ",".join(str(r) for r in result.episode_runs)
             print(
                 f"[ep {state.episode_count}] batch runs: {runs_str}"
                 f"  best_run={state.best_run}  mean_reward={result.mean_reward:.3f}"
+                f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
 
             model_store.save(model_path, model, optimizer, state)
@@ -152,11 +183,11 @@ class TrainStage1UseCase:
 
             if state.consecutive_successes >= 100:
                 print(
-                    f"Stage 1 complete: 100 consecutive episodes with 40 legal picks."
+                    f"Stage 1 complete: 100 consecutive episodes with {MAX_COMPLETE_RUN}+ non-land picks."
                     f" Model saved to {model_path}."
                 )
                 return
 
 
-# A "perfect" episode picks all 40 booster cards without collision.
+# Stage 1 success: episode achieves this effective_run (= 23 spells + 17 lands = perfect deck).
 MAX_COMPLETE_RUN = 40

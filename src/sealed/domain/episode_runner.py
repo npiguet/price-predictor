@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 BASIC_LAND_NAMES = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
 MAX_PICKS = 40
+IDEAL_SPELLS = 23  # target non-land picks for a 40-card sealed deck
 
 
 def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots: int) -> np.ndarray:
@@ -20,7 +21,7 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
 
     Returns float32 ndarray of shape [n_slots, d_model] where d_model = embed_dim + 4.
 
-    Booster slots  (0 .. n_booster-1): picked=0, available=1, is_land=0, count=0.
+    Booster slots  (0 .. n_booster-1): picked=0, available=1, is_land=per card type, count=0.
     Basic land slots (n_booster .. n_slots-1): picked=0, available=1, is_land=1, count=0.
     """
     names = pool_names.split(";")
@@ -41,6 +42,8 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
     for i, emb in enumerate(booster_embeds):
         tensor[i, :embed_dim] = emb
         tensor[i, embed_dim + 1] = 1.0  # available_flag
+        if card_port.is_land(names[i]):
+            tensor[i, embed_dim + 2] = 1.0  # is_land
 
     for i, emb in enumerate(basic_embeds):
         j = n_booster + i
@@ -62,10 +65,16 @@ class EpisodeRunner:
     ) -> Episode:
         """Run one episode.
 
-        Returns an Episode with pool indices in ``actions``.
+        Phase 1 (n_spell < IDEAL_SPELLS): any land pick terminates immediately.
+        Phase 2 (n_spell >= IDEAL_SPELLS): land picks are recorded and allowed;
+            non-land picks are recorded but penalised in the reward.
+
+        Returns an Episode whose actions include both spell picks and phase-2
+        land picks.
         """
         n_slots: int = model.config.n_slots  # type: ignore[attr-defined]
-        n_booster = len(pool_names.split(";"))
+        booster_names = pool_names.split(";")
+        n_booster = len(booster_names)
 
         current = _build_base_tensor(pool_names, card_port, n_slots)
         embed_dim = current.shape[1] - 4
@@ -73,6 +82,7 @@ class EpisodeRunner:
         picked_set: set[int] = set()
         actions: list[int] = []
         log_probs_list: list[float] = []
+        n_spell = 0  # non-land picks so far
 
         rng = np.random.default_rng(rng_seed)
         seeds = rng.integers(0, 2**31 - 1, size=MAX_PICKS, dtype=np.int64)
@@ -102,26 +112,44 @@ class EpisodeRunner:
             else:
                 pool_index = sampled_sp  # basic land slot
 
-            # Terminate if the booster slot was already picked
-            if pool_index < n_booster and pool_index in picked_set:
+            # Classify the pick
+            if pool_index >= n_booster:
+                is_land = True
+                is_duplicate = False  # basic land slots can be picked any number of times
+            elif card_port.is_land(booster_names[pool_index]):
+                is_land = True
+                is_duplicate = pool_index in picked_set
+            else:
+                is_land = False
+                is_duplicate = pool_index in picked_set
+
+            # Phase 1: any land pick terminates
+            if is_land and n_spell < IDEAL_SPELLS:
+                break
+
+            # Duplicate always terminates
+            if is_duplicate:
                 break
 
             log_prob = float(log_probs_all[sampled_sp].item())
             actions.append(pool_index)
             log_probs_list.append(log_prob)
 
-            # Update current tensor flags
-            if pool_index < n_booster:
-                picked_set.add(pool_index)
-                current[pool_index, embed_dim] = 1.0      # picked_flag
-                current[pool_index, embed_dim + 1] = 0.0  # available_flag
-            else:
-                # Basic land slot: increment count, set picked
+            # Update tensor state
+            if pool_index >= n_booster:
                 current[pool_index, embed_dim + 3] += 1.0  # basic_land_count
                 current[pool_index, embed_dim] = 1.0        # picked_flag
+            else:
+                picked_set.add(pool_index)
+                current[pool_index, embed_dim] = 1.0       # picked_flag
+                current[pool_index, embed_dim + 1] = 0.0   # available_flag
 
-        current_run = len(actions)
-        reward = float(current_run) / float(best_run) * 2.0 - 1.0
+            if not is_land:
+                n_spell += 1
+
+        n_total = len(actions)
+        effective_run = n_total - max(n_spell - IDEAL_SPELLS, 0)
+        reward = float(effective_run) / float(best_run) * 2.0 - 1.0
 
         return Episode(
             pool_names=pool_names,
@@ -129,4 +157,5 @@ class EpisodeRunner:
             actions=np.array(actions, dtype=np.int32),
             log_probs=np.array(log_probs_list, dtype=np.float32),
             reward=reward,
+            effective_run=effective_run,
         )

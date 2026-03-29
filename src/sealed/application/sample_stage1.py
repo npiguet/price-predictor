@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
-from sealed.domain.episode_runner import EpisodeRunner, BASIC_LAND_NAMES
+from sealed.domain.episode_runner import EpisodeRunner, BASIC_LAND_NAMES, MAX_PICKS
 from sealed.infrastructure.pool_loader import PoolLoader
 from sealed.infrastructure.pool_model_store import PoolModelStore
 from sealed.infrastructure.embedding_store import EmbeddingStore
@@ -51,7 +51,6 @@ class SampleStage1UseCase:
                     card_port=card_port,
                     model=model,
                     rng_seed=pool_idx,
-                    best_run=1,
                 )
 
                 booster_names = pool_names.split(";")
@@ -69,7 +68,7 @@ class SampleStage1UseCase:
                             picks.append(f"<slot {pool_index}>")
 
                 n_picks = len(ep.actions)
-                status = "SUCCESS" if n_picks == 40 else "ILLEGAL PICK"
+                status = "SUCCESS" if n_picks == MAX_PICKS else f"TERMINATED pick={n_picks + 1}"
                 print(f"--- Sample {pool_idx + 1} [{status}] picks={n_picks} ---")
                 for i, name in enumerate(picks, 1):
                     print(f"  {i:2d}. {name}")

@@ -36,15 +36,17 @@ class PPOTrainer:
         self,
         episodes: list[Episode],
         card_port: "CardEmbeddingPort",
-        best_run: int,
     ) -> TrainBatchResult:
         """Reconstruct episode states, compute PPO loss, perform one gradient step."""
-        all_step_losses: list[torch.Tensor] = []
         episode_runs: list[int] = []
         reward_sum = 0.0
 
         self.model.train()  # type: ignore[attr-defined]
         device = next(self.model.parameters()).device  # type: ignore[attr-defined]
+
+        total_steps = sum(len(ep.actions) for ep in episodes)
+
+        self.optimizer.zero_grad()  # type: ignore[attr-defined]
 
         for ep in episodes:
             n_steps = len(ep.actions)
@@ -87,7 +89,8 @@ class PPOTrainer:
                 ratio = torch.exp(new_lp - old_lp)
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantage
-                all_step_losses.append(-torch.min(surr1, surr2))
+                step_loss = -torch.min(surr1, surr2) / max(total_steps, 1)
+                step_loss.backward()  # releases graph immediately; gradients accumulate
 
                 # Simulate the pick to maintain correct tensor state for next steps
                 if action < n_booster:
@@ -102,10 +105,7 @@ class PPOTrainer:
             reward_sum += float(ep.reward)
             episode_runs.append(n_steps)
 
-        if all_step_losses:
-            total_loss = torch.stack(all_step_losses).mean()
-            self.optimizer.zero_grad()  # type: ignore[attr-defined]
-            total_loss.backward()
+        if total_steps > 0:
             self.optimizer.step()  # type: ignore[attr-defined]
 
         mean_reward = reward_sum / len(episodes) if episodes else 0.0
