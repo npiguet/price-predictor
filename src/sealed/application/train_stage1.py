@@ -22,7 +22,6 @@ class TrainingState:
     best_run: int = 1
     episode_count: int = 0
     consecutive_successes: int = 0
-    reward_baseline: float = 0.0
 
 
 class _EmbeddingAdapter:
@@ -108,7 +107,6 @@ class TrainStage1UseCase:
                     best_run=s.get("best_run", 1),
                     episode_count=s.get("episode_count", 0),
                     consecutive_successes=s.get("consecutive_successes", 0),
-                    reward_baseline=s.get("reward_baseline", 0.0),
                 )
             print(
                 f"Resumed from {model_path}"
@@ -130,7 +128,6 @@ class TrainStage1UseCase:
         card_port = _EmbeddingAdapter(embedding_store, cards_path)
         runner = EpisodeRunner()
         trainer = PPOTrainer(model, optimizer)
-        trainer.reward_baseline = state.reward_baseline
 
         pool_idx = 0
 
@@ -167,7 +164,6 @@ class TrainStage1UseCase:
             t_update = time.perf_counter() - t0
 
             t_embed = card_port.total_load_s
-            state.reward_baseline = trainer.reward_baseline
 
             runs_str = ",".join(str(r) for r in result.episode_runs)
             print(

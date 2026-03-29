@@ -1,6 +1,7 @@
 """PPOTrainer: computes PPO loss and updates model weights."""
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -26,11 +27,12 @@ class PPOTrainer:
         model: object,
         optimizer: object,
         clip_eps: float = 0.2,
+        entropy_coef: float = 0.01,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
         self.clip_eps = clip_eps
-        self.reward_baseline: float = 0.0
+        self.entropy_coef = entropy_coef
 
     def update(
         self,
@@ -46,6 +48,12 @@ class PPOTrainer:
 
         total_steps = sum(len(ep.actions) for ep in episodes)
 
+        # Normalise advantages over the batch so exactly half are positive/negative
+        # regardless of absolute reward scale.
+        raw_rewards = [float(ep.reward) for ep in episodes]
+        mean_r = statistics.mean(raw_rewards)
+        std_r = statistics.stdev(raw_rewards) if len(raw_rewards) > 1 else 1.0
+
         self.optimizer.zero_grad()  # type: ignore[attr-defined]
 
         for ep in episodes:
@@ -60,7 +68,7 @@ class PPOTrainer:
             current = _build_base_tensor(ep.pool_names, card_port, n_slots)
             embed_dim = current.shape[1] - 4
 
-            advantage = float(ep.reward) - self.reward_baseline
+            advantage = (float(ep.reward) - mean_r) / (std_r + 1e-8)
 
             for step in range(n_steps):
                 action = int(ep.actions[step])
@@ -89,7 +97,8 @@ class PPOTrainer:
                 ratio = torch.exp(new_lp - old_lp)
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantage
-                step_loss = -torch.min(surr1, surr2) / max(total_steps, 1)
+                entropy = -(new_log_probs_all * new_log_probs_all.exp()).sum()
+                step_loss = (-torch.min(surr1, surr2) - self.entropy_coef * entropy) / max(total_steps, 1)
                 step_loss.backward()  # releases graph immediately; gradients accumulate
 
                 # Simulate the pick to maintain correct tensor state for next steps
@@ -100,8 +109,6 @@ class PPOTrainer:
                     current[action, embed_dim + 3] += 1.0  # basic_land_count
                     current[action, embed_dim] = 1.0        # picked_flag
 
-            # EMA update of reward baseline
-            self.reward_baseline = 0.99 * self.reward_baseline + 0.01 * float(ep.reward)
             reward_sum += float(ep.reward)
             episode_runs.append(n_steps)
 
