@@ -11,6 +11,7 @@ import torch.optim as optim
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
 from sealed.application.train_stage1 import TrainStage1UseCase, TrainingState
+from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 from sealed.domain.replay_buffer import ReplayBuffer
 
@@ -38,7 +39,7 @@ BOOSTER_CARDS = ["Card1", "Card2", "Card3", "Card4"]
 
 def _setup_cards(cards_path: Path) -> None:
     for name in BOOSTER_CARDS + BASIC_LANDS:
-        _write_npz(cards_path / f"{name}.npz")
+        _write_npz(card_npz_path(cards_path, name))
 
 
 def _setup_pools(pools_path: Path) -> None:

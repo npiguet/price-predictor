@@ -13,6 +13,7 @@ from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransforme
 from sealed.domain.replay_buffer import ReplayBuffer
 from sealed.application.train_stage1 import TrainingState
 from sealed.application.sample_stage1 import SampleStage1UseCase
+from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 
 MINI = PoolTransformerConfig(
@@ -38,7 +39,7 @@ def _write_npz(path: Path, embed_dim: int = EMBED_DIM) -> None:
 def _setup_env(tmp_path: Path, n_pools: int = 3):
     cards_path = tmp_path / "cards"
     for name in BOOSTER_CARDS + BASIC_LANDS:
-        _write_npz(cards_path / f"{name}.npz")
+        _write_npz(card_npz_path(cards_path, name))
 
     pools_path = tmp_path / "pools"
     pools_path.mkdir(parents=True)

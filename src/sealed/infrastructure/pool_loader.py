@@ -11,6 +11,17 @@ _N_BASIC = len(BASIC_LAND_NAMES)  # 6
 _DEFAULT_N_SLOTS = 96
 
 
+def card_npz_path(cards_path: Path, card_name: str) -> Path:
+    """Return the .npz path for a card name, matching encode-cards output layout.
+
+    encode-cards saves embeddings alongside card scripts, which are organised as
+    ``cards_path/{first_letter}/{snake_case_name}.npz``.  Card names from pools.txt
+    use title-case with spaces, so this function normalises them to match.
+    """
+    stem = card_name.lower().replace(" ", "_")
+    return cards_path / stem[0] / f"{stem}.npz"
+
+
 class PoolLoader:
     def load_pools(self, pools_path: Path) -> list[str]:
         """Return list of semicolon-separated card name strings (one per pool).
@@ -39,9 +50,9 @@ class PoolLoader:
         all_names = booster_names + BASIC_LAND_NAMES
         embeds: list[np.ndarray] = []
         for name in all_names:
-            p = cards_path / f"{name}.npz"
+            p = card_npz_path(cards_path, name)
             if not p.exists():
-                raise FileNotFoundError(name)
+                raise FileNotFoundError(f"missing embedding for card: {name}")
             embeds.append(np.load(p)["embedding"])
 
         embed_dim = embeds[0].shape[0]

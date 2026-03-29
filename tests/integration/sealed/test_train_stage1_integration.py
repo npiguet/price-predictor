@@ -9,6 +9,7 @@ import pytest
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
 from sealed.application.train_stage1 import TrainStage1UseCase
+from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 
 # Miniaturized config: 4 slots, 8-dim card embeddings, d_model=12
@@ -39,9 +40,9 @@ def _write_npz(path: Path) -> None:
 def env(tmp_path):
     """Set up real filesystem environment: cards, pools, model path."""
     cards_path = tmp_path / "cards"
-    # Write 4 booster + 6 basic land .npz files
+    # Write 4 booster + 6 basic land .npz files in the encode-cards layout
     for name in BOOSTER_CARDS + BASIC_LANDS:
-        _write_npz(cards_path / f"{name}.npz")
+        _write_npz(card_npz_path(cards_path, name))
 
     pools_path = tmp_path / "pools"
     pools_path.mkdir(parents=True)

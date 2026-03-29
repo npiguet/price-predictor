@@ -12,7 +12,7 @@ from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransforme
 from sealed.domain.replay_buffer import ReplayBuffer
 from sealed.domain.episode_runner import EpisodeRunner
 from sealed.domain.ppo_trainer import PPOTrainer
-from sealed.infrastructure.pool_loader import PoolLoader
+from sealed.infrastructure.pool_loader import PoolLoader, card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 from sealed.infrastructure.embedding_store import EmbeddingStore
 
@@ -33,7 +33,7 @@ class _EmbeddingAdapter:
         self._cards_path = cards_path
 
     def get_embedding(self, card_name: str) -> np.ndarray:
-        return self._store.load(self._cards_path / f"{card_name}.npz")
+        return self._store.load(card_npz_path(self._cards_path, card_name))
 
 
 class TrainStage1UseCase:
