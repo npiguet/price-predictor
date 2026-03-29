@@ -56,6 +56,12 @@ set it at:
 - d_model: 516
 - d_ff: 2048
 
+> **Implementation note**: `d_model=516` is not divisible by 8, so `n_heads=8` is invalid for
+> `nn.TransformerEncoderLayer` (which requires `d_model % n_heads == 0`). The implementation
+> uses `n_heads=4` (516 / 4 = 129). This should be corrected in a future spec revision — either
+> change `n_heads` to 4, or adjust `d_model` to a value divisible by 8 (e.g. 512 with a small
+> input projection, or 520).
+
 # Pick Phase
 
 40 sequential steps, one card per step:
