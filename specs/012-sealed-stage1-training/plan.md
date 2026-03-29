@@ -16,7 +16,7 @@ Implement Stage 1 of the sealed deck builder training curriculum: a PPO training
 **Target Platform**: Local workstation (CPU or GPU; no deployment)
 **Project Type**: CLI tool (extension of existing `python -m sealed` module)
 **Performance Goals**: No throughput targets; training speed is secondary to correctness
-**Constraints**: Encoder weights are frozen during Stage 1; pool transformer and projection layer are the only trainable components
+**Constraints**: Encoder weights are frozen during Stage 1; the pool transformer is the only trainable component
 **Scale/Scope**: ~10,000 pools per dataset; replay buffer ≤ 1,000 episodes; batch size 32 (default)
 
 ## Constitution Check
@@ -100,7 +100,6 @@ tests/
 **`pool_transformer.py`**
 - `PoolTransformerConfig` dataclass: `n_layers=8`, `n_heads=8`, `d_model=516`, `ff_dim=2048`, `n_slots=96`, `card_embed_dim=512`, `dropout=0.1`
 - `PoolTransformerModel(nn.Module)`:
-  - Linear projection layer: `nn.Linear(512, 512)` applied to the card embedding portion of each slot before flag concatenation
   - `nn.TransformerEncoder` with `batch_first=True`, no positional encoding
   - Output linear head: `nn.Linear(516, 96)` → per-slot logits
   - `forward(slot_features: Tensor[batch, 96, 516]) → logits: Tensor[batch, 96]`
@@ -155,7 +154,7 @@ tests/
 **`pool_loader.py`**
 - `PoolLoader`:
   - `load_pools(pools_path: Path) → list[str]` — reads pools.txt line by line; raises `ValueError` if empty
-  - `assemble_pool_tensor(pool_names: str, cards_path: Path, embedding_store: EmbeddingStore, slot_state: SlotState) → Tensor[96, 516]` — loads .npz files, appends basic land embeddings, applies projection, concatenates flags; raises `FileNotFoundError` identifying missing card name
+  - `assemble_pool_tensor(pool_names: str, cards_path: Path, embedding_store: EmbeddingStore, slot_state: SlotState) → Tensor[96, 516]` — loads .npz files, appends basic land embeddings, concatenates flags; raises `FileNotFoundError` identifying missing card name
   - Basic land embeddings are loaded from cards-path by name (e.g., `Plains.npz`, `Island.npz`, etc.)
 
 **`pool_model_store.py`**

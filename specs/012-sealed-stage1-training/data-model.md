@@ -29,7 +29,7 @@ The feature vector for one card slot in the pool. 516 floats total.
 
 | Field | Type | Shape | Notes |
 |-------|------|-------|-------|
-| `card_embedding` | float32 | (512,) | From pretrained encoder, passed through projection |
+| `card_embedding` | float32 | (512,) | From pretrained encoder |
 | `picked_flag` | float32 | scalar | 1.0 if already picked this episode, else 0.0. Basic land slots: 0.0 when count==0, 1.0 otherwise |
 | `available_flag` | float32 | scalar | 1.0 if slot can be picked, else 0.0. Basic land slots: always 1.0 |
 | `is_land` | float32 | scalar | 1.0 if the card is a land (including basic lands), else 0.0 |
@@ -107,7 +107,6 @@ The complete serialized state of a training run.
 | Field | Type | Notes |
 |-------|------|-------|
 | `pool_transformer_state_dict` | dict | PyTorch state dict for the pool transformer |
-| `projection_state_dict` | dict | PyTorch state dict for the Linear(512, 512) projection layer |
 | `optimizer_state_dict` | dict | PyTorch optimizer state |
 | `training_state` | TrainingState | `best_run`, `episode_count`, `consecutive_successes`, `reward_baseline` |
 | `replay_buffer` | list[Episode] | Full serialized replay buffer |
@@ -161,7 +160,7 @@ for each episode in batch:
     compute KL divergence (warn if > 1.5 nats)
     compute per-step importance ratios
     compute PPO loss
-gradient update (projection + pool transformer)
+gradient update (pool transformer)
 save latest checkpoint
 print batch summary line
 ```

@@ -47,8 +47,7 @@ A two-stage architecture:
     - [95 × 516 features] → [Small transformer] → [95 logits] → [masked softmax] → [pick]
 
 The pool transformer attends freely over all 95 cards at every step, including already-picked ones, so it can use the
-current deck state as context for each new pick. A small projection layer (512 → 512) sits between the encoder and pool
-transformer to allow adaptation without destabilizing the pretrained weights.
+current deck state as context for each new pick.
 
 The exact size of the transformer model will be the subject of multiple experiments, but for the first version we'll 
 set it at:
@@ -246,7 +245,7 @@ Decks failing either check receive a negative reward and are never submitted to 
 on uncastable decks. Gate pass rate is logged as a diagnostic — training moves to stage 2 once it approaches 100%.
 
 ### Stage 3 — Picking good cards (aka: Forge self-play)
-Pool transformer and projection layer train freely. Model builds both decks, plays best-of-11, both decks receive
+Pool transformer trains freely. Model builds both decks, plays best-of-11, both decks receive
 rewards. Replay buffer active.
 
 Each match is best-of-11 via Forge, with Forge AI playing both sides:
@@ -260,9 +259,8 @@ Since the model builds both decks, every match produces two independent reward s
 ### Stage 4 — Encoder fine-tuning (staged unfreezing)
 Triggered when stage 2 win rate plateaus against the external benchmark. Unfreeze in order:
 
-1. Projection layer (already trainable)
-2. Top encoder layers at lr ~1e-6
-3. Full encoder at lr ~1e-6
+1. Top encoder layers at lr ~1e-6
+2. Full encoder at lr ~1e-6
 
 Pool transformer keeps its higher learning rate (~1e-4) throughout.
 

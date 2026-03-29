@@ -17,18 +17,6 @@
 
 ---
 
-## Decision 2: Projection Layer Placement
-
-**Decision**: Apply Linear(512 → 512) to the card embedding **before** concatenating the 4 per-slot flags. Flow per slot: `card_embedding[512] → projection → projected[512] → concat(flags[4]) → slot_features[516] → pool transformer`.
-
-**Rationale**: The spec explicitly states "input dimension 512, output dimension 512", implying the projection targets the card encoder output (512-dim), not the full slot feature vector. This preserves the flags as raw binary/count values without involving them in the adaptation transformation, which is appropriate since the flags are stage-dependent state variables, not encoder outputs.
-
-**Alternatives considered**:
-- Linear(516 → 516) after concatenating flags: Mixes flags into the adaptation transform; semantically incorrect and contradicts the spec's dimension statement.
-- No projection: Violates the spec and forfeits the ability to adapt the frozen encoder to pool-level decisions.
-
----
-
 ## Decision 3: Pool Transformer Positional Encoding
 
 **Decision**: No positional encoding. The pool is reshuffled before every pick step, making absolute position semantically meaningless. The 4 per-slot flags (particularly `is_land` and `basic_land_count`) provide sufficient slot identity. Basic land slots (always at the end, positions 90–95) are distinguished by `is_land=1` and `basic_land_count` values.
