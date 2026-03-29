@@ -16,7 +16,6 @@ class CheckpointData:
     pool_transformer_state_dict: dict
     optimizer_state_dict: dict
     training_state: Any  # TrainingState instance
-    replay_buffer: list  # list[Episode] via to_list/from_list
 
 
 class PoolModelStore:
@@ -26,7 +25,6 @@ class PoolModelStore:
         model: Any,
         optimizer: Any,
         training_state: Any,
-        replay_buffer: Any,
     ) -> None:
         """Atomically save checkpoint to path."""
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -34,11 +32,6 @@ class PoolModelStore:
             "pool_transformer_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "training_state": training_state,
-            "replay_buffer": (
-                replay_buffer.to_list()
-                if hasattr(replay_buffer, "to_list")
-                else replay_buffer
-            ),
         }
         fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp.pt")
         os.close(fd)
@@ -61,7 +54,6 @@ class PoolModelStore:
             pool_transformer_state_dict=payload["pool_transformer_state_dict"],
             optimizer_state_dict=payload["optimizer_state_dict"],
             training_state=payload["training_state"],
-            replay_buffer=payload["replay_buffer"],
         )
 
     def save_timestamped(
@@ -70,7 +62,6 @@ class PoolModelStore:
         model: Any,
         optimizer: Any,
         training_state: Any,
-        replay_buffer: Any,
     ) -> Path:
         """Save timestamped checkpoint under base_path.parent/checkpoints/{timestamp}.pt.
 
@@ -78,5 +69,5 @@ class PoolModelStore:
         """
         ts = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
         dest = base_path.parent / "checkpoints" / f"{ts}.pt"
-        self.save(dest, model, optimizer, training_state, replay_buffer)
+        self.save(dest, model, optimizer, training_state)
         return dest

@@ -77,6 +77,7 @@ class EpisodeRunner:
         rng = np.random.default_rng(rng_seed)
         seeds = rng.integers(0, 2**31 - 1, size=MAX_PICKS, dtype=np.int64)
 
+        device = next(model.parameters()).device  # type: ignore[attr-defined]
         model.eval()  # type: ignore[attr-defined]
         for step in range(MAX_PICKS):
             step_rng = np.random.default_rng(int(seeds[step]))
@@ -87,7 +88,7 @@ class EpisodeRunner:
                 shuffled[sp] = current[perm[sp]]
             # Basic land slots stay at indices n_booster..n_slots-1 (unchanged)
 
-            input_t = torch.from_numpy(shuffled).unsqueeze(0)  # [1, n_slots, d_model]
+            input_t = torch.from_numpy(shuffled).unsqueeze(0).to(device)  # [1, n_slots, d_model]
             with torch.no_grad():
                 logits = model(input_t)  # type: ignore[operator]  # [1, n_slots]
             logits_1d = logits[0]  # [n_slots]

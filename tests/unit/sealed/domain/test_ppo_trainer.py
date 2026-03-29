@@ -1,9 +1,6 @@
 """T009 — Unit tests for PPOTrainer."""
 from __future__ import annotations
 
-import io
-import sys
-
 import numpy as np
 import pytest
 import torch
@@ -61,7 +58,6 @@ def test_train_batch_result_fields_populated():
     assert isinstance(result.mean_reward, float)
     assert isinstance(result.episode_runs, list)
     assert len(result.episode_runs) == 3
-    assert isinstance(result.kl_warnings, int)
 
 
 def test_episode_runs_lengths_match_actions():
@@ -79,7 +75,6 @@ def test_ppo_loss_backward_produces_nonzero_gradients():
     model, optimizer, trainer = _make_trainer()
     port = _MockCardPort()
     episodes = [_make_real_episode(model, seed=i) for i in range(2)]
-    # Only include episodes with at least one pick
     episodes = [ep for ep in episodes if len(ep.actions) > 0]
     assert len(episodes) > 0
 
@@ -101,7 +96,6 @@ def test_reward_baseline_ema_updates():
     episodes = [_make_real_episode(model, seed=i) for i in range(2)]
     trainer.update(episodes, port, best_run=1)
 
-    # After processing episodes, baseline should have moved from 0
     assert trainer.reward_baseline != 0.0
 
 
@@ -113,41 +107,6 @@ def test_reward_baseline_ema_formula():
     expected_baseline = 0.01 * ep.reward
     trainer.update([ep], port, best_run=1)
     assert abs(trainer.reward_baseline - expected_baseline) < 1e-6
-
-
-# ── KL warning ────────────────────────────────────────────────────────────────
-
-def test_kl_warning_fires_when_policy_drifted(capsys):
-    """After significantly updating the model, KL should exceed threshold."""
-    model, optimizer, trainer = _make_trainer()
-    port = _MockCardPort()
-
-    # Collect episodes with the initial policy
-    episodes = [_make_real_episode(model, seed=i) for i in range(5)]
-    episodes = [ep for ep in episodes if len(ep.actions) > 0]
-
-    # Drastically perturb model weights to simulate policy drift
-    with torch.no_grad():
-        for p in model.parameters():
-            p.add_(torch.randn_like(p) * 10.0)
-
-    # Now update: the stored log_probs are from the old policy, new policy is very different
-    trainer.kl_warn_threshold = 0.0  # warn on any KL > 0
-    result = trainer.update(episodes, port, best_run=1)
-
-    captured = capsys.readouterr()
-    # With threshold=0.0, at least one warning should fire for non-trivial episodes
-    if result.kl_warnings > 0:
-        assert "[warn] KL divergence" in captured.out
-
-
-def test_kl_warning_count_in_result():
-    model, optimizer, trainer = _make_trainer()
-    port = _MockCardPort()
-    episodes = [_make_real_episode(model, seed=i) for i in range(3)]
-    trainer.kl_warn_threshold = 1e9  # never warn
-    result = trainer.update(episodes, port, best_run=1)
-    assert result.kl_warnings == 0
 
 
 # ── Empty episodes ─────────────────────────────────────────────────────────────

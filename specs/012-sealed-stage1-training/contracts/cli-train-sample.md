@@ -27,7 +27,7 @@ python -m sealed train
 | `pools.txt` missing or empty | Exit code 2, error to stderr: `"Error: pools.txt not found or empty: {path}"` |
 | Any card in pools.txt has no `.npz` file | Exit code 2, error to stderr: `"Error: missing embedding for card: {name}"` |
 | `model-path` directory does not exist | Created automatically (including parents) |
-| Checkpoint exists at `model-path` | Resume training; load model, optimizer, training state, replay buffer |
+| Checkpoint exists at `model-path` | Resume training; load model, optimizer, and training state |
 | No checkpoint at `model-path` | Initialize model and training state from scratch |
 
 ### Console output during training

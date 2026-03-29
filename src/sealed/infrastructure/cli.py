@@ -87,7 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train_parser.add_argument(
         "--cards-path",
-        default="output/sealed/cards/",
+        default="output/cardsfolder/",
         help="Directory containing .npz card embedding files",
     )
     train_parser.add_argument(
@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sample_parser.add_argument(
         "--cards-path",
-        default="output/sealed/cards/",
+        default="output/cardsfolder/",
         help="Directory containing .npz card embedding files",
     )
     sample_parser.add_argument(

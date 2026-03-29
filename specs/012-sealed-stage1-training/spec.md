@@ -50,7 +50,7 @@ model-path and verifying that training resumes from the saved state rather than 
 **Acceptance Scenarios**:
 
 1. **Given** a model checkpoint exists at the configured path, **When** the user runs `python -m sealed train --stage 1`
-   again, **Then** training resumes from the checkpoint, preserving `best_run` and replay buffer state.
+   again, **Then** training resumes from the checkpoint, preserving `best_run`, `episode_count`, `consecutive_successes`, and `reward_baseline`.
 
 2. **Given** training is running, **When** 1000 episodes have elapsed, **Then** a timestamped checkpoint is saved to
    the `checkpoints/` subfolder of the model path's parent directory.
@@ -121,12 +121,8 @@ verifying that it prints human-readable pick sequences.
 - **FR-007**: The reward for each episode MUST be computed as `(current_run / best_run) × 2 - 1`, where `current_run`
   is the number of legal picks made (minimum 1) and `best_run` is the high-water mark of all prior runs, initialized
   to 1 and never decremented.
-- **FR-008**: The training loop MUST maintain a replay buffer of up to ~1000 episodes stored compactly as: pool card
-  names, per-step shuffle seeds, actions taken, log-probabilities of those actions, and episode reward. FIFO eviction
-  MUST apply when the buffer is full.
-- **FR-009**: The system MUST monitor KL divergence on replay buffer entries to detect stale off-policy episodes.
-  When stale entries are detected, the system MUST log a warning to stdout and continue training without modifying
-  the buffer.
+- **FR-008**: *(removed — replay buffer replaced by standard on-policy PPO)*
+- **FR-009**: *(removed — KL divergence monitoring for stale buffer entries no longer applicable)*
 - **FR-016**: After each training batch completes, the system MUST print one summary line to stdout containing: total
   episode count, the `current_run` value for each episode in the batch, the current `best_run`, and the mean reward
   across the batch.
@@ -150,7 +146,6 @@ verifying that it prints human-readable pick sequences.
   embedding file. Augmented with 6 basic land slots and zero-padded to 96 entries.
 - **Episode**: A single 40-step pick sequence over one pool. Stores the pool card names, the shuffle seed used at each
   pick step, the actions taken, the log-probabilities of those actions, and the final reward.
-- **Replay Buffer**: A capped FIFO queue of episodes stored in compact form, used to sample training batches off-policy.
 - **best_run**: A high-water-mark counter tracking the longest legal pick run ever achieved. Initialized to 1, never
   decremented. Used as the denominator in the reward function and persisted across training restarts.
 - **Model Checkpoint**: The serialized state of the pool transformer, saved periodically to allow

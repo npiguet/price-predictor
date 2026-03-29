@@ -64,8 +64,8 @@ def _run_n_batches(env, n_batches: int, batch_size: int = 2) -> None:
     call_count = [0]
     original_save = PoolModelStore.save
 
-    def _save_and_maybe_stop(self, path, model, optimizer, training_state, replay_buffer):
-        original_save(self, path, model, optimizer, training_state, replay_buffer)
+    def _save_and_maybe_stop(self, path, model, optimizer, training_state):
+        original_save(self, path, model, optimizer, training_state)
         call_count[0] += 1
         if call_count[0] >= n_batches:
             raise _Stop()

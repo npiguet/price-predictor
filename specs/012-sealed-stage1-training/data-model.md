@@ -45,7 +45,7 @@ The feature vector for one card slot in the pool. 516 floats total.
 
 ### Episode
 
-One complete or terminated pick sequence. Stored compactly in the replay buffer.
+One complete or terminated pick sequence.
 
 | Field | Type | Shape | Notes |
 |-------|------|-------|-------|
@@ -109,7 +109,6 @@ The complete serialized state of a training run.
 | `pool_transformer_state_dict` | dict | PyTorch state dict for the pool transformer |
 | `optimizer_state_dict` | dict | PyTorch optimizer state |
 | `training_state` | TrainingState | `best_run`, `episode_count`, `consecutive_successes`, `reward_baseline` |
-| `replay_buffer` | list[Episode] | Full serialized replay buffer |
 
 ---
 
@@ -151,13 +150,10 @@ at episode end:
 ### Training batch
 
 ```
-collect batch_size episodes sequentially from pool dataset
-add each to replay_buffer (FIFO eviction as needed)
-sample batch from replay_buffer
+collect batch_size episodes sequentially from pool dataset (on-policy)
 for each episode in batch:
     reconstruct episode states (pool + seeds)
     compute new log_probs for stored actions
-    compute KL divergence (warn if > 1.5 nats)
     compute per-step importance ratios
     compute PPO loss
 gradient update (pool transformer)

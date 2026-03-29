@@ -9,11 +9,12 @@
 
 **Decision**: Critic-free PPO. Use the episode reward directly as the advantage signal (optionally centered by a running-mean baseline). The clipped surrogate objective applies per-step importance ratios: `r_t = exp(new_log_p_t - old_log_p_t)`, advantage = episode reward (same for all 40 steps).
 
-**Rationale**: The spec's replay buffer stores no value estimates, ruling out a learned value function without adding a new storage field. Stage 1's reward is a single scalar per episode (not per-step), so per-step advantages collapse to a constant anyway. A running-mean baseline reduces variance cheaply without introducing a critic head. The clipped surrogate `min(r * A, clip(r, 1-ε, 1+ε) * A)` still prevents large off-policy updates.
+**Rationale**: Stage 1's reward is a single scalar per episode (not per-step), so per-step advantages collapse to a constant anyway. A running-mean baseline reduces variance cheaply without introducing a critic head. The clipped surrogate `min(r * A, clip(r, 1-ε, 1+ε) * A)` prevents excessively large gradient steps. Standard on-policy PPO: each batch of episodes is collected fresh, trained on once, and discarded.
 
 **Alternatives considered**:
-- Full PPO with critic + GAE: Would require storing value estimates in the replay buffer and adding a value head to the model. Over-engineered for a single-scalar reward signal at this stage.
-- Pure REINFORCE: No clipping, no off-policy tolerance. Unstable with a replay buffer.
+- Full PPO with critic + GAE: Would require adding a value head to the model. Over-engineered for a single-scalar reward signal at this stage.
+- Pure REINFORCE: No clipping, higher variance. Rejected in favor of clipped surrogate.
+- PPO with replay buffer (off-policy): Originally specced, removed in favour of standard on-policy PPO to avoid the complexity of off-policy corrections and stale-episode detection.
 
 ---
 
@@ -38,18 +39,6 @@
 **Alternatives considered**:
 - Apply mask to logits (`masked_fill(-inf)`): Makes Stage 1 vacuous — correct behavior is enforced externally, model learns nothing. Rejected.
 - Apply mask only during evaluation/sampling: Inconsistent with training distribution; model would behave differently at inference time.
-
----
-
-## Decision 5: KL Divergence Threshold
-
-**Decision**: At batch training time, compute per-episode KL divergence as `mean(old_log_p - new_log_p)` over the stored action steps. Emit a stdout warning when any episode in the batch exceeds **1.5 nats**. No buffer eviction.
-
-**Rationale**: 1.5 nats is a standard upper bound for PPO off-policy tolerance; this is conservative enough to catch significantly stale episodes while not firing on routine policy improvement. Computing KL at training time (by re-running the current policy on the stored episode states) requires no extra storage.
-
-**Alternatives considered**:
-- Threshold of 0.5 nats: Too sensitive; fires on normal early-training variance.
-- Buffer eviction above threshold: Spec explicitly chose warn-only.
 
 ---
 

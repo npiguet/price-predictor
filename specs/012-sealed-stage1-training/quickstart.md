@@ -91,7 +91,7 @@ Sample 2:
 
 ## Resume After Interruption
 
-Simply re-run the same train command. The checkpoint at `models/sealed/stage1/latest.pt` is loaded automatically and training continues from where it left off (`best_run`, `episode_count`, and replay buffer are all restored). The pool iteration restarts from pool 0.
+Simply re-run the same train command. The checkpoint at `models/sealed/stage1/latest.pt` is loaded automatically and training continues from where it left off (`best_run`, `episode_count`, `consecutive_successes`, and `reward_baseline` are all restored). The pool iteration restarts from pool 0.
 
 ---
 

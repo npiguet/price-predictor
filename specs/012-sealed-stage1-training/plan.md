@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement Stage 1 of the sealed deck builder training curriculum: a PPO training loop that teaches the pool-level transformer to make 40 consecutive legal picks from a 96-card sealed pool. New domain components (pool transformer, episode runner, replay buffer, PPO trainer) are added to the existing `sealed` Python module, and two new CLI subcommands (`train` and `sample`) are wired into the existing `sealed` CLI.
+Implement Stage 1 of the sealed deck builder training curriculum: a standard on-policy PPO training loop that teaches the pool-level transformer to make 40 consecutive legal picks from a 96-card sealed pool. New domain components (pool transformer, episode runner, PPO trainer) are added to the existing `sealed` Python module, and two new CLI subcommands (`train` and `sample`) are wired into the existing `sealed` CLI.
 
 ## Technical Context
 
@@ -17,7 +17,7 @@ Implement Stage 1 of the sealed deck builder training curriculum: a PPO training
 **Project Type**: CLI tool (extension of existing `python -m sealed` module)
 **Performance Goals**: No throughput targets; training speed is secondary to correctness
 **Constraints**: Encoder weights are frozen during Stage 1; the pool transformer is the only trainable component
-**Scale/Scope**: ~10,000 pools per dataset; replay buffer ≤ 1,000 episodes; batch size 32 (default)
+**Scale/Scope**: ~10,000 pools per dataset; batch size 32 (default)
 
 ## Constitution Check
 
@@ -58,8 +58,8 @@ src/sealed/
 │   ├── card_embedding_port.py   (NEW) CardEmbeddingPort Protocol — satisfied structurally by EmbeddingStore
 │   ├── pool_transformer.py      (NEW) PoolTransformerModel, PoolTransformerConfig
 │   ├── episode_runner.py        (NEW) EpisodeRunner — runs one episode, handles masking + termination
-│   ├── replay_buffer.py         (NEW) ReplayBuffer, Episode dataclass
-│   └── ppo_trainer.py           (NEW) PPOTrainer — computes PPO loss, updates weights, monitors KL
+│   ├── replay_buffer.py         (NEW) Episode dataclass
+│   └── ppo_trainer.py           (NEW) PPOTrainer — computes PPO loss, updates weights
 ├── application/
 │   ├── encode_cards.py          (existing — unchanged)
 │   ├── generate_pools.py        (existing — unchanged)
@@ -125,21 +125,15 @@ tests/
 
 **`replay_buffer.py`**
 - `Episode` dataclass: `pool_names: str` *(semicolon-separated card names, same format as pools.txt line)*, `shuffle_seeds: np.ndarray[40, int32]`, `actions: np.ndarray[n, int32]`, `log_probs: np.ndarray[n, float32]`, `reward: float`
-- `ReplayBuffer`:
-  - `max_size: int` (default 1000)
-  - `append(episode: Episode) → None` — FIFO eviction
-  - `sample(n: int) → list[Episode]` — random sample without replacement (or all if `n > len`)
-  - `__len__`, `to_list() → list[Episode]`, `from_list(episodes: list[Episode]) → ReplayBuffer`
 
 **`ppo_trainer.py`**
 - `PPOTrainer`:
-  - `__init__(model, optimizer, clip_eps=0.2, kl_warn_threshold=1.5)`
-  - `update(episodes: list[Episode], pool_loader, best_run) → TrainBatchResult`
+  - `__init__(model, optimizer, clip_eps=0.2)`
+  - `update(episodes: list[Episode], card_port, best_run) → TrainBatchResult`
   - Reconstructs episode states from stored seeds: for each step, applies the stored shuffle seed to recover the input-position → pool-index permutation, then looks up the shuffled input position of the stored pool-index action to compute the new log-prob under the current policy
   - Computes per-step importance ratios; PPO loss (clipped surrogate); backward + step
-  - KL divergence monitoring: emits `print("[warn] KL divergence ...")` to stdout when exceeded
   - `reward_baseline`: EMA (decay 0.99), updated per episode processed
-- `TrainBatchResult` dataclass: `mean_reward: float`, `episode_runs: list[int]`, `kl_warnings: int`
+- `TrainBatchResult` dataclass: `mean_reward: float`, `episode_runs: list[int]`
 
 ### Application layer (`src/sealed/application/`)
 
@@ -147,7 +141,7 @@ tests/
 - `TrainStage1UseCase`:
   - `execute(pools_path, cards_path, model_path, batch_size, set_code) → None`
   - Startup validation: pools.txt non-empty, all card embeddings present; creates model-path dir; loads or initializes checkpoint
-  - Main loop: collect `batch_size` episodes → add to replay buffer → PPO update → print summary → checkpoint
+  - Main loop: collect `batch_size` fresh episodes → PPO update on those episodes → print summary → checkpoint
   - Consecutive-successes tracking; halts and reports when ≥ 100
   - Saves timestamped checkpoint every 1000 episodes
 
@@ -167,8 +161,8 @@ tests/
 
 **`pool_model_store.py`**
 - `PoolModelStore`:
-  - `save(path: Path, model, optimizer, training_state, replay_buffer) → None` — atomic (temp + rename)
-  - `load(path: Path) → CheckpointData` — returns model state dicts + training state + replay buffer
+  - `save(path: Path, model, optimizer, training_state) → None` — atomic (temp + rename)
+  - `load(path: Path) → CheckpointData` — returns model state dicts + training state
   - `save_timestamped(base_path: Path, ...) → Path` — writes to `base_path.parent/checkpoints/{ISO8601}.pt`
 
 **`cli.py` (modified)**

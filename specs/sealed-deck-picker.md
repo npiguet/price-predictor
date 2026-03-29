@@ -75,17 +75,16 @@ set it at:
 
 # Training Algorithm
 
-PPO (Proximal Policy Optimization) with experience replay:
+Standard on-policy PPO (Proximal Policy Optimization):
 
 - Handles the sequential 40-step decision process naturally
-- Tolerates mild off-policy data from the replay buffer
-- KL divergence monitored per episode to detect stale buffer entries
+- Each batch of episodes is collected with the current policy, used for one gradient update, then discarded
 
-## Replay Buffer
+## Episode Storage
 
-Rather than storing full pool embeddings, episodes are stored compactly using
-the pool's card list and per-step shuffle seeds, allowing the exact state at
-each pick step to be reconstructed at training time.
+Episodes are stored compactly using the pool's card list and per-step shuffle
+seeds, allowing the exact state at each pick step to be reconstructed at
+training time. No replay buffer is maintained.
 
 Per episode stored:
 
@@ -98,10 +97,6 @@ Per episode stored:
 | reward            | 1 float                        | (4 bytes)    |
 |                   |                                |              |
 | total per episode |                                | ~2.4 KB      |
-| buffer size       | ~1000 episodes                 | (~2.4 MB)    |
-
-FIFO eviction with KL divergence monitoring to detect when episodes are too
-stale to be useful.
 
 ## Training Curriculum
 

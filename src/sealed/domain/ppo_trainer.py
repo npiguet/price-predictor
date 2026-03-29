@@ -1,4 +1,4 @@
-"""PPOTrainer: computes PPO loss, updates model weights, monitors KL divergence."""
+"""PPOTrainer: computes PPO loss and updates model weights."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,7 +18,6 @@ if TYPE_CHECKING:
 class TrainBatchResult:
     mean_reward: float
     episode_runs: list[int]
-    kl_warnings: int
 
 
 class PPOTrainer:
@@ -27,12 +26,10 @@ class PPOTrainer:
         model: object,
         optimizer: object,
         clip_eps: float = 0.2,
-        kl_warn_threshold: float = 1.5,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
         self.clip_eps = clip_eps
-        self.kl_warn_threshold = kl_warn_threshold
         self.reward_baseline: float = 0.0
 
     def update(
@@ -44,12 +41,12 @@ class PPOTrainer:
         """Reconstruct episode states, compute PPO loss, perform one gradient step."""
         all_step_losses: list[torch.Tensor] = []
         episode_runs: list[int] = []
-        kl_warnings = 0
         reward_sum = 0.0
 
         self.model.train()  # type: ignore[attr-defined]
+        device = next(self.model.parameters()).device  # type: ignore[attr-defined]
 
-        for ep_idx, ep in enumerate(episodes):
+        for ep in episodes:
             n_steps = len(ep.actions)
             if n_steps == 0:
                 episode_runs.append(0)
@@ -62,7 +59,6 @@ class PPOTrainer:
             embed_dim = current.shape[1] - 4
 
             advantage = float(ep.reward) - self.reward_baseline
-            step_kls: list[float] = []
 
             for step in range(n_steps):
                 action = int(ep.actions[step])
@@ -76,7 +72,7 @@ class PPOTrainer:
                 for sp in range(n_booster):
                     shuffled[sp] = current[perm[sp]]
 
-                input_t = torch.from_numpy(shuffled).unsqueeze(0).float()
+                input_t = torch.from_numpy(shuffled).unsqueeze(0).float().to(device)
                 logits = self.model(input_t)  # type: ignore[operator]  # [1, n_slots]
                 new_log_probs_all = torch.log_softmax(logits[0], dim=-1)  # [n_slots]
 
@@ -87,7 +83,6 @@ class PPOTrainer:
                     shuffled_pos = action
 
                 new_lp = new_log_probs_all[shuffled_pos]
-                step_kls.append(old_lp - new_lp.item())
 
                 ratio = torch.exp(new_lp - old_lp)
                 surr1 = ratio * advantage
@@ -101,15 +96,6 @@ class PPOTrainer:
                 else:
                     current[action, embed_dim + 3] += 1.0  # basic_land_count
                     current[action, embed_dim] = 1.0        # picked_flag
-
-            if step_kls:
-                mean_kl = float(np.mean(step_kls))
-                if mean_kl > self.kl_warn_threshold:
-                    print(
-                        f"[warn] KL divergence {mean_kl:.2f} nats for episode at buffer index {ep_idx}"
-                        " — policy has drifted"
-                    )
-                    kl_warnings += 1
 
             # EMA update of reward baseline
             self.reward_baseline = 0.99 * self.reward_baseline + 0.01 * float(ep.reward)
@@ -126,5 +112,4 @@ class PPOTrainer:
         return TrainBatchResult(
             mean_reward=mean_reward,
             episode_runs=episode_runs,
-            kl_warnings=kl_warnings,
         )

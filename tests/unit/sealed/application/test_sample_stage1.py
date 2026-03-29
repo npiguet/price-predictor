@@ -10,11 +10,11 @@ import torch
 import torch.optim as optim
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
-from sealed.domain.replay_buffer import ReplayBuffer
 from sealed.application.train_stage1 import TrainingState
 from sealed.application.sample_stage1 import SampleStage1UseCase
 from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
+
 
 MINI = PoolTransformerConfig(
     n_slots=4,
@@ -49,12 +49,11 @@ def _setup_env(tmp_path: Path, n_pools: int = 3):
     model = PoolTransformerModel(MINI)
     optimizer = optim.Adam(model.parameters())
     state = TrainingState()
-    buf = ReplayBuffer()
 
     model_path = tmp_path / "models" / "latest.pt"
     model_path.parent.mkdir(parents=True)
     store = PoolModelStore()
-    store.save(model_path, model, optimizer, state, buf)
+    store.save(model_path, model, optimizer, state)
 
     return pools_path, cards_path, model_path
 

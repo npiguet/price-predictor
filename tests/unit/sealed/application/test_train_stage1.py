@@ -13,7 +13,6 @@ from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransforme
 from sealed.application.train_stage1 import TrainStage1UseCase, TrainingState
 from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
-from sealed.domain.replay_buffer import ReplayBuffer
 
 MINI = PoolTransformerConfig(
     n_slots=4,
@@ -71,8 +70,8 @@ def _run_one_batch(tmp_path: Path) -> Path:
 
         original_save = PoolModelStore.save
 
-        def _save_and_stop(self, path, model, optimizer, training_state, replay_buffer):
-            original_save(self, path, model, optimizer, training_state, replay_buffer)
+        def _save_and_stop(self, path, model, optimizer, training_state):
+            original_save(self, path, model, optimizer, training_state)
             saved.append(1)
             if len(saved) >= 1:
                 # Trigger exit by patching consecutive_successes — instead just raise
@@ -160,18 +159,16 @@ def test_checkpoint_resume_restores_state(tmp_path):
         consecutive_successes=10,
         reward_baseline=0.5,
     )
-    buf = ReplayBuffer()
-
     store = PoolModelStore()
-    store.save(model_path, model, optimizer, state, buf)
+    store.save(model_path, model, optimizer, state)
 
     # Now run use case and check it picks up the state
     loaded_states = []
     original_save = PoolModelStore.save
 
-    def _capture_save(self, path, mdl, opt, training_state, replay_buffer):
+    def _capture_save(self, path, mdl, opt, training_state):
         loaded_states.append(training_state)
-        original_save(self, path, mdl, opt, training_state, replay_buffer)
+        original_save(self, path, mdl, opt, training_state)
         raise _StopAfterBatch()
 
     use_case = TrainStage1UseCase()

@@ -9,7 +9,6 @@ import torch
 import torch.optim as optim
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
-from sealed.domain.replay_buffer import ReplayBuffer
 from sealed.domain.episode_runner import EpisodeRunner
 from sealed.domain.ppo_trainer import PPOTrainer
 from sealed.infrastructure.pool_loader import PoolLoader, card_npz_path
@@ -52,23 +51,31 @@ class TrainStage1UseCase:
         # Load and validate pools
         pools_file = pools_path / "pools.txt"
         pools = pool_loader.load_pools(pools_file)  # raises ValueError if empty/missing
+        print(f"Loaded {len(pools)} pools from {pools_file}")
 
         # Validate card embeddings present (check first pool to fail fast)
+        print(f"Validating card embeddings in {cards_path} ...")
         pool_loader.assemble_pool_tensor(pools[0], cards_path)  # raises FileNotFoundError
+        print("Embeddings OK")
 
         # Ensure model directory exists
         model_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Select compute device
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Device: {device}")
+
         # Initialize model, optimizer, state
         config = PoolTransformerConfig()
-        model = PoolTransformerModel(config)
+        model = PoolTransformerModel(config).to(device)
+        n_params = sum(p.numel() for p in model.parameters())
         optimizer = optim.Adam(model.parameters(), lr=1e-4)
-        replay_buffer = ReplayBuffer(max_size=1000)
         state = TrainingState()
 
         if model_path.exists():
             ckpt = model_store.load(model_path)
             model.load_state_dict(ckpt.pool_transformer_state_dict)
+            model.to(device)
             optimizer.load_state_dict(ckpt.optimizer_state_dict)
             if isinstance(ckpt.training_state, TrainingState):
                 state = ckpt.training_state
@@ -80,8 +87,22 @@ class TrainStage1UseCase:
                     consecutive_successes=s.get("consecutive_successes", 0),
                     reward_baseline=s.get("reward_baseline", 0.0),
                 )
-            if ckpt.replay_buffer:
-                replay_buffer = ReplayBuffer.from_list(ckpt.replay_buffer)
+            print(
+                f"Resumed from {model_path}"
+                f"  episode={state.episode_count}"
+                f"  best_run={state.best_run}"
+                f"  consecutive_successes={state.consecutive_successes}"
+            )
+        else:
+            print(f"No checkpoint found at {model_path} — starting fresh")
+
+        print(
+            f"Model: {n_params:,} parameters"
+            f"  n_slots={config.n_slots}  d_model={config.d_model}"
+            f"  n_layers={config.n_layers}  n_heads={config.n_heads}"
+        )
+        print(f"Training  set={set_code}  batch_size={batch_size}  checkpoint={model_path}")
+        print("Collecting first batch ...")
 
         card_port = _EmbeddingAdapter(embedding_store, cards_path)
         runner = EpisodeRunner()
@@ -113,11 +134,9 @@ class TrainStage1UseCase:
                 else:
                     state.consecutive_successes = 0
 
-                replay_buffer.append(ep)
                 batch_episodes.append(ep)
 
-            sampled = replay_buffer.sample(batch_size)
-            result = trainer.update(sampled, card_port, state.best_run)
+            result = trainer.update(batch_episodes, card_port, state.best_run)
             state.reward_baseline = trainer.reward_baseline
 
             runs_str = ",".join(str(r) for r in result.episode_runs)
@@ -126,10 +145,10 @@ class TrainStage1UseCase:
                 f"  best_run={state.best_run}  mean_reward={result.mean_reward:.3f}"
             )
 
-            model_store.save(model_path, model, optimizer, state, replay_buffer)
+            model_store.save(model_path, model, optimizer, state)
 
             if state.episode_count % 1000 == 0:
-                model_store.save_timestamped(model_path, model, optimizer, state, replay_buffer)
+                model_store.save_timestamped(model_path, model, optimizer, state)
 
             if state.consecutive_successes >= 100:
                 print(
