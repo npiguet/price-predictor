@@ -55,6 +55,7 @@ specs/012-sealed-stage1-training/
 src/sealed/
 ├── domain/
 │   ├── card_encoder.py          (existing — unchanged)
+│   ├── card_embedding_port.py   (NEW) CardEmbeddingPort Protocol — satisfied structurally by EmbeddingStore
 │   ├── pool_transformer.py      (NEW) PoolTransformerModel, PoolTransformerConfig
 │   ├── episode_runner.py        (NEW) EpisodeRunner — runs one episode, handles masking + termination
 │   ├── replay_buffer.py         (NEW) ReplayBuffer, Episode dataclass
@@ -105,10 +106,16 @@ tests/
   - `forward(slot_features: Tensor[batch, 96, 516]) → logits: Tensor[batch, 96]`
   - No masking applied to logits — the model samples from the full 96-slot distribution in Stage 1
 
+**`card_embedding_port.py`** *(NEW — domain protocol)*
+- `CardEmbeddingPort` (`typing.Protocol`): `get_embedding(card_name: str) → np.ndarray`
+  - Satisfied structurally by `EmbeddingStore` (infrastructure) — no cross-layer import required
+  - Keeps `EpisodeRunner` (domain) free of any infrastructure dependency per constitution IV
+
 **`episode_runner.py`**
 - `EpisodeRunner`:
-  - `run(pool_names, embedding_store, model, cards_path, rng_seed) → Episode`
-  - Assembles the 96-slot base tensors from .npz files + basic land embeddings
+  - `run(pool_names: str, card_port: CardEmbeddingPort, model, rng_seed) → Episode`
+    - `pool_names` is a semicolon-separated card name string (same format as pools.txt line)
+  - Assembles the 96-slot base tensors from the card port + basic land embeddings
   - At each step: applies the step's shuffle seed to permute the non-basic-land slots into a shuffled input tensor; slot flags reflect current picked state
   - Model outputs logits over the 96 shuffled input positions (no masking)
   - Samples a shuffled input position; translates it to the corresponding **pool index** via the inverse permutation
@@ -117,7 +124,7 @@ tests/
   - Computes reward using `best_run` (passed in, not stored in runner)
 
 **`replay_buffer.py`**
-- `Episode` dataclass: `pool_names: str`, `shuffle_seeds: np.ndarray[40, int32]`, `actions: np.ndarray[n, int32]`, `log_probs: np.ndarray[n, float32]`, `reward: float`
+- `Episode` dataclass: `pool_names: str` *(semicolon-separated card names, same format as pools.txt line)*, `shuffle_seeds: np.ndarray[40, int32]`, `actions: np.ndarray[n, int32]`, `log_probs: np.ndarray[n, float32]`, `reward: float`
 - `ReplayBuffer`:
   - `max_size: int` (default 1000)
   - `append(episode: Episode) → None` — FIFO eviction
@@ -153,9 +160,10 @@ tests/
 
 **`pool_loader.py`**
 - `PoolLoader`:
-  - `load_pools(pools_path: Path) → list[str]` — reads pools.txt line by line; raises `ValueError` if empty
-  - `assemble_pool_tensor(pool_names: str, cards_path: Path, embedding_store: EmbeddingStore, slot_state: SlotState) → Tensor[96, 516]` — loads .npz files, appends basic land embeddings, concatenates flags; raises `FileNotFoundError` identifying missing card name
+  - `load_pools(pools_path: Path) → list[str]` — reads pools.txt line by line; each element is a semicolon-separated string of card names (one pool per line); raises `ValueError` if empty
+  - `assemble_pool_tensor(pool_names: str, cards_path: Path) → Tensor[96, 516]` — `pool_names` is a semicolon-separated card name string; loads .npz files, appends basic land embeddings (Plains/Island/Swamp/Mountain/Forest/Wastes), zero-pads to 96 slots, concatenates all four flag fields at their initial values (all zero); raises `FileNotFoundError` identifying missing card name
   - Basic land embeddings are loaded from cards-path by name (e.g., `Plains.npz`, `Island.npz`, etc.)
+  - Note: PoolLoader produces the **initial** base tensor only (all flags at zero). EpisodeRunner owns per-step flag mutation.
 
 **`pool_model_store.py`**
 - `PoolModelStore`:

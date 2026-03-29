@@ -110,6 +110,8 @@ verifying that it prints human-readable pick sequences.
   zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
 - **FR-004**: Each of the 96 pool slots MUST be represented as a 516-dimensional feature vector: a 512-dimensional
   card embedding, a `picked_flag`, an `available_flag`, an `is_land` flag, and a `basic_land_count` value.
+  `basic_land_count` records how many times this basic land slot has been picked in the current episode (always 0.0
+  for booster card slots). See `data-model.md` (PoolSlot) for full per-field invariants.
 - **FR-005**: During each pick step, the model MUST sample from the unmasked distribution over all 96 slots. No
   selection mask is applied to the logits — the model is free to pick any slot, including already-picked ones. The
   `available_flag = 0` on picked slots serves as an input feature (context for the transformer) but does NOT block
@@ -135,6 +137,7 @@ verifying that it prints human-readable pick sequences.
   100 consecutive episodes.
 - **FR-012**: The pool transformer MUST use the architecture specified in the sealed-deck-picker design: 8 transformer
   layers, 8 attention heads, model dimension 516, feed-forward dimension 2048.
+- *(FR-013 intentionally removed during spec refinement — numbering preserved for traceability)*
 - **FR-014**: The sealed module MUST expose a `sample` subcommand accepting `--set`, `--pools-path`, `--cards-path`,
   `--model-path`, and `--n-samples` arguments, with sensible defaults.
 - **FR-015**: The `sample` command MUST load the specified checkpoint, run N pick sequences from randomly chosen pools,
