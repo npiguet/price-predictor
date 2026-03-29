@@ -1,6 +1,7 @@
 """PoolLoader: reads pools.txt and assembles pool tensors from .npz embeddings."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -16,9 +17,23 @@ def card_npz_path(cards_path: Path, card_name: str) -> Path:
 
     encode-cards saves embeddings alongside card scripts, which are organised as
     ``cards_path/{first_letter}/{snake_case_name}.npz``.  Card names from pools.txt
-    use title-case with spaces, so this function normalises them to match.
+    use title-case and may contain punctuation, so this function normalises them:
+
+    * apostrophes are stripped (``Nature's`` → ``natures``)
+    * any remaining non-alphanumeric run (commas, spaces, ``//``, hyphens, …)
+      is collapsed to a single underscore
+    * leading/trailing underscores are stripped
+
+    Examples::
+
+        "Sewer Shambler"                        → s/sewer_shambler.npz
+        "Jace, the Mind Sculptor"               → j/jace_the_mind_sculptor.npz
+        "Fire // Ice"                           → f/fire_ice.npz
+        "Delver of Secrets // Insectile Abert." → d/delver_of_secrets_….npz
+        "Nature's Claim"                        → n/natures_claim.npz
     """
-    stem = card_name.lower().replace(" ", "_")
+    stem = card_name.lower().replace("'", "")          # strip apostrophes
+    stem = re.sub(r"[^a-z0-9]+", "_", stem).strip("_")  # everything else → _
     return cards_path / stem[0] / f"{stem}.npz"
 
 
