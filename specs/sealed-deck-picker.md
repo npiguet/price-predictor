@@ -23,9 +23,11 @@ At the pool level, each of the 96 entries (90 pool cards + 6 basic land slots) i
 - card_embedding [512]
 - pick_count [1] (how many times this slot has been picked; 0 or 1 for booster cards, 0..N for basic land slots)
 - available_flag [1] (booster cards: cleared to 0 after first pick; basic land slots: always 1)
-- is_land [1]
-- padding [5] (reserved, always 0)
+- padding [6] (reserved, always 0)
 - => 520 features per card
+
+Note: land type is intentionally not provided as an explicit flag. The model is expected to infer it from the
+card embedding, which encodes the card's Oracle text including its type line.
 
 Card slots represent stage 1 of the model. The all have the same number of features so that they can be cleanly fed to
 the transformer at stage 2.

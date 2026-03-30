@@ -25,8 +25,7 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
     Flag layout (indices embed_dim .. embed_dim+7):
       +0  pick_count   — how many times this slot has been picked (0/1 for booster, 0..N for basic lands)
       +1  available    — 1 if still available to pick (booster: cleared after first pick; basic: always 1)
-      +2  is_land      — 1 if the card is a land type
-      +3..+7  (reserved/padding — always 0)
+      +2..+7  (reserved/padding — always 0)
 
     Initial state:
       Booster slots  (0 .. n_booster-1): pick_count=0, available=1, is_land=per card type.
@@ -50,14 +49,11 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
     for i, emb in enumerate(booster_embeds):
         tensor[i, :embed_dim] = emb
         tensor[i, embed_dim + 1] = 1.0  # available_flag
-        if card_port.is_land(names[i]):
-            tensor[i, embed_dim + 2] = 1.0  # is_land
 
     for i, emb in enumerate(basic_embeds):
         j = n_booster + i
         tensor[j, :embed_dim] = emb
         tensor[j, embed_dim + 1] = 1.0  # available_flag
-        tensor[j, embed_dim + 2] = 1.0  # is_land
 
     return tensor
 

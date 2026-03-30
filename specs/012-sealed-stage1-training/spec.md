@@ -113,8 +113,9 @@ verifying that it prints human-readable pick sequences.
   zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
 - **FR-004**: Each of the 96 pool slots MUST be represented as a 520-dimensional feature vector: a 512-dimensional
   card embedding, a `pick_count` (0/1 for booster cards, 0..N for basic land slots), an `available_flag` (cleared
-  after first pick for booster cards; always 1 for basic land slots), an `is_land` flag, and 5 reserved padding
-  dimensions (always 0).
+  after first pick for booster cards; always 1 for basic land slots), and 6 reserved padding dimensions (always 0).
+  Land type is intentionally not provided as an explicit flag — the model is expected to infer it from the card
+  embedding.
 - **FR-005**: During each pick step, the model MUST sample from the unmasked distribution over all 96 slots. No
   selection mask is applied to the logits — the model is free to pick any slot, including already-picked ones. The
   `available_flag = 0` on picked slots serves as an input feature (context for the transformer) but does NOT block

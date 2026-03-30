@@ -11,7 +11,7 @@ import torch.nn as nn
 class PoolTransformerConfig:
     n_layers: int = 8
     n_heads: int = 8  # 520 / 8 = 65
-    d_model: int = 520  # = card_embed_dim(512) + 3 flags + 5 reserved padding
+    d_model: int = 520  # = card_embed_dim(512) + 2 flags (pick_count, available) + 6 reserved padding
     ff_dim: int = 2048
     n_slots: int = 96
     card_embed_dim: int = 512
