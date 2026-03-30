@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 BASIC_LAND_NAMES = ["Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes"]
 MAX_PICKS = 40
 IDEAL_SPELLS = 23  # target non-land picks for a 40-card sealed deck
+IDEAL_LANDS = 17   # target land picks for a 40-card sealed deck
 
 
 def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots: int) -> np.ndarray:
@@ -72,12 +73,15 @@ class EpisodeRunner:
     ) -> Episode:
         """Run one episode.
 
-        Phase 1 (n_spell < IDEAL_SPELLS): any land pick terminates immediately.
-        Phase 2 (n_spell >= IDEAL_SPELLS): land picks are recorded and allowed;
-            non-land picks are recorded but penalised in the reward.
+        Land picks are allowed throughout all picks. Per-step rewards incentivise
+        picking exactly IDEAL_SPELLS=23 non-land cards and IDEAL_LANDS=17 land cards:
+          +1 for a spell pick when n_spell < IDEAL_SPELLS
+          -1 for a spell pick when n_spell >= IDEAL_SPELLS
+          +1 for a land pick when n_land < IDEAL_LANDS
+          -1 for a land pick when n_land >= IDEAL_LANDS
 
-        Returns an Episode whose actions include both spell picks and phase-2
-        land picks.
+        Only a duplicate pick (re-picking an already-chosen booster card) terminates
+        the episode early.
         """
         n_slots: int = model.config.n_slots  # type: ignore[attr-defined]
         booster_names = pool_names.split(";")
@@ -91,6 +95,7 @@ class EpisodeRunner:
         log_probs_list: list[float] = []
         step_rewards_list: list[float] = []
         n_spell = 0  # non-land picks so far
+        n_land = 0   # land picks so far
         termination = "success"
         term_action = -1
         term_log_prob = 0.0
@@ -136,13 +141,6 @@ class EpisodeRunner:
 
             log_prob = float(log_probs_all[sampled_sp].item())
 
-            # Phase 1: any land pick terminates
-            if is_land and n_spell < IDEAL_SPELLS:
-                termination = "land"
-                term_action = pool_index
-                term_log_prob = log_prob
-                break
-
             # Duplicate always terminates
             if is_duplicate:
                 termination = "duplicate"
@@ -153,11 +151,11 @@ class EpisodeRunner:
             actions.append(pool_index)
             log_probs_list.append(log_prob)
 
-            # Per-step reward: +1 for good picks, -1 for over-spell picks in phase 2
-            if not is_land and n_spell >= IDEAL_SPELLS:
-                step_rewards_list.append(-1.0)
+            # Per-step reward: +1 for picks within budget, -1 for picks over budget
+            if is_land:
+                step_rewards_list.append(1.0 if n_land < IDEAL_LANDS else -1.0)
             else:
-                step_rewards_list.append(1.0)
+                step_rewards_list.append(1.0 if n_spell < IDEAL_SPELLS else -1.0)
 
             # Update tensor state
             if pool_index >= n_booster:
@@ -167,11 +165,14 @@ class EpisodeRunner:
                 current[pool_index, embed_dim] = 1.0       # pick_count (0→1 for booster cards)
                 current[pool_index, embed_dim + 1] = 0.0   # available_flag
 
-            if not is_land:
+            if is_land:
+                n_land += 1
+            else:
                 n_spell += 1
 
         n_total = len(actions)
-        effective_run = n_total - max(n_spell - IDEAL_SPELLS, 0)
+        excess = max(n_spell - IDEAL_SPELLS, 0) + max(n_land - IDEAL_LANDS, 0)
+        effective_run = n_total - excess
         reward = float(effective_run) / float(best_run) * 2.0 - 1.0
 
         return Episode(

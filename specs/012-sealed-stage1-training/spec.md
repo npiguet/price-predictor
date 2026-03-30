@@ -24,9 +24,9 @@ episodes execute, rewards are computed, and the model checkpoint is written to d
 1. **Given** card embeddings and a pools file are present, **When** the user runs `python -m sealed train --stage 1`,
    **Then** the training loop begins, episodes execute sequentially, and the model is saved at the configured path.
 
-2. **Given** training is running at curriculum level `best_run`, **When** the model makes an illegal pick
+2. **Given** training is running at curriculum level `best_run`, **When** the model makes a duplicate pick
    before completing `best_run` picks, **Then** the episode terminates immediately and the episode-level reward
-   is computed as `(effective_run / best_run) × 2 - 1` where `effective_run = n_total - max(n_spell - 23, 0)`.
+   is computed as `(effective_run / best_run) × 2 - 1` where `effective_run = n_total - max(n_spell - 23, 0) - max(n_land - 17, 0)`.
 
 3. **Given** training is running at curriculum level `best_run`, **When** the model completes `best_run` picks
    without any illegal selection, **Then** the episode is recorded as successful with `n_total = best_run`.
@@ -94,7 +94,7 @@ verifying that it prints human-readable pick sequences.
 - What happens when a card named in a pool has no corresponding embedding file in cards-path? → Training aborts immediately with an error message identifying the missing card(s).
 - What happens when the model path does not exist yet (first run, no checkpoint)? → The model-path directory tree is created automatically.
 - What happens when training is interrupted mid-episode (e.g. keyboard interrupt between pick steps)?
-- What happens when `best_run` is 1 and the episode terminates on the very first pick? (0 legal picks: `effective_run = 0`, reward = −1.0. If the pick is legal: reward = 1.0. The model must learn to make a single legal pick before the curriculum advances.)
+- What happens when `best_run` is 1 and the episode terminates on the very first pick? (duplicate pick: `effective_run = 0`, reward = −1.0. If the pick is legal: reward = 1.0. The model must make a single non-duplicate pick before the curriculum advances.)
 
 ## Requirements *(mandatory)*
 
@@ -121,11 +121,13 @@ verifying that it prints human-readable pick sequences.
   selection. This is intentional: Stage 1 teaches the model to avoid illegal picks through the reward signal, not by
   making them mechanically impossible.
 - **FR-006**: When the model selects an already-picked non-basic-land slot, the episode MUST terminate immediately.
-- **FR-007**: Each episode MUST run for at most `best_run` picks. The episode-level reward MUST be computed as
-  `(effective_run / best_run) × 2 - 1`, where `effective_run = n_total - max(n_spell - 23, 0)`. Per-step rewards
-  are +1 for each legal pick and −1 for each non-land pick made in Phase 2 (n_spell ≥ 23). Per-step rewards are
-  batch-normalised (subtract batch mean, divide by batch std) before computing PPO advantages. An entropy bonus
-  with coefficient 0.01 is added to the PPO objective to encourage exploration. PPO clip ε = 0.2.
+  Land picks (basic land slots or booster land cards not yet picked) do NOT terminate the episode.
+- **FR-007**: Each episode MUST run for at most `best_run` picks. Per-step rewards use dual spell/land budgets:
+  +1 for a spell pick when n_spell < 23, −1 when n_spell ≥ 23; +1 for a land pick when n_land < 17, −1 when
+  n_land ≥ 17. The episode-level reward MUST be computed as `(effective_run / best_run) × 2 - 1`, where
+  `effective_run = n_total - max(n_spell - 23, 0) - max(n_land - 17, 0)`. Per-step rewards are batch-normalised
+  (subtract batch mean, divide by batch std) before computing PPO advantages. An entropy bonus with coefficient
+  0.01 is added to the PPO objective to encourage exploration. PPO clip ε = 0.2.
 - **FR-008**: *(removed — replay buffer replaced by standard on-policy PPO)*
 - **FR-009**: *(removed — KL divergence monitoring for stale buffer entries no longer applicable)*
 - **FR-016**: After each training batch completes, the system MUST print one summary line to stdout containing: total
@@ -150,8 +152,9 @@ verifying that it prints human-readable pick sequences.
 
 - **Pool**: A list of ~84–90 card names from the pre-generated dataset, assembled at runtime by loading each card's
   embedding file. Augmented with 6 basic land slots and zero-padded to 96 entries.
-- **Episode**: A single 40-step pick sequence over one pool. Stores the pool card names, the shuffle seed used at each
-  pick step, the actions taken, the log-probabilities of those actions, and the final reward.
+- **Episode**: A single pick sequence (up to `best_run` steps) over one pool. Stores the pool card names, the shuffle
+  seed used at each pick step, the actions taken, the log-probabilities of those actions, per-step rewards, and the
+  final reward. Terminates early only on a duplicate pick.
 - **best_run**: The current curriculum level — the maximum number of picks allowed per episode. Starts at 1 and
   advances by 1 each time a full batch (32 episodes) completes with every episode reaching `best_run` picks without
   an illegal pick. Used as the denominator in the reward function and persisted across training restarts.

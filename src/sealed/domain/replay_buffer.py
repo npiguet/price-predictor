@@ -15,6 +15,6 @@ class Episode:
     step_rewards: np.ndarray   # float32, shape (n_picks,) — per-step reward (+1 good, -1 bad)
     reward: float              # scalar summary used for logging
     effective_run: int         # n_total - max(n_spell - 23, 0)
-    termination: str           # "success", "land", or "duplicate"
-    term_action: int           # pool index of the terminating pick; -1 for successful episodes
+    termination: str           # "success" or "duplicate"
+    term_action: int           # pool index of the terminating duplicate pick; -1 for successful episodes
     term_log_prob: float       # log-probability of the terminating pick; 0.0 for successful episodes

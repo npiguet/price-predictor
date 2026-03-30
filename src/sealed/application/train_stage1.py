@@ -156,14 +156,13 @@ class TrainStage1UseCase:
             # Curriculum advancement: all episodes must complete best_run picks
             batch_all_succeeded = all(ep.termination == "success" for ep in batch_episodes)
 
-            n_land = sum(1 for ep in batch_episodes if ep.termination == "land")
             n_dup = sum(1 for ep in batch_episodes if ep.termination == "duplicate")
 
             runs_str = ",".join(str(r) for r in result.episode_runs)
             print(
                 f"[ep {state.episode_count}] batch runs: {runs_str}"
                 f"  best_run={state.best_run}  mean_reward={result.mean_reward:.3f}"
-                f"  | land={n_land} dup={n_dup}"
+                f"  | dup={n_dup}"
                 f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
 

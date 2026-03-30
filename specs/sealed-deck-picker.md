@@ -61,11 +61,10 @@ set it at:
 40 sequential steps, one card per step:
 
 - At each step the model sees all 96 cards with their current flags and counts
-- Already-picked nonland cards have available_flag = 0 and are masked out of selection
-- Basic land slots are never masked — picking one increments its basic_land_count
-- The selection mask is applied to logits after the transformer, not to attention, so picked cards remain visible as
-  context
-- After 40 picks the deck is complete — no separate land phase needed
+- Already-picked booster cards have available_flag = 0; this is visible to the model as context but does not block
+  selection — the model learns to avoid re-picks through the reward signal
+- Basic land slots are always available; picking one increments its pick_count
+- After 40 picks the deck is complete
 
 # Training Algorithm
 
@@ -154,70 +153,62 @@ This is the first stage of training proper. The pool transformer and PPO trainin
 loop are initialized at the start of this stage.
 
 Training proceeds as a sequence of episodes. At the start of each episode a pool
-is sampled from the pre-generated dataset. The 6 basic land embeddings are appended 
-at the end of the pool, bringing it to 96 entries. Empty slots (if any) are filled 
+is sampled from the pre-generated dataset. The 6 basic land embeddings are appended
+at the end of the pool, bringing it to 96 entries. Empty slots (if any) are filled
 with zero vectors and placed before the basic lands. Before each pick step, the
-non-basic-land portion of the pool is reshuffled to prevent the model from 
+non-basic-land portion of the pool is reshuffled to prevent the model from
 developing positional biases.
 
 The model is asked to sequentially pick up to `best_run` cards from the pool
-(see Reward and Curriculum below). The episode runs in two phases, controlled by
-how many non-land picks have been made so far.
-
-**Phase 1** (fewer than 23 non-land picks made):
-- Picking any land card (basic land slot, or a pool card whose `type:` line
-  contains "land") terminates the episode immediately.
-- Picking a duplicate non-land also terminates immediately.
-- Non-land picks are recorded normally.
-
-**Phase 2** (23 or more non-land picks made):
-- Land picks are now allowed and recorded as actions. Basic land slots can be
-  picked any number of times; non-basic pool lands can only be picked once.
-- Non-land picks are still allowed (but penalised in the reward, see below).
-- Duplicate picks still terminate the episode.
-- The episode completes successfully when 40 total picks have been recorded.
-
-The rationale: a 40-card sealed deck is ideally 23 spells followed by 17 lands.
-Phase 1 forces the model to exhaust its spell picks before touching lands. Phase 2
-rewards it for filling the remaining slots with lands rather than extra spells.
+(see Reward and Curriculum below). Land picks are allowed at any point — the only
+termination condition is a duplicate pick (re-selecting an already-chosen booster
+card). Basic land slots can be picked any number of times; non-basic pool lands
+can only be picked once.
 
 #### Reward and Curriculum
 
-**Per-step reward**: Each recorded pick receives an immediate step reward:
-- **+1** for any legal pick (Phase 1 spell pick, or Phase 2 land pick)
-- **−1** for a non-land pick made in Phase 2 (n_spell ≥ 23)
+**Per-step reward**: Each pick receives an immediate step reward based on two
+independent budgets — a spell budget (target: 23) and a land budget (target: 17):
 
-These per-step rewards are the signal passed to PPO (see Training Algorithm).
+| Pick type | Condition | Reward |
+|-----------|-----------|--------|
+| Spell     | n_spell < 23  | +1 |
+| Spell     | n_spell ≥ 23  | −1 |
+| Land      | n_land < 17   | +1 |
+| Land      | n_land ≥ 17   | −1 |
+
+A duplicate pick terminates the episode; the terminal pick receives −1 advantage
+in the PPO update. These per-step rewards are the signal passed to PPO (see
+Training Algorithm).
 
 **Episode-level reward** (used for logging and `best_run` bookkeeping):
 
-    effective_run = n_total - max(n_spell - 23, 0)
+    excess = max(n_spell - 23, 0) + max(n_land - 17, 0)
+    effective_run = n_total - excess
     reward = (effective_run / best_run) × 2 - 1
 
 Where:
 - `n_total`: total picks recorded in the episode
-- `n_spell`: non-land picks among those (lands never count toward n_spell)
-- `effective_run`: `n_total` reduced by one for each non-land pick past 23;
+- `n_spell`: non-land picks among those
+- `n_land`: land picks among those
+- `effective_run`: `n_total` reduced by one for each pick over either budget;
   peaks at 40 for a perfect 23-spell + 17-land run
-- `best_run`: the current curriculum level — the maximum number of picks allowed
-  per episode. Starts at 1 and advances by 1 each time a full batch (32 episodes)
-  completes with every episode having reached `best_run` picks without an illegal
-  pick. Persisted across training restarts.
+- `best_run`: the current curriculum level (see below)
 
 Key properties:
 - The denominator `best_run` is a fixed curriculum level, not a noisy high-water
   mark, so the reward signal is always calibrated to the difficulty the model is
   actually facing.
-- Maximum reward is only achieved with exactly 23 spells and 17 lands.
-- Each non-land pick past 23 costs exactly as much as a missing land pick.
-- Before phase 2 is reached (n_spell < 23), `effective_run = n_total = n_spell`
-  and the formula reduces to `(n_spell / best_run) × 2 - 1`.
+- Maximum reward (+1.0) is only achieved with exactly 23 spells and 17 lands.
+- Over-picking spells and over-picking lands are penalised symmetrically.
+- Land picks are incentivised throughout the episode, not deferred to a second
+  phase, so the model learns to interleave lands naturally.
 
-**Curriculum advancement**: `best_run` advances by 1 after every batch in which
-all 32 episodes completed `best_run` picks without an illegal pick. Stage 1 is
-complete when `best_run` reaches 40 and a full batch succeeds at that level.
-The land/spell composition is not checked for advancement — the reward function
-already incentivises the right ratio.
+**Curriculum advancement**: `best_run` starts at 1 and advances by 1 after every
+batch in which all 32 episodes completed `best_run` picks without a duplicate.
+Stage 1 is complete when `best_run` reaches 40 and a full batch succeeds at that
+level. The land/spell composition is not checked for advancement — the reward
+function already incentivises the right ratio.
 
 #### Command Line
 
