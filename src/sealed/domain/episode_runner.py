@@ -82,6 +82,7 @@ class EpisodeRunner:
         picked_set: set[int] = set()
         actions: list[int] = []
         log_probs_list: list[float] = []
+        step_rewards_list: list[float] = []
         n_spell = 0  # non-land picks so far
 
         rng = np.random.default_rng(rng_seed)
@@ -135,6 +136,12 @@ class EpisodeRunner:
             actions.append(pool_index)
             log_probs_list.append(log_prob)
 
+            # Per-step reward: +1 for good picks, -1 for over-spell picks in phase 2
+            if not is_land and n_spell >= IDEAL_SPELLS:
+                step_rewards_list.append(-1.0)
+            else:
+                step_rewards_list.append(1.0)
+
             # Update tensor state
             if pool_index >= n_booster:
                 current[pool_index, embed_dim + 3] += 1.0  # basic_land_count
@@ -156,6 +163,7 @@ class EpisodeRunner:
             shuffle_seeds=seeds,
             actions=np.array(actions, dtype=np.int32),
             log_probs=np.array(log_probs_list, dtype=np.float32),
+            step_rewards=np.array(step_rewards_list, dtype=np.float32),
             reward=reward,
             effective_run=effective_run,
         )

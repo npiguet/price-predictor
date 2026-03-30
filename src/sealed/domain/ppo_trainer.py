@@ -1,8 +1,7 @@
 """PPOTrainer: computes PPO loss and updates model weights."""
 from __future__ import annotations
 
-import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -48,11 +47,10 @@ class PPOTrainer:
 
         total_steps = sum(len(ep.actions) for ep in episodes)
 
-        # Normalise advantages over the batch so exactly half are positive/negative
-        # regardless of absolute reward scale.
-        raw_rewards = [float(ep.reward) for ep in episodes]
-        mean_r = statistics.mean(raw_rewards)
-        std_r = statistics.stdev(raw_rewards) if len(raw_rewards) > 1 else 1.0
+        # Normalise per-step rewards across all steps in the batch
+        all_step_rewards = np.concatenate([ep.step_rewards for ep in episodes if len(ep.actions) > 0])
+        mean_r = float(all_step_rewards.mean()) if len(all_step_rewards) > 0 else 0.0
+        std_r = float(all_step_rewards.std()) if len(all_step_rewards) > 1 else 1.0
 
         self.optimizer.zero_grad()  # type: ignore[attr-defined]
 
@@ -67,8 +65,6 @@ class PPOTrainer:
 
             current = _build_base_tensor(ep.pool_names, card_port, n_slots)
             embed_dim = current.shape[1] - 4
-
-            advantage = (float(ep.reward) - mean_r) / (std_r + 1e-8)
 
             for step in range(n_steps):
                 action = int(ep.actions[step])
@@ -94,6 +90,7 @@ class PPOTrainer:
 
                 new_lp = new_log_probs_all[shuffled_pos]
 
+                advantage = (float(ep.step_rewards[step]) - mean_r) / (std_r + 1e-8)
                 ratio = torch.exp(new_lp - old_lp)
                 surr1 = ratio * advantage
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantage
