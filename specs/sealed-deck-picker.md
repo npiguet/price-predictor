@@ -79,6 +79,10 @@ Standard on-policy PPO (Proximal Policy Optimization):
 
 - Handles the sequential 40-step decision process naturally
 - Each batch of episodes is collected with the current policy, used for one gradient update, then discarded
+- **Batch size**: 32 episodes per gradient update
+- **Clip ε**: 0.2
+- **Entropy bonus**: coefficient 0.01, added to the PPO objective to encourage exploration
+- **Advantage computation**: per-step rewards are normalised across all steps in the batch (subtract mean, divide by std) before computing PPO advantages
 
 ## Episode Storage
 
@@ -162,8 +166,9 @@ with zero vectors and placed before the basic lands. Before each pick step, the
 non-basic-land portion of the pool is reshuffled to prevent the model from 
 developing positional biases.
 
-The model is asked to sequentially pick 40 cards from the pool. The episode runs
-in two phases, controlled by how many non-land picks have been made so far.
+The model is asked to sequentially pick up to `best_run` cards from the pool
+(see Reward and Curriculum below). The episode runs in two phases, controlled by
+how many non-land picks have been made so far.
 
 **Phase 1** (fewer than 23 non-land picks made):
 - Picking any land card (basic land slot, or a pool card whose `type:` line
@@ -182,7 +187,15 @@ The rationale: a 40-card sealed deck is ideally 23 spells followed by 17 lands.
 Phase 1 forces the model to exhaust its spell picks before touching lands. Phase 2
 rewards it for filling the remaining slots with lands rather than extra spells.
 
-#### Reward function
+#### Reward and Curriculum
+
+**Per-step reward**: Each recorded pick receives an immediate step reward:
+- **+1** for any legal pick (Phase 1 spell pick, or Phase 2 land pick)
+- **−1** for a non-land pick made in Phase 2 (n_spell ≥ 23)
+
+These per-step rewards are the signal passed to PPO (see Training Algorithm).
+
+**Episode-level reward** (used for logging and `best_run` bookkeeping):
 
     effective_run = n_total - max(n_spell - 23, 0)
     reward = (effective_run / best_run) × 2 - 1
@@ -192,20 +205,25 @@ Where:
 - `n_spell`: non-land picks among those (lands never count toward n_spell)
 - `effective_run`: `n_total` reduced by one for each non-land pick past 23;
   peaks at 40 for a perfect 23-spell + 17-land run
-- `best_run`: high-water mark of `n_total` (raw pick count) across all episodes,
-  initialised to 1 and never decreasing
+- `best_run`: the current curriculum level — the maximum number of picks allowed
+  per episode. Starts at 1 and advances by 1 each time a full batch (32 episodes)
+  completes with every episode having reached `best_run` picks without an illegal
+  pick. Persisted across training restarts.
 
 Key properties:
-- Any full 40-pick run yields `effective_run ≥ 23`, so `reward > 0` once
-  `best_run ≤ 46` (which is always true).
+- The denominator `best_run` is a fixed curriculum level, not a noisy high-water
+  mark, so the reward signal is always calibrated to the difficulty the model is
+  actually facing.
 - Maximum reward is only achieved with exactly 23 spells and 17 lands.
 - Each non-land pick past 23 costs exactly as much as a missing land pick.
 - Before phase 2 is reached (n_spell < 23), `effective_run = n_total = n_spell`
-  and the formula reduces to the original `(n_spell / best_run) × 2 - 1`.
+  and the formula reduces to `(n_spell / best_run) × 2 - 1`.
 
-When `n_total = 40` in 100 consecutive episodes, training advances to stage 2.
-The land/spell composition is not checked for advancement — any 40-pick run
-counts, since the reward function already incentivises the right ratio.
+**Curriculum advancement**: `best_run` advances by 1 after every batch in which
+all 32 episodes completed `best_run` picks without an illegal pick. Stage 1 is
+complete when `best_run` reaches 40 and a full batch succeeds at that level.
+The land/spell composition is not checked for advancement — the reward function
+already incentivises the right ratio.
 
 #### Command Line
 
