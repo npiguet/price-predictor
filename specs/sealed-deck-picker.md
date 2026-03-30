@@ -205,10 +205,11 @@ Key properties:
   phase, so the model learns to interleave lands naturally.
 
 **Curriculum advancement**: `best_run` starts at 1 and advances by 1 after every
-batch in which all 32 episodes completed `best_run` picks without a duplicate.
-Stage 1 is complete when `best_run` reaches 40 and a full batch succeeds at that
-level. The land/spell composition is not checked for advancement — the reward
-function already incentivises the right ratio.
+batch in which all 32 episodes completed `best_run` picks without a duplicate AND
+the batch mean reward is ≥ 0.95. The reward threshold enforces that the model is
+picking a good spell/land mix before progressing, not merely avoiding duplicates.
+Stage 1 is complete when `best_run` reaches 40 and a full batch passes both
+conditions at that level.
 
 #### Command Line
 
