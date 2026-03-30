@@ -111,10 +111,10 @@ verifying that it prints human-readable pick sequences.
 - **FR-003**: Each training episode MUST draw the next pool from the dataset sequentially, looping back to the first
   pool once all have been used. The episode then appends the 6 basic land slot embeddings, fills any empty slots with
   zero vectors, and reshuffles the non-basic-land portion of the pool before each pick step.
-- **FR-004**: Each of the 96 pool slots MUST be represented as a 516-dimensional feature vector: a 512-dimensional
-  card embedding, a `picked_flag`, an `available_flag`, an `is_land` flag, and a `basic_land_count` value.
-  `basic_land_count` records how many times this basic land slot has been picked in the current episode (always 0.0
-  for booster card slots). See `data-model.md` (PoolSlot) for full per-field invariants.
+- **FR-004**: Each of the 96 pool slots MUST be represented as a 520-dimensional feature vector: a 512-dimensional
+  card embedding, a `pick_count` (0/1 for booster cards, 0..N for basic land slots), an `available_flag` (cleared
+  after first pick for booster cards; always 1 for basic land slots), an `is_land` flag, and 5 reserved padding
+  dimensions (always 0).
 - **FR-005**: During each pick step, the model MUST sample from the unmasked distribution over all 96 slots. No
   selection mask is applied to the logits — the model is free to pick any slot, including already-picked ones. The
   `available_flag = 0` on picked slots serves as an input feature (context for the transformer) but does NOT block
@@ -138,7 +138,7 @@ verifying that it prints human-readable pick sequences.
   picks without an illegal pick. The training loop MUST halt and report Stage 1 completion when `best_run` reaches
   40 and a full batch succeeds at that level.
 - **FR-012**: The pool transformer MUST use the architecture specified in the sealed-deck-picker design: 8 transformer
-  layers, 8 attention heads, model dimension 516, feed-forward dimension 2048.
+  layers, 8 attention heads, model dimension 520, feed-forward dimension 2048.
 - *(FR-013 intentionally removed during spec refinement — numbering preserved for traceability)*
 - **FR-014**: The sealed module MUST expose a `sample` subcommand accepting `--set`, `--pools-path`, `--cards-path`,
   `--model-path`, and `--n-samples` arguments, with sensible defaults.

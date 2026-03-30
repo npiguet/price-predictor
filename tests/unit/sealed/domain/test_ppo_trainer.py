@@ -13,7 +13,7 @@ from sealed.domain.episode_runner import EpisodeRunner, MAX_PICKS
 
 MINI = PoolTransformerConfig(
     n_slots=4,
-    d_model=12,
+    d_model=16,
     n_layers=1,
     n_heads=2,
     card_embed_dim=8,

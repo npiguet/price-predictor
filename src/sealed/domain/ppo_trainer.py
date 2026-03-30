@@ -75,7 +75,7 @@ class PPOTrainer:
             n_booster = len(ep.pool_names.split(";"))
 
             current = _build_base_tensor(ep.pool_names, card_port, n_slots)
-            embed_dim = current.shape[1] - 4
+            embed_dim = current.shape[1] - 8
 
             for step in range(n_steps):
                 action = int(ep.actions[step])

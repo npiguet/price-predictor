@@ -21,11 +21,11 @@ training stages.
 At the pool level, each of the 96 entries (90 pool cards + 6 basic land slots) is represented as:
 
 - card_embedding [512]
-- picked_flag [1] (basic land slots: 0 when basic_land_count == 0, 1 otherwise)
-- available_flag [1] (basic land slots: always 1)
+- pick_count [1] (how many times this slot has been picked; 0 or 1 for booster cards, 0..N for basic land slots)
+- available_flag [1] (booster cards: cleared to 0 after first pick; basic land slots: always 1)
 - is_land [1]
-- basic_land_count [1] (booster card slot: always 0)
-- => 516 features per card
+- padding [5] (reserved, always 0)
+- => 520 features per card
 
 Card slots represent stage 1 of the model. The all have the same number of features so that they can be cleanly fed to
 the transformer at stage 2.
@@ -44,7 +44,7 @@ A two-stage architecture:
 - Stage 1 — Card encoder: Pretrained (from price predictor), reused for each card
     - [Structured Oracle text] → [Pretrained transformer] → [512-dim card embedding]
 - Stage 2 — Pool-level transformer (trained from scratch)
-    - [95 × 516 features] → [Small transformer] → [95 logits] → [masked softmax] → [pick]
+    - [96 × 520 features] → [Small transformer] → [96 logits] → [masked softmax] → [pick]
 
 The pool transformer attends freely over all 95 cards at every step, including already-picked ones, so it can use the
 current deck state as context for each new pick.
@@ -53,14 +53,8 @@ The exact size of the transformer model will be the subject of multiple experime
 set it at:
 - layers: 8
 - heads: 8
-- d_model: 516
+- d_model: 520  (= 512-dim card embedding + 3 flags + 5 padding; 520 / 8 = 65 ✓)
 - d_ff: 2048
-
-> **Implementation note**: `d_model=516` is not divisible by 8, so `n_heads=8` is invalid for
-> `nn.TransformerEncoderLayer` (which requires `d_model % n_heads == 0`). The implementation
-> uses `n_heads=4` (516 / 4 = 129). This should be corrected in a future spec revision — either
-> change `n_heads` to 4, or adjust `d_model` to a value divisible by 8 (e.g. 512 with a small
-> input projection, or 520).
 
 # Pick Phase
 

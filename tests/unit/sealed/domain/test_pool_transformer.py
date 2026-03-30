@@ -6,10 +6,10 @@ import torch.nn.functional as F
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
 
-# Miniaturized config: d_model=12 = card_embed_dim(8) + 4 flags; 12 % 2 == 0 ✓
+# Miniaturized config: d_model=16 = card_embed_dim(8) + 8 padding; 16 % 2 == 0 ✓
 MINI = PoolTransformerConfig(
     n_slots=4,
-    d_model=12,
+    d_model=16,
     n_layers=1,
     n_heads=2,
     card_embed_dim=8,
@@ -55,7 +55,7 @@ def test_config_stored_on_model():
 
 
 def test_production_config_valid_n_heads():
-    """Production default n_heads=4 must divide d_model=516 evenly."""
+    """Production default n_heads=8 must divide d_model=520 evenly."""
     from sealed.domain.pool_transformer import PoolTransformerConfig
     cfg = PoolTransformerConfig()
     assert cfg.d_model % cfg.n_heads == 0, (

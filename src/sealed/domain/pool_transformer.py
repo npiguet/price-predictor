@@ -10,8 +10,8 @@ import torch.nn as nn
 @dataclass
 class PoolTransformerConfig:
     n_layers: int = 8
-    n_heads: int = 4  # 516 / 4 = 129; spec says 8 but 516 % 8 != 0
-    d_model: int = 516  # = card_embed_dim(512) + 3 flags + 1 reserved (pick_count, available, is_land, pad)
+    n_heads: int = 8  # 520 / 8 = 65
+    d_model: int = 520  # = card_embed_dim(512) + 3 flags + 5 reserved padding
     ff_dim: int = 2048
     n_slots: int = 96
     card_embed_dim: int = 512

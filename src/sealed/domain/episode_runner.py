@@ -21,11 +21,11 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
 
     Returns float32 ndarray of shape [n_slots, d_model] where d_model = embed_dim + 4.
 
-    Flag layout (indices embed_dim .. embed_dim+3):
+    Flag layout (indices embed_dim .. embed_dim+7):
       +0  pick_count   — how many times this slot has been picked (0/1 for booster, 0..N for basic lands)
       +1  available    — 1 if still available to pick (booster: cleared after first pick; basic: always 1)
       +2  is_land      — 1 if the card is a land type
-      +3  (reserved/padding — always 0)
+      +3..+7  (reserved/padding — always 0)
 
     Initial state:
       Booster slots  (0 .. n_booster-1): pick_count=0, available=1, is_land=per card type.
@@ -42,7 +42,7 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
 
     all_embeds = booster_embeds + basic_embeds
     embed_dim = all_embeds[0].shape[0] if all_embeds else 0
-    d_model = embed_dim + 4
+    d_model = embed_dim + 8
 
     tensor = np.zeros((n_slots, d_model), dtype=np.float32)
 
@@ -84,7 +84,7 @@ class EpisodeRunner:
         n_booster = len(booster_names)
 
         current = _build_base_tensor(pool_names, card_port, n_slots)
-        embed_dim = current.shape[1] - 4
+        embed_dim = current.shape[1] - 8
 
         picked_set: set[int] = set()
         actions: list[int] = []

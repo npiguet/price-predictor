@@ -11,7 +11,7 @@ from sealed.domain.episode_runner import EpisodeRunner, _build_base_tensor, MAX_
 # Miniaturized config: 4 booster slots, no basic lands (n_basic=0)
 MINI = PoolTransformerConfig(
     n_slots=4,
-    d_model=12,  # 8 embed + 4 flags
+    d_model=16,  # 8 embed + 8 padding
     n_layers=1,
     n_heads=2,
     card_embed_dim=8,
@@ -44,7 +44,7 @@ def _make_model():
 def test_build_base_tensor_shape():
     port = _MockCardPort()
     t = _build_base_tensor(POOL_NAMES, port, n_slots=4)
-    assert t.shape == (4, 12), f"Expected (4,12), got {t.shape}"
+    assert t.shape == (4, 16), f"Expected (4,16), got {t.shape}"
 
 
 def test_build_base_tensor_booster_available_flag():
