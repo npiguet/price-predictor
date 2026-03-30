@@ -21,8 +21,15 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
 
     Returns float32 ndarray of shape [n_slots, d_model] where d_model = embed_dim + 4.
 
-    Booster slots  (0 .. n_booster-1): picked=0, available=1, is_land=per card type, count=0.
-    Basic land slots (n_booster .. n_slots-1): picked=0, available=1, is_land=1, count=0.
+    Flag layout (indices embed_dim .. embed_dim+3):
+      +0  pick_count   — how many times this slot has been picked (0/1 for booster, 0..N for basic lands)
+      +1  available    — 1 if still available to pick (booster: cleared after first pick; basic: always 1)
+      +2  is_land      — 1 if the card is a land type
+      +3  (reserved/padding — always 0)
+
+    Initial state:
+      Booster slots  (0 .. n_booster-1): pick_count=0, available=1, is_land=per card type.
+      Basic land slots (n_booster .. n_slots-1): pick_count=0, available=1, is_land=1.
     """
     names = pool_names.split(";")
     n_booster = len(names)
@@ -84,13 +91,16 @@ class EpisodeRunner:
         log_probs_list: list[float] = []
         step_rewards_list: list[float] = []
         n_spell = 0  # non-land picks so far
+        termination = "success"
+        term_action = -1
+        term_log_prob = 0.0
 
         rng = np.random.default_rng(rng_seed)
-        seeds = rng.integers(0, 2**31 - 1, size=MAX_PICKS, dtype=np.int64)
+        seeds = rng.integers(0, 2**31 - 1, size=best_run, dtype=np.int64)
 
         device = next(model.parameters()).device  # type: ignore[attr-defined]
         model.eval()  # type: ignore[attr-defined]
-        for step in range(MAX_PICKS):
+        for step in range(best_run):
             step_rng = np.random.default_rng(int(seeds[step]))
             perm = step_rng.permutation(n_booster)  # perm[shuffled_pos] = pool_index
 
@@ -124,15 +134,22 @@ class EpisodeRunner:
                 is_land = False
                 is_duplicate = pool_index in picked_set
 
+            log_prob = float(log_probs_all[sampled_sp].item())
+
             # Phase 1: any land pick terminates
             if is_land and n_spell < IDEAL_SPELLS:
+                termination = "land"
+                term_action = pool_index
+                term_log_prob = log_prob
                 break
 
             # Duplicate always terminates
             if is_duplicate:
+                termination = "duplicate"
+                term_action = pool_index
+                term_log_prob = log_prob
                 break
 
-            log_prob = float(log_probs_all[sampled_sp].item())
             actions.append(pool_index)
             log_probs_list.append(log_prob)
 
@@ -144,11 +161,10 @@ class EpisodeRunner:
 
             # Update tensor state
             if pool_index >= n_booster:
-                current[pool_index, embed_dim + 3] += 1.0  # basic_land_count
-                current[pool_index, embed_dim] = 1.0        # picked_flag
+                current[pool_index, embed_dim] += 1.0      # pick_count (can exceed 1 for basic lands)
             else:
                 picked_set.add(pool_index)
-                current[pool_index, embed_dim] = 1.0       # picked_flag
+                current[pool_index, embed_dim] = 1.0       # pick_count (0→1 for booster cards)
                 current[pool_index, embed_dim + 1] = 0.0   # available_flag
 
             if not is_land:
@@ -166,4 +182,7 @@ class EpisodeRunner:
             step_rewards=np.array(step_rewards_list, dtype=np.float32),
             reward=reward,
             effective_run=effective_run,
+            termination=termination,
+            term_action=term_action,
+            term_log_prob=term_log_prob,
         )

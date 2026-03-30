@@ -51,6 +51,7 @@ class SampleStage1UseCase:
                     card_port=card_port,
                     model=model,
                     rng_seed=pool_idx,
+                    best_run=MAX_PICKS,
                 )
 
                 booster_names = pool_names.split(";")

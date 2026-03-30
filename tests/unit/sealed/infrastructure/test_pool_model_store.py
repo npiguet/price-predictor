@@ -25,7 +25,7 @@ MINI = PoolTransformerConfig(
 def _make_artifacts():
     model = PoolTransformerModel(MINI)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    state = TrainingState(best_run=3, episode_count=50, consecutive_successes=5, reward_baseline=0.1)
+    state = TrainingState(best_run=3, episode_count=50)
     return model, optimizer, state
 
 
@@ -54,8 +54,6 @@ def test_save_load_round_trip_training_state(tmp_path):
     loaded_state = ckpt.training_state
     assert loaded_state.best_run == state.best_run
     assert loaded_state.episode_count == state.episode_count
-    assert loaded_state.consecutive_successes == state.consecutive_successes
-    assert abs(loaded_state.reward_baseline - state.reward_baseline) < 1e-6
 
 
 def test_save_creates_parent_dirs(tmp_path):

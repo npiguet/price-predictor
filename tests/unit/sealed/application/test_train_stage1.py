@@ -64,8 +64,7 @@ def _run_one_batch(tmp_path: Path) -> Path:
     original_execute = use_case.execute
 
     with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
-        # We also need to stop the infinite loop — patch consecutive_successes to trigger exit
-        # We do this by limiting to 1 batch via a side-effect on model_store.save
+        # Stop after 1 batch via a side-effect on model_store.save
         saved = []
 
         original_save = PoolModelStore.save
@@ -74,7 +73,6 @@ def _run_one_batch(tmp_path: Path) -> Path:
             original_save(self, path, model, optimizer, training_state)
             saved.append(1)
             if len(saved) >= 1:
-                # Trigger exit by patching consecutive_successes — instead just raise
                 raise _StopAfterBatch()
 
         with patch.object(PoolModelStore, "save", _save_and_stop):
@@ -153,12 +151,7 @@ def test_checkpoint_resume_restores_state(tmp_path):
     # Create a checkpoint with known training state
     model = PoolTransformerModel(MINI)
     optimizer = optim.Adam(model.parameters())
-    state = TrainingState(
-        best_run=5,
-        episode_count=100,
-        consecutive_successes=10,
-        reward_baseline=0.5,
-    )
+    state = TrainingState(best_run=5, episode_count=100)
     store = PoolModelStore()
     store.save(model_path, model, optimizer, state)
 

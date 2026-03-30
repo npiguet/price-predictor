@@ -10,7 +10,7 @@ import torch
 import torch.optim as optim
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
-from sealed.domain.episode_runner import EpisodeRunner
+from sealed.domain.episode_runner import EpisodeRunner, MAX_PICKS
 from sealed.domain.ppo_trainer import PPOTrainer
 from sealed.infrastructure.pool_loader import PoolLoader, card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
@@ -21,7 +21,6 @@ from sealed.infrastructure.embedding_store import EmbeddingStore
 class TrainingState:
     best_run: int = 1
     episode_count: int = 0
-    consecutive_successes: int = 0
 
 
 class _EmbeddingAdapter:
@@ -106,13 +105,11 @@ class TrainStage1UseCase:
                 state = TrainingState(
                     best_run=s.get("best_run", 1),
                     episode_count=s.get("episode_count", 0),
-                    consecutive_successes=s.get("consecutive_successes", 0),
                 )
             print(
                 f"Resumed from {model_path}"
                 f"  episode={state.episode_count}"
                 f"  best_run={state.best_run}"
-                f"  consecutive_successes={state.consecutive_successes}"
             )
         else:
             print(f"No checkpoint found at {model_path} — starting fresh")
@@ -147,15 +144,6 @@ class TrainStage1UseCase:
                     best_run=state.best_run,
                 )
                 state.episode_count += 1
-
-                if len(ep.actions) > state.best_run:
-                    state.best_run = len(ep.actions)
-
-                if len(ep.actions) >= MAX_COMPLETE_RUN:
-                    state.consecutive_successes += 1
-                else:
-                    state.consecutive_successes = 0
-
                 batch_episodes.append(ep)
             t_collect = time.perf_counter() - t0
 
@@ -165,25 +153,32 @@ class TrainStage1UseCase:
 
             t_embed = card_port.total_load_s
 
+            # Curriculum advancement: all episodes must complete best_run picks
+            batch_all_succeeded = all(ep.termination == "success" for ep in batch_episodes)
+
+            n_land = sum(1 for ep in batch_episodes if ep.termination == "land")
+            n_dup = sum(1 for ep in batch_episodes if ep.termination == "duplicate")
+
             runs_str = ",".join(str(r) for r in result.episode_runs)
             print(
                 f"[ep {state.episode_count}] batch runs: {runs_str}"
                 f"  best_run={state.best_run}  mean_reward={result.mean_reward:.3f}"
+                f"  | land={n_land} dup={n_dup}"
                 f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
+
+            if batch_all_succeeded:
+                if state.best_run == MAX_PICKS:
+                    model_store.save(model_path, model, optimizer, state)
+                    print(
+                        f"Stage 1 complete: full batch succeeded at best_run={MAX_PICKS}."
+                        f" Model saved to {model_path}."
+                    )
+                    return
+                state.best_run += 1
+                print(f"  -> curriculum advanced: best_run={state.best_run}")
 
             model_store.save(model_path, model, optimizer, state)
 
             if state.episode_count % 1000 == 0:
                 model_store.save_timestamped(model_path, model, optimizer, state)
-
-            if state.consecutive_successes >= 100:
-                print(
-                    f"Stage 1 complete: 100 consecutive episodes with {MAX_COMPLETE_RUN}+ non-land picks."
-                    f" Model saved to {model_path}."
-                )
-                return
-
-
-# Stage 1 success: episode achieves this effective_run (= 23 spells + 17 lands = perfect deck).
-MAX_COMPLETE_RUN = 40

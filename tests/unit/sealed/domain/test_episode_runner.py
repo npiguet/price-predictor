@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
-from sealed.domain.episode_runner import EpisodeRunner, _build_base_tensor
+from sealed.domain.episode_runner import EpisodeRunner, _build_base_tensor, MAX_PICKS
 
 # Miniaturized config: 4 booster slots, no basic lands (n_basic=0)
 MINI = PoolTransformerConfig(
@@ -29,6 +29,9 @@ class _MockCardPort:
         # Use hash to produce repeatable but distinct vectors
         rng = np.random.default_rng(abs(hash(card_name)) % (2**31))
         return rng.random(8).astype(np.float32)
+
+    def is_land(self, card_name: str) -> bool:
+        return False
 
 
 def _make_model():
@@ -76,7 +79,7 @@ def test_legal_episode_picks_all_four_cards():
 
     found_full = False
     for seed in range(100):
-        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed)
+        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
         if len(ep.actions) == 4 and len(set(ep.actions)) == 4:
             found_full = True
             break
@@ -143,8 +146,8 @@ def test_shuffle_seeds_shape():
     model = _make_model()
     runner = EpisodeRunner()
     port = _MockCardPort()
-    ep = runner.run(POOL_NAMES, port, model, rng_seed=3)
-    assert ep.shuffle_seeds.shape == (40,)
+    ep = runner.run(POOL_NAMES, port, model, rng_seed=3, best_run=MAX_PICKS)
+    assert ep.shuffle_seeds.shape == (MAX_PICKS,)
 
 
 def test_different_pool_indices_at_same_shuffled_position_are_both_legal():
@@ -158,7 +161,7 @@ def test_different_pool_indices_at_same_shuffled_position_are_both_legal():
     # Run enough seeds to find at least one full episode
     full_episodes = []
     for seed in range(100):
-        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed)
+        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
         if len(ep.actions) == 4:
             full_episodes.append(ep)
     # We expect at least one full episode with 4 unique cards

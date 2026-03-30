@@ -109,11 +109,11 @@ def test_output_format_contains_status(tmp_path, capsys):
         use_case.execute(pools_path, cards_path, model_path, n_samples=2)
 
     captured = capsys.readouterr()
-    # Each sample header should contain SUCCESS or ILLEGAL PICK
+    # Each sample header should contain SUCCESS or TERMINATED
     headers = [ln for ln in captured.out.splitlines() if ln.startswith("--- Sample")]
     assert len(headers) == 2
     for h in headers:
-        assert "SUCCESS" in h or "ILLEGAL PICK" in h
+        assert "SUCCESS" in h or "TERMINATED" in h
 
 
 def test_output_contains_card_names(tmp_path, capsys):

@@ -29,6 +29,9 @@ class _MockCardPort:
         rng = np.random.default_rng(abs(hash(card_name)) % (2**31))
         return rng.random(8).astype(np.float32)
 
+    def is_land(self, card_name: str) -> bool:
+        return False
+
 
 def _make_real_episode(model=None, seed=42) -> Episode:
     """Generate a real episode using EpisodeRunner."""
@@ -52,7 +55,7 @@ def test_train_batch_result_fields_populated():
     model, optimizer, trainer = _make_trainer()
     port = _MockCardPort()
     episodes = [_make_real_episode(model, seed=i) for i in range(3)]
-    result = trainer.update(episodes, port, best_run=1)
+    result = trainer.update(episodes, port)
 
     assert isinstance(result, TrainBatchResult)
     assert isinstance(result.mean_reward, float)
@@ -64,7 +67,7 @@ def test_episode_runs_lengths_match_actions():
     model, optimizer, trainer = _make_trainer()
     port = _MockCardPort()
     episodes = [_make_real_episode(model, seed=i) for i in range(4)]
-    result = trainer.update(episodes, port, best_run=1)
+    result = trainer.update(episodes, port)
     for i, ep in enumerate(episodes):
         assert result.episode_runs[i] == len(ep.actions)
 
@@ -78,7 +81,7 @@ def test_ppo_loss_backward_produces_nonzero_gradients():
     episodes = [ep for ep in episodes if len(ep.actions) > 0]
     assert len(episodes) > 0
 
-    trainer.update(episodes, port, best_run=1)
+    trainer.update(episodes, port)
     has_grad = any(
         p.grad is not None and p.grad.abs().sum().item() > 0
         for p in model.parameters()
@@ -86,34 +89,11 @@ def test_ppo_loss_backward_produces_nonzero_gradients():
     assert has_grad, "PPO backward pass should produce non-zero gradients"
 
 
-# ── Reward baseline EMA ────────────────────────────────────────────────────────
-
-def test_reward_baseline_ema_updates():
-    model, optimizer, trainer = _make_trainer()
-    port = _MockCardPort()
-    assert trainer.reward_baseline == 0.0
-
-    episodes = [_make_real_episode(model, seed=i) for i in range(2)]
-    trainer.update(episodes, port, best_run=1)
-
-    assert trainer.reward_baseline != 0.0
-
-
-def test_reward_baseline_ema_formula():
-    """After one episode with reward=r, baseline = 0.99*0 + 0.01*r = 0.01*r."""
-    model, optimizer, trainer = _make_trainer()
-    port = _MockCardPort()
-    ep = _make_real_episode(model, seed=0)
-    expected_baseline = 0.01 * ep.reward
-    trainer.update([ep], port, best_run=1)
-    assert abs(trainer.reward_baseline - expected_baseline) < 1e-6
-
-
 # ── Empty episodes ─────────────────────────────────────────────────────────────
 
 def test_update_with_empty_episodes_list():
     model, optimizer, trainer = _make_trainer()
     port = _MockCardPort()
-    result = trainer.update([], port, best_run=1)
+    result = trainer.update([], port)
     assert result.mean_reward == 0.0
     assert result.episode_runs == []
