@@ -156,7 +156,7 @@ class TrainStage1UseCase:
             # Curriculum advancement: all episodes must complete best_run picks
             batch_all_succeeded = (
                 all(ep.termination == "success" for ep in batch_episodes)
-                and result.mean_reward >= 0.95
+                and result.mean_reward >= 0.90
             )
 
             n_dup = sum(1 for ep in batch_episodes if ep.termination == "duplicate")

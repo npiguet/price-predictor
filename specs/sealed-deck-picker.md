@@ -206,8 +206,9 @@ Key properties:
 
 **Curriculum advancement**: `best_run` starts at 1 and advances by 1 after every
 batch in which all 32 episodes completed `best_run` picks without a duplicate AND
-the batch mean reward is ≥ 0.95. The reward threshold enforces that the model is
-picking a good spell/land mix before progressing, not merely avoiding duplicates.
+the batch mean reward is ≥ 0.90. At `best_run=40` this threshold corresponds to
+an average waste of at most 2 picks (e.g. 2 extra spells instead of lands), so the
+model must be picking close to the ideal 23/17 split before progressing.
 Stage 1 is complete when `best_run` reaches 40 and a full batch passes both
 conditions at that level.
 

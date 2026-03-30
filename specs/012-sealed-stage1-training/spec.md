@@ -137,9 +137,10 @@ verifying that it prints human-readable pick sequences.
   `--batch-size` episodes), and MUST save a timestamped checkpoint to the `checkpoints/` subfolder of the model
   path's parent every 1000 episodes.
 - **FR-011**: `best_run` MUST advance by 1 after any training batch in which all 32 episodes completed `best_run`
-  picks without a duplicate pick AND the batch mean reward is ≥ 0.95. The mean reward threshold enforces a good
-  spell/land mix before the curriculum advances. The training loop MUST halt and report Stage 1 completion when
-  `best_run` reaches 40 and a full batch passes both conditions at that level.
+  picks without a duplicate pick AND the batch mean reward is ≥ 0.90. At `best_run=40` this corresponds to an
+  average of at most 2 wasted picks (e.g. 2 extra spells instead of lands), enforcing a spell/land mix close to
+  the 23/17 ideal. The training loop MUST halt and report Stage 1 completion when `best_run` reaches 40 and a
+  full batch passes both conditions at that level.
 - **FR-012**: The pool transformer MUST use the architecture specified in the sealed-deck-picker design: 8 transformer
   layers, 8 attention heads, model dimension 520, feed-forward dimension 2048.
 - *(FR-013 intentionally removed during spec refinement — numbering preserved for traceability)*
@@ -183,7 +184,7 @@ verifying that it prints human-readable pick sequences.
 
 - Q: How many episodes constitute one training batch (PPO update frequency)? → A: Fixed episode count per batch, configurable via `--batch-size` (default 32 episodes).
 - Q: What training progress output is shown on the console? → A: One summary line per batch showing episode count, per-episode current_run values, best_run, and mean batch reward.
-- Q: When does `best_run` advance? → A: After any batch of 32 episodes in which every episode completed `best_run` picks without a duplicate pick AND the batch mean reward is ≥ 0.95. Both conditions must hold; if either fails, `best_run` stays at its current level.
+- Q: When does `best_run` advance? → A: After any batch of 32 episodes in which every episode completed `best_run` picks without a duplicate pick AND the batch mean reward is ≥ 0.90. Both conditions must hold; if either fails, `best_run` stays at its current level.
 - Q: What advancement threshold was considered and rejected? → A: A percentage-based threshold (e.g. 95% success rate over a rolling window) was considered but deferred. The full-batch requirement will be evaluated first; if training stalls at a particular level, the threshold can be relaxed based on training logs.
 - Q: What happens when a card named in a pool has no corresponding embedding file in cards-path? → A: Abort immediately with a clear error message identifying the missing card(s).
 - Q: How are pools sampled from the dataset across episodes? → A: Sequential pass through the dataset, looping back to the start when all pools have been used.
