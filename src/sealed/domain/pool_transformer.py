@@ -30,7 +30,7 @@ class PoolTransformerModel(nn.Module):
             batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=config.n_layers)
-        self.head = nn.Linear(config.d_model, config.n_slots)
+        self.head = nn.Linear(config.d_model, 1)
 
     def forward(self, slot_features: torch.Tensor) -> torch.Tensor:
         """
@@ -39,6 +39,5 @@ class PoolTransformerModel(nn.Module):
         Returns:
             logits: [batch, n_slots]
         """
-        enc_out = self.encoder(slot_features)  # [batch, n_slots, d_model]
-        pooled = enc_out.mean(dim=1)           # [batch, d_model]
-        return self.head(pooled)               # [batch, n_slots]
+        enc_out = self.encoder(slot_features)      # [batch, n_slots, d_model]
+        return self.head(enc_out).squeeze(-1)       # [batch, n_slots]
