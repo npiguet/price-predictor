@@ -48,14 +48,14 @@ A two-stage architecture:
 - Stage 2 — Pool-level transformer (trained from scratch)
     - [96 × 520 features] → [Small transformer] → [96 logits] → [masked softmax] → [pick]
 
-The pool transformer attends freely over all 95 cards at every step, including already-picked ones, so it can use the
+The pool transformer attends freely over all 96 cards at every step, including already-picked ones, so it can use the
 current deck state as context for each new pick.
 
 The exact size of the transformer model will be the subject of multiple experiments, but for the first version we'll 
 set it at:
 - layers: 8
 - heads: 8
-- d_model: 520  (= 512-dim card embedding + 3 flags + 5 padding; 520 / 8 = 65 ✓)
+- d_model: 520  (= 512-dim card embedding + 2 flags + 5 padding; 520 / 8 = 65 ✓)
 - d_ff: 2048
 
 # Pick Phase
