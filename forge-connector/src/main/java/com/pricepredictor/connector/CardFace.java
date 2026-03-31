@@ -29,6 +29,11 @@ public record CardFace(
         abilities = List.copyOf(abilities);
     }
 
+    /** Return a copy of this face with a different ability list. */
+    public CardFace withAbilities(List<Ability> newAbilities) {
+        return new CardFace(name, manaCost, types, powerToughness, loyalty, defense, colors, text, newAbilities);
+    }
+
     /** Format as text output. */
     public String formatText() {
         StringBuilder sb = new StringBuilder();

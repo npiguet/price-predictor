@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -148,6 +149,48 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             case 5 -> "five";
             default -> String.valueOf(n);
         };
+    }
+
+    /**
+     * Result of resolving the ABILITY placeholder in a trigger/chapter description.
+     * {@code expandedDescription} has the placeholder replaced with the charm header;
+     * {@code options} are the charm choices to attach as OPTION sub-abilities.
+     */
+    public record ResolvedPlaceholder(String expandedDescription, List<Ability> options) {}
+
+    /**
+     * If {@code description} contains the {@code ABILITY} placeholder and {@code executeSA}
+     * (or an ImmediateTrigger nested within it) is a Charm, resolve the placeholder by
+     * replacing it with the synthesized charm header and collecting OPTION sub-abilities.
+     * Returns null if the placeholder is absent or no Charm is found.
+     */
+    public static ResolvedPlaceholder resolveAbilityPlaceholder(
+            String description, SpellAbility executeSA) {
+        if (description == null || !description.contains("ABILITY") || executeSA == null) {
+            return null;
+        }
+        // Case 1: execute SA is directly a Charm
+        if (executeSA.getApi() == ApiType.Charm) {
+            return buildResolved(description, executeSA);
+        }
+        // Case 2: ImmediateTrigger somewhere in the sub-chain whose Execute is a Charm
+        for (SpellAbility cur = executeSA; cur != null; cur = cur.getSubAbility()) {
+            if (cur.getApi() == ApiType.ImmediateTrigger) {
+                SpellAbility nestedCharm = cur.getAdditionalAbility("Execute");
+                if (nestedCharm != null && nestedCharm.getApi() == ApiType.Charm) {
+                    return buildResolved(description, nestedCharm);
+                }
+            }
+        }
+        return null;
+    }
+
+    private static ResolvedPlaceholder buildResolved(String description, SpellAbility charmSA) {
+        String header = synthesizeCharmHeader(charmSA);
+        if (header == null) header = "choose one";
+        String expanded = AbilityDescription.normalize(description.replace("ABILITY", header));
+        List<Ability> options = optionsFrom(charmSA);
+        return new ResolvedPlaceholder(expanded, options);
     }
 
     /**

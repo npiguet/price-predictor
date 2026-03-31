@@ -3,7 +3,6 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
-import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
@@ -61,20 +60,18 @@ public final class HauntKeyword {
             String tDesc = t.getParam("TriggerDescription");
             if (tDesc == null || "Blank".equals(tDesc)) continue;
 
-            // Replace ABILITY placeholder with the actual effect description
+            // Replace ABILITY placeholder: if execute SA is a Charm, expand with header + options;
+            // otherwise substitute the haunt effect description directly.
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
-                if (overrideSa != null && overrideSa.getApi() == ApiType.Charm) {
-                    // Haunt SVar is a Charm — synthesize "choose one —" header
-                    String charmHeader = CharmAbility.synthesizeCharmHeader(overrideSa);
-                    if (charmHeader == null) charmHeader = "choose one";
-                    tDesc = tDesc.replace("ABILITY", charmHeader);
-                    String normalized2 = AbilityDescription.normalize(tDesc);
+                CharmAbility.ResolvedPlaceholder resolved =
+                        CharmAbility.resolveAbilityPlaceholder(tDesc, overrideSa);
+                if (resolved != null) {
+                    String normalized2 = resolved.expandedDescription();
                     if (normalized2 == null || normalized2.isEmpty()) continue;
                     if (!emitted.add(normalized2)) continue;
                     AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-                    List<Ability> options = CharmAbility.optionsFrom(overrideSa);
-                    result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, options));
+                    result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, resolved.options()));
                     continue;
                 } else if (effectDesc != null) {
                     tDesc = tDesc.replace("ABILITY", effectDesc);

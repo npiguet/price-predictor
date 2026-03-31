@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -35,6 +36,23 @@ public final class AbilityDescription {
             return null;
         }
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
+    }
+
+    /**
+     * Join items with commas and a final "or" disjunction.
+     * ["A"] → "A", ["A","B"] → "A or B", ["A","B","C"] → "A, B, or C"
+     */
+    public static String joinDisjunction(List<String> items) {
+        return switch (items.size()) {
+            case 0 -> "";
+            case 1 -> items.get(0);
+            case 2 -> items.get(0) + " or " + items.get(1);
+            default -> {
+                StringJoiner sj = new StringJoiner(", ");
+                for (int i = 0; i < items.size() - 1; i++) sj.add(items.get(i));
+                yield sj + ", or " + items.get(items.size() - 1);
+            }
+        };
     }
 
     /**

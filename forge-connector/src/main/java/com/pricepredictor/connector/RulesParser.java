@@ -10,19 +10,21 @@ import com.pricepredictor.connector.ability.EtbReplacementAbility;
 import com.pricepredictor.connector.ability.GiftKeyword;
 import com.pricepredictor.connector.ability.HauntKeyword;
 import com.pricepredictor.connector.ability.ReplacementAbilityEntry;
+import com.pricepredictor.connector.ability.SpellAbilityUtils;
 import com.pricepredictor.connector.ability.SpellAdditionalCost;
 import com.pricepredictor.connector.ability.SpellEffect;
 import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
+import com.pricepredictor.connector.ability.VisitAbility;
+import com.pricepredictor.connector.ability.OpeningHandAbility;
 import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
 import forge.card.CardStateName;
 import forge.card.ICardFace;
 import forge.card.mana.ManaCost;
-import forge.game.ability.AbilityFactory;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
@@ -199,7 +201,7 @@ public class RulesParser {
                 if ("ETBReplacement".equals(mode)) continue;
                 addIfNotNull(abilities, SpellAdditionalCost.of(sa));
                 abilities.addAll(SpellEffect.fromChain(sa));
-                abilities.addAll(diceOutcomesFromSA(sa));
+                abilities.addAll(SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.SPELL, false));
             }
         }
 
@@ -287,73 +289,10 @@ public class RulesParser {
             String desc = buildAlternateAdditionalCostDescription(original);
             abilities.add(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
         } else if (original.startsWith("Visit:")) {
-            // Attraction visit keyword.  For Charm-based visits, use TriggerDescription as the
-            // header and expand Charm options as OPTION sub-abilities (existing behaviour).
-            // For non-Charm visits, derive the header from the Execute SA's SpellDescription:
-            // Forge generates TriggerDescription = "Visit — " + SpellDescription, so when
-            // SpellDescription already starts with "Visit — " the result is doubled.
-            // Using SpellDescription directly with an ensured single "Visit — " prefix avoids
-            // the doubled header.  Children are always empty: the SpellDescription is the
-            // complete oracle text and SpellEffect.fromChain would only duplicate it.
-            for (Trigger t : ki.getTriggers()) {
-                SpellAbility overriding = t.getOverridingAbility();
-                String header;
-                List<Ability> children;
-                if (overriding != null && overriding.getApi() == ApiType.Charm) {
-                    String tDesc = t.getParam("TriggerDescription");
-                    if (tDesc == null || "Blank".equals(tDesc)) continue;
-                    int nl = tDesc.indexOf('\n');
-                    if (nl >= 0) tDesc = tDesc.substring(0, nl);
-                    header = AbilityDescription.normalize(tDesc);
-                    children = CharmAbility.optionsFrom(overriding);
-                } else {
-                    String spellDesc = overriding != null ? overriding.getParam("SpellDescription") : null;
-                    if (spellDesc == null || spellDesc.isEmpty()) {
-                        // Fallback: use TriggerDescription (may have doubled prefix but better than nothing)
-                        String tDesc = t.getParam("TriggerDescription");
-                        if (tDesc == null || "Blank".equals(tDesc)) continue;
-                        int nl = tDesc.indexOf('\n');
-                        if (nl >= 0) tDesc = tDesc.substring(0, nl);
-                        header = AbilityDescription.normalize(tDesc);
-                    } else {
-                        // Ensure exactly one "Visit — " prefix.
-                        if (!spellDesc.startsWith("Visit — ")) {
-                            spellDesc = "Visit — " + spellDesc;
-                        }
-                        header = AbilityDescription.normalize(spellDesc);
-                    }
-                    children = List.of();
-                }
-                if (header == null || header.isEmpty()) continue;
-                abilities.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
-                        AbilityDescription.applyCasing(header), children));
-            }
+            abilities.addAll(VisitAbility.fromKeyword(ki));
         } else if (original.startsWith("MayEffectFromOpeningHand:")
                 || original.startsWith("MayEffectFromOpeningDeck:")) {
-            // "MayEffectFromOpeningHand:SvarName" / "MayEffectFromOpeningDeck:SvarName"
-            // The Forge game engine processes this keyword at game-start (GameAction.java) rather
-            // than registering it as a standard trigger/spell.  We look up the description by
-            // building an SA from the named SVar; fall back to a RevealCard SVar used by
-            // Chancellor-cycle cards where the named SVar lacks a SpellDescription.
-            String svarName = original.split(":", 3)[1];
-            Card hostCard = ki.getHostCard();
-            if (hostCard != null) {
-                String desc = null;
-                if (hostCard.hasSVar(svarName)) {
-                    SpellAbility svarSa = AbilityFactory.getAbility(hostCard, svarName);
-                    if (svarSa != null) desc = svarSa.getParam("SpellDescription");
-                }
-                if ((desc == null || desc.isEmpty()) && hostCard.hasSVar("RevealCard")) {
-                    SpellAbility revealSa = AbilityFactory.getAbility(hostCard, "RevealCard");
-                    if (revealSa != null) desc = revealSa.getParam("SpellDescription");
-                }
-                if (desc != null && !desc.isEmpty()) {
-                    String normalized = AbilityDescription.normalize(desc);
-                    if (normalized != null)
-                        abilities.add(new TextAbility(AbilityType.TRIGGERED,
-                                AbilityDescription.applyCasing(normalized)));
-                }
-            }
+            abilities.addAll(OpeningHandAbility.fromKeyword(ki));
         } else {
             abilities.add(StandardKeyword.of(ki, Keyword.UNDEFINED));
         }
@@ -406,21 +345,14 @@ public class RulesParser {
 
     private static String buildAlternateAdditionalCostDescription(String original) {
         String[] costParts = original.split(":", 2)[1].split(":");
-        StringBuilder desc = new StringBuilder();
-        for (int n = 0; n < costParts.length; n++) {
-            Cost cost = new Cost(costParts[n], false);
+        List<String> terms = new ArrayList<>();
+        for (String costPart : costParts) {
+            Cost cost = new Cost(costPart, false);
             String costText = cost.toSimpleString();
-            if (cost.isOnlyManaCost()) {
-                desc.append("pay ");
-            }
-            desc.append(costText.substring(0, 1).toLowerCase()).append(costText.substring(1));
-            if (n + 2 == costParts.length) {
-                desc.append(costParts.length > 2 ? ", or " : " or ");
-            } else if (n + 1 < costParts.length) {
-                desc.append(", ");
-            }
+            String term = costText.substring(0, 1).toLowerCase() + costText.substring(1);
+            terms.add(cost.isOnlyManaCost() ? "pay " + term : term);
         }
-        return desc.toString();
+        return AbilityDescription.joinDisjunction(terms);
     }
 
     private static class DummyGameHolder {
@@ -447,25 +379,12 @@ public class RulesParser {
     );
 
     static String buildLandManaDescription(ICardFace face) {
-        List<String> symbols = new ArrayList<>();
-        for (Map.Entry<String, String> entry : LAND_TYPE_MANA.entrySet()) {
-            if (face.getType().hasSubtype(entry.getKey())) {
-                symbols.add(entry.getValue());
-            }
-        }
-        if (symbols.isEmpty()) {
-            return null;
-        }
-        StringBuilder sb = new StringBuilder("{T}: add ");
-        for (int i = 0; i < symbols.size(); i++) {
-            sb.append(symbols.get(i));
-            if (i + 2 == symbols.size()) {
-                sb.append(" or ");
-            } else if (i + 1 < symbols.size()) {
-                sb.append(", ");
-            }
-        }
-        return sb.toString();
+        List<String> symbols = LAND_TYPE_MANA.entrySet().stream()
+                .filter(e -> face.getType().hasSubtype(e.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
+        if (symbols.isEmpty()) return null;
+        return "{T}: add " + AbilityDescription.joinDisjunction(symbols);
     }
 
     private static String formatTypeLine(ICardFace face) {
@@ -480,38 +399,6 @@ public class RulesParser {
 
     private static void addIfNotNull(List<Ability> list, Ability item) {
         if (item != null) list.add(item);
-    }
-
-    /**
-     * Expand {@code ResultSubAbilities} dice-outcome entries into SpellEffect nodes.
-     * Each entry has the form {@code "range:SvarName"} (e.g. {@code "1-9:DBTapAll"}).
-     * The SVar's SpellDescription is used as the description text; VERT placeholders
-     * are replaced so "1—9 VERT Tap all…" becomes "1—9 | Tap all…".
-     */
-    private static List<Ability> diceOutcomesFromSA(SpellAbility sa) {
-        // Walk the sub-ability chain to find a SA with ResultSubAbilities.
-        // Some cards place the RollDice SA (with ResultSubAbilities) as a sub-ability of the root SA.
-        for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
-            String resultSubAbilities = cur.getParam("ResultSubAbilities");
-            if (resultSubAbilities == null || resultSubAbilities.isEmpty()) continue;
-            List<Ability> result = new ArrayList<>();
-            for (String entry : resultSubAbilities.split(",")) {
-                String[] kv = entry.trim().split(":", 2);
-                if (kv.length < 2) continue;
-                String range = kv[0].trim();
-                SpellAbility sub = cur.getAdditionalAbility(range);
-                if (sub == null) continue;
-                String rawDesc = sub.getParam("SpellDescription");
-                if (rawDesc == null || rawDesc.isEmpty()) continue;
-                String desc = AbilityDescription.replaceVert(rawDesc);
-                String normalized = AbilityDescription.normalize(desc);
-                if (normalized != null) {
-                    result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
-                }
-            }
-            return result;
-        }
-        return List.of();
     }
 
     /** Remove abilities whose descriptionText duplicates an earlier entry. */
@@ -557,12 +444,7 @@ public class RulesParser {
         }
         if (fallback.isEmpty()) return card;
 
-        CardFace newFirst = new CardFace(first.name(), first.manaCost(), first.types(),
-                first.powerToughness(), first.loyalty(), first.defense(),
-                first.colors(), first.text(), fallback);
-        List<CardFace> newFaces = new ArrayList<>(card.faces());
-        newFaces.set(0, newFirst);
-        return new MultiCard(card.layout(), newFaces);
+        return card.withPrimaryFace(face -> face.withAbilities(fallback));
     }
 
     /**
@@ -572,7 +454,6 @@ public class RulesParser {
      */
     private static MultiCard applyDraftLines(
             MultiCard card, List<String> draftLines, String cardName) {
-        CardFace first = card.faces().get(0);
         List<Ability> draftAbilities = new ArrayList<>();
         for (String raw : draftLines) {
             String text = (cardName != null && !cardName.isEmpty())
@@ -585,13 +466,10 @@ public class RulesParser {
         }
         if (draftAbilities.isEmpty()) return card;
 
-        List<Ability> combined = new ArrayList<>(draftAbilities);
-        combined.addAll(first.abilities());
-        CardFace newFirst = new CardFace(first.name(), first.manaCost(), first.types(),
-                first.powerToughness(), first.loyalty(), first.defense(),
-                first.colors(), first.text(), combined);
-        List<CardFace> newFaces = new ArrayList<>(card.faces());
-        newFaces.set(0, newFirst);
-        return new MultiCard(card.layout(), newFaces);
+        return card.withPrimaryFace(face -> {
+            List<Ability> combined = new ArrayList<>(draftAbilities);
+            combined.addAll(face.abilities());
+            return face.withAbilities(combined);
+        });
     }
 }

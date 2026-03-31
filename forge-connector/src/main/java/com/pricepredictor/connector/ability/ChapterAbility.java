@@ -3,7 +3,6 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
-import forge.game.ability.ApiType;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 
@@ -44,30 +43,20 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
 
             // If TriggerDescription contains the ABILITY placeholder and execute is a Charm,
             // replace with charm header and attach OPTION sub-abilities.
-            if (stripped.contains("ABILITY")) {
-                SpellAbility execute = trigger.getOverridingAbility();
-                if (execute != null && execute.getApi() == ApiType.Charm) {
-                    String charmHeader = CharmAbility.synthesizeCharmHeader(execute);
-                    if (charmHeader == null) charmHeader = "choose one";
-                    stripped = stripped.replace("ABILITY", charmHeader);
-                    List<Ability> options = CharmAbility.optionsFrom(execute);
-                    String normalized = AbilityDescription.normalize(stripped);
-                    if (normalized == null) continue;
-                    abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), options));
-                    continue;
-                }
+            SpellAbility execute = trigger.getOverridingAbility();
+            CharmAbility.ResolvedPlaceholder resolved =
+                    CharmAbility.resolveAbilityPlaceholder(stripped, execute);
+            if (resolved != null) {
+                String normalized = AbilityDescription.normalize(resolved.expandedDescription());
+                if (normalized == null) continue;
+                abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), resolved.options()));
+                continue;
             }
 
-            if (isHeaderOnly(stripped)) {
-                SpellAbility execute = trigger.getOverridingAbility();
-                if (execute != null) {
-                    List<Ability> effectNodes = SpellEffect.fromChain(execute);
-                    if (!effectNodes.isEmpty()) {
-                        String effectText = collectChainText(effectNodes.get(0));
-                        if (!effectText.isEmpty()) {
-                            stripped = stripped + " " + effectText;
-                        }
-                    }
+            if (isHeaderOnly(stripped) && execute != null) {
+                String effectText = SpellEffect.flattenChainText(execute);
+                if (!effectText.isEmpty()) {
+                    stripped = stripped + " " + effectText;
                 }
             }
 
@@ -88,13 +77,4 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
         return desc.substring(dashIdx + 1).trim().isEmpty();
     }
 
-    /** Collect and concatenate description text from an ability node and all its descendants. */
-    private static String collectChainText(Ability node) {
-        StringBuilder sb = new StringBuilder(node.descriptionText());
-        for (Ability child : node.subAbilities()) {
-            String ct = collectChainText(child);
-            if (!ct.isEmpty()) sb.append(' ').append(ct);
-        }
-        return sb.toString();
-    }
 }

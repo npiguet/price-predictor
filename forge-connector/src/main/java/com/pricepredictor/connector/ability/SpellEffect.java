@@ -28,6 +28,37 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
     }
 
     /**
+     * Flattened description text and structured children produced from a single SA chain walk.
+     * Callers that need both pieces of information (text to concatenate into a parent description,
+     * and structured sub-abilities to keep as children) use this instead of calling
+     * {@link #fromChain} and {@link SpellAbilityUtils#expandDiceOutcomes} separately.
+     */
+    public record Extraction(String flattenedText, List<Ability> children) {
+        public static final Extraction EMPTY = new Extraction("", List.of());
+
+        /**
+         * Walk {@code sa} once, collecting both flattened description text and dice-outcome
+         * children of the given {@code childType}.
+         */
+        public static Extraction of(SpellAbility sa, AbilityType childType, boolean chaseRepeatSub) {
+            String text = SpellEffect.flattenChainText(sa);
+            List<Ability> children = SpellAbilityUtils.expandDiceOutcomes(sa, childType, chaseRepeatSub);
+            if (text.isEmpty() && children.isEmpty()) return EMPTY;
+            return new Extraction(text, children);
+        }
+    }
+
+    /**
+     * Walk the SA chain from {@code sa} and return a single space-joined string of all
+     * description fragments, without building an intermediate SpellEffect tree.
+     * Returns an empty string when {@code sa} is null or produces no descriptions.
+     */
+    public static String flattenChainText(SpellAbility sa) {
+        List<Ability> tree = fromChain(sa);
+        return tree.isEmpty() ? "" : tree.get(0).flattenText();
+    }
+
+    /**
      * Recursively walks a SpellAbility chain, returning 0 or 1 tree nodes.
      * Nodes with no SpellDescription are transparent: their children are promoted.
      * Also walks {@code RepeatSubAbility} (used by RepeatEach/Repeat) alongside the

@@ -1,7 +1,9 @@
 package com.pricepredictor.connector;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.UnaryOperator;
 
 /**
  * Represents a complete card with one or more faces.
@@ -22,6 +24,13 @@ public record MultiCard(String layout, List<CardFace> faces) {
 
     public static MultiCard multiFace(String layout, List<CardFace> faces) {
         return new MultiCard(layout, faces);
+    }
+
+    /** Return a copy of this card with the primary face replaced by {@code transform.apply(faces.get(0))}. */
+    public MultiCard withPrimaryFace(UnaryOperator<CardFace> transform) {
+        List<CardFace> newFaces = new ArrayList<>(faces);
+        newFaces.set(0, transform.apply(faces.get(0)));
+        return new MultiCard(layout, newFaces);
     }
 
     /** Format the complete card as text output. */

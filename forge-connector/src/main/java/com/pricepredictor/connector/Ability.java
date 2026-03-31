@@ -24,6 +24,16 @@ public interface Ability {
         return formatLine(null);
     }
 
+    /** Recursively collect and join descriptions from this node and all its descendants. */
+    default String flattenText() {
+        StringBuilder sb = new StringBuilder(descriptionText());
+        for (Ability child : subAbilities()) {
+            String ct = child.flattenText();
+            if (!ct.isEmpty()) sb.append(' ').append(ct);
+        }
+        return sb.toString();
+    }
+
     default String formatBlock(ActionCounter counter) {
         Integer num;
         if (ordinal() > 0) {
