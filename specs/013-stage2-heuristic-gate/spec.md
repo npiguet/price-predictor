@@ -5,6 +5,13 @@
 **Status**: Draft
 **Input**: User description: "The second stage of sealed deck picking follow the section 2 of the Training curriculum described in sealed-deck-picker.md"
 
+## Clarifications
+
+### Session 2026-03-31
+
+- Q: When Stage 2 initializes from a Stage 1 checkpoint via `--init-from`, what state carries over? → A: Model weights only — fresh optimizer, episode_count = 0.
+- Q: For multi-face cards (transform, split, adventure), how should pip counting handle their mana costs? → A: All faces — count pips from every `mana cost:` line on the card.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Launch Stage 2 Training (Priority: P1)
@@ -148,7 +155,8 @@ training resumes from the saved state.
 ### Functional Requirements
 
 - **FR-001**: System MUST load a Stage 1 checkpoint as the starting point for Stage 2 training via the `--init-from`
-  parameter.
+  parameter. Only the pool transformer model weights are loaded; the optimizer state and training state (episode count)
+  are NOT carried over — Stage 2 begins with a fresh optimizer and episode_count = 0.
 - **FR-002**: System MUST keep the card encoder frozen during Stage 2 training (only the pool transformer is trained).
 - **FR-003**: System MUST terminate an episode immediately if the model re-selects an already-picked booster card
   (duplicate pick). In this case, the Stage 1 per-step reward scheme is applied with `best_run = 40`: each prior
@@ -158,12 +166,12 @@ training resumes from the saved state.
   without a duplicate.
 - **FR-005**: For episodes that complete all 40 picks, system MUST assign the mana-score reward uniformly to all
   40 steps (reflecting that every pick contributed equally to the deck's mana base quality).
-- **FR-006**: System MUST count mana pips from the `mana cost:` line of each non-land card in the deck (see spec
-  006-card-script-parsing for the card file format). Each pip symbol is counted independently: single-color pips
-  ({W}, {U}, {B}, {R}, {G}) count +1.0 to that color, {C} counts +1.0 to colorless (tracked as a sixth color),
-  Phyrexian pips ({W/P}, etc.) count +0.5 to their color, hybrid pips ({G/R}, etc.) count +0.5 to each of their
-  two colors, and generic mana ({1}, {2}, {X}, etc.) is ignored. A card with `mana cost: {W}{W}{G}` contributes
-  2.0 white and 1.0 green.
+- **FR-006**: System MUST count mana pips from every `mana cost:` line of each non-land card in the deck (see spec
+  006-card-script-parsing for the card file format). For multi-face cards (transform, split, adventure), pips from
+  all faces are counted. Each pip symbol is counted independently: single-color pips ({W}, {U}, {B}, {R}, {G})
+  count +1.0 to that color, {C} counts +1.0 to colorless (tracked as a sixth color), Phyrexian pips ({W/P}, etc.)
+  count +0.5 to their color, hybrid pips ({G/R}, etc.) count +0.5 to each of their two colors, and generic mana
+  ({1}, {2}, {X}, etc.) is ignored. A card with `mana cost: {W}{W}{G}` contributes 2.0 white and 1.0 green.
 - **FR-007**: System MUST compute the ideal mana source distribution targeting 17 total sources, with a mandatory
   minimum of 2 sources per color present in the deck and the remaining sources distributed proportionally to pip counts.
 - **FR-008**: System MUST count actual mana sources by examining each land's `activated[N]: {T}: Add ...` lines in
