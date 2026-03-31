@@ -268,14 +268,101 @@ as a human-readable list of card names, along with the number of legal picks mad
 before the first illegal pick (if any). A completed run of 40 legal picks is
 reported as a success.
 
-### Stage 2 — Picking playable cards (aka: Heuristic gate)
-Two instant checks computed from the picked deck:
+### Stage 2 — Picking playable cards (aka: Heuristic Gate)
 
-1. Land count score: peaks at 16-18 lands, degrades outside that range
-2. Mana pip matching: weighted by 1/cmc to penalize early color requirements more heavily
+Stage 2 loads the Stage 1 checkpoint and continues training the pool transformer with the encoder still frozen. The
+goal is to learn a mana base that can actually cast the selected spells.
 
-Decks failing either check receive a negative reward and are never submitted to Forge. This prevents wasting game budget
-on uncastable decks. Gate pass rate is logged as a diagnostic — training moves to stage 2 once it approaches 100%.
+#### Reward
+
+The reward is computed once at the end of each episode from the full 40-pick deck, then assigned uniformly to all
+40 steps — each step receives the same reward value, reflecting that every pick contributed equally to the outcome.
+Standard PPO advantage normalization applies across all steps in the batch.
+
+**Step 1 — Pip counting** across all non-land cards in the deck:
+
+| Pip type     | Example                  | Count              |
+|--------------|--------------------------|--------------------|
+| Single color | {W} {U} {B} {R} {G} {C} | +1.0 to that color |
+| Phyrexian    | {W/P}, {G/P}             | +0.5 to that color |
+| Hybrid       | {G/R}, {W/U}             | +0.5 to each color |
+| Generic      | {1}, {2}, {X}            | ignored            |
+
+{C} (colorless) is tracked as a sixth color alongside W/U/B/R/G. Generic mana is ignored entirely.
+
+**Step 2 — Ideal source distribution** targeting 17 total mana sources:
+
+```
+colors_present = {c : P_c > 0}
+n_colors       = |colors_present|
+ideal_c        = 2 + (17 − 2 × n_colors) × P_c / Σ P     for c in colors_present
+ideal_c        = 0                                          otherwise
+```
+
+The mandatory 2 sources per color ensure every required color has a minimum presence. The remaining
+`17 − 2 × n_colors` sources are distributed proportionally to pip counts.
+
+**Step 3 — Actual source counting**: for each land in the deck, add +1 to `actual_c` for each color that appears
+in its `{T}: Add …` mana ability. Dual lands count as one source for each of their colors.
+
+**Score:**
+
+```
+l1_error = Σ_c |actual_c − ideal_c|
+score    = max(0.0, 1.0 − (l1_error + |n_lands − 17|) / 17.0)
+```
+
+The two penalty terms share the same normalization: one misplaced source costs the same as one land over or under
+the 17-land target. A perfect distribution with exactly 17 lands scores 1.0; an error of 17 or more scores 0.0.
+
+**Reward** (consistent with Stage 1's [−1, 1] range):
+
+```
+reward = 2 × score − 1
+```
+
+#### Curriculum Advancement
+
+Stage 2 is complete when all 32 episodes in a batch achieve `score > 0.90`.
+
+#### Command Line
+
+Training can be launched via the following command:
+```bash
+python -m sealed train \
+    --stage 2 \
+    --set [set-code] \
+    --pools-path [path] \
+    --cards-path [path] \
+    --model-path [path] \
+    --init-from [path]
+```
+
+Defaults are the same as Stage 1, with the following additions:
+- **--model-path**: models/sealed/stage2/latest.pt
+- **--init-from**: models/sealed/stage1/latest.pt (Stage 1 checkpoint loaded as starting point)
+
+#### Model Checkpointing
+
+Same as Stage 1: saved every batch to `model-path`, timestamped checkpoint every 1000 episodes to the
+`checkpoints/` subfolder of `model-path`'s parent directory.
+
+#### Sampling
+
+```bash
+python -m sealed sample \
+    --stage 2 \
+    --set [set-code] \
+    --pools-path [path] \
+    --cards-path [path] \
+    --model-path [path] \
+    --n-samples [n]
+```
+
+Defaults: same as Stage 1, `--model-path` defaults to `models/sealed/stage2/latest.pt`, `--n-samples` defaults
+to 10.
+
+Output shows for each sample: the 40 picks, the ideal vs actual source distribution per color, and the score.
 
 ### Stage 3 — Picking good cards (aka: Forge self-play)
 Pool transformer trains freely. Model builds both decks, plays best-of-11, both decks receive
