@@ -8,6 +8,9 @@ import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 
+import static com.pricepredictor.connector.ability.SpellAbilityUtils.getAdditionalAbility;
+import static com.pricepredictor.connector.ability.SpellAbilityUtils.getParam;
+
 /**
  * Gift keyword — searches the card's spell abilities for the gift description parameter.
  */
@@ -20,10 +23,9 @@ public record GiftKeyword(NonBlankString descriptionText) implements Ability {
 
     public static GiftKeyword of(KeywordInterface ki, Card card) {
         String giftTitle = card.getSpellAbilities().stream()
-                .filter(sa -> sa.hasAdditionalAbility("GiftAbility"))
+                .flatMap(sa -> getAdditionalAbility(sa, "GiftAbility").stream())
                 .findFirst()
-                .map(sa -> sa.getAdditionalAbility("GiftAbility").getParam("GiftDescription"))
-                .flatMap(NonBlankString::of)
+                .flatMap(additional -> getParam(additional, "GiftDescription"))
                 .map(d -> ki.getTitle() + " " + d)
                 .orElse(ki.getTitle());
         return new GiftKeyword(AbilityDescription.applyCasing(giftTitle));

@@ -19,8 +19,11 @@ public record ReplacementAbilityEntry(NonBlankString descriptionText) implements
     }
 
     public static Optional<ReplacementAbilityEntry> of(ReplacementEffect re) {
-        if (re.getKeyword() != null) return Optional.empty();
-        String desc = re.getParam("Description");
-        return NonBlankString.of(desc).flatMap(d -> AbilityDescription.normalize(d.value())).map(ReplacementAbilityEntry::new);
+        if (re.getKeyword() != null) {
+            return Optional.empty();
+        }
+        return SpellAbilityUtils.getParam(re, "Description")
+                .flatMap(AbilityDescription::normalize)
+                .map(ReplacementAbilityEntry::new);
     }
 }

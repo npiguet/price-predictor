@@ -27,9 +27,11 @@ public final class AbilityDescription {
      */
     public static @lombok.NonNull Optional<NonBlankString> normalize(@lombok.NonNull String raw) {
         if (raw.isEmpty()) return Optional.empty();
-        String stripped = stripReminderText(raw);
-        if (stripped.isEmpty()) return Optional.empty();
-        return Optional.of(applyCasing(stripped));
+        return normalize(NonBlankString.require(raw));
+    }
+
+    public static @lombok.NonNull Optional<NonBlankString> normalize(@lombok.NonNull NonBlankString raw) {
+        return stripReminderText(raw).map(AbilityDescription::applyCasing);
     }
 
     /** Strip parenthesized reminder text. */

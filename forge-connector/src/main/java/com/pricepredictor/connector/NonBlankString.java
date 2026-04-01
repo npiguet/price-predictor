@@ -38,17 +38,47 @@ public record NonBlankString(String value) implements Comparable<NonBlankString>
 
     // String-like convenience methods — allow callers to use NonBlankString without
     // repeatedly unwrapping via .value(), especially in test assertions.
-    public boolean contains(CharSequence s) { return value.contains(s); }
-    public boolean startsWith(String prefix) { return value.startsWith(prefix); }
-    public boolean endsWith(String suffix) { return value.endsWith(suffix); }
+    public boolean contains(CharSequence s) {
+        return value.contains(s);
+    }
 
-    /** Compare content equality with a raw String. Use instead of .equals() when comparing to String literals. */
-    public boolean contentEquals(String other) { return value.equals(other); }
+    public boolean startsWith(String prefix) {
+        return value.startsWith(prefix);
+    }
 
-    /** Returns the raw string value. Enables string concatenation and StringBuilder.append() without .value(). */
+    public boolean endsWith(String suffix) {
+        return value.endsWith(suffix);
+    }
+
+    /**
+     * Compare content equality with a raw String. Use instead of .equals() when comparing to String literals.
+     */
+    public boolean contentEquals(String other) {
+        return value.equals(other);
+    }
+
+    public int indexOf(int ch) {
+        return value.indexOf(ch);
+    }
+
+    public int length() {
+        return value.length();
+    }
+
+    public NonBlankString substring(int beginIndex, int endIndex) {
+        return NonBlankString.require(value.substring(beginIndex, endIndex).trim());
+    }
+
+    /**
+     * Returns the raw string value. Enables string concatenation and StringBuilder.append() without .value().
+     */
     @Override
-    public String toString() { return value; }
+    public String toString() {
+        return value;
+    }
 
     @Override
-    public int compareTo(NonBlankString o) { return value.compareTo(o.value); }
+    public int compareTo(NonBlankString o) {
+        return value.compareTo(o.value);
+    }
 }

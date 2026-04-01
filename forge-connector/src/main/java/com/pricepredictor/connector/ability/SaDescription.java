@@ -6,6 +6,8 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.Optional;
 
+import static com.pricepredictor.connector.ability.SpellAbilityUtils.getParam;
+
 /**
  * Resolved description for a single SpellAbility.
  *
@@ -61,34 +63,28 @@ public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDes
      * @param parentDesc the nearest ancestor's cased description, or empty if absent
      */
     public static SaDescription resolve(SpellAbility sa, Optional<NonBlankString> parentDesc) {
-        String rawDesc = sa.getParam("SpellDescription");
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            rawDesc = sa.getParam("TriggerDescription");
-        }
-        // StackDescription fallback — accepted only for literal oracle text strings.
-        // Forge uses StackDescription for several non-oracle purposes that must be rejected:
-        //   "SpellDescription"  → a level-of-indirection marker, not literal text
-        //   "None"              → sentinel meaning "don't show on stack"
-        //   "REP ..."           → replacement-effect template prefix, not oracle text
-        //   "{p:...}"           → player-reference template token, not oracle text
-        // Reject also if the StackDescription merely duplicates the parent's oracle text.
-        // Forge often copies the parent SpellDescription onto sub-ability StackDescription
-        // for stack-display — e.g. Bifurcate's DBChangeZone.
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            rawDesc = Optional.ofNullable(sa.getParam("StackDescription"))
-                    .filter(s -> !s.isEmpty())
-                    .filter(s -> !s.equals(ForgeParams.STACK_DESC_REF))
-                    .filter(s -> !s.equals(ForgeParams.NO_DISPLAY))
-                    .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
-                    .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
-                    .filter(s -> parentDesc.map(p -> !AbilityDescription.applyCasing(
-                            AbilityDescription.stripReminderText(s)).equals(p)).orElse(true))
-                    .orElse(null);
-        }
-        boolean hadRawDesc = rawDesc != null;
-        Optional<NonBlankString> strippedOpt = hadRawDesc
-                ? NonBlankString.of(AbilityDescription.stripReminderText(rawDesc))
-                : Optional.empty();
-        return new SaDescription(strippedOpt, hadRawDesc);
+        return getParam(sa, "SpellDescription")
+                .or(() -> getParam(sa, "TriggerDescription"))
+                .or(() -> getParam(sa, "StackDescription")
+                        // StackDescription fallback — accepted only for literal oracle text strings.
+                        // Forge uses StackDescription for several non-oracle purposes that must be rejected:
+                        //   "SpellDescription"  → a level-of-indirection marker, not literal text
+                        //   "None"              → sentinel meaning "don't show on stack"
+                        //   "REP ..."           → replacement-effect template prefix, not oracle text
+                        //   "{p:...}"           → player-reference template token, not oracle text
+                        // Reject also if the StackDescription merely duplicates the parent's oracle text.
+                        // Forge often copies the parent SpellDescription onto sub-ability StackDescription
+                        // for stack-display — e.g. Bifurcate's DBChangeZone.
+                        .filter(s -> !s.contentEquals(ForgeParams.STACK_DESC_REF))
+                        .filter(s -> !s.contentEquals(ForgeParams.NO_DISPLAY))
+                        .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
+                        .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
+                        .filter(s -> parentDesc
+                                .flatMap(AbilityDescription::normalize)
+                                .map(normalized -> !normalized.equals(s))
+                                .orElse(true))
+                )
+                .map(rawDesc -> new SaDescription(AbilityDescription.stripReminderText(rawDesc), true))
+                .orElseGet(() -> new SaDescription(Optional.empty(), false));
     }
 }

@@ -21,8 +21,7 @@ public record CompanionKeyword(NonBlankString descriptionText) implements Abilit
 
     public static CompanionKeyword of(KeywordInterface ki, Companion comp) {
         String compTitle = NonBlankString.of(comp.getDescription())
-                .map(d -> AbilityDescription.stripReminderText(d.value()))
-                .flatMap(NonBlankString::of)
+                .flatMap(AbilityDescription::stripReminderText)
                 .map(d -> ki.getTitle() + " — " + d)
                 .orElse(ki.getTitle());
         return new CompanionKeyword(AbilityDescription.applyCasing(compTitle));

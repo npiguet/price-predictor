@@ -19,8 +19,8 @@ public record SpellAdditionalCost(NonBlankString descriptionText) implements Abi
     }
 
     public static Optional<SpellAdditionalCost> of(SpellAbility sa) {
-        String costDesc = sa.getCostDescription();
-        return NonBlankString.of(costDesc).flatMap(d -> AbilityDescription.normalize(d.value()))
+        return NonBlankString.of(sa.getCostDescription())
+                .flatMap(AbilityDescription::normalize)
                 .flatMap(ForgeParams::stripAdditionalCostPrefix)
                 .map(SpellAdditionalCost::new);
     }

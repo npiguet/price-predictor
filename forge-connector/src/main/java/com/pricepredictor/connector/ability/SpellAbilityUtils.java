@@ -4,6 +4,7 @@ import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.NonBlankString;
+import forge.game.CardTraitBase;
 import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 
@@ -18,7 +19,8 @@ import java.util.stream.Stream;
  */
 public final class SpellAbilityUtils {
 
-    private SpellAbilityUtils() {}
+    private SpellAbilityUtils() {
+    }
 
     /**
      * Returns a sequential Stream over the sub-ability chain starting from {@code sa},
@@ -83,8 +85,12 @@ public final class SpellAbilityUtils {
         return List.of();
     }
 
-    static Optional<NonBlankString> getParam(SpellAbility sa, String param) {
+    static Optional<NonBlankString> getParam(CardTraitBase sa, String param) {
         return NonBlankString.of(sa.getParam(param));
+    }
+
+    static Optional<SpellAbility> getAdditionalAbility(SpellAbility sa, String name) {
+        return Optional.ofNullable(sa.getAdditionalAbility(name));
     }
 
     static Optional<String> findParamInChain(SpellAbility sa, String param) {
@@ -99,7 +105,8 @@ public final class SpellAbilityUtils {
      * {@code expandedDescription} has the placeholder replaced; {@code options} are
      * charm or dice-outcome sub-abilities, if any.
      */
-    public record AbilityPlaceholderResult(NonBlankString expandedDescription, List<Ability> options) {}
+    public record AbilityPlaceholderResult(NonBlankString expandedDescription, List<Ability> options) {
+    }
 
     /**
      * Resolve the ABILITY placeholder in {@code description} using {@code executeSA}
@@ -116,7 +123,7 @@ public final class SpellAbilityUtils {
      * </ol>
      */
     public static Optional<AbilityPlaceholderResult> resolveAbilityPlaceholder(
-            String description, SpellAbility executeSA, String fallbackText) {
+            String description, SpellAbility executeSA, NonBlankString fallbackText) {
         if (description == null || !description.contains("ABILITY")) return Optional.empty();
 
         if (executeSA != null) {
@@ -138,15 +145,15 @@ public final class SpellAbilityUtils {
                 Optional<NonBlankString> diceDesc = findDiceRollDescription(executeSA);
                 if (diceDesc.isPresent()) {
                     return AbilityDescription.normalize(
-                            description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc.get().value())))
+                                    description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc.get().value())))
                             .map(n -> new AbilityPlaceholderResult(n, diceOptions));
                 }
             }
         }
 
         // Case 3: Direct text substitution
-        if (fallbackText != null && !fallbackText.isEmpty()) {
-            return AbilityDescription.normalize(description.replace("ABILITY", fallbackText))
+        if (fallbackText != null) {
+            return AbilityDescription.normalize(description.replace("ABILITY", fallbackText.value()))
                     .map(n -> new AbilityPlaceholderResult(n, List.of()));
         }
 
@@ -168,11 +175,15 @@ public final class SpellAbilityUtils {
     public static Optional<NonBlankString> extractParam(String svarText, String paramName) {
         String key = paramName + "$ ";
         int idx = svarText.indexOf(key);
-        if (idx < 0) return Optional.empty();
+        if (idx < 0) {
+            return Optional.empty();
+        }
         int start = idx + key.length();
         int end = svarText.indexOf(" |", start);
         String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        if (raw.isEmpty()) return Optional.empty();
+        if (raw.isEmpty()) {
+            return Optional.empty();
+        }
         return AbilityDescription.normalize(raw);
     }
 }

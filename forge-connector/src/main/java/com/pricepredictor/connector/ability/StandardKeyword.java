@@ -127,7 +127,9 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      */
     private static String buildCraftTitle(String original) {
         KeywordFields f = KeywordFields.parse(original, 4);
-        if (!f.hasField(1)) return original;
+        if (!f.hasField(1)) {
+            return original;
+        }
         String costPart = f.field(1);
         return "Craft with " + resolveCraftTypeDescription(costPart, f)
                 + " " + extractCraftMana(costPart);

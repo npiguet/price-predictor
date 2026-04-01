@@ -9,6 +9,8 @@ import forge.game.keyword.KeywordInterface;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.pricepredictor.connector.ability.SpellAbilityUtils.getParam;
+
 /**
  * ETB replacement ability from etbCounter: or ETBReplacement: keywords.
  * One EtbReplacementAbility per replacement description.
@@ -21,12 +23,13 @@ public record EtbReplacementAbility(NonBlankString descriptionText) implements A
     }
 
     public static List<Ability> fromKeyword(KeywordInterface ki) {
-        List<Ability> abilities = new ArrayList<>();
-        for (var replacement : ki.getReplacements()) {
-            NonBlankString.of(replacement.getParam("Description"))
-                    .flatMap(d -> AbilityDescription.normalize(d.value()))
-                    .ifPresent(n -> abilities.add(new EtbReplacementAbility(n)));
-        }
-        return abilities;
+        return ki.getReplacements().stream()
+                .flatMap(replacement -> getParam(replacement, "Description")
+                        .flatMap(AbilityDescription::normalize)
+                        .stream()
+                )
+                .map(EtbReplacementAbility::new)
+                .map(Ability.class::cast)
+                .toList();
     }
 }

@@ -8,6 +8,7 @@ import forge.game.CardTraitBase;
 import forge.game.keyword.KeywordInterface;
 
 import java.util.Optional;
+import java.util.stream.StreamSupport;
 
 /**
  * Class level ability. Stores cost + description as the full text, exposes
@@ -27,23 +28,23 @@ public record ClassLevelAbility(
     public static Optional<ClassLevelAbility> of(KeywordInterface ki) {
         int level = Integer.parseInt(KeywordFields.from(ki, 3).field(1));
 
-        var it = ki.getAbilities().iterator();
-        String rawCost = it.hasNext() ? it.next().getCostDescription() : null;
-        NonBlankString costNbs = NonBlankString.of(rawCost).orElse(null);
-        if (costNbs == null) return Optional.empty();
-
-        String cost = costNbs.value();
-        if (cost.endsWith(":")) {
-            cost = cost.substring(0, cost.length() - 1).trim();
-        }
-
-        NonBlankString casedCost = AbilityDescription.applyCasing(cost);
-        return findFirstDescription(ki.getTriggers(), "TriggerDescription")
-                .or(() -> findFirstDescription(ki.getStaticAbilities(), "Description"))
-                .or(() -> findFirstDescription(ki.getReplacements(), "Description"))
-                .flatMap(d -> AbilityDescription.normalize(d.value()))
-                .map(normalized -> new ClassLevelAbility(
-                        NonBlankString.require(casedCost + ": " + normalized), normalized, level));
+        return ki.getAbilities().stream()
+                .findFirst()
+                .flatMap(ability -> NonBlankString.of(ability.getCostDescription()))
+                .map(cost -> {
+                    if (cost.endsWith(":")) {
+                        cost = cost.substring(0, cost.length() - 1);
+                    }
+                    return AbilityDescription.applyCasing(cost);
+                })
+                .flatMap(cost ->
+                        findFirstDescription(ki.getTriggers(), "TriggerDescription")
+                                .or(() -> findFirstDescription(ki.getStaticAbilities(), "Description"))
+                                .or(() -> findFirstDescription(ki.getReplacements(), "Description"))
+                                .flatMap(AbilityDescription::normalize)
+                                .map(normalized -> new ClassLevelAbility(
+                                        NonBlankString.require(cost + ": " + normalized), normalized, level))
+                );
     }
 
     private static <T extends CardTraitBase> Optional<NonBlankString> findFirstDescription(

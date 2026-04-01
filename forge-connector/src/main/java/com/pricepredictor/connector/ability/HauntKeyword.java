@@ -34,21 +34,18 @@ public final class HauntKeyword {
         // For creature haunt ki.getAbilities() is empty, so we fall back to the SVar.
         // Fallback: extract SpellDescription from the SVar content string.
         KeywordFields hauntFields = KeywordFields.from(ki, 2); // "Haunt:SvarName"
-        String effectDesc = ki.getAbilities().stream()
-                .map(sa -> sa.getParam("SpellDescription"))
-                .flatMap(d -> NonBlankString.of(d).stream().map(NonBlankString::value))
+        Optional<NonBlankString> effectDesc = ki.getAbilities().stream()
+                .flatMap(sa -> SpellAbilityUtils.getParam(sa, "SpellDescription").stream())
                 .findFirst()
                 .or(() -> hauntFields.hasField(1)
                         ? SpellAbilityUtils.extractParam(card.getSVar(hauntFields.field(1)), "SpellDescription")
-                                .map(NonBlankString::value)
-                        : Optional.empty())
-                .orElse(null);
+                        : Optional.empty());
 
         boolean isCreature = card.isCreature();
 
         // 1. For non-creature spells: emit the primary spell effect first
-        if (!isCreature && effectDesc != null) {
-            AbilityDescription.normalize(effectDesc)
+        if (!isCreature) {
+            effectDesc.flatMap(AbilityDescription::normalize)
                     .ifPresent(n -> result.add(new SpellEffect(n, List.of())));
         }
 
@@ -56,17 +53,22 @@ public final class HauntKeyword {
         Set<NonBlankString> emitted = new HashSet<>();
         for (Trigger t : ki.getTriggers()) {
             String tDesc = t.getParam("TriggerDescription");
-            if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
+            if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) {
+                continue;
+            }
 
             // Replace ABILITY placeholder: charm, dice-roll, or direct haunt-effect substitution.
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
                 Optional<SpellAbilityUtils.AbilityPlaceholderResult> resolved =
-                        SpellAbilityUtils.resolveAbilityPlaceholder(tDesc, overrideSa, effectDesc);
+                        SpellAbilityUtils.resolveAbilityPlaceholder(tDesc, overrideSa, effectDesc.orElse(null));
+
                 if (resolved.isPresent()) {
                     SpellAbilityUtils.AbilityPlaceholderResult r = resolved.get();
                     NonBlankString normalized2 = r.expandedDescription();
-                    if (!emitted.add(normalized2)) continue;
+                    if (!emitted.add(normalized2)){
+                        continue;
+                    }
                     AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
                     result.add(new TextAbility(type2, normalized2, 0, r.options()));
                     continue;
@@ -74,8 +76,12 @@ public final class HauntKeyword {
             }
 
             NonBlankString normalized = AbilityDescription.normalize(tDesc).orElse(null);
-            if (normalized == null) continue;
-            if (!emitted.add(normalized)) continue; // skip duplicates
+            if (normalized == null) {
+                continue;
+            }
+            if (!emitted.add(normalized)){
+                continue; // skip duplicates
+            }
 
             AbilityType type = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
             result.add(new TextAbility(type, normalized));
