@@ -163,7 +163,7 @@ public record SpellEffect(NonBlankString descriptionText, List<Ability> subAbili
         List<Ability> result = new ArrayList<>();
         for (String name : list.split(",")) {
             String svarText = host.getSVar(name.trim());
-            if (svarText == null || svarText.isEmpty()) continue;
+            if (svarText.isEmpty()) continue;
             if (!svarFilter.test(svarText)) continue;
             SpellAbilityUtils.extractParam(svarText, descKey)
                     .filter(desc -> !isRedundantDescription(desc, parentDesc))

@@ -38,11 +38,11 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
             }
         } else {
             // Forge's getTitle() can return an unusable string for some keywords:
-            //   - null or empty: no title computed (fall back to raw getOriginal())
+            //   - empty: no title computed (fall back to raw getOriginal())
             //   - trailing whitespace: Protection.getTitle() returns "Protection from "
             //     because Protection.parse() is empty in forge — fromWhat is never set.
             //     This is a forge bug; the trailing space lets us detect and bypass it.
-            if (title == null || title.isEmpty() || !title.trim().equals(title)) {
+            if (title.isEmpty() || !title.trim().equals(title)) {
                 title = ki.getOriginal();
             }
             // Internal keywords (MAYFLASHCOST, MAYFLASHSAC) are forge-engine mechanics
@@ -196,7 +196,6 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      * </ul>
      */
     private static Optional<NonBlankString> extractReduceCostDescription(Keyword kw, String original) {
-        if (original == null) return Optional.empty();
         return extractReduceCostFromSVar(original)
                 .or(() -> extractAdaptMonstrosityReduceCost(kw, original))
                 .or(() -> extractSpecializeReduceCost(kw, original));
