@@ -6,6 +6,8 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.CardTraitBase;
 import forge.game.keyword.KeywordInterface;
 
+import java.util.Optional;
+
 /**
  * Class level ability. Stores cost + description as the full text, exposes
  * innerDescription for class dedup matching, and ordinal = level number.
@@ -21,44 +23,35 @@ public record ClassLevelAbility(
         return AbilityType.LEVEL;
     }
 
-    public static ClassLevelAbility of(KeywordInterface ki) {
+    public static Optional<ClassLevelAbility> of(KeywordInterface ki) {
         int level = Integer.parseInt(KeywordFields.from(ki, 3).field(1));
 
         var it = ki.getAbilities().iterator();
         String cost = it.hasNext() ? it.next().getCostDescription() : null;
         if (cost == null || cost.isEmpty()) {
-            return null;
+            return Optional.empty();
         }
         cost = cost.trim();
         if (cost.endsWith(":")) {
             cost = cost.substring(0, cost.length() - 1).trim();
         }
 
-        String rawDesc = findFirstDescription(ki.getTriggers(), "TriggerDescription");
-        if (rawDesc == null) {
-            rawDesc = findFirstDescription(ki.getStaticAbilities(), "Description");
-        }
-        if (rawDesc == null) {
-            rawDesc = findFirstDescription(ki.getReplacements(), "Description");
-        }
-        if (rawDesc == null) {
-            return null;
-        }
-
-        String normalized = AbilityDescription.normalize(rawDesc);
-        if (normalized == null) return null;
         String casedCost = AbilityDescription.applyCasing(cost);
-        return new ClassLevelAbility(casedCost + ": " + normalized, normalized, level);
+        return findFirstDescription(ki.getTriggers(), "TriggerDescription")
+                .or(() -> findFirstDescription(ki.getStaticAbilities(), "Description"))
+                .or(() -> findFirstDescription(ki.getReplacements(), "Description"))
+                .flatMap(AbilityDescription::normalize)
+                .map(normalized -> new ClassLevelAbility(casedCost + ": " + normalized, normalized, level));
     }
 
-    private static <T extends CardTraitBase> String findFirstDescription(
+    private static <T extends CardTraitBase> Optional<String> findFirstDescription(
             Iterable<T> traits, String param) {
         for (T trait : traits) {
             String d = trait.getParam(param);
             if (d != null && !d.isEmpty()) {
-                return d;
+                return Optional.of(d);
             }
         }
-        return null;
+        return Optional.empty();
     }
 }

@@ -18,17 +18,13 @@ public record GiftKeyword(String descriptionText) implements Ability {
     }
 
     public static GiftKeyword of(KeywordInterface ki, Card card) {
-        String giftTitle = ki.getTitle();
-        for (SpellAbility sa : card.getSpellAbilities()) {
-            if (sa.hasAdditionalAbility("GiftAbility")) {
-                String giftDesc = sa.getAdditionalAbility("GiftAbility")
-                        .getParam("GiftDescription");
-                if (giftDesc != null && !giftDesc.isEmpty()) {
-                    giftTitle = giftTitle + " " + giftDesc;
-                }
-                break;
-            }
-        }
+        String giftTitle = card.getSpellAbilities().stream()
+                .filter(sa -> sa.hasAdditionalAbility("GiftAbility"))
+                .findFirst()
+                .map(sa -> sa.getAdditionalAbility("GiftAbility").getParam("GiftDescription"))
+                .filter(d -> d != null && !d.isEmpty())
+                .map(d -> ki.getTitle() + " " + d)
+                .orElse(ki.getTitle());
         return new GiftKeyword(AbilityDescription.applyCasing(giftTitle));
     }
 }

@@ -11,6 +11,7 @@ import forge.game.trigger.Trigger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -30,27 +31,23 @@ public final class HauntKeyword {
 
         // Get spell effect description from the SA Forge built for non-creature haunt.
         // For creature haunt ki.getAbilities() is empty, so we fall back to the SVar.
-        String effectDesc = null;
-        for (SpellAbility sa : ki.getAbilities()) {
-            String d = sa.getParam("SpellDescription");
-            if (d != null && !d.isEmpty()) { effectDesc = d; break; }
-        }
-        // Fallback: extract SpellDescription from the SVar content string
-        if (effectDesc == null) {
-            KeywordFields f = KeywordFields.from(ki, 2); // "Haunt:SvarName"
-            if (f.hasField(1)) {
-                effectDesc = SpellAbilityUtils.extractParam(card.getSVar(f.field(1)), "SpellDescription");
-            }
-        }
+        // Fallback: extract SpellDescription from the SVar content string.
+        KeywordFields hauntFields = KeywordFields.from(ki, 2); // "Haunt:SvarName"
+        String effectDesc = ki.getAbilities().stream()
+                .map(sa -> sa.getParam("SpellDescription"))
+                .filter(d -> d != null && !d.isEmpty())
+                .findFirst()
+                .or(() -> hauntFields.hasField(1)
+                        ? SpellAbilityUtils.extractParam(card.getSVar(hauntFields.field(1)), "SpellDescription")
+                        : Optional.empty())
+                .orElse(null);
 
         boolean isCreature = card.isCreature();
 
         // 1. For non-creature spells: emit the primary spell effect first
         if (!isCreature && effectDesc != null) {
-            String normalized = AbilityDescription.normalize(effectDesc);
-            if (normalized != null) {
-                result.add(new SpellEffect(AbilityDescription.applyCasing(normalized), List.of()));
-            }
+            AbilityDescription.normalize(effectDesc)
+                    .ifPresent(n -> result.add(new SpellEffect(n, List.of())));
         }
 
         // 2. Process triggers — deduplicate by description
@@ -74,12 +71,12 @@ public final class HauntKeyword {
                 }
             }
 
-            String normalized = AbilityDescription.normalize(tDesc);
+            String normalized = AbilityDescription.normalize(tDesc).orElse(null);
             if (normalized == null || normalized.isEmpty()) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
             AbilityType type = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            result.add(new TextAbility(type, AbilityDescription.applyCasing(normalized)));
+            result.add(new TextAbility(type, normalized));
         }
 
         return result;

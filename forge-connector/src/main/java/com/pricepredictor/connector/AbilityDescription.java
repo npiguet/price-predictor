@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,20 +22,17 @@ public final class AbilityDescription {
     private static final Pattern VARIABLE_X = Pattern.compile("(?<![a-z])x(?![a-z])");
 
     /**
-     * Full normalization returning null for empty/null input.
+     * Full normalization returning empty Optional for empty input or when stripping reduces to nothing.
      * Pipeline: strip reminder text, then apply casing.
      */
-    public static String normalize(String raw) {
-        if (raw == null || raw.isEmpty()) return null;
+    public static Optional<String> normalize(@lombok.NonNull String raw) {
+        if (raw.isEmpty()) return Optional.empty();
         String result = applyCasing(stripReminderText(raw));
-        return (result == null || result.isEmpty()) ? null : result;
+        return (result == null || result.isEmpty()) ? Optional.empty() : Optional.of(result);
     }
 
     /** Strip parenthesized reminder text. */
-    public static String stripReminderText(String text) {
-        if (text == null) {
-            return null;
-        }
+    public static String stripReminderText(@lombok.NonNull String text) {
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
     }
 
@@ -59,17 +57,12 @@ public final class AbilityDescription {
      * Replace Forge-internal VERT placeholder with " | " so dice-outcome descriptions
      * render correctly (e.g. "1—9 VERT Tap all…" → "1—9 | Tap all…").
      */
-    public static String replaceVert(String text) {
-        if (text == null) return null;
+    public static String replaceVert(@lombok.NonNull String text) {
         return text.replace(" VERT ", " | ").replace("VERT", "");
     }
 
     /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
-    public static String applyCasing(String text) {
-        if (text == null) {
-            return null;
-        }
-
+    public static String applyCasing(@lombok.NonNull String text) {
         // Protect brace symbols by extracting them
         List<String> braceSymbols = new ArrayList<>();
         Matcher m = BRACE_SYMBOL.matcher(text);

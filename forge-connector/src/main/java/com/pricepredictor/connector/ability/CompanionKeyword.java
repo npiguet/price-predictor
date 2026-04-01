@@ -6,6 +6,8 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.keyword.Companion;
 import forge.game.keyword.KeywordInterface;
 
+import java.util.Optional;
+
 /**
  * Companion keyword — includes the companion restriction description.
  */
@@ -17,12 +19,12 @@ public record CompanionKeyword(String descriptionText) implements Ability {
     }
 
     public static CompanionKeyword of(KeywordInterface ki, Companion comp) {
-        String compDesc = comp.getDescription();
-        if (compDesc != null && !compDesc.isEmpty()) {
-            compDesc = AbilityDescription.stripReminderText(compDesc);
-        }
-        String compTitle = (compDesc != null && !compDesc.isEmpty())
-                ? ki.getTitle() + " \u2014 " + compDesc : ki.getTitle();
+        String compTitle = Optional.ofNullable(comp.getDescription())
+                .filter(d -> !d.isEmpty())
+                .map(AbilityDescription::stripReminderText)
+                .filter(d -> !d.isEmpty())
+                .map(d -> ki.getTitle() + " \u2014 " + d)
+                .orElse(ki.getTitle());
         return new CompanionKeyword(AbilityDescription.applyCasing(compTitle));
     }
 }

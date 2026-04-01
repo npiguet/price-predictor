@@ -36,7 +36,7 @@ public final class VisitAbility {
                 if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
                 int nl = tDesc.indexOf('\n');
                 if (nl >= 0) tDesc = tDesc.substring(0, nl);
-                header = AbilityDescription.normalize(tDesc);
+                header = AbilityDescription.normalize(tDesc).orElse(null);
                 children = CharmAbility.optionsFrom(overriding);
             } else {
                 // Plain visit: prefer SpellDescription over TriggerDescription.
@@ -51,20 +51,19 @@ public final class VisitAbility {
                     if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
                     int nl = tDesc.indexOf('\n');
                     if (nl >= 0) tDesc = tDesc.substring(0, nl);
-                    header = AbilityDescription.normalize(tDesc);
+                    header = AbilityDescription.normalize(tDesc).orElse(null);
                 } else {
                     // Ensure exactly one "Visit — " prefix.
                     if (!spellDesc.startsWith("Visit — ")) {
                         spellDesc = "Visit — " + spellDesc;
                     }
-                    header = AbilityDescription.normalize(spellDesc);
+                    header = AbilityDescription.normalize(spellDesc).orElse(null);
                 }
                 children = List.of();
             }
 
             if (header == null || header.isEmpty()) continue;
-            abilities.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED,
-                    AbilityDescription.applyCasing(header), children));
+            abilities.add(new TriggeredAbilityEntry(AbilityType.TRIGGERED, header, children));
         }
         return abilities;
     }

@@ -6,9 +6,8 @@ import com.pricepredictor.connector.AbilityType;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
-import forge.game.spellability.SpellAbility;
-
 import java.util.List;
+import java.util.Optional;
 
 /**
  * MayEffectFromOpeningHand / MayEffectFromOpeningDeck keyword.
@@ -28,28 +27,22 @@ public final class OpeningHandAbility {
         Card hostCard = ki.getHostCard();
         if (hostCard == null) return List.of();
 
-        String desc = resolveDescription(hostCard, svarName);
-        if (desc == null || desc.isEmpty()) return List.of();
-
-        String normalized = AbilityDescription.normalize(desc);
-        if (normalized == null) return List.of();
-        return List.of(new TextAbility(AbilityType.TRIGGERED,
-                AbilityDescription.applyCasing(normalized)));
+        return resolveDescription(hostCard, svarName)
+                .flatMap(AbilityDescription::normalize)
+                .map(n -> List.<Ability>of(new TextAbility(AbilityType.TRIGGERED, n)))
+                .orElse(List.of());
     }
 
-    private static String resolveDescription(Card hostCard, String svarName) {
-        if (hostCard.hasSVar(svarName)) {
-            SpellAbility svarSa = AbilityFactory.getAbility(hostCard, svarName);
-            if (svarSa != null) {
-                String desc = svarSa.getParam("SpellDescription");
-                if (desc != null && !desc.isEmpty()) return desc;
-            }
-        }
+    private static Optional<String> resolveDescription(Card hostCard, String svarName) {
         // Chancellor-cycle fallback: primary SVar has no SpellDescription; use RevealCard SVar.
-        if (hostCard.hasSVar("RevealCard")) {
-            SpellAbility revealSa = AbilityFactory.getAbility(hostCard, "RevealCard");
-            if (revealSa != null) return revealSa.getParam("SpellDescription");
-        }
-        return null;
+        return resolveFromSVar(hostCard, svarName)
+                .or(() -> resolveFromSVar(hostCard, "RevealCard"));
+    }
+
+    private static Optional<String> resolveFromSVar(Card hostCard, String svarName) {
+        if (!hostCard.hasSVar(svarName)) return Optional.empty();
+        return Optional.ofNullable(AbilityFactory.getAbility(hostCard, svarName))
+                .map(sa -> sa.getParam("SpellDescription"))
+                .filter(d -> d != null && !d.isEmpty());
     }
 }

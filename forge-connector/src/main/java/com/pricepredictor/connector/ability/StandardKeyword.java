@@ -9,6 +9,7 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordWithTypeInterface;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.BiFunction;
 
 /**
@@ -48,10 +49,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             // oracle description (e.g. "you may pay {W} rather than pay this spell's
             // mana cost"), so we substitute reminder text for the title here.
             if (AbilityType.isInternalKeyword(kw)) {
-                String reminder = ki.getReminderText();
-                if (reminder != null && !reminder.isEmpty()) {
-                    title = reminder;
-                }
+                title = Optional.ofNullable(ki.getReminderText())
+                        .filter(r -> !r.isEmpty())
+                        .orElse(title);
             }
             var formatter = KEYWORD_FORMATTERS.get(kw);
             if (formatter != null) {
@@ -59,10 +59,10 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             }
         }
 
-        String reduceCost = extractReduceCostDescription(kw, ki.getOriginal());
-        if (reduceCost != null) {
-            title = title + ". " + reduceCost;
-        }
+        String finalTitle = title;
+        title = extractReduceCostDescription(kw, ki.getOriginal())
+                .map(rc -> finalTitle + ". " + rc)
+                .orElse(finalTitle);
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
@@ -193,13 +193,11 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      *       {@code ReduceCost$} marker is present.</li>
      * </ul>
      */
-    private static String extractReduceCostDescription(Keyword kw, String original) {
-        if (original == null) return null;
-        String result = extractReduceCostFromSVar(original);
-        if (result != null) return result;
-        result = extractAdaptMonstrosityReduceCost(kw, original);
-        if (result != null) return result;
-        return extractSpecializeReduceCost(kw, original);
+    private static Optional<String> extractReduceCostDescription(Keyword kw, String original) {
+        if (original == null) return Optional.empty();
+        return extractReduceCostFromSVar(original)
+                .or(() -> extractAdaptMonstrosityReduceCost(kw, original))
+                .or(() -> extractSpecializeReduceCost(kw, original));
     }
 
     /**
@@ -207,16 +205,16 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * The SVar name is skipped; the human-readable text after the colon is returned.
      * Applies broadly (Equip, any keyword that embeds a ReduceCost$ SVar reference).
      */
-    private static String extractReduceCostFromSVar(String original) {
+    private static Optional<String> extractReduceCostFromSVar(String original) {
         int idx = original.indexOf("ReduceCost$ ");
         if (idx >= 0) {
             String after = original.substring(idx + "ReduceCost$ ".length());
             int colon = after.indexOf(':');
             if (colon >= 0) {
-                return after.substring(colon + 1);
+                return Optional.of(after.substring(colon + 1));
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
@@ -224,27 +222,27 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * When {@code parts[4]} is present and non-empty, synthesises:
      * {@code "This ability costs {1} less to activate for each <parts[4]>."}
      */
-    private static String extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
+    private static Optional<String> extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
         if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
             KeywordFields f = KeywordFields.parse(original, 5); // raw String, not KeywordInterface
             if (f.hasField(4)) {
-                return "This ability costs {1} less to activate for each " + f.field(4) + ".";
+                return Optional.of("This ability costs {1} less to activate for each " + f.field(4) + ".");
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
      * Pattern C: Specialize — full sentence is in {@code parts[3]}, present when the
      * {@code ReduceCost$} marker also appears in the string.
      */
-    private static String extractSpecializeReduceCost(Keyword kw, String original) {
+    private static Optional<String> extractSpecializeReduceCost(Keyword kw, String original) {
         if (kw == Keyword.SPECIALIZE) {
             KeywordFields f = KeywordFields.parse(original, 5);
             if (original.contains("ReduceCost$") && f.hasField(3)) {
-                return f.field(3);
+                return Optional.of(f.field(3));
             }
         }
-        return null;
+        return Optional.empty();
     }
 }

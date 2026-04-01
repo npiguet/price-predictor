@@ -163,10 +163,9 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
             String svarText = host.getSVar(name.trim());
             if (svarText == null || svarText.isEmpty()) continue;
             if (!svarFilter.test(svarText)) continue;
-            String desc = SpellAbilityUtils.extractParam(svarText, descKey);
-            if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                result.add(new SpellEffect(desc, List.of()));
-            }
+            SpellAbilityUtils.extractParam(svarText, descKey)
+                    .filter(desc -> !isRedundantDescription(desc, parentDesc))
+                    .ifPresent(desc -> result.add(new SpellEffect(desc, List.of())));
         }
         return result;
     }

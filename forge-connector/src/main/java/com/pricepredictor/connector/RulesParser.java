@@ -48,6 +48,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -198,10 +199,9 @@ public class RulesParser {
         abilities.addAll(collectTriggers(card));
         abilities.addAll(collectStaticsAndReplacements(card));
 
-        String landDesc = buildLandManaDescription(face);
-        if (landDesc != null) {
-            abilities.add(new TextAbility(AbilityType.ACTIVATED, landDesc));
-        }
+        buildLandManaDescription(face)
+                .map(desc -> new TextAbility(AbilityType.ACTIVATED, desc))
+                .ifPresent(abilities::add);
 
         if (isClass) {
             abilities = applyClassPostProcessing(abilities, kw.classLevelDescriptions());
@@ -250,9 +250,9 @@ public class RulesParser {
             if (sa.getApi() == ApiType.Charm) {
                 abilities.addAll(CharmAbility.fromSpellAbility(sa));
             } else if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
-                addIfNotNull(abilities, AlternateCostSpell.of(sa));
+                AlternateCostSpell.of(sa).ifPresent(abilities::add);
             } else if (sa.isActivatedAbility()) {
-                addIfNotNull(abilities, ActivatedAbilityEntry.of(sa));
+                ActivatedAbilityEntry.of(sa).ifPresent(abilities::add);
             } else if (sa.isSpell()) {
                 // Skip SAs that are handled by the triggers or replacements loops.
                 // ImmediateTrigger SAs fire immediately on enter and are also registered
@@ -262,7 +262,7 @@ public class RulesParser {
                 if (sa.getApi() == ApiType.ImmediateTrigger) continue;
                 String mode = sa.getParam("Mode");
                 if (ForgeParams.ETB_REPLACEMENT_MODE.equals(mode)) continue;
-                addIfNotNull(abilities, SpellAdditionalCost.of(sa));
+                SpellAdditionalCost.of(sa).ifPresent(abilities::add);
                 abilities.addAll(SpellEffect.fromChain(sa));
                 abilities.addAll(SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.SPELL, false));
             }
@@ -292,7 +292,7 @@ public class RulesParser {
             if (exec != null && !"True".equalsIgnoreCase(t.getParam("Secondary"))) {
                 primaryExecuteSVars.add(exec);
             }
-            addIfNotNull(abilities, TriggeredAbilityEntry.of(t));
+            TriggeredAbilityEntry.of(t).ifPresent(abilities::add);
         }
         return abilities;
     }
@@ -300,10 +300,10 @@ public class RulesParser {
     private List<Ability> collectStaticsAndReplacements(Card card) {
         List<Ability> abilities = new ArrayList<>();
         for (StaticAbility s : card.getStaticAbilities()) {
-            addIfNotNull(abilities, StaticAbilityEntry.of(s));
+            StaticAbilityEntry.of(s).ifPresent(abilities::add);
         }
         for (ReplacementEffect r : card.getReplacementEffects()) {
-            addIfNotNull(abilities, ReplacementAbilityEntry.of(r));
+            ReplacementAbilityEntry.of(r).ifPresent(abilities::add);
         }
         return abilities;
     }
@@ -320,13 +320,13 @@ public class RulesParser {
         String loyalty = nullIfEmpty(face.getInitialLoyalty());
         String defense = nullIfEmpty(face.getDefense());
 
-        String text = nullIfEmpty(face.getNonAbilityText());
-        if (text != null) {
-            // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
-            text = text.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip();
-            if (text.isEmpty()) text = null;
-        }
-        if (text != null) text = AbilityDescription.applyCasing(text);
+        // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
+        String text = Optional.ofNullable(face.getNonAbilityText())
+                .filter(t -> !t.isEmpty())
+                .map(t -> t.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip())
+                .filter(t -> !t.isEmpty())
+                .map(AbilityDescription::applyCasing)
+                .orElse(null);
 
         return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, null, text, abilities);
     }
@@ -342,11 +342,10 @@ public class RulesParser {
             return;
         }
         if (original.startsWith("Class:")) {
-            ClassLevelAbility level = ClassLevelAbility.of(ki);
-            if (level != null) {
+            ClassLevelAbility.of(ki).ifPresent(level -> {
                 classLevelDescriptions.add(level.innerDescription());
                 abilities.add(level);
-            }
+            });
             return;
         }
         for (var entry : KEYWORD_ROUTES.entrySet()) {
@@ -454,13 +453,13 @@ public class RulesParser {
             "Forest",   "{G}"
     );
 
-    static String buildLandManaDescription(ICardFace face) {
+    static Optional<String> buildLandManaDescription(ICardFace face) {
         List<String> symbols = LAND_TYPE_MANA.entrySet().stream()
                 .filter(e -> face.getType().hasSubtype(e.getKey()))
                 .map(Map.Entry::getValue)
                 .toList();
-        if (symbols.isEmpty()) return null;
-        return "{T}: add " + AbilityDescription.joinDisjunction(symbols);
+        if (symbols.isEmpty()) return Optional.empty();
+        return Optional.of("{T}: add " + AbilityDescription.joinDisjunction(symbols));
     }
 
     private static String formatTypeLine(ICardFace face) {
@@ -471,10 +470,6 @@ public class RulesParser {
 
     private static String nullIfEmpty(String s) {
         return (s == null || s.isEmpty()) ? null : s;
-    }
-
-    private static void addIfNotNull(List<Ability> list, Ability item) {
-        if (item != null) list.add(item);
     }
 
     /** Remove abilities whose descriptionText duplicates an earlier entry. */
@@ -512,11 +507,8 @@ public class RulesParser {
 
         List<Ability> fallback = new ArrayList<>();
         for (String line : oracleText.split("\n")) {
-            String stripped = AbilityDescription.stripReminderText(line.trim());
-            if (stripped != null && !stripped.isEmpty()) {
-                fallback.add(new TextAbility(AbilityType.TEXT,
-                        AbilityDescription.applyCasing(stripped)));
-            }
+            AbilityDescription.normalize(line.trim())
+                    .ifPresent(n -> fallback.add(new TextAbility(AbilityType.TEXT, n)));
         }
         if (fallback.isEmpty()) return card;
 
@@ -534,11 +526,8 @@ public class RulesParser {
         for (String raw : draftLines) {
             String text = (cardName != null && !cardName.isEmpty())
                     ? raw.replace(cardName, "CARDNAME") : raw;
-            String stripped = AbilityDescription.stripReminderText(text.trim());
-            if (stripped != null && !stripped.isEmpty()) {
-                draftAbilities.add(new TextAbility(AbilityType.DRAFT,
-                        AbilityDescription.applyCasing(stripped)));
-            }
+            AbilityDescription.normalize(text.trim())
+                    .ifPresent(n -> draftAbilities.add(new TextAbility(AbilityType.DRAFT, n)));
         }
         if (draftAbilities.isEmpty()) return card;
 

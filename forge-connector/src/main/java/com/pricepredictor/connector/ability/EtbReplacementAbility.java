@@ -22,9 +22,9 @@ public record EtbReplacementAbility(String descriptionText) implements Ability {
     public static List<Ability> fromKeyword(KeywordInterface ki) {
         List<Ability> abilities = new ArrayList<>();
         for (var replacement : ki.getReplacements()) {
-            String normalized = AbilityDescription.normalize(replacement.getParam("Description"));
-            if (normalized == null) continue;
-            abilities.add(new EtbReplacementAbility(normalized));
+            String desc = replacement.getParam("Description");
+            if (desc == null || desc.isEmpty()) continue;
+            AbilityDescription.normalize(desc).ifPresent(n -> abilities.add(new EtbReplacementAbility(n)));
         }
         return abilities;
     }

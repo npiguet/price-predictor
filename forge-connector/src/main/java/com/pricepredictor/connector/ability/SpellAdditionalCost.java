@@ -5,6 +5,8 @@ import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Optional;
+
 /**
  * Additional cost extracted from a spell ability's cost description.
  */
@@ -15,13 +17,12 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
         return AbilityType.ADDITIONAL_COST;
     }
 
-    public static SpellAdditionalCost of(SpellAbility sa) {
+    public static Optional<SpellAdditionalCost> of(SpellAbility sa) {
         String costDesc = sa.getCostDescription();
-        if (costDesc == null) return null;
-        String normalized = AbilityDescription.normalize(costDesc.trim());
-        if (normalized == null) return null;
-        normalized = ForgeParams.stripAdditionalCostPrefix(normalized);
-        if (normalized.isEmpty()) return null;
-        return new SpellAdditionalCost(normalized);
+        if (costDesc == null || costDesc.isBlank()) return Optional.empty();
+        return AbilityDescription.normalize(costDesc.trim())
+                .map(ForgeParams::stripAdditionalCostPrefix)
+                .filter(n -> !n.isEmpty())
+                .map(SpellAdditionalCost::new);
     }
 }

@@ -3,6 +3,8 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.AbilityDescription;
 import forge.game.spellability.SpellAbility;
 
+import java.util.Optional;
+
 /**
  * Resolved description for a single SpellAbility.
  *
@@ -35,8 +37,9 @@ public record SaDescription(String stripped, boolean hadRawDesc) {
         return stripped == null || stripped.isEmpty();
     }
 
-    /** The description text with casing normalised. Returns null when {@link #isEmpty()}. */
+    /** The description text with casing normalised. Must not be called when {@link #isEmpty()}. */
     public String cased() {
+        if (isEmpty()) throw new IllegalStateException("cased() called on empty SaDescription");
         return AbilityDescription.applyCasing(stripped);
     }
 
@@ -73,22 +76,19 @@ public record SaDescription(String stripped, boolean hadRawDesc) {
         //   "None"              → sentinel meaning "don't show on stack"
         //   "REP ..."           → replacement-effect template prefix, not oracle text
         //   "{p:...}"           → player-reference template token, not oracle text
+        // Reject also if the StackDescription merely duplicates the parent's oracle text.
+        // Forge often copies the parent SpellDescription onto sub-ability StackDescription
+        // for stack-display — e.g. Bifurcate's DBChangeZone.
         if (rawDesc == null || rawDesc.isEmpty()) {
-            String stack = sa.getParam("StackDescription");
-            if (stack != null && !stack.isEmpty()
-                    && !stack.equals(ForgeParams.STACK_DESC_REF)
-                    && !stack.equals(ForgeParams.NO_DISPLAY)
-                    && !stack.contains(ForgeParams.REP_PREFIX)
-                    && !stack.contains(ForgeParams.PLAYER_TOKEN)) {
-                // Reject if the StackDescription merely duplicates the parent's oracle text.
-                // Forge often copies the parent SpellDescription onto sub-ability
-                // StackDescription for stack-display — e.g. Bifurcate's DBChangeZone.
-                String stackNorm = AbilityDescription.applyCasing(
-                        AbilityDescription.stripReminderText(stack));
-                if (!stackNorm.equals(parentDesc)) {
-                    rawDesc = stack;
-                }
-            }
+            rawDesc = Optional.ofNullable(sa.getParam("StackDescription"))
+                    .filter(s -> !s.isEmpty())
+                    .filter(s -> !s.equals(ForgeParams.STACK_DESC_REF))
+                    .filter(s -> !s.equals(ForgeParams.NO_DISPLAY))
+                    .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
+                    .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
+                    .filter(s -> !AbilityDescription.applyCasing(
+                            AbilityDescription.stripReminderText(s)).equals(parentDesc))
+                    .orElse(null);
         }
         boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
         String stripped = hadRawDesc ? AbilityDescription.stripReminderText(rawDesc) : null;

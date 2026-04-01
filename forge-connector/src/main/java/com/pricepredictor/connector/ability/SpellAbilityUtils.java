@@ -9,6 +9,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
@@ -65,10 +66,8 @@ public final class SpellAbilityUtils {
                     if (sub == null) continue;
                     String rawDesc = sub.getParam("SpellDescription");
                     if (rawDesc == null || rawDesc.isEmpty()) continue;
-                    String normalized = AbilityDescription.normalize(AbilityDescription.replaceVert(rawDesc));
-                    if (normalized != null) {
-                        result.add(new TextAbility(outputType, AbilityDescription.applyCasing(normalized)));
-                    }
+                    AbilityDescription.normalize(AbilityDescription.replaceVert(rawDesc))
+                            .ifPresent(n -> result.add(new TextAbility(outputType, n)));
                 }
                 return result;
             }
@@ -134,16 +133,16 @@ public final class SpellAbilityUtils {
             if (!diceOptions.isEmpty()) {
                 String diceDesc = findDiceRollDescription(executeSA);
                 if (diceDesc != null) {
-                    String expanded = AbilityDescription.normalize(
+                    Optional<String> expanded = AbilityDescription.normalize(
                             description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)));
-                    if (expanded != null) return new AbilityPlaceholderResult(expanded, diceOptions);
+                    if (expanded.isPresent()) return new AbilityPlaceholderResult(expanded.get(), diceOptions);
                 }
             }
         }
 
         // Case 3: Direct text substitution
         if (fallbackText != null && !fallbackText.isEmpty()) {
-            String expanded = AbilityDescription.normalize(description.replace("ABILITY", fallbackText));
+            String expanded = AbilityDescription.normalize(description.replace("ABILITY", fallbackText)).orElse(null);
             return new AbilityPlaceholderResult(expanded, List.of());
         }
 
@@ -153,26 +152,23 @@ public final class SpellAbilityUtils {
     private static AbilityPlaceholderResult buildCharmResult(String description, SpellAbility charmSA) {
         String header = CharmAbility.synthesizeCharmHeader(charmSA);
         if (header == null) header = "choose one";
-        String expanded = AbilityDescription.normalize(description.replace("ABILITY", header));
+        String expanded = AbilityDescription.normalize(description.replace("ABILITY", header)).orElse(null);
         List<Ability> options = CharmAbility.optionsFrom(charmSA);
         return new AbilityPlaceholderResult(expanded, options);
     }
 
     /**
      * Parse a "Key$ value | ..." SVar text and extract the value for the given key.
-     * Strips reminder text, normalizes casing; returns null if absent or empty.
+     * Strips reminder text, normalizes casing; returns empty Optional if absent or empty.
      */
-    public static String extractParam(String svarText, String paramName) {
+    public static Optional<String> extractParam(String svarText, String paramName) {
         String key = paramName + "$ ";
         int idx = svarText.indexOf(key);
-        if (idx < 0) return null;
+        if (idx < 0) return Optional.empty();
         int start = idx + key.length();
         int end = svarText.indexOf(" |", start);
         String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        if (raw.isEmpty()) return null;
-        String stripped = AbilityDescription.stripReminderText(raw);
-        String normalized = AbilityDescription.normalize(stripped);
-        if (normalized == null || normalized.isEmpty()) return null;
-        return AbilityDescription.applyCasing(normalized);
+        if (raw.isEmpty()) return Optional.empty();
+        return AbilityDescription.normalize(raw);
     }
 }

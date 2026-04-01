@@ -10,6 +10,7 @@ import forge.game.trigger.Trigger;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Ability wrapping a Forge Trigger. Type is TRIGGERED, or REPLACEMENT if the trigger is static.
@@ -22,13 +23,14 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         subAbilities = List.copyOf(subAbilities);
     }
 
-    public static TriggeredAbilityEntry of(Trigger trigger) {
+    public static Optional<TriggeredAbilityEntry> of(Trigger trigger) {
         if (trigger.getKeyword() != null) {
             return handleKeywordTrigger(trigger);
         }
         String rawDesc = trigger.getParam("TriggerDescription");
-        String normalized = AbilityDescription.normalize(rawDesc);
-        if (normalized == null) return null;
+        if (rawDesc == null || rawDesc.isEmpty()) return Optional.empty();
+        String normalized = AbilityDescription.normalize(rawDesc).orElse(null);
+        if (normalized == null) return Optional.empty();
         AbilityType effectiveType = trigger.isStatic()
                 ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
 
@@ -38,7 +40,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         SpellAbilityUtils.AbilityPlaceholderResult resolved =
                 SpellAbilityUtils.resolveAbilityPlaceholder(rawDesc, execute, null);
         if (resolved != null) {
-            return new TriggeredAbilityEntry(effectiveType, resolved.expandedDescription(), resolved.options());
+            return Optional.of(new TriggeredAbilityEntry(effectiveType, resolved.expandedDescription(), resolved.options()));
         }
 
         // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
@@ -51,7 +53,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 : List.of();
 
         normalized = appendTransparentChainText(execute, normalized);
-        return new TriggeredAbilityEntry(effectiveType, normalized, children);
+        return Optional.of(new TriggeredAbilityEntry(effectiveType, normalized, children));
     }
 
     /**
@@ -60,15 +62,16 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
      * "if tribute wasn't paid" ability with TriggerDescription as self-contained oracle text.
      * Returns null for all non-Tribute keyword triggers.
      */
-    private static TriggeredAbilityEntry handleKeywordTrigger(Trigger trigger) {
-        if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
+    private static Optional<TriggeredAbilityEntry> handleKeywordTrigger(Trigger trigger) {
+        if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return Optional.empty();
         // For Tribute, TriggerDescription is the full oracle text (built directly from
         // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
         // Return with empty children — the description is self-contained.
-        String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
-        if (normalized == null) return null;
+        String rawTributeDesc = trigger.getParam("TriggerDescription");
+        if (rawTributeDesc == null || rawTributeDesc.isEmpty()) return Optional.empty();
         AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-        return new TriggeredAbilityEntry(effectiveType, normalized, List.of());
+        return AbilityDescription.normalize(rawTributeDesc)
+                .map(normalized -> new TriggeredAbilityEntry(effectiveType, normalized, List.of()));
     }
 
     /**

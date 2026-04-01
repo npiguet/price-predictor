@@ -51,7 +51,9 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             SpellAbilityUtils.AbilityPlaceholderResult resolved =
                     SpellAbilityUtils.resolveAbilityPlaceholder(stripped, execute, null);
             if (resolved != null) {
-                String normalized = AbilityDescription.normalize(resolved.expandedDescription());
+                String expanded = resolved.expandedDescription();
+                if (expanded == null || expanded.isEmpty()) continue;
+                String normalized = AbilityDescription.normalize(expanded).orElse(null);
                 if (normalized == null) continue;
                 abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), resolved.options()));
                 continue;
@@ -64,7 +66,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
                 }
             }
 
-            String normalized = AbilityDescription.normalize(stripped);
+            String normalized = AbilityDescription.normalize(stripped).orElse(null);
             if (normalized == null) continue;
             abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized)));
         }
