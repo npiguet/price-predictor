@@ -41,11 +41,11 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             // resolve the execute SVar's SpellDescription to fill chapter content.
             String stripped = AbilityDescription.stripReminderText(trigDesc).trim();
 
-            // If TriggerDescription contains the ABILITY placeholder and execute is a Charm,
-            // replace with charm header and attach OPTION sub-abilities.
+            // If TriggerDescription contains the ABILITY placeholder, resolve it
+            // (charm, dice-roll, or direct substitution).
             SpellAbility execute = trigger.getOverridingAbility();
-            CharmAbility.ResolvedPlaceholder resolved =
-                    CharmAbility.resolveAbilityPlaceholder(stripped, execute);
+            SpellAbilityUtils.AbilityPlaceholderResult resolved =
+                    SpellAbilityUtils.resolveAbilityPlaceholder(stripped, execute, null);
             if (resolved != null) {
                 String normalized = AbilityDescription.normalize(resolved.expandedDescription());
                 if (normalized == null) continue;

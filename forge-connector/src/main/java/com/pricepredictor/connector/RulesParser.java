@@ -44,9 +44,11 @@ import forge.item.PaperCard;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
@@ -56,6 +58,25 @@ public class RulesParser {
 
     private final CardRules.Reader reader = new CardRules.Reader();
     private int nextCardId = 1;
+
+    /**
+     * Dispatch table for UNDEFINED keyword prefixes that produce List&lt;Ability&gt; results.
+     * CARDNAME/NICKNAME and Class are handled separately (different signatures or side-effects).
+     */
+    private static final Map<String, Function<KeywordInterface, List<Ability>>> KEYWORD_ROUTES;
+    static {
+        KEYWORD_ROUTES = new LinkedHashMap<>();
+        KEYWORD_ROUTES.put("Chapter:", ChapterAbility::fromKeyword);
+        KEYWORD_ROUTES.put("etbCounter:", EtbReplacementAbility::fromKeyword);
+        KEYWORD_ROUTES.put("ETBReplacement:", EtbReplacementAbility::fromKeyword);
+        KEYWORD_ROUTES.put("AlternateAdditionalCost:", ki -> {
+            String desc = buildAlternateAdditionalCostDescription(ki.getOriginal());
+            return List.of(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
+        });
+        KEYWORD_ROUTES.put("Visit:", VisitAbility::fromKeyword);
+        KEYWORD_ROUTES.put("MayEffectFromOpeningHand:", OpeningHandAbility::fromKeyword);
+        KEYWORD_ROUTES.put("MayEffectFromOpeningDeck:", OpeningHandAbility::fromKeyword);
+    }
 
     /**
      * Parse a card script and build domain objects for all faces.
@@ -148,15 +169,42 @@ public class RulesParser {
         return MultiCard.multiFace(layout, faces);
     }
 
+    /** Keywords collected from a card face: ability nodes and Class level description strings. */
+    private record CollectedKeywords(List<Ability> abilities, Set<String> classLevelDescriptions) {}
+
     /**
      * Parse a single card face. The Card must already be in the correct state.
      */
     CardFace parseFace(Card card, ICardFace face) {
-        List<Ability> abilities = new ArrayList<>();
         boolean isClass = face.getType().toString().contains("Class");
-        Set<String> classLevelDescriptions = new HashSet<>();
+        boolean isAlternateFace = face.getType().hasSubtype("Adventure") || face.getType().hasSubtype("Omen");
 
-        // --- Keywords — route to variants ---
+        CollectedKeywords kw = collectKeywords(card);
+        List<Ability> abilities = new ArrayList<>(kw.abilities());
+        abilities.addAll(collectSpellAbilities(card, isAlternateFace));
+        abilities.addAll(collectTriggers(card));
+        abilities.addAll(collectStaticsAndReplacements(card));
+
+        String landDesc = buildLandManaDescription(face);
+        if (landDesc != null) {
+            abilities.add(new TextAbility(AbilityType.ACTIVATED, landDesc));
+        }
+
+        if (isClass) {
+            abilities = applyClassPostProcessing(abilities, kw.classLevelDescriptions());
+        }
+        // Remove abilities whose description duplicates an earlier one.
+        // This eliminates the spurious second trigger that Forge registers for
+        // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
+        abilities = deduplicateByDescription(abilities);
+        abilities = sortCostsFirst(abilities);
+
+        return buildCardFace(face, abilities);
+    }
+
+    private CollectedKeywords collectKeywords(Card card) {
+        List<Ability> abilities = new ArrayList<>();
+        Set<String> classLevelDescriptions = new HashSet<>();
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
             if (kw == Keyword.UNDEFINED) {
@@ -171,9 +219,11 @@ public class RulesParser {
                 abilities.add(StandardKeyword.of(ki, kw));
             }
         }
+        return new CollectedKeywords(abilities, classLevelDescriptions);
+    }
 
-        // --- Spell abilities — route to variants ---
-        boolean isAlternateFace = face.getType().hasSubtype("Adventure") || face.getType().hasSubtype("Omen");
+    private List<Ability> collectSpellAbilities(Card card, boolean isAlternateFace) {
+        List<Ability> abilities = new ArrayList<>();
         for (SpellAbility sa : card.getSpellAbilities()) {
             if (sa.getKeyword() != null) continue;
             // Adventure/Omen SAs belong to the Secondary state; skip them when processing the main face.
@@ -204,8 +254,11 @@ public class RulesParser {
                 abilities.addAll(SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.SPELL, false));
             }
         }
+        return abilities;
+    }
 
-        // --- Traits — direct wrapping ---
+    private List<Ability> collectTriggers(Card card) {
+        List<Ability> abilities = new ArrayList<>();
         // Track Execute SVar names seen from primary (non-secondary) triggers.
         // When a secondary trigger re-uses the same Execute SVar, it is the "blocks" half of an
         // "attacks or blocks" pair — the primary already covers both, so skip the secondary.
@@ -221,30 +274,21 @@ public class RulesParser {
             }
             addIfNotNull(abilities, TriggeredAbilityEntry.of(t));
         }
+        return abilities;
+    }
+
+    private List<Ability> collectStaticsAndReplacements(Card card) {
+        List<Ability> abilities = new ArrayList<>();
         for (StaticAbility s : card.getStaticAbilities()) {
             addIfNotNull(abilities, StaticAbilityEntry.of(s));
         }
         for (ReplacementEffect r : card.getReplacementEffects()) {
             addIfNotNull(abilities, ReplacementAbilityEntry.of(r));
         }
+        return abilities;
+    }
 
-        // --- Synthetic land mana ---
-        String landDesc = buildLandManaDescription(face);
-        if (landDesc != null) {
-            abilities.add(new TextAbility(AbilityType.ACTIVATED, landDesc));
-        }
-
-        // --- Post-processing ---
-        if (isClass) {
-            abilities = applyClassPostProcessing(abilities, classLevelDescriptions);
-        }
-        // Remove abilities whose description duplicates an earlier one.
-        // This eliminates the spurious second trigger that Forge registers for
-        // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
-        abilities = deduplicateByDescription(abilities);
-        abilities = sortCostsFirst(abilities);
-
-        // --- Build CardFace ---
+    private static CardFace buildCardFace(ICardFace face, List<Ability> abilities) {
         String name = AbilityDescription.applyCasing(face.getName());
         ManaCost manaCost = face.getManaCost();
         String manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
@@ -275,27 +319,23 @@ public class RulesParser {
 
         if (original.startsWith("CARDNAME ") || original.startsWith("NICKNAME ")) {
             abilities.add(new TextAbility(AbilityType.STATIC, AbilityDescription.applyCasing(original)));
-        } else if (original.startsWith("Chapter:")) {
-            abilities.addAll(ChapterAbility.fromKeyword(ki));
-        } else if (original.startsWith("Class:")) {
+            return;
+        }
+        if (original.startsWith("Class:")) {
             ClassLevelAbility level = ClassLevelAbility.of(ki);
             if (level != null) {
                 classLevelDescriptions.add(level.innerDescription());
                 abilities.add(level);
             }
-        } else if (original.startsWith("etbCounter:") || original.startsWith("ETBReplacement:")) {
-            abilities.addAll(EtbReplacementAbility.fromKeyword(ki));
-        } else if (original.startsWith("AlternateAdditionalCost:")) {
-            String desc = buildAlternateAdditionalCostDescription(original);
-            abilities.add(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
-        } else if (original.startsWith("Visit:")) {
-            abilities.addAll(VisitAbility.fromKeyword(ki));
-        } else if (original.startsWith("MayEffectFromOpeningHand:")
-                || original.startsWith("MayEffectFromOpeningDeck:")) {
-            abilities.addAll(OpeningHandAbility.fromKeyword(ki));
-        } else {
-            abilities.add(StandardKeyword.of(ki, Keyword.UNDEFINED));
+            return;
         }
+        for (var entry : KEYWORD_ROUTES.entrySet()) {
+            if (original.startsWith(entry.getKey())) {
+                abilities.addAll(entry.getValue().apply(ki));
+                return;
+            }
+        }
+        abilities.add(StandardKeyword.of(ki, Keyword.UNDEFINED));
     }
 
     // --- Post-processing ---

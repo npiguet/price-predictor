@@ -23,38 +23,34 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
     public static ActivatedAbilityEntry of(SpellAbility sa) {
         AbilityType type = sa.isPwAbility() ? AbilityType.PLANESWALKER : AbilityType.ACTIVATED;
 
-        if (sa.getParam("SpellDescription") == null
-                || sa.getParam("SpellDescription").isEmpty()) {
-            // Some activated abilities have no SpellDescription on the root SA but carry their
-            // description on a SubAbility$ SVar (e.g. Arachnus Spinner).  Walk the sub-chain;
-            // if it produces nodes, concatenate their text into the cost-based root description.
-            String subText = SpellEffect.flattenChainText(sa.getSubAbility());
-            if (subText.isEmpty()) return null;
-            String rootDesc = sa.getDescription();
-            if (rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
-            int nl = rootDesc.indexOf('\n');
-            if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
-            String normalized = AbilityDescription.normalize(rootDesc);
-            String fullDesc = (normalized != null && !normalized.isEmpty())
-                    ? normalized + " " + subText : subText;
-            if (fullDesc.isEmpty()) return null;
-            return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc),
-                    SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.OPTION, false));
-        }
+        // Walk sub-chain unconditionally; used to pad the root description and detect
+        // abilities that carry their description only on a SubAbility (e.g. Arachnus Spinner).
+        String subText = SpellEffect.flattenChainText(sa.getSubAbility());
+
+        String spellDesc = sa.getParam("SpellDescription");
+        boolean hasSpellDesc = spellDesc != null && !spellDesc.isEmpty();
+
+        // No root SpellDescription and no sub-chain text → nothing to emit.
+        if (!hasSpellDesc && subText.isEmpty()) return null;
 
         String rootDesc = sa.getDescription();
+        // Fallback for abilities without SpellDescription: cost-based description.
+        if (!hasSpellDesc && rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
         // For dice-roll activated abilities, getDescription() appends outcome lines after a
         // newline. Strip them here; they will be re-emitted as OPTION sub-abilities below.
         int nl = rootDesc.indexOf('\n');
         if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
 
         String normalized = AbilityDescription.normalize(rootDesc);
-        if (normalized == null) return null;
+        // When a root SpellDescription is present, normalize must succeed.
+        if (hasSpellDesc && normalized == null) return null;
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
-        String subText = SpellEffect.flattenChainText(sa.getSubAbility());
-        String fullDesc = subText.isEmpty() ? normalized : normalized + " " + subText;
+        String fullDesc = (normalized != null && !normalized.isEmpty())
+                ? (subText.isEmpty() ? normalized : normalized + " " + subText)
+                : subText;
+        if (fullDesc.isEmpty()) return null;
 
         List<Ability> children = SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.OPTION, false);
         return new ActivatedAbilityEntry(type, type.formatDescription(fullDesc), children);

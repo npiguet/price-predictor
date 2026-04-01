@@ -3,7 +3,6 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
-import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -27,6 +26,25 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
     }
 
     public static List<Ability> fromSpellAbility(SpellAbility sa) {
+        String charmDesc = resolveCharmDescription(sa);
+        List<Ability> choiceSubs = collectChoices(sa);
+
+        List<Ability> result = new ArrayList<>();
+        if (charmDesc != null && !charmDesc.isEmpty()) {
+            result.add(new CharmAbility(AbilityDescription.applyCasing(charmDesc), choiceSubs));
+        } else {
+            // No charm description — add choices as top-level abilities
+            result.addAll(choiceSubs);
+        }
+        return result;
+    }
+
+    /**
+     * Resolve the header description for a Charm SA using a 4-fallback chain:
+     * SpellDescription → Pawprint total → AdditionalDescription → synthesized "choose N" header.
+     * Returns null (or empty) when none of the sources yield a description.
+     */
+    private static String resolveCharmDescription(SpellAbility sa) {
         String charmDesc = sa.getParam("SpellDescription");
         if (charmDesc != null && !charmDesc.isEmpty()) {
             charmDesc = AbilityDescription.stripReminderText(charmDesc);
@@ -40,61 +58,56 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
                 charmDesc += " You may choose the same mode more than once.";
             }
         }
-
         if (charmDesc == null || charmDesc.isEmpty()) {
             String additionalDesc = sa.getParam("AdditionalDescription");
             if (additionalDesc != null && !additionalDesc.isEmpty()) {
                 charmDesc = AbilityDescription.stripReminderText(additionalDesc);
             }
         }
-
         // Synthesize "choose N —" header from CharmNum/MinCharmNum when SpellDescription is absent.
         if (charmDesc == null || charmDesc.isEmpty()) {
             charmDesc = synthesizeCharmHeader(sa);
         }
+        return charmDesc;
+    }
 
-        // Collect charm choices as sub-abilities
+    /**
+     * Collect charm choices as OPTION sub-abilities, applying PrecostDesc/ModeCost/Pawprint
+     * prefix adornments so that the option text matches oracle.
+     */
+    private static List<Ability> collectChoices(SpellAbility sa) {
         List<Ability> choiceSubs = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
-        if (choices != null) {
-            for (var choice : choices) {
-                String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-                if (choiceDesc != null) {
-                    choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
-                }
-                // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
-                // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
-                String precostDesc = choice.getParam("PrecostDesc");
-                if (precostDesc != null && !precostDesc.isEmpty()) {
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? precostDesc + " \u2014 " + choiceDesc
-                            : precostDesc;
-                }
-                String modeCost = choice.getParam("ModeCost");
-                if (modeCost != null && !modeCost.isEmpty()) {
-                    String costToken = "{" + modeCost.trim() + "}";
-                    choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                            ? costToken + " \u2014 " + choiceDesc
-                            : costToken;
-                }
-                String pawprint = choice.getParam("Pawprint");
-                if (pawprint != null) {
-                    choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
-                            + " \u2014 " + choiceDesc;
-                }
-                choiceSubs.add(new TextAbility(AbilityType.OPTION,
-                        AbilityDescription.applyCasing(choiceDesc)));
+        if (choices == null) return choiceSubs;
+        for (var choice : choices) {
+            String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
+            if (choiceDesc != null) {
+                choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
             }
+            // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
+            // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
+            String precostDesc = choice.getParam("PrecostDesc");
+            if (precostDesc != null && !precostDesc.isEmpty()) {
+                choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
+                        ? precostDesc + " \u2014 " + choiceDesc
+                        : precostDesc;
+            }
+            String modeCost = choice.getParam("ModeCost");
+            if (modeCost != null && !modeCost.isEmpty()) {
+                String costToken = "{" + modeCost.trim() + "}";
+                choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
+                        ? costToken + " \u2014 " + choiceDesc
+                        : costToken;
+            }
+            String pawprint = choice.getParam("Pawprint");
+            if (pawprint != null) {
+                choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
+                        + " \u2014 " + choiceDesc;
+            }
+            choiceSubs.add(new TextAbility(AbilityType.OPTION,
+                    AbilityDescription.applyCasing(choiceDesc)));
         }
-
-        List<Ability> result = new ArrayList<>();
-        if (charmDesc != null && !charmDesc.isEmpty()) {
-            result.add(new CharmAbility(AbilityDescription.applyCasing(charmDesc), choiceSubs));
-        } else {
-            // No charm description — add choices as top-level abilities
-            result.addAll(choiceSubs);
-        }
-        return result;
+        return choiceSubs;
     }
 
     /**
@@ -149,48 +162,6 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
             case 5 -> "five";
             default -> String.valueOf(n);
         };
-    }
-
-    /**
-     * Result of resolving the ABILITY placeholder in a trigger/chapter description.
-     * {@code expandedDescription} has the placeholder replaced with the charm header;
-     * {@code options} are the charm choices to attach as OPTION sub-abilities.
-     */
-    public record ResolvedPlaceholder(String expandedDescription, List<Ability> options) {}
-
-    /**
-     * If {@code description} contains the {@code ABILITY} placeholder and {@code executeSA}
-     * (or an ImmediateTrigger nested within it) is a Charm, resolve the placeholder by
-     * replacing it with the synthesized charm header and collecting OPTION sub-abilities.
-     * Returns null if the placeholder is absent or no Charm is found.
-     */
-    public static ResolvedPlaceholder resolveAbilityPlaceholder(
-            String description, SpellAbility executeSA) {
-        if (description == null || !description.contains("ABILITY") || executeSA == null) {
-            return null;
-        }
-        // Case 1: execute SA is directly a Charm
-        if (executeSA.getApi() == ApiType.Charm) {
-            return buildResolved(description, executeSA);
-        }
-        // Case 2: ImmediateTrigger somewhere in the sub-chain whose Execute is a Charm
-        for (SpellAbility cur = executeSA; cur != null; cur = cur.getSubAbility()) {
-            if (cur.getApi() == ApiType.ImmediateTrigger) {
-                SpellAbility nestedCharm = cur.getAdditionalAbility("Execute");
-                if (nestedCharm != null && nestedCharm.getApi() == ApiType.Charm) {
-                    return buildResolved(description, nestedCharm);
-                }
-            }
-        }
-        return null;
-    }
-
-    private static ResolvedPlaceholder buildResolved(String description, SpellAbility charmSA) {
-        String header = synthesizeCharmHeader(charmSA);
-        if (header == null) header = "choose one";
-        String expanded = AbilityDescription.normalize(description.replace("ABILITY", header));
-        List<Ability> options = optionsFrom(charmSA);
-        return new ResolvedPlaceholder(expanded, options);
     }
 
     /**

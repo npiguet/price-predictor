@@ -9,6 +9,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * Spell effect ability. Factory walks the sub-ability chain recursively, building
@@ -73,9 +74,21 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * through the recursive walk. Used to suppress redundant sub-ability descriptions that merely
      * duplicate (or are contained in) text already emitted by the parent.
      */
-    private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
-        if (sa == null) return List.of();
+    /**
+     * Resolved description for one SA: the stripped text (after reminder-text removal)
+     * and whether the SA had any raw description at all (even if it stripped to empty).
+     */
+    private record ResolvedDescription(String stripped, boolean hadRawDesc) {
+        boolean hasDesc() { return stripped != null && !stripped.isEmpty(); }
+        String cased() { return AbilityDescription.applyCasing(stripped); }
+    }
 
+    /**
+     * Resolve the description for {@code sa}: tries SpellDescription, then TriggerDescription,
+     * then StackDescription (with guards against Forge-internal references). The {@code parentDesc}
+     * is used to reject StackDescriptions that merely duplicate the parent's oracle text.
+     */
+    private static ResolvedDescription resolveDescription(SpellAbility sa, String parentDesc) {
         String rawDesc = sa.getParam("SpellDescription");
         if (rawDesc == null || rawDesc.isEmpty()) {
             rawDesc = sa.getParam("TriggerDescription");
@@ -100,17 +113,22 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
                 }
             }
         }
-        // Track whether the SA had any raw description (even if it stripped entirely to reminder text).
-        // A SA with an all-reminder SpellDescription is still "described" — its DB$ Effect
-        // sub-ability children should not be promoted (e.g. Sarah's Wings NoDamage).
         boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
-        String stripped = (rawDesc != null) ? AbilityDescription.stripReminderText(rawDesc) : null;
-        boolean hasDesc = stripped != null && !stripped.isEmpty();
+        String stripped = hadRawDesc ? AbilityDescription.stripReminderText(rawDesc) : null;
+        return new ResolvedDescription(stripped, hadRawDesc);
+    }
+
+    private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
+        if (sa == null) return List.of();
+
+        ResolvedDescription resolved = resolveDescription(sa, parentDesc);
+        boolean hadRawDesc = resolved.hadRawDesc();
+        boolean hasDesc = resolved.hasDesc();
 
         // Determine the effective parentDesc to propagate to children:
         //   - if this SA has a description, its children inherit that description
         //   - if this SA is transparent, children inherit the caller's parentDesc
-        String effectiveParentDesc = hasDesc ? AbilityDescription.applyCasing(stripped) : parentDesc;
+        String effectiveParentDesc = hasDesc ? resolved.cased() : parentDesc;
 
         List<Ability> children = fromChain(sa.getSubAbility(), effectiveParentDesc);
 
@@ -132,7 +150,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
             List<Ability> repeatChildren = fromChain(repeatSub, effectiveParentDesc);
             if (!repeatChildren.isEmpty()) {
                 children = new ArrayList<>(children);
-                String parentCased = hasDesc ? AbilityDescription.applyCasing(stripped) : null;
+                String parentCased = hasDesc ? resolved.cased() : null;
                 for (Ability rc : repeatChildren) {
                     // Skip repeat-sub children whose description duplicates the parent SA.
                     // Some cards (e.g. Hoarder's Greed) copy the root SpellDescription onto
@@ -144,7 +162,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         }
 
         if (hasDesc) {
-            return List.of(new SpellEffect(AbilityDescription.applyCasing(stripped), children));
+            return List.of(new SpellEffect(resolved.cased(), children));
         } else {
             return children;
         }
@@ -157,35 +175,34 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * or are contained in it are suppressed.
      */
     private static List<Ability> collectEffectDescriptions(SpellAbility sa, String parentDesc) {
-        List<Ability> result = new ArrayList<>();
         forge.game.card.Card host = sa.getHostCard();
-        if (host == null) return result;
+        if (host == null) return List.of();
 
-        // Triggers$ param: extract TriggerDescription from each trigger SVar
-        String triggers = sa.getParam("Triggers");
-        if (triggers != null && !triggers.isEmpty()) {
-            for (String name : triggers.split(",")) {
-                String svarText = host.getSVar(name.trim());
-                if (svarText == null || svarText.isEmpty()) continue;
-                // Skip trigger SVars that fire from a specific zone (TriggerZones$): these are
-                // also registered as top-level triggers and would duplicate the triggered ability.
-                if (svarText.contains("TriggerZones$")) continue;
-                String desc = extractParam(svarText, "TriggerDescription");
-                if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                    result.add(new SpellEffect(desc, List.of()));
-                }
-            }
-        }
-        // ReplacementEffects$ param: extract Description from each replacement SVar
-        String replacements = sa.getParam("ReplacementEffects");
-        if (replacements != null && !replacements.isEmpty()) {
-            for (String name : replacements.split(",")) {
-                String svarText = host.getSVar(name.trim());
-                if (svarText == null || svarText.isEmpty()) continue;
-                String desc = extractParam(svarText, "Description");
-                if (desc != null && !isRedundantDescription(desc, parentDesc)) {
-                    result.add(new SpellEffect(desc, List.of()));
-                }
+        List<Ability> result = new ArrayList<>();
+        // Triggers$ — skip trigger SVars that fire from a specific zone (TriggerZones$): these are
+        // also registered as top-level triggers and would duplicate the triggered ability.
+        result.addAll(collectSVarDescriptions(sa, "Triggers", "TriggerDescription",
+                svar -> !svar.contains("TriggerZones$"), parentDesc));
+        result.addAll(collectSVarDescriptions(sa, "ReplacementEffects", "Description",
+                svar -> true, parentDesc));
+        return result;
+    }
+
+    private static List<Ability> collectSVarDescriptions(
+            SpellAbility sa, String listParam, String descKey,
+            Predicate<String> svarFilter, String parentDesc) {
+        String list = sa.getParam(listParam);
+        if (list == null || list.isEmpty()) return List.of();
+        forge.game.card.Card host = sa.getHostCard();
+        if (host == null) return List.of();
+        List<Ability> result = new ArrayList<>();
+        for (String name : list.split(",")) {
+            String svarText = host.getSVar(name.trim());
+            if (svarText == null || svarText.isEmpty()) continue;
+            if (!svarFilter.test(svarText)) continue;
+            String desc = SpellAbilityUtils.extractParam(svarText, descKey);
+            if (desc != null && !isRedundantDescription(desc, parentDesc)) {
+                result.add(new SpellEffect(desc, List.of()));
             }
         }
         return result;
@@ -214,24 +231,6 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
                 .replace("this spell", "CARDNAME");
         if (parentDesc.equals(childNorm) || parentDesc.contains(childNorm)) return true;
         return false;
-    }
-
-    /**
-     * Parse a "Key$ value | ..." SVar text and extract the value for the given key.
-     * Strips reminder text, normalizes casing; returns null if absent or empty.
-     */
-    private static String extractParam(String svarText, String paramName) {
-        String key = paramName + "$ ";
-        int idx = svarText.indexOf(key);
-        if (idx < 0) return null;
-        int start = idx + key.length();
-        int end = svarText.indexOf(" |", start);
-        String raw = end >= 0 ? svarText.substring(start, end).trim() : svarText.substring(start).trim();
-        if (raw.isEmpty()) return null;
-        String stripped = AbilityDescription.stripReminderText(raw);
-        String normalized = AbilityDescription.normalize(stripped);
-        if (normalized == null || normalized.isEmpty()) return null;
-        return AbilityDescription.applyCasing(normalized);
     }
 
 }

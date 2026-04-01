@@ -23,33 +23,20 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
     }
 
     public static TriggeredAbilityEntry of(Trigger trigger) {
-        // Skip keyword-associated triggers except for Tribute's "if tribute wasn't paid" ability.
-        // Most keyword triggers merely restate the keyword (already output by StandardKeyword),
-        // but Tribute's TrigNotTribute trigger is a distinct oracle ability.
         if (trigger.getKeyword() != null) {
-            if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
-            // For Tribute, TriggerDescription is the full oracle text (built directly from
-            // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
-            // Return with empty children — the description is self-contained.
-            String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
-            if (normalized == null) return null;
-            AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-            return new TriggeredAbilityEntry(effectiveType, normalized, List.of());
+            return handleKeywordTrigger(trigger);
         }
-        String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
+        String rawDesc = trigger.getParam("TriggerDescription");
+        String normalized = AbilityDescription.normalize(rawDesc);
         if (normalized == null) return null;
         AbilityType effectiveType = trigger.isStatic()
                 ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
 
         SpellAbility execute = trigger.getOverridingAbility();
 
-        // If the raw TriggerDescription contains the "ABILITY" placeholder and the
-        // execute SVar is (or wraps) a Charm (choose-one), expand it: replace the
-        // placeholder with "choose N —" and attach the charm choices as OPTION sub-abilities.
-        // Handles: direct Charm execute, and ImmediateTrigger → Charm anywhere in the sub-chain.
-        String rawDesc = trigger.getParam("TriggerDescription");
-        CharmAbility.ResolvedPlaceholder resolved =
-                CharmAbility.resolveAbilityPlaceholder(rawDesc, execute);
+        // Resolve the ABILITY placeholder (charm, dice-roll).
+        SpellAbilityUtils.AbilityPlaceholderResult resolved =
+                SpellAbilityUtils.resolveAbilityPlaceholder(rawDesc, execute, null);
         if (resolved != null) {
             return new TriggeredAbilityEntry(effectiveType, resolved.expandedDescription(), resolved.options());
         }
@@ -63,30 +50,44 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
                 ? SpellAbilityUtils.expandDiceOutcomes(execute, AbilityType.OPTION, true)
                 : List.of();
 
-        // If ABILITY placeholder remains and dice outcomes were found, replace with dice-roll description.
-        if (rawDesc != null && rawDesc.contains("ABILITY") && !children.isEmpty()) {
-            String diceDesc = SpellAbilityUtils.findDiceRollDescription(execute);
-            if (diceDesc != null) {
-                normalized = AbilityDescription.normalize(
-                        rawDesc.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)));
-            }
-        }
+        normalized = appendTransparentChainText(execute, normalized);
+        return new TriggeredAbilityEntry(effectiveType, normalized, children);
+    }
 
-        // Sub-pattern 4a: walk execute chain for trailing sub-SpellDescriptions.
-        // Only when the execute SA itself is transparent (has no description of its own):
-        // in that case, sub-ability SpellDescriptions contain oracle text not in TriggerDescription.
-        // Guard: also skip ImmediateTrigger (processed separately) and ETBReplacement (registered
-        // as replacement effects) to avoid duplicates (sigarda's_splendor concern).
+    /**
+     * Handles keyword-associated triggers. Most keyword triggers merely restate the keyword
+     * (already output by StandardKeyword) and are skipped. The Tribute exception emits the
+     * "if tribute wasn't paid" ability with TriggerDescription as self-contained oracle text.
+     * Returns null for all non-Tribute keyword triggers.
+     */
+    private static TriggeredAbilityEntry handleKeywordTrigger(Trigger trigger) {
+        if (trigger.getKeyword().getKeyword() != Keyword.TRIBUTE) return null;
+        // For Tribute, TriggerDescription is the full oracle text (built directly from
+        // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
+        // Return with empty children — the description is self-contained.
+        String normalized = AbilityDescription.normalize(trigger.getParam("TriggerDescription"));
+        if (normalized == null) return null;
+        AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
+        return new TriggeredAbilityEntry(effectiveType, normalized, List.of());
+    }
+
+    /**
+     * Appends extra oracle text from the execute SA chain when the SA is transparent
+     * (no description of its own), not an ImmediateTrigger, and not an ETBReplacement.
+     * Sub-ability SpellDescriptions in that case contain oracle text not in TriggerDescription.
+     * Returns {@code normalized} unchanged if no extra text is found.
+     */
+    private static String appendTransparentChainText(SpellAbility execute, String normalized) {
         if (execute != null
                 && isTransparentSA(execute)
                 && execute.getApi() != ApiType.ImmediateTrigger
                 && !"ETBReplacement".equals(execute.getParam("Mode"))) {
             String extra = SpellEffect.flattenChainText(execute);
             if (!extra.isEmpty()) {
-                normalized = normalized + " " + extra;
+                return normalized + " " + extra;
             }
         }
-        return new TriggeredAbilityEntry(effectiveType, normalized, children);
+        return normalized;
     }
 
     /**

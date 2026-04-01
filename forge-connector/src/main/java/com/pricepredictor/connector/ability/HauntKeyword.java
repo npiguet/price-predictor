@@ -40,7 +40,7 @@ public final class HauntKeyword {
             String original = ki.getOriginal(); // "Haunt:SvarName"
             if (original.contains(":")) {
                 String svarName = original.substring(original.indexOf(':') + 1);
-                effectDesc = parseSpellDesc(card.getSVar(svarName));
+                effectDesc = SpellAbilityUtils.extractParam(card.getSVar(svarName), "SpellDescription");
             }
         }
 
@@ -60,12 +60,11 @@ public final class HauntKeyword {
             String tDesc = t.getParam("TriggerDescription");
             if (tDesc == null || "Blank".equals(tDesc)) continue;
 
-            // Replace ABILITY placeholder: if execute SA is a Charm, expand with header + options;
-            // otherwise substitute the haunt effect description directly.
+            // Replace ABILITY placeholder: charm, dice-roll, or direct haunt-effect substitution.
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
-                CharmAbility.ResolvedPlaceholder resolved =
-                        CharmAbility.resolveAbilityPlaceholder(tDesc, overrideSa);
+                SpellAbilityUtils.AbilityPlaceholderResult resolved =
+                        SpellAbilityUtils.resolveAbilityPlaceholder(tDesc, overrideSa, effectDesc);
                 if (resolved != null) {
                     String normalized2 = resolved.expandedDescription();
                     if (normalized2 == null || normalized2.isEmpty()) continue;
@@ -73,8 +72,6 @@ public final class HauntKeyword {
                     AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
                     result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, resolved.options()));
                     continue;
-                } else if (effectDesc != null) {
-                    tDesc = tDesc.replace("ABILITY", effectDesc);
                 }
             }
 
@@ -89,15 +86,4 @@ public final class HauntKeyword {
         return result;
     }
 
-    /** Extract SpellDescription value from a raw SVar string like "DB$ Foo | SpellDescription$ Bar | …". */
-    static String parseSpellDesc(String svarContent) {
-        if (svarContent == null || svarContent.isEmpty()) return null;
-        for (String part : svarContent.split(" \\| ")) {
-            String trimmed = part.trim();
-            if (trimmed.startsWith("SpellDescription$")) {
-                return trimmed.substring("SpellDescription$".length()).trim();
-            }
-        }
-        return null;
-    }
 }
