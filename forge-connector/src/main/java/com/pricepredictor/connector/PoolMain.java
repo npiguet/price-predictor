@@ -5,7 +5,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.StringJoiner;
 
 /**
  * CLI entry point for sealed pool generation.
@@ -25,65 +24,19 @@ import java.util.StringJoiner;
 public class PoolMain {
 
     public static void main(String[] args) {
-        String setCode = "RVR";
-        int poolCount = 10000;
-        String poolsPath = "./output/sealed/pools/";
-
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--set" -> {
-                    if (i + 1 < args.length) setCode = args[++i];
-                }
-                case "--size" -> {
-                    if (i + 1 < args.length) {
-                        try {
-                            poolCount = Integer.parseInt(args[++i]);
-                        } catch (NumberFormatException e) {
-                            System.err.println("Error: --size must be an integer");
-                            System.exit(1);
-                        }
-                    }
-                }
-                case "--pools-path" -> {
-                    if (i + 1 < args.length) poolsPath = args[++i];
-                }
-            }
-        }
+        CliArgs cli = CliArgs.parse(args);
+        String setCode = cli.get("--set", "RVR");
+        int poolCount = parsePoolCount(cli.get("--size", "10000"));
+        String poolsPath = cli.get("--pools-path", "./output/sealed/pools/");
 
         try {
             ForgeEnvironmentInitializer.initialize();
-
-            PoolGenerator generator = new PoolGenerator();
             Path outputDir = Path.of(poolsPath);
             Files.createDirectories(outputDir);
             Path outputFile = outputDir.resolve("pools.txt");
 
             System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
-
-            try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
-                int written = 0;
-                while (written < poolCount) {
-                    int batch = Math.min(1000, poolCount - written);
-                    List<List<String>> pools = generator.generate(setCode, batch);
-
-                    for (List<String> pool : pools) {
-                        StringJoiner joiner = new StringJoiner(";");
-                        for (String name : pool) {
-                            joiner.add(name);
-                        }
-                        writer.write(joiner.toString());
-                        writer.newLine();
-                        written++;
-                    }
-
-                    if (written % 1000 == 0) {
-                        System.out.println("Generated " + written + "/" + poolCount + " pools");
-                        System.out.flush();
-                    }
-                }
-            }
-
-            System.out.println("Done");
+            writePoolsInBatches(new PoolGenerator(), setCode, poolCount, outputFile);
             System.out.println("Done: " + poolCount + " pools written to " + outputFile);
             System.exit(0);
 
@@ -97,6 +50,36 @@ public class PoolMain {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace(System.err);
             System.exit(1);
+        }
+    }
+
+    private static int parsePoolCount(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            System.err.println("Error: --size must be an integer");
+            System.exit(1);
+            return 0; // unreachable
+        }
+    }
+
+    private static void writePoolsInBatches(
+            PoolGenerator generator, String setCode, int poolCount, Path outputFile) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
+            int written = 0;
+            while (written < poolCount) {
+                int batch = Math.min(1000, poolCount - written);
+                List<List<String>> pools = generator.generate(setCode, batch);
+                for (List<String> pool : pools) {
+                    writer.write(String.join(";", pool));
+                    writer.newLine();
+                    written++;
+                }
+                if (written % 1000 == 0) {
+                    System.out.println("Generated " + written + "/" + poolCount + " pools");
+                    System.out.flush();
+                }
+            }
         }
     }
 }

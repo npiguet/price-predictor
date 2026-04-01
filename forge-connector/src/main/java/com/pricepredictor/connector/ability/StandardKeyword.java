@@ -81,9 +81,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * renders the first cost, so it cannot be used for dual kicker either.
      */
     private static String formatKicker(KeywordInterface ki, String title) {
-        String[] kickerParts = ki.getOriginal().split(":", 3);
-        if (kickerParts.length >= 3) {
-            Cost cost2 = new Cost(kickerParts[2], false);
+        KeywordFields f = KeywordFields.parse(ki.getOriginal(), 3);
+        if (f.hasField(2)) {
+            Cost cost2 = new Cost(f.field(2), false);
             return title + " and/or " + cost2.toSimpleString();
         }
         return title;
@@ -134,10 +134,10 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * where {@code costPart} contains mana tokens and {@code ExileCtrlOrGrave<…>} exile specs.
      */
     private static String buildCraftTitle(String original) {
-        String[] parts = original.split(":", 4);
-        if (parts.length < 2) return original;
-        String costPart = parts[1];
-        return "Craft with " + resolveCraftTypeDescription(costPart, parts)
+        KeywordFields f = KeywordFields.parse(original, 4);
+        if (!f.hasField(1)) return original;
+        String costPart = f.field(1);
+        return "Craft with " + resolveCraftTypeDescription(costPart, f)
                 + " " + extractCraftMana(costPart);
     }
 
@@ -166,9 +166,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      *       (e.g. {@code "ExileCtrlOrGrave<2/Artifact>"} → {@code "artifact"}).</li>
      * </ol>
      */
-    private static String resolveCraftTypeDescription(String costPart, String[] parts) {
-        if (parts.length >= 3 && !parts[2].isEmpty()) {
-            return parts[2];
+    private static String resolveCraftTypeDescription(String costPart, KeywordFields f) {
+        if (f.hasField(2)) {
+            return f.field(2);
         }
         if (costPart.contains("XMin")) {
             return "one or more";
@@ -236,9 +236,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      */
     private static String extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
         if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
-            String[] parts = original.split(":", 5);
-            if (parts.length >= 5 && !parts[4].isEmpty()) {
-                return "This ability costs {1} less to activate for each " + parts[4] + ".";
+            KeywordFields f = KeywordFields.parse(original, 5);
+            if (f.hasField(4)) {
+                return "This ability costs {1} less to activate for each " + f.field(4) + ".";
             }
         }
         return null;
@@ -250,9 +250,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      */
     private static String extractSpecializeReduceCost(Keyword kw, String original) {
         if (kw == Keyword.SPECIALIZE) {
-            String[] parts = original.split(":", 5);
-            if (parts.length >= 5 && original.contains("ReduceCost$") && !parts[3].isEmpty()) {
-                return parts[3];
+            KeywordFields f = KeywordFields.parse(original, 5);
+            if (original.contains("ReduceCost$") && f.hasField(3)) {
+                return f.field(3);
             }
         }
         return null;

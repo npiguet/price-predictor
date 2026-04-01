@@ -83,10 +83,10 @@ public final class AbilityDescription {
         }
         sb.append(text, lastEnd, text.length());
 
-        // Lowercase everything
         String lowered = sb.toString().toLowerCase();
 
-        // Restore brace symbols (uppercase)
+        // Restore brace symbols — {W}, {U}, {B}, {R}, {G}, {T}, etc. are MTG mana/tap symbols
+        // whose uppercase form is the canonical notation expected by downstream consumers.
         for (int i = 0; i < braceSymbols.size(); i++) {
             lowered = lowered.replace("\0brace" + i + "\0", braceSymbols.get(i));
         }

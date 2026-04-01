@@ -8,19 +8,9 @@ import java.nio.file.Path;
 public class ConvertMain {
 
     public static void main(String[] args) {
-        String cardsPath = "../forge/forge-gui/res/cardsfolder/";
-        String outputPath = "./output";
-
-        for (int i = 0; i < args.length; i++) {
-            switch (args[i]) {
-                case "--cards-path" -> {
-                    if (i + 1 < args.length) cardsPath = args[++i];
-                }
-                case "--output-path" -> {
-                    if (i + 1 < args.length) outputPath = args[++i];
-                }
-            }
-        }
+        CliArgs cli = CliArgs.parse(args);
+        String cardsPath = cli.get("--cards-path", "../forge/forge-gui/res/cardsfolder/");
+        String outputPath = cli.get("--output-path", "./output");
 
         try {
             ForgeEnvironmentInitializer.initialize();

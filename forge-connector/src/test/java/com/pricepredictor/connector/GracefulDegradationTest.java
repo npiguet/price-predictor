@@ -4,13 +4,13 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class GracefulDegradationTest {
+
+    private static final String OK_JSON = "{\"predicted_price_eur\": 1.0, \"model_version\": \"v1\"}";
 
     // --- T021: Timeout and connection-failure tests ---
 
@@ -31,8 +31,7 @@ class GracefulDegradationTest {
 
     @Test
     void slowServerTriggersTimeout() throws Exception {
-        // Mock server that sleeps 10 seconds
-        HttpServer server = createSlowServer(10_000);
+        HttpServer server = MockHttpServer.respondingSlowly(10_000, 200, OK_JSON);
         server.start();
         int port = server.getAddress().getPort();
         try {
@@ -55,8 +54,7 @@ class GracefulDegradationTest {
 
     @Test
     void configurableTimeoutIsRespected() throws Exception {
-        // Mock server sleeps 3 seconds
-        HttpServer server = createSlowServer(3000);
+        HttpServer server = MockHttpServer.respondingSlowly(3000, 200, OK_JSON);
         server.start();
         int port = server.getAddress().getPort();
         try {
@@ -91,7 +89,7 @@ class GracefulDegradationTest {
     @Test
     void clientRecoversAfterServiceRestart() throws Exception {
         // 1. Start mock server
-        HttpServer server1 = createOkServer();
+        HttpServer server1 = MockHttpServer.responding(200, OK_JSON);
         server1.start();
         int port = server1.getAddress().getPort();
 
@@ -109,7 +107,7 @@ class GracefulDegradationTest {
         assertThrows(ServiceUnavailableException.class, () -> client.predict(card));
 
         // 5. Restart server on same port
-        HttpServer server2 = createOkServerOnPort(port);
+        HttpServer server2 = MockHttpServer.respondingOnPort(port, 200, OK_JSON);
         server2.start();
         try {
             // 6. Client succeeds again — no recreation needed
@@ -122,7 +120,7 @@ class GracefulDegradationTest {
 
     @Test
     void clientDoesNotCacheConnectionState() throws Exception {
-        HttpServer server = createOkServer();
+        HttpServer server = MockHttpServer.responding(200, OK_JSON);
         server.start();
         int port = server.getAddress().getPort();
 
@@ -135,7 +133,7 @@ class GracefulDegradationTest {
 
         // Stop and restart
         server.stop(0);
-        HttpServer server2 = createOkServerOnPort(port);
+        HttpServer server2 = MockHttpServer.respondingOnPort(port, 200, OK_JSON);
         server2.start();
         try {
             // Still works after restart
@@ -146,7 +144,7 @@ class GracefulDegradationTest {
         }
     }
 
-    // --- Helper methods ---
+    // --- Helper ---
 
     private int findAvailablePort() {
         try (ServerSocket ss = new ServerSocket(0)) {
@@ -154,40 +152,5 @@ class GracefulDegradationTest {
         } catch (IOException e) {
             return 19999; // fallback
         }
-    }
-
-    private HttpServer createSlowServer(int delayMs) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/api/v1/evaluate", exchange -> {
-            try {
-                Thread.sleep(delayMs);
-            } catch (InterruptedException ignored) {}
-            exchange.getRequestBody().readAllBytes();
-            String json = "{\"predicted_price_eur\": 1.0, \"model_version\": \"v1\"}";
-            byte[] bytes = json.getBytes();
-            exchange.sendResponseHeaders(200, bytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(bytes);
-            }
-        });
-        return server;
-    }
-
-    private HttpServer createOkServer() throws IOException {
-        return createOkServerOnPort(0);
-    }
-
-    private HttpServer createOkServerOnPort(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/api/v1/evaluate", exchange -> {
-            exchange.getRequestBody().readAllBytes();
-            String json = "{\"predicted_price_eur\": 1.0, \"model_version\": \"v1\"}";
-            byte[] bytes = json.getBytes();
-            exchange.sendResponseHeaders(200, bytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(bytes);
-            }
-        });
-        return server;
     }
 }

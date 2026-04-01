@@ -10,8 +10,6 @@ import forge.game.spellability.SpellAbility;
  */
 public record SpellAdditionalCost(String descriptionText) implements Ability {
 
-    private static final String ADDITIONAL_COST_PREFIX = "as an additional cost to cast this spell, ";
-
     @Override
     public AbilityType type() {
         return AbilityType.ADDITIONAL_COST;
@@ -22,9 +20,7 @@ public record SpellAdditionalCost(String descriptionText) implements Ability {
         if (costDesc == null) return null;
         String normalized = AbilityDescription.normalize(costDesc.trim());
         if (normalized == null) return null;
-        if (normalized.startsWith(ADDITIONAL_COST_PREFIX)) {
-            normalized = normalized.substring(ADDITIONAL_COST_PREFIX.length());
-        }
+        normalized = ForgeParams.stripAdditionalCostPrefix(normalized);
         if (normalized.isEmpty()) return null;
         return new SpellAdditionalCost(normalized);
     }

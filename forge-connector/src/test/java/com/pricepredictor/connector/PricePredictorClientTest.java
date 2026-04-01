@@ -14,7 +14,7 @@ class PricePredictorClientTest {
     @Test
     void successfulPredictionReturnsPriceEstimate() throws Exception {
         String json = "{\"predicted_price_eur\": 1.50, \"model_version\": \"test-v1\"}";
-        HttpServer server = createMockServer(200, json, 0);
+        HttpServer server = MockHttpServer.responding(200, json);
         server.start();
         try {
             var client = new PricePredictorClient(
@@ -36,7 +36,7 @@ class PricePredictorClientTest {
     @Test
     void server400ThrowsInvalidResponseException() throws Exception {
         String json = "{\"error\": \"Bad input\"}";
-        HttpServer server = createMockServer(400, json, 0);
+        HttpServer server = MockHttpServer.responding(400, json);
         server.start();
         try {
             var client = new PricePredictorClient(
@@ -54,7 +54,7 @@ class PricePredictorClientTest {
     @Test
     void server500ThrowsInvalidResponseException() throws Exception {
         String json = "{\"error\": \"Internal error\"}";
-        HttpServer server = createMockServer(500, json, 0);
+        HttpServer server = MockHttpServer.responding(500, json);
         server.start();
         try {
             var client = new PricePredictorClient(
@@ -73,7 +73,7 @@ class PricePredictorClientTest {
         final String[] capturedMethod = {null};
 
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/api/v1/evaluate", exchange -> {
+        server.createContext(MockHttpServer.EVALUATE_PATH, exchange -> {
             capturedContentType[0] = exchange.getRequestHeaders().getFirst("Content-Type");
             capturedMethod[0] = exchange.getRequestMethod();
             exchange.getRequestBody().readAllBytes();
@@ -95,21 +95,5 @@ class PricePredictorClientTest {
         } finally {
             server.stop(0);
         }
-    }
-
-    private HttpServer createMockServer(int statusCode, String body, int delayMs) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/api/v1/evaluate", exchange -> {
-            if (delayMs > 0) {
-                try { Thread.sleep(delayMs); } catch (InterruptedException ignored) {}
-            }
-            exchange.getRequestBody().readAllBytes();
-            byte[] bytes = body.getBytes();
-            exchange.sendResponseHeaders(statusCode, bytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(bytes);
-            }
-        });
-        return server;
     }
 }

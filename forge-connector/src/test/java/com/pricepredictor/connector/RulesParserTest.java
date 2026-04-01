@@ -4,6 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.Arguments;
+
+import java.util.stream.Stream;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -901,74 +905,32 @@ class RulesParserTest {
 
     // --- Pattern 6: Visit duplicate suppression ---
 
-    @Test
-    void visitBumperCarsNoDuplicateLines() {
-        // SpellDescription starts with "Visit — " → Forge TrigDesc doubles it to "Visit — Visit — …"
-        // Expected: 1 TRIGGERED with single "visit —" prefix and no SPELL sub-abilities.
-        CardFace card = face("b/bumper_cars.txt");
+    /**
+     * Visit cards where Forge's TrigDesc doubles the "Visit — " prefix.
+     * checkNoPrefixDoubling=true asserts the doubling is suppressed;
+     * false skips that check (card uses a different description source).
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+        "b/bumper_cars.txt,    must be blocked,          true",
+        "f/ferris_wheel.txt,   phases out,               true",
+        "s/swinging_ship.txt,  additional combat phase,  true",
+        "s/storybook_ride.txt, exile the top,            false",
+        "t/trash_bin.txt,      mill,                     false",
+    })
+    void visitCardHasSinglePrefixAndNoSpellChildren(
+            String cardFile, String oracleFragment, boolean checkNoPrefixDoubling) {
+        CardFace card = face(cardFile.trim());
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Bumper Cars should have exactly 1 TRIGGERED: " + card.abilities());
+        assertEquals(1, triggered.size(), "Should have exactly 1 TRIGGERED: " + card.abilities());
         Ability visit = triggered.get(0);
         String desc = visit.descriptionText().toLowerCase();
         assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("must be blocked"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitFerrisWheelNoDuplicateLines() {
-        CardFace card = face("f/ferris_wheel.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Ferris Wheel should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("phases out"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitSwingingShipNoDuplicateLines() {
-        CardFace card = face("s/swinging_ship.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Swinging Ship should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
-        assertTrue(desc.contains("additional combat phase"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitStorybookRideNoDuplicateSpellChildren() {
-        // SpellDescription doesn't start with "Visit — " → no prefix doubling, but
-        // SpellEffect.fromChain produces spurious spell[1]/spell[2] sub-abilities.
-        CardFace card = face("s/storybook_ride.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Storybook Ride should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertTrue(desc.contains("exile the top"), "Description should contain oracle effect: " + desc);
-        assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
-                "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
-    }
-
-    @Test
-    void visitTrashBinNoDuplicateSpellChildren() {
-        CardFace card = face("t/trash_bin.txt");
-        var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
-        assertEquals(1, triggered.size(), "Trash Bin should have exactly 1 TRIGGERED: " + card.abilities());
-        Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
-        assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
-        assertTrue(desc.contains("mill"), "Description should contain oracle effect: " + desc);
+        if (checkNoPrefixDoubling) {
+            assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
+        }
+        assertTrue(desc.contains(oracleFragment.trim()),
+                "Description should contain '" + oracleFragment.trim() + "': " + desc);
         assertTrue(visit.subAbilities().stream().noneMatch(s -> s.type() == AbilityType.SPELL),
                 "Visit triggered should have no SPELL sub-abilities: " + visit.subAbilities());
     }

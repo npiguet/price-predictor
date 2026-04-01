@@ -71,6 +71,22 @@ public final class ForgeParams {
 
     // --- SVar structure markers ---
 
+    // --- Oracle text cost prefix ---
+
+    /**
+     * Prefix in cost descriptions built from the standard "as an additional cost" oracle pattern.
+     * Stripped before emitting the cost as an ADDITIONAL_COST ability so the output starts with
+     * the cost itself rather than this preamble.
+     */
+    public static final String ADDITIONAL_COST_PREFIX = "as an additional cost to cast this spell, ";
+
+    /** Strip {@link #ADDITIONAL_COST_PREFIX} from {@code text} if present; otherwise return {@code text} unchanged. */
+    public static String stripAdditionalCostPrefix(String text) {
+        return text.startsWith(ADDITIONAL_COST_PREFIX)
+                ? text.substring(ADDITIONAL_COST_PREFIX.length())
+                : text;
+    }
+
     /**
      * Key present in trigger SVars that fire only from a specific zone
      * (e.g. {@code TriggerZones$ Battlefield}).

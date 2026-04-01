@@ -1,5 +1,8 @@
 package com.pricepredictor.connector;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.URI;
@@ -87,8 +90,9 @@ public class PricePredictorClient {
 
     private PriceEstimate parseSuccessResponse(String json) throws InvalidResponseException {
         try {
-            double price = extractDouble(json, "predicted_price_eur");
-            String version = extractString(json, "model_version");
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            double price = obj.get("predicted_price_eur").getAsDouble();
+            String version = obj.get("model_version").getAsString();
             return new PriceEstimate(price, version);
         } catch (Exception e) {
             throw new InvalidResponseException("Failed to parse response: " + e.getMessage(), e);
@@ -97,32 +101,9 @@ public class PricePredictorClient {
 
     private String parseErrorMessage(String json) {
         try {
-            return extractString(json, "error");
+            return JsonParser.parseString(json).getAsJsonObject().get("error").getAsString();
         } catch (Exception e) {
             return "Server returned status error with unparseable body";
         }
-    }
-
-    private double extractDouble(String json, String key) {
-        String search = "\"" + key + "\"";
-        int keyIdx = json.indexOf(search);
-        if (keyIdx < 0) throw new IllegalArgumentException("Key not found: " + key);
-        int colonIdx = json.indexOf(':', keyIdx + search.length());
-        int start = colonIdx + 1;
-        // Skip whitespace
-        while (start < json.length() && Character.isWhitespace(json.charAt(start))) start++;
-        int end = start;
-        while (end < json.length() && (Character.isDigit(json.charAt(end)) || json.charAt(end) == '.' || json.charAt(end) == '-')) end++;
-        return Double.parseDouble(json.substring(start, end));
-    }
-
-    private String extractString(String json, String key) {
-        String search = "\"" + key + "\"";
-        int keyIdx = json.indexOf(search);
-        if (keyIdx < 0) throw new IllegalArgumentException("Key not found: " + key);
-        int colonIdx = json.indexOf(':', keyIdx + search.length());
-        int quoteStart = json.indexOf('"', colonIdx + 1);
-        int quoteEnd = json.indexOf('"', quoteStart + 1);
-        return json.substring(quoteStart + 1, quoteEnd);
     }
 }
