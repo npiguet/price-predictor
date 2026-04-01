@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.ability.ActivatedAbilityEntry;
+import com.pricepredictor.connector.ability.AlternateAdditionalCostAbility;
 import com.pricepredictor.connector.ability.ForgeParams;
 import com.pricepredictor.connector.ability.AlternateCostSpell;
 import com.pricepredictor.connector.ability.ChapterAbility;
@@ -29,7 +30,6 @@ import forge.card.mana.ManaCost;
 import forge.game.ability.ApiType;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
-import forge.game.cost.Cost;
 import forge.game.keyword.Companion;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
@@ -70,10 +70,7 @@ public class RulesParser {
         KEYWORD_ROUTES.put("Chapter:", ChapterAbility::fromKeyword);
         KEYWORD_ROUTES.put("etbCounter:", EtbReplacementAbility::fromKeyword);
         KEYWORD_ROUTES.put("ETBReplacement:", EtbReplacementAbility::fromKeyword);
-        KEYWORD_ROUTES.put("AlternateAdditionalCost:", ki -> {
-            String desc = buildAlternateAdditionalCostDescription(ki.getOriginal());
-            return List.of(new TextAbility(AbilityType.ADDITIONAL_COST, AbilityDescription.applyCasing(desc)));
-        });
+        KEYWORD_ROUTES.put("AlternateAdditionalCost:", AlternateAdditionalCostAbility::fromKeyword);
         KEYWORD_ROUTES.put("Visit:", VisitAbility::fromKeyword);
         KEYWORD_ROUTES.put("MayEffectFromOpeningHand:", OpeningHandAbility::fromKeyword);
         KEYWORD_ROUTES.put("MayEffectFromOpeningDeck:", OpeningHandAbility::fromKeyword);
@@ -433,18 +430,6 @@ public class RulesParser {
     }
 
     // --- Helpers ---
-
-    private static String buildAlternateAdditionalCostDescription(String original) {
-        String[] costParts = original.split(":", 2)[1].split(":");
-        List<String> terms = new ArrayList<>();
-        for (String costPart : costParts) {
-            Cost cost = new Cost(costPart, false);
-            String costText = cost.toSimpleString();
-            String term = costText.substring(0, 1).toLowerCase() + costText.substring(1);
-            terms.add(cost.isOnlyManaCost() ? "pay " + term : term);
-        }
-        return AbilityDescription.joinDisjunction(terms);
-    }
 
     private static class DummyGameHolder {
         static final Game INSTANCE = createDummyGame();

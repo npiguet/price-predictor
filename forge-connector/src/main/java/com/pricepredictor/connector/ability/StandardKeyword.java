@@ -81,7 +81,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * renders the first cost, so it cannot be used for dual kicker either.
      */
     private static String formatKicker(KeywordInterface ki, String title) {
-        KeywordFields f = KeywordFields.parse(ki.getOriginal(), 3);
+        KeywordFields f = KeywordFields.from(ki, 3);
         if (f.hasField(2)) {
             Cost cost2 = new Cost(f.field(2), false);
             return title + " and/or " + cost2.toSimpleString();
@@ -98,24 +98,14 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
 
     private static String formatProtection(KeywordInterface ki, String title) {
         // getOriginal() returns the raw script keyword, e.g.:
-        //   "Protection:Creature"         (simple type)
-        //   "Protection:Card.MultiColor:multicolored"  (filter with description)
-        // Build "Protection from <target>" from it.
-        // Color-based protection ("K:Protection from white") already has the
-        // correct format in getOriginal(), so no special-casing needed there.
-        String original = ki.getOriginal();
-        int firstColon = original.indexOf(':');
-        if (firstColon >= 0) {
-            String details = original.substring(firstColon + 1);
-            // If the details contain a second colon, the text after it is the
-            // human-readable target (e.g. "Card.MultiColor:multicolored" → "multicolored").
-            int innerColon = details.indexOf(':');
-            if (innerColon >= 0) {
-                details = details.substring(innerColon + 1);
-            }
+        //   "Protection:Creature"                      (simple type → use field 1)
+        //   "Protection:Card.MultiColor:multicolored"  (filter + human-readable → use field 2)
+        // The most specific field (last non-empty after keyword name) is always the right one.
+        String details = KeywordFields.from(ki, 3).lastNonEmptyField();
+        if (!details.isEmpty()) {
             return "Protection from " + details.toLowerCase();
         }
-        // else: getOriginal() had no colon (shouldn't happen), leave title as-is
+        // getOriginal() had no colon (shouldn't happen), leave title as-is
         return title;
     }
 
@@ -236,7 +226,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      */
     private static String extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
         if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
-            KeywordFields f = KeywordFields.parse(original, 5);
+            KeywordFields f = KeywordFields.parse(original, 5); // raw String, not KeywordInterface
             if (f.hasField(4)) {
                 return "This ability costs {1} less to activate for each " + f.field(4) + ".";
             }

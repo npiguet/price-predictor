@@ -24,8 +24,7 @@ public final class OpeningHandAbility {
     private OpeningHandAbility() {}
 
     public static List<Ability> fromKeyword(KeywordInterface ki) {
-        String original = ki.getOriginal(); // "MayEffectFromOpeningHand:SvarName" or "...Deck:..."
-        String svarName = original.split(":", 3)[1];
+        String svarName = KeywordFields.from(ki, 3).field(1); // "MayEffectFromOpeningHand:SvarName" or "...Deck:..."
         Card hostCard = ki.getHostCard();
         if (hostCard == null) return List.of();
 
