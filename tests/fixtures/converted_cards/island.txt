@@ -1,3 +1,3 @@
-name: Island
+name: island
 types: basic land island
-mana[1]: {T}: Add {U}.
+activated[1]: {T}: add {U}
