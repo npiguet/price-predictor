@@ -26,7 +26,7 @@ public final class SpellAbilityUtils {
      * Returns a sequential Stream over the sub-ability chain starting from {@code sa},
      * including {@code sa} itself, stopping at the first null link.
      */
-    private static Stream<SpellAbility> walkChain(SpellAbility sa) {
+    static Stream<SpellAbility> walkChain(SpellAbility sa) {
         return Stream.iterate(sa, Objects::nonNull, SpellAbility::getSubAbility);
     }
 

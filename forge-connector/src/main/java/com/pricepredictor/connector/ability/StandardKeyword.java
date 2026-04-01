@@ -12,6 +12,8 @@ import forge.game.keyword.KeywordWithTypeInterface;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Standard keyword ability — handles defined keywords and the undefined keyword fallback.
@@ -30,44 +32,54 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
 
     public static StandardKeyword of(KeywordInterface ki, Keyword kw) {
         boolean activatable = !ki.getAbilities().isEmpty();
-        String title = ki.getTitle();
-
-        if (kw == Keyword.UNDEFINED) {
-            if (NonBlankString.of(title).isEmpty()) {
-                title = ki.getOriginal();
-            }
-        } else {
-            // Forge's getTitle() can return an unusable string for some keywords:
-            //   - empty: no title computed (fall back to raw getOriginal())
-            //   - trailing whitespace: Protection.getTitle() returns "Protection from "
-            //     because Protection.parse() is empty in forge — fromWhat is never set.
-            //     This is a forge bug; the trailing space lets us detect and bypass it.
-            if (title.isEmpty() || !title.trim().equals(title)) {
-                title = ki.getOriginal();
-            }
-            // Internal keywords (MAYFLASHCOST, MAYFLASHSAC) are forge-engine mechanics
-            // with no player-facing name. Their reminder text holds the human-readable
-            // oracle description (e.g. "you may pay {W} rather than pay this spell's
-            // mana cost"), so we substitute reminder text for the title here.
-            if (AbilityType.isInternalKeyword(kw)) {
-                title = Optional.ofNullable(ki.getReminderText())
-                        .flatMap(NonBlankString::of)
-                        .map(NonBlankString::value)
-                        .orElse(title);
-            }
-            var formatter = KEYWORD_FORMATTERS.get(kw);
-            if (formatter != null) {
-                title = formatter.apply(ki, title);
-            }
-        }
-
-        String finalTitle = title;
-        title = extractReduceCostDescription(kw, ki.getOriginal())
-                .map(rc -> finalTitle + ". " + rc.value())
-                .orElse(finalTitle);
-
+        String title = resolveBaseTitle(ki, kw);
+        title = applyKeywordFormatter(ki, kw, title);
+        title = appendReduceCost(kw, ki.getOriginal(), title);
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
+    }
+
+    /**
+     * Resolve the base title for a keyword, handling the three degenerate cases:
+     * UNDEFINED keywords (no title → fall back to getOriginal), defined keywords with empty or
+     * trailing-whitespace titles (forge bug in Protection → fall back to getOriginal), and
+     * internal keywords (MAYFLASHCOST/MAYFLASHSAC → substitute reminder text).
+     */
+    private static String resolveBaseTitle(KeywordInterface ki, Keyword kw) {
+        String title = ki.getTitle();
+        if (kw == Keyword.UNDEFINED) {
+            return NonBlankString.of(title).isPresent() ? title : ki.getOriginal();
+        }
+        // Forge's getTitle() can return an unusable string for some keywords:
+        //   - empty: no title computed (fall back to raw getOriginal())
+        //   - trailing whitespace: Protection.getTitle() returns "Protection from "
+        //     because Protection.parse() is empty in forge — fromWhat is never set.
+        //     This is a forge bug; the trailing space lets us detect and bypass it.
+        if (title.isEmpty() || !title.trim().equals(title)) {
+            title = ki.getOriginal();
+        }
+        // Internal keywords (MAYFLASHCOST, MAYFLASHSAC) are forge-engine mechanics
+        // with no player-facing name. Their reminder text holds the human-readable
+        // oracle description (e.g. "you may pay {W} rather than pay this spell's
+        // mana cost"), so we substitute reminder text for the title here.
+        if (AbilityType.isInternalKeyword(kw)) {
+            return Optional.ofNullable(ki.getReminderText())
+                    .flatMap(NonBlankString::of)
+                    .map(NonBlankString::value)
+                    .orElse(title);
+        }
+        return title;
+    }
+
+    private static String applyKeywordFormatter(KeywordInterface ki, Keyword kw, String title) {
+        var formatter = KEYWORD_FORMATTERS.get(kw);
+        return formatter != null ? formatter.apply(ki, title) : title;
+    }
+
+    private static String appendReduceCost(Keyword kw, String original, String title) {
+        return extractReduceCostDescription(kw, original)
+                .map(rc -> title + ". " + rc.value())
+                .orElse(title);
     }
 
     // --- Per-keyword title formatters ---
@@ -113,6 +125,9 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
 
     // --- Craft title construction ---
 
+    /** Captures the type word from {@code ExileCtrlOrGrave<N/TYPE…>} in a Craft cost string. */
+    private static final Pattern EXILE_TYPE = Pattern.compile("ExileCtrlOrGrave<\\d+/([^.+>/<]+)");
+
     /**
      * Build the terse oracle title for a Craft keyword: "Craft with &lt;typeDesc&gt; &lt;manaCost&gt;".
      *
@@ -155,9 +170,8 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      *       (e.g. Throne of Grim Captain: "two legendary creatures").</li>
      *   <li><b>Variable count</b>: {@code costPart} contains {@code XMin} — use
      *       {@code "one or more"} (e.g. Sunbird Standard).</li>
-     *   <li><b>Simple type</b>: extract the first word before {@code '.'}, {@code '+'}, or
-     *       {@code '>'} from the {@code ExileCtrlOrGrave<N/TYPE…>} spec
-     *       (e.g. {@code "ExileCtrlOrGrave<2/Artifact>"} → {@code "artifact"}).</li>
+     *   <li><b>Simple type</b>: extract the first word from the {@code ExileCtrlOrGrave<N/TYPE…>}
+     *       spec via {@link #EXILE_TYPE} (e.g. {@code "ExileCtrlOrGrave<2/Artifact>"} → {@code "artifact"}).</li>
      * </ol>
      */
     private static String resolveCraftTypeDescription(String costPart, KeywordFields f) {
@@ -167,19 +181,8 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
         if (costPart.contains("XMin")) {
             return "one or more";
         }
-        // Extract the type word from ExileCtrlOrGrave<N/TYPE…>
-        int ecoIdx = costPart.indexOf("ExileCtrlOrGrave<");
-        int slashIdx = ecoIdx >= 0 ? costPart.indexOf('/', ecoIdx) : -1;
-        if (slashIdx >= 0) {
-            int typeStart = slashIdx + 1;
-            int typeEnd = typeStart;
-            while (typeEnd < costPart.length()
-                    && ".+>/<".indexOf(costPart.charAt(typeEnd)) < 0) {
-                typeEnd++;
-            }
-            return costPart.substring(typeStart, typeEnd);
-        }
-        return "artifact"; // fallback: no ExileCtrlOrGrave spec found
+        Matcher m = EXILE_TYPE.matcher(costPart);
+        return m.find() ? m.group(1) : "artifact";
     }
 
     // --- Reduce-cost description extraction ---

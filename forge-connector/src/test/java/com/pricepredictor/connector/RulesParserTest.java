@@ -7,6 +7,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.Arguments;
 
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import java.io.IOException;
@@ -294,7 +295,7 @@ class RulesParserTest {
     @Test
     void battleCardWithDefense() {
         MultiCard result = convertFromFile("i/invasion_of_kamigawa_rooftop_saboteurs.txt");
-        assertEquals("transform", result.layout());
+        assertEquals(Optional.of("transform"), result.layout());
         assertEquals(2, result.faces().size());
 
         CardFace front = result.faces().get(0);
@@ -312,7 +313,7 @@ class RulesParserTest {
     @Test
     void transformCard() {
         MultiCard result = convertFromFile("d/daring_sleuth_bearer_of_overwhelming_truths.txt");
-        assertEquals("transform", result.layout());
+        assertEquals(Optional.of("transform"), result.layout());
         assertEquals(2, result.faces().size());
         assertTrue(result.faces().get(0).name().contentEquals("daring sleuth"));
         assertTrue(result.faces().get(1).name().contentEquals("bearer of overwhelming truths"));
@@ -585,16 +586,16 @@ class RulesParserTest {
 
     @Test
     void layoutDetection() {
-        assertEquals("transform", convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",
+        assertEquals(Optional.of("transform"), convert("Name:A", "ManaCost:1", "Types:Creature Human", "PT:1/1",
                 "AlternateMode:DoubleFaced", "Oracle:", "ALTERNATE",
                 "Name:B", "Types:Creature Werewolf", "PT:2/2", "Oracle:").layout());
-        assertEquals("split", convert("Name:Fire", "ManaCost:1 R", "Types:Instant",
+        assertEquals(Optional.of("split"), convert("Name:Fire", "ManaCost:1 R", "Types:Instant",
                 "AlternateMode:Split", "Oracle:", "ALTERNATE",
                 "Name:Ice", "ManaCost:1 U", "Types:Instant", "Oracle:").layout());
-        assertEquals("adventure", convert("Name:Bonecrusher Giant", "ManaCost:2 R", "Types:Creature Giant",
+        assertEquals(Optional.of("adventure"), convert("Name:Bonecrusher Giant", "ManaCost:2 R", "Types:Creature Giant",
                 "PT:4/3", "AlternateMode:Adventure", "Oracle:", "ALTERNATE",
                 "Name:Stomp", "ManaCost:1 R", "Types:Instant Adventure", "Oracle:").layout());
-        assertEquals("meld", convert("Name:The Mightstone and Weakstone", "ManaCost:5",
+        assertEquals(Optional.of("meld"), convert("Name:The Mightstone and Weakstone", "ManaCost:5",
                 "Types:Legendary Artifact Powerstone",
                 "MeldPair:Urza, Lord Protector", "AlternateMode:Meld", "Oracle:").layout());
     }
@@ -608,7 +609,7 @@ class RulesParserTest {
     })
     void meldHalfHasSingleFace(String file, String expectedName) {
         MultiCard result = convertFromFile(file);
-        assertEquals("meld", result.layout());
+        assertEquals(Optional.of("meld"), result.layout());
         assertEquals(1, result.faces().size());
         assertTrue(result.faces().get(0).name().contentEquals(expectedName));
     }
@@ -787,7 +788,7 @@ class RulesParserTest {
         // The main face should only contain Bonecrusher Giant's triggered ability,
         // NOT Stomp's spell ability ("damage can't be prevented this turn").
         MultiCard result = convertFromFile("b/bonecrusher_giant_stomp.txt");
-        assertEquals("adventure", result.layout());
+        assertEquals(Optional.of("adventure"), result.layout());
         CardFace main = result.faces().get(0);
         assertTrue(main.name().contentEquals("bonecrusher giant"));
         // Main face should have the triggered ability

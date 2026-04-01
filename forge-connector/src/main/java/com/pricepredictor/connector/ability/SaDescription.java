@@ -63,6 +63,7 @@ public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDes
      * @param parentDesc the nearest ancestor's cased description, or empty if absent
      */
     public static SaDescription resolve(SpellAbility sa, Optional<NonBlankString> parentDesc) {
+        Optional<NonBlankString> normalizedParent = parentDesc.flatMap(AbilityDescription::normalize);
         return getParam(sa, "SpellDescription")
                 .or(() -> getParam(sa, "TriggerDescription"))
                 .or(() -> getParam(sa, "StackDescription")
@@ -79,10 +80,7 @@ public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDes
                         .filter(s -> !s.contentEquals(ForgeParams.NO_DISPLAY))
                         .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
                         .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
-                        .filter(s -> parentDesc
-                                .flatMap(AbilityDescription::normalize)
-                                .map(normalized -> !normalized.equals(s))
-                                .orElse(true))
+                        .filter(s -> normalizedParent.map(p -> !p.equals(s)).orElse(true))
                 )
                 .map(rawDesc -> new SaDescription(AbilityDescription.stripReminderText(rawDesc), true))
                 .orElseGet(() -> new SaDescription(Optional.empty(), false));

@@ -29,33 +29,31 @@ public record ActivatedAbilityEntry(AbilityType type, NonBlankString description
         // abilities that carry their description only on a SubAbility (e.g. Arachnus Spinner).
         String subText = SpellEffect.flattenChainText(sa.getSubAbility());
 
-        String spellDesc = sa.getParam("SpellDescription");
-        boolean hasSpellDesc = NonBlankString.of(spellDesc).isPresent();
+        Optional<NonBlankString> spellDesc = NonBlankString.of(sa.getParam("SpellDescription"));
 
         // No root SpellDescription and no sub-chain text → nothing to emit.
-        if (!hasSpellDesc && subText.isEmpty()) return Optional.empty();
+        if (spellDesc.isEmpty() && subText.isEmpty()) return Optional.empty();
 
-        String rootDesc = sa.getDescription();
-        // Fallback for abilities without SpellDescription: cost-based description.
-        if (!hasSpellDesc && rootDesc.isEmpty()) rootDesc = sa.getCostDescription();
-        // For dice-roll activated abilities, getDescription() appends outcome lines after a
-        // newline. Strip them here; they will be re-emitted as OPTION sub-abilities below.
-        int nl = rootDesc.indexOf('\n');
-        if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
+        // Resolve root description: prefer sa.getDescription() (includes cost prefix),
+        // fall back to cost description alone when SpellDescription is absent.
+        // Strip trailing newlines: dice-roll activated abilities append outcome lines after
+        // a newline in getDescription(); those are re-emitted as OPTION children below.
+        Optional<NonBlankString> rootNormalized = Optional.of(sa.getDescription())
+                .map(d -> d.isEmpty() && spellDesc.isEmpty() ? sa.getCostDescription() : d)
+                .map(d -> { int nl = d.indexOf('\n'); return nl >= 0 ? d.substring(0, nl) : d; })
+                .flatMap(AbilityDescription::normalize);
 
-        NonBlankString normalized = rootDesc.isEmpty() ? null : AbilityDescription.normalize(rootDesc).orElse(null);
-        // When a root SpellDescription is present, normalize must succeed.
-        if (hasSpellDesc && normalized == null) return Optional.empty();
+        // When a root SpellDescription is present, normalization must succeed.
+        if (spellDesc.isPresent() && rootNormalized.isEmpty()) return Optional.empty();
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
-        NonBlankString fullDesc = (normalized != null)
-                ? (subText.isEmpty() ? normalized : NonBlankString.require(normalized + " " + subText))
-                : NonBlankString.of(subText).orElse(null);
-        if (fullDesc == null) return Optional.empty();
+        Optional<NonBlankString> fullDesc = rootNormalized
+                .map(n -> subText.isEmpty() ? n : NonBlankString.require(n + " " + subText))
+                .or(() -> NonBlankString.of(subText));
 
         List<Ability> children = SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.OPTION, false);
-        return Optional.of(new ActivatedAbilityEntry(type, type.formatDescription(fullDesc), children));
+        return fullDesc.map(d -> new ActivatedAbilityEntry(type, type.formatDescription(d), children));
     }
 
 }

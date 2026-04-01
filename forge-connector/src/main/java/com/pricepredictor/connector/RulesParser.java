@@ -48,9 +48,11 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Parses Forge card scripts into domain objects (MultiCard/CardFace/Ability).
@@ -271,7 +273,6 @@ public class RulesParser {
     }
 
     private List<Ability> collectTriggers(Card card) {
-        List<Ability> abilities = new ArrayList<>();
         // Deduplicate "attacks or blocks" trigger pairs.
         //
         // For cards with "whenever CARDNAME attacks or blocks", Forge registers two triggers
@@ -280,17 +281,20 @@ public class RulesParser {
         // pointing at the same Execute SVar. The primary description already covers both
         // halves, so including the secondary trigger would emit a duplicate ability line.
         //
-        // Detection: track Execute SVar names from non-secondary triggers; if a secondary
-        // trigger references the same SVar, it is the redundant "blocks" half — skip it.
-        Set<String> primaryExecuteSVars = new HashSet<>();
+        // Pass 1: collect execute SVar names from all non-secondary triggers.
+        // Pass 2: skip any secondary trigger whose Execute SVar was seen in pass 1.
+        Set<String> primaryExecuteSVars = card.getTriggers().stream()
+                .filter(t -> !"True".equalsIgnoreCase(t.getParam("Secondary")))
+                .map(t -> t.getParam("Execute"))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<Ability> abilities = new ArrayList<>();
         for (Trigger t : card.getTriggers()) {
             String exec = t.getParam("Execute");
             if ("True".equalsIgnoreCase(t.getParam("Secondary"))
                     && exec != null && primaryExecuteSVars.contains(exec)) {
                 continue; // secondary of an "attacks or blocks" pair — skip duplicate
-            }
-            if (exec != null && !"True".equalsIgnoreCase(t.getParam("Secondary"))) {
-                primaryExecuteSVars.add(exec);
             }
             TriggeredAbilityEntry.of(t).ifPresent(abilities::add);
         }
