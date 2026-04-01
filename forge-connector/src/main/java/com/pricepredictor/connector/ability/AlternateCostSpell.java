@@ -8,6 +8,8 @@ import forge.game.spellability.SpellAbility;
 
 import java.util.Optional;
 
+import static com.pricepredictor.connector.AbilityDescription.applyCasing;
+
 /**
  * Alternate cost spell ability (e.g., Cleave). Built from NonBasicSpell spell abilities
  * that have PrecostDesc and CostDesc parameters.
@@ -20,9 +22,9 @@ public record AlternateCostSpell(NonBlankString descriptionText) implements Abil
     }
 
     public static Optional<AlternateCostSpell> of(SpellAbility sa) {
-        String precost = sa.getParam("PrecostDesc");
-        String costDesc = sa.getParam("CostDesc");
-        if (precost == null || costDesc == null) return Optional.empty();
-        return Optional.of(new AlternateCostSpell(AbilityDescription.applyCasing(NonBlankString.require(precost + " " + costDesc))));
+        return NonBlankString.of(sa.getParam("PrecostDesc"))
+                .flatMap(precost -> NonBlankString.of(sa.getParam("CostDesc"))
+                        .map(costDesc -> new AlternateCostSpell(applyCasing(precost + " " + costDesc)))
+                );
     }
 }

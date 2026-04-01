@@ -23,9 +23,9 @@ public record EtbReplacementAbility(NonBlankString descriptionText) implements A
     public static List<Ability> fromKeyword(KeywordInterface ki) {
         List<Ability> abilities = new ArrayList<>();
         for (var replacement : ki.getReplacements()) {
-            String desc = replacement.getParam("Description");
-            if (desc == null || desc.isEmpty()) continue;
-            AbilityDescription.normalize(desc).ifPresent(n -> abilities.add(new EtbReplacementAbility(n)));
+            NonBlankString.of(replacement.getParam("Description"))
+                    .flatMap(d -> AbilityDescription.normalize(d.value()))
+                    .ifPresent(n -> abilities.add(new EtbReplacementAbility(n)));
         }
         return abilities;
     }

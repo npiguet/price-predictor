@@ -82,10 +82,10 @@ public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDes
                     .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
                     .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
                     .filter(s -> parentDesc.map(p -> !AbilityDescription.applyCasing(
-                            AbilityDescription.stripReminderText(s)).equals(p.value())).orElse(true))
+                            AbilityDescription.stripReminderText(s)).equals(p)).orElse(true))
                     .orElse(null);
         }
-        boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
+        boolean hadRawDesc = rawDesc != null;
         Optional<NonBlankString> strippedOpt = hadRawDesc
                 ? NonBlankString.of(AbilityDescription.stripReminderText(rawDesc))
                 : Optional.empty();

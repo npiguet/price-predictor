@@ -29,8 +29,9 @@ public record TriggeredAbilityEntry(AbilityType type, NonBlankString description
             return handleKeywordTrigger(trigger);
         }
         String rawDesc = trigger.getParam("TriggerDescription");
-        if (rawDesc == null || rawDesc.isEmpty()) return Optional.empty();
-        NonBlankString normalized = AbilityDescription.normalize(rawDesc).orElse(null);
+        NonBlankString normalized = NonBlankString.of(rawDesc)
+                .flatMap(d -> AbilityDescription.normalize(d.value()))
+                .orElse(null);
         if (normalized == null) return Optional.empty();
         AbilityType effectiveType = trigger.isStatic()
                 ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
@@ -67,7 +68,7 @@ public record TriggeredAbilityEntry(AbilityType type, NonBlankString description
         // TrigNotTribute's SpellDescription), so the execute chain would duplicate it.
         // Return with empty children — the description is self-contained.
         String rawTributeDesc = trigger.getParam("TriggerDescription");
-        if (rawTributeDesc == null || rawTributeDesc.isEmpty()) return Optional.empty();
+        if (NonBlankString.of(rawTributeDesc).isEmpty()) return Optional.empty();
         AbilityType effectiveType = trigger.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
         return AbilityDescription.normalize(rawTributeDesc)
                 .map(normalized -> new TriggeredAbilityEntry(effectiveType, normalized, List.of()));

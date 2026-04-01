@@ -18,8 +18,7 @@ public record StaticAbilityEntry(AbilityType type, NonBlankString descriptionTex
     public static Optional<StaticAbilityEntry> of(StaticAbility sa) {
         if (sa.getKeyword() != null) return Optional.empty();
         String desc = sa.getParam("Description");
-        if (desc == null || desc.isEmpty()) return Optional.empty();
-        return AbilityDescription.normalize(desc).map(normalized -> {
+        return NonBlankString.of(desc).flatMap(d -> AbilityDescription.normalize(d.value())).map(normalized -> {
             AbilityType effectiveType = AbilityType.STATIC;
             if (sa.checkMode(StaticAbilityMode.RaiseCost) || sa.checkMode(StaticAbilityMode.OptionalCost)) {
                 String validCard = sa.getParam("ValidCard");

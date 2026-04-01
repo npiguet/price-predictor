@@ -21,7 +21,6 @@ public record ReplacementAbilityEntry(NonBlankString descriptionText) implements
     public static Optional<ReplacementAbilityEntry> of(ReplacementEffect re) {
         if (re.getKeyword() != null) return Optional.empty();
         String desc = re.getParam("Description");
-        if (desc == null || desc.isEmpty()) return Optional.empty();
-        return AbilityDescription.normalize(desc).map(ReplacementAbilityEntry::new);
+        return NonBlankString.of(desc).flatMap(d -> AbilityDescription.normalize(d.value())).map(ReplacementAbilityEntry::new);
     }
 }

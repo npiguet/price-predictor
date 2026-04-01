@@ -33,7 +33,7 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
         String title = ki.getTitle();
 
         if (kw == Keyword.UNDEFINED) {
-            if (title == null || title.isEmpty()) {
+            if (NonBlankString.of(title).isEmpty()) {
                 title = ki.getOriginal();
             }
         } else {
@@ -51,7 +51,8 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
             // mana cost"), so we substitute reminder text for the title here.
             if (AbilityType.isInternalKeyword(kw)) {
                 title = Optional.ofNullable(ki.getReminderText())
-                        .filter(r -> !r.isEmpty())
+                        .flatMap(NonBlankString::of)
+                        .map(NonBlankString::value)
                         .orElse(title);
             }
             var formatter = KEYWORD_FORMATTERS.get(kw);
@@ -62,11 +63,11 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
 
         String finalTitle = title;
         title = extractReduceCostDescription(kw, ki.getOriginal())
-                .map(rc -> finalTitle + ". " + rc)
+                .map(rc -> finalTitle + ". " + rc.value())
                 .orElse(finalTitle);
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
-        return new StandardKeyword(kwType, AbilityDescription.applyCasing(NonBlankString.require(title)));
+        return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
     }
 
     // --- Per-keyword title formatters ---
@@ -194,7 +195,7 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      *       {@code ReduceCost$} marker is present.</li>
      * </ul>
      */
-    private static Optional<String> extractReduceCostDescription(Keyword kw, String original) {
+    private static Optional<NonBlankString> extractReduceCostDescription(Keyword kw, String original) {
         if (original == null) return Optional.empty();
         return extractReduceCostFromSVar(original)
                 .or(() -> extractAdaptMonstrosityReduceCost(kw, original))
@@ -206,13 +207,13 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      * The SVar name is skipped; the human-readable text after the colon is returned.
      * Applies broadly (Equip, any keyword that embeds a ReduceCost$ SVar reference).
      */
-    private static Optional<String> extractReduceCostFromSVar(String original) {
+    private static Optional<NonBlankString> extractReduceCostFromSVar(String original) {
         int idx = original.indexOf("ReduceCost$ ");
         if (idx >= 0) {
             String after = original.substring(idx + "ReduceCost$ ".length());
             int colon = after.indexOf(':');
             if (colon >= 0) {
-                return Optional.of(after.substring(colon + 1));
+                return NonBlankString.of(after.substring(colon + 1));
             }
         }
         return Optional.empty();
@@ -223,11 +224,12 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      * When {@code parts[4]} is present and non-empty, synthesises:
      * {@code "This ability costs {1} less to activate for each <parts[4]>."}
      */
-    private static Optional<String> extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
+    private static Optional<NonBlankString> extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
         if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
             KeywordFields f = KeywordFields.parse(original, 5); // raw String, not KeywordInterface
             if (f.hasField(4)) {
-                return Optional.of("This ability costs {1} less to activate for each " + f.field(4) + ".");
+                return Optional.of(NonBlankString.require(
+                        "This ability costs {1} less to activate for each " + f.field(4) + "."));
             }
         }
         return Optional.empty();
@@ -237,11 +239,11 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
      * Pattern C: Specialize — full sentence is in {@code parts[3]}, present when the
      * {@code ReduceCost$} marker also appears in the string.
      */
-    private static Optional<String> extractSpecializeReduceCost(Keyword kw, String original) {
+    private static Optional<NonBlankString> extractSpecializeReduceCost(Keyword kw, String original) {
         if (kw == Keyword.SPECIALIZE) {
             KeywordFields f = KeywordFields.parse(original, 5);
             if (original.contains("ReduceCost$") && f.hasField(3)) {
-                return Optional.of(f.field(3));
+                return NonBlankString.of(f.field(3));
             }
         }
         return Optional.empty();

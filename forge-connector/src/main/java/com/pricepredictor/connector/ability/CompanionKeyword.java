@@ -20,12 +20,11 @@ public record CompanionKeyword(NonBlankString descriptionText) implements Abilit
     }
 
     public static CompanionKeyword of(KeywordInterface ki, Companion comp) {
-        String compTitle = Optional.ofNullable(comp.getDescription())
-                .filter(d -> !d.isEmpty())
-                .map(AbilityDescription::stripReminderText)
-                .filter(d -> !d.isEmpty())
-                .map(d -> ki.getTitle() + " \u2014 " + d)
+        String compTitle = NonBlankString.of(comp.getDescription())
+                .map(d -> AbilityDescription.stripReminderText(d.value()))
+                .flatMap(NonBlankString::of)
+                .map(d -> ki.getTitle() + " — " + d)
                 .orElse(ki.getTitle());
-        return new CompanionKeyword(AbilityDescription.applyCasing(NonBlankString.require(compTitle)));
+        return new CompanionKeyword(AbilityDescription.applyCasing(compTitle));
     }
 }

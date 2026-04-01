@@ -33,18 +33,18 @@ public final class SpellAbilityUtils {
      * {@code ResultSubAbilities}, and return its {@code SpellDescription}.
      * Returns null if no such SA is found.
      */
-    public static String findDiceRollDescription(SpellAbility sa) {
+    public static Optional<NonBlankString> findDiceRollDescription(SpellAbility sa) {
         for (SpellAbility cur = sa; cur != null; cur = cur.getSubAbility()) {
             if (cur.getParam("ResultSubAbilities") != null) {
-                return cur.getParam("SpellDescription");
+                return NonBlankString.of(cur.getParam("SpellDescription"));
             }
             SpellAbility repeatSub = cur.getAdditionalAbility("RepeatSubAbility");
             if (repeatSub != null) {
-                String desc = findDiceRollDescription(repeatSub);
-                if (desc != null) return desc;
+                Optional<NonBlankString> desc = findDiceRollDescription(repeatSub);
+                if (desc.isPresent()) return desc;
             }
         }
-        return null;
+        return Optional.empty();
     }
 
     /**
@@ -83,12 +83,11 @@ public final class SpellAbilityUtils {
         return List.of();
     }
 
-    static String findParamInChain(SpellAbility sa, String param) {
+    static Optional<String> findParamInChain(SpellAbility sa, String param) {
         return walkChain(sa)
                 .map(cur -> cur.getParam(param))
                 .filter(v -> v != null && !v.isEmpty())
-                .findFirst()
-                .orElse(null);
+                .findFirst();
     }
 
     /**
@@ -132,10 +131,10 @@ public final class SpellAbilityUtils {
             // Case 2: Dice-roll resolution
             List<Ability> diceOptions = expandDiceOutcomes(executeSA, AbilityType.OPTION, true);
             if (!diceOptions.isEmpty()) {
-                String diceDesc = findDiceRollDescription(executeSA);
-                if (diceDesc != null) {
+                Optional<NonBlankString> diceDesc = findDiceRollDescription(executeSA);
+                if (diceDesc.isPresent()) {
                     return AbilityDescription.normalize(
-                            description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)))
+                            description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc.get().value())))
                             .map(n -> new AbilityPlaceholderResult(n, diceOptions));
                 }
             }
@@ -151,10 +150,10 @@ public final class SpellAbilityUtils {
     }
 
     private static Optional<AbilityPlaceholderResult> buildCharmResult(String description, SpellAbility charmSA) {
-        String header = CharmAbility.synthesizeCharmHeader(charmSA);
-        if (header == null) header = "choose one";
+        NonBlankString header = CharmAbility.synthesizeCharmHeader(charmSA)
+                .orElse(NonBlankString.require("choose one"));
         List<Ability> options = CharmAbility.optionsFrom(charmSA);
-        return AbilityDescription.normalize(description.replace("ABILITY", header))
+        return AbilityDescription.normalize(description.replace("ABILITY", header.value()))
                 .map(n -> new AbilityPlaceholderResult(n, options));
     }
 

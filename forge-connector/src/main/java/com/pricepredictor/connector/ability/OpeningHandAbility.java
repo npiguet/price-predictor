@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
@@ -43,6 +44,7 @@ public final class OpeningHandAbility {
         if (!hostCard.hasSVar(svarName)) return Optional.empty();
         return Optional.ofNullable(AbilityFactory.getAbility(hostCard, svarName))
                 .map(sa -> sa.getParam("SpellDescription"))
-                .filter(d -> d != null && !d.isEmpty());
+                .flatMap(NonBlankString::of)
+                .map(NonBlankString::value);
     }
 }

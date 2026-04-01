@@ -314,7 +314,7 @@ public class RulesParser {
         Optional<NonBlankString> manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
                 ? Optional.empty() : NonBlankString.of(manaCost.getSimpleString());
 
-        NonBlankString typeLine = NonBlankString.require(formatTypeLine(face));
+        NonBlankString typeLine = formatTypeLine(face);
         Optional<NonBlankString> pt = (face.getPower() != null && face.getToughness() != null)
                 ? NonBlankString.of(face.getPower() + "/" + face.getToughness()) : Optional.empty();
         Optional<NonBlankString> loyalty = NonBlankString.of(face.getInitialLoyalty());
@@ -452,19 +452,19 @@ public class RulesParser {
             "Forest",   "{G}"
     );
 
-    static Optional<String> buildLandManaDescription(ICardFace face) {
+    static Optional<NonBlankString> buildLandManaDescription(ICardFace face) {
         List<String> symbols = LAND_TYPE_MANA.entrySet().stream()
                 .filter(e -> face.getType().hasSubtype(e.getKey()))
                 .map(Map.Entry::getValue)
                 .toList();
         if (symbols.isEmpty()) return Optional.empty();
-        return Optional.of("{T}: add " + AbilityDescription.joinDisjunction(symbols));
+        return Optional.of(NonBlankString.require("{T}: add " + AbilityDescription.joinDisjunction(symbols)));
     }
 
-    private static String formatTypeLine(ICardFace face) {
+    private static NonBlankString formatTypeLine(ICardFace face) {
         String typeStr = face.getType().toString();
         typeStr = typeStr.replace(" - ", " ");
-        return typeStr.toLowerCase();
+        return NonBlankString.require(typeStr.toLowerCase());
     }
 
     /** Remove abilities whose descriptionText duplicates an earlier entry. */

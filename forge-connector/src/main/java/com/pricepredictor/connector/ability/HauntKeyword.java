@@ -36,7 +36,7 @@ public final class HauntKeyword {
         KeywordFields hauntFields = KeywordFields.from(ki, 2); // "Haunt:SvarName"
         String effectDesc = ki.getAbilities().stream()
                 .map(sa -> sa.getParam("SpellDescription"))
-                .filter(d -> d != null && !d.isEmpty())
+                .flatMap(d -> NonBlankString.of(d).stream().map(NonBlankString::value))
                 .findFirst()
                 .or(() -> hauntFields.hasField(1)
                         ? SpellAbilityUtils.extractParam(card.getSVar(hauntFields.field(1)), "SpellDescription")

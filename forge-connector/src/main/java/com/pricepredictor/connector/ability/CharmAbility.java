@@ -28,16 +28,12 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
     }
 
     public static List<Ability> fromSpellAbility(SpellAbility sa) {
-        String charmDesc = resolveCharmDescription(sa);
         List<Ability> choiceSubs = collectChoices(sa);
-
         List<Ability> result = new ArrayList<>();
-        if (charmDesc != null && !charmDesc.isEmpty()) {
-            result.add(new CharmAbility(AbilityDescription.applyCasing(NonBlankString.require(charmDesc)), choiceSubs));
-        } else {
-            // No charm description — add choices as top-level abilities
-            result.addAll(choiceSubs);
-        }
+        resolveCharmDescription(sa).ifPresentOrElse(
+                desc -> result.add(new CharmAbility(AbilityDescription.applyCasing(desc), choiceSubs)),
+                () -> result.addAll(choiceSubs)
+        );
         return result;
     }
 
@@ -54,38 +50,36 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
      *       from {@code CharmNum} and {@code MinCharmNum} params.</li>
      * </ul>
      */
-    private static String resolveCharmDescription(SpellAbility sa) {
+    private static Optional<NonBlankString> resolveCharmDescription(SpellAbility sa) {
         return resolveFromSpellDescription(sa)
                 .or(() -> resolveFromPawprint(sa))
                 .or(() -> resolveFromAdditionalDescription(sa))
-                .or(() -> Optional.ofNullable(synthesizeCharmHeader(sa)))
-                .orElse(null);
+                .or(() -> synthesizeCharmHeader(sa));
     }
 
-    private static Optional<String> resolveFromSpellDescription(SpellAbility sa) {
-        String desc = sa.getParam("SpellDescription");
-        if (desc == null || desc.isEmpty()) return Optional.empty();
-        desc = AbilityDescription.stripReminderText(desc);
-        // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
-        desc = desc.replaceAll("\\s*\u2014\\s*$", "").trim();
-        return desc.isEmpty() ? Optional.empty() : Optional.of(desc);
+    private static Optional<NonBlankString> resolveFromSpellDescription(SpellAbility sa) {
+        return NonBlankString.of(sa.getParam("SpellDescription"))
+                .map(d -> AbilityDescription.stripReminderText(d.value()))
+                // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
+                .map(s -> s.replaceAll("\\s*—\\s*$", "").trim())
+                .flatMap(NonBlankString::of);
     }
 
-    private static Optional<String> resolveFromPawprint(SpellAbility sa) {
-        String total = sa.getParam("Pawprint");
-        if (total == null) return Optional.empty();
-        String desc = "Choose up to " + total + " {P} worth of modes.";
-        if ("True".equals(sa.getParam("CanRepeatModes"))) {
-            desc += " You may choose the same mode more than once.";
-        }
-        return Optional.of(desc);
+    private static Optional<NonBlankString> resolveFromPawprint(SpellAbility sa) {
+        return NonBlankString.of(sa.getParam("Pawprint"))
+                .map(total -> {
+                    String desc = "Choose up to " + total + " {P} worth of modes.";
+                    if ("True".equals(sa.getParam("CanRepeatModes"))) {
+                        desc += " You may choose the same mode more than once.";
+                    }
+                    return NonBlankString.require(desc);
+                });
     }
 
-    private static Optional<String> resolveFromAdditionalDescription(SpellAbility sa) {
-        String desc = sa.getParam("AdditionalDescription");
-        if (desc == null || desc.isEmpty()) return Optional.empty();
-        desc = AbilityDescription.stripReminderText(desc);
-        return desc.isEmpty() ? Optional.empty() : Optional.of(desc);
+    private static Optional<NonBlankString> resolveFromAdditionalDescription(SpellAbility sa) {
+        return NonBlankString.of(sa.getParam("AdditionalDescription"))
+                .map(d -> AbilityDescription.stripReminderText(d.value()))
+                .flatMap(NonBlankString::of);
     }
 
     /**
@@ -97,29 +91,31 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return choiceSubs;
         for (var choice : choices) {
-            String choiceDesc = extractChoiceDescription(choice);
+            // Unwrap to String for prefix-concatenation; wrap back to NonBlankString at the end.
+            String choiceDesc = extractChoiceDescription(choice).map(NonBlankString::value).orElse(null);
             // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
             // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
             String precostDesc = choice.getParam("PrecostDesc");
             if (precostDesc != null && !precostDesc.isEmpty()) {
                 choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                        ? precostDesc + " \u2014 " + choiceDesc
+                        ? precostDesc + " — " + choiceDesc
                         : precostDesc;
             }
             String modeCost = choice.getParam("ModeCost");
             if (modeCost != null && !modeCost.isEmpty()) {
                 String costToken = "{" + modeCost.trim() + "}";
                 choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                        ? costToken + " \u2014 " + choiceDesc
+                        ? costToken + " — " + choiceDesc
                         : costToken;
             }
             String pawprint = choice.getParam("Pawprint");
             if (pawprint != null) {
                 choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
-                        + " \u2014 " + choiceDesc;
+                        + " — " + choiceDesc;
             }
-            choiceSubs.add(new TextAbility(AbilityType.OPTION,
-                    AbilityDescription.applyCasing(NonBlankString.require(choiceDesc))));
+            if (choiceDesc != null && !choiceDesc.isEmpty()) {
+                choiceSubs.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(choiceDesc)));
+            }
         }
         return choiceSubs;
     }
@@ -135,7 +131,7 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
      *   no CharmNum → "choose one" (default)
      * No trailing em-dash: the header stands on its own line.
      */
-    static String synthesizeCharmHeader(SpellAbility sa) {
+    static Optional<NonBlankString> synthesizeCharmHeader(SpellAbility sa) {
         String numStr = sa.getParam("CharmNum");
         String minNumStr = sa.getParam("MinCharmNum");
         int num = parseSimpleInt(numStr);    // -1 if null or non-integer
@@ -143,22 +139,22 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
 
         if (num == -1 && numStr != null) {
             // CharmNum is a variable/expression — can't synthesize
-            return null;
+            return Optional.empty();
         }
         if (num == -1) {
             // CharmNum absent → default choose one
-            if (minNum == 0) return "Choose up to one";
-            return "Choose one";
+            if (minNum == 0) return Optional.of(NonBlankString.require("Choose up to one"));
+            return Optional.of(NonBlankString.require("Choose one"));
         }
         if (minNum == 0) {
-            return "Choose up to " + numberWord(num);
+            return Optional.of(NonBlankString.require("Choose up to " + numberWord(num)));
         }
         if (minNum == 1) {
-            if (num == 2) return "Choose one or both";
-            if (num >= 3) return "Choose one or more";
+            if (num == 2) return Optional.of(NonBlankString.require("Choose one or both"));
+            if (num >= 3) return Optional.of(NonBlankString.require("Choose one or more"));
         }
         // No MinCharmNum (or minNum == num): choose exactly N
-        return "Choose " + numberWord(num);
+        return Optional.of(NonBlankString.require("Choose " + numberWord(num)));
     }
 
     private static int parseSimpleInt(String s) {
@@ -192,9 +188,9 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;
         for (var choice : choices) {
-            String desc = extractChoiceDescription(choice);
-            if (desc == null || desc.isEmpty()) continue;
-            options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(NonBlankString.require(desc))));
+            extractChoiceDescription(choice)
+                    .map(AbilityDescription::applyCasing)
+                    .ifPresent(desc -> options.add(new TextAbility(AbilityType.OPTION, desc)));
         }
         return options;
     }
@@ -204,9 +200,9 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
      * Walks the sub-chain for {@code SpellDescription} and strips reminder text.
      * Returns null when no description is found.
      */
-    private static String extractChoiceDescription(SpellAbility choice) {
-        String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-        if (desc != null) desc = AbilityDescription.stripReminderText(desc);
-        return desc;
+    private static Optional<NonBlankString> extractChoiceDescription(SpellAbility choice) {
+        return SpellAbilityUtils.findParamInChain(choice, "SpellDescription")
+                .map(AbilityDescription::stripReminderText)
+                .flatMap(NonBlankString::of);
     }
 }

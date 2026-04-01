@@ -23,9 +23,9 @@ public record GiftKeyword(NonBlankString descriptionText) implements Ability {
                 .filter(sa -> sa.hasAdditionalAbility("GiftAbility"))
                 .findFirst()
                 .map(sa -> sa.getAdditionalAbility("GiftAbility").getParam("GiftDescription"))
-                .filter(d -> d != null && !d.isEmpty())
+                .flatMap(NonBlankString::of)
                 .map(d -> ki.getTitle() + " " + d)
                 .orElse(ki.getTitle());
-        return new GiftKeyword(AbilityDescription.applyCasing(NonBlankString.require(giftTitle)));
+        return new GiftKeyword(AbilityDescription.applyCasing(giftTitle));
     }
 }

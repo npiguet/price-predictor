@@ -27,13 +27,22 @@ public final class AbilityDescription {
      */
     public static @lombok.NonNull Optional<NonBlankString> normalize(@lombok.NonNull String raw) {
         if (raw.isEmpty()) return Optional.empty();
-        String result = applyCasing(stripReminderText(raw));
-        return NonBlankString.of(result);
+        String stripped = stripReminderText(raw);
+        if (stripped.isEmpty()) return Optional.empty();
+        return Optional.of(applyCasing(stripped));
     }
 
     /** Strip parenthesized reminder text. */
     public static @lombok.NonNull String stripReminderText(@lombok.NonNull String text) {
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
+    }
+
+    /**
+     * Strip parenthesized reminder text from a NonBlankString.
+     * Returns empty if stripping removes all content.
+     */
+    public static @lombok.NonNull Optional<NonBlankString> stripReminderText(@lombok.NonNull NonBlankString text) {
+        return NonBlankString.of(stripReminderText(text.value()));
     }
 
     /**
@@ -63,10 +72,10 @@ public final class AbilityDescription {
 
     /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
     public static @lombok.NonNull NonBlankString applyCasing(@lombok.NonNull NonBlankString text) {
-        return NonBlankString.require(applyCasing(text.value()));
+        return applyCasing(text.value());
     }
 
-    public static @lombok.NonNull String applyCasing(@lombok.NonNull String text) {
+    public static @lombok.NonNull NonBlankString applyCasing(@lombok.NonNull String text) {
         // Protect brace symbols by extracting them
         List<String> braceSymbols = new ArrayList<>();
         Matcher m = BRACE_SYMBOL.matcher(text);
@@ -97,6 +106,6 @@ public final class AbilityDescription {
         // Restore variable X to uppercase (standalone X not inside words like "exile")
         lowered = VARIABLE_X.matcher(lowered).replaceAll("X");
 
-        return lowered;
+        return NonBlankString.require(lowered);
     }
 }

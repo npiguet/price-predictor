@@ -30,7 +30,7 @@ public record ActivatedAbilityEntry(AbilityType type, NonBlankString description
         String subText = SpellEffect.flattenChainText(sa.getSubAbility());
 
         String spellDesc = sa.getParam("SpellDescription");
-        boolean hasSpellDesc = spellDesc != null && !spellDesc.isEmpty();
+        boolean hasSpellDesc = NonBlankString.of(spellDesc).isPresent();
 
         // No root SpellDescription and no sub-chain text → nothing to emit.
         if (!hasSpellDesc && subText.isEmpty()) return Optional.empty();

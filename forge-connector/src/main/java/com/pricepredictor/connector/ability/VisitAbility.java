@@ -46,7 +46,7 @@ public final class VisitAbility {
                 // script). SpellDescription is written without this duplication, so it is the
                 // correct source for oracle text.
                 String spellDesc = overriding != null ? overriding.getParam("SpellDescription") : null;
-                if (spellDesc == null || spellDesc.isEmpty()) {
+                if (NonBlankString.of(spellDesc).isEmpty()) {
                     // Fallback: use TriggerDescription (may have doubled prefix, but better than nothing).
                     String tDesc = t.getParam("TriggerDescription");
                     if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;

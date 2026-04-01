@@ -232,18 +232,18 @@ class RulesParserTest {
     @Test
     void variableXStaysUppercase() {
         // Standalone X preserved
-        assertEquals("-X: deal X damage", AbilityDescription.applyCasing("-X: Deal X damage"));
-        assertEquals("+X/+0 until end of turn", AbilityDescription.applyCasing("+X/+0 until end of turn"));
-        assertEquals("where X is the number", AbilityDescription.applyCasing("Where X is the number"));
+        assertTrue(AbilityDescription.applyCasing("-X: Deal X damage").contentEquals("-X: deal X damage"));
+        assertTrue(AbilityDescription.applyCasing("+X/+0 until end of turn").contentEquals("+X/+0 until end of turn"));
+        assertTrue(AbilityDescription.applyCasing("Where X is the number").contentEquals("where X is the number"));
         // X inside words lowercased
-        assertEquals("exile target creature", AbilityDescription.applyCasing("Exile target creature"));
-        assertEquals("next end step", AbilityDescription.applyCasing("Next end step"));
-        assertEquals("tax each opponent", AbilityDescription.applyCasing("Tax each opponent"));
+        assertTrue(AbilityDescription.applyCasing("Exile target creature").contentEquals("exile target creature"));
+        assertTrue(AbilityDescription.applyCasing("Next end step").contentEquals("next end step"));
+        assertTrue(AbilityDescription.applyCasing("Tax each opponent").contentEquals("tax each opponent"));
         // Braces
-        assertEquals("{X}{R}", AbilityDescription.applyCasing("{X}{R}"));
+        assertTrue(AbilityDescription.applyCasing("{X}{R}").contentEquals("{X}{R}"));
         // Mixed
-        assertEquals("pay {X}, where X is the number of counters",
-                AbilityDescription.applyCasing("Pay {X}, where X is the number of counters"));
+        assertTrue(AbilityDescription.applyCasing("Pay {X}, where X is the number of counters")
+                .contentEquals("pay {X}, where X is the number of counters"));
     }
 
     @Test
@@ -734,13 +734,18 @@ class RulesParserTest {
     }
 
     @Test
-    void charmChoiceWithNoDescriptionAnywhere_throws() {
-        assertThrows(Exception.class, () -> convert(
+    void charmChoiceWithNoDescriptionSkipped() {
+        // A charm choice with no SpellDescription anywhere is silently skipped.
+        // The remaining choice with a description is emitted normally.
+        CardFace card = convert(
                 "Name:Bad Charm", "ManaCost:1 U", "Types:Sorcery",
                 "A:SP$ Charm | Choices$ DBNoop,DBDraw",
                 "SVar:DBNoop:DB$ Pump | Defined$ Self | NumAtt$ 0 | NumDef$ 0",
                 "SVar:DBDraw:DB$ Draw | NumCards$ 1 | SpellDescription$ Draw a card.",
-                "Oracle:"));
+                "Oracle:").faces().get(0);
+        List<Ability> options = allOptions(card);
+        assertEquals(1, options.size());
+        assertTrue(options.get(0).descriptionText().contentEquals("draw a card."));
     }
 
     @Test
