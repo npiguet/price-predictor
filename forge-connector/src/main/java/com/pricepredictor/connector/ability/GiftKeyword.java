@@ -26,6 +26,6 @@ public record GiftKeyword(NonBlankString descriptionText) implements Ability {
                 .filter(d -> d != null && !d.isEmpty())
                 .map(d -> ki.getTitle() + " " + d)
                 .orElse(ki.getTitle());
-        return new GiftKeyword(NonBlankString.require(AbilityDescription.applyCasing(giftTitle)));
+        return new GiftKeyword(AbilityDescription.applyCasing(NonBlankString.require(giftTitle)));
     }
 }

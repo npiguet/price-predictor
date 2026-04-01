@@ -33,7 +33,7 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
 
         List<Ability> result = new ArrayList<>();
         if (charmDesc != null && !charmDesc.isEmpty()) {
-            result.add(new CharmAbility(NonBlankString.require(AbilityDescription.applyCasing(charmDesc)), choiceSubs));
+            result.add(new CharmAbility(AbilityDescription.applyCasing(NonBlankString.require(charmDesc)), choiceSubs));
         } else {
             // No charm description — add choices as top-level abilities
             result.addAll(choiceSubs);
@@ -119,7 +119,7 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
                         + " \u2014 " + choiceDesc;
             }
             choiceSubs.add(new TextAbility(AbilityType.OPTION,
-                    AbilityDescription.applyCasing(choiceDesc)));
+                    AbilityDescription.applyCasing(NonBlankString.require(choiceDesc))));
         }
         return choiceSubs;
     }
@@ -194,7 +194,7 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
         for (var choice : choices) {
             String desc = extractChoiceDescription(choice);
             if (desc == null || desc.isEmpty()) continue;
-            options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(desc)));
+            options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(NonBlankString.require(desc))));
         }
         return options;
     }

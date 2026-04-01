@@ -23,6 +23,6 @@ public record AlternateCostSpell(NonBlankString descriptionText) implements Abil
         String precost = sa.getParam("PrecostDesc");
         String costDesc = sa.getParam("CostDesc");
         if (precost == null || costDesc == null) return Optional.empty();
-        return Optional.of(new AlternateCostSpell(NonBlankString.require(AbilityDescription.applyCasing(precost + " " + costDesc))));
+        return Optional.of(new AlternateCostSpell(AbilityDescription.applyCasing(NonBlankString.require(precost + " " + costDesc))));
     }
 }

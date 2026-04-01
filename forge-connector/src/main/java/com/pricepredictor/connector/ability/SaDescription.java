@@ -35,7 +35,7 @@ public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDes
 
     /** The description text with casing normalised. */
     public Optional<NonBlankString> cased() {
-        return stripped.map(s -> NonBlankString.require(AbilityDescription.applyCasing(s.value())));
+        return stripped.map(AbilityDescription::applyCasing);
     }
 
     /**

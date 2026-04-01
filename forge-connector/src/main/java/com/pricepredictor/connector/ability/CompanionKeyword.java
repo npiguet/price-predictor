@@ -26,6 +26,6 @@ public record CompanionKeyword(NonBlankString descriptionText) implements Abilit
                 .filter(d -> !d.isEmpty())
                 .map(d -> ki.getTitle() + " \u2014 " + d)
                 .orElse(ki.getTitle());
-        return new CompanionKeyword(NonBlankString.require(AbilityDescription.applyCasing(compTitle)));
+        return new CompanionKeyword(AbilityDescription.applyCasing(NonBlankString.require(compTitle)));
     }
 }

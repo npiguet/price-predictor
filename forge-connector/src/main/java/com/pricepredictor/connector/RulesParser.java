@@ -309,7 +309,7 @@ public class RulesParser {
     }
 
     private static CardFace buildCardFace(ICardFace face, List<Ability> abilities) {
-        NonBlankString name = NonBlankString.require(AbilityDescription.applyCasing(face.getName()));
+        NonBlankString name = AbilityDescription.applyCasing(NonBlankString.require(face.getName()));
         ManaCost manaCost = face.getManaCost();
         Optional<NonBlankString> manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
                 ? Optional.empty() : NonBlankString.of(manaCost.getSimpleString());
@@ -325,7 +325,7 @@ public class RulesParser {
                 .filter(t -> !t.isEmpty())
                 .map(t -> t.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip())
                 .flatMap(NonBlankString::of)
-                .map(nbs -> NonBlankString.require(AbilityDescription.applyCasing(nbs.value())));
+                .map(AbilityDescription::applyCasing);
 
         return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, Optional.empty(), text, abilities);
     }
@@ -337,7 +337,7 @@ public class RulesParser {
         String original = ki.getOriginal();
 
         if (original.startsWith("CARDNAME ") || original.startsWith("NICKNAME ")) {
-            abilities.add(new TextAbility(AbilityType.STATIC, AbilityDescription.applyCasing(original)));
+            abilities.add(new TextAbility(AbilityType.STATIC, AbilityDescription.applyCasing(NonBlankString.require(original))));
             return;
         }
         if (original.startsWith("Class:")) {

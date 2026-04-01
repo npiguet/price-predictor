@@ -25,14 +25,14 @@ public final class AbilityDescription {
      * Full normalization returning empty Optional for empty input or when stripping reduces to nothing.
      * Pipeline: strip reminder text, then apply casing.
      */
-    public static Optional<NonBlankString> normalize(@lombok.NonNull String raw) {
+    public static @lombok.NonNull Optional<NonBlankString> normalize(@lombok.NonNull String raw) {
         if (raw.isEmpty()) return Optional.empty();
         String result = applyCasing(stripReminderText(raw));
         return NonBlankString.of(result);
     }
 
     /** Strip parenthesized reminder text. */
-    public static String stripReminderText(@lombok.NonNull String text) {
+    public static @lombok.NonNull String stripReminderText(@lombok.NonNull String text) {
         return REMINDER_TEXT.matcher(text).replaceAll("").trim();
     }
 
@@ -40,7 +40,7 @@ public final class AbilityDescription {
      * Join items with commas and a final "or" disjunction.
      * ["A"] → "A", ["A","B"] → "A or B", ["A","B","C"] → "A, B, or C"
      */
-    public static String joinDisjunction(List<String> items) {
+    public static @lombok.NonNull String joinDisjunction(List<String> items) {
         return switch (items.size()) {
             case 0 -> "";
             case 1 -> items.get(0);
@@ -57,12 +57,16 @@ public final class AbilityDescription {
      * Replace Forge-internal VERT placeholder with " | " so dice-outcome descriptions
      * render correctly (e.g. "1—9 VERT Tap all…" → "1—9 | Tap all…").
      */
-    public static String replaceVert(@lombok.NonNull String text) {
+    public static @lombok.NonNull String replaceVert(@lombok.NonNull String text) {
         return text.replace(" VERT ", " | ").replace("VERT", "");
     }
 
     /** Lowercase text, preserving brace symbols, placeholders, and standalone X. */
-    public static String applyCasing(@lombok.NonNull String text) {
+    public static @lombok.NonNull NonBlankString applyCasing(@lombok.NonNull NonBlankString text) {
+        return NonBlankString.require(applyCasing(text.value()));
+    }
+
+    public static @lombok.NonNull String applyCasing(@lombok.NonNull String text) {
         // Protect brace symbols by extracting them
         List<String> braceSymbols = new ArrayList<>();
         Matcher m = BRACE_SYMBOL.matcher(text);

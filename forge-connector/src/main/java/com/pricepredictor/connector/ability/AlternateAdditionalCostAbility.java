@@ -35,6 +35,6 @@ public record AlternateAdditionalCostAbility(NonBlankString descriptionText) imp
             terms.add(cost.isOnlyManaCost() ? "pay " + term : term);
         }
         String desc = AbilityDescription.joinDisjunction(terms);
-        return List.of(new AlternateAdditionalCostAbility(NonBlankString.require(AbilityDescription.applyCasing(desc))));
+        return List.of(new AlternateAdditionalCostAbility(AbilityDescription.applyCasing(NonBlankString.require(desc))));
     }
 }

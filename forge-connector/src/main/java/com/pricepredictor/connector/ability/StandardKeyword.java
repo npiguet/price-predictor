@@ -66,7 +66,7 @@ public record StandardKeyword(AbilityType type, NonBlankString descriptionText) 
                 .orElse(finalTitle);
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
-        return new StandardKeyword(kwType, NonBlankString.require(AbilityDescription.applyCasing(title)));
+        return new StandardKeyword(kwType, AbilityDescription.applyCasing(NonBlankString.require(title)));
     }
 
     // --- Per-keyword title formatters ---
