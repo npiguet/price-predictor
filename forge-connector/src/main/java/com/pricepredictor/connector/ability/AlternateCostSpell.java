@@ -22,9 +22,10 @@ public record AlternateCostSpell(NonBlankString descriptionText) implements Abil
     }
 
     public static Optional<AlternateCostSpell> of(SpellAbility sa) {
-        return NonBlankString.of(sa.getParam("PrecostDesc"))
-                .flatMap(precost -> NonBlankString.of(sa.getParam("CostDesc"))
-                        .map(costDesc -> new AlternateCostSpell(applyCasing(precost + " " + costDesc)))
-                );
+        return NonBlankString.of(sa.getParam("PrecostDesc")).flatMap(precost ->
+                NonBlankString.of(sa.getParam("CostDesc")).map(costDesc ->
+                        new AlternateCostSpell(applyCasing(precost + " " + costDesc))
+                )
+        );
     }
 }

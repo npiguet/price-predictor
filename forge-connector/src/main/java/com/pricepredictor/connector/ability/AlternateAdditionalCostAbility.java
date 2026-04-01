@@ -9,6 +9,10 @@ import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static com.pricepredictor.connector.AbilityDescription.applyCasing;
 
 /**
  * AlternateAdditionalCost keyword — formats a disjunction of alternate payment options.
@@ -26,15 +30,15 @@ public record AlternateAdditionalCostAbility(NonBlankString descriptionText) imp
     }
 
     public static List<Ability> fromKeyword(KeywordInterface ki) {
-        String[] costParts = KeywordFields.parseAll(ki.getOriginal()).tailFields();
-        List<String> terms = new ArrayList<>();
-        for (String costPart : costParts) {
-            Cost cost = new Cost(costPart, false);
-            String costText = cost.toSimpleString();
-            String term = costText.substring(0, 1).toLowerCase() + costText.substring(1);
-            terms.add(cost.isOnlyManaCost() ? "pay " + term : term);
-        }
+        var terms = Stream.of(KeywordFields.parseAll(ki.getOriginal()).tailFields())
+                .map(costPart -> {
+                    Cost cost = new Cost(costPart, false);
+                    String costText = cost.toSimpleString();
+                    String term = costText.substring(0, 1).toLowerCase() + costText.substring(1);
+                    return cost.isOnlyManaCost() ? "pay " + term : term;
+                })
+                .toList();
         String desc = AbilityDescription.joinDisjunction(terms);
-        return List.of(new AlternateAdditionalCostAbility(AbilityDescription.applyCasing(desc)));
+        return List.of(new AlternateAdditionalCostAbility(applyCasing(desc)));
     }
 }

@@ -6,10 +6,15 @@ import com.pricepredictor.connector.AbilityType;
 import com.pricepredictor.connector.NonBlankString;
 import forge.game.spellability.SpellAbility;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static com.pricepredictor.connector.AbilityDescription.applyCasing;
+import static com.pricepredictor.connector.ability.SpellAbilityUtils.getParam;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.joining;
 
 /**
  * Charm ability with nested OPTION sub-abilities. If the charm has no description,
@@ -29,12 +34,9 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
 
     public static List<Ability> fromSpellAbility(SpellAbility sa) {
         List<Ability> choiceSubs = collectChoices(sa);
-        List<Ability> result = new ArrayList<>();
-        resolveCharmDescription(sa).ifPresentOrElse(
-                desc -> result.add(new CharmAbility(AbilityDescription.applyCasing(desc), choiceSubs)),
-                () -> result.addAll(choiceSubs)
-        );
-        return result;
+        return resolveCharmDescription(sa)
+                .map(desc -> List.of((Ability) new CharmAbility(applyCasing(desc), choiceSubs)))
+                .orElse(choiceSubs);
     }
 
     /**
@@ -87,48 +89,31 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
      * prefix adornments so that the option text matches oracle.
      */
     private static List<Ability> collectChoices(SpellAbility sa) {
-        List<Ability> choiceSubs = new ArrayList<>();
-        var choices = sa.getAdditionalAbilityList("Choices");
-        if (choices == null) return choiceSubs;
-        for (var choice : choices) {
-            // Unwrap to String for prefix-concatenation; wrap back to NonBlankString at the end.
-            String choiceDesc = extractChoiceDescription(choice).map(NonBlankString::value).orElse(null);
-            // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
-            // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
-            String precostDesc = choice.getParam("PrecostDesc");
-            if (precostDesc != null && !precostDesc.isEmpty()) {
-                choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                        ? precostDesc + " — " + choiceDesc
-                        : precostDesc;
-            }
-            String modeCost = choice.getParam("ModeCost");
-            if (modeCost != null && !modeCost.isEmpty()) {
-                String costToken = "{" + modeCost.trim() + "}";
-                choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
-                        ? costToken + " — " + choiceDesc
-                        : costToken;
-            }
-            String pawprint = choice.getParam("Pawprint");
-            if (pawprint != null) {
-                choiceDesc = "{P}".repeat(Integer.parseInt(pawprint))
-                        + " — " + choiceDesc;
-            }
-            if (choiceDesc != null && !choiceDesc.isEmpty()) {
-                choiceSubs.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(choiceDesc)));
-            }
-        }
-        return choiceSubs;
+        return sa.getAdditionalAbilityList("Choices")
+                .stream()
+                .flatMap(choice -> Stream.of(
+                                getParam(choice, "Pawprint").map(pp -> "{P}".repeat(Integer.parseInt(pp.value()))),
+                                getParam(choice, "ModeCost").map(cost -> "{" + cost.value() + "}"),
+                                getParam(choice, "PrecostDesc").map(NonBlankString::value),
+                                extractChoiceDescription(choice).map(NonBlankString::value)
+                        )
+                        .flatMap(Optional::stream)
+                        .collect(collectingAndThen(joining(" — "), NonBlankString::of))
+                        .stream())
+                .map(choiceDesc -> (Ability) new TextAbility(AbilityType.OPTION, applyCasing(choiceDesc)))
+                .toList();
     }
+
 
     /**
      * Synthesize a "choose N —" header from CharmNum / MinCharmNum params.
      * Returns null if CharmNum is a variable/expression (can't determine statically).
      * Logic:
-     *   MinCharmNum=0 → "choose up to N"
-     *   MinCharmNum=1, CharmNum=2 → "choose one or both"
-     *   MinCharmNum=1, CharmNum≥3 → "choose one or more"
-     *   no MinCharmNum (exact) → "choose N"
-     *   no CharmNum → "choose one" (default)
+     * MinCharmNum=0 → "choose up to N"
+     * MinCharmNum=1, CharmNum=2 → "choose one or both"
+     * MinCharmNum=1, CharmNum≥3 → "choose one or more"
+     * no MinCharmNum (exact) → "choose N"
+     * no CharmNum → "choose one" (default)
      * No trailing em-dash: the header stands on its own line.
      */
     static Optional<NonBlankString> synthesizeCharmHeader(SpellAbility sa) {
@@ -159,8 +144,11 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
 
     private static int parseSimpleInt(String s) {
         if (s == null) return -1;
-        try { return Integer.parseInt(s.trim()); }
-        catch (NumberFormatException e) { return -1; }
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     private static String numberWord(int n) {
@@ -184,15 +172,13 @@ public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbil
      * and are not repeated in oracle text when the choice list appears under a trigger.
      */
     public static List<Ability> optionsFrom(SpellAbility sa) {
-        List<Ability> options = new ArrayList<>();
-        var choices = sa.getAdditionalAbilityList("Choices");
-        if (choices == null) return options;
-        for (var choice : choices) {
-            extractChoiceDescription(choice)
-                    .map(AbilityDescription::applyCasing)
-                    .ifPresent(desc -> options.add(new TextAbility(AbilityType.OPTION, desc)));
-        }
-        return options;
+        return sa.getAdditionalAbilityList("Choices").stream()
+                .flatMap(choice -> extractChoiceDescription(choice)
+                        .map(AbilityDescription::applyCasing)
+                        .stream()
+                )
+                .map(desc -> (Ability)new TextAbility(AbilityType.OPTION, desc))
+                .toList();
     }
 
     /**

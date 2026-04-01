@@ -83,6 +83,10 @@ public final class SpellAbilityUtils {
         return List.of();
     }
 
+    static Optional<NonBlankString> getParam(SpellAbility sa, String param) {
+        return NonBlankString.of(sa.getParam(param));
+    }
+
     static Optional<String> findParamInChain(SpellAbility sa, String param) {
         return walkChain(sa)
                 .map(cur -> cur.getParam(param))
