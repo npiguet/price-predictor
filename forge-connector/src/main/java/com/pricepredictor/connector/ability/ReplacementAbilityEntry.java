@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.replacement.ReplacementEffect;
 
 import java.util.Optional;
@@ -10,7 +11,7 @@ import java.util.Optional;
 /**
  * Ability wrapping a Forge ReplacementEffect.
  */
-public record ReplacementAbilityEntry(String descriptionText) implements Ability {
+public record ReplacementAbilityEntry(NonBlankString descriptionText) implements Ability {
 
     @Override
     public AbilityType type() {

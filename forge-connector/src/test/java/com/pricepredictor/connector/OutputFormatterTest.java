@@ -4,16 +4,21 @@ import com.pricepredictor.connector.ability.TextAbility;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class OutputFormatterTest {
 
+    private static NonBlankString nbs(String s) { return NonBlankString.require(s); }
+    private static <T> Optional<T> absent() { return Optional.empty(); }
+    private static Optional<NonBlankString> present(String s) { return Optional.of(NonBlankString.require(s)); }
+
     @Test
     void vanillaCreatureFormatsCorrectly() {
         CardFace card = new CardFace(
-                "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, null, List.of());
+                nbs("grizzly bears"), present("{1}{G}"), nbs("creature bear"),
+                present("2/2"), absent(), absent(), absent(), absent(), List.of());
         String output = card.formatText();
         assertEquals("""
                 name: grizzly bears
@@ -25,8 +30,8 @@ class OutputFormatterTest {
     @Test
     void nullOptionalFieldsOmitted() {
         CardFace card = new CardFace(
-                "lightning bolt", "{R}", "instant",
-                null, null, null, null, null,
+                nbs("lightning bolt"), present("{R}"), nbs("instant"),
+                absent(), absent(), absent(), absent(), absent(),
                 List.of(new TextAbility(AbilityType.SPELL,
                         "CARDNAME deals 3 damage to any target.")));
         String output = card.formatText();
@@ -41,8 +46,8 @@ class OutputFormatterTest {
     @Test
     void abilitiesFormattedInOrder() {
         CardFace card = new CardFace(
-                "test card", "{W}", "creature human",
-                "1/1", null, null, null, null,
+                nbs("test card"), present("{W}"), nbs("creature human"),
+                present("1/1"), absent(), absent(), absent(), absent(),
                 List.of(
                         new TextAbility(AbilityType.STATIC, "flying"),
                         new TextAbility(AbilityType.ACTIVATED, "{T}: add {W}."),
@@ -80,11 +85,11 @@ class OutputFormatterTest {
     @Test
     void multiFaceCardWithLayout() {
         CardFace front = new CardFace(
-                "daring sleuth", "{1}{U}", "creature human rogue",
-                "2/1", null, null, null, null, List.of());
+                nbs("daring sleuth"), present("{1}{U}"), nbs("creature human rogue"),
+                present("2/1"), absent(), absent(), absent(), absent(), List.of());
         CardFace back = new CardFace(
-                "bearer of overwhelming truths", null, "creature human wizard",
-                "3/2", null, null, null, null, List.of());
+                nbs("bearer of overwhelming truths"), absent(), nbs("creature human wizard"),
+                present("3/2"), absent(), absent(), absent(), absent(), List.of());
         MultiCard multi = MultiCard.multiFace("transform", List.of(front, back));
         String output = multi.formatText();
 
@@ -97,8 +102,8 @@ class OutputFormatterTest {
     @Test
     void singleFaceCardNoLayoutLine() {
         CardFace card = new CardFace(
-                "grizzly bears", "{1}{G}", "creature bear",
-                "2/2", null, null, null, null, List.of());
+                nbs("grizzly bears"), present("{1}{G}"), nbs("creature bear"),
+                present("2/2"), absent(), absent(), absent(), absent(), List.of());
         MultiCard single = MultiCard.singleFace(card);
         String output = single.formatText();
         assertFalse(output.contains("layout:"));
@@ -107,8 +112,8 @@ class OutputFormatterTest {
     @Test
     void loyaltyFieldIncluded() {
         CardFace card = new CardFace(
-                "jace beleren", "{1}{U}{U}", "legendary planeswalker jace",
-                null, "3", null, null, null,
+                nbs("jace beleren"), present("{1}{U}{U}"), nbs("legendary planeswalker jace"),
+                absent(), present("3"), absent(), absent(), absent(),
                 List.of(new TextAbility(AbilityType.PLANESWALKER, "+2: each player draws a card.")));
         String output = card.formatText();
         assertTrue(output.contains("loyalty: 3"));

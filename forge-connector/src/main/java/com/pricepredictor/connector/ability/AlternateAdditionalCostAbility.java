@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.cost.Cost;
 import forge.game.keyword.KeywordInterface;
 
@@ -17,7 +18,7 @@ import java.util.List;
  * prefixed with "pay"; tap/sacrifice/other costs are used as-is. The resulting terms
  * are joined as a disjunction (e.g. "pay {G} or sacrifice a creature").
  */
-public record AlternateAdditionalCostAbility(String descriptionText) implements Ability {
+public record AlternateAdditionalCostAbility(NonBlankString descriptionText) implements Ability {
 
     @Override
     public AbilityType type() {
@@ -34,6 +35,6 @@ public record AlternateAdditionalCostAbility(String descriptionText) implements 
             terms.add(cost.isOnlyManaCost() ? "pay " + term : term);
         }
         String desc = AbilityDescription.joinDisjunction(terms);
-        return List.of(new AlternateAdditionalCostAbility(AbilityDescription.applyCasing(desc)));
+        return List.of(new AlternateAdditionalCostAbility(NonBlankString.require(AbilityDescription.applyCasing(desc))));
     }
 }

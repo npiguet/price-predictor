@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
@@ -39,6 +40,7 @@ public final class HauntKeyword {
                 .findFirst()
                 .or(() -> hauntFields.hasField(1)
                         ? SpellAbilityUtils.extractParam(card.getSVar(hauntFields.field(1)), "SpellDescription")
+                                .map(NonBlankString::value)
                         : Optional.empty())
                 .orElse(null);
 
@@ -51,7 +53,7 @@ public final class HauntKeyword {
         }
 
         // 2. Process triggers — deduplicate by description
-        Set<String> emitted = new HashSet<>();
+        Set<NonBlankString> emitted = new HashSet<>();
         for (Trigger t : ki.getTriggers()) {
             String tDesc = t.getParam("TriggerDescription");
             if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
@@ -59,20 +61,20 @@ public final class HauntKeyword {
             // Replace ABILITY placeholder: charm, dice-roll, or direct haunt-effect substitution.
             if (tDesc.contains("ABILITY")) {
                 SpellAbility overrideSa = t.getOverridingAbility();
-                SpellAbilityUtils.AbilityPlaceholderResult resolved =
+                Optional<SpellAbilityUtils.AbilityPlaceholderResult> resolved =
                         SpellAbilityUtils.resolveAbilityPlaceholder(tDesc, overrideSa, effectDesc);
-                if (resolved != null) {
-                    String normalized2 = resolved.expandedDescription();
-                    if (normalized2 == null || normalized2.isEmpty()) continue;
+                if (resolved.isPresent()) {
+                    SpellAbilityUtils.AbilityPlaceholderResult r = resolved.get();
+                    NonBlankString normalized2 = r.expandedDescription();
                     if (!emitted.add(normalized2)) continue;
                     AbilityType type2 = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
-                    result.add(new TextAbility(type2, AbilityDescription.applyCasing(normalized2), 0, resolved.options()));
+                    result.add(new TextAbility(type2, normalized2, 0, r.options()));
                     continue;
                 }
             }
 
-            String normalized = AbilityDescription.normalize(tDesc).orElse(null);
-            if (normalized == null || normalized.isEmpty()) continue;
+            NonBlankString normalized = AbilityDescription.normalize(tDesc).orElse(null);
+            if (normalized == null) continue;
             if (!emitted.add(normalized)) continue; // skip duplicates
 
             AbilityType type = t.isStatic() ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;

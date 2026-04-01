@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
@@ -10,7 +11,7 @@ import forge.game.spellability.SpellAbility;
 /**
  * Gift keyword — searches the card's spell abilities for the gift description parameter.
  */
-public record GiftKeyword(String descriptionText) implements Ability {
+public record GiftKeyword(NonBlankString descriptionText) implements Ability {
 
     @Override
     public AbilityType type() {
@@ -25,6 +26,6 @@ public record GiftKeyword(String descriptionText) implements Ability {
                 .filter(d -> d != null && !d.isEmpty())
                 .map(d -> ki.getTitle() + " " + d)
                 .orElse(ki.getTitle());
-        return new GiftKeyword(AbilityDescription.applyCasing(giftTitle));
+        return new GiftKeyword(NonBlankString.require(AbilityDescription.applyCasing(giftTitle)));
     }
 }

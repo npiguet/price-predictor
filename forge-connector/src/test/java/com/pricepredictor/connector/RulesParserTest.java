@@ -82,19 +82,19 @@ class RulesParserTest {
     @Test
     void vanillaCreature() {
         CardFace card = face("g/grizzly_bears.txt");
-        assertEquals("grizzly bears", card.name());
-        assertTrue(card.manaCost().contains("{G}"));
-        assertEquals("creature bear", card.types());
-        assertEquals("2/2", card.powerToughness());
+        assertTrue(card.name().contentEquals("grizzly bears"));
+        assertTrue(card.manaCost().orElseThrow().contains("{G}"));
+        assertTrue(card.types().contentEquals("creature bear"));
+        assertTrue(card.powerToughness().orElseThrow().contentEquals("2/2"));
         assertTrue(card.abilities().isEmpty());
-        assertNull(card.loyalty());
+        assertTrue(card.loyalty().isEmpty());
     }
 
     @Test
     void passiveKeywords() {
         var keywords = abilitiesOfType(face("s/serra_angel.txt"), AbilityType.STATIC);
-        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("flying")));
-        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().equals("vigilance")));
+        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().contentEquals("flying")));
+        assertTrue(keywords.stream().anyMatch(k -> k.descriptionText().contentEquals("vigilance")));
         assertFalse(keywords.get(0).formatLine().contains("["), "Static keywords should have no action number");
     }
 
@@ -249,7 +249,7 @@ class RulesParserTest {
     @Test
     void noCostCardOmitsManaCostLine() {
         CardFace card = face("a/ancestral_vision.txt");
-        assertNull(card.manaCost());
+        assertTrue(card.manaCost().isEmpty());
         assertFalse(card.formatText().contains("mana cost:"));
     }
 
@@ -266,7 +266,7 @@ class RulesParserTest {
     @Test
     void planeswalkerAbilities() {
         CardFace card = face("j/jace_beleren.txt");
-        assertEquals("3", card.loyalty());
+        assertTrue(card.loyalty().orElseThrow().contentEquals("3"));
         var pw = abilitiesOfType(card, AbilityType.PLANESWALKER);
         assertEquals(3, pw.size());
         assertTrue(pw.get(0).formatLine().contains("[+2]:"));
@@ -298,15 +298,15 @@ class RulesParserTest {
         assertEquals(2, result.faces().size());
 
         CardFace front = result.faces().get(0);
-        assertEquals("invasion of kamigawa", front.name());
-        assertEquals("4", front.defense());
-        assertNull(front.powerToughness());
+        assertTrue(front.name().contentEquals("invasion of kamigawa"));
+        assertTrue(front.defense().orElseThrow().contentEquals("4"));
+        assertTrue(front.powerToughness().isEmpty());
         assertTrue(front.formatText().contains("defense: 4"));
 
         CardFace back = result.faces().get(1);
-        assertEquals("rooftop saboteurs", back.name());
-        assertNull(back.defense());
-        assertEquals("2/3", back.powerToughness());
+        assertTrue(back.name().contentEquals("rooftop saboteurs"));
+        assertTrue(back.defense().isEmpty());
+        assertTrue(back.powerToughness().orElseThrow().contentEquals("2/3"));
     }
 
     @Test
@@ -314,8 +314,8 @@ class RulesParserTest {
         MultiCard result = convertFromFile("d/daring_sleuth_bearer_of_overwhelming_truths.txt");
         assertEquals("transform", result.layout());
         assertEquals(2, result.faces().size());
-        assertEquals("daring sleuth", result.faces().get(0).name());
-        assertEquals("bearer of overwhelming truths", result.faces().get(1).name());
+        assertTrue(result.faces().get(0).name().contentEquals("daring sleuth"));
+        assertTrue(result.faces().get(1).name().contentEquals("bearer of overwhelming truths"));
     }
 
     @Test
@@ -439,7 +439,7 @@ class RulesParserTest {
     @Test
     void classEnchantmentLevels() {
         CardFace card = face("a/artificer_class.txt");
-        assertEquals("enchantment class", card.types());
+        assertTrue(card.types().contentEquals("enchantment class"));
 
         var levels = abilitiesOfType(card, AbilityType.LEVEL);
         assertEquals(3, levels.size());
@@ -610,7 +610,7 @@ class RulesParserTest {
         MultiCard result = convertFromFile(file);
         assertEquals("meld", result.layout());
         assertEquals(1, result.faces().size());
-        assertEquals(expectedName, result.faces().get(0).name());
+        assertTrue(result.faces().get(0).name().contentEquals(expectedName));
     }
 
     // --- Implicit land mana abilities ---
@@ -620,7 +620,7 @@ class RulesParserTest {
         CardFace card = face("f/forest.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        assertEquals("{T}: add {G}", activated.get(0).descriptionText());
+        assertTrue(activated.get(0).descriptionText().contentEquals("{T}: add {G}"));
     }
 
     @Test
@@ -651,7 +651,7 @@ class RulesParserTest {
             "t/tarnation_vista.txt, tarnation vista",
     })
     void cardConvertsWithoutError(String file, String expectedName) {
-        assertEquals(expectedName, face(file).name());
+        assertTrue(face(file).name().contentEquals(expectedName));
     }
 
     // --- Sub-ability description walking ---
@@ -700,7 +700,7 @@ class RulesParserTest {
         CardFace card = face("l/llanowar_elves.txt");
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
-        String desc = activated.get(0).descriptionText();
+        String desc = activated.get(0).descriptionText().value();
         // Count occurrences of "add" — should appear exactly once
         long addCount = desc.chars().mapToObj(i -> desc.substring(Math.max(0, desc.indexOf("add"))))
                 .count();
@@ -784,7 +784,7 @@ class RulesParserTest {
         MultiCard result = convertFromFile("b/bonecrusher_giant_stomp.txt");
         assertEquals("adventure", result.layout());
         CardFace main = result.faces().get(0);
-        assertEquals("bonecrusher giant", main.name());
+        assertTrue(main.name().contentEquals("bonecrusher giant"));
         // Main face should have the triggered ability
         assertFalse(abilitiesOfType(main, AbilityType.TRIGGERED).isEmpty(),
                 "Main face should have its triggered ability: " + main.abilities());
@@ -796,7 +796,7 @@ class RulesParserTest {
                 "Stomp's effect must not leak onto main face: " + main.abilities());
         // Adventure face should have the spell
         CardFace adventure = result.faces().get(1);
-        assertEquals("stomp", adventure.name());
+        assertTrue(adventure.name().contentEquals("stomp"));
         assertFalse(abilitiesOfType(adventure, AbilityType.SPELL).isEmpty(),
                 "Adventure face should have its spell: " + adventure.abilities());
     }
@@ -862,7 +862,7 @@ class RulesParserTest {
         assertEquals(1, spells.size(), "Non-creature haunt should emit one SPELL: " + card.abilities());
         assertEquals(2, triggered.size(), "Non-creature haunt should emit two TRIGGERED: " + card.abilities());
         assertTrue(spells.get(0).descriptionText().contains("destroy target nonwhite"));
-        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().equals("haunt")),
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contentEquals("haunt")),
                 "One TRIGGERED should be the haunt keyword line: " + triggered);
         assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("haunts dies")
                 && a.descriptionText().contains("destroy target nonwhite")),
@@ -878,7 +878,7 @@ class RulesParserTest {
                 "Creature haunt should not emit a SPELL: " + card.abilities());
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertEquals(2, triggered.size(), "Creature haunt should emit two TRIGGERED: " + card.abilities());
-        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().equals("haunt")),
+        assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contentEquals("haunt")),
                 "One TRIGGERED should be the haunt keyword line: " + triggered);
         assertTrue(triggered.stream().anyMatch(a -> a.descriptionText().contains("haunts dies")
                 && a.descriptionText().contains("loses 2 life")),
@@ -895,11 +895,11 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty(), "Visit attraction should emit a TRIGGERED: " + card.abilities());
         Ability visit = triggered.get(0);
-        assertTrue(visit.descriptionText().toLowerCase().contains("visit"),
+        assertTrue(visit.descriptionText().value().toLowerCase().contains("visit"),
                 "Visit triggered description should contain 'visit': " + visit.descriptionText());
         assertTrue(visit.descriptionText().contains("exile the top"),
                 "Visit triggered description should contain the exile effect: " + visit.descriptionText());
-        assertFalse(visit.descriptionText().equalsIgnoreCase("visit:trigexile"),
+        assertFalse(visit.descriptionText().value().equalsIgnoreCase("visit:trigexile"),
                 "Visit should not be emitted as raw 'visit:trigexile': " + visit.descriptionText());
     }
 
@@ -924,7 +924,7 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertEquals(1, triggered.size(), "Should have exactly 1 TRIGGERED: " + card.abilities());
         Ability visit = triggered.get(0);
-        String desc = visit.descriptionText().toLowerCase();
+        String desc = visit.descriptionText().value().toLowerCase();
         assertTrue(desc.startsWith("visit —"), "Description should start with 'visit —': " + desc);
         if (checkNoPrefixDoubling) {
             assertFalse(desc.contains("visit — visit"), "Description must not double 'visit —': " + desc);
@@ -1047,13 +1047,13 @@ class RulesParserTest {
         assertEquals(1, triggered.size(),
                 "Balloon Stand should have 1 TRIGGERED ability: " + card.abilities());
         Ability visit = triggered.get(0);
-        assertTrue(visit.descriptionText().toLowerCase().contains("visit"),
+        assertTrue(visit.descriptionText().value().toLowerCase().contains("visit"),
                 "Triggered ability should have 'visit' in description: " + visit.descriptionText());
         List<Ability> options = visit.subAbilities().stream()
                 .filter(a -> a.type() == AbilityType.OPTION).toList();
         assertEquals(2, options.size(),
                 "Visit charm should expand to 2 OPTION sub-abilities: " + visit.subAbilities());
-        assertTrue(options.stream().anyMatch(a -> a.descriptionText().toLowerCase().contains("balloon")),
+        assertTrue(options.stream().anyMatch(a -> a.descriptionText().value().toLowerCase().contains("balloon")),
                 "Should have a Balloon option: " + options);
     }
 
@@ -1082,7 +1082,7 @@ class RulesParserTest {
         CardFace card = face("c/chancellor_of_the_tangle.txt");
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertTrue(triggered.stream().anyMatch(a ->
-                        a.descriptionText().toLowerCase().contains("may reveal")),
+                        a.descriptionText().value().toLowerCase().contains("may reveal")),
                 "Should have a TRIGGERED ability containing 'may reveal': " + triggered);
     }
 
@@ -1207,7 +1207,7 @@ class RulesParserTest {
         assertFalse(chapters.isEmpty(), "Should have CHAPTER abilities: " + card.abilities());
         // At least one chapter must have non-empty effect text after the roman numeral header
         assertTrue(chapters.stream().anyMatch(c -> {
-            String desc = c.descriptionText();
+            String desc = c.descriptionText().value();
             int dash = desc.indexOf('\u2014');
             return dash >= 0 && !desc.substring(dash + 1).trim().isEmpty();
         }), "At least one chapter should have effect text after em-dash: " + chapters);
@@ -1220,10 +1220,10 @@ class RulesParserTest {
         // calim_djinn_emperor: K:Ward:2 should emit "static: ward {2}", not "triggered: ward {2}".
         CardFace card = face("c/calim_djinn_emperor.txt");
         var statics = abilitiesOfType(card, AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(a -> a.descriptionText().toLowerCase().contains("ward")),
+        assertTrue(statics.stream().anyMatch(a -> a.descriptionText().value().toLowerCase().contains("ward")),
                 "Ward should be classified as STATIC: " + card.abilities());
         assertEquals(0, abilitiesOfType(card, AbilityType.TRIGGERED).stream()
-                        .filter(a -> a.descriptionText().toLowerCase().contains("ward")).count(),
+                        .filter(a -> a.descriptionText().value().toLowerCase().contains("ward")).count(),
                 "Ward must NOT appear as TRIGGERED: " + card.abilities());
     }
 
@@ -1234,7 +1234,7 @@ class RulesParserTest {
         // TriggerDescription$ on root spell SA must be used as the spell description
         var spells = abilitiesOfType(face("s/sheoldreds_restoration.txt"), AbilityType.SPELL);
         assertTrue(spells.stream().anyMatch(
-                a -> a.descriptionText().toLowerCase().contains("return target creature card")),
+                a -> a.descriptionText().value().toLowerCase().contains("return target creature card")),
                 "sheoldred's restoration spell effect missing: " + spells);
     }
 
@@ -1243,7 +1243,7 @@ class RulesParserTest {
         // AdditionalDescription$ on Charm SA must become the main spell line
         var spells = abilitiesOfType(face("v/vincents_limit_break.txt"), AbilityType.SPELL);
         assertTrue(spells.stream().anyMatch(
-                a -> a.descriptionText().toLowerCase().contains("until end of turn")),
+                a -> a.descriptionText().value().toLowerCase().contains("until end of turn")),
                 "vincent's limit break missing AdditionalDescription: " + spells);
     }
 
@@ -1553,7 +1553,7 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
         for (Ability t : triggered) {
-            String desc = t.descriptionText();
+            String desc = t.descriptionText().value();
             // "1 damage" must appear exactly once — duplication would cause two occurrences.
             int first = desc.indexOf("1 damage");
             assertTrue(first >= 0, "Must contain '1 damage': " + desc);
@@ -1568,7 +1568,7 @@ class RulesParserTest {
         var triggered = abilitiesOfType(card, AbilityType.TRIGGERED);
         assertFalse(triggered.isEmpty(), "Should have TRIGGERED: " + card.abilities());
         for (Ability t : triggered) {
-            String desc = t.descriptionText();
+            String desc = t.descriptionText().value();
             // "destroy" must appear exactly once — duplication would cause two occurrences.
             int first = desc.indexOf("destroy");
             assertTrue(first >= 0, "Must contain 'destroy': " + desc);
@@ -1584,7 +1584,7 @@ class RulesParserTest {
         CardFace card = face("b/bifurcate.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String desc = spells.get(0).descriptionText();
+        String desc = spells.get(0).descriptionText().value();
         // "search" must appear exactly once (StackDescription duplication would cause two)
         int first = desc.indexOf("search");
         assertTrue(first >= 0, "Must contain 'search': " + desc);
@@ -1611,7 +1611,7 @@ class RulesParserTest {
         CardFace card = face("e/energy_arc.txt");
         var spells = abilitiesOfType(card, AbilityType.SPELL);
         assertEquals(1, spells.size(), "Should have exactly 1 SPELL: " + card.abilities());
-        String desc = spells.get(0).descriptionText();
+        String desc = spells.get(0).descriptionText().value();
         // "prevent" must appear exactly once
         int first = desc.indexOf("prevent");
         assertTrue(first >= 0, "Must contain 'prevent': " + desc);
@@ -1780,7 +1780,7 @@ class RulesParserTest {
         // ability.  Pin this behaviour so it is not accidentally collapsed.
         var statics = abilitiesOfType(face("e/elite_inquisitor.txt"), AbilityType.STATIC);
         long protections = statics.stream()
-                .filter(a -> a.descriptionText().toLowerCase().contains("protection from"))
+                .filter(a -> a.descriptionText().value().toLowerCase().contains("protection from"))
                 .count();
         assertEquals(3, protections,
                 "Each of the three protection keywords must produce its own static line: " + statics);
@@ -1793,7 +1793,7 @@ class RulesParserTest {
         // converter correctly models each Forge keyword as its own static ability.
         var statics = abilitiesOfType(face("j/jaheira_harper_emissary.txt"), AbilityType.STATIC);
         long hexproofs = statics.stream()
-                .filter(a -> a.descriptionText().toLowerCase().contains("hexproof from"))
+                .filter(a -> a.descriptionText().value().toLowerCase().contains("hexproof from"))
                 .count();
         assertEquals(2, hexproofs,
                 "Each of the two hexproof keywords must produce its own static line: " + statics);
@@ -1819,7 +1819,7 @@ class RulesParserTest {
         var activated = abilitiesOfType(card, AbilityType.ACTIVATED);
         assertEquals(1, activated.size());
         assertTrue(activated.get(0).descriptionText().contains("regenerate"));
-        assertFalse(activated.get(0).descriptionText().toLowerCase().contains("silvos"),
+        assertFalse(activated.get(0).descriptionText().value().toLowerCase().contains("silvos"),
                     "Card name must be replaced, not kept literal: " + activated);
     }
 
@@ -1843,13 +1843,13 @@ class RulesParserTest {
     void developerNoteStrippedFromTextField() {
         // Text:[Developer's note: …] is not oracle content; must not be emitted.
         var card = face("c/celestine_cave_witch.txt");
-        assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
+        assertTrue(card.text().isEmpty(), "Developer's note should produce empty text field, got: " + card.text());
     }
 
     @Test
     void goblinPolkaBandDeveloperNoteStripped() {
         var card = face("g/goblin_polka_band.txt");
-        assertNull(card.text(), "Developer's note should produce null text field, got: " + card.text());
+        assertTrue(card.text().isEmpty(), "Developer's note should produce empty text field, got: " + card.text());
     }
 
     // --- Helpers ---

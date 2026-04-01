@@ -1,5 +1,6 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.keyword.Keyword;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -22,8 +23,8 @@ public enum AbilityType {
     STATIC("static", false),
     REPLACEMENT("replacement", false),
     CHAPTER("chapter", false) {
-        @Override public String formatDescription(String desc) {
-            return uppercaseRomanPrefix(desc);
+        @Override public NonBlankString formatDescription(NonBlankString desc) {
+            return NonBlankString.require(uppercaseRomanPrefix(desc.value()));
         }
     },
     LEVEL("level", true),
@@ -33,8 +34,8 @@ public enum AbilityType {
     DRAFT("draft", false),
     SPELL("spell", true),
     PLANESWALKER("planeswalker", true) {
-        @Override public String formatDescription(String desc) {
-            return bracketLoyaltyCost(desc);
+        @Override public NonBlankString formatDescription(NonBlankString desc) {
+            return NonBlankString.require(bracketLoyaltyCost(desc.value()));
         }
     },
     OPTION("option", true),
@@ -48,7 +49,7 @@ public enum AbilityType {
     }
 
     /** Apply type-specific formatting to a description. Default is identity. */
-    public String formatDescription(String desc) {
+    public NonBlankString formatDescription(NonBlankString desc) {
         return desc;
     }
 

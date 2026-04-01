@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
@@ -14,7 +15,7 @@ import java.util.Optional;
  * Charm ability with nested OPTION sub-abilities. If the charm has no description,
  * the factory returns the choices as top-level OPTION abilities instead.
  */
-public record CharmAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
+public record CharmAbility(NonBlankString descriptionText, List<Ability> subAbilities) implements Ability {
 
     public CharmAbility {
         Objects.requireNonNull(subAbilities);
@@ -32,7 +33,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
 
         List<Ability> result = new ArrayList<>();
         if (charmDesc != null && !charmDesc.isEmpty()) {
-            result.add(new CharmAbility(AbilityDescription.applyCasing(charmDesc), choiceSubs));
+            result.add(new CharmAbility(NonBlankString.require(AbilityDescription.applyCasing(charmDesc)), choiceSubs));
         } else {
             // No charm description — add choices as top-level abilities
             result.addAll(choiceSubs);

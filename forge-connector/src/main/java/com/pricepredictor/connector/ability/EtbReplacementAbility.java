@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.keyword.KeywordInterface;
 
 import java.util.ArrayList;
@@ -12,7 +13,7 @@ import java.util.List;
  * ETB replacement ability from etbCounter: or ETBReplacement: keywords.
  * One EtbReplacementAbility per replacement description.
  */
-public record EtbReplacementAbility(String descriptionText) implements Ability {
+public record EtbReplacementAbility(NonBlankString descriptionText) implements Ability {
 
     @Override
     public AbilityType type() {

@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.ability;
 
 import com.pricepredictor.connector.AbilityDescription;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.spellability.SpellAbility;
 
 import java.util.Optional;
@@ -25,32 +26,26 @@ import java.util.Optional;
  * {@code TriggeredAbilityEntry.isTransparentSA()}, which encoded the same logic
  * independently and had begun to diverge.
  *
- * @param stripped     the description text after reminder-text stripping; may be null
- *                     or empty if no usable source was found
+ * @param stripped     the description text after reminder-text stripping; empty if no usable
+ *                     source was found
  * @param hadRawDesc   true when at least one source contained non-empty text, even if
  *                     that text stripped entirely to nothing (e.g. pure reminder text)
  */
-public record SaDescription(String stripped, boolean hadRawDesc) {
+public record SaDescription(Optional<NonBlankString> stripped, boolean hadRawDesc) {
 
-    /** True when this SA carries no usable description text. */
-    public boolean isEmpty() {
-        return stripped == null || stripped.isEmpty();
-    }
-
-    /** The description text with casing normalised. Must not be called when {@link #isEmpty()}. */
-    public String cased() {
-        if (isEmpty()) throw new IllegalStateException("cased() called on empty SaDescription");
-        return AbilityDescription.applyCasing(stripped);
+    /** The description text with casing normalised. */
+    public Optional<NonBlankString> cased() {
+        return stripped.map(s -> NonBlankString.require(AbilityDescription.applyCasing(s.value())));
     }
 
     /**
      * Resolve the description for {@code sa} without parent-deduplication.
-     * Equivalent to {@code resolve(sa, null)}.
+     * Equivalent to {@code resolve(sa, Optional.empty())}.
      * Use this overload when checking whether an SA is "transparent" (carries no
      * description of its own), rather than when building a full description tree.
      */
     public static SaDescription resolve(SpellAbility sa) {
-        return resolve(sa, null);
+        return resolve(sa, Optional.empty());
     }
 
     /**
@@ -63,9 +58,9 @@ public record SaDescription(String stripped, boolean hadRawDesc) {
      * once from the child's StackDescription). The guard compares the normalised forms
      * to catch this case.
      *
-     * @param parentDesc the nearest ancestor's cased description, or null if absent
+     * @param parentDesc the nearest ancestor's cased description, or empty if absent
      */
-    public static SaDescription resolve(SpellAbility sa, String parentDesc) {
+    public static SaDescription resolve(SpellAbility sa, Optional<NonBlankString> parentDesc) {
         String rawDesc = sa.getParam("SpellDescription");
         if (rawDesc == null || rawDesc.isEmpty()) {
             rawDesc = sa.getParam("TriggerDescription");
@@ -86,12 +81,14 @@ public record SaDescription(String stripped, boolean hadRawDesc) {
                     .filter(s -> !s.equals(ForgeParams.NO_DISPLAY))
                     .filter(s -> !s.contains(ForgeParams.REP_PREFIX))
                     .filter(s -> !s.contains(ForgeParams.PLAYER_TOKEN))
-                    .filter(s -> !AbilityDescription.applyCasing(
-                            AbilityDescription.stripReminderText(s)).equals(parentDesc))
+                    .filter(s -> parentDesc.map(p -> !AbilityDescription.applyCasing(
+                            AbilityDescription.stripReminderText(s)).equals(p.value())).orElse(true))
                     .orElse(null);
         }
         boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
-        String stripped = hadRawDesc ? AbilityDescription.stripReminderText(rawDesc) : null;
-        return new SaDescription(stripped, hadRawDesc);
+        Optional<NonBlankString> strippedOpt = hadRawDesc
+                ? NonBlankString.of(AbilityDescription.stripReminderText(rawDesc))
+                : Optional.empty();
+        return new SaDescription(strippedOpt, hadRawDesc);
     }
 }

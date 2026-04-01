@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.CardTraitBase;
 import forge.game.keyword.KeywordInterface;
 
@@ -13,8 +14,8 @@ import java.util.Optional;
  * innerDescription for class dedup matching, and ordinal = level number.
  */
 public record ClassLevelAbility(
-        String descriptionText,
-        String innerDescription,
+        NonBlankString descriptionText,
+        NonBlankString innerDescription,
         int ordinal
 ) implements Ability {
 
@@ -41,7 +42,8 @@ public record ClassLevelAbility(
                 .or(() -> findFirstDescription(ki.getStaticAbilities(), "Description"))
                 .or(() -> findFirstDescription(ki.getReplacements(), "Description"))
                 .flatMap(AbilityDescription::normalize)
-                .map(normalized -> new ClassLevelAbility(casedCost + ": " + normalized, normalized, level));
+                .map(normalized -> new ClassLevelAbility(
+                        NonBlankString.require(casedCost + ": " + normalized), normalized, level));
     }
 
     private static <T extends CardTraitBase> Optional<String> findFirstDescription(

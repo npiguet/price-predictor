@@ -3,12 +3,14 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 /**
@@ -16,7 +18,7 @@ import java.util.function.Predicate;
  * a tree of SpellEffect nodes — one per SpellDescription fragment. Nodes without a
  * description are transparent: their children are promoted upward.
  */
-public record SpellEffect(String descriptionText, List<Ability> subAbilities) implements Ability {
+public record SpellEffect(NonBlankString descriptionText, List<Ability> subAbilities) implements Ability {
 
     public SpellEffect {
         Objects.requireNonNull(subAbilities);
@@ -66,7 +68,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * regular {@code SubAbility} chain so those descriptions are not missed.
      */
     public static List<Ability> fromChain(SpellAbility sa) {
-        return fromChain(sa, null);
+        return fromChain(sa, Optional.empty());
     }
 
     /**
@@ -74,17 +76,17 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * through the recursive walk. Used to suppress redundant sub-ability descriptions that merely
      * duplicate (or are contained in) text already emitted by the parent.
      */
-    private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
+    private static List<Ability> fromChain(SpellAbility sa, Optional<NonBlankString> parentDesc) {
         if (sa == null) return List.of();
 
         SaDescription resolved = SaDescription.resolve(sa, parentDesc);
         boolean hadRawDesc = resolved.hadRawDesc();
-        boolean hasDesc = !resolved.isEmpty();
+        boolean hasDesc = resolved.stripped().isPresent();
 
         // Determine the effective parentDesc to propagate to children:
         //   - if this SA has a description, its children inherit that description
         //   - if this SA is transparent, children inherit the caller's parentDesc
-        String effectiveParentDesc = hasDesc ? resolved.cased() : parentDesc;
+        Optional<NonBlankString> effectiveParentDesc = resolved.cased().or(() -> parentDesc);
 
         List<Ability> children = fromChain(sa.getSubAbility(), effectiveParentDesc);
 
@@ -106,19 +108,19 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
             List<Ability> repeatChildren = fromChain(repeatSub, effectiveParentDesc);
             if (!repeatChildren.isEmpty()) {
                 children = new ArrayList<>(children);
-                String parentCased = hasDesc ? resolved.cased() : null;
+                Optional<NonBlankString> parentCased = resolved.cased();
                 for (Ability rc : repeatChildren) {
                     // Skip repeat-sub children whose description duplicates the parent SA.
                     // Some cards (e.g. Hoarder's Greed) copy the root SpellDescription onto
                     // the RepeatSubAbility SVar for stack-display; including it would double-emit.
-                    if (parentCased != null && parentCased.equals(rc.descriptionText())) continue;
+                    if (parentCased.filter(p -> p.equals(rc.descriptionText())).isPresent()) continue;
                     children.add(rc);
                 }
             }
         }
 
         if (hasDesc) {
-            return List.of(new SpellEffect(resolved.cased(), children));
+            return List.of(new SpellEffect(resolved.cased().get(), children));
         }
         return children;
     }
@@ -129,7 +131,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * {@code parentDesc} is the nearest ancestor's cased description; descriptions that duplicate
      * or are contained in it are suppressed.
      */
-    private static List<Ability> collectEffectDescriptions(SpellAbility sa, String parentDesc) {
+    private static List<Ability> collectEffectDescriptions(SpellAbility sa, Optional<NonBlankString> parentDesc) {
         forge.game.card.Card host = sa.getHostCard();
         if (host == null) return List.of();
 
@@ -153,7 +155,7 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
 
     private static List<Ability> collectSVarDescriptions(
             SpellAbility sa, String listParam, String descKey,
-            Predicate<String> svarFilter, String parentDesc) {
+            Predicate<String> svarFilter, Optional<NonBlankString> parentDesc) {
         String list = sa.getParam(listParam);
         if (list == null || list.isEmpty()) return List.of();
         forge.game.card.Card host = sa.getHostCard();
@@ -174,25 +176,26 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * Returns true when the child description should be suppressed because it is
      * already covered by the parent's oracle text, or is a Forge-internal display string.
      */
-    private static boolean isRedundantDescription(String childDesc, String parentDesc) {
+    private static boolean isRedundantDescription(NonBlankString childDesc, Optional<NonBlankString> parentDesc) {
         // Forge-internal placeholder — never valid oracle text. Checked unconditionally
         // (before the parentDesc null guard) so it fires even when ActivatedAbilityEntry
         // calls fromChain() without threading parentDesc.
         if (childDesc.contains(ForgeParams.EFFECT_SOURCE)) return true;
-        if (parentDesc == null) return false;
+        if (parentDesc.isEmpty()) return false;
+        NonBlankString parent = parentDesc.get();
         // Exact match — child is identical to the parent's description.
-        if (parentDesc.equals(childDesc)) return true;
+        if (parent.equals(childDesc)) return true;
         // Substring — child text is already contained in the parent description.
-        if (parentDesc.contains(childDesc)) return true;
+        if (parent.contains(childDesc.value())) return true;
         // Forge replacement-effect Description$ SVars use "this card/creature/permanent/spell"
         // to refer to the host card, while SpellDescription uses the CARDNAME placeholder for
         // the same reference. Normalise before comparison to avoid false negatives.
-        String childNorm = childDesc
+        String childNorm = childDesc.value()
                 .replace("this card", "CARDNAME")
                 .replace("this creature", "CARDNAME")
                 .replace("this permanent", "CARDNAME")
                 .replace("this spell", "CARDNAME");
-        return parentDesc.equals(childNorm) || parentDesc.contains(childNorm);
+        return parent.contentEquals(childNorm) || parent.contains(childNorm);
     }
 
 }

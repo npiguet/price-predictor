@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.spellability.SpellAbility;
 
 import java.util.List;
@@ -14,7 +15,7 @@ import java.util.Optional;
  * The root description is taken from sa.getDescription() (cost + root SpellDescription only).
  * Sub-ability descriptions become child SpellEffect nodes via SpellEffect.fromChain().
  */
-public record ActivatedAbilityEntry(AbilityType type, String descriptionText, List<Ability> subAbilities) implements Ability {
+public record ActivatedAbilityEntry(AbilityType type, NonBlankString descriptionText, List<Ability> subAbilities) implements Ability {
 
     public ActivatedAbilityEntry {
         Objects.requireNonNull(subAbilities);
@@ -42,16 +43,16 @@ public record ActivatedAbilityEntry(AbilityType type, String descriptionText, Li
         int nl = rootDesc.indexOf('\n');
         if (nl >= 0) rootDesc = rootDesc.substring(0, nl);
 
-        String normalized = rootDesc.isEmpty() ? null : AbilityDescription.normalize(rootDesc).orElse(null);
+        NonBlankString normalized = rootDesc.isEmpty() ? null : AbilityDescription.normalize(rootDesc).orElse(null);
         // When a root SpellDescription is present, normalize must succeed.
         if (hasSpellDesc && normalized == null) return Optional.empty();
 
         // Concatenate sub-ability chain descriptions into the root line so that oracle
         // lines (one paragraph = one activated ability) are not over-split.
-        String fullDesc = (normalized != null && !normalized.isEmpty())
-                ? (subText.isEmpty() ? normalized : normalized + " " + subText)
-                : subText;
-        if (fullDesc.isEmpty()) return Optional.empty();
+        NonBlankString fullDesc = (normalized != null)
+                ? (subText.isEmpty() ? normalized : NonBlankString.require(normalized + " " + subText))
+                : NonBlankString.of(subText).orElse(null);
+        if (fullDesc == null) return Optional.empty();
 
         List<Ability> children = SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.OPTION, false);
         return Optional.of(new ActivatedAbilityEntry(type, type.formatDescription(fullDesc), children));

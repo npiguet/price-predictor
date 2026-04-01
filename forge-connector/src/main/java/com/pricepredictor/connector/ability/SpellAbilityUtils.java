@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.ability.ApiType;
 import forge.game.spellability.SpellAbility;
 
@@ -95,11 +96,11 @@ public final class SpellAbilityUtils {
      * {@code expandedDescription} has the placeholder replaced; {@code options} are
      * charm or dice-outcome sub-abilities, if any.
      */
-    public record AbilityPlaceholderResult(String expandedDescription, List<Ability> options) {}
+    public record AbilityPlaceholderResult(NonBlankString expandedDescription, List<Ability> options) {}
 
     /**
      * Resolve the ABILITY placeholder in {@code description} using {@code executeSA}
-     * and optional {@code fallbackText}. Returns null when the placeholder is absent or
+     * and optional {@code fallbackText}. Returns empty Optional when the placeholder is absent or
      * no resolution strategy applies.
      *
      * <p>Resolution cascade:
@@ -111,9 +112,9 @@ public final class SpellAbilityUtils {
      *   <li>Fallback: if fallbackText is non-null and non-empty, substitute it directly.</li>
      * </ol>
      */
-    public static AbilityPlaceholderResult resolveAbilityPlaceholder(
+    public static Optional<AbilityPlaceholderResult> resolveAbilityPlaceholder(
             String description, SpellAbility executeSA, String fallbackText) {
-        if (description == null || !description.contains("ABILITY")) return null;
+        if (description == null || !description.contains("ABILITY")) return Optional.empty();
 
         if (executeSA != null) {
             // Case 1: Charm resolution
@@ -133,35 +134,35 @@ public final class SpellAbilityUtils {
             if (!diceOptions.isEmpty()) {
                 String diceDesc = findDiceRollDescription(executeSA);
                 if (diceDesc != null) {
-                    Optional<String> expanded = AbilityDescription.normalize(
-                            description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)));
-                    if (expanded.isPresent()) return new AbilityPlaceholderResult(expanded.get(), diceOptions);
+                    return AbilityDescription.normalize(
+                            description.replace("ABILITY", AbilityDescription.replaceVert(diceDesc)))
+                            .map(n -> new AbilityPlaceholderResult(n, diceOptions));
                 }
             }
         }
 
         // Case 3: Direct text substitution
         if (fallbackText != null && !fallbackText.isEmpty()) {
-            String expanded = AbilityDescription.normalize(description.replace("ABILITY", fallbackText)).orElse(null);
-            return new AbilityPlaceholderResult(expanded, List.of());
+            return AbilityDescription.normalize(description.replace("ABILITY", fallbackText))
+                    .map(n -> new AbilityPlaceholderResult(n, List.of()));
         }
 
-        return null;
+        return Optional.empty();
     }
 
-    private static AbilityPlaceholderResult buildCharmResult(String description, SpellAbility charmSA) {
+    private static Optional<AbilityPlaceholderResult> buildCharmResult(String description, SpellAbility charmSA) {
         String header = CharmAbility.synthesizeCharmHeader(charmSA);
         if (header == null) header = "choose one";
-        String expanded = AbilityDescription.normalize(description.replace("ABILITY", header)).orElse(null);
         List<Ability> options = CharmAbility.optionsFrom(charmSA);
-        return new AbilityPlaceholderResult(expanded, options);
+        return AbilityDescription.normalize(description.replace("ABILITY", header))
+                .map(n -> new AbilityPlaceholderResult(n, options));
     }
 
     /**
      * Parse a "Key$ value | ..." SVar text and extract the value for the given key.
      * Strips reminder text, normalizes casing; returns empty Optional if absent or empty.
      */
-    public static Optional<String> extractParam(String svarText, String paramName) {
+    public static Optional<NonBlankString> extractParam(String svarText, String paramName) {
         String key = paramName + "$ ";
         int idx = svarText.indexOf(key);
         if (idx < 0) return Optional.empty();

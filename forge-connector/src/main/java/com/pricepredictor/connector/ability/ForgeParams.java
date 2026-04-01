@@ -1,5 +1,9 @@
 package com.pricepredictor.connector.ability;
 
+import com.pricepredictor.connector.NonBlankString;
+
+import java.util.Optional;
+
 /**
  * Named constants for Forge-internal sentinel values and string markers that the
  * connector must recognise and filter out when extracting oracle text.
@@ -85,6 +89,15 @@ public final class ForgeParams {
         return text.startsWith(ADDITIONAL_COST_PREFIX)
                 ? text.substring(ADDITIONAL_COST_PREFIX.length())
                 : text;
+    }
+
+    /**
+     * Strip {@link #ADDITIONAL_COST_PREFIX} from {@code text} if present.
+     * Returns empty if stripping results in a blank string.
+     */
+    public static Optional<NonBlankString> stripAdditionalCostPrefix(NonBlankString text) {
+        String result = stripAdditionalCostPrefix(text.value());
+        return NonBlankString.of(result);
     }
 
     /**

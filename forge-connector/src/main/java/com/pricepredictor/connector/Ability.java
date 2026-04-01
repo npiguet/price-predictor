@@ -8,7 +8,7 @@ import java.util.List;
  */
 public interface Ability {
     AbilityType type();
-    String descriptionText();
+    NonBlankString descriptionText();
     default List<Ability> subAbilities() { return List.of(); }
     default int ordinal() { return 0; }
 
@@ -26,7 +26,7 @@ public interface Ability {
 
     /** Recursively collect and join descriptions from this node and all its descendants. */
     default String flattenText() {
-        StringBuilder sb = new StringBuilder(descriptionText());
+        StringBuilder sb = new StringBuilder(descriptionText().value());
         for (Ability child : subAbilities()) {
             String ct = child.flattenText();
             if (!ct.isEmpty()) sb.append(' ').append(ct);

@@ -25,10 +25,10 @@ public final class AbilityDescription {
      * Full normalization returning empty Optional for empty input or when stripping reduces to nothing.
      * Pipeline: strip reminder text, then apply casing.
      */
-    public static Optional<String> normalize(@lombok.NonNull String raw) {
+    public static Optional<NonBlankString> normalize(@lombok.NonNull String raw) {
         if (raw.isEmpty()) return Optional.empty();
         String result = applyCasing(stripReminderText(raw));
-        return (result == null || result.isEmpty()) ? Optional.empty() : Optional.of(result);
+        return NonBlankString.of(result);
     }
 
     /** Strip parenthesized reminder text. */

@@ -3,17 +3,19 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Chapter ability from a Saga. One ChapterAbility per trigger, with uppercased Roman prefix.
  */
-public record ChapterAbility(String descriptionText, List<Ability> subAbilities) implements Ability {
+public record ChapterAbility(NonBlankString descriptionText, List<Ability> subAbilities) implements Ability {
 
     public ChapterAbility {
         Objects.requireNonNull(subAbilities);
@@ -21,7 +23,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
     }
 
     /** Convenience constructor: no sub-abilities. */
-    public ChapterAbility(String descriptionText) {
+    public ChapterAbility(NonBlankString descriptionText) {
         this(descriptionText, List.of());
     }
 
@@ -48,14 +50,11 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
             // If TriggerDescription contains the ABILITY placeholder, resolve it
             // (charm, dice-roll, or direct substitution).
             SpellAbility execute = trigger.getOverridingAbility();
-            SpellAbilityUtils.AbilityPlaceholderResult resolved =
+            Optional<SpellAbilityUtils.AbilityPlaceholderResult> resolved =
                     SpellAbilityUtils.resolveAbilityPlaceholder(stripped, execute, null);
-            if (resolved != null) {
-                String expanded = resolved.expandedDescription();
-                if (expanded == null || expanded.isEmpty()) continue;
-                String normalized = AbilityDescription.normalize(expanded).orElse(null);
-                if (normalized == null) continue;
-                abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized), resolved.options()));
+            if (resolved.isPresent()) {
+                SpellAbilityUtils.AbilityPlaceholderResult r = resolved.get();
+                abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(r.expandedDescription()), r.options()));
                 continue;
             }
 
@@ -66,7 +65,7 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
                 }
             }
 
-            String normalized = AbilityDescription.normalize(stripped).orElse(null);
+            NonBlankString normalized = AbilityDescription.normalize(stripped).orElse(null);
             if (normalized == null) continue;
             abilities.add(new ChapterAbility(AbilityType.CHAPTER.formatDescription(normalized)));
         }

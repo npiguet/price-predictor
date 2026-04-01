@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.ability.ApiType;
 import forge.game.keyword.Keyword;
 import forge.game.spellability.SpellAbility;
@@ -16,7 +17,7 @@ import java.util.Optional;
  * Ability wrapping a Forge Trigger. Type is TRIGGERED, or REPLACEMENT if the trigger is static.
  * The execute SVar chain (if any) becomes child SpellEffect nodes via SpellEffect.fromChain().
  */
-public record TriggeredAbilityEntry(AbilityType type, String descriptionText, List<Ability> subAbilities) implements Ability {
+public record TriggeredAbilityEntry(AbilityType type, NonBlankString descriptionText, List<Ability> subAbilities) implements Ability {
 
     public TriggeredAbilityEntry {
         Objects.requireNonNull(subAbilities);
@@ -29,7 +30,7 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         }
         String rawDesc = trigger.getParam("TriggerDescription");
         if (rawDesc == null || rawDesc.isEmpty()) return Optional.empty();
-        String normalized = AbilityDescription.normalize(rawDesc).orElse(null);
+        NonBlankString normalized = AbilityDescription.normalize(rawDesc).orElse(null);
         if (normalized == null) return Optional.empty();
         AbilityType effectiveType = trigger.isStatic()
                 ? AbilityType.REPLACEMENT : AbilityType.TRIGGERED;
@@ -37,11 +38,9 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
         SpellAbility execute = trigger.getOverridingAbility();
 
         // Resolve the ABILITY placeholder (charm, dice-roll).
-        SpellAbilityUtils.AbilityPlaceholderResult resolved =
-                SpellAbilityUtils.resolveAbilityPlaceholder(rawDesc, execute, null);
-        if (resolved != null) {
-            return Optional.of(new TriggeredAbilityEntry(effectiveType, resolved.expandedDescription(), resolved.options()));
-        }
+        Optional<TriggeredAbilityEntry> fromPlaceholder = SpellAbilityUtils.resolveAbilityPlaceholder(rawDesc, execute, null)
+                .map(r -> new TriggeredAbilityEntry(effectiveType, r.expandedDescription(), r.options()));
+        if (fromPlaceholder.isPresent()) return fromPlaceholder;
 
         // Do NOT walk the execute SA chain for SpellEffect descriptions: TriggerDescription
         // is the authoritative oracle text for triggered abilities.  Walking the chain would
@@ -89,14 +88,14 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
      * </ul>
      * Returns {@code normalized} unchanged if no extra text is found.
      */
-    private static String appendTransparentChainText(SpellAbility execute, String normalized) {
+    private static NonBlankString appendTransparentChainText(SpellAbility execute, NonBlankString normalized) {
         if (execute != null
-                && SaDescription.resolve(execute).isEmpty()
+                && SaDescription.resolve(execute).stripped().isEmpty()
                 && execute.getApi() != ApiType.ImmediateTrigger
                 && !ForgeParams.ETB_REPLACEMENT_MODE.equals(execute.getParam("Mode"))) {
             String extra = SpellEffect.flattenChainText(execute);
             if (!extra.isEmpty()) {
-                return normalized + " " + extra;
+                return NonBlankString.require(normalized.value() + " " + extra);
             }
         }
         return normalized;

@@ -3,6 +3,7 @@ package com.pricepredictor.connector.ability;
 import com.pricepredictor.connector.Ability;
 import com.pricepredictor.connector.AbilityDescription;
 import com.pricepredictor.connector.AbilityType;
+import com.pricepredictor.connector.NonBlankString;
 import forge.game.cost.Cost;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
@@ -16,7 +17,7 @@ import java.util.function.BiFunction;
  * Standard keyword ability — handles defined keywords and the undefined keyword fallback.
  * Covers KICKER dual cost, AFFINITY type description, and internal keyword reminder text.
  */
-public record StandardKeyword(AbilityType type, String descriptionText) implements Ability {
+public record StandardKeyword(AbilityType type, NonBlankString descriptionText) implements Ability {
 
     /** Per-keyword title formatters: (ki, currentTitle) → newTitle. */
     private static final Map<Keyword, BiFunction<KeywordInterface, String, String>> KEYWORD_FORMATTERS =
@@ -65,7 +66,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
                 .orElse(finalTitle);
 
         AbilityType kwType = AbilityType.classifyKeyword(kw, activatable, !ki.getTriggers().isEmpty());
-        return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
+        return new StandardKeyword(kwType, NonBlankString.require(AbilityDescription.applyCasing(title)));
     }
 
     // --- Per-keyword title formatters ---

@@ -184,7 +184,7 @@ public class RulesParser {
     }
 
     /** Keywords collected from a card face: ability nodes and Class level description strings. */
-    private record CollectedKeywords(List<Ability> abilities, Set<String> classLevelDescriptions) {}
+    private record CollectedKeywords(List<Ability> abilities, Set<NonBlankString> classLevelDescriptions) {}
 
     /**
      * Parse a single card face. The Card must already be in the correct state.
@@ -217,7 +217,7 @@ public class RulesParser {
 
     private CollectedKeywords collectKeywords(Card card) {
         List<Ability> abilities = new ArrayList<>();
-        Set<String> classLevelDescriptions = new HashSet<>();
+        Set<NonBlankString> classLevelDescriptions = new HashSet<>();
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
             if (kw == Keyword.UNDEFINED) {
@@ -309,32 +309,31 @@ public class RulesParser {
     }
 
     private static CardFace buildCardFace(ICardFace face, List<Ability> abilities) {
-        String name = AbilityDescription.applyCasing(face.getName());
+        NonBlankString name = NonBlankString.require(AbilityDescription.applyCasing(face.getName()));
         ManaCost manaCost = face.getManaCost();
-        String manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
-                ? null : manaCost.getSimpleString();
+        Optional<NonBlankString> manaCostStr = (manaCost == null || manaCost == ManaCost.NO_COST)
+                ? Optional.empty() : NonBlankString.of(manaCost.getSimpleString());
 
-        String typeLine = formatTypeLine(face);
-        String pt = (face.getPower() != null && face.getToughness() != null)
-                ? face.getPower() + "/" + face.getToughness() : null;
-        String loyalty = nullIfEmpty(face.getInitialLoyalty());
-        String defense = nullIfEmpty(face.getDefense());
+        NonBlankString typeLine = NonBlankString.require(formatTypeLine(face));
+        Optional<NonBlankString> pt = (face.getPower() != null && face.getToughness() != null)
+                ? NonBlankString.of(face.getPower() + "/" + face.getToughness()) : Optional.empty();
+        Optional<NonBlankString> loyalty = NonBlankString.of(face.getInitialLoyalty());
+        Optional<NonBlankString> defense = NonBlankString.of(face.getDefense());
 
         // Strip [Developer's note: …] brackets — Forge-internal metadata, not oracle content.
-        String text = Optional.ofNullable(face.getNonAbilityText())
+        Optional<NonBlankString> text = Optional.ofNullable(face.getNonAbilityText())
                 .filter(t -> !t.isEmpty())
                 .map(t -> t.replaceAll("(?i)\\[Developer's note:[^]]*]", "").strip())
-                .filter(t -> !t.isEmpty())
-                .map(AbilityDescription::applyCasing)
-                .orElse(null);
+                .flatMap(NonBlankString::of)
+                .map(nbs -> NonBlankString.require(AbilityDescription.applyCasing(nbs.value())));
 
-        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, null, text, abilities);
+        return new CardFace(name, manaCostStr, typeLine, pt, loyalty, defense, Optional.empty(), text, abilities);
     }
 
     // --- Undefined keyword routing ---
 
     private void routeUndefinedKeyword(KeywordInterface ki, List<Ability> abilities,
-                                       Set<String> classLevelDescriptions) {
+                                       Set<NonBlankString> classLevelDescriptions) {
         String original = ki.getOriginal();
 
         if (original.startsWith("CARDNAME ") || original.startsWith("NICKNAME ")) {
@@ -360,7 +359,7 @@ public class RulesParser {
     // --- Post-processing ---
 
     private static List<Ability> applyClassPostProcessing(List<Ability> abilities,
-                                                          Set<String> classLevelDescriptions) {
+                                                          Set<NonBlankString> classLevelDescriptions) {
         List<Ability> result = removeClassDuplicates(abilities, classLevelDescriptions);
         result = retypeToLevel(result);
         return sortLevelFirst(result);
@@ -373,7 +372,7 @@ public class RulesParser {
      * is tracked so those duplicates can be stripped here.
      */
     private static List<Ability> removeClassDuplicates(List<Ability> abilities,
-                                                        Set<String> classLevelDescriptions) {
+                                                        Set<NonBlankString> classLevelDescriptions) {
         List<Ability> result = new ArrayList<>(abilities);
         result.removeIf(a ->
                 a.type() != AbilityType.LEVEL
@@ -468,17 +467,12 @@ public class RulesParser {
         return typeStr.toLowerCase();
     }
 
-    private static String nullIfEmpty(String s) {
-        return (s == null || s.isEmpty()) ? null : s;
-    }
-
     /** Remove abilities whose descriptionText duplicates an earlier entry. */
     private static List<Ability> deduplicateByDescription(List<Ability> abilities) {
-        Set<String> seen = new HashSet<>();
+        Set<NonBlankString> seen = new HashSet<>();
         List<Ability> result = new ArrayList<>();
         for (Ability a : abilities) {
-            String desc = a.descriptionText();
-            if (desc == null || seen.add(desc)) {
+            if (seen.add(a.descriptionText())) {
                 result.add(a);
             }
         }
@@ -494,7 +488,7 @@ public class RulesParser {
     private static MultiCard applyOracleFallbackIfNeeded(
             MultiCard card, String rawOracle, String cardName) {
         CardFace first = card.faces().get(0);
-        if (!first.abilities().isEmpty() || first.text() != null) {
+        if (!first.abilities().isEmpty() || first.text().isPresent()) {
             return card; // already has content — fallback not needed
         }
 
