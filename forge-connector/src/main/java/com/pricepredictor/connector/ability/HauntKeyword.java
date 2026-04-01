@@ -58,7 +58,7 @@ public final class HauntKeyword {
         Set<String> emitted = new HashSet<>();
         for (Trigger t : ki.getTriggers()) {
             String tDesc = t.getParam("TriggerDescription");
-            if (tDesc == null || "Blank".equals(tDesc)) continue;
+            if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
 
             // Replace ABILITY placeholder: charm, dice-roll, or direct haunt-effect substitution.
             if (tDesc.contains("ABILITY")) {

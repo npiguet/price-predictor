@@ -20,9 +20,9 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
     /** Per-keyword title formatters: (ki, currentTitle) → newTitle. */
     private static final Map<Keyword, BiFunction<KeywordInterface, String, String>> KEYWORD_FORMATTERS =
             Map.of(
-                Keyword.KICKER, StandardKeyword::formatKicker,
-                Keyword.AFFINITY, StandardKeyword::formatAffinity,
-                Keyword.CRAFT, (ki, title) -> buildCraftTitle(ki.getOriginal()),
+                Keyword.KICKER,     StandardKeyword::formatKicker,
+                Keyword.AFFINITY,   StandardKeyword::formatAffinity,
+                Keyword.CRAFT,      (ki, title) -> buildCraftTitle(ki.getOriginal()),
                 Keyword.PROTECTION, StandardKeyword::formatProtection
             );
 
@@ -35,9 +35,18 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
                 title = ki.getOriginal();
             }
         } else {
+            // Forge's getTitle() can return an unusable string for some keywords:
+            //   - null or empty: no title computed (fall back to raw getOriginal())
+            //   - trailing whitespace: Protection.getTitle() returns "Protection from "
+            //     because Protection.parse() is empty in forge — fromWhat is never set.
+            //     This is a forge bug; the trailing space lets us detect and bypass it.
             if (title == null || title.isEmpty() || !title.trim().equals(title)) {
                 title = ki.getOriginal();
             }
+            // Internal keywords (MAYFLASHCOST, MAYFLASHSAC) are forge-engine mechanics
+            // with no player-facing name. Their reminder text holds the human-readable
+            // oracle description (e.g. "you may pay {W} rather than pay this spell's
+            // mana cost"), so we substitute reminder text for the title here.
             if (AbilityType.isInternalKeyword(kw)) {
                 String reminder = ki.getReminderText();
                 if (reminder != null && !reminder.isEmpty()) {
@@ -59,6 +68,18 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
         return new StandardKeyword(kwType, AbilityDescription.applyCasing(title));
     }
 
+    // --- Per-keyword title formatters ---
+
+    /**
+     * Format dual-kicker title: "Kicker {cost1} and/or {cost2}".
+     *
+     * <p>We re-parse {@code getOriginal()} to extract cost2 rather than using
+     * {@code ki.getReminderText()}, which returns the full sentence ("You may pay an
+     * additional … as you cast this spell."). Stripping that sentence programmatically
+     * would be more fragile than extracting the cost directly.
+     * Note: {@code Kicker.getTitle()} (inherited from {@code KeywordWithCost}) only
+     * renders the first cost, so it cannot be used for dual kicker either.
+     */
     private static String formatKicker(KeywordInterface ki, String title) {
         String[] kickerParts = ki.getOriginal().split(":", 3);
         if (kickerParts.length >= 3) {
@@ -98,97 +119,142 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
         return title;
     }
 
+    // --- Craft title construction ---
+
     /**
-     * Build the terse oracle title for a Craft keyword: "Craft with <typeDesc> <manaCost>".
+     * Build the terse oracle title for a Craft keyword: "Craft with &lt;typeDesc&gt; &lt;manaCost&gt;".
      *
-     * ki.getOriginal() format: "Craft:<costPart>[:<typeDesc>[:<replaceDesc>]]"
-     * where costPart contains mana tokens and ExileCtrlOrGrave<…> exile specs.
+     * <p>Forge's {@code Craft} class already parses the same {@code ki.getOriginal()} string
+     * internally (into {@code manaString} and {@code exileString}), but those fields are
+     * package-private with no public accessor. Even if exposed, their format is reminder-text
+     * oriented ("Exile 2 artifacts from among…"), not the terse oracle title we need here.
+     * Manual parsing is therefore the correct approach.
      *
-     * Three sub-patterns for the type description:
-     *   - Explicit: parts[2] present and non-empty → use as-is
-     *   - Variable count: costPart contains "XMin" → "one or more"
-     *   - Simple type: extract first word of TYPE from ExileCtrlOrGrave<N/TYPE.suffix>
+     * <p>{@code ki.getOriginal()} format: {@code "Craft:<costPart>[:<typeDesc>[:<replaceDesc>]]}
+     * where {@code costPart} contains mana tokens and {@code ExileCtrlOrGrave<…>} exile specs.
      */
     private static String buildCraftTitle(String original) {
         String[] parts = original.split(":", 4);
         if (parts.length < 2) return original;
-
         String costPart = parts[1];
+        return "Craft with " + resolveCraftTypeDescription(costPart, parts)
+                + " " + extractCraftMana(costPart);
+    }
 
-        // Mana: strip all ExileCtrlOrGrave<…> specs and XMin\d+ constraint tokens
+    /**
+     * Strip {@code ExileCtrlOrGrave<…>} exile specs and {@code XMin\d+} constraint tokens
+     * from {@code costPart}, then parse the remainder as a {@link Cost} and return its
+     * simple string representation.
+     */
+    private static String extractCraftMana(String costPart) {
         String mana = costPart
                 .replaceAll("ExileCtrlOrGrave<[^>]*>", "")
                 .replaceAll("XMin\\d+", "")
                 .trim();
-        String manaCostStr = new Cost(mana, false).toSimpleString();
-
-        // Type description (three sub-patterns)
-        String typeDesc;
-        if (parts.length >= 3 && !parts[2].isEmpty()) {
-            // Explicit human-readable description in k[2] (Throne of Grim Captain, Eye of Ojer Taq)
-            typeDesc = parts[2];
-        } else if (costPart.contains("XMin")) {
-            // Variable-count exile (Sunbird Standard): "one or more"
-            typeDesc = "one or more";
-        } else {
-            // Simple type: extract first word before '.' or '+' from ExileCtrlOrGrave<N/TYPE…>
-            int ecoIdx = costPart.indexOf("ExileCtrlOrGrave<");
-            int slashIdx = ecoIdx >= 0 ? costPart.indexOf('/', ecoIdx) : -1;
-            if (slashIdx >= 0) {
-                int typeStart = slashIdx + 1;
-                int typeEnd = typeStart;
-                while (typeEnd < costPart.length()
-                        && ".+>/<".indexOf(costPart.charAt(typeEnd)) < 0) {
-                    typeEnd++;
-                }
-                typeDesc = costPart.substring(typeStart, typeEnd);
-            } else {
-                typeDesc = "artifact"; // fallback
-            }
-        }
-
-        return "Craft with " + typeDesc + " " + manaCostStr;
+        return new Cost(mana, false).toSimpleString();
     }
+
+    /**
+     * Resolve the type description for a Craft keyword, choosing among three sub-patterns:
+     * <ol>
+     *   <li><b>Explicit</b>: {@code parts[2]} is present and non-empty — use as-is
+     *       (e.g. Throne of Grim Captain: "two legendary creatures").</li>
+     *   <li><b>Variable count</b>: {@code costPart} contains {@code XMin} — use
+     *       {@code "one or more"} (e.g. Sunbird Standard).</li>
+     *   <li><b>Simple type</b>: extract the first word before {@code '.'}, {@code '+'}, or
+     *       {@code '>'} from the {@code ExileCtrlOrGrave<N/TYPE…>} spec
+     *       (e.g. {@code "ExileCtrlOrGrave<2/Artifact>"} → {@code "artifact"}).</li>
+     * </ol>
+     */
+    private static String resolveCraftTypeDescription(String costPart, String[] parts) {
+        if (parts.length >= 3 && !parts[2].isEmpty()) {
+            return parts[2];
+        }
+        if (costPart.contains("XMin")) {
+            return "one or more";
+        }
+        // Extract the type word from ExileCtrlOrGrave<N/TYPE…>
+        int ecoIdx = costPart.indexOf("ExileCtrlOrGrave<");
+        int slashIdx = ecoIdx >= 0 ? costPart.indexOf('/', ecoIdx) : -1;
+        if (slashIdx >= 0) {
+            int typeStart = slashIdx + 1;
+            int typeEnd = typeStart;
+            while (typeEnd < costPart.length()
+                    && ".+>/<".indexOf(costPart.charAt(typeEnd)) < 0) {
+                typeEnd++;
+            }
+            return costPart.substring(typeStart, typeEnd);
+        }
+        return "artifact"; // fallback: no ExileCtrlOrGrave spec found
+    }
+
+    // --- Reduce-cost description extraction ---
 
     /**
      * Extract cost-reduction description from a keyword's original string, or null if absent.
      *
-     * Pattern A (Equip): "Equip:cost:::ReduceCost$ SVar:full sentence"
-     * Pattern B (Adapt/Monstrosity): "Keyword:N:cost:SVar:for-each-description"
-     *   → synthesizes "This ability costs {1} less to activate for each [description]."
-     * Pattern C (Specialize): "Specialize:cost::full sentence.:ReduceCost$ SVar"
-     *   → uses the full sentence from parts[3] directly
+     * <p>Three distinct grammar patterns are handled; each is isolated in its own method:
+     * <ul>
+     *   <li>Pattern A (generic): {@code "ReduceCost$ SVar:human-text"} anywhere in the string —
+     *       used by Equip and other keywords that embed the description in an SVar reference.</li>
+     *   <li>Pattern B (Adapt/Monstrosity): 5-field colon-delimited format with the "for each"
+     *       description in {@code parts[4]}.</li>
+     *   <li>Pattern C (Specialize): full sentence in {@code parts[3]} when the
+     *       {@code ReduceCost$} marker is present.</li>
+     * </ul>
      */
     private static String extractReduceCostDescription(Keyword kw, String original) {
         if (original == null) return null;
+        String result = extractReduceCostFromSVar(original);
+        if (result != null) return result;
+        result = extractAdaptMonstrosityReduceCost(kw, original);
+        if (result != null) return result;
+        return extractSpecializeReduceCost(kw, original);
+    }
 
-        // Pattern A: Equip with ReduceCost$ SVar:human-text format
+    /**
+     * Pattern A: scan for {@code "ReduceCost$ SVar:human-text"} anywhere in the keyword string.
+     * The SVar name is skipped; the human-readable text after the colon is returned.
+     * Applies broadly (Equip, any keyword that embeds a ReduceCost$ SVar reference).
+     */
+    private static String extractReduceCostFromSVar(String original) {
         int idx = original.indexOf("ReduceCost$ ");
         if (idx >= 0) {
             String after = original.substring(idx + "ReduceCost$ ".length());
-            // Format: "SVar:human text" — skip SVar name
             int colon = after.indexOf(':');
             if (colon >= 0) {
                 return after.substring(colon + 1);
             }
         }
+        return null;
+    }
 
-        // Pattern B: Adapt / Monstrosity — 5-field format with "for each" description
+    /**
+     * Pattern B: Adapt/Monstrosity 5-field colon-delimited format.
+     * When {@code parts[4]} is present and non-empty, synthesises:
+     * {@code "This ability costs {1} less to activate for each <parts[4]>."}
+     */
+    private static String extractAdaptMonstrosityReduceCost(Keyword kw, String original) {
         if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
             String[] parts = original.split(":", 5);
             if (parts.length >= 5 && !parts[4].isEmpty()) {
                 return "This ability costs {1} less to activate for each " + parts[4] + ".";
             }
         }
+        return null;
+    }
 
-        // Pattern C: Specialize — full description is in parts[3], ReduceCost$ marker in parts[4]
+    /**
+     * Pattern C: Specialize — full sentence is in {@code parts[3]}, present when the
+     * {@code ReduceCost$} marker also appears in the string.
+     */
+    private static String extractSpecializeReduceCost(Keyword kw, String original) {
         if (kw == Keyword.SPECIALIZE) {
             String[] parts = original.split(":", 5);
             if (parts.length >= 5 && original.contains("ReduceCost$") && !parts[3].isEmpty()) {
                 return parts[3];
             }
         }
-
         return null;
     }
 }

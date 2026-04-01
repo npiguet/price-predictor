@@ -73,35 +73,30 @@ public record TriggeredAbilityEntry(AbilityType type, String descriptionText, Li
 
     /**
      * Appends extra oracle text from the execute SA chain when the SA is transparent
-     * (no description of its own), not an ImmediateTrigger, and not an ETBReplacement.
-     * Sub-ability SpellDescriptions in that case contain oracle text not in TriggerDescription.
+     * (carries no description of its own), subject to two additional guards:
+     * <ul>
+     *   <li>{@code ImmediateTrigger} SAs fire immediately on enter-the-battlefield and
+     *       are also registered as top-level triggers via {@code createTraits()}. Walking
+     *       their chain here would duplicate the TriggeredAbilityEntry already emitted
+     *       by {@code RulesParser.collectTriggers()}.</li>
+     *   <li>{@link ForgeParams#ETB_REPLACEMENT_MODE ETBReplacement} SAs are replacement
+     *       effects handled by the replacement-effects loop in
+     *       {@code RulesParser.collectStaticsAndReplacements()}. They must not be walked
+     *       here to avoid double-emission.</li>
+     * </ul>
      * Returns {@code normalized} unchanged if no extra text is found.
      */
     private static String appendTransparentChainText(SpellAbility execute, String normalized) {
         if (execute != null
-                && isTransparentSA(execute)
+                && SaDescription.resolve(execute).isEmpty()
                 && execute.getApi() != ApiType.ImmediateTrigger
-                && !"ETBReplacement".equals(execute.getParam("Mode"))) {
+                && !ForgeParams.ETB_REPLACEMENT_MODE.equals(execute.getParam("Mode"))) {
             String extra = SpellEffect.flattenChainText(execute);
             if (!extra.isEmpty()) {
                 return normalized + " " + extra;
             }
         }
         return normalized;
-    }
-
-    /**
-     * Returns true when a SpellAbility has no description of its own (transparent).
-     * Transparent SAs are safe to walk: extra oracle text comes only from sub-abilities.
-     */
-    private static boolean isTransparentSA(SpellAbility sa) {
-        String spellDesc = sa.getParam("SpellDescription");
-        if (spellDesc != null && !spellDesc.isEmpty()) return false;
-        String trigDesc = sa.getParam("TriggerDescription");
-        if (trigDesc != null && !trigDesc.isEmpty()) return false;
-        String stackDesc = sa.getParam("StackDescription");
-        if (stackDesc != null && !stackDesc.isEmpty() && !stackDesc.equals("None")) return false;
-        return true;
     }
 
 }

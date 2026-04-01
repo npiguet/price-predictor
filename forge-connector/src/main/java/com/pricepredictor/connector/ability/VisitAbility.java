@@ -33,18 +33,22 @@ public final class VisitAbility {
             if (overriding != null && overriding.getApi() == ApiType.Charm) {
                 // Charm-based visit: header from TriggerDescription, children from Charm choices.
                 String tDesc = t.getParam("TriggerDescription");
-                if (tDesc == null || "Blank".equals(tDesc)) continue;
+                if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
                 int nl = tDesc.indexOf('\n');
                 if (nl >= 0) tDesc = tDesc.substring(0, nl);
                 header = AbilityDescription.normalize(tDesc);
                 children = CharmAbility.optionsFrom(overriding);
             } else {
-                // Plain visit: prefer SpellDescription over TriggerDescription to avoid doubled prefix.
+                // Plain visit: prefer SpellDescription over TriggerDescription.
+                // Forge places a doubled "Visit — Visit — " prefix in TriggerDescription for plain
+                // visits (the keyword name is prepended by both the keyword handler and the trigger
+                // script). SpellDescription is written without this duplication, so it is the
+                // correct source for oracle text.
                 String spellDesc = overriding != null ? overriding.getParam("SpellDescription") : null;
                 if (spellDesc == null || spellDesc.isEmpty()) {
                     // Fallback: use TriggerDescription (may have doubled prefix, but better than nothing).
                     String tDesc = t.getParam("TriggerDescription");
-                    if (tDesc == null || "Blank".equals(tDesc)) continue;
+                    if (tDesc == null || ForgeParams.BLANK_DESC.equals(tDesc)) continue;
                     int nl = tDesc.indexOf('\n');
                     if (nl >= 0) tDesc = tDesc.substring(0, nl);
                     header = AbilityDescription.normalize(tDesc);

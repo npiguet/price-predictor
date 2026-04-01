@@ -33,6 +33,10 @@ public record ChapterAbility(String descriptionText, List<Ability> subAbilities)
     public static List<Ability> fromKeyword(KeywordInterface ki) {
         List<Ability> abilities = new ArrayList<>();
         for (var trigger : ki.getTriggers()) {
+            // Forge registers Secondary triggers for multi-chapter steps (e.g. "I, II —")
+            // to handle the case where the saga advances past more than one chapter at once.
+            // The primary trigger already covers the description for the chapter group,
+            // so secondary triggers are skipped to avoid duplicate chapter lines.
             if ("True".equals(trigger.getParam("Secondary"))) continue;
             String trigDesc = trigger.getParam("TriggerDescription");
             if (trigDesc == null) continue;

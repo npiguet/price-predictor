@@ -74,56 +74,12 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * through the recursive walk. Used to suppress redundant sub-ability descriptions that merely
      * duplicate (or are contained in) text already emitted by the parent.
      */
-    /**
-     * Resolved description for one SA: the stripped text (after reminder-text removal)
-     * and whether the SA had any raw description at all (even if it stripped to empty).
-     */
-    private record ResolvedDescription(String stripped, boolean hadRawDesc) {
-        boolean hasDesc() { return stripped != null && !stripped.isEmpty(); }
-        String cased() { return AbilityDescription.applyCasing(stripped); }
-    }
-
-    /**
-     * Resolve the description for {@code sa}: tries SpellDescription, then TriggerDescription,
-     * then StackDescription (with guards against Forge-internal references). The {@code parentDesc}
-     * is used to reject StackDescriptions that merely duplicate the parent's oracle text.
-     */
-    private static ResolvedDescription resolveDescription(SpellAbility sa, String parentDesc) {
-        String rawDesc = sa.getParam("SpellDescription");
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            rawDesc = sa.getParam("TriggerDescription");
-        }
-        // StackDescription fallback — only for literal oracle text strings,
-        // not the "SpellDescription" keyword reference, not "None" (no-display sentinel),
-        // and not Forge template strings.
-        if (rawDesc == null || rawDesc.isEmpty()) {
-            String stack = sa.getParam("StackDescription");
-            if (stack != null && !stack.isEmpty()
-                    && !stack.equals("SpellDescription")
-                    && !stack.equals("None")
-                    && !stack.contains("REP ")
-                    && !stack.contains("{p:")) {
-                // Reject if the StackDescription merely duplicates the parent's oracle text
-                // (Forge often copies the parent SpellDescription onto sub-ability StackDescription
-                // for stack-display purposes — e.g. Bifurcate's DBChangeZone).
-                String stackNorm = AbilityDescription.applyCasing(
-                        AbilityDescription.stripReminderText(stack));
-                if (!stackNorm.equals(parentDesc)) {
-                    rawDesc = stack;
-                }
-            }
-        }
-        boolean hadRawDesc = rawDesc != null && !rawDesc.isEmpty();
-        String stripped = hadRawDesc ? AbilityDescription.stripReminderText(rawDesc) : null;
-        return new ResolvedDescription(stripped, hadRawDesc);
-    }
-
     private static List<Ability> fromChain(SpellAbility sa, String parentDesc) {
         if (sa == null) return List.of();
 
-        ResolvedDescription resolved = resolveDescription(sa, parentDesc);
+        SaDescription resolved = SaDescription.resolve(sa, parentDesc);
         boolean hadRawDesc = resolved.hadRawDesc();
-        boolean hasDesc = resolved.hasDesc();
+        boolean hasDesc = !resolved.isEmpty();
 
         // Determine the effective parentDesc to propagate to children:
         //   - if this SA has a description, its children inherit that description
@@ -163,9 +119,8 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
 
         if (hasDesc) {
             return List.of(new SpellEffect(resolved.cased(), children));
-        } else {
-            return children;
         }
+        return children;
     }
 
     /**
@@ -179,13 +134,21 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
         if (host == null) return List.of();
 
         List<Ability> result = new ArrayList<>();
-        // Triggers$ — skip trigger SVars that fire from a specific zone (TriggerZones$): these are
-        // also registered as top-level triggers and would duplicate the triggered ability.
         result.addAll(collectSVarDescriptions(sa, "Triggers", "TriggerDescription",
-                svar -> !svar.contains("TriggerZones$"), parentDesc));
+                svar -> !isTopLevelTrigger(svar), parentDesc));
         result.addAll(collectSVarDescriptions(sa, "ReplacementEffects", "Description",
                 svar -> true, parentDesc));
         return result;
+    }
+
+    /**
+     * Returns true when a trigger SVar defines a zone-specific trigger ({@code TriggerZones$}).
+     * Such triggers are also registered as top-level triggers on the card, so their descriptions
+     * are already emitted by {@code RulesParser.collectTriggers()}.
+     * Including them here via Effect SVars would produce duplicates.
+     */
+    private static boolean isTopLevelTrigger(String svarText) {
+        return svarText.contains(ForgeParams.TRIGGER_ZONES_MARKER);
     }
 
     private static List<Ability> collectSVarDescriptions(
@@ -213,24 +176,24 @@ public record SpellEffect(String descriptionText, List<Ability> subAbilities) im
      * already covered by the parent's oracle text, or is a Forge-internal display string.
      */
     private static boolean isRedundantDescription(String childDesc, String parentDesc) {
-        // Forge-internal placeholder — "effectsource" is never valid oracle text.
-        // Checked unconditionally (before parentDesc null guard) so it fires even when
-        // ActivatedAbilityEntry calls fromChain() without threading parentDesc.
-        if (childDesc.contains("effectsource")) return true;
+        // Forge-internal placeholder — never valid oracle text. Checked unconditionally
+        // (before the parentDesc null guard) so it fires even when ActivatedAbilityEntry
+        // calls fromChain() without threading parentDesc.
+        if (childDesc.contains(ForgeParams.EFFECT_SOURCE)) return true;
         if (parentDesc == null) return false;
-        // Exact match — child is identical to the parent's description
+        // Exact match — child is identical to the parent's description.
         if (parentDesc.equals(childDesc)) return true;
-        // Substring — child text is already contained in the parent description
+        // Substring — child text is already contained in the parent description.
         if (parentDesc.contains(childDesc)) return true;
-        // "this card/creature/permanent/spell" in replacement-effect Description$ SVars refers to
-        // the same card as CARDNAME in SpellDescription; normalise before substring check.
+        // Forge replacement-effect Description$ SVars use "this card/creature/permanent/spell"
+        // to refer to the host card, while SpellDescription uses the CARDNAME placeholder for
+        // the same reference. Normalise before comparison to avoid false negatives.
         String childNorm = childDesc
                 .replace("this card", "CARDNAME")
                 .replace("this creature", "CARDNAME")
                 .replace("this permanent", "CARDNAME")
                 .replace("this spell", "CARDNAME");
-        if (parentDesc.equals(childNorm) || parentDesc.contains(childNorm)) return true;
-        return false;
+        return parentDesc.equals(childNorm) || parentDesc.contains(childNorm);
     }
 
 }

@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.ability.ActivatedAbilityEntry;
+import com.pricepredictor.connector.ability.ForgeParams;
 import com.pricepredictor.connector.ability.AlternateCostSpell;
 import com.pricepredictor.connector.ability.ChapterAbility;
 import com.pricepredictor.connector.ability.CharmAbility;
@@ -78,14 +79,29 @@ public class RulesParser {
         KEYWORD_ROUTES.put("MayEffectFromOpeningDeck:", OpeningHandAbility::fromKeyword);
     }
 
+    // Script field prefixes used in the pre-pass below.
+    private static final String ORACLE_KEY = "Oracle:";
+    private static final String NAME_KEY   = "Name:";
+    private static final String DRAFT_KEY  = "Draft:";
+
     /**
      * Parse a card script and build domain objects for all faces.
      */
     public MultiCard parseScript(List<String> scriptLines, String filename) {
         reader.reset();
 
-        // Pre-pass: capture front-face Oracle, Name, and Draft lines.
-        // We stop at ALTERNATE so we never accidentally use a back-face oracle.
+        // Pre-pass: capture front-face Oracle, Name, and Draft lines before ALTERNATE.
+        //
+        // CardRules.Reader doesn't expose the front-face oracle text as a distinct field
+        // after multi-face parsing, so we capture it here from the raw script. Two uses:
+        //   1. Oracle fallback: Draft/conspiracy cards whose Forge game-engine representation
+        //      carries no standard spell/trigger/static abilities need the raw oracle text
+        //      emitted directly as TEXT ability lines.
+        //   2. Draft injection: Draft: lines are invisible to the Forge game engine but are
+        //      part of the card's oracle text and must appear in the output.
+        //
+        // We stop at ALTERNATE to avoid using a back-face oracle for the front face
+        // on transform/modal double-faced cards.
         String frontOracle = null;
         String frontName = null;
         List<String> frontDraftLines = new ArrayList<>();
@@ -94,14 +110,14 @@ public class RulesParser {
             String trimmed = line.trim();
             if ("ALTERNATE".equals(trimmed)) { inAlternate = true; continue; }
             if (inAlternate) continue;
-            if (trimmed.startsWith("Oracle:") && frontOracle == null) {
-                frontOracle = trimmed.substring(7).trim();
+            if (trimmed.startsWith(ORACLE_KEY) && frontOracle == null) {
+                frontOracle = trimmed.substring(ORACLE_KEY.length()).trim();
             }
-            if (trimmed.startsWith("Name:") && frontName == null) {
-                frontName = trimmed.substring(5).trim();
+            if (trimmed.startsWith(NAME_KEY) && frontName == null) {
+                frontName = trimmed.substring(NAME_KEY.length()).trim();
             }
-            if (trimmed.startsWith("Draft:")) {
-                frontDraftLines.add(trimmed.substring(6).trim());
+            if (trimmed.startsWith(DRAFT_KEY)) {
+                frontDraftLines.add(trimmed.substring(DRAFT_KEY.length()).trim());
             }
         }
 
@@ -248,7 +264,7 @@ public class RulesParser {
                 // getReplacementEffects(), so without this guard they double-emit.
                 if (sa.getApi() == ApiType.ImmediateTrigger) continue;
                 String mode = sa.getParam("Mode");
-                if ("ETBReplacement".equals(mode)) continue;
+                if (ForgeParams.ETB_REPLACEMENT_MODE.equals(mode)) continue;
                 addIfNotNull(abilities, SpellAdditionalCost.of(sa));
                 abilities.addAll(SpellEffect.fromChain(sa));
                 abilities.addAll(SpellAbilityUtils.expandDiceOutcomes(sa, AbilityType.SPELL, false));
@@ -259,9 +275,16 @@ public class RulesParser {
 
     private List<Ability> collectTriggers(Card card) {
         List<Ability> abilities = new ArrayList<>();
-        // Track Execute SVar names seen from primary (non-secondary) triggers.
-        // When a secondary trigger re-uses the same Execute SVar, it is the "blocks" half of an
-        // "attacks or blocks" pair — the primary already covers both, so skip the secondary.
+        // Deduplicate "attacks or blocks" trigger pairs.
+        //
+        // For cards with "whenever CARDNAME attacks or blocks", Forge registers two triggers
+        // that share the same Execute SVar: a primary trigger ("attacks") whose
+        // TriggerDescription says "attacks or blocks", and a Secondary trigger ("blocks")
+        // pointing at the same Execute SVar. The primary description already covers both
+        // halves, so including the secondary trigger would emit a duplicate ability line.
+        //
+        // Detection: track Execute SVar names from non-secondary triggers; if a secondary
+        // trigger references the same SVar, it is the redundant "blocks" half — skip it.
         Set<String> primaryExecuteSVars = new HashSet<>();
         for (Trigger t : card.getTriggers()) {
             String exec = t.getParam("Execute");
@@ -340,14 +363,36 @@ public class RulesParser {
 
     // --- Post-processing ---
 
-    private List<Ability> applyClassPostProcessing(List<Ability> abilities,
-                                                   Set<String> classLevelDescriptions) {
-        List<Ability> result = new ArrayList<>(abilities);
+    private static List<Ability> applyClassPostProcessing(List<Ability> abilities,
+                                                          Set<String> classLevelDescriptions) {
+        List<Ability> result = removeClassDuplicates(abilities, classLevelDescriptions);
+        result = retypeToLevel(result);
+        return sortLevelFirst(result);
+    }
 
+    /**
+     * Remove abilities whose description text duplicates the inner description of a LEVEL
+     * ability. Class cards embed triggers and static effects inside level blocks; Forge also
+     * emits those same effects as top-level abilities. The inner text of each ClassLevelAbility
+     * is tracked so those duplicates can be stripped here.
+     */
+    private static List<Ability> removeClassDuplicates(List<Ability> abilities,
+                                                        Set<String> classLevelDescriptions) {
+        List<Ability> result = new ArrayList<>(abilities);
         result.removeIf(a ->
                 a.type() != AbilityType.LEVEL
                         && classLevelDescriptions.contains(a.descriptionText()));
+        return result;
+    }
 
+    /**
+     * Retype STATIC, TRIGGERED, and REPLACEMENT abilities to LEVEL at ordinal 1.
+     * Class cards declare their level-1 effects as ordinary triggers/statics in Forge's
+     * game engine, but in oracle text they belong inside the level block. Reclassifying
+     * them as LEVEL ensures they render in the correct position.
+     */
+    private static List<Ability> retypeToLevel(List<Ability> abilities) {
+        List<Ability> result = new ArrayList<>(abilities);
         for (int i = 0; i < result.size(); i++) {
             Ability a = result.get(i);
             if (a.type() == AbilityType.STATIC || a.type() == AbilityType.TRIGGERED
@@ -355,18 +400,24 @@ public class RulesParser {
                 result.set(i, new TextAbility(AbilityType.LEVEL, a.descriptionText(), 1));
             }
         }
+        return result;
+    }
 
+    /**
+     * Sort LEVEL abilities first (ordered by their ordinal), then all other abilities in
+     * their original relative order. This is a stable partition: non-LEVEL abilities
+     * retain their existing sequence.
+     */
+    private static List<Ability> sortLevelFirst(List<Ability> abilities) {
+        List<Ability> result = new ArrayList<>(abilities);
         result.sort((a, b) -> {
             boolean aLevel = a.type() == AbilityType.LEVEL;
             boolean bLevel = b.type() == AbilityType.LEVEL;
-            if (aLevel && bLevel) {
-                return Integer.compare(a.ordinal(), b.ordinal());
-            }
+            if (aLevel && bLevel) return Integer.compare(a.ordinal(), b.ordinal());
             if (aLevel) return -1;
             if (bLevel) return 1;
             return 0;
         });
-
         return result;
     }
 

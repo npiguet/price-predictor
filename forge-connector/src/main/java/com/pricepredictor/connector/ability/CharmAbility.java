@@ -8,6 +8,7 @@ import forge.game.spellability.SpellAbility;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Charm ability with nested OPTION sub-abilities. If the charm has no description,
@@ -40,35 +41,50 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
     }
 
     /**
-     * Resolve the header description for a Charm SA using a 4-fallback chain:
+     * Resolve the header description for a Charm SA using a 4-source cascade:
      * SpellDescription → Pawprint total → AdditionalDescription → synthesized "choose N" header.
-     * Returns null (or empty) when none of the sources yield a description.
+     *
+     * <p>Each source represents a different card design pattern:
+     * <ul>
+     *   <li><b>SpellDescription</b>: most charms — explicit oracle text on the SA.</li>
+     *   <li><b>Pawprint</b>: attraction-style charms — header built from paw-print count.</li>
+     *   <li><b>AdditionalDescription</b>: charms that describe the choice mode inline.</li>
+     *   <li><b>Synthesized</b>: charms where no text exists — generate "choose one/up to N/…"
+     *       from {@code CharmNum} and {@code MinCharmNum} params.</li>
+     * </ul>
      */
     private static String resolveCharmDescription(SpellAbility sa) {
-        String charmDesc = sa.getParam("SpellDescription");
-        if (charmDesc != null && !charmDesc.isEmpty()) {
-            charmDesc = AbilityDescription.stripReminderText(charmDesc);
-            // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
-            charmDesc = charmDesc.replaceAll("\\s*\u2014\\s*$", "").trim();
+        return resolveFromSpellDescription(sa)
+                .or(() -> resolveFromPawprint(sa))
+                .or(() -> resolveFromAdditionalDescription(sa))
+                .or(() -> Optional.ofNullable(synthesizeCharmHeader(sa)))
+                .orElse(null);
+    }
+
+    private static Optional<String> resolveFromSpellDescription(SpellAbility sa) {
+        String desc = sa.getParam("SpellDescription");
+        if (desc == null || desc.isEmpty()) return Optional.empty();
+        desc = AbilityDescription.stripReminderText(desc);
+        // Strip trailing em-dash (oracle/SpellDescription often ends with " —")
+        desc = desc.replaceAll("\\s*\u2014\\s*$", "").trim();
+        return desc.isEmpty() ? Optional.empty() : Optional.of(desc);
+    }
+
+    private static Optional<String> resolveFromPawprint(SpellAbility sa) {
+        String total = sa.getParam("Pawprint");
+        if (total == null) return Optional.empty();
+        String desc = "Choose up to " + total + " {P} worth of modes.";
+        if ("True".equals(sa.getParam("CanRepeatModes"))) {
+            desc += " You may choose the same mode more than once.";
         }
-        if ((charmDesc == null || charmDesc.isEmpty()) && sa.hasParam("Pawprint")) {
-            String total = sa.getParam("Pawprint");
-            charmDesc = "Choose up to " + total + " {P} worth of modes.";
-            if ("True".equals(sa.getParam("CanRepeatModes"))) {
-                charmDesc += " You may choose the same mode more than once.";
-            }
-        }
-        if (charmDesc == null || charmDesc.isEmpty()) {
-            String additionalDesc = sa.getParam("AdditionalDescription");
-            if (additionalDesc != null && !additionalDesc.isEmpty()) {
-                charmDesc = AbilityDescription.stripReminderText(additionalDesc);
-            }
-        }
-        // Synthesize "choose N —" header from CharmNum/MinCharmNum when SpellDescription is absent.
-        if (charmDesc == null || charmDesc.isEmpty()) {
-            charmDesc = synthesizeCharmHeader(sa);
-        }
-        return charmDesc;
+        return Optional.of(desc);
+    }
+
+    private static Optional<String> resolveFromAdditionalDescription(SpellAbility sa) {
+        String desc = sa.getParam("AdditionalDescription");
+        if (desc == null || desc.isEmpty()) return Optional.empty();
+        desc = AbilityDescription.stripReminderText(desc);
+        return desc.isEmpty() ? Optional.empty() : Optional.of(desc);
     }
 
     /**
@@ -80,10 +96,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return choiceSubs;
         for (var choice : choices) {
-            String choiceDesc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-            if (choiceDesc != null) {
-                choiceDesc = AbilityDescription.stripReminderText(choiceDesc);
-            }
+            String choiceDesc = extractChoiceDescription(choice);
             // Tiered charms (e.g. Vincent's Limit Break): the ability name lives in
             // PrecostDesc on the choice SA.  Prepend it so the option text matches oracle.
             String precostDesc = choice.getParam("PrecostDesc");
@@ -166,18 +179,33 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
 
     /**
      * Return only the OPTION sub-abilities for a charm SA (no wrapper).
-     * Used when the parent description already exists (e.g. triggered charm).
+     * Used when the charm appears nested inside another ability (triggered charm,
+     * ABILITY placeholder), where the parent description already provides context.
+     *
+     * <p>PrecostDesc, ModeCost, and Pawprint decorators are intentionally omitted here:
+     * those adornments are part of the top-level charm presentation (e.g. "choose one —")
+     * and are not repeated in oracle text when the choice list appears under a trigger.
      */
     public static List<Ability> optionsFrom(SpellAbility sa) {
         List<Ability> options = new ArrayList<>();
         var choices = sa.getAdditionalAbilityList("Choices");
         if (choices == null) return options;
         for (var choice : choices) {
-            String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
-            if (desc != null) desc = AbilityDescription.stripReminderText(desc);
+            String desc = extractChoiceDescription(choice);
             if (desc == null || desc.isEmpty()) continue;
             options.add(new TextAbility(AbilityType.OPTION, AbilityDescription.applyCasing(desc)));
         }
         return options;
+    }
+
+    /**
+     * Extract the raw choice description from a Charm choice SA.
+     * Walks the sub-chain for {@code SpellDescription} and strips reminder text.
+     * Returns null when no description is found.
+     */
+    private static String extractChoiceDescription(SpellAbility choice) {
+        String desc = SpellAbilityUtils.findParamInChain(choice, "SpellDescription");
+        if (desc != null) desc = AbilityDescription.stripReminderText(desc);
+        return desc;
     }
 }
