@@ -57,7 +57,7 @@ A researcher has generated card embeddings (`.npz` files) and wants to verify th
 
 - **FR-006**: The command MUST exit with code 0 if all probes pass, code 1 if any probe fails, and code 2 for input errors (missing directory, insufficient data).
 
-- **FR-007**: The `--threshold-accuracy` parameter MUST override the default accuracy threshold for all classification probes. The `--threshold-r2` parameter MUST override the default R² threshold for all regression probes. The mana value probe MUST use a threshold of `max(threshold-r2, 0.90)`.
+- **FR-007**: The `--threshold-accuracy` parameter MUST override the default accuracy threshold for all classification probes. The `--threshold-r2` parameter MUST override the default R² threshold for all regression probes. The mana value probe MUST use a threshold of `max(threshold-r2, 0.90)`. The is-land probe MUST use a threshold of `max(threshold-accuracy, 0.99)`.
 
 - **FR-008**: The command MUST report the total number of cards used for probing in its output.
 

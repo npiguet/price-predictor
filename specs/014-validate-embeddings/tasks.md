@@ -47,16 +47,16 @@ No tasks in this phase.
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
 - [ ] T003 [P] [US1] Write unit tests for ground truth extraction functions in `tests/unit/sealed/domain/test_embedding_probe.py`. Cover: `extract_is_land()` (land vs non-land text), `extract_card_color()` per color (single-color, multi-color, colorless cards), `extract_pip_counts()` per color (zero pips, fractional hybrid pips), `extract_mana_value()` (delegates to `compute_mana_value` via mana cost line), `extract_mana_produced()` per color (lands, mana rocks like Sol Ring, non-mana-producing cards → 0). Use synthetic `CardData` objects with hand-written card text strings — no real embeddings needed.
-- [ ] T004 [P] [US1] Write unit tests for probe runner in `tests/unit/sealed/domain/test_embedding_probe.py`. Cover: `build_default_probes()` returns 21 ProbeSpecs with correct names/types/thresholds, `build_default_probes()` with custom threshold overrides, `run_probes()` returns ProbeResult list with correct pass/fail status. Mock `cross_val_score` to avoid real sklearn fitting in unit tests.
+- [ ] T004 [US1] Write unit tests for probe runner in `tests/unit/sealed/domain/test_embedding_probe.py` (same file as T003 — implement sequentially after T003). Cover: `build_default_probes()` returns 21 ProbeSpecs with correct names/types/thresholds, `build_default_probes()` with custom threshold overrides, `run_probes()` returns ProbeResult list with correct pass/fail status. Mock `cross_val_score` to avoid real sklearn fitting in unit tests.
 - [ ] T005 [P] [US1] Write unit tests for CLI argument parsing in `tests/unit/sealed/infrastructure/test_cli_sealed_validate.py`. Cover: `validate-embeddings` subcommand is recognized by the parser, `--cards-path` / `--threshold-accuracy` / `--threshold-r2` arguments are parsed correctly with defaults, handler returns exit code 2 when cards-path does not exist.
 
 ### Implementation for User Story 1
 
 - [ ] T006 [P] [US1] Implement value objects (`CardData`, `ProbeSpec`, `ProbeResult`, `ValidationResult`) and ground truth extraction functions (`extract_is_land`, `extract_card_color`, `extract_pip_counts`, `extract_mana_value`, `extract_mana_produced`) in `src/sealed/domain/embedding_probe.py`. Extraction functions take `list[CardData]` and return `np.ndarray`. Reuse `count_pips()` and `count_actual_sources()` from `sealed.domain.mana_scorer` for parsing. Use type-line check (same logic as `EmbeddingAdapter.is_land()`) for land detection. See data-model.md for entity fields and ground truth extraction table.
 - [ ] T007 [US1] Implement probe runner (`build_default_probes`, `run_probes`) in `src/sealed/domain/embedding_probe.py`. `build_default_probes(threshold_accuracy, threshold_r2)` returns a list of 21 `ProbeSpec` objects covering all 5 categories (is-land, card color ×6, pip counts ×6, mana value, mana produced ×6) with thresholds per FR-007 (is-land uses `max(threshold_accuracy, 0.99)`, mana value uses `max(threshold_r2, 0.90)`). `run_probes(cards, probes)` runs each probe using `cross_val_score` with `StratifiedKFold(5)` for classification and `KFold(5, shuffle=True)` for regression. See research.md R2.
-- [ ] T008 [US1] Implement `ValidateEmbeddingsUseCase` in `src/sealed/application/validate_embeddings.py`. The `execute(cards_path, threshold_accuracy, threshold_r2)` method: discovers `.npz` files via `Path.rglob("*.npz")`, pairs each with `.txt` file at same path (exclude cards missing either file), loads embeddings via `np.load(path)["embedding"]` and text via `Path.read_text()`, raises `ValueError` if fewer than 50 paired cards, builds probe specs via `build_default_probes()`, runs probes, returns `ValidationResult`. See data-model.md relationships diagram.
+- [ ] T008 [US1] Implement `ValidateEmbeddingsUseCase` in `src/sealed/application/validate_embeddings.py`. The `execute(cards_path, threshold_accuracy, threshold_r2)` method: discovers `.npz` files via `Path.rglob("*.npz")`, pairs each with `.txt` file at same path (exclude cards missing either file), loads embeddings via `np.load(path)["embedding"]` and text via `Path.read_text()`, raises `ValueError` if fewer than 50 paired cards, counts lands among loaded cards (check type line for "land") and includes as `n_lands` in result, builds probe specs via `build_default_probes()`, runs probes, returns `ValidationResult`. See data-model.md relationships diagram.
 - [ ] T009 [US1] Add `validate-embeddings` subcommand and `run_validate_embeddings()` handler to `src/sealed/infrastructure/cli.py`. Add subparser with `--cards-path` (default `output/cardsfolder/`), `--threshold-accuracy` (float, default 0.95), `--threshold-r2` (float, default 0.85). Handler: validates cards-path exists (exit 2 if not), calls use case, prints result table (Feature / Score / Threshold / Status per probe), prints summary line with total cards and overall PASS/FAIL, returns exit code 0 or 1. Wire into `main()` dispatcher. See research.md R5 for output format.
-- [ ] T010 [US1] Write integration test in `tests/integration/sealed/test_validate_embeddings_integration.py`. Create a `tmp_path` fixture directory with ~100 synthetic cards (random 512-dim embeddings as `.npz`, hand-written `.txt` files covering lands, colored spells, artifacts with mana abilities). Run `ValidateEmbeddingsUseCase.execute()` end-to-end with real sklearn fitting. Verify it returns a `ValidationResult` with 21 `ProbeResult` entries. Verify exit code logic (all_passed reflects actual probe outcomes). This test exercises the full pipeline: file discovery → loading → ground truth extraction → cross-validation → result aggregation.
+- [ ] T010 [US1] Write integration test in `tests/integration/sealed/test_validate_embeddings_integration.py`. Create a `tmp_path` fixture directory with ~100 synthetic cards (random 512-dim embeddings as `.npz`, hand-written `.txt` files covering lands, colored spells, artifacts with mana abilities). Run `ValidateEmbeddingsUseCase.execute()` end-to-end with real sklearn fitting. Verify it returns a `ValidationResult` with 21 `ProbeResult` entries. Verify exit code logic (all_passed reflects actual probe outcomes). This test exercises the full pipeline: file discovery → loading → ground truth extraction → cross-validation → result aggregation. Also include a test case that constructs cards with random noise embeddings (e.g., `np.random.default_rng(42).standard_normal((512,))`) paired with realistic card texts, asserts that `validation_result.all_passed` is `False` and that at least 3 of the 5 probe categories contain a failing probe, confirming the validation rejects meaningless embeddings (SC-002).
 
 **Checkpoint**: User Story 1 is fully functional and testable. `python -m sealed validate-embeddings --cards-path output/cardsfolder/` works end-to-end.
 
@@ -86,7 +86,8 @@ No tasks in this phase.
 
 ### Within Phase 3 (User Story 1)
 
-- T003, T004, T005 can all run in parallel (different files, no dependencies)
+- T003, T005 can run in parallel (different files, no dependencies)
+- T004 follows T003 (same file)
 - T006 can run in parallel with tests (different file)
 - T007 depends on T006 (value objects and extraction functions must exist)
 - T008 depends on T007 (use case calls probe runner)
@@ -99,7 +100,7 @@ No tasks in this phase.
 Phase 2:    T001 → T002
 
 Phase 3:    ┌─ T003 (unit: extraction)  ─┐
-            ├─ T004 (unit: probe runner) ─┤
+            │    └─ T004 (unit: runner)  ─┤
             ├─ T005 (unit: CLI)          ─┤
             └─ T006 (impl: extraction)   ─┘
                         │

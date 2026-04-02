@@ -65,7 +65,7 @@ Aggregate result of all probes.
 | `probe_results` | `list[ProbeResult]` | One per probe spec |
 | `n_cards` | `int` | Total cards loaded (with both `.npz` and `.txt`) |
 | `n_lands` | `int` | Cards identified as lands |
-| `all_passed` | `bool` | `True` if every non-skipped probe passed |
+| `all_passed` | `bool` | `True` if every probe passed |
 
 **Exit code mapping**:
 - `all_passed == True` → exit code 0
