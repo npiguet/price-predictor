@@ -12,7 +12,7 @@ from sealed.domain.episode_runner import EpisodeRunner, BASIC_LAND_NAMES, MAX_PI
 from sealed.infrastructure.pool_loader import PoolLoader
 from sealed.infrastructure.pool_model_store import PoolModelStore
 from sealed.infrastructure.embedding_store import EmbeddingStore
-from sealed.application.train_stage1 import _EmbeddingAdapter
+from sealed.infrastructure.embedding_adapter import EmbeddingAdapter
 
 
 class SampleStage1UseCase:
@@ -39,7 +39,7 @@ class SampleStage1UseCase:
         pools = pool_loader.load_pools(pools_file)
 
         embedding_store = EmbeddingStore()
-        card_port = _EmbeddingAdapter(embedding_store, cards_path)
+        card_port = EmbeddingAdapter(embedding_store, cards_path)
         runner = EpisodeRunner()
 
         selected = random.sample(pools, min(n_samples, len(pools)))

@@ -1,5 +1,4 @@
-name: Breeding Pool
+name: breeding pool
 types: land forest island
-etb: As CARDNAME enters the battlefield, you may pay 2 life. If you don't, it enters the battlefield tapped.
-mana[1]: {T}: Add {G}.
-mana[2]: {T}: Add {U}.
+replacement: as CARDNAME enters, you may pay 2 life. if you don't, it enters tapped.
+activated[1]: {T}: add {U} or {G}

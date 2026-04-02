@@ -5,55 +5,22 @@ from dataclasses import dataclass
 from pathlib import Path
 import time
 
-import numpy as np
 import torch
 import torch.optim as optim
 
 from sealed.domain.pool_transformer import PoolTransformerConfig, PoolTransformerModel
 from sealed.domain.episode_runner import EpisodeRunner, MAX_PICKS
 from sealed.domain.ppo_trainer import PPOTrainer
-from sealed.infrastructure.pool_loader import PoolLoader, card_npz_path
+from sealed.infrastructure.pool_loader import PoolLoader
 from sealed.infrastructure.pool_model_store import PoolModelStore
 from sealed.infrastructure.embedding_store import EmbeddingStore
+from sealed.infrastructure.embedding_adapter import EmbeddingAdapter
 
 
 @dataclass
 class TrainingState:
     best_run: int = 1
     episode_count: int = 0
-
-
-class _EmbeddingAdapter:
-    """Wraps EmbeddingStore to satisfy CardEmbeddingPort (structural protocol)."""
-
-    def __init__(self, store: EmbeddingStore, cards_path: Path) -> None:
-        self._store = store
-        self._cards_path = cards_path
-        self.total_load_s: float = 0.0
-        self._land_cache: dict[str, bool] = {}
-
-    def get_embedding(self, card_name: str) -> np.ndarray:
-        t0 = time.perf_counter()
-        result = self._store.load(card_npz_path(self._cards_path, card_name))
-        self.total_load_s += time.perf_counter() - t0
-        return result
-
-    def is_land(self, card_name: str) -> bool:
-        if card_name in self._land_cache:
-            return self._land_cache[card_name]
-        txt_path = card_npz_path(self._cards_path, card_name).with_suffix(".txt")
-        result = False
-        if txt_path.exists():
-            for line in txt_path.read_text(encoding="utf-8").splitlines():
-                low = line.lower()
-                if low.startswith("type") and "land" in low:
-                    result = True
-                    break
-        self._land_cache[card_name] = result
-        return result
-
-    def reset_timing(self) -> None:
-        self.total_load_s = 0.0
 
 
 class TrainStage1UseCase:
@@ -122,7 +89,7 @@ class TrainStage1UseCase:
         print(f"Training  set={set_code}  batch_size={batch_size}  checkpoint={model_path}")
         print("Collecting first batch ...")
 
-        card_port = _EmbeddingAdapter(embedding_store, cards_path)
+        card_port = EmbeddingAdapter(embedding_store, cards_path)
         runner = EpisodeRunner()
         trainer = PPOTrainer(model, optimizer)
 

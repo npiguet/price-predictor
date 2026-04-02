@@ -72,7 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--stage",
         type=int,
         required=True,
-        help="Training stage (currently only 1 is supported)",
+        help="Training stage (1 or 2)",
     )
     train_parser.add_argument(
         "--set",
@@ -93,7 +93,20 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument(
         "--model-path",
         default=None,
-        help="Path to save/load the .pt model checkpoint. Default: models/sealed/stage1/{set}/latest.pt",
+        help=(
+            "Path to save/load the .pt model checkpoint. "
+            "Default: models/sealed/stage1/{set}/latest.pt (stage 1) or "
+            "models/sealed/stage2/{set}/latest.pt (stage 2)"
+        ),
+    )
+    train_parser.add_argument(
+        "--init-from",
+        default=None,
+        help=(
+            "Path to Stage 1 checkpoint to initialise Stage 2 from. "
+            "Default: models/sealed/stage1/{set}/latest.pt. "
+            "Only used when --stage 2 and --model-path does not exist."
+        ),
     )
     train_parser.add_argument(
         "--batch-size",
@@ -108,6 +121,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Sample picks from a trained sealed deck-picker model",
     )
     sample_parser.add_argument(
+        "--stage",
+        type=int,
+        default=1,
+        help="Model stage to sample from (1 or 2, default: 1)",
+    )
+    sample_parser.add_argument(
         "--set",
         default="RVR",
         dest="set_code",
@@ -126,7 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     sample_parser.add_argument(
         "--model-path",
         default=None,
-        help="Path to .pt model checkpoint. Default: models/sealed/stage1/{set}/latest.pt",
+        help=(
+            "Path to .pt model checkpoint. "
+            "Default: models/sealed/stage1/{set}/latest.pt (stage 1) or "
+            "models/sealed/stage2/{set}/latest.pt (stage 2)"
+        ),
     )
     sample_parser.add_argument(
         "--n-samples",
@@ -221,9 +244,7 @@ def run_generate_pools(args: argparse.Namespace) -> int:
 
 def run_train(args: argparse.Namespace) -> int:
     """Execute the train command."""
-    from sealed.application.train_stage1 import TrainStage1UseCase
-
-    if args.stage != 1:
+    if args.stage not in (1, 2):
         print(f"Error: unknown training stage {args.stage}", file=sys.stderr)
         return 1
 
@@ -234,58 +255,111 @@ def run_train(args: argparse.Namespace) -> int:
     else:
         pools_path = Path(args.pools_path.replace("{set}", set_code))
 
-    if args.model_path is None:
-        model_path = Path("models") / "sealed" / "stage1" / set_code / "latest.pt"
-    else:
-        model_path = Path(args.model_path.replace("{set}", set_code))
-
     cards_path = Path(args.cards_path)
 
-    try:
-        use_case = TrainStage1UseCase()
-        use_case.execute(
-            pools_path=pools_path,
-            cards_path=cards_path,
-            model_path=model_path,
-            batch_size=args.batch_size,
-            set_code=set_code,
-        )
-    except (ValueError, FileNotFoundError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+    if args.stage == 1:
+        from sealed.application.train_stage1 import TrainStage1UseCase
+
+        if args.model_path is None:
+            model_path = Path("models") / "sealed" / "stage1" / set_code / "latest.pt"
+        else:
+            model_path = Path(args.model_path.replace("{set}", set_code))
+
+        try:
+            use_case = TrainStage1UseCase()
+            use_case.execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                batch_size=args.batch_size,
+                set_code=set_code,
+            )
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+
+    else:  # stage == 2
+        from sealed.application.train_stage2 import TrainStage2UseCase
+
+        if args.model_path is None:
+            model_path = Path("models") / "sealed" / "stage2" / set_code / "latest.pt"
+        else:
+            model_path = Path(args.model_path.replace("{set}", set_code))
+
+        init_from_raw = getattr(args, "init_from", None)
+        if init_from_raw is None:
+            init_from = Path("models") / "sealed" / "stage1" / set_code / "latest.pt"
+        else:
+            init_from = Path(init_from_raw.replace("{set}", set_code))
+
+        try:
+            use_case = TrainStage2UseCase()
+            use_case.execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                init_from=init_from,
+                batch_size=args.batch_size,
+                set_code=set_code,
+            )
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
 
     return 0
 
 
 def run_sample(args: argparse.Namespace) -> int:
     """Execute the sample command."""
-    from sealed.application.sample_stage1 import SampleStage1UseCase
-
     set_code = args.set_code
+    stage = getattr(args, "stage", 1)
 
     if args.pools_path is None:
         pools_path = Path("output") / "sealed" / "pools" / set_code
     else:
         pools_path = Path(args.pools_path.replace("{set}", set_code))
 
-    if args.model_path is None:
-        model_path = Path("models") / "sealed" / "stage1" / set_code / "latest.pt"
-    else:
-        model_path = Path(args.model_path.replace("{set}", set_code))
-
     cards_path = Path(args.cards_path)
 
-    try:
-        use_case = SampleStage1UseCase()
-        use_case.execute(
-            pools_path=pools_path,
-            cards_path=cards_path,
-            model_path=model_path,
-            n_samples=args.n_samples,
-        )
-    except FileNotFoundError as exc:
-        print(f"Error: checkpoint not found: {exc}", file=sys.stderr)
-        return 2
+    if stage == 2:
+        from sealed.application.sample_stage2 import SampleStage2UseCase
+
+        if args.model_path is None:
+            model_path = Path("models") / "sealed" / "stage2" / set_code / "latest.pt"
+        else:
+            model_path = Path(args.model_path.replace("{set}", set_code))
+
+        try:
+            use_case = SampleStage2UseCase()
+            use_case.execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                n_samples=args.n_samples,
+            )
+        except FileNotFoundError as exc:
+            print(f"Error: checkpoint not found: {exc}", file=sys.stderr)
+            return 2
+
+    else:
+        from sealed.application.sample_stage1 import SampleStage1UseCase
+
+        if args.model_path is None:
+            model_path = Path("models") / "sealed" / "stage1" / set_code / "latest.pt"
+        else:
+            model_path = Path(args.model_path.replace("{set}", set_code))
+
+        try:
+            use_case = SampleStage1UseCase()
+            use_case.execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                n_samples=args.n_samples,
+            )
+        except FileNotFoundError as exc:
+            print(f"Error: checkpoint not found: {exc}", file=sys.stderr)
+            return 2
 
     return 0
 

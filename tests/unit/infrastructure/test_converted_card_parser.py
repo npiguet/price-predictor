@@ -159,12 +159,12 @@ def test_parse_converted_cards_with_fixtures():
     assert "jace, the mind sculptor" in names
     assert "Serra Angel" in names
     assert "Delver of Secrets" in names
-    assert "Sol Ring" in names
+    assert "sol ring" in names
     assert "Ragavan, Nimble Pilferer" in names
-    assert "Breeding Pool" in names
+    assert "breeding pool" in names
     assert "Fire" in names
     assert "Matter Reshaper" in names
-    assert "Island" in names
+    assert "island" in names
 
 
 # --- 10. parse_converted_cards with nonexistent directory ---
