@@ -104,13 +104,46 @@ Per episode stored:
 The training dataset is pre-generated before training begins. The preparation
 consists of two independent steps that can be run separately:
 
-#### Step 1 - Card Embedding Generation
+#### Step 1 - Card Embedding Generation and validation
 The Python application scans cards-path and generates a 512-dimensional embedding
 vector for each card found, following the process described in spec
 006-card-script-parsing. Each embedding is stored as a .npz file named after
 the card (e.g. Lightning-Bolt.npz) in the same cards-path folder. This step is
 skipped for cards that already have a corresponding .npz file, making it safe
 to run incrementally when new cards are added or when the encoder is retrained.
+
+After generating embeddings, a validation step probes whether the embeddings actually encode the features 
+that Stage 2 training depends on. Validation uses linear probing: for each feature, a lightweight linear
+classifier or regressor is trained on top of the frozen embeddings using ground truth labels extracted 
+from card text files. A feature is considered encoded if its probe achieves a score above a minimum 
+threshold. Ground truth extraction reuses the same parsing logic as the Stage 2 mana scorer 
+(pip counting, source counting, type-line parsing).
+
+| Feature                                     | Probe type                         | Ground truth source                   | Pass threshold            |
+|---------------------------------------------|------------------------------------|---------------------------------------|---------------------------|                                                                                                                                                                                                                                                                                                                                                              
+| Is land                                     | Logistic regression (binary)       | Card types line                       | Accuracy ≥ 0.99           |                                                                                                                                                                                                                                                                                                 
+| Card color (per W/U/B/R/G/C)                | Logistic regression, one per color | `mana cost:` pip counts > 0           | Accuracy ≥ 0.95 per color |                                                                                                                                                                                                                                                
+| Pip counts (per W/U/B/R/G/C)                | Linear regression, one per color   | `mana cost:` parsed pip counts        | R² ≥ 0.85 per color       |                                                                                                                                                                                                                                                     
+| Mana value                                  | Linear regression                  | Sum of generic + colored pips (X = 0) | R² ≥ 0.90                 |                                                                                                                                                                                                                                                                                         
+| Mana produced (per W/U/B/R/G/C, lands only) | Logistic regression, one per color | `activated[N]: {T}: add` abilities    | Accuracy ≥ 0.95 per color |        
+
+The command exits with code 0 if all probes pass, code 1 if any fail. Both passing and failing results are 
+printed with the achieved score and threshold. Failure should be treated as a blocker: if an embedding cannot
+express that a Forest produces green mana or that a {2}{W}{W} spell
+requires two white sources, no amount of reward shaping in Stage 2 will compensate.
+
+```bash
+python -m sealed validate-embeddings \
+    --cards-path [path] \
+    --threshold-accuracy [float] \
+    --threshold-r2 [float]
+```
+
+Defaults:
+- **--cards-path**: output/cardsfolder/
+- **--threshold-accuracy**: 0.95 (applied to all classification probes)
+- **--threshold-r2**: 0.85 (applied to all regression probes; mana value uses a fixed minimum of 0.90)
+
 
 #### Step 2 - Pool Generation
 The Python script invokes a forge-connector Java class that uses Forge's
