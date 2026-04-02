@@ -235,6 +235,22 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     return 1 if result.errors else 0
 
 
+_COL_FEATURE = 32
+_COL_SCORE = 8
+_COL_THRESHOLD = 10
+
+
+def _print_probe_row(r) -> None:
+    status = "PASS" if r.passed else "FAIL"
+    threshold_str = f"≥ {r.threshold:.3f}"
+    print(
+        f"{r.feature_name:<{_COL_FEATURE}}  "
+        f"{r.score:>{_COL_SCORE}.3f}  "
+        f"{threshold_str:>{_COL_THRESHOLD}}  "
+        f"{status}"
+    )
+
+
 def run_validate_embeddings(args: argparse.Namespace) -> int:
     """Execute the validate-embeddings command."""
     from sealed.application.validate_embeddings import ValidateEmbeddingsUseCase
@@ -247,51 +263,43 @@ def run_validate_embeddings(args: argparse.Namespace) -> int:
 
     print(f"Loading embeddings from {cards_path} ...")
 
+    use_case = ValidateEmbeddingsUseCase()
+
+    # Print the table header before probes start so results stream in live.
+    _print_probe_table_header()
+
     try:
-        use_case = ValidateEmbeddingsUseCase()
         result = use_case.execute(
             cards_path=cards_path,
             threshold_accuracy=args.threshold_accuracy,
             threshold_r2=args.threshold_r2,
+            on_result=_print_probe_row,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
-    _print_validation_result(result)
-    return 0 if result.all_passed else 1
-
-
-def _print_validation_result(result) -> None:
-    """Print probe results as a formatted table."""
-    print(f"\nValidating embeddings ({result.n_cards:,} cards, {result.n_lands:,} lands)...\n")
-
-    col_feature = 32
-    col_score = 8
-    col_threshold = 10
-
-    header = (
-        f"{'Feature':<{col_feature}}  {'Score':>{col_score}}  "
-        f"{'Threshold':>{col_threshold}}  Status"
-    )
-    sep = f"{'─' * col_feature}  {'─' * col_score}  {'─' * col_threshold}  {'─' * 6}"
-    print(header)
-    print(sep)
-
-    for r in result.probe_results:
-        status = "PASS" if r.passed else "FAIL"
-        threshold_str = f"≥ {r.threshold:.3f}"
-        print(
-            f"{r.feature_name:<{col_feature}}  "
-            f"{r.score:>{col_score}.3f}  "
-            f"{threshold_str:>{col_threshold}}  "
-            f"{status}"
-        )
-
     n_passed = sum(1 for r in result.probe_results if r.passed)
     n_total = len(result.probe_results)
     overall = "PASS" if result.all_passed else "FAIL"
-    print(f"\nResult: {overall} ({n_passed}/{n_total} probes passed)")
+    print(f"\nResult: {overall} ({n_passed}/{n_total} probes passed, "
+          f"{result.n_cards:,} cards, {result.n_lands:,} lands)")
+
+    return 0 if result.all_passed else 1
+
+
+def _print_probe_table_header() -> None:
+    header = (
+        f"{'Feature':<{_COL_FEATURE}}  {'Score':>{_COL_SCORE}}  "
+        f"{'Threshold':>{_COL_THRESHOLD}}  Status"
+    )
+    sep = (
+        f"{'─' * _COL_FEATURE}  {'─' * _COL_SCORE}  "
+        f"{'─' * _COL_THRESHOLD}  {'─' * 6}"
+    )
+    print()
+    print(header)
+    print(sep)
 
 
 def run_generate_pools(args: argparse.Namespace) -> int:

@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 
 from sealed.domain.embedding_probe import (
     CardData,
+    ProbeResult,
     ValidationResult,
     _is_land_text,
     build_default_probes,
@@ -22,6 +24,7 @@ class ValidateEmbeddingsUseCase:
         cards_path: Path,
         threshold_accuracy: float = 0.95,
         threshold_r2: float = 0.85,
+        on_result: Callable[[ProbeResult], None] | None = None,
     ) -> ValidationResult:
         """Discover cards, run probes, return ValidationResult.
 
@@ -38,7 +41,7 @@ class ValidateEmbeddingsUseCase:
 
         n_lands = sum(1 for c in cards if _is_land_text(c.text))
         probes = build_default_probes(threshold_accuracy, threshold_r2)
-        results = run_probes(cards, probes)
+        results = run_probes(cards, probes, on_result=on_result)
         all_passed = all(r.passed for r in results)
 
         return ValidationResult(

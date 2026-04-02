@@ -181,8 +181,16 @@ def build_default_probes(
     return probes
 
 
-def run_probes(cards: list[CardData], probes: list[ProbeSpec]) -> list[ProbeResult]:
-    """Run each probe with 5-fold cross-validation and return results."""
+def run_probes(
+    cards: list[CardData],
+    probes: list[ProbeSpec],
+    on_result: Callable[[ProbeResult], None] | None = None,
+) -> list[ProbeResult]:
+    """Run each probe with 5-fold cross-validation and return results.
+
+    If *on_result* is provided it is called immediately after each probe
+    finishes, allowing the caller to display progress in real time.
+    """
     embeddings = np.stack([c.embedding for c in cards])
 
     results: list[ProbeResult] = []
@@ -203,12 +211,15 @@ def run_probes(cards: list[CardData], probes: list[ProbeSpec]) -> list[ProbeResu
             )
 
         mean_score = float(np.mean(fold_scores))
-        results.append(ProbeResult(
+        result = ProbeResult(
             feature_name=spec.feature_name,
             score=mean_score,
             threshold=spec.threshold,
             passed=mean_score >= spec.threshold,
             n_samples=len(cards),
-        ))
+        )
+        results.append(result)
+        if on_result is not None:
+            on_result(result)
 
     return results
