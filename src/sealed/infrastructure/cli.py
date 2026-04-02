@@ -115,6 +115,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of episodes per training batch",
     )
 
+    # ── validate-embeddings ───────────────────────────────────────
+    validate_parser = subparsers.add_parser(
+        "validate-embeddings",
+        help="Validate card embeddings using linear probes",
+    )
+    validate_parser.add_argument(
+        "--cards-path",
+        default="output/cardsfolder/",
+        help="Directory containing .npz embedding and .txt card text files",
+    )
+    validate_parser.add_argument(
+        "--threshold-accuracy",
+        type=float,
+        default=0.95,
+        help="Minimum accuracy for classification probes (default: 0.95)",
+    )
+    validate_parser.add_argument(
+        "--threshold-r2",
+        type=float,
+        default=0.85,
+        help="Minimum R² for regression probes (default: 0.85)",
+    )
+
     # ── sample ────────────────────────────────────────────────────
     sample_parser = subparsers.add_parser(
         "sample",
@@ -210,6 +233,65 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         print(f"  Error: {err}", file=sys.stderr)
 
     return 1 if result.errors else 0
+
+
+def run_validate_embeddings(args: argparse.Namespace) -> int:
+    """Execute the validate-embeddings command."""
+    from sealed.application.validate_embeddings import ValidateEmbeddingsUseCase
+
+    cards_path = Path(args.cards_path)
+
+    if not cards_path.exists():
+        print(f"Error: Cards path not found: {cards_path}", file=sys.stderr)
+        return 2
+
+    print(f"Loading embeddings from {cards_path} ...")
+
+    try:
+        use_case = ValidateEmbeddingsUseCase()
+        result = use_case.execute(
+            cards_path=cards_path,
+            threshold_accuracy=args.threshold_accuracy,
+            threshold_r2=args.threshold_r2,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    _print_validation_result(result)
+    return 0 if result.all_passed else 1
+
+
+def _print_validation_result(result) -> None:
+    """Print probe results as a formatted table."""
+    print(f"\nValidating embeddings ({result.n_cards:,} cards, {result.n_lands:,} lands)...\n")
+
+    col_feature = 32
+    col_score = 8
+    col_threshold = 10
+
+    header = (
+        f"{'Feature':<{col_feature}}  {'Score':>{col_score}}  "
+        f"{'Threshold':>{col_threshold}}  Status"
+    )
+    sep = f"{'─' * col_feature}  {'─' * col_score}  {'─' * col_threshold}  {'─' * 6}"
+    print(header)
+    print(sep)
+
+    for r in result.probe_results:
+        status = "PASS" if r.passed else "FAIL"
+        threshold_str = f"≥ {r.threshold:.3f}"
+        print(
+            f"{r.feature_name:<{col_feature}}  "
+            f"{r.score:>{col_score}.3f}  "
+            f"{threshold_str:>{col_threshold}}  "
+            f"{status}"
+        )
+
+    n_passed = sum(1 for r in result.probe_results if r.passed)
+    n_total = len(result.probe_results)
+    overall = "PASS" if result.all_passed else "FAIL"
+    print(f"\nResult: {overall} ({n_passed}/{n_total} probes passed)")
 
 
 def run_generate_pools(args: argparse.Namespace) -> int:
@@ -380,6 +462,8 @@ def main() -> None:
         sys.exit(run_train(args))
     elif args.command == "sample":
         sys.exit(run_sample(args))
+    elif args.command == "validate-embeddings":
+        sys.exit(run_validate_embeddings(args))
     else:
         parser.print_help()
         sys.exit(1)

@@ -38,7 +38,7 @@ Defines a single linear probe to run.
 | Pip counts (W/U/B/R/G/C) | 6 | regression | 0.85 |
 | Mana value | 1 | regression | 0.90 |
 | Mana produced (W/U/B/R/G/C) | 6 | classification | 0.95 |
-| **Total** | **21** | | |
+| **Total** | **20** | | |
 
 ---
 

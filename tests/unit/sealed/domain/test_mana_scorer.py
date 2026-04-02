@@ -12,6 +12,7 @@ from sealed.domain.mana_scorer import (
     compute_ideal_distribution,
     count_actual_sources,
     compute_mana_score,
+    compute_mana_value,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -377,3 +378,43 @@ class TestComputeManaScore:
         actual = ActualSourceCounts(sources={"C": 17.0})
         result = compute_mana_score(ideal, actual, n_lands=17)
         assert result.score == pytest.approx(1.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T002 — compute_mana_value()
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestComputeManaValue:
+    def test_single_colored_pip(self):
+        assert compute_mana_value("{W}") == pytest.approx(1.0)
+
+    def test_generic_plus_colored(self):
+        assert compute_mana_value("{2}{W}{W}") == pytest.approx(4.0)
+
+    def test_hybrid_counts_as_one(self):
+        assert compute_mana_value("{G/R}") == pytest.approx(1.0)
+
+    def test_phyrexian_counts_as_one(self):
+        assert compute_mana_value("{W/P}") == pytest.approx(1.0)
+
+    def test_variable_x_contributes_zero(self):
+        assert compute_mana_value("{X}{R}") == pytest.approx(1.0)
+
+    def test_colorless_pip(self):
+        assert compute_mana_value("{C}") == pytest.approx(1.0)
+
+    def test_multi_generic_plus_colored(self):
+        assert compute_mana_value("{4}{B}{B}{B}") == pytest.approx(7.0)
+
+    def test_empty_string(self):
+        assert compute_mana_value("") == pytest.approx(0.0)
+
+    def test_pure_generic(self):
+        assert compute_mana_value("{5}") == pytest.approx(5.0)
+
+    def test_x_only(self):
+        assert compute_mana_value("{X}") == pytest.approx(0.0)
+
+    def test_complex_multicolor(self):
+        # {2}{W}{U}{B} → 2+1+1+1 = 5
+        assert compute_mana_value("{2}{W}{U}{B}") == pytest.approx(5.0)

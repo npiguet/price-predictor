@@ -166,6 +166,46 @@ def count_actual_sources(land_texts: list[str]) -> ActualSourceCounts:
     return ActualSourceCounts(sources=sources)
 
 
+# ─── 014: compute_mana_value() ───────────────────────────────────────────────
+
+def compute_mana_value(cost_str: str) -> float:
+    """Return the mana value (CMC) of a brace-format cost string.
+
+    Rules (FR-007 / data-model.md):
+      {W},{U},{B},{R},{G},{C}  → +1
+      {N} generic digit        → +N
+      {W/P} phyrexian          → +1
+      {G/R} hybrid             → +1
+      {X}                      → +0
+    """
+    total = 0.0
+    pos = 0
+    while pos < len(cost_str):
+        if cost_str[pos] != "{":
+            pos += 1
+            continue
+        end = cost_str.find("}", pos)
+        if end == -1:
+            break
+        symbol = cost_str[pos + 1: end]
+        pos = end + 1
+
+        if "/" in symbol:
+            # Phyrexian or hybrid — counts as 1 pip regardless
+            total += 1.0
+        elif symbol.upper() in ("W", "U", "B", "R", "G", "C"):
+            total += 1.0
+        elif symbol.upper() == "X":
+            pass  # X contributes 0
+        else:
+            # Generic integer
+            try:
+                total += float(symbol)
+            except ValueError:
+                pass
+    return total
+
+
 # ─── T015: compute_mana_score() ──────────────────────────────────────────────
 
 _ALL_COLORS = ("W", "U", "B", "R", "G", "C")
