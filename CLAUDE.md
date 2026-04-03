@@ -1,4 +1,4 @@
-# price-predictor Development Guidelines
+﻿# price-predictor Development Guidelines
 
 ## Stack
 
