@@ -241,15 +241,18 @@ def run_encode_cards(args: argparse.Namespace) -> int:
 
 _COL_FEATURE = 32
 _COL_SCORE = 8
+_COL_EXACT = 12
 _COL_THRESHOLD = 10
 
 
 def _print_probe_row(r) -> None:
     status = "PASS" if r.passed else "FAIL"
     threshold_str = f"≥ {r.threshold:.3f}"
+    exact_str = f"{r.rounded_score:.3f}" if r.rounded_score is not None else "-"
     print(
         f"{r.feature_name:<{_COL_FEATURE}}  "
         f"{r.score:>{_COL_SCORE}.3f}  "
+        f"{exact_str:>{_COL_EXACT}}  "
         f"{threshold_str:>{_COL_THRESHOLD}}  "
         f"{status}"
     )
@@ -295,10 +298,12 @@ def run_validate_embeddings(args: argparse.Namespace) -> int:
 def _print_probe_table_header() -> None:
     header = (
         f"{'Feature':<{_COL_FEATURE}}  {'Score':>{_COL_SCORE}}  "
+        f"{'Exact Match':>{_COL_EXACT}}  "
         f"{'Threshold':>{_COL_THRESHOLD}}  Status"
     )
     sep = (
         f"{'─' * _COL_FEATURE}  {'─' * _COL_SCORE}  "
+        f"{'─' * _COL_EXACT}  "
         f"{'─' * _COL_THRESHOLD}  {'─' * 6}"
     )
     print()

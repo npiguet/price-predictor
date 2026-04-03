@@ -7,7 +7,7 @@ from typing import Callable
 
 import numpy as np
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score
+from sklearn.model_selection import KFold, StratifiedKFold, cross_val_predict, cross_val_score
 
 from sealed.domain.mana_scorer import (
     compute_mana_value,
@@ -32,6 +32,7 @@ class ProbeSpec:
     probe_type: str   # "classification" or "regression"
     threshold: float
     extract_labels: Callable[[list[CardData]], np.ndarray]
+    round_to: float | None = None  # regression only: snap predictions to this step size
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,7 @@ class ProbeResult:
     threshold: float
     passed: bool
     n_samples: int
+    rounded_score: float | None = None  # R² after rounding predictions to nearest valid value
 
 
 @dataclass(frozen=True)
@@ -237,6 +239,7 @@ def build_default_probes(
             probe_type="regression",
             threshold=threshold_r2,
             extract_labels=lambda cards, c=color: extract_pip_counts(cards, c),
+            round_to=0.5,
         ))
 
     # Mana value (1 probe)
@@ -245,6 +248,7 @@ def build_default_probes(
         probe_type="regression",
         threshold=max(threshold_r2, 0.90),
         extract_labels=extract_mana_value,
+        round_to=1.0,
     ))
 
     # Mana produced — one per color (6 probes)
@@ -281,12 +285,20 @@ def run_probes(
             fold_scores = cross_val_score(
                 model, embeddings, labels, cv=cv, scoring="accuracy", error_score=0.0
             )
+            preds = cross_val_predict(model, embeddings, labels, cv=cv)
+            rounded_score = float(np.mean(preds == labels))
         else:
             model = LinearRegression()
             cv = KFold(n_splits=5, shuffle=True, random_state=42)
             fold_scores = cross_val_score(
                 model, embeddings, labels, cv=cv, scoring="r2", error_score=0.0
             )
+            rounded_score = None
+            if spec.round_to is not None:
+                preds = cross_val_predict(model, embeddings, labels, cv=cv)
+                pred_steps = np.round(preds / spec.round_to)
+                true_steps = np.round(labels / spec.round_to)
+                rounded_score = float(np.mean(pred_steps == true_steps))
 
         mean_score = float(np.mean(fold_scores))
         result = ProbeResult(
@@ -295,6 +307,7 @@ def run_probes(
             threshold=spec.threshold,
             passed=mean_score >= spec.threshold,
             n_samples=len(cards),
+            rounded_score=rounded_score,
         )
         results.append(result)
         if on_result is not None:
