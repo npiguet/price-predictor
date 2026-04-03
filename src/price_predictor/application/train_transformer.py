@@ -272,6 +272,15 @@ def _train_loop(
         for loss_fn in aux_cls_loss_fns:
             loss_fn.to(device)
 
+    # Pre-build ordinal tensors on device once — avoids per-batch CPU→GPU transfers
+    # for class boundary values and k_range inside _compute_aux_losses.
+    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+    if use_aux and ordinal_class_maps:
+        for head_idx, classes in ordinal_class_maps.items():
+            classes_t = torch.tensor(classes, dtype=torch.float32, device=device)
+            k_range_t = torch.arange(len(classes) - 1, dtype=torch.long, device=device)
+            ordinal_tensors[head_idx] = (classes_t, k_range_t)
+
     optimizer = torch.optim.AdamW(training_model.parameters(), lr=lr)
 
     # Linear warmup scheduler
@@ -310,7 +319,7 @@ def _train_loop(
                 aux_labels_batch = batch["aux_labels"].to(device)
                 aux_losses = _compute_aux_losses(
                     aux_preds, aux_labels_batch,
-                    aux_cls_loss_fns, ordinal_class_maps or {},
+                    aux_cls_loss_fns, ordinal_tensors,
                 )
                 loss = _combined_loss(l_price, aux_losses, aux_lambda)
             else:
@@ -342,7 +351,7 @@ def _train_loop(
                         aux_cls_loss_fns, ordinal_class_maps or {},
                     )
                     val_losses.append(l_price.item())
-                    val_aux_losses.append(sum(a.item() for a in aux_losses))
+                    val_aux_losses.append(sum(aux_losses).item())
                 else:
                     predictions = training_model(input_ids, attention_mask, meta)
                     loss = price_loss_fn(predictions, targets)
@@ -390,12 +399,15 @@ def _compute_aux_losses(
     aux_preds: list[torch.Tensor],
     aux_labels: torch.Tensor,
     cls_loss_fns: list,
-    ordinal_class_maps: dict[int, list[float]],
+    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor]],
 ) -> list[torch.Tensor]:
     """Compute per-head auxiliary losses.
 
     Classification heads (indices 0-6, 14-19): BCEWithLogitsLoss on (batch,) logits.
-    Ordinal heads (indices 7-13): EMD loss on (batch, K) logits vs nearest class index.
+    Ordinal heads (indices 7-13): EMD loss using pre-built device tensors to avoid
+    per-batch CPU→GPU transfers.
+
+    ordinal_tensors: maps head_idx → (classes_t, k_range_t) already on device.
     """
     losses = []
     cls_idx = 0
@@ -406,11 +418,15 @@ def _compute_aux_losses(
             losses.append(loss)
             cls_idx += 1
         else:
-            # Ordinal EMD loss
-            classes = ordinal_class_maps[head_idx]
+            # Ordinal EMD loss — use pre-built tensors (no per-batch tensor creation)
+            classes_t, k_range_t = ordinal_tensors[head_idx]
             raw_labels = aux_labels[:, head_idx]
-            class_indices = _raw_to_class_idx_tensor(raw_labels, classes)
-            loss = _emd_loss(aux_preds[head_idx], class_indices)
+            dists = torch.abs(raw_labels.unsqueeze(1) - classes_t.unsqueeze(0))
+            class_indices = dists.argmin(dim=-1)
+            probs = torch.softmax(aux_preds[head_idx], dim=-1)
+            cdf_pred = torch.cumsum(probs, dim=-1)[:, :-1]
+            cdf_true = (k_range_t.unsqueeze(0) >= class_indices.unsqueeze(1)).float()
+            loss = torch.abs(cdf_pred - cdf_true).sum(dim=-1).mean()
             losses.append(loss)
     return losses
 
@@ -551,8 +567,8 @@ def train_transformer(
     # drowned out by the ~90% cheap-card majority.
     train_prices = [p for _, _, p, _ in train_data]
     sampler = _make_weighted_sampler(train_prices, exponent=sampler_exponent)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, pin_memory=True)
 
     # 5. Build model
     config = TransformerConfig(
