@@ -22,17 +22,20 @@ def build_parser() -> argparse.ArgumentParser:
     encode_parser.add_argument(
         "--encoder-path",
         default="models/price-predictor/transformer/latest.pt",
-        help="Path to the pretrained transformer model .pt file",
+        help="Path to the pretrained transformer model .pt file "
+             "(default: models/price-predictor/transformer/latest.pt)",
     )
     encode_parser.add_argument(
         "--vocab-path",
         default="models/price-predictor/transformer/vocab.txt",
-        help="Path to the tokenizer vocabulary file",
+        help="Path to the tokenizer vocabulary file "
+             "(default: models/price-predictor/transformer/vocab.txt)",
     )
     encode_parser.add_argument(
         "--cards-path",
         default="output/cardsfolder/",
-        help="Directory containing .txt card script files (searched recursively)",
+        help="Directory containing .txt card script files (searched recursively) "
+             "(default: output/cardsfolder/)",
     )
     encode_parser.add_argument(
         "--clean",
@@ -49,13 +52,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--set",
         default="RVR",
         dest="set_code",
-        help="MTG set code to generate boosters from (e.g. RVR, MH3, BLB)",
+        help="MTG set code to generate boosters from (e.g. RVR, MH3, BLB) (default: RVR)",
     )
     generate_parser.add_argument(
         "--size",
         type=int,
         default=10000,
-        help="Number of sealed pools to generate",
+        help="Number of sealed pools to generate (default: 10000)",
     )
     generate_parser.add_argument(
         "--pools-path",
@@ -78,17 +81,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--set",
         default="RVR",
         dest="set_code",
-        help="MTG set code (e.g. RVR, MH3)",
+        help="MTG set code (e.g. RVR, MH3) (default: RVR)",
     )
     train_parser.add_argument(
         "--pools-path",
         default=None,
-        help="Directory containing pools.txt. Default: output/sealed/pools/{set}/",
+        help="Directory containing pools.txt (default: output/sealed/pools/{set}/)",
     )
     train_parser.add_argument(
         "--cards-path",
         default="output/cardsfolder/",
-        help="Directory containing .npz card embedding files",
+        help="Directory containing .npz card embedding files (default: output/cardsfolder/)",
     )
     train_parser.add_argument(
         "--model-path",
@@ -112,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--batch-size",
         type=int,
         default=32,
-        help="Number of episodes per training batch",
+        help="Number of episodes per training batch (default: 32)",
     )
 
     # ── validate-embeddings ───────────────────────────────────────
@@ -123,7 +126,8 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument(
         "--cards-path",
         default="output/cardsfolder/",
-        help="Directory containing .npz embedding and .txt card text files",
+        help="Directory containing .npz embedding and .txt card text files "
+             "(default: output/cardsfolder/)",
     )
     validate_parser.add_argument(
         "--threshold-accuracy",
@@ -147,23 +151,23 @@ def build_parser() -> argparse.ArgumentParser:
         "--stage",
         type=int,
         default=1,
-        help="Model stage to sample from (1 or 2, default: 1)",
+        help="Model stage to sample from (1 or 2) (default: 1)",
     )
     sample_parser.add_argument(
         "--set",
         default="RVR",
         dest="set_code",
-        help="MTG set code (e.g. RVR, MH3)",
+        help="MTG set code (e.g. RVR, MH3) (default: RVR)",
     )
     sample_parser.add_argument(
         "--pools-path",
         default=None,
-        help="Directory containing pools.txt. Default: output/sealed/pools/{set}/",
+        help="Directory containing pools.txt (default: output/sealed/pools/{set}/)",
     )
     sample_parser.add_argument(
         "--cards-path",
         default="output/cardsfolder/",
-        help="Directory containing .npz card embedding files",
+        help="Directory containing .npz card embedding files (default: output/cardsfolder/)",
     )
     sample_parser.add_argument(
         "--model-path",
@@ -178,7 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--n-samples",
         type=int,
         default=10,
-        help="Number of sample episodes to display",
+        help="Number of sample episodes to display (default: 10)",
     )
 
     return parser

@@ -228,6 +228,10 @@ def _train_loop(
 
     training_model.to(device)
 
+    if use_aux and aux_cls_loss_fns is not None:
+        for loss_fn in aux_cls_loss_fns:
+            loss_fn.to(device)
+
     optimizer = torch.optim.AdamW(training_model.parameters(), lr=lr)
 
     # Linear warmup scheduler

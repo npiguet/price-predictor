@@ -12,25 +12,33 @@ from urllib.request import Request, urlopen
 def _add_shared_train_args(parser: argparse.ArgumentParser) -> None:
     """Add shared training options to a parser."""
     parser.add_argument("--output-dir", type=str, default="./output",
-                        help="Converted card text directory")
+                        help="Converted card text directory (default: ./output)")
     parser.add_argument("--prices-path", type=str,
-                        default="resources/AllPricesToday.json")
+                        default="resources/AllPricesToday.json",
+                        help="Path to AllPricesToday.json (default: resources/AllPricesToday.json)")
     parser.add_argument("--printings-path", type=str,
-                        default="resources/AllPrintings.json")
-    parser.add_argument("--test-split", type=float, default=0.2)
-    parser.add_argument("--random-seed", type=int, default=42)
+                        default="resources/AllPrintings.json",
+                        help="Path to AllPrintings.json (default: resources/AllPrintings.json)")
+    parser.add_argument("--test-split", type=float, default=0.2,
+                        help="Fraction of data held out for validation (default: 0.2)")
+    parser.add_argument("--random-seed", type=int, default=42,
+                        help="Random seed for reproducibility (default: 42)")
 
 
 def _add_shared_evaluate_args(parser: argparse.ArgumentParser) -> None:
     """Add shared evaluate options to a parser."""
     parser.add_argument("--output-dir", type=str, default="./output",
-                        help="Converted card text directory")
+                        help="Converted card text directory (default: ./output)")
     parser.add_argument("--prices-path", type=str,
-                        default="resources/AllPricesToday.json")
+                        default="resources/AllPricesToday.json",
+                        help="Path to AllPricesToday.json (default: resources/AllPricesToday.json)")
     parser.add_argument("--printings-path", type=str,
-                        default="resources/AllPrintings.json")
-    parser.add_argument("--test-split", type=float, default=0.2)
-    parser.add_argument("--random-seed", type=int, default=42)
+                        default="resources/AllPrintings.json",
+                        help="Path to AllPrintings.json (default: resources/AllPrintings.json)")
+    parser.add_argument("--test-split", type=float, default=0.2,
+                        help="Fraction of data held out for validation (default: 0.2)")
+    parser.add_argument("--random-seed", type=int, default=42,
+                        help="Random seed for reproducibility (default: 42)")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,31 +58,40 @@ def build_parser() -> argparse.ArgumentParser:
                                                  help="Train sklearn model")
     _add_shared_train_args(train_sklearn)
     train_sklearn.add_argument("--model-output", type=str,
-                               default="./models/price-predictor/sklearn/")
+                               default="./models/price-predictor/sklearn/",
+                               help="Output directory for trained model (default: ./models/price-predictor/sklearn/)")
 
     # train transformer
     train_transformer = train_subparsers.add_parser("transformer",
                                                      help="Train transformer model")
     _add_shared_train_args(train_transformer)
     train_transformer.add_argument("--model-output", type=str,
-                                   default="./models/price-predictor/transformer/")
-    train_transformer.add_argument("--batch-size", type=int, default=64)
-    train_transformer.add_argument("--epochs", type=int, default=100)
-    train_transformer.add_argument("--lr", type=float, default=1e-4)
-    train_transformer.add_argument("--patience", type=int, default=20)
+                                   default="./models/price-predictor/transformer/",
+                                   help="Output directory for trained model (default: ./models/price-predictor/transformer/)")
+    train_transformer.add_argument("--batch-size", type=int, default=64,
+                                   help="Training batch size (default: 64)")
+    train_transformer.add_argument("--epochs", type=int, default=100,
+                                   help="Maximum number of training epochs (default: 100)")
+    train_transformer.add_argument("--lr", type=float, default=1e-4,
+                                   help="Learning rate for AdamW optimizer (default: 1e-4)")
+    train_transformer.add_argument("--patience", type=int, default=20,
+                                   help="Early stopping patience in epochs (default: 20)")
     train_transformer.add_argument("--vocab-path", type=str,
                                    default="models/price-predictor/transformer/vocab.txt",
-                                   help="Path to vocab.txt built by 'vocabulary' command")
+                                   help="Path to vocab.txt built by 'vocabulary' command "
+                                        "(default: models/price-predictor/transformer/vocab.txt)")
     train_transformer.add_argument("--log-offset", type=float, default=2.0,
                                    help="Offset used in log(price + offset) target transform "
-                                        "(stored in model artifact; use 0.5 for better high-price signal)")
+                                        "(stored in model artifact; use 0.5 for better high-price signal) "
+                                        "(default: 2.0)")
     train_transformer.add_argument("--dropout", type=float, default=0.1,
-                                   help="Dropout rate for embeddings and transformer layers (default: 0.1; "
-                                        "try 0.05 or 0.0 for small datasets)")
+                                   help="Dropout rate for embeddings and transformer layers "
+                                        "(default: 0.1; try 0.05 or 0.0 for small datasets)")
     train_transformer.add_argument("--sampler-exponent", type=float, default=1.0,
                                    help="Exponent for price-bucket oversampling: "
-                                        "0.0=uniform, 0.5=sqrt, 1.0=full inverse (default). "
-                                        "Higher values oversample expensive cards more aggressively.")
+                                        "0.0=uniform, 0.5=sqrt, 1.0=full inverse. "
+                                        "Higher values oversample expensive cards more aggressively. "
+                                        "(default: 1.0)")
     train_transformer.add_argument("--d-model", type=int, default=256,
                                    help="Embedding dimension (default: 256). Must be divisible by n-heads.")
     train_transformer.add_argument("--n-layers", type=int, default=2,
@@ -85,7 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
     train_transformer.add_argument("--aux-lambda", type=float, default=0.0,
                                    help="Weight for auxiliary mana-feature losses "
-                                        "(0=disabled, 0.2=recommended starting point).")
+                                        "(0=disabled, 0.2=recommended starting point) (default: 0.0).")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -103,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
         if model_name == "transformer":
             p.add_argument("--vocab-path", type=str,
                            default="models/price-predictor/transformer/vocab.txt",
-                           help="Path to vocab.txt")
+                           help="Path to vocab.txt (default: models/price-predictor/transformer/vocab.txt)")
 
     # ── evaluate {model} ─────────────────────────────────────────
     evaluate_parser = subparsers.add_parser("evaluate",
@@ -115,33 +132,42 @@ def build_parser() -> argparse.ArgumentParser:
                                                    help="Evaluate sklearn model")
     _add_shared_evaluate_args(eval_sklearn)
     eval_sklearn.add_argument("--model-path", type=str,
-                              default="./models/price-predictor/sklearn/latest.joblib")
-    eval_sklearn.add_argument("--output-csv", type=str, default=None)
+                              default="./models/price-predictor/sklearn/latest.joblib",
+                              help="Path to trained sklearn model (default: ./models/price-predictor/sklearn/latest.joblib)")
+    eval_sklearn.add_argument("--output-csv", type=str, default=None,
+                              help="Write per-card predictions to this CSV file (default: disabled)")
 
     # evaluate transformer
     eval_transformer = evaluate_subparsers.add_parser(
         "transformer", help="Evaluate transformer model")
     _add_shared_evaluate_args(eval_transformer)
     eval_transformer.add_argument("--model-path", type=str,
-                                  default="./models/price-predictor/transformer/")
+                                  default="./models/price-predictor/transformer/",
+                                  help="Path to transformer model directory (default: ./models/price-predictor/transformer/)")
     eval_transformer.add_argument("--vocab-path", type=str,
                                   default="models/price-predictor/transformer/vocab.txt",
-                                  help="Path to vocab.txt")
+                                  help="Path to vocab.txt (default: models/price-predictor/transformer/vocab.txt)")
 
     # ── serve ─────────────────────────────────────────────────────
     serve_parser = subparsers.add_parser("serve",
                                          help="Start the prediction REST service")
     serve_parser.add_argument("--model-path", type=str,
-                              default="models/price-predictor/sklearn/latest.joblib")
+                              default="models/price-predictor/sklearn/latest.joblib",
+                              help="Path to sklearn model file (default: models/price-predictor/sklearn/latest.joblib)")
     serve_parser.add_argument("--printings-path", type=str,
-                              default="resources/AllPrintings.json")
+                              default="resources/AllPrintings.json",
+                              help="Path to AllPrintings.json (default: resources/AllPrintings.json)")
     serve_parser.add_argument("--prices-path", type=str,
-                              default="resources/AllPricesToday.json")
-    serve_parser.add_argument("--host", type=str, default="0.0.0.0")
-    serve_parser.add_argument("--port", type=int, default=8000)
+                              default="resources/AllPricesToday.json",
+                              help="Path to AllPricesToday.json (default: resources/AllPricesToday.json)")
+    serve_parser.add_argument("--host", type=str, default="0.0.0.0",
+                              help="Host address to bind the server to (default: 0.0.0.0)")
+    serve_parser.add_argument("--port", type=int, default=8000,
+                              help="Port to listen on (default: 8000)")
     serve_parser.add_argument("--vocab-path", type=str,
                               default="models/price-predictor/transformer/vocab.txt",
-                              help="Path to vocab.txt for transformer predictions")
+                              help="Path to vocab.txt for transformer predictions "
+                                   "(default: models/price-predictor/transformer/vocab.txt)")
 
     # ── vocabulary ────────────────────────────────────────────────
     vocab_parser = subparsers.add_parser(
@@ -149,15 +175,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     vocab_parser.add_argument(
         "--output-dir", type=str, default="models/price-predictor/transformer/",
-        help="Directory where vocab.txt is written",
+        help="Directory where vocab.txt is written (default: models/price-predictor/transformer/)",
     )
     vocab_parser.add_argument(
         "--cards-path", type=str, default="./output/cardsfolder",
-        help="Path to converted card corpus (directory of .txt files)",
+        help="Path to converted card corpus (directory of .txt files) (default: ./output/cardsfolder)",
     )
     vocab_parser.add_argument(
         "--freq-threshold", type=int, default=5,
-        help="Minimum corpus occurrences for a word to be included as a token",
+        help="Minimum corpus occurrences for a word to be included as a token (default: 5)",
     )
     vocab_parser.add_argument(
         "--printings-path", type=str, default="resources/AllPrintings.json",
@@ -175,11 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
     convert_parser.add_argument(
         "--cards-path", type=str,
         default="../forge/forge-gui/res/cardsfolder/",
-        help="Path to Forge cardsfolder directory",
+        help="Path to Forge cardsfolder directory (default: ../forge/forge-gui/res/cardsfolder/)",
     )
     convert_parser.add_argument(
         "--output-path", type=str, default="./output",
-        help="Output directory for converted files",
+        help="Output directory for converted files (default: ./output)",
     )
 
     # ── check-convert ─────────────────────────────────────────────
@@ -190,19 +216,19 @@ def build_parser() -> argparse.ArgumentParser:
     check_parser.add_argument(
         "--cards-path", type=str,
         default="../forge/forge-gui/res/cardsfolder/",
-        help="Path to Forge cardsfolder directory",
+        help="Path to Forge cardsfolder directory (default: ../forge/forge-gui/res/cardsfolder/)",
     )
     check_parser.add_argument(
         "--output-path", type=str, default="./output",
-        help="Path to converted output directory",
+        help="Path to converted output directory (default: ./output)",
     )
     check_parser.add_argument(
         "--threshold", type=float, default=0.5,
-        help="Similarity threshold below which cards are flagged (0.0-1.0)",
+        help="Similarity threshold below which cards are flagged, 0.0–1.0 (default: 0.5)",
     )
     check_parser.add_argument(
         "--limit", type=int, default=0,
-        help="Max number of results to show (0 = all)",
+        help="Max number of results to show, 0=all (default: 0)",
     )
 
     return parser
