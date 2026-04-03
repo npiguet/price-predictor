@@ -19,14 +19,14 @@ the card color label definition (retroactive fix to features 013/014).
 ## Technical Context
 
 **Language/Version**: Python 3.14+  
-**Primary Dependencies**: PyTorch (nn.Module, BCEWithLogitsLoss, MSELoss), numpy, scikit-learn  
+**Primary Dependencies**: PyTorch (nn.Module, BCEWithLogitsLoss, ordinal EMD loss), numpy, scikit-learn  
 **Storage**: Files — `.pt` checkpoints (unchanged format), `.txt` card files (read-only)  
 **Testing**: pytest (unit tests, CPU-only — no GPU required for unit tests)  
 **Target Platform**: Windows 11, CUDA GPU (training), CPU (testing)  
 **Project Type**: CLI / ML training pipeline  
 **Performance Goals**: Training on ~30k card corpus; label pre-computation < 30s  
 **Constraints**: Saved checkpoint must be loadable by existing `load_model()`; embedding dimensionality (2×d_model) unchanged  
-**Scale/Scope**: ~30k cards, 20 auxiliary heads (13 classification, 7 regression)
+**Scale/Scope**: ~30k cards, 20 auxiliary heads (13 binary classification, 7 ordinal classification)
 
 ## Constitution Check
 
@@ -105,8 +105,8 @@ Refactor `CardPriceTransformerModel`:
 - `forward()` calls `_embed()` then applies output head
 
 Add `AuxiliaryTrainingModel(nn.Module)`:
-- `__init__(base, n_aux=20)`: Stores base model + `nn.ModuleList` of 20 `nn.Linear(2*d_model, 1)`
-- `forward(input_ids, attention_mask, meta)`: Calls `base._embed()` for pooled representation, runs price head and all aux heads, returns `(price_pred, [aux_preds])`
+- `__init__(base, ordinal_class_maps)`: Stores base model + `nn.ModuleList` of 20 heads. Classification heads are `nn.Linear(2*d_model, 1)`; ordinal heads are `nn.Linear(2*d_model, K)` where K comes from `ordinal_class_maps`.
+- `forward(input_ids, attention_mask, meta)`: Calls `base._embed()` for pooled representation, runs price head and all aux heads, returns `(price_pred, [aux_preds])`. Classification predictions have shape `(batch,)`; ordinal predictions have shape `(batch, K)`.
 
 ### 2. Card Color Label Correction
 
@@ -140,12 +140,15 @@ Add pre-training setup (when `aux_lambda > 0`):
 3. Split labels into train/val sets (same split as price data)
 4. Print "Computing class weights and target statistics..." (FR-011)
 5. For classification heads (indices 0,1–6,14–19): compute `pos_weight = n_neg / n_pos`
-6. For regression heads (indices 7–13): compute mean, std (floor=1.0), standardize training+val labels
-7. Pass labels to dataset, stats to training loop
+6. For ordinal heads (indices 7–13): use fixed class maps from FR-012/FR-013/FR-014; print class distribution per head
+7. Pass labels to dataset, class maps and pos_weights to training loop
 
 Modify `_train_loop()`:
-- Accept optional aux parameters: `aux_heads_model`, `cls_loss_fns`, `reg_loss_fn`, `aux_lambda`, classification/regression index masks
+- Accept optional aux parameters: `cls_loss_fns`, `ordinal_class_maps`, `aux_lambda`
 - When aux parameters present: compute combined loss `L_price + lambda * sum(L_aux_i)`
+  - Classification heads: `BCEWithLogitsLoss` as before
+  - Ordinal heads: EMD loss — convert raw float label to class index via `ordinal_class_maps`,
+    compute softmax CDF of logits, L1 distance between predicted and true CDFs
 - Print aux_loss alongside train_loss and val_loss per epoch
 - Early stopping still based on price validation loss only (aux is a means, not the objective)
 

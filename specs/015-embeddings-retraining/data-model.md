@@ -13,13 +13,14 @@ with 20 auxiliary linear heads. Exists only during training.
 | Field | Type | Description |
 |-------|------|-------------|
 | `base` | `CardPriceTransformerModel` | The encoder + price head (persisted after training) |
-| `aux_heads` | `nn.ModuleList[nn.Linear]` | 20 linear projections from pooled embedding to scalar |
+| `aux_heads` | `nn.ModuleList[nn.Linear]` | 20 linear projections from pooled embedding to logits (variable output size per head — see table below) |
 
 **Lifecycle**: Created at training start → used during training → `base` extracted and
 saved as checkpoint → wrapper discarded.
 
-**Forward pass returns**: `(price_prediction, list[aux_prediction])` where each aux
-prediction has shape `(batch_size,)`.
+**Forward pass returns**: `(price_prediction, list[aux_prediction])` where classification
+head predictions have shape `(batch_size,)` and ordinal head predictions have shape
+`(batch_size, K)` for K classes.
 
 ### Auxiliary Label Tensor (pre-computed, not persisted)
 
@@ -34,13 +35,13 @@ A 20-element float vector per card, computed once from card text before training
 | 4 | card_color_R | classification | ≥1 R pip and not devoid | 0.0 or 1.0 |
 | 5 | card_color_G | classification | ≥1 G pip and not devoid | 0.0 or 1.0 |
 | 6 | card_color_C | classification | Colorless: no colored pips, devoid, or no mana cost | 0.0 or 1.0 |
-| 7 | pip_count_W | regression | `count_pips()` for W | float ≥ 0.0 |
-| 8 | pip_count_U | regression | `count_pips()` for U | float ≥ 0.0 |
-| 9 | pip_count_B | regression | `count_pips()` for B | float ≥ 0.0 |
-| 10 | pip_count_R | regression | `count_pips()` for R | float ≥ 0.0 |
-| 11 | pip_count_G | regression | `count_pips()` for G | float ≥ 0.0 |
-| 12 | pip_count_C | regression | `count_pips()` for C | float ≥ 0.0 |
-| 13 | mana_value | regression | `compute_mana_value()` | float ≥ 0.0 |
+| 7 | pip_count_W | ordinal (11 classes) | `count_pips()` for W | class index in {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} |
+| 8 | pip_count_U | ordinal (11 classes) | `count_pips()` for U | class index in {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} |
+| 9 | pip_count_B | ordinal (11 classes) | `count_pips()` for B | class index in {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} |
+| 10 | pip_count_R | ordinal (11 classes) | `count_pips()` for R | class index in {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} |
+| 11 | pip_count_G | ordinal (11 classes) | `count_pips()` for G | class index in {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} |
+| 12 | pip_count_C | ordinal (5 classes) | `count_pips()` for C | class index in {0, 1, 2, 2.5, 3} |
+| 13 | mana_value | ordinal (17 classes) | `compute_mana_value()` | class index in {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16} |
 | 14 | mana_produced_W | classification | Has `{T}: add {W}` ability | 0.0 or 1.0 |
 | 15 | mana_produced_U | classification | Has `{T}: add {U}` ability | 0.0 or 1.0 |
 | 16 | mana_produced_B | classification | Has `{T}: add {B}` ability | 0.0 or 1.0 |
@@ -48,8 +49,22 @@ A 20-element float vector per card, computed once from card text before training
 | 18 | mana_produced_G | classification | Has `{T}: add {G}` ability | 0.0 or 1.0 |
 | 19 | mana_produced_C | classification | Has `{T}: add {C}` ability | 0.0 or 1.0 |
 
-**Classification indices**: 0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19 (13 heads)  
-**Regression indices**: 7, 8, 9, 10, 11, 12, 13 (7 heads)
+**Classification indices**: 0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19 (13 heads, 1 logit each)  
+**Ordinal indices**: 7, 8, 9, 10, 11, 12, 13 (7 heads, K logits each)
+
+### Ordinal Class Definitions
+
+| Head index | Head name | Classes | K |
+|------------|-----------|---------|---|
+| 7–11 | pip_count_W/U/B/R/G | {0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8} | 11 |
+| 12 | pip_count_C | {0, 1, 2, 2.5, 3} | 5 |
+| 13 | mana_value | {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16} | 17 |
+
+**Label storage**: Raw float values (e.g. 1.5 for a hybrid pip) are stored in the auxiliary
+label tensor. At loss computation time, raw floats are mapped to class indices using the
+class definitions above. Class lists are derived from a full scan of the card corpus — every
+value that appears in any card's mana cost line is an explicit class. No overflow classes are
+used.
 
 ### AuxiliaryLabelStats (pre-computed, not persisted)
 
@@ -58,12 +73,12 @@ Statistics computed once from the training set before training begins.
 | Field | Type | Description |
 |-------|------|-------------|
 | `pos_weights` | `dict[int, float]` | Per-classification-head pos_weight (neg/pos ratio) |
-| `reg_means` | `dict[int, float]` | Per-regression-head mean from training set |
-| `reg_stds` | `dict[int, float]` | Per-regression-head std from training set (floor=1.0) |
+| `ordinal_class_maps` | `dict[int, list[float]]` | Per-ordinal-head sorted class boundary values |
 
 **Usage**:
 - `pos_weights` → passed to `BCEWithLogitsLoss(pos_weight=...)` per classification head
-- `reg_means` / `reg_stds` → used to standardize regression targets before MSE loss
+- `ordinal_class_maps` → used to convert raw float labels to class indices at loss computation
+  time, and to construct `nn.Linear(2*d_model, K)` heads with the correct output size
 
 ## Value Objects
 

@@ -61,20 +61,28 @@ _ADD_COLOR_RE = re.compile(r"\{([WUBRGC])\}")
 def count_pips(card_texts: list[str]) -> PipCounts:
     """Count total mana pips from all provided card texts (non-land spells).
 
-    Each card text may be a multi-face card separated by 'ALTERNATE'.
-    Only 'mana cost:' lines are parsed; all faces of a multi-face card count.
+    One 'mana cost:' line is parsed per card face. Faces are separated by an
+    'ALTERNATE' section marker (used by split, adventure, and similar layouts).
+    This avoids summing duplicate colour variants on Baldur's Gate companion
+    cards, which carry six 'mana cost:' lines for the same face.
     """
     totals: dict[str, float] = {}
 
     for text in card_texts:
+        seen_cost_in_face = False
         for line in text.splitlines():
             stripped = line.strip()
+            if stripped.upper() == "ALTERNATE":
+                seen_cost_in_face = False  # new face — allow next mana cost line
+                continue
+            if seen_cost_in_face:
+                continue
             low = stripped.lower()
             if not low.startswith("mana cost:"):
                 continue
-            # Extract the cost portion after "mana cost:"
             cost_part = stripped[len("mana cost:"):].strip()
             _accumulate_pips(cost_part, totals)
+            seen_cost_in_face = True  # skip any further cost lines in this face
 
     return PipCounts(counts=totals)
 

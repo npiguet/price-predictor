@@ -22,7 +22,7 @@ class TestTrainTransformerParser:
     def test_default_model_output(self):
         parser = build_parser()
         args = parser.parse_args(["train", "transformer"])
-        assert args.model_output == "./models/transformer/"
+        assert args.model_output == "./models/price-predictor/transformer/"
 
     def test_default_batch_size(self):
         parser = build_parser()
@@ -32,7 +32,7 @@ class TestTrainTransformerParser:
     def test_default_epochs(self):
         parser = build_parser()
         args = parser.parse_args(["train", "transformer"])
-        assert args.epochs == 20
+        assert args.epochs == 100
 
     def test_default_lr(self):
         parser = build_parser()
@@ -42,7 +42,7 @@ class TestTrainTransformerParser:
     def test_default_patience(self):
         parser = build_parser()
         args = parser.parse_args(["train", "transformer"])
-        assert args.patience == 5
+        assert args.patience == 20
 
     def test_default_random_seed(self):
         parser = build_parser()

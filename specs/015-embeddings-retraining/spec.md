@@ -26,8 +26,8 @@ new encoder. All 20 probes must pass.
 1. **Given** a card corpus with text files and price data, **When** I run training with auxiliary
    supervision enabled, **Then** training completes and produces a checkpoint in the standard format.
 2. **Given** a trained encoder with auxiliary supervision, **When** I run `validate-embeddings`,
-   **Then** all 20 probes pass their thresholds (is-land >= 0.990, card color >= 0.950, pip counts
-   R^2 >= 0.850, mana value R^2 >= 0.900, mana produced >= 0.950).
+   **Then** all 20 probes pass their thresholds (is-land >= 0.990, card color >= 0.950,
+   pip counts exact match >= 0.900, mana value exact match >= 0.750, mana produced >= 0.950).
 3. **Given** a trained encoder with auxiliary supervision, **When** I compare price prediction
    accuracy to the feature 007 baseline, **Then** accuracy has not degraded unacceptably (manual
    judgment).
@@ -100,8 +100,9 @@ loss across runs.
   pips. Pip counts still reflect the actual mana cost.
 - What happens when a classification head has extreme class imbalance (e.g., "is land" at ~5%
   positive)? The loss function uses pos_weight to prevent trivial all-zero predictions.
-- What happens when regression targets have different scales (pip count ~0-5 vs mana value ~0-15)?
-  Regression targets are standardized (subtract mean, divide by std) before loss computation.
+- What happens when ordinal targets span very different ranges (pip count 0–3 vs mana value 0–10)?
+  Each head has its own class set; EMD loss operates on normalized CDF values so scale differences
+  do not affect gradient magnitude.
 
 ## Requirements *(mandatory)*
 
@@ -118,8 +119,23 @@ loss across runs.
   `L_total = L_price + lambda * sum(L_aux_i)`, where lambda is configurable.
 - **FR-005**: System MUST use `BCEWithLogitsLoss` with `pos_weight` (negatives/positives) for
   classification heads to handle class imbalance.
-- **FR-006**: System MUST standardize regression targets (subtract mean, divide by std from training
-  set) before computing MSE loss.
+- **FR-006**: Pip count heads (indices 7–12) and the mana value head (index 13) MUST use ordinal
+  classification with Earth Mover's Distance (EMD) loss rather than MSE regression. Each such head
+  outputs K logits (one per class); the loss is the L1 distance between the cumulative distribution
+  of the softmax output and the cumulative distribution of the one-hot true label:
+  `EMD = sum_{k=1}^{K-1} |CDF_pred(k) - CDF_true(k)|`. This penalises predictions proportionally
+  to how many class boundaries they are from the truth.
+- **FR-012**: Pip count classes for W, U, B, R, G MUST be:
+  `{0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8}` (11 classes). Derived from a full scan of the card
+  corpus — every pip count value that appears in a `mana cost:` line is represented exactly. The
+  highest observed value is 8 ({G}×8 on Khalni Hydra). No overflow class is used.
+- **FR-013**: Pip count classes for C MUST be: `{0, 1, 2, 2.5, 3}` (5 classes).
+  Derived from corpus scan; 2.5 appears on cards with hybrid {C/W} etc. pips; 3.0 is the max
+  (Echoes of Eternity, Rise of the Eldrazi). No overflow class is used.
+- **FR-014**: Mana value classes MUST be:
+  `{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}` (17 classes). Derived from
+  corpus scan — every integer mana value from 0 to 16 appears with no gaps. No overflow class
+  is used.
 - **FR-007**: System MUST discard the 20 auxiliary heads when saving the checkpoint. The saved
   checkpoint MUST contain the encoder and price head in the same format as the current `latest.pt`.
 - **FR-008**: System MUST train from scratch (not fine-tune an existing checkpoint).
@@ -134,8 +150,10 @@ loss across runs.
 
 ### Key Entities
 
-- **Auxiliary Head**: A single linear layer (no activation) projecting the pooled embedding to a
-  scalar. Exists only during training. 13 are binary classifiers, 7 are regression heads.
+- **Auxiliary Head**: A single linear layer (no activation) projecting the pooled embedding to
+  logits. Exists only during training. 13 are binary classifiers (1 logit each); 7 are ordinal
+  classifiers (K logits each, where K = 8 for pip counts W/U/B/R/G, 4 for pip count C,
+  11 for mana value).
 - **Card Color Labels**: A 6-element binary vector (W/U/B/R/G/C) derived from pip counts plus
   devoid/no-mana-cost rules. Distinct from raw pip counts.
 - **Lambda (auxiliary weight)**: A scalar hyperparameter controlling the strength of auxiliary
@@ -145,8 +163,10 @@ loss across runs.
 
 ### Measurable Outcomes
 
-- **SC-001**: All 20 embedding probes (feature 014's `validate-embeddings`) pass their thresholds
-  when run against the retrained encoder.
+- **SC-001**: All 20 embedding probes pass their thresholds when run against the retrained encoder.
+  Thresholds: is-land ≥ 0.990 (accuracy), card color ≥ 0.950 (accuracy), pip counts ≥ 0.900
+  (exact match after rounding to nearest 0.5), mana value ≥ 0.750 (exact match after rounding to
+  nearest integer), mana produced ≥ 0.950 (accuracy).
 - **SC-002**: Price prediction accuracy on the validation set does not degrade unacceptably relative
   to the feature 007 baseline (manual judgment after exploring lambda values).
 - **SC-003**: The saved checkpoint is loadable by existing code and produces embeddings in the same

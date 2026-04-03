@@ -246,7 +246,9 @@ class TestRunProbes:
         probes = build_default_probes()
 
         fake_scores = np.array([0.9, 0.9, 0.9, 0.9, 0.9])
-        with patch("sealed.domain.embedding_probe.cross_val_score", return_value=fake_scores):
+        fake_preds = np.zeros(20)
+        with patch("sealed.domain.embedding_probe.cross_val_score", return_value=fake_scores), \
+             patch("sealed.domain.embedding_probe.cross_val_predict", return_value=fake_preds):
             results = run_probes(cards, probes)
 
         assert len(results) == len(probes)
