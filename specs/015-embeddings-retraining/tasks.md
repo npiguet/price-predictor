@@ -21,7 +21,7 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T001 Copy representative real card text files from output/cardsfolder/ into tests/fixtures/cards/ for use as test fixtures (FR-010). Include: a land (e.g., forest), a red spell, a multicolor card, a hybrid mana card, a devoid card (e.g., world_breaker), a card with {C} in cost, a generic-only cost card (e.g., {3}), a mana dork (e.g., llanowar_elves), and an artifact mana producer (e.g., sol_ring). Add a helper in tests/conftest.py to load fixture card text by filename.
+- [ ] T001 Copy representative real card text files from output/cardsfolder/ into tests/fixtures/cards/ for use as test fixtures (FR-010). Include: a land (e.g., forest), a red spell, a multicolor card, a hybrid mana card, a devoid card (e.g., world_breaker), a card with {C} in cost, a generic-only cost card (e.g., {3}), a mana dork (e.g., llanowar_elves), an artifact mana producer (e.g., sol_ring), and a Phyrexian mana card (e.g., norn's_decree or similar with {W/P} in cost). Add a helper in tests/conftest.py to load fixture card text by filename.
 
 **Checkpoint**: Test infrastructure ready — user story implementation can begin.
 
@@ -35,7 +35,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T002 [US2] Write tests for corrected card color labels in tests/unit/sealed/domain/test_embedding_probe.py. Use real card fixture files. Test cases from spec: (1) {2}{R} → R=1, others 0; (2) {C}{C} → C=1, colors 0; (3) {3} generic only → C=1; (4) land with no mana cost → C=1; (5) devoid card with colored pips → C=1, W/U/B/R/G=0; (6) hybrid {G/R} → G=1, R=1, C=0. Also test that pip counts are unaffected by devoid (devoid only changes color labels, not pip counts).
+- [ ] T002 [US2] Write tests for corrected card color labels in tests/unit/sealed/domain/test_embedding_probe.py. Use real card fixture files. Test cases from spec: (1) {2}{R} → R=1, others 0; (2) {C}{C} → C=1, colors 0; (3) {3} generic only → C=1; (4) land with no mana cost → C=1; (5) devoid card with colored pips → C=1, W/U/B/R/G=0; (6) hybrid {G/R} → G=1, R=1, C=0; (7) Phyrexian {W/P} → W=1, C=0. Also test that pip counts are unaffected by devoid (devoid only changes color labels, not pip counts).
 
 ### Implementation for User Story 2
 
@@ -58,7 +58,7 @@
 - [ ] T004 [P] [US1] Write tests for `compute_aux_labels()` in tests/unit/sealed/domain/test_embedding_probe.py. Use real card fixture files. Verify: returns 20-element ndarray; is_land label correct for land/non-land; card color labels use corrected definition (consistent with US2); pip counts match `count_pips()` output; mana value matches `compute_mana_value()`; mana produced labels correct for land, mana dork, and non-mana card.
 - [ ] T005 [P] [US1] Write tests for `_embed()` method and `AuxiliaryTrainingModel` in tests/unit/infrastructure/test_transformer_model.py. Test: `_embed()` output shape is (batch, 2*d_model); `_embed()` produces same values as old `encode()` when no_grad applied; `AuxiliaryTrainingModel.forward()` returns tuple of (price_pred, list[aux_preds]); price_pred shape is (batch,); each aux_pred shape is (batch,); aux_heads count equals n_aux parameter; gradients flow through aux heads back to encoder.
 - [ ] T006 [P] [US1] Write tests for aux_labels in `TransformerTrainingDataset` in tests/unit/infrastructure/test_transformer_dataset.py. Test: when aux_labels=None, __getitem__ returns dict without "aux_labels" key (backward compat); when aux_labels provided, __getitem__ includes "aux_labels" tensor of correct shape; aux_labels values round-trip correctly through dataset.
-- [ ] T007 [P] [US1] Write tests for auxiliary label statistics computation and combined loss in tests/unit/application/test_train_transformer.py. Test: pos_weight computation (num_neg / num_pos) for known label distributions; regression standardization with known mean/std; std floor of 1.0 when variance is near zero; combined loss equals L_price + lambda * sum(L_aux_i) for known inputs.
+- [ ] T007 [P] [US1] Write tests for auxiliary label statistics computation and combined loss in tests/unit/application/test_train_transformer.py. Test: pos_weight computation (num_neg / num_pos) for known label distributions; regression standardization with known mean/std; std floor of 1.0 when variance is near zero; combined loss equals L_price + lambda * sum(L_aux_i) for known inputs; saving wrapper.base after aux training produces a checkpoint loadable by load_model() with the same state_dict keys as a non-aux checkpoint (FR-007, SC-003).
 - [ ] T008 [P] [US1] Write test for `--aux-lambda` CLI argument in tests/unit/infrastructure/test_cli_train_transformer.py. Test: flag is parsed as float; default is 0.0; value is passed to train_transformer() call.
 
 ### Implementation for User Story 1
