@@ -8,6 +8,9 @@ import pytest
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 
+# Minimal ordinal class maps for tests: 2 classes per ordinal head (indices 7-13)
+_TEST_ORDINAL_CLASS_MAPS: dict[int, list[float]] = {i: [0.0, 1.0] for i in range(7, 14)}
+
 
 def _make_config(**overrides) -> TransformerConfig:
     defaults = dict(d_model=128, n_layers=4, n_heads=4, ff_dim=512, max_seq_len=64, vocab_size=30522, dropout=0.1)
@@ -202,7 +205,7 @@ class TestAuxiliaryTrainingModel:
         )
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         aux_model.eval()
         batch_size = 2
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
@@ -220,7 +223,7 @@ class TestAuxiliaryTrainingModel:
         )
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         aux_model.eval()
         batch_size = 4
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
@@ -238,7 +241,7 @@ class TestAuxiliaryTrainingModel:
         n_aux = 20
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=n_aux)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         aux_model.eval()
         batch_size = 2
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
@@ -249,13 +252,14 @@ class TestAuxiliaryTrainingModel:
         assert len(aux_preds) == n_aux
 
     def test_each_aux_pred_shape(self):
+        """Classification heads → (batch,); ordinal heads → (batch, K)."""
         from price_predictor.infrastructure.transformer_model import (
             AuxiliaryTrainingModel,
             CardPriceTransformerModel,
         )
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         aux_model.eval()
         batch_size = 3
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
@@ -264,7 +268,11 @@ class TestAuxiliaryTrainingModel:
         with torch.no_grad():
             _, aux_preds = aux_model(input_ids, attention_mask, meta)
         for i, pred in enumerate(aux_preds):
-            assert pred.shape == (batch_size,), f"aux_pred[{i}] shape mismatch"
+            if i in _TEST_ORDINAL_CLASS_MAPS:
+                K = len(_TEST_ORDINAL_CLASS_MAPS[i])
+                assert pred.shape == (batch_size, K), f"aux_pred[{i}] ordinal shape mismatch"
+            else:
+                assert pred.shape == (batch_size,), f"aux_pred[{i}] classification shape mismatch"
 
     def test_gradients_flow_through_aux_heads(self):
         """Gradients from aux heads must reach encoder parameters."""
@@ -274,7 +282,7 @@ class TestAuxiliaryTrainingModel:
         )
         config = _make_config(dropout=0.0)
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         aux_model.train()
         batch_size = 2
         input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
@@ -297,7 +305,7 @@ class TestAuxiliaryTrainingModel:
         )
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         assert len(aux_model.aux_heads) == 20
 
     def test_base_attribute_is_original_model(self):
@@ -307,5 +315,5 @@ class TestAuxiliaryTrainingModel:
         )
         config = _make_config()
         base = CardPriceTransformerModel(config)
-        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         assert aux_model.base is base

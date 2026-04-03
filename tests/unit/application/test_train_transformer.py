@@ -325,31 +325,75 @@ class TestAuxPosWeightComputation:
         assert pw >= 1.0
 
 
-class TestRegressionStandardization:
-    """T007: Regression targets are standardized with std floor of 1.0."""
+class TestOrdinalClassMapping:
+    """T007: Raw float labels are mapped to nearest ordinal class index."""
 
-    def test_std_floor_applied_when_std_below_one(self):
-        from price_predictor.application.train_transformer import _compute_reg_stats
-        import numpy as np
-        # Near-constant values → std << 1, should use floor 1.0
-        values = np.array([0.0, 0.0, 0.0, 0.0, 0.01])
-        mean, std = _compute_reg_stats(values)
-        assert std >= 1.0
+    def test_exact_match_returns_correct_index(self):
+        import torch
+        from price_predictor.application.train_transformer import _raw_to_class_idx_tensor
+        classes = [0.0, 0.5, 1.0, 1.5, 2.0]
+        labels = torch.tensor([0.0, 0.5, 1.5, 2.0])
+        indices = _raw_to_class_idx_tensor(labels, classes)
+        assert indices.tolist() == [0, 1, 3, 4]
 
-    def test_std_above_one_not_floored(self):
-        from price_predictor.application.train_transformer import _compute_reg_stats
-        import numpy as np
-        # Values with std > 1 should use actual std
-        values = np.array([0.0, 5.0, 10.0, 15.0, 20.0])
-        mean, std = _compute_reg_stats(values)
-        assert std > 1.0
+    def test_nearest_class_used_for_float_imprecision(self):
+        import torch
+        from price_predictor.application.train_transformer import _raw_to_class_idx_tensor
+        classes = [0.0, 1.0, 2.0, 3.0]
+        # 1.0000001 should map to index 1 (nearest to 1.0)
+        labels = torch.tensor([1.0000001])
+        indices = _raw_to_class_idx_tensor(labels, classes)
+        assert indices.tolist() == [1]
 
-    def test_mean_computed_correctly(self):
-        from price_predictor.application.train_transformer import _compute_reg_stats
-        import numpy as np
-        values = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
-        mean, std = _compute_reg_stats(values)
-        assert mean == pytest.approx(6.0)
+    def test_wubrg_pip_class_15_maps_to_index_3(self):
+        """Per spec FR-012: 1.5 pips → class index 3 in {0,0.5,1,1.5,2,2.5,3,4,5,6,8}."""
+        import torch
+        from price_predictor.application.train_transformer import (
+            _raw_to_class_idx_tensor, _WUBRG_PIP_CLASSES,
+        )
+        labels = torch.tensor([1.5])
+        indices = _raw_to_class_idx_tensor(labels, _WUBRG_PIP_CLASSES)
+        assert indices.tolist() == [3]
+
+
+class TestEMDLoss:
+    """T007: EMD loss is 0 for correct prediction, proportional to distance for wrong."""
+
+    def test_perfect_prediction_gives_zero_loss(self):
+        import torch
+        from price_predictor.application.train_transformer import _emd_loss
+        # K=4, true class=1 → CDF_true=[0,1,1]; predict one-hot at class 1
+        K = 4
+        logits = torch.zeros(1, K)
+        logits[0, 1] = 100.0  # very confident class 1
+        class_indices = torch.tensor([1])
+        loss = _emd_loss(logits, class_indices)
+        assert loss.item() == pytest.approx(0.0, abs=1e-3)
+
+    def test_adjacent_class_gives_loss_one(self):
+        import torch
+        from price_predictor.application.train_transformer import _emd_loss
+        # K=4, true class=1, predict class=2 → EMD = 1
+        K = 4
+        logits = torch.zeros(1, K)
+        logits[0, 2] = 100.0  # confident class 2
+        class_indices = torch.tensor([1])
+        loss = _emd_loss(logits, class_indices)
+        assert loss.item() == pytest.approx(1.0, abs=0.01)
+
+    def test_farther_class_gives_higher_loss(self):
+        import torch
+        from price_predictor.application.train_transformer import _emd_loss
+        # K=4, true=0, predict=3 → EMD = 3
+        K = 4
+        logits_near = torch.zeros(1, K)
+        logits_near[0, 1] = 100.0  # predict adjacent class 1 (EMD=1)
+        logits_far = torch.zeros(1, K)
+        logits_far[0, 3] = 100.0  # predict far class 3 (EMD=3)
+        class_indices = torch.tensor([0])
+        loss_near = _emd_loss(logits_near, class_indices)
+        loss_far = _emd_loss(logits_far, class_indices)
+        assert loss_far.item() > loss_near.item()
 
 
 class TestCombinedLoss:
@@ -391,7 +435,7 @@ class TestSaveWrapperBase:
             max_seq_len=16, vocab_size=100, dropout=0.0,
         )
         base = CardPriceTransformerModel(config)
-        wrapper = AuxiliaryTrainingModel(base, n_aux=20)
+        wrapper = AuxiliaryTrainingModel(base, {i: [0.0, 1.0] for i in range(7, 14)})
 
         # Save base (not wrapper)
         _, model_path = save_model(wrapper.base, config, tmp_path)
@@ -413,7 +457,7 @@ class TestSaveWrapperBase:
             max_seq_len=16, vocab_size=100, dropout=0.0,
         )
         base = CardPriceTransformerModel(config)
-        wrapper = AuxiliaryTrainingModel(base, n_aux=20)
+        wrapper = AuxiliaryTrainingModel(base, {i: [0.0, 1.0] for i in range(7, 14)})
 
         _, model_path = save_model(wrapper.base, config, tmp_path)
 

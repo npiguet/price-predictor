@@ -34,8 +34,23 @@ logger = logging.getLogger(__name__)
 # ─── Auxiliary label indices (data-model.md) ──────────────────────────────────
 # Classification heads: 0,1-6,14-19 (13 total)
 _AUX_CLASSIFICATION_INDICES = [0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19]
-# Regression heads: 7-13 (7 total)
-_AUX_REGRESSION_INDICES = [7, 8, 9, 10, 11, 12, 13]
+# Ordinal heads: 7-13 (7 total)
+_AUX_ORDINAL_INDICES = [7, 8, 9, 10, 11, 12, 13]
+
+# ─── Ordinal class definitions (FR-012/013/014) ───────────────────────────────
+_WUBRG_PIP_CLASSES: list[float] = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
+_C_PIP_CLASSES: list[float] = [0.0, 1.0, 2.0, 2.5, 3.0]
+_MANA_VALUE_CLASSES: list[float] = [float(v) for v in range(17)]
+
+ORDINAL_CLASS_MAPS: dict[int, list[float]] = {
+    7:  _WUBRG_PIP_CLASSES,   # pip_count_W  (K=11)
+    8:  _WUBRG_PIP_CLASSES,   # pip_count_U
+    9:  _WUBRG_PIP_CLASSES,   # pip_count_B
+    10: _WUBRG_PIP_CLASSES,   # pip_count_R
+    11: _WUBRG_PIP_CLASSES,   # pip_count_G
+    12: _C_PIP_CLASSES,        # pip_count_C  (K=5)
+    13: _MANA_VALUE_CLASSES,   # mana_value   (K=17)
+}
 
 
 def _compute_pos_weight(labels: np.ndarray) -> float:
@@ -47,12 +62,37 @@ def _compute_pos_weight(labels: np.ndarray) -> float:
     return n_neg / n_pos
 
 
-def _compute_reg_stats(values: np.ndarray) -> tuple[float, float]:
-    """Return (mean, std) with a minimum std floor of 1.0."""
-    mean = float(np.mean(values))
-    std = float(np.std(values))
-    std = max(std, 1.0)
-    return mean, std
+def _raw_to_class_idx_tensor(labels: torch.Tensor, classes: list[float]) -> torch.Tensor:
+    """Map a batch of raw float values to the nearest class index.
+
+    labels: (batch,) float tensor of raw label values
+    classes: sorted list of float class boundary values
+
+    Returns: (batch,) long tensor of class indices (0-indexed, nearest-class lookup)
+    """
+    classes_t = torch.tensor(classes, dtype=torch.float32, device=labels.device)
+    dists = torch.abs(labels.unsqueeze(1) - classes_t.unsqueeze(0))  # (batch, K)
+    return dists.argmin(dim=-1)
+
+
+def _emd_loss(logits: torch.Tensor, class_indices: torch.Tensor) -> torch.Tensor:
+    """Earth Mover's Distance loss for ordinal classification (FR-006).
+
+    Computes L1 distance between CDF of softmax output and CDF of one-hot true label:
+        EMD = sum_{k=0}^{K-2} |CDF_pred(k) - CDF_true(k)|
+
+    logits: (batch, K) raw logits for K ordinal classes
+    class_indices: (batch,) integer class indices (ground truth)
+
+    Returns: scalar mean EMD loss across the batch
+    """
+    K = logits.shape[-1]
+    probs = torch.softmax(logits, dim=-1)                          # (batch, K)
+    cdf_pred = torch.cumsum(probs, dim=-1)[:, :-1]                 # (batch, K-1)
+    k_range = torch.arange(K - 1, device=logits.device)           # (K-1,)
+    # CDF_true[k] = 1 if k >= class_idx else 0  (step function at class_idx)
+    cdf_true = (k_range.unsqueeze(0) >= class_indices.unsqueeze(1)).float()  # (batch, K-1)
+    return torch.abs(cdf_pred - cdf_true).sum(dim=-1).mean()
 
 
 def _combined_loss(
@@ -209,9 +249,7 @@ def _train_loop(
     warmup_epochs: int = 2,
     aux_lambda: float = 0.0,
     aux_cls_loss_fns: list | None = None,
-    aux_reg_loss_fn: torch.nn.Module | None = None,
-    reg_means: dict[int, float] | None = None,
-    reg_stds: dict[int, float] | None = None,
+    ordinal_class_maps: dict[int, list[float]] | None = None,
 ) -> tuple[int, float, bool, int]:
     """Run the training loop with early stopping.
 
@@ -222,7 +260,9 @@ def _train_loop(
     use_aux = aux_lambda > 0.0 and aux_cls_loss_fns is not None
 
     if use_aux:
-        training_model: nn.Module = AuxiliaryTrainingModel(model, n_aux=20)
+        training_model: nn.Module = AuxiliaryTrainingModel(
+            model, ordinal_class_maps or {}
+        )
     else:
         training_model = model
 
@@ -270,8 +310,7 @@ def _train_loop(
                 aux_labels_batch = batch["aux_labels"].to(device)
                 aux_losses = _compute_aux_losses(
                     aux_preds, aux_labels_batch,
-                    aux_cls_loss_fns, aux_reg_loss_fn,
-                    reg_means, reg_stds, device,
+                    aux_cls_loss_fns, ordinal_class_maps or {},
                 )
                 loss = _combined_loss(l_price, aux_losses, aux_lambda)
             else:
@@ -300,8 +339,7 @@ def _train_loop(
                     aux_labels_batch = batch["aux_labels"].to(device)
                     aux_losses = _compute_aux_losses(
                         aux_preds, aux_labels_batch,
-                        aux_cls_loss_fns, aux_reg_loss_fn,
-                        reg_means, reg_stds, device,
+                        aux_cls_loss_fns, ordinal_class_maps or {},
                     )
                     val_losses.append(l_price.item())
                     val_aux_losses.append(sum(a.item() for a in aux_losses))
@@ -352,12 +390,13 @@ def _compute_aux_losses(
     aux_preds: list[torch.Tensor],
     aux_labels: torch.Tensor,
     cls_loss_fns: list,
-    reg_loss_fn: torch.nn.Module,
-    reg_means: dict[int, float],
-    reg_stds: dict[int, float],
-    device: torch.device,
+    ordinal_class_maps: dict[int, list[float]],
 ) -> list[torch.Tensor]:
-    """Compute per-head auxiliary losses."""
+    """Compute per-head auxiliary losses.
+
+    Classification heads (indices 0-6, 14-19): BCEWithLogitsLoss on (batch,) logits.
+    Ordinal heads (indices 7-13): EMD loss on (batch, K) logits vs nearest class index.
+    """
     losses = []
     cls_idx = 0
     for head_idx in range(20):
@@ -367,11 +406,11 @@ def _compute_aux_losses(
             losses.append(loss)
             cls_idx += 1
         else:
-            # Regression: standardize targets on-the-fly using pre-computed stats
-            mean = reg_means[head_idx]
-            std = reg_stds[head_idx]
-            targets = (aux_labels[:, head_idx] - mean) / std
-            loss = reg_loss_fn(aux_preds[head_idx], targets)
+            # Ordinal EMD loss
+            classes = ordinal_class_maps[head_idx]
+            raw_labels = aux_labels[:, head_idx]
+            class_indices = _raw_to_class_idx_tensor(raw_labels, classes)
+            loss = _emd_loss(aux_preds[head_idx], class_indices)
             losses.append(loss)
     return losses
 
@@ -447,9 +486,6 @@ def train_transformer(
     train_aux_tensor: torch.Tensor | None = None
     val_aux_tensor: torch.Tensor | None = None
     aux_cls_loss_fns: list | None = None
-    aux_reg_loss_fn: torch.nn.Module | None = None
-    reg_means: dict[int, float] | None = None
-    reg_stds: dict[int, float] | None = None
 
     if aux_lambda > 0.0:
         from sealed.domain.embedding_probe import compute_aux_labels
@@ -461,20 +497,10 @@ def train_transformer(
         train_labels_np = np.stack([compute_aux_labels(t) for t in train_texts])
         val_labels_np = np.stack([compute_aux_labels(t) for t in val_texts])
 
-        print("Computing class weights and target statistics...")
-        # Build per-classification-head pos_weight
+        print("Computing class weights and ordinal class distributions...")
         pos_weights = {}
         for head_idx in _AUX_CLASSIFICATION_INDICES:
-            pw = _compute_pos_weight(train_labels_np[:, head_idx])
-            pos_weights[head_idx] = pw
-
-        # Build per-regression-head standardization stats
-        reg_means = {}
-        reg_stds = {}
-        for head_idx in _AUX_REGRESSION_INDICES:
-            mean, std = _compute_reg_stats(train_labels_np[:, head_idx])
-            reg_means[head_idx] = mean
-            reg_stds[head_idx] = std
+            pos_weights[head_idx] = _compute_pos_weight(train_labels_np[:, head_idx])
 
         # Print statistics
         colors = ["W", "U", "B", "R", "G", "C"]
@@ -491,21 +517,24 @@ def train_transformer(
             n_neg = len(train_labels_np) - n_pos
             print(f"  {name}: pos_weight={pos_weights[head_idx]:.1f} "
                   f"({n_pos} positive / {n_neg} negative)")
-        for head_idx in _AUX_REGRESSION_INDICES:
+        for head_idx in _AUX_ORDINAL_INDICES:
             name = head_names[head_idx]
-            print(f"  {name}: mean={reg_means[head_idx]:.2f}, std={reg_stds[head_idx]:.2f}")
+            classes = ORDINAL_CLASS_MAPS[head_idx]
+            vals = train_labels_np[:, head_idx]
+            counts = [int(np.sum(np.abs(vals - c) < 1e-6)) for c in classes]
+            dist_str = ", ".join(f"{c}:{n}" for c, n in zip(classes, counts))
+            print(f"  {name} (K={len(classes)}): {dist_str}")
 
         train_aux_tensor = torch.tensor(train_labels_np, dtype=torch.float32)
         val_aux_tensor = torch.tensor(val_labels_np, dtype=torch.float32)
 
-        # Build loss functions
+        # Build classification loss functions
         aux_cls_loss_fns = []
         for head_idx in _AUX_CLASSIFICATION_INDICES:
             pw_tensor = torch.tensor([pos_weights[head_idx]], dtype=torch.float32)
             aux_cls_loss_fns.append(
                 torch.nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
             )
-        aux_reg_loss_fn = torch.nn.MSELoss()
 
     train_dataset = TransformerTrainingDataset(
         train_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer,
@@ -548,9 +577,7 @@ def train_transformer(
         model, train_loader, val_loader, device, epochs, lr, patience,
         aux_lambda=aux_lambda,
         aux_cls_loss_fns=aux_cls_loss_fns,
-        aux_reg_loss_fn=aux_reg_loss_fn,
-        reg_means=reg_means,
-        reg_stds=reg_stds,
+        ordinal_class_maps=ORDINAL_CLASS_MAPS if aux_lambda > 0.0 else None,
     )
 
     # 7. Save (always save the base model, not the aux wrapper)

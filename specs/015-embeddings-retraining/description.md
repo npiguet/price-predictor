@@ -54,13 +54,14 @@ are linearly decodable from the embedding, which is exactly the property the Sta
 
 The 20 heads mirror the 20 probes from feature 014:
 
-| Head                             | Type                  | Target                                                     |
-|----------------------------------|-----------------------|------------------------------------------------------------|
-| Is land                          | Binary classification | 1 if type line contains "land"                             |
-| Card color (× 6: W/U/B/R/G/C)    | Binary classification | 1 if card has that color (see note below)                  |
-| Pip counts (× 6: W/U/B/R/G/C)    | Linear regression     | Pip count for that color (fractional for hybrid/phyrexian) |
-| Mana value                       | Linear regression     | Sum of all pips including generic; X = 0                   |
-| Mana produced (× 6: W/U/B/R/G/C) | Binary classification | 1 if card has a `{T}: add {color}` ability                 |
+| Head                             | Type                         | Target                                                     |
+|----------------------------------|------------------------------|------------------------------------------------------------|
+| Is land                          | Binary classification        | 1 if type line contains "land"                             |
+| Card color (× 6: W/U/B/R/G/C)    | Binary classification        | 1 if card has that color (see note below)                  |
+| Pip counts W/U/B/R/G             | Ordinal classification (K=11)| Pip count class in {0,0.5,1,1.5,2,2.5,3,4,5,6,8}          |
+| Pip count C                      | Ordinal classification (K=5) | Pip count class in {0,1,2,2.5,3}                           |
+| Mana value                       | Ordinal classification (K=17)| Mana value class in {0,1,…,16}                             |
+| Mana produced (× 6: W/U/B/R/G/C) | Binary classification        | 1 if card has a `{T}: add {color}` ability                 |
 
 # Label Generation
 
@@ -93,9 +94,12 @@ L_total = L_price + λ × Σ L_aux_i
 Where:
 - `L_price` is the existing price prediction loss (unchanged)
 - Each classification head uses `BCEWithLogitsLoss`
-- Each regression head uses MSE on **standardized targets** (subtract mean, divide by std, computed once from
-  the training set before training begins). This normalizes regression losses to ~1.0 for a naive predictor,
-  putting them on the same scale as the BCE losses so no head type dominates the gradient.
+- Each ordinal head (pip counts and mana value) uses **Earth Mover's Distance (EMD) loss**: the head outputs
+  K logits (one per class); the loss is the L1 distance between the CDF of the softmax output and the CDF of
+  the one-hot true label: `EMD = sum_{k=0}^{K-2} |CDF_pred(k) - CDF_true(k)|`. This penalises predictions
+  proportionally to how many class boundaries they are from the truth — predicting class 3 when truth is 2 is
+  penalised less than predicting class 7. Classes are derived from a full scan of the card corpus so no
+  overflow class is needed (FR-012/013/014).
 - `λ` is a weighting hyperparameter controlling the strength of auxiliary supervision. Starting value: ~0.2.
   The goal is "as low as possible while all 20 probes pass" — if probes fail, increase λ; if price accuracy
   degrades too much, decrease λ.

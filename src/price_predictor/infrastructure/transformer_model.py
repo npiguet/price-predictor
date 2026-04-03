@@ -99,14 +99,36 @@ class AuxiliaryTrainingModel(nn.Module):
 
     Used only during training. Save checkpoint with save_model(wrapper.base, ...).
     The 20 aux heads are discarded after training.
+
+    Classification heads (indices 0-6, 14-19) output (batch,).
+    Ordinal heads (indices 7-13) output (batch, K) where K = len(class_list).
     """
 
-    def __init__(self, base: CardPriceTransformerModel, n_aux: int = 20) -> None:
+    def __init__(
+        self,
+        base: CardPriceTransformerModel,
+        ordinal_class_maps: dict[int, list[float]],
+    ) -> None:
+        """Create auxiliary model with variable-output heads.
+
+        Args:
+            base: The base price predictor model.
+            ordinal_class_maps: Maps head index → sorted list of class values.
+                Heads present in this dict are ordinal and get nn.Linear(d_emb, K)
+                where K = len(classes). All other heads are binary classifiers with
+                nn.Linear(d_emb, 1).
+        """
         super().__init__()
         self.base = base
-        self.aux_heads = nn.ModuleList(
-            [nn.Linear(2 * base.config.d_model, 1) for _ in range(n_aux)]
-        )
+        d_emb = 2 * base.config.d_model
+        heads: list[nn.Module] = []
+        for i in range(20):
+            if i in ordinal_class_maps:
+                K = len(ordinal_class_maps[i])
+                heads.append(nn.Linear(d_emb, K))
+            else:
+                heads.append(nn.Linear(d_emb, 1))
+        self.aux_heads = nn.ModuleList(heads)
 
     def forward(
         self,
@@ -118,7 +140,8 @@ class AuxiliaryTrainingModel(nn.Module):
 
         Returns:
             price_pred: (batch_size,)
-            aux_preds: list of n_aux tensors each (batch_size,)
+            aux_preds: list of 20 tensors; classification heads → (batch_size,),
+                ordinal heads → (batch_size, K)
         """
         pooled_embed = self.base._embed(input_ids, attention_mask)  # (batch, 2*d_model)
         # Price prediction through base model's output head
@@ -126,5 +149,11 @@ class AuxiliaryTrainingModel(nn.Module):
         pooled_with_meta = self.base.output_dropout(pooled_with_meta)
         price_pred = self.base.output_head(pooled_with_meta).squeeze(-1)
         # Auxiliary predictions (raw pooled embedding, no dropout)
-        aux_preds = [head(pooled_embed).squeeze(-1) for head in self.aux_heads]
+        aux_preds = []
+        for head in self.aux_heads:
+            out = head(pooled_embed)
+            if out.shape[-1] == 1:
+                aux_preds.append(out.squeeze(-1))  # (batch,) for classification
+            else:
+                aux_preds.append(out)              # (batch, K) for ordinal
         return price_pred, aux_preds
