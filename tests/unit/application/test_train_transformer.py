@@ -291,3 +291,132 @@ class TestMatchCardsToTexts:
         assert "rarity:" not in text
         assert "printings:" not in text
         assert "legalities:" not in text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T007 — Auxiliary label statistics computation and combined loss
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestAuxPosWeightComputation:
+    """T007: pos_weight = num_neg / num_pos for each classification head."""
+
+    def test_pos_weight_balanced(self):
+        from price_predictor.application.train_transformer import _compute_pos_weight
+        import numpy as np
+        # 5 positives, 5 negatives → pos_weight = 1.0
+        labels = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        pw = _compute_pos_weight(labels)
+        assert pw == pytest.approx(1.0)
+
+    def test_pos_weight_imbalanced(self):
+        from price_predictor.application.train_transformer import _compute_pos_weight
+        import numpy as np
+        # 1 positive, 9 negatives → pos_weight = 9.0
+        labels = np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        pw = _compute_pos_weight(labels)
+        assert pw == pytest.approx(9.0)
+
+    def test_pos_weight_all_negative_returns_large(self):
+        from price_predictor.application.train_transformer import _compute_pos_weight
+        import numpy as np
+        # All zeros → no positives, should not crash (return large number or 1.0)
+        labels = np.zeros(10)
+        pw = _compute_pos_weight(labels)
+        assert pw >= 1.0
+
+
+class TestRegressionStandardization:
+    """T007: Regression targets are standardized with std floor of 1.0."""
+
+    def test_std_floor_applied_when_std_below_one(self):
+        from price_predictor.application.train_transformer import _compute_reg_stats
+        import numpy as np
+        # Near-constant values → std << 1, should use floor 1.0
+        values = np.array([0.0, 0.0, 0.0, 0.0, 0.01])
+        mean, std = _compute_reg_stats(values)
+        assert std >= 1.0
+
+    def test_std_above_one_not_floored(self):
+        from price_predictor.application.train_transformer import _compute_reg_stats
+        import numpy as np
+        # Values with std > 1 should use actual std
+        values = np.array([0.0, 5.0, 10.0, 15.0, 20.0])
+        mean, std = _compute_reg_stats(values)
+        assert std > 1.0
+
+    def test_mean_computed_correctly(self):
+        from price_predictor.application.train_transformer import _compute_reg_stats
+        import numpy as np
+        values = np.array([2.0, 4.0, 6.0, 8.0, 10.0])
+        mean, std = _compute_reg_stats(values)
+        assert mean == pytest.approx(6.0)
+
+
+class TestCombinedLoss:
+    """T007: Combined loss = L_price + lambda * sum(L_aux_i)."""
+
+    def test_combined_loss_formula(self):
+        from price_predictor.application.train_transformer import _combined_loss
+        import torch
+        # L_price = 2.0, aux_losses = [1.0, 1.0], lambda = 0.5
+        # Expected: 2.0 + 0.5 * 2.0 = 3.0
+        l_price = torch.tensor(2.0)
+        aux_losses = [torch.tensor(1.0), torch.tensor(1.0)]
+        total = _combined_loss(l_price, aux_losses, aux_lambda=0.5)
+        assert total.item() == pytest.approx(3.0)
+
+    def test_combined_loss_zero_lambda_equals_price_loss(self):
+        from price_predictor.application.train_transformer import _combined_loss
+        import torch
+        l_price = torch.tensor(2.5)
+        aux_losses = [torch.tensor(1.0), torch.tensor(3.0)]
+        total = _combined_loss(l_price, aux_losses, aux_lambda=0.0)
+        assert total.item() == pytest.approx(2.5)
+
+
+class TestSaveWrapperBase:
+    """T007: After aux training, saving wrapper.base produces checkpoint loadable
+    by load_model() with same state_dict keys as non-aux checkpoint (FR-007, SC-003)."""
+
+    def test_save_base_produces_loadable_checkpoint(self, tmp_path):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        from price_predictor.infrastructure.transformer_store import save_model, load_model
+        from price_predictor.domain.entities import TransformerConfig
+
+        config = TransformerConfig(
+            d_model=32, n_layers=1, n_heads=2, ff_dim=64,
+            max_seq_len=16, vocab_size=100, dropout=0.0,
+        )
+        base = CardPriceTransformerModel(config)
+        wrapper = AuxiliaryTrainingModel(base, n_aux=20)
+
+        # Save base (not wrapper)
+        _, model_path = save_model(wrapper.base, config, tmp_path)
+
+        # Reload and compare state_dict keys
+        loaded_model, loaded_config = load_model(tmp_path)
+        assert set(loaded_model.state_dict().keys()) == set(base.state_dict().keys())
+
+    def test_save_base_checkpoint_has_no_aux_head_keys(self, tmp_path):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        from price_predictor.infrastructure.transformer_store import save_model, load_model
+        from price_predictor.domain.entities import TransformerConfig
+
+        config = TransformerConfig(
+            d_model=32, n_layers=1, n_heads=2, ff_dim=64,
+            max_seq_len=16, vocab_size=100, dropout=0.0,
+        )
+        base = CardPriceTransformerModel(config)
+        wrapper = AuxiliaryTrainingModel(base, n_aux=20)
+
+        _, model_path = save_model(wrapper.base, config, tmp_path)
+
+        loaded_model, _ = load_model(tmp_path)
+        keys = set(loaded_model.state_dict().keys())
+        assert not any("aux_head" in k for k in keys)

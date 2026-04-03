@@ -12,6 +12,12 @@ from price_predictor.domain.value_objects import ManaCost
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 FORGE_CARDS_DIR = FIXTURES_DIR / "forge_cards"
+CARDS_FIXTURES_DIR = FIXTURES_DIR / "cards"
+
+
+def load_card_fixture(filename: str) -> str:
+    """Load card text from tests/fixtures/cards/ by filename."""
+    return (CARDS_FIXTURES_DIR / filename).read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -22,6 +28,11 @@ def fixtures_dir() -> Path:
 @pytest.fixture
 def forge_cards_dir() -> Path:
     return FORGE_CARDS_DIR
+
+
+@pytest.fixture
+def card_fixtures_dir() -> Path:
+    return CARDS_FIXTURES_DIR
 
 
 @pytest.fixture

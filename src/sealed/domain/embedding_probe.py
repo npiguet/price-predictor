@@ -70,12 +70,36 @@ def extract_is_land(cards: list[CardData]) -> np.ndarray:
     return np.array([1.0 if _is_land_text(c.text) else 0.0 for c in cards])
 
 
+_DEVOID_RE = re.compile(r"^static:\s*devoid\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def _has_devoid(text: str) -> bool:
+    """Return True if card text contains a 'static: devoid' line."""
+    return bool(_DEVOID_RE.search(text))
+
+
 def extract_card_color(cards: list[CardData], color: str) -> np.ndarray:
-    """Binary label: 1 if card has ≥1 pip of the given color, 0 otherwise."""
+    """Binary label: 1 if card has the given color, 0 otherwise.
+
+    Corrected definition (FR-003):
+    - W/U/B/R/G = 1 if pip count > 0 AND card is not devoid
+    - C = 1 if card is colorless: all W/U/B/R/G labels are 0
+      (i.e., no colored pips, or devoid, or no mana cost)
+    """
     labels = []
     for c in cards:
         pips = count_pips([c.text])
-        labels.append(1.0 if pips.counts.get(color, 0.0) > 0 else 0.0)
+        devoid = _has_devoid(c.text)
+        if color == "C":
+            # Colorless = no colored pips or devoid
+            is_colorless = all(
+                pips.counts.get(col, 0.0) <= 0.0 or devoid
+                for col in ("W", "U", "B", "R", "G")
+            )
+            labels.append(1.0 if is_colorless else 0.0)
+        else:
+            pip_val = pips.counts.get(color, 0.0)
+            labels.append(0.0 if devoid or pip_val <= 0.0 else 1.0)
     return np.array(labels)
 
 
@@ -116,9 +140,63 @@ def extract_mana_produced(cards: list[CardData], color: str) -> np.ndarray:
     return np.array(labels)
 
 
-# ─── Probe runner ─────────────────────────────────────────────────────────────
+# ─── Auxiliary label computation ─────────────────────────────────────────────
 
 _COLORS = ("W", "U", "B", "R", "G", "C")
+
+
+def compute_aux_labels(card_text: str) -> np.ndarray:
+    """Return the 20-element auxiliary label vector for a single card text.
+
+    Label order (data-model.md):
+      0:     is_land
+      1–6:   card_color W/U/B/R/G/C (corrected: devoid → colorless)
+      7–12:  pip_count W/U/B/R/G/C
+      13:    mana_value
+      14–19: mana_produced W/U/B/R/G/C
+    """
+    labels = np.zeros(20, dtype=np.float32)
+
+    # 0: is_land
+    labels[0] = 1.0 if _is_land_text(card_text) else 0.0
+
+    # 1–6: card_color (corrected definition: devoid → colorless)
+    pips = count_pips([card_text])
+    devoid = _has_devoid(card_text)
+    for i, color in enumerate(_COLORS):
+        if color == "C":
+            is_colorless = all(
+                pips.counts.get(col, 0.0) <= 0.0 or devoid
+                for col in ("W", "U", "B", "R", "G")
+            )
+            labels[1 + i] = 1.0 if is_colorless else 0.0
+        else:
+            pip_val = pips.counts.get(color, 0.0)
+            labels[1 + i] = 0.0 if devoid or pip_val <= 0.0 else 1.0
+
+    # 7–12: pip_count (raw pip counts, not affected by devoid)
+    for i, color in enumerate(_COLORS):
+        labels[7 + i] = float(pips.counts.get(color, 0.0))
+
+    # 13: mana_value
+    mv = 0.0
+    for line in card_text.splitlines():
+        stripped = line.strip()
+        if stripped.lower().startswith("mana cost:"):
+            cost_part = stripped[len("mana cost:"):].strip()
+            mv = compute_mana_value(cost_part)
+            break
+    labels[13] = float(mv)
+
+    # 14–19: mana_produced
+    sources = count_actual_sources([card_text])
+    for i, color in enumerate(_COLORS):
+        labels[14 + i] = 1.0 if sources.sources.get(color, 0.0) > 0 else 0.0
+
+    return labels
+
+
+# ─── Probe runner ─────────────────────────────────────────────────────────────
 
 
 def build_default_probes(

@@ -1,0 +1,5 @@
+name: eldritch immunity
+mana cost: {C}
+types: kindred instant eldrazi
+alternate cost: overload {4}{C}
+spell[1]: target creature you control gains protection from each color until end of turn.

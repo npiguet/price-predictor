@@ -24,6 +24,7 @@ class TransformerTrainingDataset(Dataset):
         tokenizer: MtgTokenizer,
         log_offset: float = 2.0,
         printing_data_list: list[PrintingData] | None = None,
+        aux_labels: torch.Tensor | None = None,
     ) -> None:
         """Construct dataset from (card_name, text_content, price_eur) tuples.
 
@@ -34,6 +35,8 @@ class TransformerTrainingDataset(Dataset):
             printing_data_list: Optional per-card PrintingData for side-channel
                 metadata. When None, zero-filled tensors of shape (_META_DIM,)
                 are used.
+            aux_labels: Optional (n_cards, n_aux) tensor of pre-computed auxiliary
+                training labels. When provided, __getitem__ includes "aux_labels".
         """
         all_input_ids = []
         all_attention_masks = []
@@ -55,14 +58,18 @@ class TransformerTrainingDataset(Dataset):
         self.attention_masks = torch.stack(all_attention_masks)
         self.targets = torch.tensor(all_targets, dtype=torch.float32)
         self.meta = torch.stack(all_meta)
+        self.aux_labels = aux_labels
 
     def __len__(self) -> int:
         return len(self.targets)
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
-        return {
+        item = {
             "input_ids": self.input_ids[idx],
             "attention_mask": self.attention_masks[idx],
             "target": self.targets[idx],
             "meta": self.meta[idx],
         }
+        if self.aux_labels is not None:
+            item["aux_labels"] = self.aux_labels[idx]
+        return item

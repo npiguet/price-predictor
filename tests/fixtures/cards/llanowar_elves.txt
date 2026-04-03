@@ -1,0 +1,5 @@
+name: llanowar elves
+mana cost: {G}
+types: creature elf druid
+power toughness: 1/1
+activated[1]: {T}: add {G}.

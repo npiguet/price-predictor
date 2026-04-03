@@ -1,4 +1,4 @@
-"""Tests for CardPriceTransformerModel (nn.Module)."""
+"""Tests for CardPriceTransformerModel and AuxiliaryTrainingModel (nn.Module)."""
 
 from __future__ import annotations
 
@@ -144,3 +144,168 @@ class TestCardPriceTransformerModelForward:
             out_zeros = model(input_ids, attention_mask, meta_zeros)
             out_ones = model(input_ids, attention_mask, meta_ones)
         assert not torch.allclose(out_zeros, out_ones)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T005 — _embed() and AuxiliaryTrainingModel
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestEmbed:
+    """T005: _embed() extracts the shared pooled representation."""
+
+    def test_embed_output_shape(self):
+        from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
+        config = _make_config()
+        model = CardPriceTransformerModel(config)
+        model.eval()
+        batch_size = 3
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        with torch.no_grad():
+            pooled = model._embed(input_ids, attention_mask)
+        assert pooled.shape == (batch_size, 2 * config.d_model)
+
+    def test_embed_matches_encode_output(self):
+        """_embed() (no_grad) must produce same values as encode()."""
+        config = _make_config(dropout=0.0)
+        model = CardPriceTransformerModel(config)
+        model.eval()
+        input_ids = torch.randint(0, config.vocab_size, (2, config.max_seq_len))
+        attention_mask = torch.ones(2, config.max_seq_len)
+        encode_out = model.encode(input_ids, attention_mask)
+        with torch.no_grad():
+            embed_out = model._embed(input_ids, attention_mask)
+        assert torch.allclose(encode_out, embed_out, atol=1e-6)
+
+    def test_embed_has_gradients(self):
+        """_embed() should allow gradients to flow (unlike encode which has no_grad)."""
+        config = _make_config(dropout=0.0)
+        model = CardPriceTransformerModel(config)
+        model.train()
+        input_ids = torch.randint(0, config.vocab_size, (1, config.max_seq_len))
+        attention_mask = torch.ones(1, config.max_seq_len)
+        pooled = model._embed(input_ids, attention_mask)
+        # Sum and backward must not raise
+        pooled.sum().backward()
+        # At least one parameter should have a gradient
+        has_grad = any(p.grad is not None for p in model.parameters())
+        assert has_grad
+
+
+class TestAuxiliaryTrainingModel:
+    """T005: AuxiliaryTrainingModel wraps base model with 20 auxiliary heads."""
+
+    def test_forward_returns_tuple(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model.eval()
+        batch_size = 2
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        meta = _make_meta(batch_size, config.meta_dim)
+        with torch.no_grad():
+            price_pred, aux_preds = aux_model(input_ids, attention_mask, meta)
+        assert isinstance(price_pred, torch.Tensor)
+        assert isinstance(aux_preds, list)
+
+    def test_price_pred_shape(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model.eval()
+        batch_size = 4
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        meta = _make_meta(batch_size, config.meta_dim)
+        with torch.no_grad():
+            price_pred, _ = aux_model(input_ids, attention_mask, meta)
+        assert price_pred.shape == (batch_size,)
+
+    def test_aux_preds_count_equals_n_aux(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        n_aux = 20
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=n_aux)
+        aux_model.eval()
+        batch_size = 2
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        meta = _make_meta(batch_size, config.meta_dim)
+        with torch.no_grad():
+            _, aux_preds = aux_model(input_ids, attention_mask, meta)
+        assert len(aux_preds) == n_aux
+
+    def test_each_aux_pred_shape(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model.eval()
+        batch_size = 3
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        meta = _make_meta(batch_size, config.meta_dim)
+        with torch.no_grad():
+            _, aux_preds = aux_model(input_ids, attention_mask, meta)
+        for i, pred in enumerate(aux_preds):
+            assert pred.shape == (batch_size,), f"aux_pred[{i}] shape mismatch"
+
+    def test_gradients_flow_through_aux_heads(self):
+        """Gradients from aux heads must reach encoder parameters."""
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config(dropout=0.0)
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        aux_model.train()
+        batch_size = 2
+        input_ids = torch.randint(0, config.vocab_size, (batch_size, config.max_seq_len))
+        attention_mask = torch.ones(batch_size, config.max_seq_len)
+        meta = _make_meta(batch_size, config.meta_dim)
+        _, aux_preds = aux_model(input_ids, attention_mask, meta)
+        # Sum all aux predictions and backprop
+        sum(p.sum() for p in aux_preds).backward()
+        # Encoder parameters should have gradients
+        encoder_has_grad = any(
+            p.grad is not None
+            for p in base.encoder.parameters()
+        )
+        assert encoder_has_grad, "Gradients must flow through aux heads to encoder"
+
+    def test_aux_heads_count(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        assert len(aux_model.aux_heads) == 20
+
+    def test_base_attribute_is_original_model(self):
+        from price_predictor.infrastructure.transformer_model import (
+            AuxiliaryTrainingModel,
+            CardPriceTransformerModel,
+        )
+        config = _make_config()
+        base = CardPriceTransformerModel(config)
+        aux_model = AuxiliaryTrainingModel(base, n_aux=20)
+        assert aux_model.base is base

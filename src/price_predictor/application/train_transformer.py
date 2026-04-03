@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
@@ -22,10 +23,47 @@ from price_predictor.infrastructure.mtgjson_loader import (
 )
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
-from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
+from price_predictor.infrastructure.transformer_model import (
+    AuxiliaryTrainingModel,
+    CardPriceTransformerModel,
+)
 from price_predictor.infrastructure.transformer_store import save_model
 
 logger = logging.getLogger(__name__)
+
+# ─── Auxiliary label indices (data-model.md) ──────────────────────────────────
+# Classification heads: 0,1-6,14-19 (13 total)
+_AUX_CLASSIFICATION_INDICES = [0, 1, 2, 3, 4, 5, 6, 14, 15, 16, 17, 18, 19]
+# Regression heads: 7-13 (7 total)
+_AUX_REGRESSION_INDICES = [7, 8, 9, 10, 11, 12, 13]
+
+
+def _compute_pos_weight(labels: np.ndarray) -> float:
+    """Compute pos_weight = num_negatives / num_positives for a binary label column."""
+    n_pos = float(np.sum(labels > 0.5))
+    n_neg = float(np.sum(labels <= 0.5))
+    if n_pos == 0:
+        return float(n_neg) if n_neg > 0 else 1.0
+    return n_neg / n_pos
+
+
+def _compute_reg_stats(values: np.ndarray) -> tuple[float, float]:
+    """Return (mean, std) with a minimum std floor of 1.0."""
+    mean = float(np.mean(values))
+    std = float(np.std(values))
+    std = max(std, 1.0)
+    return mean, std
+
+
+def _combined_loss(
+    l_price: torch.Tensor,
+    aux_losses: list[torch.Tensor],
+    aux_lambda: float,
+) -> torch.Tensor:
+    """Combine price loss with auxiliary losses: L_total = L_price + lambda * sum(L_aux_i)."""
+    if aux_lambda == 0.0 or not aux_losses:
+        return l_price
+    return l_price + aux_lambda * sum(aux_losses)
 
 
 @dataclass
@@ -169,12 +207,28 @@ def _train_loop(
     lr: float,
     patience: int,
     warmup_epochs: int = 2,
+    aux_lambda: float = 0.0,
+    aux_cls_loss_fns: list | None = None,
+    aux_reg_loss_fn: torch.nn.Module | None = None,
+    reg_means: dict[int, float] | None = None,
+    reg_stds: dict[int, float] | None = None,
 ) -> tuple[int, float, bool, int]:
     """Run the training loop with early stopping.
 
-    Returns (best_epoch, best_val_loss, stopped_early, final_epoch).
+    When aux_lambda > 0, wraps model in AuxiliaryTrainingModel and uses
+    combined loss. Returns (best_epoch, best_val_loss, stopped_early, final_epoch).
+    Early stopping is always based on price validation loss only.
     """
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    use_aux = aux_lambda > 0.0 and aux_cls_loss_fns is not None
+
+    if use_aux:
+        training_model: nn.Module = AuxiliaryTrainingModel(model, n_aux=20)
+    else:
+        training_model = model
+
+    training_model.to(device)
+
+    optimizer = torch.optim.AdamW(training_model.parameters(), lr=lr)
 
     # Linear warmup scheduler
     warmup_steps = warmup_epochs * len(train_loader)
@@ -185,7 +239,7 @@ def _train_loop(
         return 1.0
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-    loss_fn = torch.nn.HuberLoss(delta=1.0)
+    price_loss_fn = torch.nn.HuberLoss(delta=1.0)
 
     best_val_loss = float("inf")
     best_epoch = 0
@@ -196,7 +250,7 @@ def _train_loop(
         epoch_start = time.perf_counter()
 
         # Train
-        model.train()
+        training_model.train()
         train_losses = []
         for batch in train_loader:
             input_ids = batch["input_ids"].to(device)
@@ -205,16 +259,30 @@ def _train_loop(
             meta = batch["meta"].to(device)
 
             optimizer.zero_grad()
-            predictions = model(input_ids, attention_mask, meta)
-            loss = loss_fn(predictions, targets)
+
+            if use_aux:
+                price_pred, aux_preds = training_model(input_ids, attention_mask, meta)
+                l_price = price_loss_fn(price_pred, targets)
+                aux_labels_batch = batch["aux_labels"].to(device)
+                aux_losses = _compute_aux_losses(
+                    aux_preds, aux_labels_batch,
+                    aux_cls_loss_fns, aux_reg_loss_fn,
+                    reg_means, reg_stds, device,
+                )
+                loss = _combined_loss(l_price, aux_losses, aux_lambda)
+            else:
+                predictions = training_model(input_ids, attention_mask, meta)
+                loss = price_loss_fn(predictions, targets)
+
             loss.backward()
             optimizer.step()
             scheduler.step()
             train_losses.append(loss.item())
 
         # Validate
-        model.eval()
+        training_model.eval()
         val_losses = []
+        val_aux_losses = []
         with torch.no_grad():
             for batch in val_loader:
                 input_ids = batch["input_ids"].to(device)
@@ -222,37 +290,86 @@ def _train_loop(
                 targets = batch["target"].to(device)
                 meta = batch["meta"].to(device)
 
-                predictions = model(input_ids, attention_mask, meta)
-                loss = loss_fn(predictions, targets)
-                val_losses.append(loss.item())
+                if use_aux:
+                    price_pred, aux_preds = training_model(input_ids, attention_mask, meta)
+                    l_price = price_loss_fn(price_pred, targets)
+                    aux_labels_batch = batch["aux_labels"].to(device)
+                    aux_losses = _compute_aux_losses(
+                        aux_preds, aux_labels_batch,
+                        aux_cls_loss_fns, aux_reg_loss_fn,
+                        reg_means, reg_stds, device,
+                    )
+                    val_losses.append(l_price.item())
+                    val_aux_losses.append(sum(a.item() for a in aux_losses))
+                else:
+                    predictions = training_model(input_ids, attention_mask, meta)
+                    loss = price_loss_fn(predictions, targets)
+                    val_losses.append(loss.item())
 
         train_loss = sum(train_losses) / len(train_losses)
         val_loss = sum(val_losses) / len(val_losses)
         elapsed = time.perf_counter() - epoch_start
 
-        print(
-            f"Epoch {epoch}/{epochs} — "
-            f"train_loss: {train_loss:.3f}, val_loss: {val_loss:.3f}, "
-            f"{elapsed:.1f}s"
-        )
+        if use_aux and val_aux_losses:
+            avg_aux = sum(val_aux_losses) / len(val_aux_losses)
+            print(
+                f"Epoch {epoch}/{epochs} — "
+                f"train_loss: {train_loss:.3f}, val_loss: {val_loss:.3f}, "
+                f"aux_loss: {avg_aux:.3f}, {elapsed:.1f}s"
+            )
+        else:
+            print(
+                f"Epoch {epoch}/{epochs} — "
+                f"train_loss: {train_loss:.3f}, val_loss: {val_loss:.3f}, "
+                f"{elapsed:.1f}s"
+            )
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch
-            best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            # Always snapshot the base model's state (not the wrapper)
+            state_src = training_model.base if use_aux else training_model
+            best_state_dict = {k: v.cpu().clone() for k, v in state_src.state_dict().items()}
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 print(f"Early stopping triggered at epoch {epoch}")
-                # Restore best weights
                 model.load_state_dict(best_state_dict)
                 return best_epoch, best_val_loss, True, epoch
 
-    # Restore best weights
+    # Restore best weights to base model
     if best_state_dict is not None:
         model.load_state_dict(best_state_dict)
     return best_epoch, best_val_loss, False, epochs
+
+
+def _compute_aux_losses(
+    aux_preds: list[torch.Tensor],
+    aux_labels: torch.Tensor,
+    cls_loss_fns: list,
+    reg_loss_fn: torch.nn.Module,
+    reg_means: dict[int, float],
+    reg_stds: dict[int, float],
+    device: torch.device,
+) -> list[torch.Tensor]:
+    """Compute per-head auxiliary losses."""
+    losses = []
+    cls_idx = 0
+    for head_idx in range(20):
+        if head_idx in _AUX_CLASSIFICATION_INDICES:
+            targets = aux_labels[:, head_idx]
+            loss = cls_loss_fns[cls_idx](aux_preds[head_idx], targets)
+            losses.append(loss)
+            cls_idx += 1
+        else:
+            # Regression: standardize targets on-the-fly using pre-computed stats
+            mean = reg_means[head_idx]
+            std = reg_stds[head_idx]
+            targets = (aux_labels[:, head_idx] - mean) / std
+            loss = reg_loss_fn(aux_preds[head_idx], targets)
+            losses.append(loss)
+    return losses
 
 
 def train_transformer(
@@ -273,6 +390,7 @@ def train_transformer(
     n_layers: int = 4,
     n_heads: int = 4,
     ff_dim: int = 512,
+    aux_lambda: float = 0.0,
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
@@ -321,13 +439,79 @@ def train_transformer(
     train_pd = [pd for _, _, _, pd in train_data]
     val_pd = [pd for _, _, _, pd in val_data]
 
+    # 4a. Pre-compute auxiliary labels when aux_lambda > 0 (FR-011, T013)
+    train_aux_tensor: torch.Tensor | None = None
+    val_aux_tensor: torch.Tensor | None = None
+    aux_cls_loss_fns: list | None = None
+    aux_reg_loss_fn: torch.nn.Module | None = None
+    reg_means: dict[int, float] | None = None
+    reg_stds: dict[int, float] | None = None
+
+    if aux_lambda > 0.0:
+        from sealed.domain.embedding_probe import compute_aux_labels
+
+        print(f"Computing auxiliary labels for ~{len(matched)} cards...")
+        train_texts = [t for _, t, _, _ in train_data]
+        val_texts = [t for _, t, _, _ in val_data]
+
+        train_labels_np = np.stack([compute_aux_labels(t) for t in train_texts])
+        val_labels_np = np.stack([compute_aux_labels(t) for t in val_texts])
+
+        print("Computing class weights and target statistics...")
+        # Build per-classification-head pos_weight
+        pos_weights = {}
+        for head_idx in _AUX_CLASSIFICATION_INDICES:
+            pw = _compute_pos_weight(train_labels_np[:, head_idx])
+            pos_weights[head_idx] = pw
+
+        # Build per-regression-head standardization stats
+        reg_means = {}
+        reg_stds = {}
+        for head_idx in _AUX_REGRESSION_INDICES:
+            mean, std = _compute_reg_stats(train_labels_np[:, head_idx])
+            reg_means[head_idx] = mean
+            reg_stds[head_idx] = std
+
+        # Print statistics
+        colors = ["W", "U", "B", "R", "G", "C"]
+        head_names = (
+            ["is_land"]
+            + [f"card_color_{c}" for c in colors]
+            + [f"pip_count_{c}" for c in colors]
+            + ["mana_value"]
+            + [f"mana_produced_{c}" for c in colors]
+        )
+        for head_idx in _AUX_CLASSIFICATION_INDICES:
+            name = head_names[head_idx]
+            n_pos = int(np.sum(train_labels_np[:, head_idx] > 0.5))
+            n_neg = len(train_labels_np) - n_pos
+            print(f"  {name}: pos_weight={pos_weights[head_idx]:.1f} "
+                  f"({n_pos} positive / {n_neg} negative)")
+        for head_idx in _AUX_REGRESSION_INDICES:
+            name = head_names[head_idx]
+            print(f"  {name}: mean={reg_means[head_idx]:.2f}, std={reg_stds[head_idx]:.2f}")
+
+        train_aux_tensor = torch.tensor(train_labels_np, dtype=torch.float32)
+        val_aux_tensor = torch.tensor(val_labels_np, dtype=torch.float32)
+
+        # Build loss functions
+        aux_cls_loss_fns = []
+        for head_idx in _AUX_CLASSIFICATION_INDICES:
+            pw_tensor = torch.tensor([pos_weights[head_idx]], dtype=torch.float32)
+            aux_cls_loss_fns.append(
+                torch.nn.BCEWithLogitsLoss(pos_weight=pw_tensor)
+            )
+        aux_reg_loss_fn = torch.nn.MSELoss()
+
     train_dataset = TransformerTrainingDataset(
         train_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer,
         log_offset=log_offset, printing_data_list=train_pd,
+        aux_labels=train_aux_tensor,
     )
     val_dataset = TransformerTrainingDataset(
         val_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer,
         log_offset=log_offset, printing_data_list=val_pd,
+        aux_labels=val_aux_tensor,
     )
 
     # Oversample expensive cards during training so their gradient signal isn't
@@ -354,14 +538,18 @@ def train_transformer(
     device = torch.device("cuda")
 
     model = CardPriceTransformerModel(config)
-    model.to(device)
 
     # 6. Train
     best_epoch, best_val_loss, stopped_early, final_epoch = _train_loop(
         model, train_loader, val_loader, device, epochs, lr, patience,
+        aux_lambda=aux_lambda,
+        aux_cls_loss_fns=aux_cls_loss_fns,
+        aux_reg_loss_fn=aux_reg_loss_fn,
+        reg_means=reg_means,
+        reg_stds=reg_stds,
     )
 
-    # 7. Save
+    # 7. Save (always save the base model, not the aux wrapper)
     model.cpu()
     version, model_path = save_model(model, config, model_output)
 

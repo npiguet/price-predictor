@@ -180,3 +180,58 @@ class TestTransformerTrainingDataset:
                 assert mask[i].item() == 0
             # Note: real tokens could also happen to have ID 0 only if PAD is used,
             # but since PAD is ID 0, we just check padding alignment
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T006 — aux_labels in TransformerTrainingDataset
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestTransformerTrainingDatasetAuxLabels:
+    """T006: Optional aux_labels tensor in dataset."""
+
+    def test_no_aux_labels_key_without_parameter(self):
+        """When aux_labels=None (default), __getitem__ must not include 'aux_labels'."""
+        tok = _make_tokenizer()
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
+        item = ds[0]
+        assert "aux_labels" not in item
+
+    def test_aux_labels_key_present_when_provided(self):
+        """When aux_labels is provided, __getitem__ includes 'aux_labels' tensor."""
+        tok = _make_tokenizer()
+        n = len(SAMPLE_CARDS)
+        aux = torch.zeros(n, 20)
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok, aux_labels=aux)
+        item = ds[0]
+        assert "aux_labels" in item
+
+    def test_aux_labels_shape_per_item(self):
+        """Each item's aux_labels should have shape (20,)."""
+        tok = _make_tokenizer()
+        n = len(SAMPLE_CARDS)
+        aux = torch.zeros(n, 20)
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok, aux_labels=aux)
+        item = ds[0]
+        assert item["aux_labels"].shape == (20,)
+
+    def test_aux_labels_values_round_trip(self):
+        """Values stored in aux_labels tensor should be retrievable unchanged."""
+        tok = _make_tokenizer()
+        n = len(SAMPLE_CARDS)
+        aux = torch.arange(n * 20, dtype=torch.float32).reshape(n, 20)
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok, aux_labels=aux)
+        for idx in range(n):
+            item = ds[idx]
+            assert torch.allclose(item["aux_labels"], aux[idx])
+
+    def test_existing_keys_unchanged_with_aux_labels(self):
+        """Providing aux_labels must not affect other returned keys."""
+        tok = _make_tokenizer()
+        n = len(SAMPLE_CARDS)
+        aux = torch.zeros(n, 20)
+        ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok, aux_labels=aux)
+        item = ds[0]
+        assert "input_ids" in item
+        assert "attention_mask" in item
+        assert "target" in item
+        assert "meta" in item

@@ -1,0 +1,4 @@
+name: absorb
+mana cost: {W}{U}{U}
+types: instant
+spell[1]: counter target spell. you gain 3 life.

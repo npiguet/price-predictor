@@ -40,12 +40,13 @@ class CardPriceTransformerModel(nn.Module):
             nn.Linear(config.regression_hidden_dim, 1),
         )
 
-    @torch.no_grad()
-    def encode(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        """Return pooled card embedding without meta or output head.
+    def _embed(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Shared embedding computation: token+position embed → encoder → pool.
 
         Returns:
             (batch_size, 2 * d_model) — cat([max_pooled, mean_pooled])
+
+        Gradients flow through this method; use encode() for no-grad inference.
         """
         seq_len = input_ids.size(1)
         positions = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
@@ -60,6 +61,15 @@ class CardPriceTransformerModel(nn.Module):
         lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
         mean_pooled = x_mean.sum(dim=1) / lengths
         return torch.cat([max_pooled, mean_pooled], dim=-1)  # (batch, 2*d_model)
+
+    @torch.no_grad()
+    def encode(self, input_ids: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        """Return pooled card embedding without meta or output head.
+
+        Returns:
+            (batch_size, 2 * d_model) — cat([max_pooled, mean_pooled])
+        """
+        return self._embed(input_ids, attention_mask)
 
     def forward(
         self,
@@ -77,28 +87,44 @@ class CardPriceTransformerModel(nn.Module):
         Returns:
             (batch_size,) predictions in shifted-log-price space.
         """
-        seq_len = input_ids.size(1)
-        positions = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
-
-        x = self.token_embedding(input_ids) + self.position_embedding(positions)
-        x = self.embed_dropout(x)
-
-        # TransformerEncoder expects src_key_padding_mask where True = ignore
-        padding_mask = attention_mask == 0
-        x = self.encoder(x, src_key_padding_mask=padding_mask)
-
-        padding_mask_3d = (attention_mask == 0).unsqueeze(-1)  # (batch, seq, 1)
-
-        # Max pooling: padding filled with -inf so it never wins
-        x_max = x.masked_fill(padding_mask_3d, float("-inf"))
-        max_pooled = x_max.max(dim=1).values  # (batch, d_model)
-
-        # Mean pooling: padding zeroed out, divide by real token count
-        x_mean = x.masked_fill(padding_mask_3d, 0.0)
-        lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
-        mean_pooled = x_mean.sum(dim=1) / lengths  # (batch, d_model)
-
-        pooled = torch.cat([max_pooled, mean_pooled, meta], dim=-1)  # (batch, 2*d_model + meta_dim)
+        pooled_embed = self._embed(input_ids, attention_mask)  # (batch, 2*d_model)
+        pooled = torch.cat([pooled_embed, meta], dim=-1)  # (batch, 2*d_model + meta_dim)
         pooled = self.output_dropout(pooled)
         logits = self.output_head(pooled).squeeze(-1)
         return logits
+
+
+class AuxiliaryTrainingModel(nn.Module):
+    """Wrapper that adds 20 auxiliary linear heads to CardPriceTransformerModel.
+
+    Used only during training. Save checkpoint with save_model(wrapper.base, ...).
+    The 20 aux heads are discarded after training.
+    """
+
+    def __init__(self, base: CardPriceTransformerModel, n_aux: int = 20) -> None:
+        super().__init__()
+        self.base = base
+        self.aux_heads = nn.ModuleList(
+            [nn.Linear(2 * base.config.d_model, 1) for _ in range(n_aux)]
+        )
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        meta: torch.Tensor,
+    ) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        """Run forward pass returning price prediction and auxiliary predictions.
+
+        Returns:
+            price_pred: (batch_size,)
+            aux_preds: list of n_aux tensors each (batch_size,)
+        """
+        pooled_embed = self.base._embed(input_ids, attention_mask)  # (batch, 2*d_model)
+        # Price prediction through base model's output head
+        pooled_with_meta = torch.cat([pooled_embed, meta], dim=-1)
+        pooled_with_meta = self.base.output_dropout(pooled_with_meta)
+        price_pred = self.base.output_head(pooled_with_meta).squeeze(-1)
+        # Auxiliary predictions (raw pooled embedding, no dropout)
+        aux_preds = [head(pooled_embed).squeeze(-1) for head in self.aux_heads]
+        return price_pred, aux_preds

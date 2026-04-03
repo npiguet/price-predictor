@@ -1,0 +1,8 @@
+name: world breaker
+mana cost: {6}{G}
+types: creature eldrazi
+power toughness: 5/7
+static: devoid
+static: reach
+activated[1]: {2}{C}, sacrifice a land: return CARDNAME from your graveyard to your hand.
+triggered: when you cast this spell, exile target artifact, enchantment, or land.

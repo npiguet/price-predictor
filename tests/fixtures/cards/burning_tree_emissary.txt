@@ -1,0 +1,5 @@
+name: burning-tree emissary
+mana cost: {R/G}{R/G}
+types: creature human shaman
+power toughness: 2/2
+triggered: when CARDNAME enters, add {R}{G}.

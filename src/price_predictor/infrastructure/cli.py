@@ -83,6 +83,9 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
     train_transformer.add_argument("--ff-dim", type=int, default=1024,
                                    help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
+    train_transformer.add_argument("--aux-lambda", type=float, default=0.0,
+                                   help="Weight for auxiliary mana-feature losses "
+                                        "(0=disabled, 0.2=recommended starting point).")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -565,6 +568,7 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             n_layers=args.n_layers,
             n_heads=args.n_heads,
             ff_dim=args.ff_dim,
+            aux_lambda=args.aux_lambda,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

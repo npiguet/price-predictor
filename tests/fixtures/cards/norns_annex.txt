@@ -1,0 +1,4 @@
+name: norn's annex
+mana cost: {3}{W/P}{W/P}
+types: artifact
+static: creatures can't attack you or planeswalkers you control unless their controller pays {W/P} for each of those creatures.

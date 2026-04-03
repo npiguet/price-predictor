@@ -1,4 +1,4 @@
-"""T003/T004 — Unit tests for embedding_probe domain module."""
+"""Tests for embedding_probe domain module."""
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -19,6 +19,7 @@ from sealed.domain.embedding_probe import (
     build_default_probes,
     run_probes,
 )
+from tests.conftest import load_card_fixture
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -91,9 +92,11 @@ class TestExtractCardColor:
         assert extract_card_color(cards, "G")[0] == pytest.approx(0.0)
 
     def test_land_no_color(self):
+        # Land (no mana cost) → no colored pips, so W/U/B/R/G=0 and C=1 (colorless)
         cards = [_card(LAND_TEXT)]
-        for color in ("W", "U", "B", "R", "G", "C"):
+        for color in ("W", "U", "B", "R", "G"):
             assert extract_card_color(cards, color)[0] == pytest.approx(0.0)
+        assert extract_card_color(cards, "C")[0] == pytest.approx(1.0)
 
     def test_hybrid_card_counts_both_colors(self):
         cards = [_card(HYBRID_TEXT)]
@@ -276,3 +279,220 @@ class TestRunProbes:
             results = run_probes(cards, probes)
 
         assert results[0].n_samples == 20
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T002 — Corrected card color labels (using real card fixture files)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fixture_card(filename: str, embed_dim: int = 4) -> CardData:
+    """Create a CardData from a real card fixture file."""
+    text = load_card_fixture(filename)
+    rng = np.random.default_rng(abs(hash(filename)) % (2**31))
+    return CardData(
+        name=filename,
+        embedding=rng.standard_normal(embed_dim).astype(np.float32),
+        text=text,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T004 — compute_aux_labels() (20-element label vector)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestComputeAuxLabels:
+    """T004: Verify compute_aux_labels() returns correct 20-element array.
+
+    Label order (data-model.md):
+      0: is_land
+      1-6: card_color W/U/B/R/G/C
+      7-12: pip_count W/U/B/R/G/C
+      13: mana_value
+      14-19: mana_produced W/U/B/R/G/C
+    """
+
+    def test_returns_ndarray_of_length_20(self):
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("lightning_bolt.txt")
+        result = compute_aux_labels(text)
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (20,)
+
+    def test_is_land_label_for_land(self):
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("forest.txt")
+        result = compute_aux_labels(text)
+        assert result[0] == pytest.approx(1.0), "forest is_land should be 1"
+
+    def test_is_land_label_for_non_land(self):
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("lightning_bolt.txt")
+        result = compute_aux_labels(text)
+        assert result[0] == pytest.approx(0.0), "lightning bolt is_land should be 0"
+
+    def test_card_color_uses_corrected_definition(self):
+        # world_breaker is devoid → all color labels 0 except C=1
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("world_breaker.txt")
+        result = compute_aux_labels(text)
+        # indices 1-5: W/U/B/R/G = 0 (devoid)
+        for i, color in enumerate(["W", "U", "B", "R", "G"], start=1):
+            assert result[i] == pytest.approx(0.0), f"devoid: color_{color} should be 0"
+        # index 6: C = 1 (colorless due to devoid)
+        assert result[6] == pytest.approx(1.0), "devoid: color_C should be 1"
+
+    def test_pip_counts_match_count_pips(self):
+        from sealed.domain.embedding_probe import compute_aux_labels
+        from sealed.domain.mana_scorer import count_pips
+        text = load_card_fixture("norns_annex.txt")
+        result = compute_aux_labels(text)
+        pips = count_pips([text])
+        colors = ["W", "U", "B", "R", "G", "C"]
+        for i, color in enumerate(colors, start=7):
+            expected = pips.counts.get(color, 0.0)
+            assert result[i] == pytest.approx(expected), f"pip_count_{color} mismatch"
+
+    def test_mana_value_matches_compute_mana_value(self):
+        from sealed.domain.embedding_probe import compute_aux_labels
+        from sealed.domain.mana_scorer import compute_mana_value
+        text = load_card_fixture("norns_annex.txt")  # {3}{W/P}{W/P} → MV 5
+        result = compute_aux_labels(text)
+        # Extract mana cost line
+        for line in text.splitlines():
+            if line.strip().lower().startswith("mana cost:"):
+                cost = line.strip()[len("mana cost:"):].strip()
+                expected_mv = compute_mana_value(cost)
+                break
+        assert result[13] == pytest.approx(expected_mv)
+
+    def test_mana_produced_for_land(self):
+        # forest produces G
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("forest.txt")
+        result = compute_aux_labels(text)
+        # indices 14-19: W/U/B/R/G/C
+        assert result[18] == pytest.approx(1.0), "forest should produce G"
+        for i, color in zip([14, 15, 16, 17, 19], ["W", "U", "B", "R", "C"]):
+            assert result[i] == pytest.approx(0.0), f"forest should not produce {color}"
+
+    def test_mana_produced_for_mana_dork(self):
+        # llanowar elves produces G
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("llanowar_elves.txt")
+        result = compute_aux_labels(text)
+        assert result[18] == pytest.approx(1.0), "llanowar elves should produce G"
+        for i in [14, 15, 16, 17, 19]:
+            assert result[i] == pytest.approx(0.0), f"llanowar should not produce index {i}"
+
+    def test_mana_produced_for_artifact_mana_producer(self):
+        # sol ring produces C
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("sol_ring.txt")
+        result = compute_aux_labels(text)
+        assert result[19] == pytest.approx(1.0), "sol ring should produce C"
+        for i in [14, 15, 16, 17, 18]:
+            assert result[i] == pytest.approx(0.0), f"sol ring should not produce index {i}"
+
+    def test_non_mana_card_produces_nothing(self):
+        # lightning bolt produces no mana
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("lightning_bolt.txt")
+        result = compute_aux_labels(text)
+        for i in range(14, 20):
+            assert result[i] == pytest.approx(0.0), f"lightning bolt should not produce mana (index {i})"
+
+    def test_devoid_does_not_affect_pip_counts(self):
+        # world_breaker: {6}{G} + devoid → pip_G = 1.0 (pips unaffected by devoid)
+        from sealed.domain.embedding_probe import compute_aux_labels
+        text = load_card_fixture("world_breaker.txt")
+        result = compute_aux_labels(text)
+        # pip_count_G is index 11
+        assert result[11] > 0.0, "devoid does not change pip counts"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T002 — Corrected card color labels (using real card fixture files)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCorrectedCardColorLabels:
+    """T002: Verify corrected card color label logic using real fixture files.
+
+    Spec acceptance scenarios:
+      1. {R} → R=1, all others=0
+      2. {C} only → C=1, W/U/B/R/G=0
+      3. {3} generic only → C=1
+      4. land with no mana cost → C=1
+      5. devoid + colored pips → C=1, W/U/B/R/G=0
+      6. hybrid {R/G} → R=1, G=1, C=0
+      7. Phyrexian {W/P} → W=1, C=0
+    """
+
+    def test_red_spell_color_correct(self):
+        # Scenario 1: lightning bolt {R} → R=1, others=0
+        cards = [_fixture_card("lightning_bolt.txt")]
+        assert extract_card_color(cards, "R")[0] == pytest.approx(1.0)
+        for color in ("W", "U", "B", "G", "C"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_colorless_pip_card_is_colorless(self):
+        # Scenario 2: eldritch immunity {C} → C=1, colors=0
+        cards = [_fixture_card("eldritch_immunity.txt")]
+        assert extract_card_color(cards, "C")[0] == pytest.approx(1.0)
+        for color in ("W", "U", "B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_generic_only_cost_is_colorless(self):
+        # Scenario 3: abandoned sarcophagus {3} → C=1
+        cards = [_fixture_card("abandoned_sarcophagus.txt")]
+        assert extract_card_color(cards, "C")[0] == pytest.approx(1.0)
+        for color in ("W", "U", "B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_land_no_mana_cost_is_colorless(self):
+        # Scenario 4: forest (land, no mana cost line) → C=1
+        cards = [_fixture_card("forest.txt")]
+        assert extract_card_color(cards, "C")[0] == pytest.approx(1.0)
+        for color in ("W", "U", "B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_devoid_card_is_colorless(self):
+        # Scenario 5: world breaker {6}{G} + devoid → C=1, G=0
+        cards = [_fixture_card("world_breaker.txt")]
+        assert extract_card_color(cards, "C")[0] == pytest.approx(1.0)
+        for color in ("W", "U", "B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_hybrid_card_color_correct(self):
+        # Scenario 6: burning-tree emissary {R/G}{R/G} → R=1, G=1, C=0
+        cards = [_fixture_card("burning_tree_emissary.txt")]
+        assert extract_card_color(cards, "R")[0] == pytest.approx(1.0)
+        assert extract_card_color(cards, "G")[0] == pytest.approx(1.0)
+        assert extract_card_color(cards, "C")[0] == pytest.approx(0.0)
+        for color in ("W", "U", "B"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_phyrexian_card_color_correct(self):
+        # Scenario 7: norn's annex {3}{W/P}{W/P} → W=1, C=0
+        cards = [_fixture_card("norns_annex.txt")]
+        assert extract_card_color(cards, "W")[0] == pytest.approx(1.0)
+        assert extract_card_color(cards, "C")[0] == pytest.approx(0.0)
+        for color in ("U", "B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color
+
+    def test_devoid_does_not_change_pip_counts(self):
+        # World breaker has {G} in cost → pip_G > 0 even though color G = 0
+        cards = [_fixture_card("world_breaker.txt")]
+        # Pip counts use the raw mana cost, not affected by devoid
+        pips_g = extract_pip_counts(cards, "G")[0]
+        assert pips_g > 0.0, "devoid card should still have G pip count > 0"
+        # But card color G must be 0 (devoid overrides)
+        assert extract_card_color(cards, "G")[0] == pytest.approx(0.0)
+
+    def test_multicolor_card_colors_correct(self):
+        # absorb {W}{U}{U} → W=1, U=1, C=0
+        cards = [_fixture_card("absorb.txt")]
+        assert extract_card_color(cards, "W")[0] == pytest.approx(1.0)
+        assert extract_card_color(cards, "U")[0] == pytest.approx(1.0)
+        assert extract_card_color(cards, "C")[0] == pytest.approx(0.0)
+        for color in ("B", "R", "G"):
+            assert extract_card_color(cards, color)[0] == pytest.approx(0.0), color

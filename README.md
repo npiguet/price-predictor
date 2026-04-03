@@ -86,6 +86,9 @@ python -m price_predictor train sklearn
 # Train the transformer model (requires vocabulary to be built first)
 python -m price_predictor vocabulary           # step 1: build vocab
 python -m price_predictor train transformer --epochs 20 --batch-size 64
+
+# Train the transformer with auxiliary supervision (mana-aware embeddings)
+python -m price_predictor train transformer --aux-lambda 0.2
 ```
 
 Models are saved to `models/sklearn/` and `models/transformer/` respectively,
@@ -94,6 +97,11 @@ with timestamped filenames and a `latest` copy.
 Options: `--output-dir`, `--prices-path`, `--printings-path`, `--model-output`,
 `--test-split`, `--random-seed`. Transformer adds `--batch-size`, `--epochs`,
 `--lr`, `--patience`, `--vocab-path`. See `python -m price_predictor train sklearn --help`.
+
+The `--aux-lambda` flag (default `0.0`) enables auxiliary supervision during transformer
+training: 20 linear heads teach the encoder to represent mana cost, card color, pip
+counts, and mana production. After training, validate with `python -m sealed validate-embeddings`.
+See `specs/015-embeddings-retraining/quickstart.md` for detailed tuning guidance.
 
 ### Predict a card price
 
