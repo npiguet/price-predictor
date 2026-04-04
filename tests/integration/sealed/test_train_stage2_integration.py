@@ -97,7 +97,7 @@ def _run_n_batches(env: dict, n_batches: int, batch_size: int = 2) -> None:
             raise _Stop()
 
     use_case = TrainStage2UseCase()
-    with patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(PoolModelStore, "save", _save_and_stop):
             with pytest.raises(_Stop):
                 use_case.execute(
@@ -156,7 +156,7 @@ def test_pool_reshuffled_before_each_pick(env):
             raise _Stop()
 
     use_case = TrainStage2UseCase()
-    with patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(EpisodeRunner, "run", capture_run):
             with patch.object(PoolModelStore, "save", _save_and_stop):
                 with pytest.raises(_Stop):
@@ -200,7 +200,7 @@ def test_mana_scores_computed_for_completed_episodes(env):
             raise _Stop()
 
     use_case = TrainStage2UseCase()
-    with patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(PPOTrainer, "update", capture_update):
             with patch.object(PoolModelStore, "save", _save_and_stop):
                 with pytest.raises(_Stop):

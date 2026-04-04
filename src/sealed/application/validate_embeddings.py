@@ -25,8 +25,14 @@ class ValidateEmbeddingsUseCase:
         threshold_accuracy: float = 0.95,
         threshold_r2: float = 0.85,
         on_result: Callable[[ProbeResult], None] | None = None,
+        embed_dim: int | None = None,
     ) -> ValidationResult:
         """Discover cards, run probes, return ValidationResult.
+
+        Args:
+            embed_dim: If provided, probes use only the first *embed_dim* dimensions
+                of each embedding — i.e., the transformer-learned portion, excluding
+                any appended explicit features.
 
         Raises:
             ValueError: if fewer than 50 paired cards are found.
@@ -41,7 +47,7 @@ class ValidateEmbeddingsUseCase:
 
         n_lands = sum(1 for c in cards if _is_land_text(c.text))
         probes = build_default_probes(threshold_accuracy, threshold_r2)
-        results = run_probes(cards, probes, on_result=on_result)
+        results = run_probes(cards, probes, on_result=on_result, embed_dim=embed_dim)
         all_passed = all(r.passed for r in results)
 
         return ValidationResult(

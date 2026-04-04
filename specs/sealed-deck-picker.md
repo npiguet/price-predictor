@@ -13,21 +13,28 @@ increasing complexity.
 
 # Card Representation
 
-Each card is encoded by your pretrained price predictor transformer, producing a 512-dimensional vector (256 mean pool +
-256 max pool over ~300 tokens of structured card text). The `name:` line is stripped from the card text before encoding
-so that the embedding captures what the card does, not its name. This encoder is frozen initially and unfrozen in later
-training stages.
+Each card is encoded by your pretrained price predictor transformer, producing a **527-dimensional vector**:
+- 512-dimensional transformer embedding (256 mean pool + 256 max pool over ~300 tokens of structured card text)
+- 15 explicit mana features appended directly (pip counts W/U/B/R/G/C, generic mana count, X count, mana value,
+  and mana produced W/U/B/R/G/C, each normalized to approximately [0, 1])
+
+The `name:` line is stripped from the card text before encoding so that the transformer portion captures what the
+card does, not its name. The 15 mana features are parsed deterministically from the card text and bypass the
+transformer entirely — they are exact values, not learned representations. This encoder is frozen initially and
+unfrozen in later training stages.
 
 At the pool level, each of the 96 entries (90 pool cards + 6 basic land slots) is represented as:
 
-- card_embedding [512]
+- card_embedding [527] (512-dim transformer embedding + 15 explicit mana features)
 - pick_count [1] (how many times this slot has been picked; 0 or 1 for booster cards, 0..N for basic land slots)
 - available_flag [1] (booster cards: cleared to 0 after first pick; basic land slots: always 1)
 - padding [6] (reserved, always 0)
-- => 520 features per card
+- => 535 features per card (padded to 536 for n_heads=8 divisibility in the Pool Transformer)
 
-Note: land type is intentionally not provided as an explicit flag. The model is expected to infer it from the
-card embedding, which encodes the card's Oracle text including its type line.
+Note: land type is intentionally not provided as an explicit flag. The model can infer it from the
+card embedding, which encodes the card's Oracle text including its type line. The 15 explicit mana features
+(pip counts, mana value) give the pool transformer direct access to mana cost information without relying on
+the transformer to decode it from text.
 
 Card slots represent stage 1 of the model. The all have the same number of features so that they can be cleanly fed to
 the transformer at stage 2.
@@ -46,7 +53,7 @@ A two-stage architecture:
 - Stage 1 — Card encoder: Pretrained (from price predictor), reused for each card
     - [Structured Oracle text] → [Pretrained transformer] → [512-dim card embedding]
 - Stage 2 — Pool-level transformer (trained from scratch)
-    - [96 × 520 features] → [Small transformer] → [96 logits] → [masked softmax] → [pick]
+    - [96 × 536 features] → [Small transformer] → [96 logits] → [masked softmax] → [pick]
 
 The pool transformer attends freely over all 96 cards at every step, including already-picked ones, so it can use the
 current deck state as context for each new pick.
@@ -55,7 +62,7 @@ The exact size of the transformer model will be the subject of multiple experime
 set it at:
 - layers: 8
 - heads: 8
-- d_model: 520  (= 512-dim card embedding + 2 flags + 5 padding; 520 / 8 = 65 ✓)
+- d_model: 536  (= 527-dim card embedding + 8 flags; ceil(535/8)×8 = 536; 536 / 8 = 67 ✓)
 - d_ff: 2048
 
 # Pick Phase
@@ -105,44 +112,48 @@ The training dataset is pre-generated before training begins. The preparation
 consists of two independent steps that can be run separately:
 
 #### Step 1 - Card Embedding Generation and validation
-The Python application scans cards-path and generates a 512-dimensional embedding
-vector for each card found, following the process described in spec
-006-card-script-parsing. Each embedding is stored as a .npz file named after
-the card (e.g. Lightning-Bolt.npz) in the same cards-path folder. This step is
-skipped for cards that already have a corresponding .npz file, making it safe
-to run incrementally when new cards are added or when the encoder is retrained.
+The Python application scans cards-path and generates a **527-dimensional embedding vector** for each card
+found, following the process described in spec 006-card-script-parsing. The 527 dimensions consist of the
+512-dim transformer embedding (2×256 max+mean pool) plus 15 explicit mana features appended directly. Each
+embedding is stored as a .npz file named after the card (e.g. Lightning-Bolt.npz) in the same cards-path
+folder. This step is skipped for cards that already have a corresponding .npz file, making it safe to run
+incrementally when new cards are added or when the encoder is retrained.
 
-After generating embeddings, a validation step probes whether the embeddings actually encode the features 
-that Stage 2 training depends on. Validation uses linear probing: for each feature, a lightweight linear
-classifier or regressor is trained on top of the frozen embeddings using ground truth labels extracted 
-from card text files. A feature is considered encoded if its probe achieves a score above a minimum 
-threshold. Ground truth extraction reuses the same parsing logic as the Stage 2 mana scorer 
+After generating embeddings, a validation step probes whether the **transformer portion** of the embeddings
+encodes the mana-relevant features that Stage 2 training depends on. Validation uses linear probing on the
+first 512 dimensions only (pass `--embed-dim 512` to exclude the appended mana features). For each feature,
+a lightweight linear classifier or regressor is trained on top of the frozen embeddings using ground truth
+labels extracted from card text files. A feature is considered encoded if its probe achieves a score above
+a minimum threshold. Ground truth extraction reuses the same parsing logic as the Stage 2 mana scorer
 (pip counting, source counting, type-line parsing).
 
 | Feature                                     | Probe type                         | Ground truth source                   | Pass threshold            |
-|---------------------------------------------|------------------------------------|---------------------------------------|---------------------------|                                                                                                                                                                                                                                                                                                                                                              
-| Is land                                     | Logistic regression (binary)       | Card types line                       | Accuracy ≥ 0.99           |                                                                                                                                                                                                                                                                                                 
-| Card color (per W/U/B/R/G/C)                | Logistic regression, one per color | `mana cost:` pip counts > 0           | Accuracy ≥ 0.95 per color |                                                                                                                                                                                                                                                
-| Pip counts (per W/U/B/R/G/C)                | Linear regression, one per color   | `mana cost:` parsed pip counts        | R² ≥ 0.85 per color       |                                                                                                                                                                                                                                                     
-| Mana value                                  | Linear regression                  | Sum of generic + colored pips (X = 0) | R² ≥ 0.90                 |                                                                                                                                                                                                                                                                                         
-| Mana produced (per W/U/B/R/G/C, lands only) | Logistic regression, one per color | `activated[N]: {T}: add` abilities    | Accuracy ≥ 0.95 per color |        
+|---------------------------------------------|------------------------------------|---------------------------------------|---------------------------|
+| Is land                                     | Logistic regression (binary)       | Card types line                       | Accuracy ≥ 0.99           |
+| Card color (per W/U/B/R/G/C)                | Logistic regression, one per color | `mana cost:` pip counts > 0           | Accuracy ≥ 0.95 per color |
+| Pip counts (per W/U/B/R/G/C)                | Ordinal classification, one per pip| `mana cost:` parsed pip counts        | Exact match ≥ 0.90        |
+| Mana value                                  | Ordinal classification             | Sum of generic + colored pips (X = 0) | Exact match ≥ 0.75        |
+| Mana produced (per W/U/B/R/G/C)             | Logistic regression, one per color | `activated[N]: {T}: add` abilities    | Accuracy ≥ 0.95 per color |
 
 The command exits with code 0 if all probes pass, code 1 if any fail. Both passing and failing results are 
-printed with the achieved score and threshold. Failure should be treated as a blocker: if an embedding cannot
-express that a Forest produces green mana or that a {2}{W}{W} spell
-requires two white sources, no amount of reward shaping in Stage 2 will compensate.
+printed with the achieved score and threshold. Failure should be treated as a blocker: if the transformer
+embedding cannot express that a Forest produces green mana or that a {2}{W}{W} spell requires two white
+sources, no amount of reward shaping in Stage 2 will compensate.
+
+Note: the 15 appended mana features in the full 527-dim embedding already encode pip counts and mana value
+exactly — probes on the full embedding would trivially pass. Probing only the 512-dim transformer portion
+validates that the *learned representation* is mana-aware, which ensures the quality of the encoder is
+sound for future fine-tuning stages.
 
 ```bash
 python -m sealed validate-embeddings \
     --cards-path [path] \
-    --threshold-accuracy [float] \
-    --threshold-r2 [float]
+    --embed-dim 512
 ```
 
 Defaults:
 - **--cards-path**: output/cardsfolder/
-- **--threshold-accuracy**: 0.95 (applied to all classification probes)
-- **--threshold-r2**: 0.85 (applied to all regression probes; mana value uses a fixed minimum of 0.90)
+- **--embed-dim**: auto-detected from encoder checkpoint (2 × d_model of the price predictor transformer)
 
 
 #### Step 2 - Pool Generation

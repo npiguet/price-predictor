@@ -13,6 +13,11 @@ from sealed.domain.mana_scorer import (
     count_actual_sources,
     compute_mana_score,
     compute_mana_value,
+    count_generic,
+    count_x,
+    count_mana_produced,
+    extract_mana_features,
+    normalize_mana_features,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,6 +419,150 @@ class TestComputeManaValue:
 
     def test_x_only(self):
         assert compute_mana_value("{X}") == pytest.approx(0.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Explicit mana feature extraction
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCountGeneric:
+    def test_generic_from_mixed_cost(self):
+        assert count_generic("{3}{W}{W}") == pytest.approx(3.0)
+
+    def test_no_generic(self):
+        assert count_generic("{R}") == pytest.approx(0.0)
+
+    def test_empty_string(self):
+        assert count_generic("") == pytest.approx(0.0)
+
+    def test_multiple_generic_symbols(self):
+        assert count_generic("{2}{2}") == pytest.approx(4.0)
+
+    def test_x_not_counted_as_generic(self):
+        assert count_generic("{X}{R}") == pytest.approx(0.0)
+
+    def test_colorless_pip_not_counted_as_generic(self):
+        assert count_generic("{C}{C}") == pytest.approx(0.0)
+
+    def test_hybrid_not_counted_as_generic(self):
+        assert count_generic("{G/R}") == pytest.approx(0.0)
+
+
+class TestCountX:
+    def test_single_x(self):
+        assert count_x("{X}{R}") == 1
+
+    def test_double_x(self):
+        assert count_x("{X}{X}{G}") == 2
+
+    def test_no_x(self):
+        assert count_x("{3}{W}") == 0
+
+    def test_empty_string(self):
+        assert count_x("") == 0
+
+    def test_x_lowercase_not_matched(self):
+        # Only uppercase {X} is a valid mana symbol; lowercase won't appear in practice
+        assert count_x("{x}") == 0
+
+
+class TestCountManaProduced:
+    def test_forest_produces_green(self):
+        text = "name: forest\ntypes: basic land forest\nactivated[1]: {T}: add {G}.\n"
+        result = count_mana_produced(text)
+        assert result.get("G", 0.0) == pytest.approx(1.0)
+
+    def test_sol_ring_produces_two_colorless(self):
+        # Sol Ring: {T}: add {C}{C}
+        text = "name: sol ring\nmana cost: {1}\ntypes: artifact\nactivated[1]: {T}: add {C}{C}.\n"
+        result = count_mana_produced(text)
+        assert result.get("C", 0.0) == pytest.approx(2.0)
+
+    def test_non_mana_card_empty(self):
+        text = "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
+        result = count_mana_produced(text)
+        assert result == {}
+
+    def test_dual_land_produces_two_colors(self):
+        text = "name: tundra\ntypes: land plains island\nactivated[1]: {T}: add {W} or {U}.\n"
+        result = count_mana_produced(text)
+        assert result.get("W", 0.0) == pytest.approx(1.0)
+        assert result.get("U", 0.0) == pytest.approx(1.0)
+
+
+class TestExtractManaFeatures:
+    def test_returns_15_elements(self):
+        result = extract_mana_features("name: lightning bolt\nmana cost: {R}\ntypes: instant\n")
+        assert len(result) == 15
+
+    def test_red_spell_features(self):
+        # {R}: pip_W=0, pip_U=0, pip_B=0, pip_R=1, pip_G=0, pip_C=0,
+        #      generic=0, x=0, mv=1, no mana produced
+        result = extract_mana_features("name: lightning bolt\nmana cost: {R}\ntypes: instant\n")
+        assert result[3] == pytest.approx(1.0)  # pip_R
+        assert result[8] == pytest.approx(1.0)  # mana_value
+        for i in [0, 1, 2, 4, 5, 6, 7]:
+            assert result[i] == pytest.approx(0.0)
+
+    def test_land_no_mana_cost(self):
+        # Land has no mana cost: all pip/generic/x/mv are 0
+        text = "name: forest\ntypes: basic land forest\nactivated[1]: {T}: add {G}.\n"
+        result = extract_mana_features(text)
+        for i in range(9):
+            assert result[i] == pytest.approx(0.0)
+        assert result[13] == pytest.approx(1.0)  # mana_produced_G (index 9+4=13)
+
+    def test_generic_mana_counted(self):
+        # {3}{W}{W}: generic=3, pip_W=2, mv=5
+        text = "name: baneslayer\nmana cost: {3}{W}{W}\ntypes: creature angel\n"
+        result = extract_mana_features(text)
+        assert result[6] == pytest.approx(3.0)   # generic
+        assert result[0] == pytest.approx(2.0)   # pip_W
+        assert result[8] == pytest.approx(5.0)   # mana_value
+
+    def test_x_counted(self):
+        text = "name: fireball\nmana cost: {X}{R}\ntypes: instant\n"
+        result = extract_mana_features(text)
+        assert result[7] == pytest.approx(1.0)   # x_count
+        assert result[3] == pytest.approx(1.0)   # pip_R
+        assert result[8] == pytest.approx(1.0)   # mana_value ({X} = 0, {R} = 1)
+
+
+class TestNormalizeManaFeatures:
+    def test_returns_15_elements(self):
+        raw = [0.0] * 15
+        assert len(normalize_mana_features(raw)) == 15
+
+    def test_all_zeros_stays_zero(self):
+        raw = [0.0] * 15
+        for v in normalize_mana_features(raw):
+            assert v == pytest.approx(0.0)
+
+    def test_values_in_0_1_range(self):
+        # Use large values to test clamping
+        raw = [8.0, 8.0, 8.0, 8.0, 8.0, 3.0, 15.0, 3.0, 16.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        for v in normalize_mana_features(raw):
+            assert 0.0 <= v <= 1.0, f"Value {v} out of [0, 1]"
+
+    def test_max_values_normalize_to_one(self):
+        raw = [8.0, 8.0, 8.0, 8.0, 8.0, 3.0, 15.0, 3.0, 16.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+        norm = normalize_mana_features(raw)
+        for v in norm:
+            assert v == pytest.approx(1.0)
+
+    def test_pip_r_normalization(self):
+        # pip_R (index 3) ÷ 8.0
+        raw = [0.0] * 15
+        raw[3] = 4.0  # 4 R pips
+        norm = normalize_mana_features(raw)
+        assert norm[3] == pytest.approx(0.5)
+
+    def test_mana_value_normalization(self):
+        # mana_value (index 8) ÷ 16.0
+        raw = [0.0] * 15
+        raw[8] = 8.0
+        norm = normalize_mana_features(raw)
+        assert norm[8] == pytest.approx(0.5)
 
     def test_complex_multicolor(self):
         # {2}{W}{U}{B} → 2+1+1+1 = 5

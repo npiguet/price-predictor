@@ -75,7 +75,11 @@ def _raw_to_class_idx_tensor(labels: torch.Tensor, classes: list[float]) -> torc
     return dists.argmin(dim=-1)
 
 
-def _emd_loss(logits: torch.Tensor, class_indices: torch.Tensor) -> torch.Tensor:
+def _emd_loss(
+    logits: torch.Tensor,
+    class_indices: torch.Tensor,
+    class_weights: torch.Tensor | None = None,
+) -> torch.Tensor:
     """Earth Mover's Distance loss for ordinal classification (FR-006).
 
     Computes L1 distance between CDF of softmax output and CDF of one-hot true label:
@@ -83,8 +87,11 @@ def _emd_loss(logits: torch.Tensor, class_indices: torch.Tensor) -> torch.Tensor
 
     logits: (batch, K) raw logits for K ordinal classes
     class_indices: (batch,) integer class indices (ground truth)
+    class_weights: (K,) per-class inverse-frequency weights. When provided, each
+        sample is weighted by class_weights[class_indices[i]], so rare buckets
+        contribute proportionally more gradient (analogous to pos_weight for BCE).
 
-    Returns: scalar mean EMD loss across the batch
+    Returns: scalar (weighted) mean EMD loss across the batch
     """
     K = logits.shape[-1]
     probs = torch.softmax(logits, dim=-1)                          # (batch, K)
@@ -92,7 +99,11 @@ def _emd_loss(logits: torch.Tensor, class_indices: torch.Tensor) -> torch.Tensor
     k_range = torch.arange(K - 1, device=logits.device)           # (K-1,)
     # CDF_true[k] = 1 if k >= class_idx else 0  (step function at class_idx)
     cdf_true = (k_range.unsqueeze(0) >= class_indices.unsqueeze(1)).float()  # (batch, K-1)
-    return torch.abs(cdf_pred - cdf_true).sum(dim=-1).mean()
+    per_sample = torch.abs(cdf_pred - cdf_true).sum(dim=-1)        # (batch,)
+    if class_weights is not None:
+        w = class_weights[class_indices]                           # (batch,)
+        return (w * per_sample).sum() / w.sum()
+    return per_sample.mean()
 
 
 def _combined_loss(
@@ -250,6 +261,7 @@ def _train_loop(
     aux_lambda: float = 0.0,
     aux_cls_loss_fns: list | None = None,
     ordinal_class_maps: dict[int, list[float]] | None = None,
+    ordinal_class_weights: dict[int, list[float]] | None = None,
 ) -> tuple[int, float, bool, int]:
     """Run the training loop with early stopping.
 
@@ -273,13 +285,18 @@ def _train_loop(
             loss_fn.to(device)
 
     # Pre-build ordinal tensors on device once — avoids per-batch CPU→GPU transfers
-    # for class boundary values and k_range inside _compute_aux_losses.
-    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
+    # for class boundary values, k_range, and class weights inside _compute_aux_losses.
+    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]] = {}
     if use_aux and ordinal_class_maps:
         for head_idx, classes in ordinal_class_maps.items():
             classes_t = torch.tensor(classes, dtype=torch.float32, device=device)
             k_range_t = torch.arange(len(classes) - 1, dtype=torch.long, device=device)
-            ordinal_tensors[head_idx] = (classes_t, k_range_t)
+            class_weight_t: torch.Tensor | None = None
+            if ordinal_class_weights and head_idx in ordinal_class_weights:
+                class_weight_t = torch.tensor(
+                    ordinal_class_weights[head_idx], dtype=torch.float32, device=device
+                )
+            ordinal_tensors[head_idx] = (classes_t, k_range_t, class_weight_t)
 
     optimizer = torch.optim.AdamW(training_model.parameters(), lr=lr)
 
@@ -348,7 +365,7 @@ def _train_loop(
                     aux_labels_batch = batch["aux_labels"].to(device)
                     aux_losses = _compute_aux_losses(
                         aux_preds, aux_labels_batch,
-                        aux_cls_loss_fns, ordinal_class_maps or {},
+                        aux_cls_loss_fns, ordinal_tensors,
                     )
                     val_losses.append(l_price.item())
                     val_aux_losses.append(sum(aux_losses).item())
@@ -399,7 +416,7 @@ def _compute_aux_losses(
     aux_preds: list[torch.Tensor],
     aux_labels: torch.Tensor,
     cls_loss_fns: list,
-    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor]],
+    ordinal_tensors: dict[int, tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]],
 ) -> list[torch.Tensor]:
     """Compute per-head auxiliary losses.
 
@@ -407,7 +424,9 @@ def _compute_aux_losses(
     Ordinal heads (indices 7-13): EMD loss using pre-built device tensors to avoid
     per-batch CPU→GPU transfers.
 
-    ordinal_tensors: maps head_idx → (classes_t, k_range_t) already on device.
+    ordinal_tensors: maps head_idx → (classes_t, k_range_t, class_weight_t) already
+        on device. class_weight_t is (K,) inverse-frequency weights, or None for
+        uniform weighting.
     """
     losses = []
     cls_idx = 0
@@ -419,14 +438,11 @@ def _compute_aux_losses(
             cls_idx += 1
         else:
             # Ordinal EMD loss — use pre-built tensors (no per-batch tensor creation)
-            classes_t, k_range_t = ordinal_tensors[head_idx]
+            classes_t, _k_range_t, class_weight_t = ordinal_tensors[head_idx]
             raw_labels = aux_labels[:, head_idx]
             dists = torch.abs(raw_labels.unsqueeze(1) - classes_t.unsqueeze(0))
             class_indices = dists.argmin(dim=-1)
-            probs = torch.softmax(aux_preds[head_idx], dim=-1)
-            cdf_pred = torch.cumsum(probs, dim=-1)[:, :-1]
-            cdf_true = (k_range_t.unsqueeze(0) >= class_indices.unsqueeze(1)).float()
-            loss = torch.abs(cdf_pred - cdf_true).sum(dim=-1).mean()
+            loss = _emd_loss(aux_preds[head_idx], class_indices, class_weight_t)
             losses.append(loss)
     return losses
 
@@ -502,6 +518,7 @@ def train_transformer(
     train_aux_tensor: torch.Tensor | None = None
     val_aux_tensor: torch.Tensor | None = None
     aux_cls_loss_fns: list | None = None
+    ordinal_class_weights: dict[int, list[float]] = {}
 
     if aux_lambda > 0.0:
         from sealed.domain.embedding_probe import compute_aux_labels
@@ -533,13 +550,22 @@ def train_transformer(
             n_neg = len(train_labels_np) - n_pos
             print(f"  {name}: pos_weight={pos_weights[head_idx]:.1f} "
                   f"({n_pos} positive / {n_neg} negative)")
+        ordinal_class_weights: dict[int, list[float]] = {}
         for head_idx in _AUX_ORDINAL_INDICES:
             name = head_names[head_idx]
             classes = ORDINAL_CLASS_MAPS[head_idx]
+            K = len(classes)
             vals = train_labels_np[:, head_idx]
+            n_total = len(vals)
             counts = [int(np.sum(np.abs(vals - c) < 1e-6)) for c in classes]
-            dist_str = ", ".join(f"{c}:{n}" for c, n in zip(classes, counts))
-            print(f"  {name} (K={len(classes)}): {dist_str}")
+            # Inverse-frequency weights: weight[k] = total / (K * count[k]), capped at 100.
+            # Unseen classes get the maximum observed weight (no infinite weights).
+            raw_weights = [min(n_total / (K * cnt), 100.0) if cnt > 0 else 0.0 for cnt in counts]
+            max_w = max((w for w in raw_weights if w > 0), default=1.0)
+            weights = [w if w > 0 else max_w for w in raw_weights]
+            ordinal_class_weights[head_idx] = weights
+            dist_str = ", ".join(f"{c}:{n}(w={w:.2f})" for c, n, w in zip(classes, counts, weights))
+            print(f"  {name} (K={K}): {dist_str}")
 
         train_aux_tensor = torch.tensor(train_labels_np, dtype=torch.float32)
         val_aux_tensor = torch.tensor(val_labels_np, dtype=torch.float32)
@@ -594,6 +620,7 @@ def train_transformer(
         aux_lambda=aux_lambda,
         aux_cls_loss_fns=aux_cls_loss_fns,
         ordinal_class_maps=ORDINAL_CLASS_MAPS if aux_lambda > 0.0 else None,
+        ordinal_class_weights=ordinal_class_weights if aux_lambda > 0.0 else None,
     )
 
     # 7. Save (always save the base model, not the aux wrapper)

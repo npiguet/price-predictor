@@ -126,7 +126,7 @@ class TransformerConfig:
     dropout: float
     regression_hidden_dim: int = 64
     log_offset: float = 2.0
-    meta_dim: int = 15
+    meta_dim: int = 30
 
     def __post_init__(self) -> None:
         for name in (

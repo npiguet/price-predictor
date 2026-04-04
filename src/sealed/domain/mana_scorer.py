@@ -214,6 +214,144 @@ def compute_mana_value(cost_str: str) -> float:
     return total
 
 
+# ─── Explicit mana feature extraction ───────────────────────────────────────
+
+def count_generic(cost_str: str) -> float:
+    """Return the total generic mana in a brace-format cost string.
+
+    {3}{W}{W} → 3.0   {R} → 0.0   {2}{2} → 4.0   '' → 0.0
+    """
+    total = 0.0
+    pos = 0
+    while pos < len(cost_str):
+        if cost_str[pos] != "{":
+            pos += 1
+            continue
+        end = cost_str.find("}", pos)
+        if end == -1:
+            break
+        symbol = cost_str[pos + 1: end]
+        pos = end + 1
+        if "/" not in symbol and symbol.upper() not in ("W", "U", "B", "R", "G", "C", "X"):
+            try:
+                total += float(symbol)
+            except ValueError:
+                pass
+    return total
+
+
+def count_x(cost_str: str) -> int:
+    """Return the number of {X} symbols in a brace-format cost string.
+
+    {X}{R} → 1   {X}{X}{G} → 2   {3}{W} → 0
+    """
+    count = 0
+    pos = 0
+    while pos < len(cost_str):
+        if cost_str[pos] != "{":
+            pos += 1
+            continue
+        end = cost_str.find("}", pos)
+        if end == -1:
+            break
+        symbol = cost_str[pos + 1: end]
+        pos = end + 1
+        if symbol == "X":
+            count += 1
+    return count
+
+
+def count_mana_produced(card_text: str) -> dict[str, float]:
+    """Count mana pips produced per color by a single card's tap abilities.
+
+    Unlike count_actual_sources, this counts actual pips rather than
+    deduplicating per ability. So {T}: add {C}{C} → {"C": 2.0}.
+
+    Scans for 'activated[N]: {T}: add ...' lines and tallies all color
+    symbols found in the add clause (without dedup).
+    """
+    sources: dict[str, float] = {}
+    for line in card_text.splitlines():
+        m = _MANA_ABILITY_RE.match(line.strip())
+        if not m:
+            continue
+        add_clause = m.group(1)
+        for c in _ADD_COLOR_RE.findall(add_clause):
+            key = c.upper()
+            sources[key] = sources.get(key, 0.0) + 1.0
+    return sources
+
+
+_PIP_COLORS = ("W", "U", "B", "R", "G", "C")
+_PIP_NORM = {"W": 8.0, "U": 8.0, "B": 8.0, "R": 8.0, "G": 8.0, "C": 3.0}
+_GENERIC_NORM = 15.0
+_X_NORM = 3.0
+_MV_NORM = 16.0
+_PRODUCED_NORM = 3.0
+
+
+def extract_mana_features(card_text: str) -> list[float]:
+    """Return the 15-element raw mana feature vector for a single card.
+
+    Layout:
+      0–5:  pip counts W/U/B/R/G/C  (from count_pips)
+      6:    generic mana count       (from count_generic)
+      7:    X count                  (from count_x)
+      8:    mana value               (from compute_mana_value)
+      9–14: mana produced W/U/B/R/G/C (from count_mana_produced)
+    """
+    pips = count_pips([card_text])
+    produced = count_mana_produced(card_text)
+
+    # Extract mana cost line (face-aware: stop after first per face)
+    cost_str = ""
+    seen_cost = False
+    for line in card_text.splitlines():
+        stripped = line.strip()
+        if stripped.upper() == "ALTERNATE":
+            seen_cost = False
+            continue
+        if seen_cost:
+            continue
+        if stripped.lower().startswith("mana cost:"):
+            cost_str = stripped[len("mana cost:"):].strip()
+            seen_cost = True
+
+    features: list[float] = []
+    for color in _PIP_COLORS:
+        features.append(float(pips.counts.get(color, 0.0)))
+    features.append(count_generic(cost_str))
+    features.append(float(count_x(cost_str)))
+    features.append(compute_mana_value(cost_str))
+    for color in _PIP_COLORS:
+        features.append(produced.get(color, 0.0))
+
+    return features
+
+
+def normalize_mana_features(raw: list[float]) -> list[float]:
+    """Return the 15-element normalized mana feature vector (approx [0, 1]).
+
+    Uses the same layout as extract_mana_features.
+    """
+    norm = []
+    # 0–4: pip counts WUBRG ÷8
+    for i in range(5):
+        norm.append(min(raw[i] / 8.0, 1.0))
+    # 5: pip count C ÷3
+    norm.append(min(raw[5] / 3.0, 1.0))
+    # 6: generic ÷15
+    norm.append(min(raw[6] / _GENERIC_NORM, 1.0))
+    # 7: X count ÷3
+    norm.append(min(raw[7] / _X_NORM, 1.0))
+    # 8: mana value ÷16
+    norm.append(min(raw[8] / _MV_NORM, 1.0))
+    # 9–14: mana produced ÷3
+    for i in range(9, 15):
+        norm.append(min(raw[i] / _PRODUCED_NORM, 1.0))
+    return norm
+
+
 # ─── T015: compute_mana_score() ──────────────────────────────────────────────
 
 _ALL_COLORS = ("W", "U", "B", "R", "G", "C")

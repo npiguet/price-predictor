@@ -36,7 +36,12 @@ class SampleStage2UseCase:
         model_store = PoolModelStore()
         ckpt = model_store.load(model_path)
 
-        config = PoolTransformerConfig()
+        first_npz = next(cards_path.rglob("*.npz"), None)
+        if first_npz is None:
+            raise FileNotFoundError(f"No .npz embedding files found in {cards_path}")
+        import numpy as _np
+        card_embed_dim = int(_np.load(first_npz)["embedding"].shape[0])
+        config = PoolTransformerConfig.from_embed_dim(card_embed_dim)
         model = PoolTransformerModel(config)
         model.load_state_dict(ckpt.pool_transformer_state_dict)
         model.eval()

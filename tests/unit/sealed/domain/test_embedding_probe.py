@@ -178,11 +178,11 @@ class TestBuildDefaultProbes:
     def test_probe_types_correct(self):
         probes = build_default_probes()
         classification = [p for p in probes if p.probe_type == "classification"]
-        regression = [p for p in probes if p.probe_type == "regression"]
+        ordinal = [p for p in probes if p.probe_type == "ordinal"]
         # is-land:1, card-color:6, mana-produced:6 = 13 classification
         assert len(classification) == 13
-        # pip-counts:6, mana-value:1 = 7 regression
-        assert len(regression) == 7
+        # pip-counts:6, mana-value:1 = 7 ordinal
+        assert len(ordinal) == 7
 
     def test_is_land_threshold_floor(self):
         # is-land uses max(threshold_accuracy, 0.99)
@@ -195,16 +195,15 @@ class TestBuildDefaultProbes:
         is_land = next(p for p in probes if p.feature_name == "Is land")
         assert is_land.threshold == pytest.approx(0.999)
 
-    def test_mana_value_threshold_floor(self):
-        # mana value uses max(threshold_r2, 0.90)
-        probes = build_default_probes(threshold_r2=0.70)
+    def test_mana_value_uses_accuracy_threshold(self):
+        probes = build_default_probes(threshold_accuracy=0.80)
+        mv = next(p for p in probes if p.feature_name == "Mana value")
+        assert mv.threshold == pytest.approx(0.80)
+
+    def test_mana_value_threshold_overrideable(self):
+        probes = build_default_probes(threshold_accuracy=0.90)
         mv = next(p for p in probes if p.feature_name == "Mana value")
         assert mv.threshold == pytest.approx(0.90)
-
-    def test_mana_value_threshold_above_floor(self):
-        probes = build_default_probes(threshold_r2=0.95)
-        mv = next(p for p in probes if p.feature_name == "Mana value")
-        assert mv.threshold == pytest.approx(0.95)
 
     def test_card_color_threshold_overrideable(self):
         probes = build_default_probes(threshold_accuracy=0.80)
@@ -212,9 +211,9 @@ class TestBuildDefaultProbes:
         assert color_w.threshold == pytest.approx(0.80)
 
     def test_pip_counts_threshold_overrideable(self):
-        probes = build_default_probes(threshold_r2=0.70)
+        probes = build_default_probes(threshold_accuracy=0.80)
         pip_w = next(p for p in probes if p.feature_name == "Pip counts (W)")
-        assert pip_w.threshold == pytest.approx(0.70)
+        assert pip_w.threshold == pytest.approx(0.80)
 
     def test_all_six_colors_present_in_card_color(self):
         probes = build_default_probes()
@@ -281,6 +280,32 @@ class TestRunProbes:
             results = run_probes(cards, probes)
 
         assert results[0].n_samples == 20
+
+    def test_embed_dim_slices_embedding(self):
+        """embed_dim parameter must restrict probes to first N embedding dimensions."""
+        rng = np.random.default_rng(42)
+        # Cards with 6-dim embeddings: first 2 dims are meaningful, last 4 are appended extras
+        cards = []
+        for i in range(20):
+            full_emb = rng.standard_normal(6).astype(np.float32)
+            cards.append(CardData(
+                name=f"card_{i}",
+                embedding=full_emb,
+                text=LAND_TEXT if i % 2 == 0 else SPELL_TEXT,
+            ))
+        probes = [build_default_probes()[0]]  # is-land
+
+        seen_shapes = []
+
+        def capture_shape(estimator, X, y, **kwargs):
+            seen_shapes.append(X.shape)
+            return np.array([0.9] * 5)
+
+        with patch("sealed.domain.embedding_probe.cross_val_score", side_effect=capture_shape), \
+             patch("sealed.domain.embedding_probe.cross_val_predict", return_value=np.zeros(20)):
+            run_probes(cards, probes, embed_dim=2)
+
+        assert seen_shapes[0] == (20, 2), f"Expected (20, 2), got {seen_shapes[0]}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -91,22 +91,22 @@ class TestTransformerTrainingDataset:
         assert item["target"].shape == ()
 
     def test_meta_shape_without_printing_data(self):
-        """When printing_data_list is None, meta should be zero vector of shape (15,)."""
+        """When printing_data_list is None, meta should be shape (30,): 15 printing + 15 mana."""
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
-        assert item["meta"].shape == (15,)
-        assert (item["meta"] == 0.0).all()
+        assert item["meta"].shape == (30,)
+        assert item["meta"].dtype == torch.float32
 
     def test_meta_shape_with_printing_data(self):
-        """When printing_data_list is provided, meta should be encoded tensor of shape (15,)."""
+        """When printing_data_list is provided, meta should be shape (30,): 15 printing + 15 mana."""
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(
             SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
             printing_data_list=SAMPLE_PRINTING_DATA,
         )
         item = ds[0]
-        assert item["meta"].shape == (15,)
+        assert item["meta"].shape == (30,)
         assert item["meta"].dtype == torch.float32
 
     def test_meta_values_differ_with_printing_data(self):

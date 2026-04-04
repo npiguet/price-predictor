@@ -395,6 +395,44 @@ class TestEMDLoss:
         loss_far = _emd_loss(logits_far, class_indices)
         assert loss_far.item() > loss_near.item()
 
+    def test_class_weights_upweight_rare_sample(self):
+        """A rare class (high weight) contributes more than a common class (low weight)."""
+        import torch
+        from price_predictor.application.train_transformer import _emd_loss
+        # K=3, two samples: class 0 (common, weight=0.1) and class 2 (rare, weight=5.0)
+        # Both predict class 1 (1 step off), so per-sample EMD = 1 for both.
+        # Weighted mean = (0.1*1 + 5.0*1) / (0.1 + 5.0) ≈ 0.98
+        # Unweighted mean = 1.0
+        K = 3
+        logits = torch.zeros(2, K)
+        logits[:, 1] = 100.0           # both samples predict class 1
+        class_indices = torch.tensor([0, 2])
+        class_weights = torch.tensor([0.1, 1.0, 5.0])  # class 2 is rare
+        loss_weighted = _emd_loss(logits, class_indices, class_weights)
+        loss_unweighted = _emd_loss(logits, class_indices)
+        # Both should be ~1.0 (one step off), but weighted version normalises by sum of weights
+        assert loss_weighted.item() == pytest.approx(1.0, abs=0.01)
+        assert loss_unweighted.item() == pytest.approx(1.0, abs=0.01)
+
+    def test_class_weights_amplify_gradient_for_rare_class(self):
+        """With class weights, a batch dominated by a rare-class sample gives higher loss
+        than the same batch with uniform weights."""
+        import torch
+        from price_predictor.application.train_transformer import _emd_loss
+        # K=3: sample 0 is class 0 (common), sample 1 is class 2 (rare, weight=10x)
+        # sample 0 predicts correctly (EMD=0), sample 1 is wrong by 2 steps (EMD=2)
+        K = 3
+        logits = torch.zeros(2, K)
+        logits[0, 0] = 100.0   # sample 0: correct prediction for class 0
+        logits[1, 0] = 100.0   # sample 1: wrong prediction (predicts class 0, true is class 2)
+        class_indices = torch.tensor([0, 2])
+        class_weights = torch.tensor([1.0, 1.0, 10.0])
+        loss_weighted = _emd_loss(logits, class_indices, class_weights)
+        loss_unweighted = _emd_loss(logits, class_indices)
+        # Weighted: (1.0*0 + 10.0*2) / 11.0 ≈ 1.818
+        # Unweighted: (0 + 2) / 2 = 1.0
+        assert loss_weighted.item() > loss_unweighted.item()
+
 
 class TestCombinedLoss:
     """T007: Combined loss = L_price + lambda * sum(L_aux_i)."""

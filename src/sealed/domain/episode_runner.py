@@ -17,10 +17,20 @@ IDEAL_SPELLS = 23  # target non-land picks for a 40-card sealed deck
 IDEAL_LANDS = 17   # target land picks for a 40-card sealed deck
 
 
-def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots: int) -> np.ndarray:
+def _build_base_tensor(
+    pool_names: str,
+    card_port: "CardEmbeddingPort",
+    n_slots: int,
+    d_model: int | None = None,
+) -> np.ndarray:
     """Build initial pool tensor for an episode.
 
-    Returns float32 ndarray of shape [n_slots, d_model] where d_model = embed_dim + 4.
+    Returns float32 ndarray of shape [n_slots, d_model].
+
+    d_model should be passed from model.config.d_model so that the tensor
+    matches the Pool Transformer's expected input size exactly. When not
+    provided, falls back to embed_dim + 8 (correct only when embed_dim + 8
+    is already divisible by n_heads).
 
     Flag layout (indices embed_dim .. embed_dim+7):
       +0  pick_count   — how many times this slot has been picked (0/1 for booster, 0..N for basic lands)
@@ -42,7 +52,8 @@ def _build_base_tensor(pool_names: str, card_port: "CardEmbeddingPort", n_slots:
 
     all_embeds = booster_embeds + basic_embeds
     embed_dim = all_embeds[0].shape[0] if all_embeds else 0
-    d_model = embed_dim + 8
+    if d_model is None:
+        d_model = embed_dim + 8
 
     tensor = np.zeros((n_slots, d_model), dtype=np.float32)
 
@@ -83,8 +94,8 @@ class EpisodeRunner:
         booster_names = pool_names.split(";")
         n_booster = len(booster_names)
 
-        current = _build_base_tensor(pool_names, card_port, n_slots)
-        embed_dim = current.shape[1] - 8
+        current = _build_base_tensor(pool_names, card_port, n_slots, model.config.d_model)  # type: ignore[attr-defined]
+        embed_dim = model.config.card_embed_dim  # type: ignore[attr-defined]
 
         picked_set: set[int] = set()
         actions: list[int] = []

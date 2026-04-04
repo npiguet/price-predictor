@@ -67,7 +67,7 @@ def test_missing_checkpoint_raises_file_not_found(tmp_path):
 
     use_case = SampleStage1UseCase()
     with pytest.raises(FileNotFoundError):
-        with patch("sealed.application.sample_stage1.PoolTransformerConfig", return_value=MINI):
+        with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
             use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
 
@@ -77,7 +77,7 @@ def test_n_samples_controls_count(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=10)
 
     use_case = SampleStage1UseCase()
-    with patch("sealed.application.sample_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=3)
 
     captured = capsys.readouterr()
@@ -91,7 +91,7 @@ def test_n_samples_capped_at_pool_count(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=2)
 
     use_case = SampleStage1UseCase()
-    with patch("sealed.application.sample_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=100)
 
     captured = capsys.readouterr()
@@ -105,7 +105,7 @@ def test_output_format_contains_status(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=2)
 
     use_case = SampleStage1UseCase()
-    with patch("sealed.application.sample_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=2)
 
     captured = capsys.readouterr()
@@ -120,7 +120,7 @@ def test_output_contains_card_names(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=1)
 
     use_case = SampleStage1UseCase()
-    with patch("sealed.application.sample_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     captured = capsys.readouterr()

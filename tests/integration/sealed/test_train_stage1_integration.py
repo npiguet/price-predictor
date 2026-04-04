@@ -12,10 +12,11 @@ from sealed.application.train_stage1 import TrainStage1UseCase
 from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 
-# Miniaturized config: 4 slots, 8-dim card embeddings, d_model=12
+# Miniaturized config: 4 slots, 8-dim card embeddings
+# d_model = card_embed_dim(8) + 8 flag bits = 16 (must match _build_base_tensor)
 MINI = PoolTransformerConfig(
     n_slots=4,
-    d_model=12,
+    d_model=16,
     n_layers=1,
     n_heads=2,
     card_embed_dim=8,
@@ -71,7 +72,7 @@ def _run_n_batches(env, n_batches: int, batch_size: int = 2) -> None:
             raise _Stop()
 
     use_case = TrainStage1UseCase()
-    with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(PoolModelStore, "save", _save_and_maybe_stop):
             with pytest.raises(_Stop):
                 use_case.execute(

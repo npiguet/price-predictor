@@ -18,7 +18,7 @@ def _make_config(**overrides) -> TransformerConfig:
     return TransformerConfig(**defaults)
 
 
-def _make_meta(batch_size: int, meta_dim: int = 15) -> torch.Tensor:
+def _make_meta(batch_size: int, meta_dim: int = 30) -> torch.Tensor:
     """Create a zero meta tensor for testing."""
     return torch.zeros(batch_size, meta_dim)
 
@@ -317,3 +317,40 @@ class TestAuxiliaryTrainingModel:
         base = CardPriceTransformerModel(config)
         aux_model = AuxiliaryTrainingModel(base, _TEST_ORDINAL_CLASS_MAPS)
         assert aux_model.base is base
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# encode_mana_features
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestEncodeManaFeatures:
+    """Tests for encode_mana_features() in metadata_encoder."""
+
+    def test_returns_tensor_of_shape_15(self):
+        from price_predictor.infrastructure.metadata_encoder import encode_mana_features
+        result = encode_mana_features("name: lightning bolt\nmana cost: {R}\ntypes: instant\n")
+        assert result.shape == (15,)
+
+    def test_dtype_is_float32(self):
+        from price_predictor.infrastructure.metadata_encoder import encode_mana_features
+        result = encode_mana_features("name: foo\n")
+        assert result.dtype == torch.float32
+
+    def test_values_in_0_1_range(self):
+        from price_predictor.infrastructure.metadata_encoder import encode_mana_features
+        result = encode_mana_features("name: baneslayer\nmana cost: {3}{W}{W}\ntypes: creature\n")
+        assert (result >= 0.0).all() and (result <= 1.0).all()
+
+    def test_red_spell_has_nonzero_pip_r(self):
+        from price_predictor.infrastructure.metadata_encoder import encode_mana_features
+        result = encode_mana_features("name: lightning bolt\nmana cost: {R}\ntypes: instant\n")
+        # pip_R is index 3 of the mana features
+        assert result[3].item() > 0.0
+
+    def test_combined_meta_is_30_dims(self):
+        from price_predictor.infrastructure.metadata_encoder import encode_metadata, encode_mana_features
+        from price_predictor.domain.value_objects import PrintingData
+        import torch
+        pd = PrintingData.defaults()
+        full_meta = torch.cat([encode_metadata(pd), encode_mana_features("name: test\n")])
+        assert full_meta.shape == (30,)

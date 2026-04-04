@@ -10,7 +10,7 @@ import torch
 from price_predictor.domain.entities import PriceEstimate
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.metadata_encoder import encode_metadata
+from price_predictor.infrastructure.metadata_encoder import encode_mana_features, encode_metadata
 from price_predictor.infrastructure.transformer_store import load_model
 
 
@@ -42,7 +42,7 @@ class PredictTransformerUseCase:
             printing_data = PrintingData.defaults()
 
         input_ids, attention_mask = tokenizer.encode(card_text, config.max_seq_len)
-        meta = encode_metadata(printing_data)
+        meta = torch.cat([encode_metadata(printing_data), encode_mana_features(card_text)])
 
         try:
             device = next(model.parameters()).device

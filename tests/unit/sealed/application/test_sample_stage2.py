@@ -75,7 +75,7 @@ def test_missing_checkpoint_raises(tmp_path):
 
     use_case = SampleStage2UseCase()
     with pytest.raises(FileNotFoundError):
-        with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+        with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
             use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
 
@@ -85,7 +85,7 @@ def test_output_shows_40_picks_for_success(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=5)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     out = capsys.readouterr().out
@@ -97,7 +97,7 @@ def test_n_samples_controls_output_count(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=10)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=3)
 
     out = capsys.readouterr().out
@@ -111,7 +111,7 @@ def test_output_contains_mana_sources_section(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=5)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     out = capsys.readouterr().out
@@ -123,7 +123,7 @@ def test_output_contains_all_six_colors(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=5)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     out = capsys.readouterr().out
@@ -136,7 +136,7 @@ def test_output_contains_score_and_land_count(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=5)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     out = capsys.readouterr().out
@@ -148,7 +148,7 @@ def test_output_shows_ideal_vs_actual(tmp_path, capsys):
     pools_path, cards_path, model_path = _setup_env(tmp_path, n_pools=5)
 
     use_case = SampleStage2UseCase()
-    with patch("sealed.application.sample_stage2.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         use_case.execute(pools_path, cards_path, model_path, n_samples=1)
 
     out = capsys.readouterr().out

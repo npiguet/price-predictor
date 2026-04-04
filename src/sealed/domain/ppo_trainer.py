@@ -74,8 +74,8 @@ class PPOTrainer:
             n_slots: int = self.model.config.n_slots  # type: ignore[attr-defined]
             n_booster = len(ep.pool_names.split(";"))
 
-            current = _build_base_tensor(ep.pool_names, card_port, n_slots)
-            embed_dim = current.shape[1] - 8
+            current = _build_base_tensor(ep.pool_names, card_port, n_slots, self.model.config.d_model)  # type: ignore[attr-defined]
+            embed_dim = self.model.config.card_embed_dim  # type: ignore[attr-defined]
 
             for step in range(n_steps):
                 action = int(ep.actions[step])

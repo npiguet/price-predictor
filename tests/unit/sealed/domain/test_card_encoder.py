@@ -85,13 +85,13 @@ class TestCardEncoderOutputShape:
         result = encoder.encode("name: Test\ntype: Creature")
         assert isinstance(result, np.ndarray)
 
-    def test_output_shape_is_2x_d_model(self):
+    def test_output_shape_is_2x_d_model_plus_15_mana(self):
         d_model = 8
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
         encoder = CardEncoder(model, tok, max_seq_len=16)
         result = encoder.encode("name: Test\ntype: Creature")
-        assert result.shape == (2 * d_model,)
+        assert result.shape == (2 * d_model + 15,)
 
     def test_output_dtype_is_float32(self):
         tok = _make_tokenizer()

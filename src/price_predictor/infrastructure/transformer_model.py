@@ -55,11 +55,13 @@ class CardPriceTransformerModel(nn.Module):
         padding_mask = attention_mask == 0
         x = self.encoder(x, src_key_padding_mask=padding_mask)
         padding_mask_3d = (attention_mask == 0).unsqueeze(-1)
+        x_masked = x.masked_fill(padding_mask_3d, 0.0)
+        # Max pooling: best for detecting token presence
         x_max = x.masked_fill(padding_mask_3d, float("-inf"))
         max_pooled = x_max.max(dim=1).values
-        x_mean = x.masked_fill(padding_mask_3d, 0.0)
+        # Mean pooling: relative frequency, normalised by sequence length
         lengths = attention_mask.sum(dim=1, keepdim=True).clamp(min=1)
-        mean_pooled = x_mean.sum(dim=1) / lengths
+        mean_pooled = x_masked.sum(dim=1) / lengths
         return torch.cat([max_pooled, mean_pooled], dim=-1)  # (batch, 2*d_model)
 
     @torch.no_grad()
@@ -88,7 +90,7 @@ class CardPriceTransformerModel(nn.Module):
             (batch_size,) predictions in shifted-log-price space.
         """
         pooled_embed = self._embed(input_ids, attention_mask)  # (batch, 2*d_model)
-        pooled = torch.cat([pooled_embed, meta], dim=-1)  # (batch, 2*d_model + meta_dim)
+        pooled = torch.cat([pooled_embed, meta], dim=-1)        # (batch, 2*d_model + meta_dim)
         pooled = self.output_dropout(pooled)
         logits = self.output_head(pooled).squeeze(-1)
         return logits
@@ -143,7 +145,7 @@ class AuxiliaryTrainingModel(nn.Module):
             aux_preds: list of 20 tensors; classification heads → (batch_size,),
                 ordinal heads → (batch_size, K)
         """
-        pooled_embed = self.base._embed(input_ids, attention_mask)  # (batch, 2*d_model)
+        pooled_embed = self.base._embed(input_ids, attention_mask)   # (batch, 2*d_model)
         # Price prediction through base model's output head
         pooled_with_meta = torch.cat([pooled_embed, meta], dim=-1)
         pooled_with_meta = self.base.output_dropout(pooled_with_meta)

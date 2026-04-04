@@ -53,8 +53,16 @@ class TrainStage1UseCase:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"Device: {device}")
 
+        # Detect embedding dimension from first .npz file
+        first_npz = next(cards_path.rglob("*.npz"), None)
+        if first_npz is None:
+            raise FileNotFoundError(f"No .npz embedding files found in {cards_path}")
+        import numpy as _np
+        card_embed_dim = int(_np.load(first_npz)["embedding"].shape[0])
+        print(f"Detected card embedding dimension: {card_embed_dim}")
+
         # Initialize model, optimizer, state
-        config = PoolTransformerConfig()
+        config = PoolTransformerConfig.from_embed_dim(card_embed_dim)
         model = PoolTransformerModel(config).to(device)
         n_params = sum(p.numel() for p in model.parameters())
         optimizer = optim.Adam(model.parameters(), lr=1e-4)

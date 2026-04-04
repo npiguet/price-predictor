@@ -8,6 +8,8 @@ from typing import Callable
 import numpy as np
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.model_selection import KFold, StratifiedKFold, cross_val_predict, cross_val_score
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from sealed.domain.mana_scorer import (
     compute_mana_value,
@@ -29,10 +31,11 @@ class CardData:
 class ProbeSpec:
     """Specification for a single linear probe."""
     feature_name: str
-    probe_type: str   # "classification" or "regression"
+    probe_type: str   # "classification", "regression", or "ordinal"
     threshold: float
     extract_labels: Callable[[list[CardData]], np.ndarray]
     round_to: float | None = None  # regression only: snap predictions to this step size
+    class_values: list[float] | None = None  # ordinal only: sorted class boundary values
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,7 @@ class ProbeResult:
     passed: bool
     n_samples: int
     rounded_score: float | None = None  # R² after rounding predictions to nearest valid value
+    bucket_stats: list[tuple[float, int, float]] | None = None  # (value, count, exact_match)
 
 
 @dataclass(frozen=True)
@@ -232,23 +236,25 @@ def build_default_probes(
             extract_labels=lambda cards, c=color: extract_card_color(cards, c),
         ))
 
-    # Pip counts — one per color (6 probes)
+    # Pip counts — one per color (6 ordinal probes)
+    _wubrg_classes = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
+    _c_classes = [0.0, 1.0, 2.0, 2.5, 3.0]
     for color in _COLORS:
         probes.append(ProbeSpec(
             feature_name=f"Pip counts ({color})",
-            probe_type="regression",
-            threshold=threshold_r2,
+            probe_type="ordinal",
+            threshold=threshold_accuracy,
             extract_labels=lambda cards, c=color: extract_pip_counts(cards, c),
-            round_to=0.5,
+            class_values=_c_classes if color == "C" else _wubrg_classes,
         ))
 
-    # Mana value (1 probe)
+    # Mana value (1 ordinal probe)
     probes.append(ProbeSpec(
         feature_name="Mana value",
-        probe_type="regression",
-        threshold=max(threshold_r2, 0.90),
+        probe_type="ordinal",
+        threshold=threshold_accuracy,
         extract_labels=extract_mana_value,
-        round_to=1.0,
+        class_values=[float(v) for v in range(17)],
     ))
 
     # Mana produced — one per color (6 probes)
@@ -267,47 +273,97 @@ def run_probes(
     cards: list[CardData],
     probes: list[ProbeSpec],
     on_result: Callable[[ProbeResult], None] | None = None,
+    embed_dim: int | None = None,
 ) -> list[ProbeResult]:
     """Run each probe with 5-fold cross-validation and return results.
 
     If *on_result* is provided it is called immediately after each probe
     finishes, allowing the caller to display progress in real time.
+
+    If *embed_dim* is provided, only the first *embed_dim* dimensions of each
+    embedding are used. This allows probing only the transformer-learned portion
+    when embeddings include appended explicit features.
     """
     embeddings = np.stack([c.embedding for c in cards])
+    if embed_dim is not None:
+        embeddings = embeddings[:, :embed_dim]
 
     results: list[ProbeResult] = []
     for spec in probes:
         labels = spec.extract_labels(cards)
 
+        rounded_score: float | None = None
+        bucket_stats: list[tuple[float, int, float]] | None = None
         if spec.probe_type == "classification":
-            model = LogisticRegression(max_iter=1000, solver="lbfgs")
+            model = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(max_iter=1000, solver="lbfgs"),
+            )
             cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
             fold_scores = cross_val_score(
                 model, embeddings, labels, cv=cv, scoring="accuracy", error_score=0.0
             )
             preds = cross_val_predict(model, embeddings, labels, cv=cv)
             rounded_score = float(np.mean(preds == labels))
-        else:
+        elif spec.probe_type == "ordinal":
+            # Multinomial logistic regression on ordinal class indices — matches
+            # the K-logit linear training head, so training and probing use the
+            # same model class (K linear functions of the embedding).
+            class_arr = np.array(spec.class_values)
+            class_indices = np.array([
+                int(np.argmin(np.abs(class_arr - v))) for v in labels
+            ])
+            model = make_pipeline(
+                StandardScaler(),
+                LogisticRegression(max_iter=5000, solver="lbfgs"),
+            )
+            cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+            fold_scores = cross_val_score(
+                model, embeddings, class_indices, cv=cv, scoring="accuracy",
+                error_score=0.0,
+            )
+            preds = cross_val_predict(model, embeddings, class_indices, cv=cv)
+            rounded_score = float(np.mean(preds == class_indices))
+            bucket_stats = []
+            for k, val in enumerate(spec.class_values):
+                mask = class_indices == k
+                count = int(np.sum(mask))
+                exact = float(np.mean(preds[mask] == k)) if count > 0 else 0.0
+                bucket_stats.append((val, count, exact))
+        else:  # regression
             model = LinearRegression()
             cv = KFold(n_splits=5, shuffle=True, random_state=42)
             fold_scores = cross_val_score(
                 model, embeddings, labels, cv=cv, scoring="r2", error_score=0.0
             )
-            rounded_score = None
             if spec.round_to is not None:
                 preds = cross_val_predict(model, embeddings, labels, cv=cv)
                 pred_steps = np.round(preds / spec.round_to)
                 true_steps = np.round(labels / spec.round_to)
                 rounded_score = float(np.mean(pred_steps == true_steps))
+                bucket_stats = []
+                for step in sorted(np.unique(true_steps)):
+                    mask = true_steps == step
+                    count = int(np.sum(mask))
+                    exact = float(np.mean(pred_steps[mask] == step))
+                    bucket_stats.append((float(step * spec.round_to), count, exact))
 
         mean_score = float(np.mean(fold_scores))
+        # For regression probes with rounding, also accept if exact match meets threshold.
+        # R² is undefined (≈0) for near-constant distributions, so exact match is the
+        # reliable signal in those cases (e.g., pip_count_C where ~99% of cards have 0).
+        if rounded_score is not None:
+            passed = mean_score >= spec.threshold or rounded_score >= spec.threshold
+        else:
+            passed = mean_score >= spec.threshold
         result = ProbeResult(
             feature_name=spec.feature_name,
             score=mean_score,
             threshold=spec.threshold,
-            passed=mean_score >= spec.threshold,
+            passed=passed,
             n_samples=len(cards),
             rounded_score=rounded_score,
+            bucket_stats=bucket_stats,
         )
         results.append(result)
         if on_result is not None:

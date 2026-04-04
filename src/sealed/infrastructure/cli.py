@@ -141,6 +141,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.85,
         help="Minimum R² for regression probes (default: 0.85)",
     )
+    validate_parser.add_argument(
+        "--embed-dim",
+        type=int,
+        default=None,
+        help="If set, probes use only the first N embedding dimensions (the transformer "
+             "portion), ignoring any appended explicit features. Set to 2*d_model of the "
+             "encoder (e.g. 512 if d_model=256).",
+    )
 
     # ── sample ────────────────────────────────────────────────────
     sample_parser = subparsers.add_parser(
@@ -256,6 +264,10 @@ def _print_probe_row(r) -> None:
         f"{threshold_str:>{_COL_THRESHOLD}}  "
         f"{status}"
     )
+    if r.bucket_stats is not None:
+        print(f"  {'Value':>6}  {'Count':>6}  {'Exact%':>7}")
+        for val, count, exact in r.bucket_stats:
+            print(f"  {val:>6.1f}  {count:>6,}  {exact:>6.1%}")
 
 
 def run_validate_embeddings(args: argparse.Namespace) -> int:
@@ -281,6 +293,7 @@ def run_validate_embeddings(args: argparse.Namespace) -> int:
             threshold_accuracy=args.threshold_accuracy,
             threshold_r2=args.threshold_r2,
             on_result=_print_probe_row,
+            embed_dim=args.embed_dim,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -373,7 +386,7 @@ def run_train(args: argparse.Namespace) -> int:
                 batch_size=args.batch_size,
                 set_code=set_code,
             )
-        except (ValueError, FileNotFoundError) as exc:
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
 
@@ -401,7 +414,7 @@ def run_train(args: argparse.Namespace) -> int:
                 batch_size=args.batch_size,
                 set_code=set_code,
             )
-        except (ValueError, FileNotFoundError) as exc:
+        except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 2
 
@@ -436,8 +449,8 @@ def run_sample(args: argparse.Namespace) -> int:
                 model_path=model_path,
                 n_samples=args.n_samples,
             )
-        except FileNotFoundError as exc:
-            print(f"Error: checkpoint not found: {exc}", file=sys.stderr)
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"Error: checkpoint not found or incompatible: {exc}", file=sys.stderr)
             return 2
 
     else:
@@ -456,8 +469,8 @@ def run_sample(args: argparse.Namespace) -> int:
                 model_path=model_path,
                 n_samples=args.n_samples,
             )
-        except FileNotFoundError as exc:
-            print(f"Error: checkpoint not found: {exc}", file=sys.stderr)
+        except (FileNotFoundError, RuntimeError) as exc:
+            print(f"Error: checkpoint not found or incompatible: {exc}", file=sys.stderr)
             return 2
 
     return 0

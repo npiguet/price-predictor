@@ -63,7 +63,7 @@ def _run_one_batch(tmp_path: Path) -> Path:
     call_count = [0]
     original_execute = use_case.execute
 
-    with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         # Stop after 1 batch via a side-effect on model_store.save
         saved = []
 
@@ -103,7 +103,7 @@ def test_empty_pools_raises_value_error(tmp_path):
 
     use_case = TrainStage1UseCase()
     with pytest.raises(ValueError, match="pools.txt not found or empty"):
-        with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+        with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
             use_case.execute(pools_path, cards_path, model_path, batch_size=1)
 
 
@@ -117,7 +117,7 @@ def test_missing_npz_raises_file_not_found(tmp_path):
 
     use_case = TrainStage1UseCase()
     with pytest.raises(FileNotFoundError):
-        with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+        with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
             use_case.execute(pools_path, cards_path, model_path, batch_size=1)
 
 
@@ -129,7 +129,7 @@ def test_model_path_dir_created(tmp_path):
     model_path = tmp_path / "deep" / "nested" / "model.pt"
 
     use_case = TrainStage1UseCase()
-    with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch):
             with pytest.raises(_StopAfterBatch):
                 use_case.execute(pools_path, cards_path, model_path, batch_size=1)
@@ -165,7 +165,7 @@ def test_checkpoint_resume_restores_state(tmp_path):
         raise _StopAfterBatch()
 
     use_case = TrainStage1UseCase()
-    with patch("sealed.application.train_stage1.PoolTransformerConfig", return_value=MINI):
+    with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
         with patch.object(PoolModelStore, "save", _capture_save):
             with pytest.raises(_StopAfterBatch):
                 use_case.execute(pools_path, cards_path, model_path, batch_size=1)

@@ -143,7 +143,7 @@ def test_completed_episode_step_rewards_overridden_with_mana_score(tmp_path):
     mock_runner_instance.run.return_value = ep
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner_instance),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo.return_value),
         patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
@@ -204,7 +204,7 @@ def test_duplicate_episode_step_rewards_unchanged(tmp_path):
     mock_runner.run.return_value = dup_ep
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
@@ -261,7 +261,7 @@ def test_training_halts_when_all_scores_above_threshold(tmp_path):
     perfect_score = ManaScore(score=0.95, reward=0.9, l1_error=0.0, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=perfect_score),
@@ -318,7 +318,7 @@ def test_training_continues_when_duplicate_in_batch(tmp_path):
             raise _StopAfterBatch()
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=perfect_score),
@@ -374,7 +374,7 @@ def test_batch_log_contains_expected_fields(tmp_path, capsys):
     score_val = ManaScore(score=0.8, reward=0.6, l1_error=1.0, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),
@@ -439,7 +439,7 @@ def test_card_encoder_parameters_not_in_optimizer(tmp_path):
     score_val = ManaScore(score=0.5, reward=0.0, l1_error=4.25, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", side_effect=capture_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),
@@ -516,7 +516,7 @@ def test_model_path_takes_priority_over_init_from(tmp_path):
     score_val = ManaScore(score=0.5, reward=0.0, l1_error=0.0, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),
@@ -578,7 +578,7 @@ def test_init_from_used_when_model_path_absent(tmp_path):
     score_val = ManaScore(score=0.5, reward=0.0, l1_error=0.0, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),
@@ -615,7 +615,7 @@ def test_error_when_neither_checkpoint_exists(tmp_path):
 
     use_case = TrainStage2UseCase()
     with pytest.raises((ValueError, FileNotFoundError)):
-        with patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI):
+        with patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI):
             use_case.execute(
                 pools_path=pools_path,
                 cards_path=cards_path,
@@ -661,7 +661,7 @@ def test_init_from_uses_model_weights_only_fresh_optimizer(tmp_path):
     score_val = ManaScore(score=0.5, reward=0.0, l1_error=0.0, n_lands=17)
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", side_effect=capture_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),
@@ -736,7 +736,7 @@ def test_timestamped_checkpoint_saved_every_1000_episodes(tmp_path):
             raise _StopAfterBatch()
 
     with (
-        patch("sealed.application.train_stage2.PoolTransformerConfig", return_value=MINI),
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
         patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
         patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
         patch("sealed.application.train_stage2.compute_mana_score", return_value=score_val),

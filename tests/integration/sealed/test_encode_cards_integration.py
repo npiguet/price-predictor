@@ -36,6 +36,7 @@ def fixture_cards_dir(tmp_path):
 def encoder_artifacts(tmp_path):
     """Build a minimal real encoder and vocab, save them, return paths."""
     import torch
+    from dataclasses import asdict
     from price_predictor.domain.entities import TransformerConfig
     from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
     from price_predictor.domain.tokenizer import MtgTokenizer
@@ -58,7 +59,7 @@ def encoder_artifacts(tmp_path):
     model_dir = tmp_path / "models"
     model_dir.mkdir()
     encoder_path = model_dir / "latest.pt"
-    torch.save({"model_state_dict": model.state_dict(), "config": config}, encoder_path)
+    torch.save({"state_dict": model.state_dict(), "config": asdict(config)}, encoder_path)
 
     # Build a minimal vocab (line index = token ID; [PAD]=0, [UNK]=1 required)
     vocab_tokens = [

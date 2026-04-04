@@ -147,6 +147,19 @@ loss across runs.
 - **FR-011**: System MUST print clear progress messages to the console for pre-training phases that
   are expected to take more than a couple of seconds (e.g., loading ~30k card files, computing
   labels, computing class weights and target statistics).
+- **FR-015**: System MUST append 15 explicit mana features to the meta vector passed to the price
+  prediction regression head. The meta vector MUST be 30-dimensional: 15 printing features followed
+  by 15 mana features (pip counts W/U/B/R/G/C, generic count, X count, mana value, mana produced
+  W/U/B/R/G/C), all normalized to approximately [0, 1].
+- **FR-016**: System MUST append the same 15 normalized mana features to the card embedding stored
+  in `.npz` files, after the 2×d_model transformer embedding. Total embedding dimension is
+  `2*d_model + 15`. These explicit features are NOT passed through the Pool Transformer in the
+  sealed module.
+- **FR-017**: `encode_mana_features()` in `metadata_encoder.py` and `extract_mana_features()` /
+  `normalize_mana_features()` in `mana_scorer.py` MUST use identical normalization constants so that
+  the meta vector (training) and card embedding (inference) contain the same values.
+- **FR-018**: The `validate-embeddings` command MUST accept `--embed-dim` to restrict probes to the
+  transformer portion of the embedding, excluding the appended mana features.
 
 ### Key Entities
 
@@ -169,7 +182,8 @@ loss across runs.
   nearest integer), mana produced ≥ 0.950 (accuracy).
 - **SC-002**: Price prediction accuracy on the validation set does not degrade unacceptably relative
   to the feature 007 baseline (manual judgment after exploring lambda values).
-- **SC-003**: The saved checkpoint is loadable by existing code and produces embeddings in the same
-  format and dimensionality as before retraining.
+- **SC-003**: The saved checkpoint produces card embeddings of dimension `2*d_model + 15`, where
+  the first `2*d_model` elements are the transformer pooled output and the last 15 are normalized
+  mana features. The transformer portion is tested by probes with `--embed-dim <2*d_model>`.
 - **SC-004**: Card color labels are correct for edge cases: devoid cards are colorless, no-mana-cost
   cards are colorless, hybrid pips grant both colors.

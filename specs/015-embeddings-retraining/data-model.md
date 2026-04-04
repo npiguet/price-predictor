@@ -118,6 +118,59 @@ AuxiliaryLabelStats
   └──→ consumed by: loss functions in _train_loop()
 ```
 
+## Meta Vector Layout (30 elements)
+
+The meta vector passed to the regression head during price prediction training is 30-dimensional.
+It is constructed by `metadata_encoder.py` as:
+
+```
+meta_vector = cat([encode_metadata(printing_data), encode_mana_features(card_text)])
+```
+
+| Indices | Group | Source | Size |
+|---------|-------|--------|------|
+| 0–14 | Printing features | `encode_metadata(PrintingData)` | 15 |
+| 15–29 | Mana features | `encode_mana_features(card_text)` via `normalize_mana_features(extract_mana_features(...))` | 15 |
+
+**Mana feature layout within indices 15–29**:
+
+| Offset | Feature | Raw source | Normalization |
+|--------|---------|------------|---------------|
+| 0 | pip_W | `count_pips()["W"]` | ÷ 8 |
+| 1 | pip_U | `count_pips()["U"]` | ÷ 8 |
+| 2 | pip_B | `count_pips()["B"]` | ÷ 8 |
+| 3 | pip_R | `count_pips()["R"]` | ÷ 8 |
+| 4 | pip_G | `count_pips()["G"]` | ÷ 8 |
+| 5 | pip_C | `count_pips()["C"]` | ÷ 3 |
+| 6 | generic | `count_generic()` | ÷ 15 |
+| 7 | x_count | `count_x()` | ÷ 3 |
+| 8 | mana_value | `compute_mana_value()` | ÷ 16 |
+| 9 | produced_W | `count_mana_produced()["W"]` | ÷ 3, clamp ≤ 1 |
+| 10 | produced_U | `count_mana_produced()["U"]` | ÷ 3, clamp ≤ 1 |
+| 11 | produced_B | `count_mana_produced()["B"]` | ÷ 3, clamp ≤ 1 |
+| 12 | produced_R | `count_mana_produced()["R"]` | ÷ 3, clamp ≤ 1 |
+| 13 | produced_G | `count_mana_produced()["G"]` | ÷ 3, clamp ≤ 1 |
+| 14 | produced_C | `count_mana_produced()["C"]` | ÷ 3, clamp ≤ 1 |
+
+## Card Embedding Format
+
+Each `.npz` file stores a single key `"embedding"` of shape `(2*d_model + 15,)`, dtype `float32`.
+
+```
+embedding = cat([transformer_embedding, mana_features])
+```
+
+| Region | Indices | Content | Size |
+|--------|---------|---------|------|
+| Transformer embedding | 0 .. 2*d_model-1 | max+mean pooled transformer output | 2*d_model |
+| Mana features | 2*d_model .. 2*d_model+14 | normalized explicit mana features (same layout as meta indices 15–29 above) | 15 |
+
+The mana features in the embedding use **the same normalization** as the meta vector, ensuring
+consistency between training and inference.
+
+When probing the transformer embedding quality, pass `--embed-dim <2*d_model>` to
+`validate-embeddings` to slice off the appended mana features.
+
 ## Checkpoint Format (unchanged)
 
 The saved `.pt` file contains exactly the same structure as before:
@@ -132,3 +185,5 @@ The saved `.pt` file contains exactly the same structure as before:
 The 20 auxiliary head weights are **not saved**. They are discarded by saving only
 `wrapper.base` (the inner `CardPriceTransformerModel`) rather than the full
 `AuxiliaryTrainingModel`.
+
+`TransformerConfig.meta_dim` is now **30** (was 15). The checkpoint config reflects this.

@@ -1,4 +1,4 @@
-"""Encode PrintingData into a compact numeric tensor for the transformer side-channel."""
+"""Encode PrintingData and mana features into numeric tensors for the transformer side-channel."""
 
 from __future__ import annotations
 
@@ -57,3 +57,20 @@ def encode_metadata(printing_data: PrintingData) -> torch.Tensor:
     feats.append(1.0 if printing_data.is_abu else 0.0)
 
     return torch.tensor(feats, dtype=torch.float32)
+
+
+def encode_mana_features(card_text: str) -> torch.Tensor:
+    """Encode mana features from card text into a float32 tensor of shape (15,).
+
+    Layout:
+        [0–5]   pip counts W/U/B/R/G/C  (normalized: WUBRG÷8, C÷3)
+        [6]     generic mana count      (÷15)
+        [7]     X count                 (÷3)
+        [8]     mana value              (÷16)
+        [9–14]  mana produced W/U/B/R/G/C (÷3)
+    """
+    from sealed.domain.mana_scorer import extract_mana_features, normalize_mana_features
+    return torch.tensor(
+        normalize_mana_features(extract_mana_features(card_text)),
+        dtype=torch.float32,
+    )
