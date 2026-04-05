@@ -15,7 +15,7 @@ from sealed.infrastructure.pool_model_store import PoolModelStore
 # Miniaturized config: 4 slots, 8-dim card embeddings
 # d_model = card_embed_dim(8) + 8 flag bits = 16 (must match _build_base_tensor)
 MINI = PoolTransformerConfig(
-    n_slots=4,
+    n_slots=10,
     d_model=16,
     n_layers=1,
     n_heads=2,

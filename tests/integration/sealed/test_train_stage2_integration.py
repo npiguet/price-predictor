@@ -17,7 +17,7 @@ from sealed.domain.episode_runner import MAX_PICKS
 # Miniaturized config: 4 slots, 8-dim card embeddings
 # d_model = card_embed_dim(8) + 8 flag bits = 16 (must match _build_base_tensor)
 MINI = PoolTransformerConfig(
-    n_slots=4,
+    n_slots=10,
     d_model=16,
     n_layers=1,
     n_heads=2,
@@ -213,11 +213,11 @@ def test_mana_scores_computed_for_completed_episodes(env):
                         set_code="TEST",
                     )
 
-    # Check that completed episodes have uniform step_rewards (mana score)
-    completed = [ep for ep in captured_episodes if ep.termination == "success"]
-    for ep in completed:
+    # All episodes complete (action masking prevents early termination).
+    # Check that each episode has uniform step_rewards (replaced by mana score).
+    for ep in captured_episodes:
         if len(ep.step_rewards) > 1:
             rewards_set = set(ep.step_rewards.tolist())
             assert len(rewards_set) == 1, (
-                f"Completed episode should have uniform step_rewards, got {rewards_set}"
+                f"Episode should have uniform step_rewards, got {rewards_set}"
             )

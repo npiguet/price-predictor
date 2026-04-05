@@ -70,8 +70,8 @@ set it at:
 40 sequential steps, one card per step:
 
 - At each step the model sees all 96 cards with their current flags and counts
-- Already-picked booster cards have available_flag = 0; this is visible to the model as context but does not block
-  selection — the model learns to avoid re-picks through the reward signal
+- Already-picked booster cards have available_flag = 0; before computing the pick distribution their logits are
+  set to −∞ so they cannot be selected (see Action Masking in Training Algorithm)
 - Basic land slots are always available; picking one increments its pick_count
 - After 40 picks the deck is complete
 
@@ -85,6 +85,38 @@ Standard on-policy PPO (Proximal Policy Optimization):
 - **Clip ε**: 0.2
 - **Entropy bonus**: coefficient 0.01, added to the PPO objective to encourage exploration
 - **Advantage computation**: per-step rewards are normalised across all steps in the batch (subtract mean, divide by std) before computing PPO advantages
+
+## Action Masking
+
+Before computing the pick distribution at each step, the logits of all already-picked booster slots
+(available_flag == 0) are set to −∞. After the masked softmax, those slots have probability 0 and
+cannot be selected. Basic land slots are never masked.
+
+**Why this is the right design, not a crutch**
+
+A crutch compensates for a deficit the model should learn to overcome. Action masking is different:
+re-picking an already-chosen booster card is never correct under any circumstances — it is a rule of
+the game with no strategic exceptions, not a trade-off the model needs to reason about.
+
+Treating it as a learnable constraint forces the model to spend gradient budget on something with zero
+strategic content, and creates a tug-of-war: whenever the mana signal strongly favors a card, the
+duplicate penalty has to overpower it. This produces the learning instability observed in practice
+(models that oscillate between good mana and low duplicates, but rarely both at once).
+
+The `available_flag` in the input already tells the model which cards are picked. Masking makes the
+output consistent with what the input already encodes. What the model learns with masking is the actual
+skill: given a partial deck, which *available* card best advances the current goal? The model is
+effectively learning a ranking of card desirability in context; the mask simply restricts selection to
+the valid subset of that ranking at each step.
+
+Without masking, the model must learn "even though I strongly prefer this card, its flag is 0 so I
+must not pick it" — a conditional suppression that fights directly against the preference signal.
+With masking, the model only needs to learn preferences; the mask automatically selects the
+highest-ranked card that is still available. The constraint is enforced structurally, not learned.
+
+The masking must be applied in both the episode runner (during collection) and the PPO trainer (during
+the gradient update when episode states are reconstructed), so that the log-probabilities used for the
+ratio `π_new / π_old` are consistent between the two.
 
 ## Episode Storage
 
@@ -206,10 +238,10 @@ non-basic-land portion of the pool is reshuffled to prevent the model from
 developing positional biases.
 
 The model is asked to sequentially pick up to `best_run` cards from the pool
-(see Reward and Curriculum below). Land picks are allowed at any point — the only
-termination condition is a duplicate pick (re-selecting an already-chosen booster
-card). Basic land slots can be picked any number of times; non-basic pool lands
-can only be picked once.
+(see Reward and Curriculum below). Land picks are allowed at any point. Action
+masking prevents duplicate picks structurally (see Training Algorithm), so every
+episode always completes all `best_run` steps. Basic land slots can be picked any
+number of times; non-basic pool lands can only be picked once.
 
 #### Reward and Curriculum
 
@@ -223,9 +255,8 @@ independent budgets — a spell budget (target: 23) and a land budget (target: 1
 | Land      | n_land < 17   | +1 |
 | Land      | n_land ≥ 17   | −1 |
 
-A duplicate pick terminates the episode; the terminal pick receives −1 advantage
-in the PPO update. These per-step rewards are the signal passed to PPO (see
-Training Algorithm).
+These per-step rewards are the signal passed to PPO (see Training Algorithm).
+Duplicate picks are impossible due to action masking — no termination condition exists in Stage 1.
 
 **Episode-level reward** (used for logging and `best_run` bookkeeping):
 
@@ -250,13 +281,18 @@ Key properties:
 - Land picks are incentivised throughout the episode, not deferred to a second
   phase, so the model learns to interleave lands naturally.
 
-**Curriculum advancement**: `best_run` starts at 1 and advances by 1 after every
-batch in which all 32 episodes completed `best_run` picks without a duplicate AND
-the batch mean reward is ≥ 0.90. At `best_run=40` this threshold corresponds to
-an average waste of at most 2 picks (e.g. 2 extra spells instead of lands), so the
-model must be picking close to the ideal 23/17 split before progressing.
-Stage 1 is complete when `best_run` reaches 40 and a full batch passes both
-conditions at that level.
+**Curriculum advancement**: `best_run` starts at 17 and advances by 1 after every
+batch in which all 32 episodes achieve batch mean reward ≥ 0.90. At `best_run=40`
+this threshold corresponds to an average waste of at most 2 picks (e.g. 2 extra
+spells instead of lands), so the model must be picking close to the ideal 23/17
+split before progressing. Stage 1 is complete when `best_run` reaches 40 and a
+full batch passes the condition at that level.
+
+Starting at 17 rather than 1 is correct because action masking eliminates duplicate
+terminations entirely, and the budget reward signal cannot produce a negative step
+reward before pick 18 (the earliest a budget ceiling can be hit is land pick 18 or
+spell pick 24). Levels 1–16 are trivially passable in a single batch and provide no
+useful gradient signal.
 
 #### Command Line
 

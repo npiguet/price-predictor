@@ -19,7 +19,7 @@ from sealed.infrastructure.embedding_adapter import EmbeddingAdapter
 
 @dataclass
 class TrainingState:
-    best_run: int = 1
+    best_run: int = 17
     episode_count: int = 0
 
 
@@ -137,19 +137,13 @@ class TrainStage1UseCase:
 
             t_embed = card_port.total_load_s
 
-            # Curriculum advancement: all episodes must complete best_run picks
-            batch_all_succeeded = (
-                all(ep.termination == "success" for ep in batch_episodes)
-                and result.mean_reward >= 0.90
-            )
-
-            n_dup = sum(1 for ep in batch_episodes if ep.termination == "duplicate")
+            # Curriculum advancement: batch mean reward must reach threshold
+            batch_all_succeeded = result.mean_reward >= 0.90
 
             runs_str = ",".join(str(r) for r in result.episode_runs)
             print(
                 f"[ep {state.episode_count}] batch runs: {runs_str}"
                 f"  best_run={state.best_run}  mean_reward={result.mean_reward:.3f}"
-                f"  | dup={n_dup}"
                 f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
 

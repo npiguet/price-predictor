@@ -75,9 +75,9 @@ reward   = 2 * score - 1
 
 ### Episode (domain/replay_buffer.py)
 
-No structural changes. Stage 2 reuses the same Episode dataclass. For completed episodes, the
-application layer overwrites `step_rewards` (uniform mana-score reward) and `reward` (mapped score)
-after the episode runs.
+No structural changes. Stage 2 reuses the same Episode dataclass. Action masking guarantees every
+episode always completes all 40 picks — there is no terminated/duplicate path. The application layer
+overwrites `step_rewards` (uniform mana-score reward) and `reward` (mapped score) after each episode.
 
 ### TrainingState (application/train_stage1.py)
 
@@ -117,9 +117,8 @@ No changes. Stage 2 checkpoints contain the same payload:
                                    │
                             Run batch of 32 episodes
                                    │
-                            For each episode:
-                              ├─ 40 picks, no duplicate ──> Compute mana score, uniform reward
-                              └─ duplicate pick ──> Keep Stage 1 per-step rewards
+                            For each episode (always 40 picks, action masking):
+                              └─ Compute mana score, assign uniform reward to all steps
                                    │
                             PPO update (normalise across batch)
                                    │

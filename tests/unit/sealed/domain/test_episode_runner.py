@@ -60,49 +60,39 @@ def test_build_base_tensor_booster_flags_picked_and_land_zero():
     t = _build_base_tensor(POOL_NAMES, port, n_slots=4)
     embed_dim = 8
     for i in range(4):
-        assert t[i, embed_dim] == 0.0     # picked_flag
-        assert t[i, embed_dim + 2] == 0.0  # is_land
-        assert t[i, embed_dim + 3] == 0.0  # basic_land_count
+        assert t[i, embed_dim] == 0.0     # pick_count
+        assert t[i, embed_dim + 2] == 0.0  # reserved
 
 
 # ── EpisodeRunner ─────────────────────────────────────────────────────────────
 
-def test_legal_episode_picks_all_four_cards():
-    """A model biased to always pick available (non-picked) cards should complete 4 picks."""
+def test_episode_always_completes_all_picks():
+    """With action masking, every episode completes all best_run steps."""
     model = _make_model()
-    # Bias the model to strongly prefer whichever slot has the lowest index
-    # by zeroing head and then setting large bias for all slots — this alone
-    # won't guarantee 4 picks because the permutation can still cause duplicates.
-    # Instead, try many seeds and assert that at least one produces 4 unique picks.
     runner = EpisodeRunner()
     port = _MockCardPort()
 
-    found_full = False
-    for seed in range(100):
+    for seed in range(10):
         ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
-        if len(ep.actions) == 4 and len(set(ep.actions)) == 4:
-            found_full = True
-            break
-    assert found_full, "Expected at least one seed to produce a full 4-pick episode"
+        assert len(ep.actions) == 4, f"Expected 4 picks, got {len(ep.actions)} (seed={seed})"
 
 
-def test_episode_terminates_on_illegal_pick():
-    """Forcing a repeated pool_index should terminate the episode early."""
-    # Use a model that always outputs logits heavily favouring slot 0
+def test_masking_prevents_duplicate_picks():
+    """Even with a model strongly biased toward slot 0, all picks must be unique."""
     model = _make_model()
-    # Override head weights so slot 0 always has the highest logit
+    # Override head weights so slot 0 always has the highest logit — without masking
+    # this would immediately cause a duplicate on step 2.
     with torch.no_grad():
         model.head.weight.zero_()
         model.head.bias.zero_()
         model.head.bias[0] = 100.0  # slot 0 always wins
     runner = EpisodeRunner()
     port = _MockCardPort()
-    ep = runner.run(POOL_NAMES, port, model, rng_seed=0)
-    # First pick: slot 0 → legal.  Second pick: slot 0 → duplicate → terminates.
-    # After picking slot 0, the permutation at the next step may map it to a
-    # different shuffled position; but since logits strongly favor shuffled pos 0,
-    # it's very likely to re-pick the same pool index quickly.
-    assert len(ep.actions) <= 4  # episode must end no later than picking all cards
+
+    for seed in range(5):
+        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
+        assert len(ep.actions) == 4, "Masking should ensure all 4 picks complete"
+        assert len(set(ep.actions)) == 4, "All 4 picks must be unique pool indices"
 
 
 def test_reward_formula():
@@ -132,22 +122,25 @@ def test_log_probs_have_same_length_as_actions():
     assert len(ep.log_probs) == len(ep.actions)
 
 
-def test_actions_are_unique_in_full_episode():
-    """When episode completes all 4 picks, each pool index appears exactly once."""
+def test_actions_are_always_unique():
+    """With masking, actions are always a permutation of pool indices."""
     model = _make_model()
     runner = EpisodeRunner()
     port = _MockCardPort()
-    ep = runner.run(POOL_NAMES, port, model, rng_seed=42)
-    if len(ep.actions) == 4:
-        assert sorted(ep.actions) == [0, 1, 2, 3]
+    for seed in range(20):
+        ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
+        assert len(ep.actions) == 4
+        assert sorted(ep.actions) == [0, 1, 2, 3], f"Expected all 4 unique indices (seed={seed})"
 
 
 def test_shuffle_seeds_shape():
+    """shuffle_seeds always has shape (best_run,)."""
     model = _make_model()
     runner = EpisodeRunner()
     port = _MockCardPort()
-    ep = runner.run(POOL_NAMES, port, model, rng_seed=3, best_run=MAX_PICKS)
-    assert ep.shuffle_seeds.shape == (MAX_PICKS,)
+    # Use best_run=4 (== n_booster) so we don't exhaust all available slots
+    ep = runner.run(POOL_NAMES, port, model, rng_seed=3, best_run=4)
+    assert ep.shuffle_seeds.shape == (4,)
 
 
 def test_different_pool_indices_at_same_shuffled_position_are_both_legal():
@@ -158,13 +151,7 @@ def test_different_pool_indices_at_same_shuffled_position_are_both_legal():
     model = _make_model()
     runner = EpisodeRunner()
     port = _MockCardPort()
-    # Run enough seeds to find at least one full episode
-    full_episodes = []
-    for seed in range(100):
+    # With masking all episodes complete with 4 unique picks
+    for seed in range(20):
         ep = runner.run(POOL_NAMES, port, model, rng_seed=seed, best_run=4)
-        if len(ep.actions) == 4:
-            full_episodes.append(ep)
-    # We expect at least one full episode with 4 unique cards
-    assert len(full_episodes) > 0, "Expected at least one full episode across 100 seeds"
-    for ep in full_episodes:
         assert len(set(ep.actions)) == 4

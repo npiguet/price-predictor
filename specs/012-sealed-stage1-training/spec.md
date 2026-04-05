@@ -24,12 +24,13 @@ episodes execute, rewards are computed, and the model checkpoint is written to d
 1. **Given** card embeddings and a pools file are present, **When** the user runs `python -m sealed train --stage 1`,
    **Then** the training loop begins, episodes execute sequentially, and the model is saved at the configured path.
 
-2. **Given** training is running at curriculum level `best_run`, **When** the model makes a duplicate pick
-   before completing `best_run` picks, **Then** the episode terminates immediately and the episode-level reward
-   is computed as `(effective_run / best_run) × 2 - 1` where `effective_run = n_total - max(n_spell - 23, 0) - max(n_land - 17, 0)`.
+2. **Given** training is running at curriculum level `best_run`, **When** the model produces logits for a pick step,
+   **Then** logits for already-picked booster slots are set to −1e9 before softmax, making duplicate picks structurally
+   impossible. Every episode always completes all `best_run` steps.
 
-3. **Given** training is running at curriculum level `best_run`, **When** the model completes `best_run` picks
-   without any illegal selection, **Then** the episode is recorded as successful with `n_total = best_run`.
+3. **Given** training is running at curriculum level `best_run`, **When** the model completes `best_run` picks,
+   **Then** the episode-level reward is computed as `(effective_run / best_run) × 2 - 1` where
+   `effective_run = n_total - max(n_spell - 23, 0) - max(n_land - 17, 0)`.
 
 4. **Given** a training batch of 32 episodes all succeeded at the current `best_run` level, **When** `best_run`
    was already 40, **Then** the training loop reports completion of Stage 1 and halts.
@@ -80,11 +81,8 @@ verifying that it prints human-readable pick sequences.
    `python -m sealed sample`, **Then** the command prints N pick sequences drawn from random pools, each showing the
    selected card names in pick order.
 
-2. **Given** a sample is generated where the model made an illegal pick before completing 40 picks, **Then** the output
-   also reports how many legal picks were made before the first illegal pick.
-
-3. **Given** a sample is generated where the model completed all 40 picks legally, **Then** the run is reported as a
-   success with 40/40 legal picks.
+2. **Given** a sample is generated, **Then** the run is always reported as a success with 40/40 picks (action masking
+   ensures no illegal picks can occur).
 
 ---
 
@@ -94,7 +92,7 @@ verifying that it prints human-readable pick sequences.
 - What happens when a card named in a pool has no corresponding embedding file in cards-path? → Training aborts immediately with an error message identifying the missing card(s).
 - What happens when the model path does not exist yet (first run, no checkpoint)? → The model-path directory tree is created automatically.
 - What happens when training is interrupted mid-episode (e.g. keyboard interrupt between pick steps)?
-- What happens when `best_run` is 1 and the episode terminates on the very first pick? (duplicate pick: `effective_run = 0`, reward = −1.0. If the pick is legal: reward = 1.0. The model must make a single non-duplicate pick before the curriculum advances.)
+- What happens when `best_run` is 17 and all 17 picks are over-budget? (`effective_run = 0`, reward = −1.0. This is the worst-case start for the curriculum.)
 
 ## Requirements *(mandatory)*
 
@@ -116,14 +114,12 @@ verifying that it prints human-readable pick sequences.
   after first pick for booster cards; always 1 for basic land slots), and 6 reserved padding dimensions (always 0).
   Land type is intentionally not provided as an explicit flag — the model is expected to infer it from the card
   embedding.
-- **FR-005**: During each pick step, the model MUST sample from the unmasked distribution over all 96 slots. No
-  selection mask is applied to the logits — the model is free to pick any slot, including already-picked ones. The
-  `available_flag = 0` on picked slots serves as an input feature (context for the transformer) but does NOT block
-  selection. This is intentional: Stage 1 teaches the model to avoid illegal picks through the reward signal, not by
-  making them mechanically impossible.
-- **FR-006**: When the model selects an already-picked non-basic-land slot, the episode MUST terminate immediately.
-  Land picks (basic land slots or booster land cards not yet picked) do NOT terminate the episode.
-- **FR-007**: Each episode MUST run for at most `best_run` picks. Per-step rewards use dual spell/land budgets:
+- **FR-005**: During each pick step, the logits of already-picked booster slots (where `available_flag = 0`) MUST be
+  set to −1e9 before softmax, making duplicate picks structurally impossible. This is action masking. Every episode
+  always completes all `best_run` steps — there is no early termination. See `sealed-deck-picker.md` § Action Masking
+  for the full rationale.
+- **FR-006**: *(removed — duplicate termination no longer exists; see FR-005)*
+- **FR-007**: Each episode MUST run for exactly `best_run` picks. Per-step rewards use dual spell/land budgets:
   +1 for a spell pick when n_spell < 23, −1 when n_spell ≥ 23; +1 for a land pick when n_land < 17, −1 when
   n_land ≥ 17. The episode-level reward MUST be computed as `(effective_run / best_run) × 2 - 1`, where
   `effective_run = n_total - max(n_spell - 23, 0) - max(n_land - 17, 0)`. Per-step rewards are batch-normalised
@@ -137,11 +133,11 @@ verifying that it prints human-readable pick sequences.
 - **FR-010**: The system MUST save the model state to model-path at the end of each training batch (every
   `--batch-size` episodes), and MUST save a timestamped checkpoint to the `checkpoints/` subfolder of the model
   path's parent every 1000 episodes.
-- **FR-011**: `best_run` MUST advance by 1 after any training batch in which all 32 episodes completed `best_run`
-  picks without a duplicate pick AND the batch mean reward is ≥ 0.90. At `best_run=40` this corresponds to an
-  average of at most 2 wasted picks (e.g. 2 extra spells instead of lands), enforcing a spell/land mix close to
-  the 23/17 ideal. The training loop MUST halt and report Stage 1 completion when `best_run` reaches 40 and a
-  full batch passes both conditions at that level.
+- **FR-011**: `best_run` starts at 17 and MUST advance by 1 after any training batch in which the batch mean reward
+  is ≥ 0.90. At `best_run=40` this corresponds to an average of at most 2 wasted picks (e.g. 2 extra spells instead
+  of lands), enforcing a spell/land mix close to the 23/17 ideal. The training loop MUST halt and report Stage 1
+  completion when `best_run` reaches 40 and a full batch passes the threshold at that level. Levels 1–16 are skipped
+  because action masking makes them trivially achievable from episode 1.
 - **FR-012**: The pool transformer MUST use the architecture specified in the sealed-deck-picker design: 8 transformer
   layers, 8 attention heads, model dimension 520, feed-forward dimension 2048.
 - *(FR-013 intentionally removed during spec refinement — numbering preserved for traceability)*
@@ -155,12 +151,13 @@ verifying that it prints human-readable pick sequences.
 
 - **Pool**: A list of ~84–90 card names from the pre-generated dataset, assembled at runtime by loading each card's
   embedding file. Augmented with 6 basic land slots and zero-padded to 96 entries.
-- **Episode**: A single pick sequence (up to `best_run` steps) over one pool. Stores the pool card names, the shuffle
-  seed used at each pick step, the actions taken, the log-probabilities of those actions, per-step rewards, and the
-  final reward. Terminates early only on a duplicate pick.
-- **best_run**: The current curriculum level — the maximum number of picks allowed per episode. Starts at 1 and
-  advances by 1 each time a full batch (32 episodes) completes with every episode reaching `best_run` picks without
-  an illegal pick. Used as the denominator in the reward function and persisted across training restarts.
+- **Episode**: A single pick sequence of exactly `best_run` steps over one pool. Stores the pool card names, the
+  shuffle seed used at each pick step, the actions taken, the log-probabilities of those actions, per-step rewards,
+  and the final reward. Action masking guarantees every episode always completes all steps — there is no early
+  termination.
+- **best_run**: The current curriculum level — the exact number of picks per episode. Starts at 17 and advances by 1
+  each time a full batch mean reward is ≥ 0.90. Used as the denominator in the reward function and persisted across
+  training restarts.
 - **Model Checkpoint**: The serialized state of the pool transformer, saved periodically to allow
   resumption and comparison across training stages.
 
@@ -185,7 +182,7 @@ verifying that it prints human-readable pick sequences.
 
 - Q: How many episodes constitute one training batch (PPO update frequency)? → A: Fixed episode count per batch, configurable via `--batch-size` (default 32 episodes).
 - Q: What training progress output is shown on the console? → A: One summary line per batch showing episode count, per-episode current_run values, best_run, and mean batch reward.
-- Q: When does `best_run` advance? → A: After any batch of 32 episodes in which every episode completed `best_run` picks without a duplicate pick AND the batch mean reward is ≥ 0.90. Both conditions must hold; if either fails, `best_run` stays at its current level.
+- Q: When does `best_run` advance? → A: After any batch in which the batch mean reward is ≥ 0.90. Action masking guarantees every episode always completes all `best_run` steps, so the "no duplicate pick" condition that existed in earlier versions is no longer needed.
 - Q: What advancement threshold was considered and rejected? → A: A percentage-based threshold (e.g. 95% success rate over a rolling window) was considered but deferred. The full-batch requirement will be evaluated first; if training stalls at a particular level, the threshold can be relaxed based on training logs.
 - Q: What happens when a card named in a pool has no corresponding embedding file in cards-path? → A: Abort immediately with a clear error message identifying the missing card(s).
 - Q: How are pools sampled from the dataset across episodes? → A: Sequential pass through the dataset, looping back to the start when all pools have been used.

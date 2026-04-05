@@ -17,14 +17,10 @@ def test_episode_fields_accessible():
         step_rewards=np.ones(3, dtype=np.float32),
         reward=1.0,
         effective_run=3,
-        termination="success",
-        term_action=-1,
-        term_log_prob=0.0,
     )
     assert ep.pool_names == "CardA;CardB;CardC"
     assert ep.reward == 1.0
     assert ep.effective_run == 3
-    assert ep.termination == "success"
     assert len(ep.actions) == 3
     assert len(ep.log_probs) == 3
     assert len(ep.step_rewards) == 3

@@ -34,19 +34,15 @@ written to disk.
    `python -m sealed train --stage 2`, **Then** the Stage 1 checkpoint is loaded as the starting point and training
    begins with the heuristic mana-score reward.
 
-2. **Given** Stage 2 training is running, **When** an episode completes all 40 picks without a duplicate, **Then** the
-   heuristic mana score is computed from the full deck and the same reward value is assigned uniformly to all 40 steps.
+2. **Given** Stage 2 training is running, **When** an episode completes all 40 picks (action masking guarantees
+   every episode always completes), **Then** the heuristic mana score is computed from the full deck and the same
+   reward value is assigned uniformly to all 40 steps.
 
-3. **Given** Stage 2 training is running, **When** the model re-selects an already-picked booster card before
-   completing 40 picks, **Then** the episode terminates immediately and the Stage 1 per-step reward scheme is applied
-   with `best_run = 40` (each prior pick receives +1 or -1 based on spell/land budgets; the duplicate pick receives
-   -1 advantage).
+3. **Given** Stage 2 training is running, **When** a batch of 32 episodes all achieve a mana score above 0.90,
+   **Then** Stage 2 is reported as complete and training halts.
 
-4. **Given** Stage 2 training is running, **When** a batch of 32 episodes all complete 40 picks without duplicates
-   and all achieve a mana score above 0.90, **Then** Stage 2 is reported as complete and training halts.
-
-5. **Given** Stage 2 training is running, **When** a batch completes but not all 32 episodes meet the completion
-   criteria, **Then** training continues with the next batch.
+4. **Given** Stage 2 training is running, **When** a batch completes but not all 32 episodes meet the completion
+   criterion, **Then** training continues with the next batch.
 
 ---
 
@@ -147,8 +143,8 @@ training resumes from the saved state.
   training.
 - What happens when a card's Oracle text has no mana cost (e.g. lands in the non-land card list due to data issues)?
   Cards with no mana cost contribute zero pips to the count.
-- What happens when the model makes a duplicate pick on pick 1 (the very first pick)? The episode terminates with
-  zero completed picks and the duplicate pick receives -1 advantage. No mana score is computed.
+- What happens when a deck contains only cards with no mana cost (e.g., purely land picks)? The pip count is zero
+  for all colors; ideal distribution is zero; score reflects only the land-count deviation penalty.
 
 ## Requirements *(mandatory)*
 
@@ -158,12 +154,10 @@ training resumes from the saved state.
   parameter. Only the pool transformer model weights are loaded; the optimizer state and training state (episode count)
   are NOT carried over — Stage 2 begins with a fresh optimizer and episode_count = 0.
 - **FR-002**: System MUST keep the card encoder frozen during Stage 2 training (only the pool transformer is trained).
-- **FR-003**: System MUST terminate an episode immediately if the model re-selects an already-picked booster card
-  (duplicate pick). In this case, the Stage 1 per-step reward scheme is applied with `best_run = 40`: each prior
-  pick receives +1 or -1 based on spell/land budgets (spell < 23 → +1, spell ≥ 23 → -1; land < 17 → +1,
-  land ≥ 17 → -1), and the duplicate pick receives -1 advantage.
-- **FR-004**: System MUST compute the heuristic mana score at the end of each episode that completes all 40 picks
-  without a duplicate.
+- **FR-003**: *(removed — duplicate termination no longer exists; action masking in FR-005 of spec 012 guarantees
+  every episode always completes all 40 picks)*
+- **FR-004**: System MUST compute the heuristic mana score at the end of each episode (all episodes complete all
+  40 picks).
 - **FR-005**: For episodes that complete all 40 picks, system MUST assign the mana-score reward uniformly to all
   40 steps (reflecting that every pick contributed equally to the deck's mana base quality).
 - **FR-006**: System MUST count mana pips from every `mana cost:` line of each non-land card in the deck (see spec
@@ -182,8 +176,7 @@ training resumes from the saved state.
   is the sum of absolute differences between actual and ideal source counts per color.
 - **FR-010**: System MUST convert the score to the reward range [-1, 1] via `reward = 2 * score - 1`.
 - **FR-011**: System MUST apply standard PPO advantage normalization across all steps in the batch.
-- **FR-012**: System MUST declare Stage 2 complete when all 32 episodes in a batch complete 40 picks without
-  duplicates and all achieve score > 0.90.
+- **FR-012**: System MUST declare Stage 2 complete when all 32 episodes in a batch achieve score > 0.90.
 - **FR-013**: System MUST save the model to `model-path` after each training batch and save a timestamped checkpoint
   every 1000 episodes to the `checkpoints/` subfolder.
 - **FR-014**: System MUST support resuming Stage 2 training from a previously saved checkpoint.
@@ -227,8 +220,8 @@ training resumes from the saved state.
 - Land cards can be identified from their `types:` line (containing "land") and their mana-producing abilities
   are reliably present as activated abilities in the card file. Basic lands always have an implicit mana ability
   generated by the card converter (see spec 006 FR-020).
-- The existing pool assembly, shuffling, PPO training infrastructure, and duplicate-pick termination from Stage 1
-  are reused. Stage 2 adds the heuristic mana-score reward for completed episodes and changes the sample output
-  format.
+- The existing pool assembly, shuffling, action masking, and PPO training infrastructure from Stage 1 are reused.
+  Stage 2 adds the heuristic mana-score reward (replacing the per-step budget rewards after each episode) and
+  changes the sample output format.
 - Checkpointing follows the same conventions established in Stage 1 (latest.pt + timestamped checkpoints every
   1000 episodes).

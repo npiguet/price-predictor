@@ -15,7 +15,7 @@ from sealed.infrastructure.pool_loader import card_npz_path
 from sealed.infrastructure.pool_model_store import PoolModelStore
 
 MINI = PoolTransformerConfig(
-    n_slots=4,
+    n_slots=10,
     d_model=16,
     n_layers=1,
     n_heads=2,

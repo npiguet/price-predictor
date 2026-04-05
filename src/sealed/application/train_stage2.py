@@ -177,20 +177,15 @@ class TrainStage2UseCase:
                 batch_episodes.append(ep)
             t_collect = time.perf_counter() - t0
 
-            # Compute mana scores for completed episodes, override rewards
+            # Compute mana scores and override rewards for all episodes
             batch_scores: list[float] = []
-            n_dup = 0
             for ep in batch_episodes:
-                if ep.termination == "success":
-                    ms = _compute_episode_mana_score(ep, card_port)
-                    ep.step_rewards = np.full(
-                        len(ep.actions), ms.reward, dtype=np.float32
-                    )
-                    ep.reward = ms.reward
-                    batch_scores.append(ms.score)
-                else:
-                    n_dup += 1
-                    batch_scores.append(ep.reward)  # Stage 1 reward for duplicates
+                ms = _compute_episode_mana_score(ep, card_port)
+                ep.step_rewards = np.full(
+                    len(ep.actions), ms.reward, dtype=np.float32
+                )
+                ep.reward = ms.reward
+                batch_scores.append(ms.score)
 
             t0 = time.perf_counter()
             trainer.update(batch_episodes, card_port)
@@ -203,15 +198,11 @@ class TrainStage2UseCase:
             print(
                 f"[ep {state.episode_count}] batch scores: {scores_str}"
                 f"  mean_score={mean_score:.3f}"
-                f"  | dup={n_dup}"
                 f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
 
-            # Convergence: all episodes completed and scored above threshold
-            batch_converged = (
-                n_dup == 0
-                and all(s > _CONVERGENCE_THRESHOLD for s in batch_scores)
-            )
+            # Convergence: all episodes scored above threshold
+            batch_converged = all(s > _CONVERGENCE_THRESHOLD for s in batch_scores)
 
             model_store.save(model_path, model, optimizer, state)
 

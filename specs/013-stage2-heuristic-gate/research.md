@@ -48,18 +48,16 @@ which does NOT match production output. Implementation MUST be tested against th
 application layer.
 
 **Rationale**: EpisodeRunner always produces per-step rewards (+1/-1 based on spell/land budgets)
-and handles duplicate-pick termination. These behaviours are correct for both Stage 1 and Stage 2:
-- **Completed episodes** (Stage 2): overwrite `episode.step_rewards` with uniform mana-score reward
-  and `episode.reward` with the mapped score after the episode runs.
-- **Terminated episodes** (Stage 2): keep the Stage 1 per-step rewards as-is (FR-003).
+and applies action masking (available_flag == 0 → logit = −1e9). Every episode always completes all
+40 steps. Stage 2 simply overwrites `episode.step_rewards` and `episode.reward` with the uniform
+mana-score reward after each episode runs.
 
 PPOTrainer reads `step_rewards` from Episode objects and normalises advantages across the batch
-(FR-011). It doesn't know or care whether the rewards are per-step or uniform — the math is the
-same. Terminal picks use -1.0 advantage regardless of stage.
+(FR-011). It doesn't know or care whether the rewards are per-step or uniform — the math is the same.
 
 **Alternatives considered**:
 - Subclassing EpisodeRunner with a Stage 2 variant — rejected: unnecessary complexity since the
-  episode mechanics (shuffling, picking, duplicate detection) are identical.
+  episode mechanics (shuffling, picking, action masking) are identical.
 - Adding a `reward_fn` callback to EpisodeRunner — rejected: YAGNI, only two stages exist.
 
 ## 3. Embedding Adapter Extraction

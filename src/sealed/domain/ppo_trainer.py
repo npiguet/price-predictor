@@ -45,17 +45,12 @@ class PPOTrainer:
         self.model.train()  # type: ignore[attr-defined]
         device = next(self.model.parameters()).device  # type: ignore[attr-defined]
 
-        n_terminals = sum(1 for ep in episodes if ep.term_action >= 0)
-        total_steps = sum(len(ep.actions) for ep in episodes) + n_terminals
+        total_steps = sum(len(ep.actions) for ep in episodes)
 
-        # Normalise per-step rewards across all steps in the batch, including
-        # the terminal pick (reward=-1) for each failed episode.
+        # Normalise per-step rewards across all steps in the batch
         step_reward_arrays = [ep.step_rewards for ep in episodes if len(ep.actions) > 0]
-        parts = step_reward_arrays.copy()
-        if n_terminals > 0:
-            parts.append(np.full(n_terminals, -1.0, dtype=np.float32))
-        if parts:
-            all_step_rewards = np.concatenate(parts)
+        if step_reward_arrays:
+            all_step_rewards = np.concatenate(step_reward_arrays)
             mean_r = float(all_step_rewards.mean())
             std_r = float(all_step_rewards.std()) if len(all_step_rewards) > 1 else 1.0
         else:
@@ -65,9 +60,8 @@ class PPOTrainer:
 
         for ep in episodes:
             n_steps = len(ep.actions)
-            has_terminal = ep.term_action >= 0
 
-            if n_steps == 0 and not has_terminal:
+            if n_steps == 0:
                 episode_runs.append(0)
                 continue
 
@@ -91,6 +85,11 @@ class PPOTrainer:
 
                 input_t = torch.from_numpy(shuffled).unsqueeze(0).float().to(device)
                 logits = self.model(input_t)  # type: ignore[operator]  # [1, n_slots]
+
+                # Action masking: must match episode runner exactly
+                available = torch.from_numpy(shuffled[:, embed_dim + 1]).to(device)  # [n_slots]
+                logits[0] = logits[0].masked_fill(available == 0, -1e9)
+
                 new_log_probs_all = torch.log_softmax(logits[0], dim=-1)  # [n_slots]
 
                 # Map pool_index back to the shuffled input position
@@ -115,39 +114,6 @@ class PPOTrainer:
                     current[action, embed_dim + 1] = 0.0   # available_flag
                 else:
                     current[action, embed_dim] += 1.0      # pick_count (can exceed 1 for basic lands)
-
-            # Process the terminating (illegal) pick with a -1 advantage so the
-            # model receives a gradient signal pushing it away from bad picks.
-            if has_terminal:
-                term_step = n_steps  # seeds[n_steps] was used for the terminal pick
-                step_rng = np.random.default_rng(int(ep.shuffle_seeds[term_step]))
-                perm = step_rng.permutation(n_booster)
-                inv_perm = np.argsort(perm)
-
-                shuffled = current.copy()
-                for sp in range(n_booster):
-                    shuffled[sp] = current[perm[sp]]
-
-                input_t = torch.from_numpy(shuffled).unsqueeze(0).float().to(device)
-                logits = self.model(input_t)  # type: ignore[operator]
-                new_log_probs_all = torch.log_softmax(logits[0], dim=-1)
-
-                term_action = ep.term_action
-                if term_action < n_booster:
-                    term_shuffled_pos = int(inv_perm[term_action])
-                else:
-                    term_shuffled_pos = term_action
-
-                new_lp = new_log_probs_all[term_shuffled_pos]
-                old_lp = ep.term_log_prob
-
-                advantage = (-1.0 - mean_r) / (std_r + 1e-8)
-                ratio = torch.exp(new_lp - old_lp)
-                surr1 = ratio * advantage
-                surr2 = torch.clamp(ratio, 1.0 - self.clip_eps, 1.0 + self.clip_eps) * advantage
-                entropy = -(new_log_probs_all * new_log_probs_all.exp()).sum()
-                step_loss = (-torch.min(surr1, surr2) - self.entropy_coef * entropy) / max(total_steps, 1)
-                step_loss.backward()
 
             reward_sum += float(ep.reward)
             episode_runs.append(n_steps)

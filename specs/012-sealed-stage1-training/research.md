@@ -30,15 +30,35 @@
 
 ---
 
-## Decision 4: No Logit Masking in Stage 1
+## Decision 4: Action Masking in All Stages
 
-**Decision**: No selection mask is applied to logits during Stage 1. The pool transformer produces `(batch, 96)` logits and the model samples freely from the full distribution, including already-picked slots. The `available_flag = 0` on picked slots is present as an input feature (context for the transformer) but does NOT block selection. If the model picks an already-picked non-basic-land slot, the episode terminates and the reward signal penalizes that behavior.
+**Decision**: Logits for already-picked booster slots (`available_flag = 0`) are set to −1e9 before softmax in both
+the episode runner and the PPO trainer. This makes duplicate picks structurally impossible. Every episode always
+completes all `best_run` steps. Basic land slots are never masked (their `available_flag` is never cleared).
 
-**Rationale**: Masking makes illegal picks mechanically impossible, which would make Stage 1 trivially solved from episode 1 — there would be nothing for the model to learn. The entire purpose of Stage 1 is to teach the model to avoid illegal picks through reinforcement. The reward signal (`(current_run / best_run) × 2 - 1`) provides the necessary gradient: illegal picks end the episode early and yield a lower reward. The `available_flag` feature gives the model the information it needs to learn this avoidance, but the learning must happen through experience, not constraint.
+**Rationale**: Without masking, duplicate avoidance and mana/spell-count optimization compete for the same model
+parameters, causing destructive oscillation: the model learns mana coherence, then forgets to avoid duplicates,
+then relearns that, then forgets mana — repeating in cycles. With masking, these concerns are cleanly separated:
+duplicate avoidance is handled structurally, and every gradient step focuses entirely on the spell/land mix quality.
+
+A subtler concern raised during design: "doesn't masking prevent the model from learning?" The answer is no. Without
+masking, the model must learn "even though I REALLY want this card, its flag is 0 so I cannot pick it again" — a
+conditional suppression that fights directly against the preference signal coming from the same card's embedding. The
+useful thing masking actually teaches is a *ranking*: by forcing the model to express a preference among the remaining
+available cards rather than collapsing back to already-picked favorites, the model's outputs become a ranking of
+available cards by desirability. That ranking is exactly what Stage 2 needs.
+
+Stage 1 levels 1–16 are skipped (`best_run` starts at 17) because with masking they are trivially achievable from
+episode 1 — there is nothing to learn at those levels.
+
+**Why −1e9 instead of −∞**: Using `float('-inf')` produces `exp(-inf) = 0`, then `log_softmax` gives `−inf` for
+masked positions, and `−inf × 0 = NaN` in the entropy term (`−Σ p log p`). A large finite value like −1e9 avoids
+this: `exp(-1e9) = 0.0` in float32 (safe underflow), but `−1e9 × 0.0 = 0.0` (no NaN).
 
 **Alternatives considered**:
-- Apply mask to logits (`masked_fill(-inf)`): Makes Stage 1 vacuous — correct behavior is enforced externally, model learns nothing. Rejected.
-- Apply mask only during evaluation/sampling: Inconsistent with training distribution; model would behave differently at inference time.
+- No masking + terminate on duplicate: Causes destructive oscillation between duplicate avoidance and mana learning.
+  Rejected after observing the oscillation in practice.
+- Mask only during evaluation: Inconsistent with training distribution; model would behave differently at inference.
 
 ---
 

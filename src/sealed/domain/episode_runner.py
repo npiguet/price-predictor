@@ -38,8 +38,8 @@ def _build_base_tensor(
       +2..+7  (reserved/padding — always 0)
 
     Initial state:
-      Booster slots  (0 .. n_booster-1): pick_count=0, available=1, is_land=per card type.
-      Basic land slots (n_booster .. n_slots-1): pick_count=0, available=1, is_land=1.
+      Booster slots  (0 .. n_booster-1): pick_count=0, available=1.
+      Basic land slots (n_booster .. n_slots-1): pick_count=0, available=1.
     """
     names = pool_names.split(";")
     n_booster = len(names)
@@ -80,15 +80,16 @@ class EpisodeRunner:
     ) -> Episode:
         """Run one episode.
 
+        Action masking prevents duplicate picks: before each pick, the logits of
+        already-picked booster slots (available_flag == 0) are set to -inf so they
+        cannot be selected. Every episode always completes all best_run steps.
+
         Land picks are allowed throughout all picks. Per-step rewards incentivise
         picking exactly IDEAL_SPELLS=23 non-land cards and IDEAL_LANDS=17 land cards:
           +1 for a spell pick when n_spell < IDEAL_SPELLS
           -1 for a spell pick when n_spell >= IDEAL_SPELLS
           +1 for a land pick when n_land < IDEAL_LANDS
           -1 for a land pick when n_land >= IDEAL_LANDS
-
-        Only a duplicate pick (re-picking an already-chosen booster card) terminates
-        the episode early.
         """
         n_slots: int = model.config.n_slots  # type: ignore[attr-defined]
         booster_names = pool_names.split(";")
@@ -97,15 +98,11 @@ class EpisodeRunner:
         current = _build_base_tensor(pool_names, card_port, n_slots, model.config.d_model)  # type: ignore[attr-defined]
         embed_dim = model.config.card_embed_dim  # type: ignore[attr-defined]
 
-        picked_set: set[int] = set()
         actions: list[int] = []
         log_probs_list: list[float] = []
         step_rewards_list: list[float] = []
         n_spell = 0  # non-land picks so far
         n_land = 0   # land picks so far
-        termination = "success"
-        term_action = -1
-        term_log_prob = 0.0
 
         rng = np.random.default_rng(rng_seed)
         seeds = rng.integers(0, 2**31 - 1, size=best_run, dtype=np.int64)
@@ -124,6 +121,11 @@ class EpisodeRunner:
             input_t = torch.from_numpy(shuffled).unsqueeze(0).to(device)  # [1, n_slots, d_model]
             with torch.no_grad():
                 logits = model(input_t)  # type: ignore[operator]  # [1, n_slots]
+
+            # Action masking: set logits of unavailable slots to -inf
+            available = torch.from_numpy(shuffled[:, embed_dim + 1]).to(device)  # [n_slots]
+            logits[0] = logits[0].masked_fill(available == 0, -1e9)
+
             logits_1d = logits[0]  # [n_slots]
 
             log_probs_all = torch.log_softmax(logits_1d, dim=-1)
@@ -135,25 +137,15 @@ class EpisodeRunner:
             else:
                 pool_index = sampled_sp  # basic land slot
 
-            # Classify the pick
+            # Classify the pick (needed for step rewards)
             if pool_index >= n_booster:
                 is_land = True
-                is_duplicate = False  # basic land slots can be picked any number of times
             elif card_port.is_land(booster_names[pool_index]):
                 is_land = True
-                is_duplicate = pool_index in picked_set
             else:
                 is_land = False
-                is_duplicate = pool_index in picked_set
 
             log_prob = float(log_probs_all[sampled_sp].item())
-
-            # Duplicate always terminates
-            if is_duplicate:
-                termination = "duplicate"
-                term_action = pool_index
-                term_log_prob = log_prob
-                break
 
             actions.append(pool_index)
             log_probs_list.append(log_prob)
@@ -168,7 +160,6 @@ class EpisodeRunner:
             if pool_index >= n_booster:
                 current[pool_index, embed_dim] += 1.0      # pick_count (can exceed 1 for basic lands)
             else:
-                picked_set.add(pool_index)
                 current[pool_index, embed_dim] = 1.0       # pick_count (0→1 for booster cards)
                 current[pool_index, embed_dim + 1] = 0.0   # available_flag
 
@@ -190,7 +181,4 @@ class EpisodeRunner:
             step_rewards=np.array(step_rewards_list, dtype=np.float32),
             reward=reward,
             effective_run=effective_run,
-            termination=termination,
-            term_action=term_action,
-            term_log_prob=term_log_prob,
         )

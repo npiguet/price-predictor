@@ -65,36 +65,16 @@ def _setup_pools(pools_path: Path) -> None:
 
 
 def _make_success_episode(pool_names: str = ";".join(BOOSTER_CARDS)) -> Episode:
-    """Minimal completed episode (MAX_PICKS=40 picks, no duplicates)."""
+    """Minimal completed episode (MAX_PICKS=40 picks)."""
     n_picks = MAX_PICKS
     return Episode(
         pool_names=pool_names,
-        shuffle_seeds=np.zeros(n_picks + 1, dtype=np.int64),
-        actions=np.array([0] * n_picks, dtype=np.int32),  # always pick slot 0 (basic land)
+        shuffle_seeds=np.zeros(n_picks, dtype=np.int64),
+        actions=np.array([0] * n_picks, dtype=np.int32),  # always pick slot 0
         log_probs=np.zeros(n_picks, dtype=np.float32),
         step_rewards=np.ones(n_picks, dtype=np.float32),
         reward=1.0,
         effective_run=n_picks,
-        termination="success",
-        term_action=-1,
-        term_log_prob=0.0,
-    )
-
-
-def _make_duplicate_episode(pool_names: str = ";".join(BOOSTER_CARDS)) -> Episode:
-    """Episode that terminated due to duplicate pick."""
-    n_picks = 5
-    return Episode(
-        pool_names=pool_names,
-        shuffle_seeds=np.zeros(n_picks + 2, dtype=np.int64),
-        actions=np.array([0, 1, 2, 3, 0], dtype=np.int32)[:n_picks - 1],
-        log_probs=np.zeros(n_picks - 1, dtype=np.float32),
-        step_rewards=np.array([1.0, 1.0, 1.0, -1.0], dtype=np.float32),
-        reward=-0.5,
-        effective_run=4,
-        termination="duplicate",
-        term_action=0,
-        term_log_prob=-0.5,
     )
 
 
@@ -170,61 +150,6 @@ def test_completed_episode_step_rewards_overridden_with_mana_score(tmp_path):
     assert updated_ep.reward == updated_ep.step_rewards[0]
 
 
-def test_duplicate_episode_step_rewards_unchanged(tmp_path):
-    """Duplicate episodes should keep their original Stage 1 step_rewards."""
-    pools_path = tmp_path / "pools"
-    cards_path = tmp_path / "cards"
-    model_path = tmp_path / "models" / "stage2" / "latest.pt"
-    init_from = tmp_path / "models" / "stage1" / "latest.pt"
-
-    _setup_pools(pools_path)
-    _setup_cards(cards_path)
-
-    model = PoolTransformerModel(MINI)
-    optimizer = optim.Adam(model.parameters())
-    state = TrainingState(best_run=MAX_PICKS, episode_count=0)
-    init_from.parent.mkdir(parents=True, exist_ok=True)
-    PoolModelStore().save(init_from, model, optimizer, state)
-
-    dup_ep = _make_duplicate_episode()
-    original_rewards = dup_ep.step_rewards.copy()
-    original_reward = dup_ep.reward
-
-    captured_episodes: list[list[Episode]] = []
-
-    mock_ppo_result = MagicMock()
-    mock_ppo_result.mean_reward = -0.5
-    mock_ppo_result.episode_runs = [4]
-    mock_ppo = MagicMock()
-    mock_ppo.update.side_effect = lambda episodes, _port: (
-        captured_episodes.append(list(episodes)) or mock_ppo_result
-    )
-
-    mock_runner = MagicMock()
-    mock_runner.run.return_value = dup_ep
-
-    with (
-        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
-        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
-        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
-        patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
-    ):
-        with pytest.raises(_StopAfterBatch):
-            use_case = TrainStage2UseCase()
-            use_case.execute(
-                pools_path=pools_path,
-                cards_path=cards_path,
-                model_path=model_path,
-                init_from=init_from,
-                batch_size=1,
-            )
-
-    assert len(captured_episodes) == 1
-    updated_ep = captured_episodes[0][0]
-    np.testing.assert_array_equal(updated_ep.step_rewards, original_rewards)
-    assert updated_ep.reward == original_reward
-
-
 # ─── Completion criterion ─────────────────────────────────────────────────────
 
 def test_training_halts_when_all_scores_above_threshold(tmp_path):
@@ -281,66 +206,6 @@ def test_training_halts_when_all_scores_above_threshold(tmp_path):
     # If we reach here, training halted normally (no infinite loop)
 
 
-def test_training_continues_when_duplicate_in_batch(tmp_path):
-    """Training should NOT halt if any episode in the batch is a duplicate."""
-    pools_path = tmp_path / "pools"
-    cards_path = tmp_path / "cards"
-    model_path = tmp_path / "models" / "stage2" / "latest.pt"
-    init_from = tmp_path / "models" / "stage1" / "latest.pt"
-
-    _setup_pools(pools_path)
-    _setup_cards(cards_path)
-
-    model = PoolTransformerModel(MINI)
-    optimizer = optim.Adam(model.parameters())
-    state = TrainingState(best_run=MAX_PICKS, episode_count=0)
-    init_from.parent.mkdir(parents=True, exist_ok=True)
-    PoolModelStore().save(init_from, model, optimizer, state)
-
-    dup_ep = _make_duplicate_episode()
-    batch_count = [0]
-
-    mock_ppo_result = MagicMock()
-    mock_ppo_result.mean_reward = 0.95
-    mock_ppo_result.episode_runs = [4]
-    mock_ppo = MagicMock()
-    mock_ppo.update.return_value = mock_ppo_result
-
-    mock_runner = MagicMock()
-    mock_runner.run.return_value = dup_ep
-
-    from sealed.domain.mana_scorer import ManaScore
-    perfect_score = ManaScore(score=0.95, reward=0.9, l1_error=0.0, n_lands=17)
-
-    def save_and_count(*args, **kwargs):
-        batch_count[0] += 1
-        if batch_count[0] >= 2:
-            raise _StopAfterBatch()
-
-    with (
-        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
-        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
-        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
-        patch("sealed.application.train_stage2.compute_mana_score", return_value=perfect_score),
-        patch("sealed.application.train_stage2.count_pips", return_value=MagicMock(counts={})),
-        patch("sealed.application.train_stage2.compute_ideal_distribution", return_value=MagicMock(ideal={})),
-        patch("sealed.application.train_stage2.count_actual_sources", return_value=MagicMock(sources={})),
-        patch.object(PoolModelStore, "save", save_and_count),
-    ):
-        with pytest.raises(_StopAfterBatch):
-            use_case = TrainStage2UseCase()
-            use_case.execute(
-                pools_path=pools_path,
-                cards_path=cards_path,
-                model_path=model_path,
-                init_from=init_from,
-                batch_size=1,
-            )
-
-    # Should have run at least 2 batches (didn't halt after first duplicate)
-    assert batch_count[0] >= 2
-
-
 # ─── Batch logging format ─────────────────────────────────────────────────────
 
 def test_batch_log_contains_expected_fields(tmp_path, capsys):
@@ -394,10 +259,9 @@ def test_batch_log_contains_expected_fields(tmp_path, capsys):
             )
 
     out = capsys.readouterr().out
-    # Should contain batch scores, mean_score, dup count, timing
+    # Should contain batch scores, mean_score, and timing
     assert "batch scores:" in out
     assert "mean_score=" in out
-    assert "dup=" in out
 
 
 # ─── Card encoder frozen (FR-002) ────────────────────────────────────────────

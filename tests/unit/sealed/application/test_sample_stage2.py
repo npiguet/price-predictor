@@ -17,7 +17,7 @@ from sealed.domain.episode_runner import MAX_PICKS, BASIC_LAND_NAMES
 
 
 MINI = PoolTransformerConfig(
-    n_slots=4,
+    n_slots=10,
     d_model=16,
     n_layers=1,
     n_heads=2,
