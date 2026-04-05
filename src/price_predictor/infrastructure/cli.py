@@ -100,9 +100,9 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
     train_transformer.add_argument("--ff-dim", type=int, default=1024,
                                    help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
-    train_transformer.add_argument("--aux-lambda", type=float, default=0.0,
+    train_transformer.add_argument("--aux-lambda", type=float, default=0.04,
                                    help="Weight for auxiliary mana-feature losses "
-                                        "(0=disabled, 0.2=recommended starting point) (default: 0.0).")
+                                        "(0=disabled, 0.2=recommended starting point) (default: 0.04).")
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",

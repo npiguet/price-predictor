@@ -159,7 +159,7 @@ Save: Extract `model.base` from wrapper before passing to `save_model()`.
 **File**: `src/price_predictor/infrastructure/cli.py`
 
 Add `--aux-lambda` argument to `train transformer` subparser:
-- Type: float, default: 0.0
+- Type: float, default: 0.04
 - Help text: "Weight for auxiliary mana-feature losses (0=disabled, 0.2=recommended starting point)"
 - Pass through to `train_transformer()` call
 

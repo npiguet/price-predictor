@@ -98,7 +98,7 @@ Options: `--output-dir`, `--prices-path`, `--printings-path`, `--model-output`,
 `--test-split`, `--random-seed`. Transformer adds `--batch-size`, `--epochs`,
 `--lr`, `--patience`, `--vocab-path`. See `python -m price_predictor train sklearn --help`.
 
-The `--aux-lambda` flag (default `0.0`) enables auxiliary supervision during transformer
+The `--aux-lambda` flag (default `0.04`) enables auxiliary supervision during transformer
 training: 20 linear heads teach the encoder to represent mana cost, card color, pip
 counts, and mana production. After training, validate with `python -m sealed validate-embeddings`.
 See `specs/015-embeddings-retraining/quickstart.md` for detailed tuning guidance.

@@ -71,10 +71,10 @@ class TestTrainTransformerParser:
 class TestAuxLambdaCLIFlag:
     """T008: --aux-lambda flag is parsed as float and passed to train_transformer()."""
 
-    def test_default_aux_lambda_is_zero(self):
+    def test_default_aux_lambda(self):
         parser = build_parser()
         args = parser.parse_args(["train", "transformer"])
-        assert args.aux_lambda == pytest.approx(0.0)
+        assert args.aux_lambda == pytest.approx(0.04)
 
     def test_aux_lambda_parsed_as_float(self):
         parser = build_parser()

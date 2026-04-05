@@ -258,7 +258,7 @@ def _train_loop(
     lr: float,
     patience: int,
     warmup_epochs: int = 2,
-    aux_lambda: float = 0.0,
+    aux_lambda: float = 0.04,
     aux_cls_loss_fns: list | None = None,
     ordinal_class_maps: dict[int, list[float]] | None = None,
     ordinal_class_weights: dict[int, list[float]] | None = None,
@@ -465,7 +465,7 @@ def train_transformer(
     n_layers: int = 4,
     n_heads: int = 4,
     ff_dim: int = 512,
-    aux_lambda: float = 0.0,
+    aux_lambda: float = 0.04,
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
