@@ -105,25 +105,41 @@ class TrainStage2UseCase:
         if model_path.exists():
             # Resume from Stage 2 checkpoint (full state)
             ckpt = model_store.load(model_path)
-            model.load_state_dict(ckpt.pool_transformer_state_dict)
-            model.to(device)
-            optimizer.load_state_dict(ckpt.optimizer_state_dict)
-            if isinstance(ckpt.training_state, TrainingState):
-                state = ckpt.training_state
-            elif isinstance(ckpt.training_state, dict):
-                s = ckpt.training_state
-                state = TrainingState(
-                    best_run=s.get("best_run", MAX_PICKS),
-                    episode_count=s.get("episode_count", 0),
+            try:
+                model.load_state_dict(ckpt.pool_transformer_state_dict)
+                model.to(device)
+                optimizer.load_state_dict(ckpt.optimizer_state_dict)
+                if isinstance(ckpt.training_state, TrainingState):
+                    state = ckpt.training_state
+                elif isinstance(ckpt.training_state, dict):
+                    s = ckpt.training_state
+                    state = TrainingState(
+                        best_run=s.get("best_run", MAX_PICKS),
+                        episode_count=s.get("episode_count", 0),
+                    )
+                print(
+                    f"Resumed from {model_path}"
+                    f"  episode={state.episode_count}"
                 )
-            print(
-                f"Resumed from {model_path}"
-                f"  episode={state.episode_count}"
-            )
+            except RuntimeError as e:
+                if "size mismatch" in str(e):
+                    raise ValueError(
+                        f"Stage 2 checkpoint at {model_path} has incompatible shape"
+                        f" (card embedding dimension changed). Delete it and re-run Stage 1 first."
+                    ) from e
+                raise
         elif init_from.exists():
             # Init from Stage 1 checkpoint (model weights only, fresh optimizer)
             ckpt = model_store.load(init_from)
-            model.load_state_dict(ckpt.pool_transformer_state_dict)
+            try:
+                model.load_state_dict(ckpt.pool_transformer_state_dict)
+            except RuntimeError as e:
+                if "size mismatch" in str(e):
+                    raise ValueError(
+                        f"Stage 1 checkpoint at {init_from} has incompatible shape"
+                        f" (card embedding dimension changed). Delete it and re-run Stage 1 first."
+                    ) from e
+                raise
             model.to(device)
             state = TrainingState(best_run=MAX_PICKS, episode_count=0)
             print(f"Initialized from Stage 1 checkpoint: {init_from}")

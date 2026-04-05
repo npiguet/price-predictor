@@ -70,22 +70,31 @@ class TrainStage1UseCase:
 
         if model_path.exists():
             ckpt = model_store.load(model_path)
-            model.load_state_dict(ckpt.pool_transformer_state_dict)
-            model.to(device)
-            optimizer.load_state_dict(ckpt.optimizer_state_dict)
-            if isinstance(ckpt.training_state, TrainingState):
-                state = ckpt.training_state
-            elif isinstance(ckpt.training_state, dict):
-                s = ckpt.training_state
-                state = TrainingState(
-                    best_run=s.get("best_run", 1),
-                    episode_count=s.get("episode_count", 0),
+            try:
+                model.load_state_dict(ckpt.pool_transformer_state_dict)
+                model.to(device)
+                optimizer.load_state_dict(ckpt.optimizer_state_dict)
+                if isinstance(ckpt.training_state, TrainingState):
+                    state = ckpt.training_state
+                elif isinstance(ckpt.training_state, dict):
+                    s = ckpt.training_state
+                    state = TrainingState(
+                        best_run=s.get("best_run", 1),
+                        episode_count=s.get("episode_count", 0),
+                    )
+                print(
+                    f"Resumed from {model_path}"
+                    f"  episode={state.episode_count}"
+                    f"  best_run={state.best_run}"
                 )
-            print(
-                f"Resumed from {model_path}"
-                f"  episode={state.episode_count}"
-                f"  best_run={state.best_run}"
-            )
+            except RuntimeError as e:
+                if "size mismatch" in str(e):
+                    print(
+                        f"Warning: checkpoint at {model_path} has incompatible shape"
+                        f" (card embedding dimension changed). Starting fresh."
+                    )
+                else:
+                    raise
         else:
             print(f"No checkpoint found at {model_path} — starting fresh")
 
