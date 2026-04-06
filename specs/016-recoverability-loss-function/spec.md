@@ -155,6 +155,13 @@ the reward values change in the expected direction.
   ideal for that color upward, which can reduce imbalance and produce a positive shaping signal — the reward correctly
   captures that adding demand for an over-supplied color is a good move.
 
+## Clarifications
+
+### Session 2026-04-06
+
+- Q: Which specific bounding function for the shaping signal? → A: `tanh(x / temperature)`
+- Q: Should recoverability ratio, imbalance, and shaping signal be logged as training metrics? → A: Log batch-mean shaping signal and batch-mean final imbalance on the existing print line. Recoverability ratio is not logged (intermediate value, not useful at batch granularity).
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -177,9 +184,9 @@ the reward values change in the expected direction.
   configurable exponent (default: 2). When remaining picks is zero, the ratio equals the raw imbalance.
 
 - **FR-005**: System MUST compute the per-step shaping signal as the reduction in the recoverability ratio from
-  before the pick to after the pick, passed through a bounding function with a configurable temperature parameter
-  (default: 1). The bounding function must preserve sign, keep small values approximately linear, and clamp large
-  values to the range (-1, 1).
+  before the pick to after the pick, passed through `tanh(delta / temperature)` where delta is the reduction and
+  temperature is a configurable parameter (default: 1). This bounds the signal to the range (-1, 1), preserves
+  sign, and keeps small values approximately linear.
 
 - **FR-006**: System MUST compute the total per-step reward as the sum of the Stage 1 budget reward (+1 for on-budget
   picks, -1 for off-budget picks) and the shaping signal. The total reward falls within the range (-2, 2).
@@ -199,6 +206,10 @@ the reward values change in the expected direction.
 - **FR-011**: System MUST display the mana cost of each non-land card before its name in the sample output pick list
   (e.g. `1. {U}{U} Counterspell`). Land cards are printed without a mana cost prefix. This applies to the
   `sealed sample` command output.
+
+- **FR-012**: System MUST log batch-mean shaping signal and batch-mean final imbalance on the existing per-batch
+  print line alongside the current batch scores and timing metrics. These two values provide the primary diagnostic
+  signals for tuning: whether shaping is net-positive and whether mana balance is converging.
 
 ### Key Entities
 
