@@ -182,3 +182,10 @@ No runaway gradients from late-game picks with tiny remaining_picks denominators
 - **Single-color deck**: n_colors = 1, `ideal[c] = 17` for that color, 0 for all others.
   Imbalance equals `|17 − actual_sources[c]|`. The model is rewarded for picking sources of
   that color and penalized for picking lands of other colors.
+
+# Sample Output Enhancement
+
+The `sealed sample` command must print the mana cost of each non-land card before its name in
+the pick list, e.g. `1. {U}{U} Counterspell` instead of `1. Counterspell`. Land cards are
+printed without a mana cost prefix. This makes it easy to visually verify the color coordination
+of picked decks at a glance.
