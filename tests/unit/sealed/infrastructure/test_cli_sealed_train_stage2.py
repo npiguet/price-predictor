@@ -117,3 +117,112 @@ def test_init_from_default_contains_stage1_path():
     assert len(captured_calls) == 1
     assert "stage1" in str(captured_calls[0]["init_from"])
     assert "RVR" in str(captured_calls[0]["init_from"])
+
+
+# ─── T009: New hyperparameter CLI args (feature 016) ─────────────────────────
+
+def test_urgency_exponent_argument_parsed():
+    """--urgency-exponent 3 should be parsed as float 3.0."""
+    parser = build_parser()
+    args = parser.parse_args(["train", "--stage", "2", "--urgency-exponent", "3"])
+    assert args.urgency_exponent == pytest.approx(3.0)
+
+
+def test_temperature_argument_parsed():
+    """--temperature 0.5 should be parsed as float 0.5."""
+    parser = build_parser()
+    args = parser.parse_args(["train", "--stage", "2", "--temperature", "0.5"])
+    assert args.temperature == pytest.approx(0.5)
+
+
+def test_urgency_exponent_default_is_2():
+    """--urgency-exponent default must be 2.0 when not specified."""
+    parser = build_parser()
+    args = parser.parse_args(["train", "--stage", "2"])
+    assert args.urgency_exponent == pytest.approx(2.0)
+
+
+def test_temperature_default_is_1():
+    """--temperature default must be 1.0 when not specified."""
+    parser = build_parser()
+    args = parser.parse_args(["train", "--stage", "2"])
+    assert args.temperature == pytest.approx(1.0)
+
+
+def test_urgency_exponent_help_includes_default():
+    """--urgency-exponent help text must include '(default: 2.0)'."""
+    import io
+    parser = build_parser()
+    help_text = io.StringIO()
+    try:
+        parser.parse_args(["train", "--help"])
+    except SystemExit:
+        pass
+    # Re-capture help via formatter
+    train_parser = [a for a in parser._subparsers._actions
+                    if hasattr(a, '_name_parser_map')]
+    if train_parser:
+        sub = train_parser[0]._name_parser_map.get("train")
+        if sub:
+            fmt = sub.format_help()
+            assert "default: 2.0" in fmt, (
+                f"Expected '(default: 2.0)' in train --help. Got:\n{fmt}"
+            )
+
+
+def test_temperature_help_includes_default():
+    """--temperature help text must include '(default: 1.0)'."""
+    parser = build_parser()
+    train_parser = [a for a in parser._subparsers._actions
+                    if hasattr(a, '_name_parser_map')]
+    if train_parser:
+        sub = train_parser[0]._name_parser_map.get("train")
+        if sub:
+            fmt = sub.format_help()
+            assert "default: 1.0" in fmt, (
+                f"Expected '(default: 1.0)' in train --help. Got:\n{fmt}"
+            )
+
+
+def test_run_train_stage2_passes_urgency_exponent(tmp_path):
+    """run_train passes urgency_exponent to TrainStage2UseCase.execute()."""
+    parser = build_parser()
+    args = parser.parse_args([
+        "train", "--stage", "2", "--urgency-exponent", "3",
+    ])
+    captured_calls: list[dict] = []
+
+    def mock_execute(**kwargs):
+        captured_calls.append(kwargs)
+        raise ValueError("stop")
+
+    mock_use_case = MagicMock()
+    mock_use_case.execute.side_effect = mock_execute
+
+    with patch("sealed.application.train_stage2.TrainStage2UseCase", return_value=mock_use_case):
+        run_train(args)
+
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["urgency_exponent"] == pytest.approx(3.0)
+
+
+def test_run_train_stage2_passes_temperature(tmp_path):
+    """run_train passes temperature to TrainStage2UseCase.execute()."""
+    parser = build_parser()
+    args = parser.parse_args([
+        "train", "--stage", "2", "--temperature", "0.5",
+    ])
+    captured_calls: list[dict] = []
+
+    def mock_execute(**kwargs):
+        captured_calls.append(kwargs)
+        raise ValueError("stop")
+
+    mock_use_case = MagicMock()
+    mock_use_case.execute.side_effect = mock_execute
+
+    with patch("sealed.application.train_stage2.TrainStage2UseCase", return_value=mock_use_case):
+        run_train(args)
+
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["temperature"] == pytest.approx(0.5)

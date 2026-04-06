@@ -567,3 +567,288 @@ class TestNormalizeManaFeatures:
     def test_complex_multicolor(self):
         # {2}{W}{U}{B} → 2+1+1+1 = 5
         assert compute_mana_value("{2}{W}{U}{B}") == pytest.approx(5.0)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T002 — compute_recoverability_ratio()  (feature 016)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestComputeRecoverabilityRatio:
+    """Tests for compute_recoverability_ratio() — pure mana-urgency math."""
+
+    # Helper: pip_counts + actual_sources that give imbalance = 4.0
+    # pip_counts = {W: 4} → ideal = {W: 17} (single-color, 1+remaining*pip/total)
+    # actual_sources = {W: 13}  → |17 - 13| = 4.0
+    @staticmethod
+    def _pip4w():
+        return PipCounts({"W": 4.0})
+
+    @staticmethod
+    def _actual13w():
+        return {"W": 13.0}
+
+    def test_ratio_early_step_remaining_35_exponent_2(self):
+        """Step 5 of 40 picks: remaining=35, imbalance=4.0, exponent=2 → 4/35²≈0.003265."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            self._pip4w(), self._actual13w(), remaining_picks=35, exponent=2.0
+        )
+        assert result == pytest.approx(4.0 / 35 ** 2, rel=1e-5)
+
+    def test_ratio_late_step_remaining_5_exponent_2(self):
+        """Step 35 of 40 picks: remaining=5, imbalance=4.0, exponent=2 → 4/25=0.16."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=2.0
+        )
+        assert result == pytest.approx(4.0 / 5 ** 2, rel=1e-5)
+
+    def test_ratio_no_spells_picked_is_zero(self):
+        """No spells, no lands → ideal is empty → imbalance = 0 → ratio = 0."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            PipCounts({}), {}, remaining_picks=20, exponent=2.0
+        )
+        assert result == pytest.approx(0.0)
+
+    def test_ratio_perfect_balance_is_zero(self):
+        """Perfect balance (actual = ideal) → imbalance = 0 → ratio = 0."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        # pip = {W: 4} → ideal = {W: 17}; actual = {W: 17} → imbalance = 0
+        result = compute_recoverability_ratio(
+            PipCounts({"W": 4.0}), {"W": 17.0}, remaining_picks=10, exponent=2.0
+        )
+        assert result == pytest.approx(0.0)
+
+    def test_ratio_remaining_zero_equals_raw_imbalance(self):
+        """remaining_picks=0 → denominator = max(0,1)^exp = 1 → ratio = imbalance."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            self._pip4w(), self._actual13w(), remaining_picks=0, exponent=2.0
+        )
+        # imbalance = 4.0, denominator = max(0,1)^2 = 1 → ratio = 4.0
+        assert result == pytest.approx(4.0)
+
+    def test_ratio_custom_exponent_3(self):
+        """Custom exponent=3: ratio = 4.0/5³ = 4/125 = 0.032."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=3.0
+        )
+        assert result == pytest.approx(4.0 / 5 ** 3, rel=1e-5)
+
+    def test_ratio_custom_exponent_1(self):
+        """Custom exponent=1: ratio = 4.0/5 = 0.8."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        result = compute_recoverability_ratio(
+            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=1.0
+        )
+        assert result == pytest.approx(4.0 / 5.0, rel=1e-5)
+
+    def test_ratio_multicolor_imbalance(self):
+        """Two-color pip counts: imbalance sums over both colors."""
+        from sealed.domain.mana_scorer import compute_recoverability_ratio
+        # pip = {W: 2, U: 2} → n_colors=2, total=4
+        # ideal W: 2 + (17-2*2)*2/4 = 2+13*0.5 = 8.5, ideal U: 8.5
+        # actual = {W: 5, U: 5} → |8.5-5| + |8.5-5| = 7.0
+        result = compute_recoverability_ratio(
+            PipCounts({"W": 2.0, "U": 2.0}),
+            {"W": 5.0, "U": 5.0},
+            remaining_picks=10,
+            exponent=2.0,
+        )
+        expected_imbalance = 7.0
+        assert result == pytest.approx(expected_imbalance / 10 ** 2, rel=1e-5)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T004 + T008 — compute_per_step_rewards()  (feature 016)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _MockCardPort:
+    """Minimal CardEmbeddingPort stub for reward-function tests."""
+    def __init__(self, land_names: set, card_texts: dict):
+        self._land_names = land_names
+        self._card_texts = card_texts
+
+    def get_embedding(self, card_name: str):
+        import numpy as _np
+        return _np.zeros(8, dtype=_np.float32)
+
+    def is_land(self, card_name: str) -> bool:
+        return card_name in self._land_names
+
+    def get_card_text(self, card_name: str) -> str:
+        return self._card_texts.get(card_name, "")
+
+
+_WHITE_SPELL_TEXT = "name: white knight\nmana cost: {1}{W}\ntypes: creature\n"
+_PLAINS_TEXT = "name: plains\ntypes: basic land\nactivated[1]: {T}: add {W}\n"
+
+
+def _make_port_ws_plains() -> _MockCardPort:
+    """port for pool 'WhiteSpell;Plains' (index 0 = WhiteSpell, 1 = Plains)."""
+    return _MockCardPort(
+        land_names={"Plains"},
+        card_texts={"WhiteSpell": _WHITE_SPELL_TEXT, "Plains": _PLAINS_TEXT},
+    )
+
+
+def _invoke_per_step(actions, pool_names, port, budget_rewards=None,
+                     exponent=2.0, temperature=1.0):
+    from sealed.domain.mana_scorer import compute_per_step_rewards
+    import numpy as _np
+    n = len(actions)
+    if budget_rewards is None:
+        budget_rewards = _np.ones(n, dtype=_np.float32)
+    return compute_per_step_rewards(
+        actions=_np.array(actions, dtype=_np.int32),
+        pool_names=pool_names,
+        card_port=port,
+        budget_rewards=_np.array(budget_rewards, dtype=_np.float32),
+        urgency_exponent=exponent,
+        temperature=temperature,
+    )
+
+
+class TestComputePerStepRewards:
+    """T004 — unit tests for compute_per_step_rewards()."""
+
+    def test_returns_float32_array_length_40(self):
+        """Result.step_rewards must be float32 with length == len(actions)."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        result = _invoke_per_step([1] * 40, "WhiteSpell;Plains", port)
+        assert result.step_rewards.dtype == _np.float32
+        assert result.step_rewards.shape == (40,)
+
+    def test_step_rewards_bounded_open_minus2_to_2(self):
+        """step_rewards[t] must be strictly in (-2, 2) for all t."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.tile([1.0, -1.0], 20).astype(_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        assert all(-2.0 < v < 2.0 for v in result.step_rewards), (
+            f"step_rewards out of (-2,2): {result.step_rewards}"
+        )
+
+    def test_plains_into_undersourced_white_positive_shaping(self):
+        """Plains pick when under-sourced for white → step_reward > budget_reward."""
+        # 1 WhiteSpell then 39 Plains; budget all +1
+        # At step 10 (10th Plains), actual={W:9}, ideal≈{W:17} → under-sourced
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        # step 10: Plains into under-sourced → positive shaping → reward > budget
+        assert result.step_rewards[10] > budget[10], (
+            f"Expected step_rewards[10] > 1.0, got {result.step_rewards[10]:.6f}"
+        )
+
+    def test_plains_into_oversourced_white_negative_shaping(self):
+        """Plains pick when over-sourced for white → step_reward < budget_reward."""
+        # 1 WhiteSpell then 39 Plains; after step ~17, ideal≈17 is reached
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        # step 25: actual ≈ 24 > ideal ≈ 17 → over-sourced → negative shaping
+        assert result.step_rewards[25] < budget[25], (
+            f"Expected step_rewards[25] < 1.0, got {result.step_rewards[25]:.6f}"
+        )
+
+    def test_shaping_signals_not_all_identical(self):
+        """Per-step shaping signals must vary (not all the same value)."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        unique_values = set(round(float(v), 8) for v in result.step_rewards)
+        assert len(unique_values) > 1, (
+            "step_rewards should have distinct per-step values, not be uniform"
+        )
+
+    def test_mean_shaping_diagnostic_is_finite_float(self):
+        """mean_shaping must be a finite float."""
+        import math
+        port = _make_port_ws_plains()
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port)
+        assert isinstance(result.mean_shaping, float)
+        assert math.isfinite(result.mean_shaping)
+
+    def test_final_imbalance_diagnostic_nonnegative(self):
+        """final_imbalance must be a non-negative finite float."""
+        import math
+        port = _make_port_ws_plains()
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port)
+        assert isinstance(result.final_imbalance, float)
+        assert math.isfinite(result.final_imbalance)
+        assert result.final_imbalance >= 0.0
+
+    def test_multiface_adventure_card_counts_pips_from_all_faces(self):
+        """FR-010: Multi-face card counts pips from ALL faces (both W and U here)."""
+        import numpy as _np
+        # Adventure card: face 1 = {1}{W} creature, face 2 = {2}{U} instant
+        # count_pips sums W+U across faces
+        adventure_text = (
+            "name: brave adventurer\nmana cost: {1}{W}\ntypes: creature\n"
+            "ALTERNATE\n"
+            "name: heroic adventure\nmana cost: {2}{U}\ntypes: instant\n"
+        )
+        port = _MockCardPort(
+            land_names={"Plains"},
+            card_texts={
+                "AdventureCard": adventure_text,
+                "Plains": _PLAINS_TEXT,
+            },
+        )
+        # 1 AdventureCard + 39 Plains (all add W source)
+        result = _invoke_per_step([0] + [1] * 39, "AdventureCard;Plains", port)
+        # pip_counts={W:1, U:1} → n_colors=2 → ideal={W:8.5, U:8.5}
+        # actual_sources={W:39} → imbalance = |8.5-39| + |8.5-0| = 30.5 + 8.5 = 39.0
+        assert result.final_imbalance == pytest.approx(39.0, abs=1.0)
+
+
+class TestPerStepRewardBudgetPreservation:
+    """T008 — budget signal is preserved at full strength (additive, unscaled)."""
+
+    def test_shaping_component_bounded_minus1_to_1(self):
+        """step_rewards[t] - budget_rewards[t] must be in [-1, 1] for all t (tanh output)."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.tile([1.0, -1.0], 20).astype(_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        shaping = result.step_rewards - budget
+        for t, s in enumerate(shaping):
+            assert -1.0 <= s <= 1.0, f"shaping[{t}]={s:.6f} not in [-1,1]"
+
+    def test_budget_input_array_is_not_mutated(self):
+        """The budget_rewards array passed in must not be modified by the function."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        budget_copy = budget.copy()
+        _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port, budget_rewards=budget)
+        _np.testing.assert_array_equal(budget, budget_copy,
+                                       err_msg="budget_rewards array was mutated")
+
+    def test_total_reward_bounded_minus2_to_2_positive_budget(self):
+        """With budget=+1, step_rewards are in [-2, 2]."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=_np.ones(40, dtype=_np.float32))
+        assert all(-2.0 <= v <= 2.0 for v in result.step_rewards)
+
+    def test_total_reward_bounded_minus2_to_2_negative_budget(self):
+        """With budget=-1, step_rewards are in [-2, 2]."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=_np.full(40, -1.0, dtype=_np.float32))
+        assert all(-2.0 <= v <= 2.0 for v in result.step_rewards)

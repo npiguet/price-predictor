@@ -22,6 +22,21 @@ from sealed.infrastructure.pool_model_store import PoolModelStore
 _COLORS = ("W", "U", "B", "R", "G", "C")
 
 
+def _extract_first_face_mana_cost(card_text: str) -> str:
+    """Return the mana cost string from the first face of a card text.
+
+    Reads the first 'mana cost:' line before any ALTERNATE section marker.
+    Returns empty string if no mana cost line is found (e.g. for lands).
+    """
+    for line in card_text.splitlines():
+        stripped = line.strip()
+        if stripped.upper() == "ALTERNATE":
+            break
+        if stripped.lower().startswith("mana cost:"):
+            return stripped[len("mana cost:"):].strip()
+    return ""
+
+
 class SampleStage2UseCase:
     def execute(
         self,
@@ -69,7 +84,8 @@ class SampleStage2UseCase:
                 booster_names = pool_names.split(";")
                 n_booster = len(booster_names)
 
-                picks: list[str] = []
+                # list of (card_name, mana_cost_str) — mana_cost_str is "" for lands
+                picks: list[tuple[str, str]] = []
                 land_texts: list[str] = []
                 non_land_texts: list[str] = []
 
@@ -80,14 +96,18 @@ class SampleStage2UseCase:
                         card_name = BASIC_LAND_NAMES[pool_index - n_booster]
                     else:
                         card_name = f"<slot {pool_index}>"
-                    picks.append(card_name)
 
                     if card_name.startswith("<slot"):
+                        picks.append((card_name, ""))
                         continue
+
+                    card_text = card_port.get_card_text(card_name)
                     if card_port.is_land(card_name):
-                        land_texts.append(card_port.get_card_text(card_name))
+                        land_texts.append(card_text)
+                        picks.append((card_name, ""))
                     else:
-                        non_land_texts.append(card_port.get_card_text(card_name))
+                        non_land_texts.append(card_text)
+                        picks.append((card_name, _extract_first_face_mana_cost(card_text)))
 
                 n_picks = len(ep.actions)
                 n_lands = len(land_texts)
@@ -104,8 +124,11 @@ class SampleStage2UseCase:
                     f" picks={n_picks} score={ms.score:.3f} ---"
                 )
                 print(header)
-                for i, name in enumerate(picks, 1):
-                    print(f"  {i:2d}. {name}")
+                for i, (name, mana_cost) in enumerate(picks, 1):
+                    if mana_cost:
+                        print(f"  {i:2d}. {mana_cost} {name}")
+                    else:
+                        print(f"  {i:2d}. {name}")
                 print()
                 print("  Mana sources (ideal → actual):")
                 for c in _COLORS:

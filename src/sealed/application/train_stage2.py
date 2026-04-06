@@ -5,7 +5,6 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import numpy as np
 import torch
 import torch.optim as optim
 
@@ -15,6 +14,7 @@ from sealed.domain.mana_scorer import (
     ManaScore,
     compute_ideal_distribution,
     compute_mana_score,
+    compute_per_step_rewards,
     count_actual_sources,
     count_pips,
 )
@@ -69,6 +69,8 @@ class TrainStage2UseCase:
         init_from: Path,
         batch_size: int = 32,
         set_code: str = "RVR",
+        urgency_exponent: float = 2.0,
+        temperature: float = 1.0,
     ) -> None:
         pool_loader = PoolLoader()
         model_store = PoolModelStore()
@@ -177,15 +179,28 @@ class TrainStage2UseCase:
                 batch_episodes.append(ep)
             t_collect = time.perf_counter() - t0
 
-            # Compute mana scores and override rewards for all episodes
+            # Compute mana scores and per-step rewards for all episodes
             batch_scores: list[float] = []
+            batch_mean_shaping = 0.0
+            batch_mean_imbalance = 0.0
             for ep in batch_episodes:
                 ms = _compute_episode_mana_score(ep, card_port)
-                ep.step_rewards = np.full(
-                    len(ep.actions), ms.reward, dtype=np.float32
+                result = compute_per_step_rewards(
+                    actions=ep.actions,
+                    pool_names=ep.pool_names,
+                    card_port=card_port,
+                    budget_rewards=ep.step_rewards,
+                    urgency_exponent=urgency_exponent,
+                    temperature=temperature,
                 )
+                ep.step_rewards = result.step_rewards
                 ep.reward = ms.reward
                 batch_scores.append(ms.score)
+                batch_mean_shaping += result.mean_shaping
+                batch_mean_imbalance += result.final_imbalance
+            if batch_episodes:
+                batch_mean_shaping /= len(batch_episodes)
+                batch_mean_imbalance /= len(batch_episodes)
 
             t0 = time.perf_counter()
             trainer.update(batch_episodes, card_port)
@@ -198,6 +213,8 @@ class TrainStage2UseCase:
             print(
                 f"[ep {state.episode_count}] batch scores: {scores_str}"
                 f"  mean_score={mean_score:.3f}"
+                f"  shaping={batch_mean_shaping:.2f}"
+                f"  imbalance={batch_mean_imbalance:.1f}"
                 f"  | collect={t_collect:.2f}s  update={t_update:.2f}s  embed={t_embed:.2f}s"
             )
 

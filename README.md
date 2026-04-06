@@ -514,8 +514,9 @@ Giant Growth;Serra Angel;Wrath of God;...
 
 ### train
 
-Runs a PPO reinforcement-learning training loop that teaches the pool-level transformer to make 40 consecutive legal picks from a 96-card sealed pool (Stage 1). Training resumes automatically from the latest checkpoint if one exists.
+Runs a PPO reinforcement-learning training loop. Stage 1 teaches the model to make 40 legal picks. Stage 2 fine-tunes with a recoverability-based per-step mana reward. Training resumes automatically from the latest checkpoint if one exists.
 
+**Stage 1:**
 ```
 python -m sealed train \
     --stage      1 \
@@ -526,23 +527,49 @@ python -m sealed train \
     [--batch-size 32]
 ```
 
+**Stage 2:**
+```
+python -m sealed train \
+    --stage      2 \
+    [--set        RVR] \
+    [--pools-path output/sealed/pools/{set}/] \
+    [--cards-path output/cardsfolder/] \
+    [--model-path models/sealed/stage2/{set}/latest.pt] \
+    [--init-from  models/sealed/stage1/{set}/latest.pt] \
+    [--batch-size 32] \
+    [--urgency-exponent 2.0] \
+    [--temperature      1.0]
+```
+
 | Argument | Default | Description |
 |---|---|---|
-| `--stage` | *(required)* | Training stage; currently only `1` is supported |
+| `--stage` | *(required)* | Training stage (`1` or `2`) |
 | `--set` | `RVR` | MTG set code for the pool dataset |
 | `--pools-path` | `output/sealed/pools/{set}/` | Directory containing `pools.txt` |
 | `--cards-path` | `output/cardsfolder/` | Directory containing `.npz` embedding files |
-| `--model-path` | `models/sealed/stage1/latest.pt` | Path to load and save the checkpoint |
+| `--model-path` | `models/sealed/stage{N}/{set}/latest.pt` | Path to load and save the checkpoint |
+| `--init-from` | `models/sealed/stage1/{set}/latest.pt` | Stage 1 checkpoint to initialise Stage 2 from (Stage 2 only) |
 | `--batch-size` | `32` | Episodes collected per PPO update |
+| `--urgency-exponent` | `2.0` | Exponent for the recoverability ratio denominator (Stage 2 only) |
+| `--temperature` | `1.0` | Temperature for the tanh shaping bounding function (Stage 2 only) |
 
-**Console output** (one line per batch):
+**Stage 1 console output** (one line per batch):
 ```
 [ep 64] batch runs: 1,3,2,1,...  best_run=5  mean_reward=-0.712
 ```
 
-**Checkpoints**: `latest.pt` is overwritten atomically after every batch. Timestamped checkpoints are saved every 1000 episodes under `models/sealed/stage1/checkpoints/`.
+**Stage 2 console output** (one line per batch):
+```
+[ep 32] batch scores: 0.750,0.823,...  mean_score=0.801  shaping=0.12  imbalance=3.4  | collect=2.31s  update=0.45s  embed=0.12s
+```
 
-**Stage 1 complete** when 100 consecutive episodes achieve 40 legal picks. Exit code `0`.
+- **mean_score**: Average mana score (convergence target: all > 0.90)
+- **shaping**: Batch-mean shaping signal (positive = picks improving mana balance)
+- **imbalance**: Batch-mean final L1 imbalance (target: < 3.0 for good mana bases)
+
+**Checkpoints**: `latest.pt` is overwritten after every batch. Timestamped checkpoints are saved every 1000 episodes.
+
+**Stage 1 complete** when 100 consecutive episodes achieve 40 legal picks. **Stage 2 complete** when all episodes in a batch score > 0.90. Exit code `0`.
 
 **Exit codes**: `0` = success, `1` = unknown stage, `2` = missing `pools.txt` or card embeddings.
 

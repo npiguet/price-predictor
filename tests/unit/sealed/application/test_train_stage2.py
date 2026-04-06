@@ -84,8 +84,8 @@ class _StopAfterBatch(Exception):
 
 # ─── Reward override ──────────────────────────────────────────────────────────
 
-def test_completed_episode_step_rewards_overridden_with_mana_score(tmp_path):
-    """Completed episodes should have step_rewards replaced with uniform mana score reward."""
+def test_completed_episode_step_rewards_overridden_with_per_step_rewards(tmp_path):
+    """Completed episodes should have step_rewards replaced with per-step reward values."""
     pools_path = tmp_path / "pools"
     cards_path = tmp_path / "cards"
     model_path = tmp_path / "models" / "stage2" / "latest.pt"
@@ -138,16 +138,15 @@ def test_completed_episode_step_rewards_overridden_with_mana_score(tmp_path):
                 batch_size=1,
             )
 
-    # The episode passed to update should have uniform step_rewards (mana score reward)
-    # not the original per-step rewards
+    # The episode passed to update should have per-step rewards from compute_per_step_rewards()
     assert len(captured_episodes) == 1
     updated_ep = captured_episodes[0][0]
-    # All step_rewards should be identical (uniform mana score)
-    assert len(set(updated_ep.step_rewards.tolist())) == 1, (
-        "Completed episode step_rewards should all be equal (uniform mana score)"
+    # step_rewards should have been replaced (differ from the initial all-ones array)
+    assert not np.all(updated_ep.step_rewards == 1.0), (
+        "step_rewards should have been overridden (not left as all-ones)"
     )
-    # The reward should match the mana score (not be the Stage 1 effective_run-based reward)
-    assert updated_ep.reward == updated_ep.step_rewards[0]
+    # ep.reward should hold the mana score (for convergence checking and logging)
+    assert isinstance(updated_ep.reward, float)
 
 
 # ─── Completion criterion ─────────────────────────────────────────────────────
@@ -623,3 +622,193 @@ def test_timestamped_checkpoint_saved_every_1000_episodes(tmp_path):
     # With episode_count starting at 999 and batch_size=1, first batch → episode_count=1000
     # That should trigger a timestamped save
     assert timestamped_calls[0] >= 1, "Expected at least one timestamped checkpoint save"
+
+
+# ─── T005: Per-step reward integration ───────────────────────────────────────
+
+def _make_train_env(tmp_path):
+    """Reusable setup: pools, cards, stage1 checkpoint."""
+    pools_path = tmp_path / "pools"
+    cards_path = tmp_path / "cards"
+    model_path = tmp_path / "models" / "stage2" / "latest.pt"
+    init_from = tmp_path / "models" / "stage1" / "latest.pt"
+
+    _setup_pools(pools_path)
+    _setup_cards(cards_path)
+
+    model = PoolTransformerModel(MINI)
+    optimizer = optim.Adam(model.parameters())
+    state = TrainingState(best_run=MAX_PICKS, episode_count=0)
+    init_from.parent.mkdir(parents=True, exist_ok=True)
+    PoolModelStore().save(init_from, model, optimizer, state)
+
+    return pools_path, cards_path, model_path, init_from
+
+
+def test_step_rewards_are_per_step_not_uniform(tmp_path):
+    """T005: step_rewards on episodes must be per-step (not all identical after T007)."""
+    pools_path, cards_path, model_path, init_from = _make_train_env(tmp_path)
+
+    ep = _make_success_episode()
+    captured_episodes: list[list[Episode]] = []
+
+    mock_ppo = MagicMock()
+    mock_ppo_result = MagicMock()
+    mock_ppo_result.mean_reward = 0.5
+    mock_ppo_result.episode_runs = [MAX_PICKS]
+    mock_ppo.update.side_effect = lambda episodes, _port: (
+        captured_episodes.append(list(episodes)) or mock_ppo_result
+    )
+
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = ep
+
+    with (
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
+        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
+        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
+        patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
+    ):
+        with pytest.raises(_StopAfterBatch):
+            TrainStage2UseCase().execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                init_from=init_from,
+                batch_size=1,
+            )
+
+    assert len(captured_episodes) == 1
+    updated_ep = captured_episodes[0][0]
+    # Per-step rewards: should have more than one distinct value (NOT uniform)
+    unique_vals = set(round(float(v), 6) for v in updated_ep.step_rewards)
+    assert len(unique_vals) > 1, (
+        "step_rewards should be per-step (distinct values), not uniform. "
+        f"Got {len(unique_vals)} unique values: {sorted(unique_vals)[:5]}"
+    )
+
+
+def test_ep_reward_holds_mana_score_for_convergence_logging(tmp_path):
+    """T005: ep.reward must still be the end-of-episode mana score (not step reward)."""
+    pools_path, cards_path, model_path, init_from = _make_train_env(tmp_path)
+
+    ep = _make_success_episode()
+    captured_episodes: list[list[Episode]] = []
+
+    mock_ppo = MagicMock()
+    mock_ppo_result = MagicMock()
+    mock_ppo_result.mean_reward = 0.5
+    mock_ppo_result.episode_runs = [MAX_PICKS]
+    mock_ppo.update.side_effect = lambda episodes, _port: (
+        captured_episodes.append(list(episodes)) or mock_ppo_result
+    )
+
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = ep
+
+    from sealed.domain.mana_scorer import ManaScore
+    fixed_score = ManaScore(score=0.75, reward=0.5, l1_error=1.0, n_lands=17)
+
+    with (
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
+        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
+        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
+        patch("sealed.application.train_stage2._compute_episode_mana_score",
+              return_value=fixed_score),
+        patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
+    ):
+        with pytest.raises(_StopAfterBatch):
+            TrainStage2UseCase().execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                init_from=init_from,
+                batch_size=1,
+            )
+
+    assert len(captured_episodes) == 1
+    updated_ep = captured_episodes[0][0]
+    # ep.reward must be the mana score reward (for convergence checking)
+    assert updated_ep.reward == pytest.approx(fixed_score.reward), (
+        f"ep.reward={updated_ep.reward} should equal mana score reward={fixed_score.reward}"
+    )
+
+
+# ─── T013: Batch log format with shaping and imbalance fields ─────────────────
+
+def test_batch_log_includes_shaping_field(tmp_path, capsys):
+    """T013: batch print line must include 'shaping=' field."""
+    pools_path, cards_path, model_path, init_from = _make_train_env(tmp_path)
+
+    ep = _make_success_episode()
+
+    mock_ppo = MagicMock()
+    mock_ppo_result = MagicMock()
+    mock_ppo_result.mean_reward = 0.5
+    mock_ppo_result.episode_runs = [MAX_PICKS]
+    mock_ppo.update.return_value = mock_ppo_result
+
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = ep
+
+    from sealed.domain.mana_scorer import ManaScore
+    score_val = ManaScore(score=0.8, reward=0.6, l1_error=1.0, n_lands=17)
+
+    with (
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
+        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
+        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
+        patch("sealed.application.train_stage2._compute_episode_mana_score",
+              return_value=score_val),
+        patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
+    ):
+        with pytest.raises(_StopAfterBatch):
+            TrainStage2UseCase().execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                init_from=init_from,
+                batch_size=1,
+            )
+
+    out = capsys.readouterr().out
+    assert "shaping=" in out, f"Expected 'shaping=' in batch log. Got:\n{out}"
+
+
+def test_batch_log_includes_imbalance_field(tmp_path, capsys):
+    """T013: batch print line must include 'imbalance=' field."""
+    pools_path, cards_path, model_path, init_from = _make_train_env(tmp_path)
+
+    ep = _make_success_episode()
+
+    mock_ppo = MagicMock()
+    mock_ppo_result = MagicMock()
+    mock_ppo_result.mean_reward = 0.5
+    mock_ppo_result.episode_runs = [MAX_PICKS]
+    mock_ppo.update.return_value = mock_ppo_result
+
+    mock_runner = MagicMock()
+    mock_runner.run.return_value = ep
+
+    from sealed.domain.mana_scorer import ManaScore
+    score_val = ManaScore(score=0.8, reward=0.6, l1_error=1.0, n_lands=17)
+
+    with (
+        patch.object(PoolTransformerConfig, "from_embed_dim", return_value=MINI),
+        patch("sealed.application.train_stage2.EpisodeRunner", return_value=mock_runner),
+        patch("sealed.application.train_stage2.PPOTrainer", return_value=mock_ppo),
+        patch("sealed.application.train_stage2._compute_episode_mana_score",
+              return_value=score_val),
+        patch.object(PoolModelStore, "save", side_effect=_StopAfterBatch),
+    ):
+        with pytest.raises(_StopAfterBatch):
+            TrainStage2UseCase().execute(
+                pools_path=pools_path,
+                cards_path=cards_path,
+                model_path=model_path,
+                init_from=init_from,
+                batch_size=1,
+            )
+
+    out = capsys.readouterr().out
+    assert "imbalance=" in out, f"Expected 'imbalance=' in batch log. Got:\n{out}"

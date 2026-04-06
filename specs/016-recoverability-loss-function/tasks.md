@@ -19,7 +19,7 @@
 
 **Purpose**: No new project structure needed — all changes modify existing files. This phase ensures the branch is ready.
 
-- [ ] T001 Verify existing tests pass by running `pytest` from `src/`
+- [X] T001 Verify existing tests pass by running `pytest` from `src/`
 
 ---
 
@@ -41,11 +41,11 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T002 [P] [US2] Write unit tests for `compute_recoverability_ratio()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: step 5 with imbalance 4.0 and exponent 2 → 4.0/35²≈0.00327; step 35 with same imbalance → 4.0/5²=0.16; no spells picked → ratio 0; perfect balance → ratio 0; remaining_picks=0 → ratio equals raw imbalance; custom exponent values
+- [X] T002 [P] [US2] Write unit tests for `compute_recoverability_ratio()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: step 5 with imbalance 4.0 and exponent 2 → 4.0/35²≈0.00327; step 35 with same imbalance → 4.0/5²=0.16; no spells picked → ratio 0; perfect balance → ratio 0; remaining_picks=0 → ratio equals raw imbalance; custom exponent values
 
 ### Implementation for User Story 2
 
-- [ ] T003 [US2] Implement `compute_recoverability_ratio(pip_counts, actual_sources, remaining_picks, exponent)` in src/sealed/domain/mana_scorer.py — reuse existing `compute_ideal_distribution()`, compute L1 imbalance across all 6 colors (W/U/B/R/G/C), divide by `max(remaining_picks, 1) ** exponent` per data-model.md
+- [X] T003 [US2] Implement `compute_recoverability_ratio(pip_counts, actual_sources, remaining_picks, exponent)` in src/sealed/domain/mana_scorer.py — reuse existing `compute_ideal_distribution()`, compute L1 imbalance across all 6 colors (W/U/B/R/G/C), divide by `max(remaining_picks, 1) ** exponent` per data-model.md
 
 **Checkpoint**: `compute_recoverability_ratio()` passes all unit tests. Can be verified independently by constructing PipCounts/actual_sources dicts and checking return values.
 
@@ -61,13 +61,13 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T004 [P] [US1] Write unit tests for `compute_per_step_rewards()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: returns float32[40] array; values in (-2, 2); Plains pick into under-sourced white deck → positive shaping; Plains pick into over-sourced white deck → negative shaping; spell pick that shifts ideal → correct delta; shaping signals are not all identical (per-step credit assignment); mean_shaping and final_imbalance diagnostic values returned correctly; multi-face card (e.g. transform/adventure) correctly counts pips from all faces (FR-010)
-- [ ] T005 [P] [US1] Write unit tests for per-step reward integration in tests/unit/sealed/application/test_train_stage2.py — cover: `step_rewards` on Episode objects are overridden with per-step values (not uniform); `ep.reward` still holds the end-of-episode mana score for convergence logging
+- [X] T004 [P] [US1] Write unit tests for `compute_per_step_rewards()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: returns float32[40] array; values in (-2, 2); Plains pick into under-sourced white deck → positive shaping; Plains pick into over-sourced white deck → negative shaping; spell pick that shifts ideal → correct delta; shaping signals are not all identical (per-step credit assignment); mean_shaping and final_imbalance diagnostic values returned correctly; multi-face card (e.g. transform/adventure) correctly counts pips from all faces (FR-010)
+- [X] T005 [P] [US1] Write unit tests for per-step reward integration in tests/unit/sealed/application/test_train_stage2.py — cover: `step_rewards` on Episode objects are overridden with per-step values (not uniform); `ep.reward` still holds the end-of-episode mana score for convergence logging
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Implement `compute_per_step_rewards()` in src/sealed/domain/mana_scorer.py — signature per data-model.md: takes actions, pool_names, card_port, budget_rewards, urgency_exponent, temperature; replays 40 picks maintaining running pip_counts and actual_sources; computes ratio_before/ratio_after per step; delta = ratio_before - ratio_after; shaping = tanh(delta / temperature); step_rewards[t] = budget_rewards[t] + shaping; returns PerStepRewardResult (step_rewards, mean_shaping, final_imbalance)
-- [ ] T007 [US1] Modify `TrainStage2UseCase.execute()` in src/sealed/application/train_stage2.py — replace the uniform `np.full(len(ep.actions), ms.reward)` reward assignment (lines 184-185) with a call to `compute_per_step_rewards()` using `ep.step_rewards` (budget rewards from episode runner) and the episode's actions/pool_names; keep `ep.reward = ms.reward` for convergence checking
+- [X] T006 [US1] Implement `compute_per_step_rewards()` in src/sealed/domain/mana_scorer.py — signature per data-model.md: takes actions, pool_names, card_port, budget_rewards, urgency_exponent, temperature; replays 40 picks maintaining running pip_counts and actual_sources; computes ratio_before/ratio_after per step; delta = ratio_before - ratio_after; shaping = tanh(delta / temperature); step_rewards[t] = budget_rewards[t] + shaping; returns PerStepRewardResult (step_rewards, mean_shaping, final_imbalance)
+- [X] T007 [US1] Modify `TrainStage2UseCase.execute()` in src/sealed/application/train_stage2.py — replace the uniform `np.full(len(ep.actions), ms.reward)` reward assignment (lines 184-185) with a call to `compute_per_step_rewards()` using `ep.step_rewards` (budget rewards from episode runner) and the episode's actions/pool_names; keep `ep.reward = ms.reward` for convergence checking
 
 **Checkpoint**: Stage 2 training produces per-step rewards. Each step's reward is distinct. `ep.reward` still holds the mana score for convergence.
 
@@ -81,7 +81,7 @@
 
 ### Tests for User Story 3 (MANDATORY per Constitution)
 
-- [ ] T008 [US3] Write unit tests verifying budget signal preservation in tests/unit/sealed/domain/test_mana_scorer.py — cover: for every step, step_rewards[t] == budget_rewards[t] + shaping[t] exactly; budget_rewards are always ±1 (unchanged from episode runner output); no scaling factor applied to either component; total reward bounded to (-2, 2)
+- [X] T008 [US3] Write unit tests verifying budget signal preservation in tests/unit/sealed/domain/test_mana_scorer.py — cover: for every step, step_rewards[t] == budget_rewards[t] + shaping[t] exactly; budget_rewards are always ±1 (unchanged from episode runner output); no scaling factor applied to either component; total reward bounded to (-2, 2)
 
 ### Implementation for User Story 3
 
@@ -101,12 +101,12 @@ No separate implementation — the budget signal preservation is enforced by the
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T009 [P] [US4] Write unit tests for CLI args in tests/unit/sealed/infrastructure/test_cli_sealed_train_stage2.py — cover: `--urgency-exponent 3` parsed correctly; `--temperature 0.5` parsed correctly; defaults are exponent=2.0 and temperature=1.0 when not specified; help text includes `(default: ...)` suffix matching CLI conventions
+- [X] T009 [P] [US4] Write unit tests for CLI args in tests/unit/sealed/infrastructure/test_cli_sealed_train_stage2.py — cover: `--urgency-exponent 3` parsed correctly; `--temperature 0.5` parsed correctly; defaults are exponent=2.0 and temperature=1.0 when not specified; help text includes `(default: ...)` suffix matching CLI conventions
 
 ### Implementation for User Story 4
 
-- [ ] T010 [US4] Add `--urgency-exponent` and `--temperature` arguments to `train_parser` in src/sealed/infrastructure/cli.py — type=float, defaults 2.0 and 1.0, help text per data-model.md conventions
-- [ ] T011 [US4] Thread `urgency_exponent` and `temperature` through `run_train()` → `TrainStage2UseCase.execute()` → `compute_per_step_rewards()` in src/sealed/infrastructure/cli.py and src/sealed/application/train_stage2.py — add parameters to `execute()` signature with defaults matching CLI defaults
+- [X] T010 [US4] Add `--urgency-exponent` and `--temperature` arguments to `train_parser` in src/sealed/infrastructure/cli.py — type=float, defaults 2.0 and 1.0, help text per data-model.md conventions
+- [X] T011 [US4] Thread `urgency_exponent` and `temperature` through `run_train()` → `TrainStage2UseCase.execute()` → `compute_per_step_rewards()` in src/sealed/infrastructure/cli.py and src/sealed/application/train_stage2.py — add parameters to `execute()` signature with defaults matching CLI defaults
 
 **Checkpoint**: `sealed train --stage 2 --urgency-exponent 3 --temperature 0.5` passes args all the way to reward computation.
 
@@ -116,14 +116,14 @@ No separate implementation — the budget signal preservation is enforced by the
 
 **Purpose**: Sample output enhancement (FR-011), batch logging (FR-012), and final validation.
 
-- [ ] T012 [P] Write unit tests for mana cost prefix display in tests/unit/sealed/application/test_sample_stage2.py — cover: non-land card shows `{mana_cost} CardName` format; land card shows name only (no cost prefix); multi-face card shows first-face cost
-- [ ] T013 [P] Write unit tests for batch log format in tests/unit/sealed/application/test_train_stage2.py — cover: batch print line includes `shaping=X.XX` and `imbalance=X.X` fields alongside existing `mean_score` and timing fields
-- [ ] T014 Modify sample output in src/sealed/application/sample_stage2.py to prefix each non-land pick with its mana cost string (FR-011) — extract the `mana cost:` line from card text; format as `{cost} CardName`; lands print name only
-- [ ] T015 Modify batch logging in src/sealed/application/train_stage2.py to include `shaping=` (batch-mean shaping signal) and `imbalance=` (batch-mean final imbalance) on the existing print line (FR-012) — values come from `PerStepRewardResult.mean_shaping` and `final_imbalance` accumulated across the batch
-- [ ] T016 Update project README (if it documents Stage 2 CLI args) to include `--urgency-exponent` and `--temperature` — per constitution Principle VI, changed CLI commands must be documented
-- [ ] T017 Run `ruff check .` from `src/` and fix any lint warnings
-- [ ] T018 Run full test suite (`pytest` from `src/`) and verify all tests pass
-- [ ] T019 Validate quickstart.md scenarios manually — verify CLI commands from quickstart.md parse correctly (arg parsing, not full training run)
+- [X] T012 [P] Write unit tests for mana cost prefix display in tests/unit/sealed/application/test_sample_stage2.py — cover: non-land card shows `{mana_cost} CardName` format; land card shows name only (no cost prefix); multi-face card shows first-face cost
+- [X] T013 [P] Write unit tests for batch log format in tests/unit/sealed/application/test_train_stage2.py — cover: batch print line includes `shaping=X.XX` and `imbalance=X.X` fields alongside existing `mean_score` and timing fields
+- [X] T014 Modify sample output in src/sealed/application/sample_stage2.py to prefix each non-land pick with its mana cost string (FR-011) — extract the `mana cost:` line from card text; format as `{cost} CardName`; lands print name only
+- [X] T015 Modify batch logging in src/sealed/application/train_stage2.py to include `shaping=` (batch-mean shaping signal) and `imbalance=` (batch-mean final imbalance) on the existing print line (FR-012) — values come from `PerStepRewardResult.mean_shaping` and `final_imbalance` accumulated across the batch
+- [X] T016 Update project README (if it documents Stage 2 CLI args) to include `--urgency-exponent` and `--temperature` — per constitution Principle VI, changed CLI commands must be documented
+- [X] T017 Run `ruff check .` from `src/` and fix any lint warnings
+- [X] T018 Run full test suite (`pytest` from `src/`) and verify all tests pass
+- [X] T019 Validate quickstart.md scenarios manually — verify CLI commands from quickstart.md parse correctly (arg parsing, not full training run)
 
 ---
 

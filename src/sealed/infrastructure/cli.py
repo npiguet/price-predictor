@@ -117,6 +117,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=32,
         help="Number of episodes per training batch (default: 32)",
     )
+    train_parser.add_argument(
+        "--urgency-exponent",
+        type=float,
+        default=2.0,
+        help="Exponent for the recoverability ratio denominator (default: 2.0)",
+    )
+    train_parser.add_argument(
+        "--temperature",
+        type=float,
+        default=1.0,
+        help="Temperature for the tanh shaping bounding function (default: 1.0)",
+    )
 
     # ── validate-embeddings ───────────────────────────────────────
     validate_parser = subparsers.add_parser(
@@ -413,6 +425,8 @@ def run_train(args: argparse.Namespace) -> int:
                 init_from=init_from,
                 batch_size=args.batch_size,
                 set_code=set_code,
+                urgency_exponent=getattr(args, "urgency_exponent", 2.0),
+                temperature=getattr(args, "temperature", 1.0),
             )
         except (ValueError, FileNotFoundError, RuntimeError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
