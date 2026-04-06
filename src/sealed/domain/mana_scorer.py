@@ -1,7 +1,6 @@
 """mana_scorer: pure-domain mana-base quality scoring for sealed deck analysis."""
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -390,35 +389,9 @@ def compute_mana_score(
 @dataclass
 class PerStepRewardResult:
     """Result of compute_per_step_rewards() — per-step combined rewards + diagnostics."""
-    step_rewards: np.ndarray   # float32[n_picks], each in (-2, 2)
+    step_rewards: np.ndarray   # float32[n_picks], each in [-2, 2]
     mean_shaping: float        # batch diagnostic: mean shaping signal
     final_imbalance: float     # batch diagnostic: L1 imbalance at episode end
-
-
-def compute_recoverability_ratio(
-    pip_counts: PipCounts,
-    actual_sources: dict[str, float],
-    remaining_picks: int,
-    exponent: float = 2.0,
-) -> float:
-    """Measure how critical the current mana imbalance is given remaining picks.
-
-    Formula:
-        ideal        = compute_ideal_distribution(pip_counts)
-        imbalance    = sum(|ideal[c] - actual[c]|) for c in all 6 colors
-        denominator  = max(remaining_picks, 1) ** exponent
-        ratio        = imbalance / denominator
-
-    Returns 0.0 when pip_counts is empty (no spells → no demand) or when
-    actual sources perfectly match ideal.
-    """
-    ideal = compute_ideal_distribution(pip_counts)
-    imbalance = sum(
-        abs(ideal.ideal.get(c, 0.0) - actual_sources.get(c, 0.0))
-        for c in _ALL_COLORS
-    )
-    denominator = max(remaining_picks, 1) ** exponent
-    return imbalance / denominator
 
 
 def compute_per_step_rewards(
@@ -426,28 +399,28 @@ def compute_per_step_rewards(
     pool_names: str,
     card_port: "CardEmbeddingPort",
     budget_rewards: np.ndarray,
-    urgency_exponent: float = 2.0,
-    temperature: float = 1.0,
 ) -> PerStepRewardResult:
     """Compute per-step combined rewards for a completed episode.
 
     Replays the 40 picks, tracking running pip demand and actual sources.
-    At each step t:
-        ratio_before = recoverability ratio before the pick
-        [update pip_counts or actual_sources based on pick]
-        ratio_after  = recoverability ratio after the pick
-        delta        = ratio_before - ratio_after
-        shaping[t]   = tanh(delta / temperature)   ∈ (-1, 1)
-        step_rewards[t] = budget_rewards[t] + shaping[t]   ∈ (-2, 2)
+    At each step t, computes L1 imbalance before and after the pick, then
+    applies a discrete shaping signal:
+
+        shaping = 0     when no pip demand or no mana supply yet
+        shaping = +0.5  when imbalance < 3 and reduced by the pick
+        shaping = -0.5  when imbalance < 3 and increased by the pick
+        shaping = +1.0  when imbalance >= 3 and reduced by the pick
+        shaping = -1.0  when imbalance >= 3 and increased by the pick
+        shaping = 0     when imbalance is unchanged
+
+        step_rewards[t] = budget_rewards[t] + shaping[t]   ∈ [-2, 2]
 
     Args:
-        actions:          int32 array of pool slot indices (length = n_picks)
-        pool_names:       semicolon-separated booster card names
-        card_port:        for is_land() and get_card_text() lookups
-        budget_rewards:   float32 array of per-step budget signals (+1/-1)
-                          from the episode runner
-        urgency_exponent: denominator exponent in recoverability ratio (default 2.0)
-        temperature:      scaling divisor for tanh bounding (default 1.0)
+        actions:        int32 array of pool slot indices (length = n_picks)
+        pool_names:     semicolon-separated booster card names
+        card_port:      for is_land() and get_card_text() lookups
+        budget_rewards: float32 array of per-step budget signals (+1/-1)
+                        from the episode runner
 
     Returns:
         PerStepRewardResult with step_rewards, mean_shaping, final_imbalance
@@ -460,7 +433,6 @@ def compute_per_step_rewards(
 
     pip_counts_dict: dict[str, float] = {}
     actual_sources: dict[str, float] = {}
-    remaining = n_picks
 
     step_rewards = np.empty(n_picks, dtype=np.float32)
     shaping_signals = np.empty(n_picks, dtype=np.float32)
@@ -476,12 +448,11 @@ def compute_per_step_rewards(
         else:
             card_name = ""
 
-        # Compute ratio before the pick
-        ratio_before = compute_recoverability_ratio(
-            PipCounts(dict(pip_counts_dict)),
-            actual_sources,
-            remaining,
-            urgency_exponent,
+        # Compute imbalance before the pick
+        ideal_before = compute_ideal_distribution(PipCounts(dict(pip_counts_dict)))
+        imbalance_before = sum(
+            abs(ideal_before.ideal.get(c, 0.0) - actual_sources.get(c, 0.0))
+            for c in _ALL_COLORS
         )
 
         # Update running state with this pick
@@ -496,18 +467,23 @@ def compute_per_step_rewards(
                 for c, v in new_pips.items():
                     pip_counts_dict[c] = pip_counts_dict.get(c, 0.0) + v
 
-        remaining -= 1
-
-        # Compute ratio after the pick
-        ratio_after = compute_recoverability_ratio(
-            PipCounts(dict(pip_counts_dict)),
-            actual_sources,
-            remaining,
-            urgency_exponent,
+        # Compute imbalance after the pick
+        ideal_after = compute_ideal_distribution(PipCounts(dict(pip_counts_dict)))
+        imbalance_after = sum(
+            abs(ideal_after.ideal.get(c, 0.0) - actual_sources.get(c, 0.0))
+            for c in _ALL_COLORS
         )
 
-        delta = ratio_before - ratio_after
-        shaping = math.tanh(delta / temperature)
+        # Discrete shaping signal
+        if not pip_counts_dict or not actual_sources:
+            shaping = 0.0
+        elif imbalance_after < imbalance_before:
+            shaping = 1.0 if imbalance_before >= 3.0 else 0.5
+        elif imbalance_after > imbalance_before:
+            shaping = -1.0 if imbalance_before >= 3.0 else -0.5
+        else:
+            shaping = 0.0
+
         shaping_signals[t] = shaping
         step_rewards[t] = budget_rewards[t] + shaping
 

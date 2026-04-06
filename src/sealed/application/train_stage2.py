@@ -69,8 +69,6 @@ class TrainStage2UseCase:
         init_from: Path,
         batch_size: int = 32,
         set_code: str = "RVR",
-        urgency_exponent: float = 2.0,
-        temperature: float = 1.0,
     ) -> None:
         pool_loader = PoolLoader()
         model_store = PoolModelStore()
@@ -190,8 +188,6 @@ class TrainStage2UseCase:
                     pool_names=ep.pool_names,
                     card_port=card_port,
                     budget_rewards=ep.step_rewards,
-                    urgency_exponent=urgency_exponent,
-                    temperature=temperature,
                 )
                 ep.step_rewards = result.step_rewards
                 ep.reward = ms.reward

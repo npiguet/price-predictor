@@ -536,9 +536,7 @@ python -m sealed train \
     [--cards-path output/cardsfolder/] \
     [--model-path models/sealed/stage2/{set}/latest.pt] \
     [--init-from  models/sealed/stage1/{set}/latest.pt] \
-    [--batch-size 32] \
-    [--urgency-exponent 2.0] \
-    [--temperature      1.0]
+    [--batch-size 32]
 ```
 
 | Argument | Default | Description |
@@ -550,8 +548,6 @@ python -m sealed train \
 | `--model-path` | `models/sealed/stage{N}/{set}/latest.pt` | Path to load and save the checkpoint |
 | `--init-from` | `models/sealed/stage1/{set}/latest.pt` | Stage 1 checkpoint to initialise Stage 2 from (Stage 2 only) |
 | `--batch-size` | `32` | Episodes collected per PPO update |
-| `--urgency-exponent` | `2.0` | Exponent for the recoverability ratio denominator (Stage 2 only) |
-| `--temperature` | `1.0` | Temperature for the tanh shaping bounding function (Stage 2 only) |
 
 **Stage 1 console output** (one line per batch):
 ```

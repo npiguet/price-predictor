@@ -179,7 +179,7 @@ def test_pool_reshuffled_before_each_pick(env):
 
 
 def test_mana_scores_computed_for_completed_episodes(env):
-    """Completed episodes should have their rewards replaced with mana scores."""
+    """Completed episodes should have per-step rewards and mana score in ep.reward."""
     from sealed.application.train_stage2 import TrainStage2UseCase
     from sealed.domain.ppo_trainer import PPOTrainer
 
@@ -214,10 +214,9 @@ def test_mana_scores_computed_for_completed_episodes(env):
                     )
 
     # All episodes complete (action masking prevents early termination).
-    # Check that each episode has uniform step_rewards (replaced by mana score).
+    # Check that each episode has per-step rewards (not uniform) and bounded.
     for ep in captured_episodes:
         if len(ep.step_rewards) > 1:
-            rewards_set = set(ep.step_rewards.tolist())
-            assert len(rewards_set) == 1, (
-                f"Episode should have uniform step_rewards, got {rewards_set}"
+            assert all(-2.0 <= v <= 2.0 for v in ep.step_rewards), (
+                f"step_rewards out of [-2,2]: {ep.step_rewards}"
             )

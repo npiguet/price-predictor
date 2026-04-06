@@ -65,12 +65,20 @@ def _setup_pools(pools_path: Path) -> None:
 
 
 def _make_success_episode(pool_names: str = ";".join(BOOSTER_CARDS)) -> Episode:
-    """Minimal completed episode (MAX_PICKS=40 picks)."""
+    """Minimal completed episode (MAX_PICKS=40 picks).
+
+    Picks: slot 0 (spell), then alternates slot 0 (spell) and slot 4
+    (Plains basic land, first slot after booster) so that both pip demand
+    and mana supply exist — required for non-zero shaping.
+    """
     n_picks = MAX_PICKS
+    n_booster = len(pool_names.split(";"))
+    # spell, land, spell, land, ... so shaping can activate
+    actions = [(0 if t % 2 == 0 else n_booster) for t in range(n_picks)]
     return Episode(
         pool_names=pool_names,
         shuffle_seeds=np.zeros(n_picks, dtype=np.int64),
-        actions=np.array([0] * n_picks, dtype=np.int32),  # always pick slot 0
+        actions=np.array(actions, dtype=np.int32),
         log_probs=np.zeros(n_picks, dtype=np.float32),
         step_rewards=np.ones(n_picks, dtype=np.float32),
         reward=1.0,

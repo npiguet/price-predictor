@@ -1,5 +1,10 @@
 # Tasks: Recoverability-Based Per-Step Stage 2 Loss
 
+> **Revision 2026-04-06**: The continuous PBRS approach (tanh/temperature/urgency-exponent) was replaced with a
+> discrete shaping signal (±0.5 when imbalance < 3, ±1.0 when imbalance >= 3, 0 when no demand/supply). Tasks
+> below reflect the original implementation; the revision removed `compute_recoverability_ratio()`,
+> `--urgency-exponent`, `--temperature`, and related tests. See spec.md "Revision 2026-04-06" for details.
+
 **Input**: Design documents from `/specs/016-recoverability-loss-function/`
 **Prerequisites**: plan.md (required), spec.md (required), research.md, data-model.md, quickstart.md
 

@@ -5,18 +5,20 @@
 
 ## Summary
 
-Replace Stage 2's uniform end-of-episode mana score reward with a per-step reward that combines the existing Stage 1 budget signal (+1/-1) with a recoverability-based shaping signal bounded to (-1, 1) via `tanh`. The shaping signal measures how each pick changes the deck's mana recoverability — the ratio of mana imbalance to remaining picks raised to a configurable exponent. This gives the model step-by-step credit assignment: each pick is immediately rewarded or penalized based on whether it moved the deck closer to its ideal mana distribution, with urgency that naturally increases as fewer picks remain.
+Replace Stage 2's uniform end-of-episode mana score reward with a per-step reward that combines the existing Stage 1 budget signal (+1/-1) with a discrete imbalance shaping signal in {-1, -0.5, 0, +0.5, +1}. The shaping signal measures whether each pick improved or worsened the deck's mana imbalance, with stronger signals (±1) when imbalance is >= 3 and weaker signals (±0.5) when < 3. Shaping is 0 until both pip demand and mana supply exist. This gives the model step-by-step credit assignment with clear directional feedback.
+
+> **Revision 2026-04-06**: Originally used continuous PBRS (`tanh(delta_ratio / temperature)`) with `--urgency-exponent` and `--temperature` CLI args. Replaced with discrete shaping after the continuous signal proved too weak (~0.001 magnitude for early picks, constant `shaping=-0.07` during training).
 
 ## Technical Context
 
 **Language/Version**: Python 3.14+
-**Primary Dependencies**: PyTorch, numpy, math (stdlib tanh)
+**Primary Dependencies**: PyTorch, numpy
 **Storage**: N/A (rewards computed in-memory during training; no new persistence)
 **Testing**: pytest (fast unit tests in `tests/unit/`, slower integration tests in `tests/integration/`)
 **Target Platform**: Local workstation (Windows 11, CUDA optional)
 **Project Type**: CLI / ML training pipeline
 **Performance Goals**: Reward computation must not significantly slow the training loop. Currently the bottleneck is `collect` (episode rollout, ~seconds) and `update` (PPO gradient step). The new per-step reward computation reuses existing mana analysis functions and adds O(40) arithmetic per episode — negligible.
-**Constraints**: Total reward must stay in (-2, 2). Stage 1 budget signal must be preserved at full strength. No new external dependencies.
+**Constraints**: Total reward must stay in [-2, 2]. Stage 1 budget signal must be preserved at full strength. No new external dependencies.
 **Scale/Scope**: 40 picks per episode, 32 episodes per batch. Reward computed per-step inline during episode collection.
 
 ## Constitution Check
@@ -56,12 +58,12 @@ specs/016-recoverability-loss-function/
 ```text
 src/sealed/
 ├── domain/
-│   └── mana_scorer.py          # ADD: compute_recoverability_ratio(), compute_per_step_rewards()
+│   └── mana_scorer.py          # ADD: compute_per_step_rewards() with discrete shaping
 ├── application/
-│   ├── train_stage2.py          # MODIFY: per-step reward override, new hyperparams, batch logging
+│   ├── train_stage2.py          # MODIFY: per-step reward override, batch logging
 │   └── sample_stage2.py         # MODIFY: mana cost prefix on non-land picks (FR-011)
 └── infrastructure/
-    └── cli.py                   # MODIFY: add --urgency-exponent, --temperature CLI args
+    └── cli.py                   # No new CLI args (discrete shaping has no hyperparameters)
 
 tests/
 ├── unit/sealed/domain/

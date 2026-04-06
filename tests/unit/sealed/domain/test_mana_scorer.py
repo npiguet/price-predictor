@@ -570,98 +570,6 @@ class TestNormalizeManaFeatures:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# T002 — compute_recoverability_ratio()  (feature 016)
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestComputeRecoverabilityRatio:
-    """Tests for compute_recoverability_ratio() — pure mana-urgency math."""
-
-    # Helper: pip_counts + actual_sources that give imbalance = 4.0
-    # pip_counts = {W: 4} → ideal = {W: 17} (single-color, 1+remaining*pip/total)
-    # actual_sources = {W: 13}  → |17 - 13| = 4.0
-    @staticmethod
-    def _pip4w():
-        return PipCounts({"W": 4.0})
-
-    @staticmethod
-    def _actual13w():
-        return {"W": 13.0}
-
-    def test_ratio_early_step_remaining_35_exponent_2(self):
-        """Step 5 of 40 picks: remaining=35, imbalance=4.0, exponent=2 → 4/35²≈0.003265."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            self._pip4w(), self._actual13w(), remaining_picks=35, exponent=2.0
-        )
-        assert result == pytest.approx(4.0 / 35 ** 2, rel=1e-5)
-
-    def test_ratio_late_step_remaining_5_exponent_2(self):
-        """Step 35 of 40 picks: remaining=5, imbalance=4.0, exponent=2 → 4/25=0.16."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=2.0
-        )
-        assert result == pytest.approx(4.0 / 5 ** 2, rel=1e-5)
-
-    def test_ratio_no_spells_picked_is_zero(self):
-        """No spells, no lands → ideal is empty → imbalance = 0 → ratio = 0."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            PipCounts({}), {}, remaining_picks=20, exponent=2.0
-        )
-        assert result == pytest.approx(0.0)
-
-    def test_ratio_perfect_balance_is_zero(self):
-        """Perfect balance (actual = ideal) → imbalance = 0 → ratio = 0."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        # pip = {W: 4} → ideal = {W: 17}; actual = {W: 17} → imbalance = 0
-        result = compute_recoverability_ratio(
-            PipCounts({"W": 4.0}), {"W": 17.0}, remaining_picks=10, exponent=2.0
-        )
-        assert result == pytest.approx(0.0)
-
-    def test_ratio_remaining_zero_equals_raw_imbalance(self):
-        """remaining_picks=0 → denominator = max(0,1)^exp = 1 → ratio = imbalance."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            self._pip4w(), self._actual13w(), remaining_picks=0, exponent=2.0
-        )
-        # imbalance = 4.0, denominator = max(0,1)^2 = 1 → ratio = 4.0
-        assert result == pytest.approx(4.0)
-
-    def test_ratio_custom_exponent_3(self):
-        """Custom exponent=3: ratio = 4.0/5³ = 4/125 = 0.032."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=3.0
-        )
-        assert result == pytest.approx(4.0 / 5 ** 3, rel=1e-5)
-
-    def test_ratio_custom_exponent_1(self):
-        """Custom exponent=1: ratio = 4.0/5 = 0.8."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        result = compute_recoverability_ratio(
-            self._pip4w(), self._actual13w(), remaining_picks=5, exponent=1.0
-        )
-        assert result == pytest.approx(4.0 / 5.0, rel=1e-5)
-
-    def test_ratio_multicolor_imbalance(self):
-        """Two-color pip counts: imbalance sums over both colors."""
-        from sealed.domain.mana_scorer import compute_recoverability_ratio
-        # pip = {W: 2, U: 2} → n_colors=2, total=4
-        # ideal W: 2 + (17-2*2)*2/4 = 2+13*0.5 = 8.5, ideal U: 8.5
-        # actual = {W: 5, U: 5} → |8.5-5| + |8.5-5| = 7.0
-        result = compute_recoverability_ratio(
-            PipCounts({"W": 2.0, "U": 2.0}),
-            {"W": 5.0, "U": 5.0},
-            remaining_picks=10,
-            exponent=2.0,
-        )
-        expected_imbalance = 7.0
-        assert result == pytest.approx(expected_imbalance / 10 ** 2, rel=1e-5)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # T004 + T008 — compute_per_step_rewards()  (feature 016)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -694,8 +602,7 @@ def _make_port_ws_plains() -> _MockCardPort:
     )
 
 
-def _invoke_per_step(actions, pool_names, port, budget_rewards=None,
-                     exponent=2.0, temperature=1.0):
+def _invoke_per_step(actions, pool_names, port, budget_rewards=None):
     from sealed.domain.mana_scorer import compute_per_step_rewards
     import numpy as _np
     n = len(actions)
@@ -706,8 +613,6 @@ def _invoke_per_step(actions, pool_names, port, budget_rewards=None,
         pool_names=pool_names,
         card_port=port,
         budget_rewards=_np.array(budget_rewards, dtype=_np.float32),
-        urgency_exponent=exponent,
-        temperature=temperature,
     )
 
 
@@ -722,15 +627,15 @@ class TestComputePerStepRewards:
         assert result.step_rewards.dtype == _np.float32
         assert result.step_rewards.shape == (40,)
 
-    def test_step_rewards_bounded_open_minus2_to_2(self):
-        """step_rewards[t] must be strictly in (-2, 2) for all t."""
+    def test_step_rewards_bounded_closed_minus2_to_2(self):
+        """step_rewards[t] must be in [-2, 2] for all t."""
         import numpy as _np
         port = _make_port_ws_plains()
         budget = _np.tile([1.0, -1.0], 20).astype(_np.float32)
         result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
                                   budget_rewards=budget)
-        assert all(-2.0 < v < 2.0 for v in result.step_rewards), (
-            f"step_rewards out of (-2,2): {result.step_rewards}"
+        assert all(-2.0 <= v <= 2.0 for v in result.step_rewards), (
+            f"step_rewards out of [-2,2]: {result.step_rewards}"
         )
 
     def test_plains_into_undersourced_white_positive_shaping(self):
@@ -789,6 +694,129 @@ class TestComputePerStepRewards:
         assert math.isfinite(result.final_imbalance)
         assert result.final_imbalance >= 0.0
 
+    def test_shaping_zero_when_no_pip_demand(self):
+        """All-lands pool: no spells → pip_counts empty → shaping = 0 for every step."""
+        import numpy as _np
+        port = _make_port_ws_plains()
+        # 40 Plains, no spells → pip_counts_dict stays empty
+        result = _invoke_per_step([1] * 40, "WhiteSpell;Plains", port)
+        shaping = result.step_rewards - _np.ones(40, dtype=_np.float32)
+        for t, s in enumerate(shaping):
+            assert s == 0.0, f"shaping[{t}]={s}, expected 0 (no pip demand)"
+
+    def test_shaping_zero_when_no_supply(self):
+        """All-spells pool: no lands → actual_sources empty → shaping = 0 for every step."""
+        import numpy as _np
+        port = _MockCardPort(
+            land_names=set(),
+            card_texts={"SpellA": _WHITE_SPELL_TEXT, "SpellB": _WHITE_SPELL_TEXT},
+        )
+        result = _invoke_per_step([0, 1] * 20, "SpellA;SpellB", port)
+        shaping = result.step_rewards - _np.ones(40, dtype=_np.float32)
+        for t, s in enumerate(shaping):
+            assert s == 0.0, f"shaping[{t}]={s}, expected 0 (no supply)"
+
+    def test_shaping_half_when_small_imbalance_reduced(self):
+        """When imbalance_before < 3 and a land pick reduces it, shaping = +0.5."""
+        import numpy as _np
+        # WhiteSpell pips={W:1} → ideal={W:17}
+        # After 16 Plains: actual={W:16}, imbalance=|17-16|=1.0 (<3)
+        # Step 17 (picks another Plains): actual→{W:17}, imbalance→0 (reduced)
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        # step 17: the 17th Plains pick (index 17), actual goes from 16 to 17
+        shaping_17 = float(result.step_rewards[17] - budget[17])
+        assert shaping_17 == pytest.approx(0.5), (
+            f"Expected shaping=+0.5 at step 17 (small imbalance reduced), got {shaping_17}"
+        )
+
+    def test_shaping_negative_half_when_small_imbalance_increased(self):
+        """When imbalance_before < 3 and a land pick increases it, shaping = -0.5."""
+        import numpy as _np
+        # WhiteSpell pips={W:1} → ideal={W:17}
+        # After 17 Plains: actual={W:17}, imbalance=0 (<3)
+        # Step 18 (picks another Plains): actual→{W:18}, imbalance→1 (increased)
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        shaping_18 = float(result.step_rewards[18] - budget[18])
+        assert shaping_18 == pytest.approx(-0.5), (
+            f"Expected shaping=-0.5 at step 18 (small imbalance increased), got {shaping_18}"
+        )
+
+    def test_shaping_one_when_large_imbalance_reduced(self):
+        """When imbalance_before >= 3 and a land pick reduces it, shaping = +1.0."""
+        import numpy as _np
+        # WhiteSpell pips={W:1} → ideal={W:17}
+        # After 1 Plains (step 1): actual={W:1}, imbalance=|17-1|=16 (>=3)
+        # Step 2 (picks Plains): actual→{W:2}, imbalance→15 (reduced)
+        port = _make_port_ws_plains()
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step([0] + [1] * 39, "WhiteSpell;Plains", port,
+                                  budget_rewards=budget)
+        shaping_2 = float(result.step_rewards[2] - budget[2])
+        assert shaping_2 == pytest.approx(1.0), (
+            f"Expected shaping=+1.0 at step 2 (large imbalance reduced), got {shaping_2}"
+        )
+
+    def test_shaping_negative_one_when_large_imbalance_increased(self):
+        """When imbalance_before >= 3 and a pick increases it, shaping = -1.0."""
+        import numpy as _np
+        # 2-color setup: WhiteSpell + BlueSpell to create demand,
+        # then many Plains to oversource W while U stays undersourced.
+        blue_spell_text = "name: blue mage\nmana cost: {1}{U}\ntypes: creature\n"
+        port = _MockCardPort(
+            land_names={"Plains"},
+            card_texts={
+                "WhiteSpell": _WHITE_SPELL_TEXT,
+                "BlueSpell": blue_spell_text,
+                "Plains": _PLAINS_TEXT,
+            },
+        )
+        # Pick 2 spells (W+U demand), then 38 Plains (W supply only)
+        # After enough Plains, W is oversourced and U is undersourced
+        # ideal ≈ {W:8.5, U:8.5}
+        # At step 25: actual={W:23}, imbalance=|8.5-23|+|8.5-0|=14.5+8.5=23 (>=3)
+        # Step 26 picks Plains: actual={W:24}, imbalance=|8.5-24|+|8.5-0|=15.5+8.5=24 (increased)
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step(
+            [0, 1] + [2] * 38, "WhiteSpell;BlueSpell;Plains", port,
+            budget_rewards=budget,
+        )
+        shaping_25 = float(result.step_rewards[25] - budget[25])
+        assert shaping_25 == pytest.approx(-1.0), (
+            f"Expected shaping=-1.0 at step 25 (large imbalance increased), got {shaping_25}"
+        )
+
+    def test_shaping_zero_when_imbalance_unchanged(self):
+        """When a pick doesn't change imbalance, shaping = 0."""
+        import numpy as _np
+        # A spell pick that adds pip demand but no sources:
+        # If it doesn't change the ideal distribution proportions, imbalance stays same
+        # Actually easier: pick a card with empty text (no pips, not land)
+        port = _MockCardPort(
+            land_names={"Plains"},
+            card_texts={
+                "WhiteSpell": _WHITE_SPELL_TEXT,
+                "Plains": _PLAINS_TEXT,
+                "Token": "",  # no pips, not a land
+            },
+        )
+        # Pick WhiteSpell, Plains (to activate shaping), then Token
+        # Before Token: some imbalance. Token doesn't change pips or sources → same imbalance.
+        budget = _np.ones(40, dtype=_np.float32)
+        result = _invoke_per_step(
+            [0, 1, 2] + [1] * 37, "WhiteSpell;Plains;Token", port,
+            budget_rewards=budget,
+        )
+        shaping_2 = float(result.step_rewards[2] - budget[2])
+        assert shaping_2 == pytest.approx(0.0), (
+            f"Expected shaping=0 at step 2 (imbalance unchanged by Token), got {shaping_2}"
+        )
+
     def test_multiface_adventure_card_counts_pips_from_all_faces(self):
         """FR-010: Multi-face card counts pips from ALL faces (both W and U here)."""
         import numpy as _np
@@ -817,7 +845,7 @@ class TestPerStepRewardBudgetPreservation:
     """T008 — budget signal is preserved at full strength (additive, unscaled)."""
 
     def test_shaping_component_bounded_minus1_to_1(self):
-        """step_rewards[t] - budget_rewards[t] must be in [-1, 1] for all t (tanh output)."""
+        """step_rewards[t] - budget_rewards[t] must be in [-1, 1] for all t."""
         import numpy as _np
         port = _make_port_ws_plains()
         budget = _np.tile([1.0, -1.0], 20).astype(_np.float32)
