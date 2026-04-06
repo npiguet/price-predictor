@@ -56,7 +56,7 @@ specs/016-recoverability-loss-function/
 ```text
 src/sealed/
 ├── domain/
-│   └── mana_scorer.py          # ADD: compute_recoverability_ratio(), compute_shaping_signal()
+│   └── mana_scorer.py          # ADD: compute_recoverability_ratio(), compute_per_step_rewards()
 ├── application/
 │   ├── train_stage2.py          # MODIFY: per-step reward override, new hyperparams, batch logging
 │   └── sample_stage2.py         # MODIFY: mana cost prefix on non-land picks (FR-011)

@@ -10,7 +10,7 @@ Immutable snapshot of the deck's mana recoverability at a given point in the epi
 |-------|------|-------------|
 | `pip_counts` | `PipCounts` | Running pip demand from all non-land spells picked so far |
 | `actual_sources` | `dict[str, float]` | Running count of mana sources per color from lands picked so far |
-| `remaining_picks` | `int` | Number of picks still to come (40 − current_step − 1) |
+| `remaining_picks` | `int` | Number of picks still to come including the current one (40 − current_step). Decremented by 1 after each pick. |
 
 **Not a formal dataclass** — this is the implicit state tracked by the replay loop. Documented here for clarity.
 
@@ -74,11 +74,11 @@ def compute_per_step_rewards(
 - `final_imbalance: float` — batch diagnostic: imbalance at last step
 
 **Algorithm** (40 iterations):
-1. Initialize running pip demand (empty), actual sources (empty), step = 0
+1. Initialize running pip demand (empty), actual sources (empty), remaining = 40, step = 0
 2. For each pick in `actions`:
-   a. Compute `ratio_before` from current state
-   b. Update state: if spell → add pips; if land → add source
-   c. Compute `ratio_after` from updated state
+   a. Compute `ratio_before` from current state (using `remaining`)
+   b. Update state: if spell → add pips; if land → add source. Decrement `remaining` by 1.
+   c. Compute `ratio_after` from updated state (using decremented `remaining`)
    d. `delta = ratio_before - ratio_after`
    e. `shaping = tanh(delta / temperature)`
    f. `step_rewards[t] = budget_rewards[t] + shaping`
@@ -108,22 +108,26 @@ def compute_recoverability_ratio(
 
 ```
 Step 0 (no picks yet):
-  pip_demand = {}, actual_sources = {}, remaining = 39
-  → ratio = 0 (imbalance is 0 because ideal is {} when no spells picked)
+  pip_demand = {}, actual_sources = {}, remaining = 40
+  → ratio_before = 0 (imbalance is 0 because ideal is {} when no spells picked)
+  After pick: remaining = 39
+  → ratio_after = 0 (still zero imbalance if first pick is a land with no demand)
   → shaping ≈ 0
 
 Step t (spell picked):
-  pip_demand += pips_from_card
+  ratio_before computed with remaining = 40 - t
+  pip_demand += pips_from_card, remaining decremented to 40 - t - 1
   → ideal shifts, imbalance may increase or decrease
   → ratio_after computed with remaining = 40 - t - 1
 
 Step t (land picked):
-  actual_sources += colors_from_land
+  ratio_before computed with remaining = 40 - t
+  actual_sources += colors_from_land, remaining decremented to 40 - t - 1
   → imbalance decreases (if land matches ideal) or increases (if oversupplied)
   → ratio_after computed with remaining = 40 - t - 1
 
 Step 39 (final pick):
-  remaining_before = 1, remaining_after = 0
+  remaining_before = 1 (40 - 39), remaining_after = 0 (40 - 39 - 1)
   → ratio_after uses denominator max(0, 1)^exp = 1
   → delta = ratio_before - imbalance_after
 ```

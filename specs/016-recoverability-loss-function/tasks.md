@@ -61,7 +61,7 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T004 [P] [US1] Write unit tests for `compute_per_step_rewards()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: returns float32[40] array; values in (-2, 2); Plains pick into under-sourced white deck → positive shaping; Plains pick into over-sourced white deck → negative shaping; spell pick that shifts ideal → correct delta; shaping signals are not all identical (per-step credit assignment); mean_shaping and final_imbalance diagnostic values returned correctly
+- [ ] T004 [P] [US1] Write unit tests for `compute_per_step_rewards()` in tests/unit/sealed/domain/test_mana_scorer.py — cover: returns float32[40] array; values in (-2, 2); Plains pick into under-sourced white deck → positive shaping; Plains pick into over-sourced white deck → negative shaping; spell pick that shifts ideal → correct delta; shaping signals are not all identical (per-step credit assignment); mean_shaping and final_imbalance diagnostic values returned correctly; multi-face card (e.g. transform/adventure) correctly counts pips from all faces (FR-010)
 - [ ] T005 [P] [US1] Write unit tests for per-step reward integration in tests/unit/sealed/application/test_train_stage2.py — cover: `step_rewards` on Episode objects are overridden with per-step values (not uniform); `ep.reward` still holds the end-of-episode mana score for convergence logging
 
 ### Implementation for User Story 1
@@ -120,9 +120,10 @@ No separate implementation — the budget signal preservation is enforced by the
 - [ ] T013 [P] Write unit tests for batch log format in tests/unit/sealed/application/test_train_stage2.py — cover: batch print line includes `shaping=X.XX` and `imbalance=X.X` fields alongside existing `mean_score` and timing fields
 - [ ] T014 Modify sample output in src/sealed/application/sample_stage2.py to prefix each non-land pick with its mana cost string (FR-011) — extract the `mana cost:` line from card text; format as `{cost} CardName`; lands print name only
 - [ ] T015 Modify batch logging in src/sealed/application/train_stage2.py to include `shaping=` (batch-mean shaping signal) and `imbalance=` (batch-mean final imbalance) on the existing print line (FR-012) — values come from `PerStepRewardResult.mean_shaping` and `final_imbalance` accumulated across the batch
-- [ ] T016 Run `ruff check .` from `src/` and fix any lint warnings
-- [ ] T017 Run full test suite (`pytest` from `src/`) and verify all tests pass
-- [ ] T018 Validate quickstart.md scenarios manually — verify CLI commands from quickstart.md parse correctly (arg parsing, not full training run)
+- [ ] T016 Update project README (if it documents Stage 2 CLI args) to include `--urgency-exponent` and `--temperature` — per constitution Principle VI, changed CLI commands must be documented
+- [ ] T017 Run `ruff check .` from `src/` and fix any lint warnings
+- [ ] T018 Run full test suite (`pytest` from `src/`) and verify all tests pass
+- [ ] T019 Validate quickstart.md scenarios manually — verify CLI commands from quickstart.md parse correctly (arg parsing, not full training run)
 
 ---
 
@@ -136,7 +137,7 @@ No separate implementation — the budget signal preservation is enforced by the
 - **US1 (Phase 4)**: Depends on US2 (Phase 3) — `compute_per_step_rewards()` calls `compute_recoverability_ratio()`
 - **US3 (Phase 5)**: Depends on US1 (Phase 4) — verification tests exercise the reward composition
 - **US4 (Phase 6)**: Can start after Phase 1 (CLI args are independent of reward logic), but threading through to `execute()` depends on US1 (Phase 4)
-- **Polish (Phase 7)**: FR-011 (T012/T014) can start any time after Phase 1. FR-012 (T013/T015) depends on US1 (Phase 4). Final validation (T016-T018) depends on all prior phases.
+- **Polish (Phase 7)**: FR-011 (T012/T014) can start any time after Phase 1. FR-012 (T013/T015) depends on US1 (Phase 4). Documentation (T016) can start any time. Final validation (T017-T019) depends on all prior phases.
 
 ### User Story Dependencies
 

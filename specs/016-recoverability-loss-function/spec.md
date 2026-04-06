@@ -21,7 +21,7 @@ Stage 1 budget signal and the recoverability-based mana shaping signal.
 the credit assignment problem remains unsolved and the instability cycle continues.
 
 **Independent Test**: Can be fully tested by running Stage 2 training on a small dataset and verifying that each step
-in an episode receives a distinct reward value (not a uniform value), that rewards fall within the expected [-2, 2]
+in an episode receives a distinct reward value (not a uniform value), that rewards fall within the expected (-2, 2)
 range, and that picks that clearly improve mana balance receive higher rewards than picks that worsen it.
 
 **Acceptance Scenarios**:
