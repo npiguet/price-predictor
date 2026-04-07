@@ -3,14 +3,6 @@
 Train a sealed deck builder that takes a pool of cards opened from 6 boosters and selects an optimal 40-card deck, using
 game outcomes as the training signal. This is a stepping stone toward a full MTG-playing AI.
 
-In order to keep the training cost manageable, this will be achieved by going through multiple training stages of 
-increasing complexity.
-
-1. Picking legal cards
-2. Picking playable cards
-3. Picking good cards
-4. Fine-tuning
-
 # Card Representation
 
 Each card is encoded by your pretrained price predictor transformer, producing a 512-dimensional vector (256 mean pool +
@@ -18,14 +10,23 @@ Each card is encoded by your pretrained price predictor transformer, producing a
 so that the embedding captures what the card does, not its name. This encoder is frozen initially and unfrozen in later
 training stages.
 
-At the pool level, each of the 96 entries (90 pool cards + 6 basic land slots) is represented as:
+At the pool level, each of the 90 entries is represented as the card embeddings plus a number of important features 
+deterministically extractable from card text that are known to be difficult for transformer models to represent 
+accurately, but are also important for judging card quality:
 
 - card_embedding [512]
-- picked_flag [1] (basic land slots: 0 when basic_land_count == 0, 1 otherwise)
-- available_flag [1] (basic land slots: always 1)
 - is_land [1]
-- basic_land_count [1] (booster card slot: always 0)
-- => 516 features per card
+- mana cost:
+   * number of pips of each color (colorless {C}) [6]
+   * number of generic mana [1]
+   * number of {X} pips [1]
+   * mana value [1]
+- card color (WUBRG or C) [6]
+- count of mana produced (WUBRG + C) [6]
+- power and toughness (for creatures): [2]
+- starting loyalty [1]
+- zero-padding reserved features (to make the vector size divisible by 8) [7]
+- => 546 features per card
 
 Card slots represent stage 1 of the model. The all have the same number of features so that they can be cleanly fed to
 the transformer at stage 2.
@@ -33,9 +34,6 @@ the transformer at stage 2.
 ## Card Pool Composition
 
 - 84-90 cards (opened from 6 boosters, varies by set, 14-15 cards per booster. Contain lands, including basic lands)
-- 6 basic land slots (one per color + colorless, always available, never masked out, counts how many times it was
-  selected)
-- 96 total entries
 
 # Model Architecture
 
@@ -44,63 +42,93 @@ A two-stage architecture:
 - Stage 1 — Card encoder: Pretrained (from price predictor), reused for each card
     - [Structured Oracle text] → [Pretrained transformer] → [512-dim card embedding]
 - Stage 2 — Pool-level transformer (trained from scratch)
-    - [95 × 516 features] → [Small transformer] → [95 logits] → [masked softmax] → [pick]
+    - [90 × 546 features] → [Transformer] → [90 scores] → deck selection
 
-The pool transformer attends freely over all 95 cards at every step, including already-picked ones, so it can use the
-current deck state as context for each new pick. A small projection layer (512 → 512) sits between the encoder and pool
-transformer to allow adaptation without destabilizing the pretrained weights.
+The pool transformer processes all 90 pool card embeddings in a single forward pass using self-attention, and outputs a
+scalar score for each card.
 
-The exact size of the transformer model will be the subject of multiple experiments, but for the first version we'll 
-set it at:
+The exact size of the transformer model will be the subject of experiments, but as a starting point:
 - layers: 8
 - heads: 8
-- d_model: 516
+- d_model: 546
 - d_ff: 2048
 
-# Pick Phase
+# Deck Selection
 
-40 sequential steps, one card per step:
+Instead of picking cards one at a time over 40 sequential steps, the model scores all 90 pool cards in a single forward
+pass and the deck is assembled from those scores:
 
-- At each step the model sees all 96 cards with their current flags and counts
-- Already-picked nonland cards have available_flag = 0 and are masked out of selection
-- Basic land slots are never masked — picking one increments its basic_land_count
-- The selection mask is applied to logits after the transformer, not to attention, so picked cards remain visible as
-  context
-- After 40 picks the deck is complete — no separate land phase needed
+1. The transformer outputs a score for each of the 90 pool cards
+2. Sort cards by score descending
+3. Walk down the sorted list, accepting cards until 23 non-land cards (spells) have been selected. Any non-basic lands
+   that score higher than the lowest-accepted spell are also included.
+4. Let x = the number of non-basic lands selected. Fill the remaining 17 - x land slots with basic lands, allocated
+   across colors using the ideal mana distribution (proportional to pip demand from the selected spells, with a floor
+   of 2 sources per color present).
+
+The total deck is always 40 cards: 23 spells + x non-basic lands + (17 - x) basic lands.
+
+## Why One-Shot Selection
+
+The previous sequential approach (40 picks, one per step, PPO with per-step rewards) failed to learn color coordination.
+The root cause is a credit assignment problem: evaluating a holistic set property (mana balance) requires reasoning about
+all cards simultaneously, but a sequential model must decompose that into 40 independent per-step decisions. Spell/land
+ratio (a 1D counting problem) was learned easily, but color balance (a 6D coupled optimization with a moving target) was
+not — every spell pick shifts the ideal distribution across all 6 color buckets simultaneously, and the model could never
+get meaningful per-step gradient signal for this global property.
+
+The one-shot approach sidesteps the credit assignment problem entirely:
+- The transformer sees all 90 cards simultaneously via self-attention, allowing holistic reasoning about card interactions
+  and color synergies
+- One forward pass produces one deck, one deck produces one score — direct gradient signal with no decomposition needed
+- Mana balance is solved by construction through the deterministic basic land allocation
+
+## Non-Basic Land Handling
+
+Booster pools contain non-basic lands (dual lands, utility lands, fetch lands, etc.) that are more valuable than basic
+lands. These must be evaluated alongside spells, not relegated to a separate land-allocation phase. The selection
+procedure handles this naturally: non-basic lands compete with spells for inclusion based on their transformer scores.
+A strong dual land that provides needed color fixing will score higher than a marginal spell and be included
+automatically.
 
 # Training Algorithm
 
-PPO (Proximal Policy Optimization) with experience replay:
+With one-shot selection, the training signal is dramatically simpler than the sequential approach: one forward pass
+produces one deck, one deck receives one score.
 
-- Handles the sequential 40-step decision process naturally
-- Tolerates mild off-policy data from the replay buffer
-- KL divergence monitored per episode to detect stale buffer entries
+Two candidate training approaches:
 
-## Replay Buffer
+## Option A: REINFORCE / Policy Gradient
 
-Per episode stored:
+Treat the card scores as a stochastic policy (e.g., via Plackett-Luce sampling for ordered selection without
+replacement). Sample a deck, score it, compute the policy gradient. Standard variance reduction (baseline subtraction)
+keeps gradients stable.
 
-| Feature            | Format          | Size        |
-|--------------------|-----------------|-------------|
-| pool embeddings:   | 95 × 512 floats | (~195 KB)   |
-| actions:           | 40 integers     | (160 bytes) |
-| log probabilities: | 40 floats       | (160 bytes) | 
-| reward:            | 1 float         | (4 bytes)   |
-|                    |                 |             |
-| total per episode: |                 | ~195 KB     |
-| buffer size:       | ~1000 episodes  | (~195 MB)   |
+- Simple to implement
+- Direct optimization of the scoring function
+- Well-understood convergence properties
 
-FIFO eviction with KL divergence monitoring to detect when episodes are too stale to be useful.
+## Option B: Expert Iteration
 
+1. Generate many random (or policy-sampled) decks from each pool
+2. Score all decks with the evaluation function
+3. Train the model to imitate the highest-scoring decks
+4. Repeat — each iteration produces better decks to train on
 
-## Training Curriculum
+- Avoids high-variance gradient estimates
+- Naturally explores the deck space
+- Can bootstrap from random decks with no pretrained policy
 
-### Stage 0 - Training Dataset Preparation
+Either approach (or a hybrid) is viable. The choice will be informed by early experiments.
+
+# Training Curriculum
+
+## Stage 0 - Training Dataset Preparation
 
 The training dataset is pre-generated before training begins. The preparation
 consists of two independent steps that can be run separately:
 
-#### Step 1 - Card Embedding Generation
+### Step 1 - Card Embedding Generation
 The Python application scans cards-path and generates a 512-dimensional embedding
 vector for each card found, following the process described in spec
 006-card-script-parsing. Each embedding is stored as a .npz file named after
@@ -108,7 +136,7 @@ the card (e.g. Lightning-Bolt.npz) in the same cards-path folder. This step is
 skipped for cards that already have a corresponding .npz file, making it safe
 to run incrementally when new cards are added or when the encoder is retrained.
 
-#### Step 2 - Pool Generation
+### Step 2 - Pool Generation
 The Python script invokes a forge-connector Java class that uses Forge's
 internal classes to generate a configurable number of sealed pools, each
 consisting of 6 boosters from the same configurable set. The pools are
@@ -118,8 +146,7 @@ allowed since a pool can contain multiple copies of the same card. Basic
 lands are not included in the generated pools.
 
 At training time, each pool is assembled by reading the .npz embedding file
-for each card in the pool, then appending the 6 basic land embeddings looked
-up by name from cards-path.
+for each card in the pool.
 
 The dataset preparation can be launched via the following commands:
 ```bash
@@ -144,56 +171,30 @@ Defaults for generate-pools:
 - **--size**: 10000
 - **--pools-path**: output/sealed/pools/{set-code}/
 
-### Stage 1 - Picking legal card (aka: Legal deck gate)
-At each pick step, we verify that the model has selected a pool slot that has not already been chosen in the current 
-episode. Basic land slots are exempt from this check since they can be picked any number of times.
+## Stage 1 - Heuristic Training
 
-At the start of each episode, a pool is sampled from the pre-generated dataset
-and the 6 basic land embeddings are appended to it, bringing the pool size to
-96 entries. The card order within the pool is then shuffled to prevent the
-model from learning positional biases.
+Train the model to produce decks that score well on heuristic evaluation functions — land count, mana curve, color
+consistency — without needing Forge game simulations. This is cheap to run (pure Python, no JVM) and establishes a
+baseline policy that builds structurally sound decks.
 
-During training, the card order within each pool is shuffled before each
-episode to prevent the model from learning positional biases.
+The heuristic scoring function evaluates the assembled 40-card deck (selected spells + non-basic lands + allocated
+basics) and produces a scalar reward. The exact heuristic components will be defined in the feature spec for this stage.
 
-When an illegal pick is made, the episode terminates immediately.
+Training advances to Stage 2 once the model consistently produces decks that pass all heuristic checks.
 
-The reward is calculated as:
+## Stage 2 — Forge Self-Play
+
+The model builds decks from fresh pools. Each match is best-of-11 via Forge, with Forge AI playing both sides:
 ```
-reward = (current_run / best_run) × 2 - 1
-```
-
-Where:
-- current_run: the number of legal picks made in this episode before
-  termination (minimum 1, since the first pick is always legal)
-- best_run: a high-water mark tracking the longest legal pick sequence
-  ever achieved, initialized to 1 and never decreasing
-
-When the model consistently reaches current_run = 40 over 100 consecutive episodes, training advances to stage 2.
-
-### Stage 2 — Picking playable cards (aka: Heuristic gate)
-Two instant checks computed from the picked deck:
-
-1. Land count score: peaks at 16-18 lands, degrades outside that range
-2. Mana pip matching: weighted by 1/cmc to penalize early color requirements more heavily
-
-Decks failing either check receive a negative reward and are never submitted to Forge. This prevents wasting game budget
-on uncastable decks. Gate pass rate is logged as a diagnostic — training moves to stage 2 once it approaches 100%.
-
-### Stage 3 — Picking good cards (aka: Forge self-play)
-Pool transformer and projection layer train freely. Model builds both decks, plays best-of-11, both decks receive
-rewards. Replay buffer active.
-
-Each match is best-of-11 via Forge, with Forge AI playing both sides:
-```
-winner reward = games_won / 11 # 0.5 to 1.0
-loser reward = games_won / 11 - 1 # -0.5 to 0.0
+winner reward = games_won / 11    # 0.5 to 1.0
+loser reward  = games_won / 11 - 1 # -0.5 to 0.0
 ```
 
-Since the model builds both decks, every match produces two independent reward signals.
+The model builds both decks from the same pool, so every match produces two independent reward signals.
 
-### Stage 4 — Encoder fine-tuning (staged unfreezing)
-Triggered when stage 2 win rate plateaus against the external benchmark. Unfreeze in order:
+## Stage 3 — Encoder Fine-Tuning (Staged Unfreezing)
+
+Triggered when Stage 2 win rate plateaus against the external benchmark. Unfreeze in order:
 
 1. Projection layer (already trainable)
 2. Top encoder layers at lr ~1e-6
@@ -201,8 +202,9 @@ Triggered when stage 2 win rate plateaus against the external benchmark. Unfreez
 
 Pool transformer keeps its higher learning rate (~1e-4) throughout.
 
-## Evaluation Against External Baseline
-Every 1000 training episodes, freeze weights and run:
+# Evaluation Against External Baseline
+
+Every N training iterations, freeze weights and run:
 
 ```
 20 fresh pools
@@ -216,21 +218,24 @@ Every 1000 training episodes, freeze weights and run:
 This tracks absolute quality independently of self-play, catching the relativism trap where both self-play decks improve
 relative to each other but not in absolute terms.
 
-## Training Completion Criteria
+# Training Completion Criteria
+
 Training is considered done when all of the following are stable across several consecutive evaluation checkpoints:
 
 - Self-play win rate → ~50% (both decks consistently strong)
 - Forge builder win rate → plateaued (absolute quality peaked)
-- Gate pass rate → ~100% (always builds legal decks)
+- Heuristic scores → consistently high (structurally sound decks)
 - Human spot check → built decks look strategically coherent
 
 # Expansion Path
+
 Once the model is performing well on a single set:
 
-Expand to multiple sets by padding pools to the largest set's pool size
-The architecture requires no changes — just longer padding for smaller sets
-Retrain or fine-tune on the expanded card pool
+Expand to multiple sets by padding pools to the largest set's pool size.
+The architecture requires no changes — just longer padding for smaller sets.
+Retrain or fine-tune on the expanded card pool.
 
 # Longer Term
+
 The card encoder and the understanding of card quality learned here feed directly into the next project — training a
 model to actually play the game, where card evaluation is a prerequisite for good play decisions.
