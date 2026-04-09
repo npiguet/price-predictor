@@ -70,7 +70,7 @@ card1|card2|...|card40;card1|card2|...|card40;wins_a;wins_b
 Each worker is invoked as:
 
 ```
-java -Xmx1200m -cp <classpath> com.pricepredictor.connector.MatchWorkerMain
+java -Xmx1200m -Doutput.file=./output/sealed/match-outcomes.txt -cp <classpath> com.pricepredictor.connector.MatchWorkerMain
 ```
 
 The classpath includes:

@@ -57,7 +57,7 @@
 - [ ] T011 [P] [US1] Implement DeckBuilder with method 1 only (standard SealedDeckBuilder: new SealedDeckBuilder(pool).buildDeck()) in forge-connector/src/main/java/com/pricepredictor/connector/DeckBuilder.java
 - [ ] T012 [US1] Implement MatchGenerator (pick random set from all sets with boosters, generate 2 pools of 6 boosters each via PoolGenerator, build deck from each pool via DeckBuilder, play best-of-3 via GamePlayer, return MatchResult) in forge-connector/src/main/java/com/pricepredictor/connector/MatchGenerator.java
 - [ ] T013 [US1] Implement MatchWorkerMain (initialize Forge via ForgeEnvironmentInitializer, create MatchGenerator + MatchResultWriter with output file path from system property, loop forever: generateMatch + write result) in forge-connector/src/main/java/com/pricepredictor/connector/MatchWorkerMain.java
-- [ ] T014 [P] [US1] Implement MatchWorkerConnector (build Java subprocess command with classpath including all 6 JARs + dependency dir, -Xmx1200m, pass output file path as system property, return Popen handle) in src/sealed/infrastructure/match_worker_connector.py
+- [ ] T014 [P] [US1] Implement MatchWorkerConnector (build Java subprocess command with classpath including all 5 JARs + dependency dir, -Xmx1200m, pass output file path as system property, return Popen handle) in src/sealed/infrastructure/match_worker_connector.py
 - [ ] T015 [US1] Implement MatchOutcomeSupervisor (spawn worker_count monitor threads, each thread loops: start worker via MatchWorkerConnector, waitFor, restart if not shutting down; register SIGINT/SIGTERM handlers to set shutdown Event and terminate all workers; status reporter prints line count, rate, alive workers every 60s) in src/sealed/application/match_outcomes.py
 - [ ] T016 [US1] Extend CLI with match-outcomes subcommand (add subparser with --workers int default 12, wire to MatchOutcomeSupervisor, ensure output dir ./output/sealed/ is created) in src/sealed/infrastructure/cli.py
 
@@ -89,7 +89,7 @@
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T018 [P] [US3] Unit test for DeckBuilder (verify weighted method selection distribution over many calls; verify method 2 swaps exactly 3 nonland cards; verify method 3 swaps exactly 8 nonland cards; verify method 4 picks 23 random nonland cards; verify rebalanceLands produces exactly 40-card decks) in forge-connector/src/test/java/com/pricepredictor/connector/DeckBuilderTest.java
+- [ ] T018 [P] [US3] Unit test for DeckBuilder (verify weighted method selection distribution over many calls; verify method 2 swaps exactly 3 nonland cards; verify method 3 swaps exactly 8 nonland cards; verify method 4 picks 23 random nonland cards; verify rebalanceLands produces exactly 40-card decks; verify FR-010: for methods 2-4, each card instance in the resulting deck appears at most once from the original pool — no pool card reuse after swaps) in forge-connector/src/test/java/com/pricepredictor/connector/DeckBuilderTest.java
 
 ### Implementation for User Story 3
 
@@ -124,7 +124,8 @@
 **Purpose**: Verify nothing is broken and the full system works end-to-end
 
 - [ ] T022 [P] Verify existing forge-connector entry points (PoolMain, ConvertMain) still function correctly after ForgeEnvironmentInitializer rewrite — run existing commands and confirm unchanged behavior
-- [ ] T023 Run quickstart.md end-to-end validation: build forge-connector (mvn package -DskipTests), run python -m sealed match-outcomes --workers 2, verify output file contains well-formed records per contracts/cli.md format spec
+- [ ] T023 Run quickstart.md end-to-end validation: build forge-connector (mvn package -DskipTests), run python -m sealed match-outcomes --workers 2, verify output file contains well-formed records per contracts/cli.md format spec; note observed throughput rate against SC-001 target (≥500 matches/hour at 12 workers)
+- [ ] T024 [P] Update project root README.md with the new `match-outcomes` command: add workflow description (supervisor/worker architecture, inputs, outputs), document the output format, and describe how to run and stop the generation process (per Constitution VI)
 
 ---
 

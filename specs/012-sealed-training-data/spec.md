@@ -141,7 +141,7 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 
 - The Forge game engine and its sealed deck builder are available and accessible from the forge-connector module.
 - The Forge AI can play games autonomously without user interaction.
-- The forge-connector module already has the necessary harnesses to list expansion sets, generate boosters, build sealed decks, and play games.
+- The forge-connector module already has the necessary harnesses to list expansion sets and generate boosters. Deck building and game playing capabilities are added by this feature.
 - Card names in the output use the canonical Forge card naming convention.
 - Workers appending single lines to the output file is safe for concurrent writes on the target operating system.
 - An example of the supervisor/worker pattern used here is available in the jumpstart-tierlist project (`../jumpstart-tierlist`).
