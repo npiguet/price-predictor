@@ -11,7 +11,7 @@
 
 As a model trainer, I want to generate a large dataset of sealed-format game outcomes so that the deck scorer (Phase 1) has sufficient training signal to learn which decks are strong.
 
-The user runs a single command that spawns multiple parallel workers. Each worker independently and repeatedly: picks a random sealed-legal expansion set, generates two booster pools (6 boosters each), builds a deck from each pool, plays a best-of-3 match via the Forge AI, and appends the outcome to a shared results file. The process runs indefinitely until the user stops it or a target count is reached.
+The user runs a single command that spawns multiple parallel workers. Each worker independently and repeatedly: picks a random sealed-legal expansion set, generates two booster pools (6 boosters each), builds a deck from each pool, plays a best-of-3 match via the Forge AI, and appends the outcome to a shared results file. The process runs indefinitely until the user stops it.
 
 **Why this priority**: Without match outcome data, no subsequent phase of the sealed deck project can proceed. This is the foundational data generation step.
 
@@ -73,30 +73,49 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 
 ### Edge Cases
 
-- What happens when Forge does not support a particular set's sealed format? Sets that cannot provide the required booster types must be excluded from the selection pool.
+- What happens when Forge does not support a particular set's sealed format? The set is automatically excluded — only sets for which forge-connector can generate sealed boosters are in the selection pool.
 - What happens when a game hangs or takes excessively long? In practice, excessively long games cause the worker JVM to crash, which is handled by the supervisor's automatic restart mechanism.
 - What happens when the output file grows very large? The append-only flat file format must remain performant for concurrent writes from many workers. Each worker writes one complete line atomically per match.
-- What happens when a deck construction method produces fewer than 23 non-land cards (e.g. some sets have very small booster pools)? The system should handle small pools gracefully, either by adjusting the deck size or skipping that match.
+- ~~What happens when a deck construction method produces fewer than 23 non-land cards?~~ Not applicable — 6 boosters always produce enough non-land cards for any construction method. No special handling required.
+
+## Clarifications
+
+### Session 2026-04-09
+
+- Q: Should the supervisor provide progress feedback during long runs? → A: Supervisor periodically prints a status line (total matches completed, generation rate, alive workers).
+- Q: Can a match pit players from different expansion sets? → A: No. Both players always use the same set, matching real sealed play rules.
+- Q: What happens when the process is restarted after a previous run? → A: Always append to existing file, accumulating data across runs.
+- Q: What if a pool has fewer than 23 non-land cards? → A: Not possible. 6 boosters always produce enough non-land cards; no special handling needed.
+- Q: How are duplicate card copies represented in the output? → A: Repeat the card name once per copy (e.g., `Lightning Strike|Lightning Strike|...`).
+- Q: Should the CLI accept a target match count to stop automatically? → A: No. The process always runs indefinitely until the user stops it manually.
+- Q: Are deck construction method weights configurable via CLI or hardcoded? → A: Hardcoded constants in source code.
+- Q: What is the worker process architecture? → A: Python supervisor spawns Java (forge-connector) worker subprocesses.
+- Q: How does colorless mana factor into land rebalancing? → A: Only explicit {C} pips count toward Wastes allocation. Generic mana costs ({1}, {2}, etc.) are ignored. All 6 basic land types (Plains, Island, Swamp, Mountain, Forest, Wastes) are considered.
+- Q: How are ineligible sets (un-sets, aftermath) identified for exclusion? → A: Data-driven from Forge: a set is eligible if forge-connector can generate sealed boosters for it.
+- Q: How frequently should the supervisor print status? → A: Every 60 seconds.
+- Q: Should the output format include the expansion set name as an additional field? → A: No. Keep the 4-field format (`deck_A;deck_B;wins_A;wins_B`); set info is not needed in the output.
+- Q: Should the output record the deck construction method ID used for each deck? → A: No. Method distribution correctness is verified via code review and unit tests only; no runtime tracking needed.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: System MUST generate sealed-format match outcomes by selecting a random sealed-legal expansion set, producing two 6-booster pools, constructing a deck from each pool, playing a best-of-3 match, and recording the result.
-- **FR-002**: System MUST support four deck construction methods selected randomly per deck with configurable weights:
+- **FR-001**: System MUST generate sealed-format match outcomes by selecting a random sealed-legal expansion set, producing two 6-booster pools **from that same set**, constructing a deck from each pool, playing a best-of-3 match, and recording the result.
+- **FR-002**: System MUST support four deck construction methods selected randomly per deck with the following hardcoded weights:
   1. Standard Forge sealed deck generator (default weight 40%)
   2. Same as method 1, but 3 random **nonland** cards in the deck are swapped with 3 random **nonland** cards from the remaining pool (default weight 30%)
   3. Same as method 1, but 8 random **nonland** cards in the deck are swapped with 8 random **nonland** cards from the remaining pool (default weight 20%)
   4. Cards are randomly picked from the pool (**basic lands excluded**) until 23 non-land cards have been selected (default weight 10%)
-- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands, then add lands to reach exactly 40 cards total, with a minimum of 2 basic lands for any color with at least 1 mana pip present, and remaining lands distributed proportionally to the color pip distribution (including colorless).
-- **FR-004**: System MUST record each match outcome as a single line in the format: `deck_A_card_names;deck_B_card_names;wins_A;wins_B` where card names are pipe-separated and wins sum to 2 or 3.
+- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands, then add lands to reach exactly 40 cards total, with a minimum of 2 basic lands for any color with at least 1 mana pip present, and remaining lands distributed proportionally across all 6 basic land types (Plains, Island, Swamp, Mountain, Forest, Wastes) based on pip counts (W, U, B, R, G, C respectively). Generic mana costs ({1}, {2}, etc.) do not influence land distribution.
+- **FR-004**: System MUST record each match outcome as a single line in the format: `deck_A_card_names;deck_B_card_names;wins_A;wins_B` where card names are pipe-separated (duplicate copies repeat the name, e.g. `Lightning Strike|Lightning Strike|...`) and wins sum to 2 or 3.
 - **FR-005**: System MUST run multiple worker processes in parallel (configurable, default 12), all appending to the same output file.
 - **FR-006**: System MUST monitor worker processes and automatically restart any worker that dies unexpectedly, without affecting other workers or corrupting existing output data.
 - **FR-007**: When the supervisor receives an interrupt or termination signal (e.g. Ctrl+C), it MUST terminate all worker processes it started and exit cleanly, leaving no orphaned workers behind.
-- **FR-008**: System MUST exclude un-sets and aftermath-style sets from the expansion set selection pool. Only sets providing "draft boosters" or "play boosters" are eligible.
+- **FR-008**: System MUST exclude ineligible sets from the expansion set selection pool. A set is eligible if and only if forge-connector can successfully generate sealed boosters for it. This implicitly excludes un-sets, aftermath-style sets, and any other sets Forge does not support for sealed play.
 - **FR-009**: System MUST be invocable via the command `python -m sealed match-outcomes`.
 - **FR-010**: Each card instance in a pool MUST be selectable at most once (matching physical sealed rules), even if multiple copies of that card exist in the pool.
-- **FR-011**: System MUST write output to `./output/sealed/match-outcomes.txt`, creating the directory structure if it does not exist.
+- **FR-011**: System MUST write output by appending to `./output/sealed/match-outcomes.txt`, creating the directory structure if it does not exist. If the file already exists from a previous run, new outcomes are appended (data accumulates across runs).
+- **FR-012**: The supervisor MUST print a status summary to the terminal every 60 seconds, including total matches completed, current generation rate, and number of alive workers.
 
 ### Key Entities
 
@@ -104,7 +123,8 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 - **Booster Pool**: A collection of 84-90 cards generated from 6 boosters of a single expansion set. Each player in a match receives their own distinct pool.
 - **Deck**: A 40-card selection from a booster pool, consisting of approximately 23 non-land cards plus basic lands distributed according to the deck's mana requirements.
 - **Match Outcome**: The result of a best-of-3 game between two decks, recording the card composition of each deck and the number of games won by each side.
-- **Worker**: An independent process that generates and plays matches. Multiple workers run in parallel under a supervisor that restarts crashed workers.
+- **Worker**: An independent Java subprocess (running forge-connector) that generates and plays matches. Multiple workers run in parallel under a Python supervisor that restarts crashed workers.
+- **Supervisor**: A Python process (`python -m sealed match-outcomes`) that spawns and monitors Java worker subprocesses, handles restarts, prints status, and responds to termination signals.
 
 ## Success Criteria *(mandatory)*
 
