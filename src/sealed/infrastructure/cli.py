@@ -63,6 +63,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory; pools.txt is written here. Default: output/sealed/pools/{set}/",
     )
 
+    # ── match-outcomes ────────────────────────────────────────────
+    match_parser = subparsers.add_parser(
+        "match-outcomes",
+        help="Generate sealed match outcome training data using Forge AI",
+    )
+    match_parser.add_argument(
+        "--workers",
+        type=int,
+        default=12,
+        help="Number of parallel Java worker processes to spawn (default: 12)",
+    )
+
     return parser
 
 
@@ -147,6 +159,26 @@ def run_generate_pools(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_match_outcomes(args: argparse.Namespace) -> int:
+    """Execute the match-outcomes command."""
+    from sealed.application.match_outcomes import MatchOutcomeSupervisor
+
+    output_path = Path("output") / "sealed" / "match-outcomes.txt"
+
+    supervisor = MatchOutcomeSupervisor(
+        worker_count=args.workers,
+        output_path=output_path,
+    )
+
+    try:
+        supervisor.run()
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    return 0
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
@@ -159,6 +191,8 @@ def main() -> None:
         sys.exit(run_encode_cards(args))
     elif args.command == "generate-pools":
         sys.exit(run_generate_pools(args))
+    elif args.command == "match-outcomes":
+        sys.exit(run_match_outcomes(args))
     else:
         parser.print_help()
         sys.exit(1)

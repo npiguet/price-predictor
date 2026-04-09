@@ -187,6 +187,12 @@ public class RulesParser {
             } else if (sa.isSpell() && "True".equals(sa.getParam("NonBasicSpell"))) {
                 addIfNotNull(abilities, AlternateCostSpell.of(sa));
             } else if (sa.isActivatedAbility()) {
+                // Skip mana abilities for faces that have basic-land subtypes: the
+                // synthetic land mana block below adds them in a canonical format.
+                // With FModel initialization, CardFactory now produces fully-resolved
+                // Card objects that include these mana abilities in SpellAbilities,
+                // so without this guard they would be double-counted.
+                if (sa.isManaAbility() && buildLandManaDescription(face) != null) continue;
                 addIfNotNull(abilities, ActivatedAbilityEntry.of(sa));
             } else if (sa.isSpell()) {
                 // Skip SAs that are handled by the triggers or replacements loops.

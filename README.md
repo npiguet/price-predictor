@@ -504,6 +504,54 @@ Giant Growth;Serra Angel;Wrath of God;...
 
 **Exit codes**: `0` = success, `2` = fatal error (invalid set, JAR not found, Java not on PATH).
 
+### match-outcomes
+
+Generates a large dataset of sealed-format match outcomes for training a deck scorer. Spawns a configurable number of Java worker processes that each independently pick a random sealed-legal set, generate two 6-booster pools, construct decks, play a best-of-3 match via Forge AI, and append the result to a shared flat file. The supervisor monitors workers and restarts any that crash.
+
+**Prerequisites**: Java 17+, Forge built (`cd ../forge && mvn install -DskipTests`), forge-connector fat JAR built (`cd forge-connector && mvn package -DskipTests`).
+
+```bash
+# Start 12 workers (default)
+python -m sealed match-outcomes
+
+# Use fewer workers (e.g. on a machine with limited RAM)
+python -m sealed match-outcomes --workers 4
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--workers` | `12` | Number of parallel Java worker processes |
+
+**Stop**: Press **Ctrl+C** to terminate all workers and exit cleanly.
+
+**Output**: `output/sealed/match-outcomes.txt` — one match per line, appended indefinitely. The file is never truncated — runs accumulate.
+
+**Output format** (`match-outcomes.txt`):
+```
+card1|card2|...|card40;card1|card2|...|card40;wins_a;wins_b
+```
+Four semicolon-separated fields:
+1. `deck_a`: Pipe-separated card names (40 cards, Forge canonical names, duplicates repeat)
+2. `deck_b`: Same format as `deck_a`
+3. `wins_a`: Games won by deck A (0–2)
+4. `wins_b`: Games won by deck B (0–2)
+
+**Invariants**: `wins_a + wins_b` is 2 or 3; each deck contains exactly 40 cards.
+
+**Architecture**:
+```
+python -m sealed match-outcomes
+        │
+        ├── Worker 0 (java MatchWorkerMain) ──┐
+        ├── Worker 1 (java MatchWorkerMain) ──┤
+        ├── ...                               ├──► output/sealed/match-outcomes.txt
+        └── Worker N (java MatchWorkerMain) ──┘
+```
+
+Each Java worker uses one of four weighted deck-building methods (40/30/20/10%) to produce decks of varying quality, from Forge's optimal sealed builder to a fully random 23-card selection. This variation produces a richer training signal for the deck scorer.
+
+**Exit codes**: `0` = clean shutdown, `2` = configuration error (Java not found, JAR not built).
+
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
 The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:
