@@ -95,12 +95,13 @@ selected at random for each deck, according to the following weights:
 Card picking follows the same constraints as physical card picks. A card pool may contain multiple copies of a card, but
 each card instance can only be picked once.
 
-For methods 2-4, an extra basic land rebalancing step is performed. All basic lands are first removed from the deck,
-and new basic lands are selected following these rules:
- - Pick as many lands as necessary to yield a deck of exactly 40 cards
- - Minimum 2 basic lands for any color that has at least 1 pip present in the mana cost of any card in the deck
- - After the minimum lands have been picked, the remaining lands are distributed in such a way that their proportions 
-   match the proportions of the sum of the color pips of each color ({C} included)
+For methods 2-4, an extra basic land rebalancing step is performed. All basic lands are first removed from the deck
+(non-basic lands are kept), then Forge's built-in `LimitedDeckBuilder` land allocation algorithm adds basic lands:
+ - Pick as many basic lands as necessary to yield a deck of exactly 40 cards
+ - Minimum 2 basic lands per required WUBRG color
+ - Remaining slots distributed proportionally to mana pip counts
+ - Note: colorless {C} pips are not handled by Forge's algorithm. This is an accepted trade-off — very few sets/cards
+   require {C}, not enough examples for the model to learn from anyway
 
 ## Step 4 - Use the Forge AI to play the game and record the result
 

@@ -27,6 +27,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - `models/transformer/vocab.txt` (plain text, UTF-8, one token per line) (010-mtg-custom-tokenizer)
 - Python 3.14+ (sealed module), Java 17+ (forge-connector extension) + PyTorch + existing MtgTokenizer (Python); forge-game 2.0.10-SNAPSHOT (Java — already in pom.xml) (011-sealed-dataset)
 - `.npz` embedding files in cards-path folder; `pools.txt` flat text file in output/sealed/pools/{set}/ (011-sealed-dataset)
+- Python 3.14+ (supervisor), Java 17+ (forge-connector worker) + Python stdlib only (subprocess, signal, time, pathlib); Java: forge-game 2.0.10-SNAPSHOT (already in forge-connector pom.xml) (012-sealed-training-data)
+- Append-only flat text file at `./output/sealed/match-outcomes.txt` (012-sealed-training-data)
 
 ## Project Structure
 
@@ -44,9 +46,9 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 012-sealed-training-data: Added Python 3.14+ (supervisor), Java 17+ (forge-connector worker) + Python stdlib only (subprocess, signal, time, pathlib); Java: forge-game 2.0.10-SNAPSHOT (already in forge-connector pom.xml)
 - 011-sealed-dataset: Added Python 3.14+ (sealed module), Java 17+ (forge-connector extension) + PyTorch + existing MtgTokenizer (Python); forge-game 2.0.10-SNAPSHOT (Java — already in pom.xml)
 - 010-mtg-custom-tokenizer: Added Python 3.14+ + Standard library only — no new Python packages required
-- 009-printing-metadata: Added Python 3.14+ + scikit-learn, pandas, numpy, joblib, PyTorch, transformers (BERT tokenizer), FastAPI, uvicorn, ijson
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

@@ -52,7 +52,7 @@ As a model trainer, I want the generated data to contain decks of varying qualit
 **Acceptance Scenarios**:
 
 1. **Given** a deck is being constructed, **When** the construction method is selected, **Then** it is chosen randomly with the following approximate weights: standard Forge builder (40%), Forge builder with 3-card swap (30%), Forge builder with 8-card swap (20%), random card selection (10%).
-2. **Given** a deck is built with any non-standard method (methods 2-4), **When** basic lands are assigned, **Then** the deck is rebalanced to exactly 40 cards with land distribution proportional to the mana pip demands of the selected spells, with a minimum of 2 basic lands for any color with at least 1 pip present.
+2. **Given** a deck is built with any non-standard method (methods 2-4), **When** basic lands are assigned, **Then** basic lands are removed (non-basic lands kept), and Forge's land allocation algorithm rebalances the deck to exactly 40 cards with land distribution proportional to the mana pip demands of the selected spells.
 
 ---
 
@@ -90,7 +90,7 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 - Q: Should the CLI accept a target match count to stop automatically? → A: No. The process always runs indefinitely until the user stops it manually.
 - Q: Are deck construction method weights configurable via CLI or hardcoded? → A: Hardcoded constants in source code.
 - Q: What is the worker process architecture? → A: Python supervisor spawns Java (forge-connector) worker subprocesses.
-- Q: How does colorless mana factor into land rebalancing? → A: Only explicit {C} pips count toward Wastes allocation. Generic mana costs ({1}, {2}, etc.) are ignored. All 6 basic land types (Plains, Island, Swamp, Mountain, Forest, Wastes) are considered.
+- Q: How does colorless mana factor into land rebalancing? → A: Colorless {C} pips are not handled by the land rebalancing algorithm (Forge's built-in `LimitedDeckBuilder.addLands()` only supports WUBRG). Cards requiring {C} may be slightly disadvantaged, but this affects very few sets and cards — not enough examples for the model to learn from anyway. Accepted trade-off.
 - Q: How are ineligible sets (un-sets, aftermath) identified for exclusion? → A: Data-driven from Forge: a set is eligible if forge-connector can generate sealed boosters for it.
 - Q: How frequently should the supervisor print status? → A: Every 60 seconds.
 - Q: Should the output format include the expansion set name as an additional field? → A: No. Keep the 4-field format (`deck_A;deck_B;wins_A;wins_B`); set info is not needed in the output.
@@ -106,7 +106,7 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
   2. Same as method 1, but 3 random **nonland** cards in the deck are swapped with 3 random **nonland** cards from the remaining pool (default weight 30%)
   3. Same as method 1, but 8 random **nonland** cards in the deck are swapped with 8 random **nonland** cards from the remaining pool (default weight 20%)
   4. Cards are randomly picked from the pool (**basic lands excluded**) until 23 non-land cards have been selected (default weight 10%)
-- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands, then add lands to reach exactly 40 cards total, with a minimum of 2 basic lands for any color with at least 1 mana pip present, and remaining lands distributed proportionally across all 6 basic land types (Plains, Island, Swamp, Mountain, Forest, Wastes) based on pip counts (W, U, B, R, G, C respectively). Generic mana costs ({1}, {2}, etc.) do not influence land distribution.
+- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands (keeping non-basic lands), then use Forge's built-in `LimitedDeckBuilder` land allocation algorithm to add basic lands to reach exactly 40 cards. This algorithm guarantees a minimum of 2 basic lands per required WUBRG color and distributes remaining slots proportionally to mana pip counts. Colorless {C} pips are not handled (accepted trade-off — too few affected cards for the model to learn from).
 - **FR-004**: System MUST record each match outcome as a single line in the format: `deck_A_card_names;deck_B_card_names;wins_A;wins_B` where card names are pipe-separated (duplicate copies repeat the name, e.g. `Lightning Strike|Lightning Strike|...`) and wins sum to 2 or 3.
 - **FR-005**: System MUST run multiple worker processes in parallel (configurable, default 12), all appending to the same output file.
 - **FR-006**: System MUST monitor worker processes and automatically restart any worker that dies unexpectedly, without affecting other workers or corrupting existing output data.
