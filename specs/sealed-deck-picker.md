@@ -28,8 +28,135 @@ accurately, but are also important for judging card quality:
 - zero-padding reserved features (to make the vector size divisible by 8) [7]
 - => 544 features per card
 
+## Deterministic Feature Encoding (indices 512–543)
+
+All 32 features are extracted from the converted card text file (see spec 006-card-script-parsing).
+
+### is_land [1] — index 512
+
+`1.0` if `"land"` is in the card's types, `0.0` otherwise. Derived from the parsed `types:` line.
+
+### Mana cost [9] — indices 513–521
+
+Extracted from the `mana cost:` line. Cards with no mana cost (lands, some special cards) get all zeros.
+
+| Index | Feature             | Description                    |
+|-------|---------------------|--------------------------------|
+| 513   | white pips (W)      | count of {W} in mana cost      |
+| 514   | blue pips (U)       | count of {U} in mana cost      |
+| 515   | black pips (B)      | count of {B} in mana cost      |
+| 516   | red pips (R)        | count of {R} in mana cost      |
+| 517   | green pips (G)      | count of {G} in mana cost      |
+| 518   | colorless pips (C)  | count of {C} in mana cost      |
+| 519   | generic mana        | generic mana amount            |
+| 520   | X pip count         | count of {X} in mana cost      |
+| 521   | mana value          | total mana value               |
+
+### Card color [6] — indices 522–527
+
+Multi-hot encoding derived from mana cost pips. A card is a given color if it has at least one pip of that color.
+Cards with no colored pips (lands, colorless artifacts, Eldrazi) are marked colorless. Cards with the `devoid`
+keyword are colorless regardless of their mana cost (all WUBRG flags `0.0`, colorless flag `1.0`).
+
+| Index | Feature    | Rule                                      |
+|-------|------------|-------------------------------------------|
+| 522   | is white   | `1.0` if W pips > 0 and not devoid        |
+| 523   | is blue    | `1.0` if U pips > 0 and not devoid        |
+| 524   | is black   | `1.0` if B pips > 0 and not devoid        |
+| 525   | is red     | `1.0` if R pips > 0 and not devoid        |
+| 526   | is green   | `1.0` if G pips > 0 and not devoid        |
+| 527   | is colorless | `1.0` if no colored pips, or devoid, or no mana cost |
+
+Note: this is color, not color identity. A card like `{2}{C}{C}` (colorless pips only, no W/U/B/R/G) is colorless.
+Devoid is detected from `keyword` lines in the converted card text (e.g. `keyword[1]: devoid`).
+
+### Mana produced [7] — indices 528–534
+
+Whether and how much mana this card can produce. Parsed from `activated` ability lines in the converted card text
+that contain `add` patterns (e.g. `activated[1]: {T}: add {R} or {W}.`). Only activated abilities are scanned —
+triggered, static, and other ability types are ignored.
+
+The encoding is 6 multi-hot color flags plus 1 mana count:
+
+| Index | Feature         | Description                                     |
+|-------|-----------------|-------------------------------------------------|
+| 528   | produces W      | `1.0` if the card can produce white mana        |
+| 529   | produces U      | `1.0` if the card can produce blue mana         |
+| 530   | produces B      | `1.0` if the card can produce black mana        |
+| 531   | produces R      | `1.0` if the card can produce red mana          |
+| 532   | produces G      | `1.0` if the card can produce green mana        |
+| 533   | produces C      | `1.0` if the card can produce colorless mana    |
+| 534   | mana count      | total mana produced per activation (see below)  |
+
+**Mana count rules:**
+
+- Explicit symbols: `add {W}` → count 1, `add {U}{B}` → count 2, `add {R} or {W}` → count 1
+- `add one mana of any color` / `add one mana of any type` → count 1, set all 5 color flags
+- `add two mana of one color` / `add three mana in any combination` → count 2 or 3 respectively, set all 5 color flags
+- Complex/game-dependent amounts (e.g. "add X mana", "add mana equal to...") → count 1 as default
+
+Cards that produce no mana get all zeros.
+
+**Simplification:** this does not attempt to model conditional production (e.g. "add one mana of any color a land
+you control could produce"), mana from sacrifice costs, or mana from abilities that require specific conditions.
+The parser handles the common patterns; edge cases get approximate values. Accuracy here is not critical — the
+transformer embedding already encodes the full card text, so these features are supplemental hints, not the sole
+signal.
+
+### Power and toughness [2] — indices 535–536
+
+From the `power toughness:` line. Non-creatures get `0.0` for both.
+
+| Index | Feature   | Rule                                                 |
+|-------|-----------|------------------------------------------------------|
+| 535   | power     | Numeric value. `*` and `X` encode as `0.0`.          |
+| 536   | toughness | Numeric value. `*` and `X` encode as `0.0`.          |
+
+### Starting loyalty [1] — index 537
+
+From the `loyalty:` line. `0.0` for non-planeswalkers or unparseable values.
+
+### Zero-padding [6] — indices 538–543
+
+All `0.0`. Reserved to make the feature vector length 544 (divisible by 8), which helps with memory alignment and
+potential future feature additions.
+
 Card slots represent the input to the Set Transformer scorer. They all have the same number of features so that they
 can be cleanly fed to the model.
+
+## Feature Normalization
+
+The 32 deterministic features (indices 512–543) have varying scales — binary flags are 0/1, while mana value and
+power/toughness can reach 15+. Without normalization, the larger-magnitude features dominate the Q/K dot products in
+attention, forcing the model to spend capacity learning to downweight them instead of learning card interactions.
+
+The 512 embedding dimensions (indices 0–511) come from the pretrained encoder and are expected to already be at a
+reasonable scale. Only the 32 deterministic features are standardized (zero mean, unit variance).
+
+**Pipeline:**
+- The `.npz` files store **raw (unnormalized)** values. This keeps the encode-cards step incremental — new cards can
+  be encoded without recomputing global statistics or re-encoding existing files.
+- At training startup, the data loader reads all `.npz` files, computes per-feature mean and std across the corpus for
+  indices 512–543, and normalizes in memory.
+- The computed mean and std vectors (each of shape (32,)) are stored as non-trainable buffers on the model via
+  `register_buffer`. This way they are part of `model.state_dict()` — they save/load with the model checkpoint, move
+  to GPU with `.to(device)`, and can never get out of sync with the model that depends on them.
+- At inference, the same buffers are used to normalize incoming feature vectors before scoring.
+
+## Scorer Input — Non-Land Cards Only
+
+The scorer sees only spells and non-basic lands — basic lands are excluded. Since basic lands are assigned
+deterministically from the selected spells (see Phase 0 Step 3 and Phase 2), they carry no information beyond what the
+spell selection already provides. Including them would only inflate the sequence length with redundant tokens.
+
+This means the scorer input is variable-length: typically ~20-29 cards per deck, depending on how many non-basic lands
+the pool contained and the builder selected. The Set Transformer handles this natively — self-attention computes over
+however many tokens are present, and the pooling seed vectors cross-attend over all cards regardless of count.
+
+**Batching with variable lengths:** within a training batch, shorter decks are padded to the length of the longest deck
+in that batch. A boolean attention mask of shape `(batch, max_cards)` marks real cards as `True` and padding as `False`.
+Self-attention and seed-vector cross-attention both use this mask (setting pad positions to `-inf` before softmax) so
+padding tokens contribute nothing to the output.
 
 ## Card Pool Composition
 
@@ -154,11 +281,20 @@ training data.
 
 ## Prerequisite — Card Embedding Generation
 
-Before Phase 0 or Phase 1 can run, each card must have a precomputed 512-dimensional embedding. The Python application
-scans cards-path and generates an embedding for each card found, following the process described in spec
-006-card-script-parsing. Each embedding is stored as a `.npz` file named after the card (e.g. `Lightning-Bolt.npz`) in
-the same cards-path folder. Cards that already have a corresponding `.npz` file are skipped, making it safe to run
-incrementally when new cards are added or when the encoder is retrained.
+Before Phase 0 or Phase 1 can run, each card must have a precomputed 544-dimensional feature vector. The Python
+application scans cards-path and generates a feature vector for each card found. Each feature vector is stored as a
+`.npz` file named after the card (e.g. `Lightning-Bolt.npz`) in the same cards-path folder. Cards that already have a
+corresponding `.npz` file are skipped, making it safe to run incrementally when new cards are added or when the encoder
+is retrained.
+
+The `.npz` file contains a single array of 544 floats:
+- **[0:512]** — the 512-dimensional embedding from the pretrained price predictor transformer, following the process
+  described in spec 006-card-script-parsing (256 mean pool + 256 max pool, name line stripped)
+- **[512:544]** — the 32 deterministic features parsed from the card's converted text file (see Card Representation
+  above): is_land, mana cost fields, card color, mana produced, P/T, loyalty, and zero-padding
+
+Storing both components together means training only needs a single `.npz` lookup per card name — no reparsing of card
+text at training time.
 
 ```bash
 python -m sealed encode-cards \
@@ -188,21 +324,21 @@ Key differences from a standard transformer:
 
 The model consists of:
 
-1. **Optional input projection**: Linear layer mapping 544 → 512 or 256, giving the model a chance to blend the
-   semantic (512-dim) and deterministic (32-dim) features into a unified space before attention.
-2. **Self-attention layers**: Cards attend to each other, learning interactions like "this removal spell is more
+1. **Self-attention layers**: Cards attend to each other, learning interactions like "this removal spell is more
    valuable because the rest of the deck is slow" or "these three cards form a synergy package."
-3. **Pooling layer**: 4-8 learned seed vectors attend over the card representations, producing a fixed-size deck vector
-   (seed vectors x model dimension, e.g. 4 x 512 = 2048).
-4. **Scoring head**: A small MLP (2 hidden layers of 256-512 dims with ReLU) mapping the deck vector to a single
+2. **Pooling layer**: 4-8 learned seed vectors attend over the card representations, producing a fixed-size deck vector
+   (seed vectors x model dimension, e.g. 4 x 544 = 2176).
+3. **Scoring head**: A small MLP (2 hidden layers of 256-512 dims with ReLU) mapping the deck vector to a single
    scalar score.
 
 ### Starting Hyperparameters
 
 - Layers: 2-4 (start with 2; pairwise card interactions likely sufficient, try 4 if validation loss stalls)
 - Attention heads: 4-8 (each head can specialize in color alignment, curve distribution, synergy, removal density, etc.)
-- d_model: 512 (or 256 if using input projection)
-- d_ff: 1024-2048 (standard 2-4x model dimension heuristic)
+- d_model: 544 (no input projection — the Q/K/V projections in each attention head already serve as
+  per-head feature selection, letting different heads attend to different subspaces of the semantic
+  and deterministic features)
+- d_ff: 1088-2176 (standard 2-4x model dimension heuristic)
 - Pooling seed vectors: 4-8
 - Total parameters: roughly 5-15M
 
@@ -257,7 +393,24 @@ Batch composition: each batch should contain games from many different pools to 
 patterns.
 
 Validation: hold out some pools entirely. Generate decks and play games from those pools but never train on them.
-Monitor whether the scorer correctly ranks held-out deck variants.
+
+### Validation Metrics
+
+Three metrics are tracked to detect overfitting and measure progress:
+
+1. **Validation Bradley-Terry loss** (BCE on held-out game pairs) — the primary signal. If training loss keeps dropping
+   but validation loss rises, the model is overfitting.
+2. **Validation prediction accuracy** — the fraction of held-out matchups where the higher-scored deck actually won.
+   The theoretical ceiling is well below 100% because individual MTG games are noisy (the worse deck sometimes wins on
+   draws alone), but this should climb and plateau.
+3. **Forge baseline win rate** — the external evaluation described under "Evaluation Against External Baseline" below.
+   This is the ground truth check that the scorer generalizes to actual deck quality, not just fitting the training
+   distribution.
+
+Note: Bradley-Terry scores have no fixed scale — all scores could drift up by 1000 and the loss would be unchanged
+because only the *difference* between scores enters the sigmoid. Score magnitude is therefore not a useful metric.
+If constraining it is desired for logging aesthetics, a small L2 penalty on the raw scores works, but it is not
+necessary for correctness.
 
 ## Embedding Schedule
 
@@ -283,7 +436,7 @@ Once the scorer is trained, deck building at inference is:
 2. Heuristic builder produces a starting deck of ~23 non-land cards
 3. Deterministically assign basic lands (proportional to pip demand from selected spells, floor of 2 sources per
    included color)
-4. Score the deck with the trained scorer
+4. Score the deck with the trained scorer (input = spells + non-basic lands only; basic lands excluded)
 5. For every possible swap (remove one non-land card from deck, add one from pool): score the resulting deck
 6. Take the best-improving swap, apply it
 7. Recompute lands after the swap
