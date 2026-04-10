@@ -29,6 +29,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-01
 - `.npz` embedding files in cards-path folder; `pools.txt` flat text file in output/sealed/pools/{set}/ (011-sealed-dataset)
 - Python 3.14+ (supervisor), Java 17+ (forge-connector worker) + Python stdlib only (subprocess, signal, time, pathlib); Java: forge-game 2.0.10-SNAPSHOT (already in forge-connector pom.xml) (012-sealed-training-data)
 - Append-only flat text file at `./output/sealed/match-outcomes.txt` (012-sealed-training-data)
+- Python 3.14+ (scorer, training, evaluation CLI), Java 17+ (evaluation workers) + PyTorch (model architecture, training), numpy (embeddings, data loading); existing: scikit-learn, pandas, joblib, FastAPI, uvicorn; Java: forge-game 2.0.10-SNAPSHOT (already in pom.xml) (013-sealed-deck-scorer)
+- `.npz` embedding files (544-dim card vectors), `.pt` model checkpoints (scorer), `match-outcomes.txt` flat text (training data from feature 012) (013-sealed-deck-scorer)
 
 ## Project Structure
 
@@ -46,9 +48,9 @@ cd src; pytest; ruff check .
 Python 3.14+: Follow standard conventions
 
 ## Recent Changes
+- 013-sealed-deck-scorer: Added Python 3.14+ (scorer, training, evaluation CLI), Java 17+ (evaluation workers) + PyTorch (model architecture, training), numpy (embeddings, data loading); existing: scikit-learn, pandas, joblib, FastAPI, uvicorn; Java: forge-game 2.0.10-SNAPSHOT (already in pom.xml)
 - 012-sealed-training-data: Added Python 3.14+ (supervisor), Java 17+ (forge-connector worker) + Python stdlib only (subprocess, signal, time, pathlib); Java: forge-game 2.0.10-SNAPSHOT (already in forge-connector pom.xml)
 - 011-sealed-dataset: Added Python 3.14+ (sealed module), Java 17+ (forge-connector extension) + PyTorch + existing MtgTokenizer (Python); forge-game 2.0.10-SNAPSHOT (Java — already in pom.xml)
-- 010-mtg-custom-tokenizer: Added Python 3.14+ + Standard library only — no new Python packages required
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
