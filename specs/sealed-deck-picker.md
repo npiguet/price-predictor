@@ -493,16 +493,21 @@ This is the RL approach that previously failed — but now it works because:
 
 # Evaluation Against External Baseline
 
-Every N training iterations, freeze weights and run:
+Every N training iterations, freeze weights and run an evaluation. The workflow spans Python and Java:
 
-```
-20 fresh pools
--> your scorer + search builds deck A
--> Forge's heuristic deck builder builds deck B from same pool
--> best-of-11 via Forge AI
--> log absolute win rate
-~220 games, ~4 minutes
-```
+1. **Pool generation (Python)**: Generate 20 fresh pools by invoking the same Forge booster-generation classes used by
+   the `generate-pools` command.
+2. **Deck A selection (Python)**: For each pool, the scorer-guided greedy search builds deck A (exactly 40 cards).
+3. **Write validation matches file (Python)**: Each line contains `{deck_A};{pool_B}` — deck A as a pipe-separated list
+   of exactly 40 card names, pool B as a pipe-separated list of the full pool of cards (deck B is built in Java, not
+   Python, because it uses Forge's SealedDeckBuilder).
+4. **Split across workers (Python)**: The validation matches are distributed across multiple Java worker processes,
+   each receiving its own subset of matches.
+5. **Play matches (Java workers)**: Each worker reads its assigned matches. For each match, it builds deck B from pool B
+   using Forge's SealedDeckBuilder, plays a best-of-3 match between deck A and deck B via the Forge AI, and writes the
+   outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`).
+6. **Collect results (Python)**: After all workers complete, the Python script reads all outcome files and prints an
+   aggregate summary (pools evaluated, total games played, win rate).
 
 This tracks absolute quality independently of training data generation, catching the trap where the scorer learns to
 rank training variants correctly but doesn't generalize to truly strong decks.
