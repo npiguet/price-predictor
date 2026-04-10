@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import platform
 import signal
 import subprocess
 import threading
@@ -26,6 +27,7 @@ class MatchOutcomeSupervisor:
         self._output_path = output_path
         self._shutdown_event = threading.Event()
         self._processes: list[subprocess.Popen] = []
+        self._start_times: dict[subprocess.Popen, float] = {}
         self._processes_lock = threading.Lock()
         self._connector = MatchWorkerConnector()
 
@@ -59,12 +61,14 @@ class MatchOutcomeSupervisor:
                 proc = self._start_worker(worker_id)
                 with self._processes_lock:
                     self._processes.append(proc)
+                    self._start_times[proc] = time.monotonic()
 
                 proc.wait()
 
                 with self._processes_lock:
                     if proc in self._processes:
                         self._processes.remove(proc)
+                    self._start_times.pop(proc, None)
 
                 if self._shutdown_event.is_set():
                     return
@@ -109,11 +113,25 @@ class MatchOutcomeSupervisor:
                 f" | {alive}/{self._worker_count} workers alive"
             )
 
+            self._kill_oldest_worker()
+
             last_count = count
             last_time = now
 
         self._terminate_all()
         print(f"Shutting down, terminating {self._worker_count} workers...")
+
+    def _kill_oldest_worker(self) -> None:
+        """Kill the longest-running worker to prevent slowdown from stale JVMs."""
+        with self._processes_lock:
+            alive = [(p, t) for p, t in self._start_times.items() if p.poll() is None]
+            if not alive:
+                return
+            oldest_proc, oldest_time = min(alive, key=lambda x: x[1])
+            age = time.monotonic() - oldest_time
+
+        self._kill_process_tree(oldest_proc)
+        print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")
 
     def _terminate_all(self) -> None:
         """Terminate all running worker processes."""
@@ -121,14 +139,31 @@ class MatchOutcomeSupervisor:
             procs = list(self._processes)
 
         for proc in procs:
-            try:
+            self._kill_process_tree(proc)
+
+    @staticmethod
+    def _kill_process_tree(proc: subprocess.Popen) -> None:
+        """Kill a process and its entire child tree.
+
+        On Windows, subprocess.terminate() only kills the parent process;
+        child processes (e.g. JVM child spawned by the java launcher) survive.
+        Use taskkill /F /T to kill the entire tree instead.
+        """
+        try:
+            if platform.system() == "Windows":
+                subprocess.call(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
                 proc.terminate()
-                proc.wait(timeout=5)
+            proc.wait(timeout=10)
+        except Exception:
+            try:
+                proc.kill()
             except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
+                pass
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers."""

@@ -193,6 +193,31 @@ class TestSupervisorWorkerCount:
         assert len(spawned_ids) == 1
 
 
+class TestSupervisorRecycleOldest:
+    def test_oldest_worker_is_terminated(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file)
+
+        old_proc = FakeProcess(pid=100, hang=True)
+        new_proc = FakeProcess(pid=200, hang=True)
+
+        with supervisor._processes_lock:
+            supervisor._processes.extend([old_proc, new_proc])
+            supervisor._start_times[old_proc] = 1000.0
+            supervisor._start_times[new_proc] = 2000.0
+
+        supervisor._kill_oldest_worker()
+
+        assert old_proc._terminated, "Oldest worker must be terminated"
+        assert not new_proc._terminated, "Newer worker must not be terminated"
+
+    def test_no_crash_when_no_workers(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        # Should not raise
+        supervisor._kill_oldest_worker()
+
+
 class TestSupervisorStatusReporting:
     def test_status_counts_output_file_lines(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"

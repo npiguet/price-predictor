@@ -75,6 +75,7 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 
 - What happens when Forge does not support a particular set's sealed format? The set is automatically excluded — only sets for which forge-connector can generate sealed boosters are in the selection pool.
 - What happens when a game hangs or takes excessively long? In practice, excessively long games cause the worker JVM to crash, which is handled by the supervisor's automatic restart mechanism.
+- What happens when workers slow down over extended runs? Forge AI games tend to slow down within long-running JVMs. The supervisor periodically recycles the longest-running worker by terminating it; the monitor thread automatically restarts it with a fresh JVM.
 - What happens when the output file grows very large? The append-only flat file format must remain performant for concurrent writes from many workers. Each worker writes one complete line atomically per match.
 - ~~What happens when a deck construction method produces fewer than 23 non-land cards?~~ Not applicable — 6 boosters always produce enough non-land cards for any construction method. No special handling required.
 
@@ -116,6 +117,7 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 - **FR-010**: Each card instance in a pool MUST be selectable at most once (matching physical sealed rules), even if multiple copies of that card exist in the pool.
 - **FR-011**: System MUST write output by appending to `./output/sealed/match-outcomes.txt`, creating the directory structure if it does not exist. If the file already exists from a previous run, new outcomes are appended (data accumulates across runs).
 - **FR-012**: The supervisor MUST print a status summary to the terminal every 60 seconds, including total matches completed, current generation rate, and number of alive workers.
+- **FR-013**: The supervisor MUST recycle the longest-running worker every 60 seconds (at each status interval) by terminating it. The monitor thread automatically restarts it with a fresh JVM. This prevents throughput degradation caused by long-running Forge JVMs accumulating internal state.
 
 ### Key Entities
 

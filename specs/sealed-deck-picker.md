@@ -136,6 +136,11 @@ creates a configurable number of Java worker processes (default 12) that all app
 Because the Forge AI is not very stable and tends to crash the JVM in various ways, the Python process monitors the
 workers and automatically restarts any that die unexpectedly.
 
+Additionally, Forge AI games tend to slow down over time within a long-running JVM (likely due to accumulated garbage
+collection pressure or internal state growth). To mitigate this, the supervisor **recycles** workers: every 60 seconds
+it terminates the longest-running worker process. The monitor thread automatically restarts it with a fresh JVM,
+keeping throughput stable over long generation runs.
+
 An example of this single-supervisor / multiple-worker pattern is available at `..\jumpstart-tierlist`.
 
 ## Future improvement — Scorer-guided deck generation
