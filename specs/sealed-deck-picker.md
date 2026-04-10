@@ -88,20 +88,26 @@ A new 40-card deck is generated from each card pool. There are 4 distinct deck g
 selected at random for each deck, according to the following weights:
 
 1. Use the standard Forge sealed deck generator (weight: 0.4)
-2. Same as 1, but 3 random nonland cards are swapped with 3 other random nonland cards from the pool (weight: 0.3)
-3. Same as 1, but 8 random nonland cards are swapped with 8 other random nonland cards from the pool (weight: 0.2)
-4. Cards are randomly picked from the pool (basic lands excluded) until 23 non-land cards have been picked (weight: 0.1)
+2. Same as 1, but 3 type-matched swaps are made: each swap picks a random card from the deck's
+   non-basics (spells or non-basic lands) and replaces it with a card of the same type from
+   the remaining pool — spells swap with spells, non-basic lands swap with non-basic lands (weight: 0.3)
+3. Same as 2 but 8 swaps (weight: 0.2)
+4. 23 random spells (non-land cards) are picked from the pool; non-basic lands in the pool
+   are excluded from picking (weight: 0.1)
 
 Card picking follows the same constraints as physical card picks. A card pool may contain multiple copies of a card, but
 each card instance can only be picked once.
 
-For methods 2-4, an extra basic land rebalancing step is performed. All basic lands are first removed from the deck
-(non-basic lands are kept), then Forge's built-in `LimitedDeckBuilder` land allocation algorithm adds basic lands:
- - Pick as many basic lands as necessary to yield a deck of exactly 40 cards
- - Minimum 2 basic lands per required WUBRG color
- - Remaining slots distributed proportionally to mana pip counts
- - Note: colorless {C} pips are not handled by Forge's algorithm. This is an accepted trade-off — very few sets/cards
+For methods 2-4, an extra basic land rebalancing step is performed. All basic lands are removed from the
+deck (non-basic lands are kept) and basic lands are added back using a pip-proportional algorithm:
+ - basicLandsNeeded = 40 - spells - nonBasicLands
+ - Slots distributed proportionally to the WUBRG mana pip counts of the **spells only**
+   (non-basic lands have no mana cost and contribute no pips)
+ - Note: colorless {C} pips are not handled. This is an accepted trade-off — very few sets/cards
    require {C}, not enough examples for the model to learn from anyway
+ - Implementation note: `LimitedDeckBuilder.addLands()` is private and `SealedDeckBuilder` re-selects
+   a subset of its input rather than treating all cards as already-chosen. The pip-proportional logic
+   is therefore reimplemented directly in `DeckBuilder.rebalanceLands(spells, nonbasicLands)`.
 
 ## Step 4 - Use the Forge AI to play the game and record the result
 

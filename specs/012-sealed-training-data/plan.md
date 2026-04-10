@@ -157,22 +157,38 @@ public class DeckBuilder {
     }
 
     private Deck buildWithSwaps(List<PaperCard> pool, int swapCount) {
-        // 1. buildStandard(pool)
-        // 2. Swap N random nonland deck cards with N random nonland pool cards
-        // 3. Rebalance lands
+        // 1. buildStandard(pool); partition result into spellsInDeck, nonbasicLandsInDeck
+        // 2. Remaining pool split into spellsRemaining, nonbasicLandsRemaining
+        // 3. N type-matched swaps: randomly pick any deck card; if spell → replace from
+        //    spellsRemaining; if non-basic land → replace from nonbasicLandsRemaining;
+        //    skip swap if no matching replacement available
+        // 4. rebalanceLands(chosenSpells, chosenNonbasics)
     }
 
     private Deck buildRandom(List<PaperCard> pool) {
-        // 1. Random-pick 23 nonland cards from pool (basic lands excluded)
-        // 2. Add lands via rebalanceLands()
+        // 1. Filter pool to spells only (!isLand()); non-basic lands excluded
+        // 2. Random-pick 23 spells
+        // 3. rebalanceLands(chosenSpells, List.of())
     }
 
-    Deck rebalanceLands(List<PaperCard> nonlandCards, List<PaperCard> nonbasicLands) {
-        // 1. Combine nonlandCards + nonbasicLands into a pool list
-        // 2. Pass to SealedDeckBuilder or LimitedDeckBuilder which calls addLands()
-        //    Forge's algorithm: min 2 basics per WUBRG color, rest proportional to pips
-        // 3. Returns a 40-card Deck with basic lands filled in
+    Deck rebalanceLands(List<PaperCard> spells, List<PaperCard> nonbasicLands) {
+        // LimitedDeckBuilder.addLands() is private; SealedDeckBuilder re-selects a
+        // subset of its input rather than using all cards — produces land-heavy decks.
+        // Reimplemented pip-proportional logic:
+        //
+        // 1. Count WUBRG mana pips from spells only (non-basic lands have no mana cost)
+        // 2. basicLandsNeeded = 40 - spells.size() - nonbasicLands.size()
+        // 3. Distribute basicLandsNeeded slots proportionally to pip counts
+        //    using greedy-proportional method (WUBRG order, last color absorbs remainder)
+        // 4. Source PaperCard land objects via FModel.getMagicDb().getCommonCards().getCard()
+        //    using any set from the spell pool that has basic lands (fallback: "GRN")
+        // 5. Build a new Deck: spells + nonbasicLands + basicLands
         // Note: {C} pips not handled — accepted trade-off (too few affected cards)
+    }
+
+    private String findBasicLandSet(List<PaperCard> cards) {
+        // Return the edition code of the first card whose set has basic lands;
+        // fall back to "GRN" (Guilds of Ravnica) if none found.
     }
 }
 ```

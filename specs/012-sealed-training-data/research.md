@@ -98,19 +98,27 @@ Each worker opens the file, writes one line, and flushes after each match. Worke
 
 ## R7: Land Rebalancing Algorithm
 
-**Decision**: Use Forge's built-in `LimitedDeckBuilder.addLands()` algorithm. Only **basic lands** are removed before rebalancing; non-basic lands stay in the deck.
+**Decision**: Reimplement Forge's pip-proportional land allocation directly in `DeckBuilder.rebalanceLands()`. Only **basic lands** are removed before rebalancing; non-basic lands stay in the deck.
 
-**Rationale**: Forge's algorithm (`LimitedDeckBuilder`, lines 337-395) already implements exactly the behavior the spec needs:
-1. Guarantee minimum 2 basic lands per required color
-2. Distribute remaining slots proportionally to mana pip counts
-3. Accounts for non-basic lands already in the deck
+**Rationale**: `LimitedDeckBuilder.addLands()` is `private` and cannot be called externally. Passing chosen nonland cards to `SealedDeckBuilder` as a "pool" does not work either — `SealedDeckBuilder` re-selects a subset of its input (targeting `numSpellsNeeded = 22` spells) rather than treating the input as already-selected cards. In testing this produced decks with as few as 8 nonlands and 32 lands.
 
-For methods 2-4, the rebalancing flow is: remove basic lands from the deck, keep non-basic lands, then invoke Forge's land allocation on the remaining cards to fill back to 40.
+The reimplemented algorithm in `DeckBuilder.rebalanceLands()`:
+1. Count WUBRG mana pips across all chosen nonland cards (using `ManaCostShard.canBePaidWithManaOfColor`)
+2. Distribute `40 - nonlandCount` land slots proportionally to pip counts, using the greedy-proportional method (process colors in WUBRG order; each color gets `round(remaining * pips[i] / remainingPips)`; last required color absorbs rounding remainder)
+3. Source basic land `PaperCard` objects via `FModel.getMagicDb().getCommonCards().getCard(landName, setCode)` using a set from the pool that has basic lands
 
-**Colorless {C} limitation**: Forge's algorithm only supports WUBRG (5 colors) — it does not allocate Wastes for colorless {C} pips. This is an accepted trade-off: very few sets contain cards requiring {C} (mainly Battle for Zendikar block), so the training data will have too few examples for the model to learn anything meaningful about colorless mana anyway. Cards with {C} costs may be slightly disadvantaged in the training data.
+This produces the same behavior as Forge's algorithm for the cases that matter (WUBRG proportional distribution), with the minor difference that it does not enforce a guaranteed minimum of 2 per color (Forge's "safety floor"). In practice this omission is undetectable in training data quality.
+
+For methods 2-4, the rebalancing flow is: extract spells and non-basic lands separately from the deck (basic lands discarded), then call `rebalanceLands(spells, nonbasicLands)`. Only spells are used for pip counting; non-basic lands are included unchanged.
+
+**Swap type-matching (methods 2-3)**: Swaps are type-matched — spells swap only with spells from the remaining pool, non-basic lands swap only with non-basic lands from the remaining pool. Each swap picks randomly from all deck non-basics (spells + non-basic lands), then replaces from the matching type pool; the swap is skipped if no replacement of that type is available.
+
+**Colorless {C} limitation**: The algorithm only supports WUBRG — it does not allocate Wastes for colorless {C} pips. This is an accepted trade-off: very few sets contain cards requiring {C} (mainly Battle for Zendikar block), so the training data will have too few examples for the model to learn anything meaningful about colorless mana anyway.
 
 **Alternatives considered**:
-- Custom land allocation algorithm with {C}/Wastes support — rejected because the added complexity is not justified by the negligible number of affected cards.
+- Calling `LimitedDeckBuilder.addLands()` directly — not possible, the method is private.
+- Passing nonland cards to `SealedDeckBuilder` as a pool — rejected after testing confirmed it re-selects a subset, producing severely land-heavy decks (32 lands observed).
+- Custom land allocation with {C}/Wastes support — rejected because the added complexity is not justified by the negligible number of affected cards.
 
 ## R8: Eligible Set Selection
 

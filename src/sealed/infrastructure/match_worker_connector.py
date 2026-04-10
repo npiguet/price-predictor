@@ -52,7 +52,7 @@ class MatchWorkerConnector:
             "com.pricepredictor.connector.MatchWorkerMain",
         ]
 
-        return subprocess.Popen(cmd)
+        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _resolve_jar_path(self) -> Path:
         """Resolve the forge-connector fat JAR path relative to this file."""

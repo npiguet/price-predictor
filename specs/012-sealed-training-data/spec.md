@@ -52,7 +52,7 @@ As a model trainer, I want the generated data to contain decks of varying qualit
 **Acceptance Scenarios**:
 
 1. **Given** a deck is being constructed, **When** the construction method is selected, **Then** it is chosen randomly with the following approximate weights: standard Forge builder (40%), Forge builder with 3-card swap (30%), Forge builder with 8-card swap (20%), random card selection (10%).
-2. **Given** a deck is built with any non-standard method (methods 2-4), **When** basic lands are assigned, **Then** basic lands are removed (non-basic lands kept), and Forge's land allocation algorithm rebalances the deck to exactly 40 cards with land distribution proportional to the mana pip demands of the selected spells.
+2. **Given** a deck is built with methods 2-4, **When** basic lands are assigned, **Then** basic lands are removed (non-basic lands kept), and the deck is filled to exactly 40 cards with basic lands distributed proportional to the WUBRG mana pip demands of the spells (non-basic lands contribute no pips).
 
 ---
 
@@ -103,10 +103,10 @@ As a model trainer, I want matches to use a wide variety of sealed-legal expansi
 - **FR-001**: System MUST generate sealed-format match outcomes by selecting a random sealed-legal expansion set, producing two 6-booster pools **from that same set**, constructing a deck from each pool, playing a best-of-3 match, and recording the result.
 - **FR-002**: System MUST support four deck construction methods selected randomly per deck with the following hardcoded weights:
   1. Standard Forge sealed deck generator (default weight 40%)
-  2. Same as method 1, but 3 random **nonland** cards in the deck are swapped with 3 random **nonland** cards from the remaining pool (default weight 30%)
-  3. Same as method 1, but 8 random **nonland** cards in the deck are swapped with 8 random **nonland** cards from the remaining pool (default weight 20%)
-  4. Cards are randomly picked from the pool (**basic lands excluded**) until 23 non-land cards have been selected (default weight 10%)
-- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands (keeping non-basic lands), then use Forge's built-in `LimitedDeckBuilder` land allocation algorithm to add basic lands to reach exactly 40 cards. This algorithm guarantees a minimum of 2 basic lands per required WUBRG color and distributes remaining slots proportionally to mana pip counts. Colorless {C} pips are not handled (accepted trade-off — too few affected cards for the model to learn from).
+  2. Same as method 1, but N=3 random cards are swapped out of the deck and replaced by type-matched cards from the remaining pool: spells swap with spells, non-basic lands swap with non-basic lands (default weight 30%)
+  3. Same as method 2 but N=8 swaps (default weight 20%)
+  4. 23 random **spells** (non-land cards) picked from the pool; no non-basic lands included (default weight 10%)
+- **FR-003**: For deck construction methods 2-4, the system MUST rebalance basic lands after card swaps: remove all basic lands (keeping non-basic lands), then add basic lands to reach exactly 40 cards with distribution proportional to the WUBRG mana pip counts of the selected nonland cards. Colorless {C} pips are not handled (accepted trade-off — too few affected cards for the model to learn from). Note: `LimitedDeckBuilder.addLands()` is private and cannot be called externally; the pip-proportional logic is reimplemented directly in `DeckBuilder.rebalanceLands()`.
 - **FR-004**: System MUST record each match outcome as a single line in the format: `deck_A_card_names;deck_B_card_names;wins_A;wins_B` where card names are pipe-separated (duplicate copies repeat the name, e.g. `Lightning Strike|Lightning Strike|...`) and wins sum to 2 or 3.
 - **FR-005**: System MUST run multiple worker processes in parallel (configurable, default 12), all appending to the same output file.
 - **FR-006**: System MUST monitor worker processes and automatically restart any worker that dies unexpectedly, without affecting other workers or corrupting existing output data.
