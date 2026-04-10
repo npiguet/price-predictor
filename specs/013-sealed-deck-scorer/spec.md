@@ -38,7 +38,7 @@ A researcher runs a training command that reads match outcome data (deck pairs a
 **Acceptance Scenarios**:
 
 1. **Given** a match outcomes file with at least 1,000 recorded matches and a cards folder with 544-dimensional embeddings, **When** the researcher starts training, **Then** training proceeds and reports loss at regular intervals.
-2. **Given** training in progress, **When** training completes or is stopped, **Then** a model checkpoint is saved that includes all model parameters and normalization statistics, and can be loaded for scoring or resumed training.
+2. **Given** training in progress, **When** training completes or is stopped, **Then** two model checkpoints are saved: a latest checkpoint (current state) and a best checkpoint (lowest validation loss seen during training). Both include all model parameters and normalization statistics, and can be loaded for scoring or resumed training.
 3. **Given** a trained model checkpoint and a deck (list of card names), **When** the researcher requests a score, **Then** the model returns a single numerical score for that deck.
 4. **Given** a pair of decks where one is clearly stronger (e.g., all high-impact cards vs. all filler), **When** both are scored by a sufficiently trained model, **Then** the stronger deck receives a higher score.
 5. **Given** training data, **When** training begins, **Then** the deterministic features (indices 512-543) are normalized to zero mean and unit variance using statistics computed across the full training corpus, and these statistics are stored as part of the model checkpoint.
@@ -76,7 +76,8 @@ The researcher runs an evaluation command that tests whether the scorer can buil
 2. **Given** a validation matches file, **When** evaluation proceeds, **Then** the Python script splits the matches across multiple Java workers, each receiving its own subset of matches to play.
 3. **Given** a subset of matches, **When** a Java worker processes them, **Then** for each match the worker builds deck B from pool B using Forge's SealedDeckBuilder, plays a best-of-3 match between deck A and deck B via the Forge AI, and appends the result as `{wins_A};{wins_B}` to an outcomes file (`{input_file}-outcomes.txt`).
 4. **Given** all workers have completed, **When** the Python script collects results, **Then** it reads all outcome files and prints a summary to the console including: number of pools evaluated, total games played, and aggregate win rate.
-5. **Given** a scorer-guided deck, **When** the deck is constructed, **Then** the greedy search starts from a heuristic initial deck, iteratively tries swapping each non-land card in the deck with each card remaining in the pool, picks the swap that most improves the score, recomputes basic lands after each swap, and repeats until no swap improves the score.
+5. **Given** a scorer-guided deck, **When** the deck is constructed, **Then** the greedy search starts from a random selection of 23 non-land cards from the pool, iteratively tries swapping each non-land card in the deck with each card remaining in the pool, picks the swap that most improves the score, recomputes basic lands after each swap, and repeats until no swap improves the score.
+6. **Given** a Java worker that crashes mid-evaluation with some matches already played, **When** the Python script retries that worker's subset, **Then** the restarted worker skips matches whose outcomes are already in the outcomes file and only plays the remaining matches.
 
 ---
 
@@ -108,6 +109,16 @@ After initial training with fixed card representations (Phase A), the researcher
 - Non-creature cards have power = 0 and toughness = 0; non-planeswalker cards have loyalty = 0.
 - Mana production is only parsed from activated abilities containing `add` patterns; triggered or static mana production is ignored (an accepted simplification -- the text embedding already captures the full card text).
 
+## Clarifications
+
+### Session 2026-04-11
+
+- Q: What algorithm produces the heuristic initial deck for the scorer-guided greedy search (evaluation P4)? → A: Random selection of 23 non-land cards from the pool.
+- Q: What fraction of match outcomes data is held out for validation? → A: 80/20 split (80% training, 20% validation).
+- Q: How are match outcomes mapped to training examples? → A: One training example per match line; the match winner (the deck with 2 game wins in the best-of-3) is the label. No expansion to per-game examples.
+- Q: Should training automatically preserve the best checkpoint (lowest validation loss) in addition to the final checkpoint? → A: Yes — save both best-validation-loss checkpoint and latest checkpoint (two files).
+- Q: Does the evaluation pipeline need worker crash recovery (monitor + restart), or simpler coordination? → A: Simple run-and-wait with retry — if a worker crashes, retry its subset. Workers skip matches whose outcomes are already recorded in the outcomes file (no replaying completed matches).
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -129,21 +140,21 @@ After initial training with fixed card representations (Phase A), the researcher
 
 **Training**
 
-- **FR-010**: Training MUST use pairwise game outcomes as the learning signal. For each match, the model scores both decks and is trained so that the probability of the winning deck being scored higher follows the Bradley-Terry model: `P(A beats B) = sigmoid(score_A - score_B)`. See parent spec [Training Objective — Bradley-Terry Pairwise Loss](../sealed-deck-picker.md#training-objective--bradley-terry-pairwise-loss) for the full loss formulation and rationale.
+- **FR-010**: Training MUST use pairwise match outcomes as the learning signal. Each line in the match outcomes file is one training example; the match winner (the deck with 2 game wins in the best-of-3) is the label. The model scores both decks and is trained so that the probability of the winning deck being scored higher follows the Bradley-Terry model: `P(A beats B) = sigmoid(score_A - score_B)`. See parent spec [Training Objective — Bradley-Terry Pairwise Loss](../sealed-deck-picker.md#training-objective--bradley-terry-pairwise-loss) for the full loss formulation and rationale.
 - **FR-011**: At training startup, the system MUST compute per-feature mean and standard deviation for the deterministic features (indices 512-543) across the full training corpus and normalize those features to zero mean and unit variance in memory. See parent spec [Feature Normalization](../sealed-deck-picker.md#feature-normalization) for the full normalization pipeline and rationale for normalizing at training time rather than encoding time.
 - **FR-012**: The normalization statistics (per-feature mean and standard deviation vectors) MUST be stored as part of the model checkpoint so they are available at inference time without recomputation and cannot fall out of sync with the model.
-- **FR-013**: Training data MUST be split into training and validation sets by match (each line in the match outcomes file stays intact in one split), preventing data leakage between splits.
+- **FR-013**: Training data MUST be split 80/20 into training and validation sets by match (each line in the match outcomes file stays intact in one split), preventing data leakage between splits.
 - **FR-014**: Training MUST report training loss and validation metrics (validation loss, prediction accuracy) at regular intervals throughout training.
 - **FR-015**: Training MUST support two embedding modes: frozen (card embeddings have zero learning rate and do not change during training) and unfrozen (card embeddings train with a configurable, independently-set learning rate). See parent spec [Embedding Schedule](../sealed-deck-picker.md#embedding-schedule) for the Phase A/B rationale and learning rate guidance.
 - **FR-016**: When training with unfrozen embeddings, the system MUST report average embedding drift (mean L2 distance of embeddings from their initial values) to help the researcher monitor fine-tuning stability.
-- **FR-017**: Training MUST save model checkpoints that can be loaded for inference, evaluation, or resumed training.
+- **FR-017**: Training MUST save two model checkpoints: (1) the **latest** checkpoint, overwritten after each validation evaluation, and (2) the **best** checkpoint, overwritten only when validation loss improves. Both can be loaded for inference, evaluation, or resumed training.
 
 **Evaluation**
 
-- **FR-018**: The evaluation pipeline MUST coordinate Python and Java: the Python script generates pools (reusing the same Forge booster-generation classes as `generate-pools`), builds deck A using the scorer-guided greedy search, writes a validation matches file (`{deck_A};{pool_B}` per line, pipe-separated card names, exactly 40 cards for deck A, full pool for pool B), splits matches across multiple Java workers, and collects results after workers complete.
-- **FR-018a**: Each Java worker MUST build deck B from the provided pool using Forge's SealedDeckBuilder, play a best-of-3 match via the Forge AI, and write the outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`).
+- **FR-018**: The evaluation pipeline MUST coordinate Python and Java: the Python script generates pools (reusing the same Forge booster-generation classes as `generate-pools`), builds deck A using the scorer-guided greedy search, writes a validation matches file (`{deck_A};{pool_B}` per line, pipe-separated card names, exactly 40 cards for deck A, full pool for pool B), splits matches across multiple Java workers, waits for all workers to complete, and collects results. If any worker crashes, the Python script retries the failed worker's subset; workers MUST skip matches whose outcomes are already recorded in their outcomes file (no replaying completed matches).
+- **FR-018a**: Each Java worker MUST build deck B from the provided pool using Forge's SealedDeckBuilder, play a best-of-3 match via the Forge AI, and write the outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`). Before playing a match, the worker MUST check the outcomes file and skip any match line whose outcome is already recorded.
 - **FR-018b**: After all workers complete, the Python script MUST read all outcome files, compute the aggregate win rate, and print a summary including: number of pools evaluated, total games played, and aggregate win rate.
-- **FR-019**: The scorer-guided greedy search used in evaluation MUST: start from a heuristic initial deck, iteratively evaluate all possible single-card swaps (one non-land card out, one pool card in), apply the best-improving swap, recompute basic lands after each swap, and repeat until no swap improves the score. See parent spec [Phase 2 — Search-Based Deck Builder](../sealed-deck-picker.md#phase-2--search-based-deck-builder-inference) for the full search procedure, non-basic land handling, and local optima considerations.
+- **FR-019**: The scorer-guided greedy search used in evaluation MUST: start from a random selection of 23 non-land cards from the pool, iteratively evaluate all possible single-card swaps (one non-land card out, one pool card in), apply the best-improving swap, recompute basic lands after each swap, and repeat until no swap improves the score. See parent spec [Phase 2 — Search-Based Deck Builder](../sealed-deck-picker.md#phase-2--search-based-deck-builder-inference) for the full search procedure, non-basic land handling, and local optima considerations.
 - **FR-020**: Validation prediction accuracy MUST be computed as the fraction of held-out matchups where the deck that scored higher actually won the match.
 
 **CLI**
