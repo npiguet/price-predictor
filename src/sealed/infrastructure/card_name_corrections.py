@@ -21,4 +21,12 @@ FILENAME_CORRECTIONS: dict[str, str] = {
     "village_watch": "scorned_villager_moonscarred_werewolf",
     "summon_gf_cerberus": "summon_g_f_cerberus",
     "fallaji_archaeologist": "fallaji_archeologist",
+    "pathfinding_axejaw": "pathfinding_exejaw",
+    "summon_gf_ifrit": "summon_g_f_ifrit",
+    "vhal_candlekeep_researcher": "vhal_candelkeep_researcher",
+    "voldaren_thrillseeker": "voldaren_thrilseeker",
+    "sita_varma_masked_racer": "sita_varma_masker_racer",
+    "spdr_piloted_by_peni": "sp_dr_piloted_by_peni",
+    "minsc__boo_timeless_heroes": "minsc_boo_timeless_heroes",
+    "duke_ulder_ravengard": "duke_ulder_ravenguard",
 }
