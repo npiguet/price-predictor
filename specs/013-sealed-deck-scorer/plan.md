@@ -16,7 +16,7 @@ Train a Set Transformer-based deck scorer on pairwise match outcomes using Bradl
 **Testing**: pytest (Python unit + integration), JUnit 5 (Java)
 **Target Platform**: Windows 11 (primary dev), Linux compatible
 **Project Type**: CLI + ML training pipeline
-**Performance Goals**: Evaluation ~4 minutes for 20 pools; greedy search ~1 second per deck (1500 candidate swaps, each a forward pass)
+**Performance Goals**: Greedy search ~1 second per deck (1500 candidate swaps, each a forward pass); evaluation time dominated by Forge match count (N² matches for N pools)
 **Constraints**: Variable-length deck input (20-29 non-land cards), permutation invariance required, shared scorer weights for both decks in a training pair
 **Scale/Scope**: 10,000+ match outcomes for training, 544-dim feature vectors, ~5-15M model parameters
 
@@ -43,7 +43,7 @@ Train a Set Transformer-based deck scorer on pairwise match outcomes using Bradl
 | II. Simplicity First | PASS | No ISAB (standard SAB sufficient for 20-29 card decks). No custom loss (standard BCE). No learning rate scheduling (manual Phase A/B). Single forward pass architecture. |
 | III. Data Integrity | PASS | Feature parsing fully tested with known card examples. Checkpoint round-trip tested. Normalization statistics validated against manual computation. |
 | IV. Domain-Driven Design | PASS | Clear layer separation — see Project Structure below. Model architecture (domain) has no file I/O concerns. CLI (infrastructure) delegates to use cases (application). |
-| V. MTG Forge Interoperability | PASS | New ValidationWorkerMain reads deck A + pool B from flat file, builds deck B with SealedDeckBuilder, plays via GamePlayer, writes outcomes. Same forge-connector module. |
+| V. MTG Forge Interoperability | PASS | New ValidationWorkerMain reads two pre-built decks from flat file, plays via GamePlayer, writes outcomes. Forge's SealedDeckBuilder used in a separate deck-building step. Same forge-connector module. |
 | VI. Documentation | PASS | CLI contract, file format contract, quickstart, and research.md all produced. |
 
 ## Project Structure

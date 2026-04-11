@@ -6,16 +6,18 @@ Written by the Python evaluation script, read by Java workers.
 
 **Path**: `{work-dir}/validation-matches-{worker_id}.txt`
 
-**Format**: One match per line.
+**Format**: One match per line. Both sides are pre-built 40-card decks.
 
 ```
-deck_A_card1|card2|...|card40;pool_B_card1|card2|...|cardN
+deck_A_card1|card2|...|card40;deck_B_card1|card2|...|card40
 ```
 
 | Field | Separator | Description |
 |-------|-----------|-------------|
 | deck_A | `|` between cards, `;` after | Exactly 40 card names (scorer-built deck, including basic lands) |
-| pool_B | `|` between cards | Full pool of cards (84-90 cards, no basic lands) |
+| deck_B | `|` between cards | Exactly 40 card names (Forge-built deck, including basic lands) |
+
+The file contains N² lines for N evaluation pools — every scorer deck (A_i) paired with every Forge deck (B_j).
 
 **Example**:
 ```
@@ -45,7 +47,7 @@ wins_A;wins_B
 
 Saved by training, loaded by evaluation and resumed training.
 
-**Path**: `{checkpoint-dir}/latest.pt` and `{checkpoint-dir}/best.pt`
+**Path**: `{checkpoint-dir}/latest.pt` and `{checkpoint-dir}/best_l{n-layers}_h{n-heads}_s{n-seeds}_ff{d-ff}_mlp{mlp-hidden}.pt`
 
 **Format**: PyTorch `torch.save()` dict.
 

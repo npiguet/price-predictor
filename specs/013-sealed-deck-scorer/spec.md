@@ -64,18 +64,18 @@ During training, the system automatically evaluates on a held-out set of match o
 
 ### User Story 4 - Evaluate Scorer Against Forge Baseline (Priority: P4)
 
-The researcher runs an evaluation command that tests whether the scorer can build better decks than Forge's built-in deck builder. The evaluation workflow spans Python and Java: the Python script generates pools (using the same Forge booster-generation classes as `generate-pools`), builds deck A from each pool using the scorer-guided greedy search, then writes a validation matches file where each line pairs deck A (exactly 40 cards) with the raw pool for player B. The match file is split across multiple Java workers, each of which builds deck B from the pool using Forge's SealedDeckBuilder and plays a best-of-3 match. Each worker writes outcomes to a companion file. After all workers complete, the Python script collects the outcome files and prints an aggregate summary. This is the ground-truth check that the scorer generalizes beyond its training distribution. The full evaluation workflow is defined in the parent spec under [Evaluation Against External Baseline](../sealed-deck-picker.md#evaluation-against-external-baseline), and the greedy search procedure is described under [Phase 2 — Search-Based Deck Builder](../sealed-deck-picker.md#phase-2--search-based-deck-builder-inference).
+The researcher runs an evaluation command that tests whether the scorer can build better decks than Forge's built-in deck builder. The evaluation uses a round-robin design: N pools are generated (configurable, default 12), and both builders construct a deck from each pool. Every scorer-built deck (A) plays every Forge-built deck (B) in a best-of-K match (configurable K, default 3), producing N² matches. Per-pool win rate comparisons and aggregate win rates are reported. Both builders receive the same pools, and all decks face a shared opponent field, isolating builder quality from pool quality. The full evaluation workflow is defined in the parent spec under [Evaluation Against External Baseline](../sealed-deck-picker.md#evaluation-against-external-baseline), and the greedy search procedure is described under [Phase 2 — Search-Based Deck Builder](../sealed-deck-picker.md#phase-2--search-based-deck-builder-inference).
 
 **Why this priority**: Validation metrics (P3) measure whether the model fits its training distribution, but the Forge baseline evaluation measures whether the scorer actually produces better decks in practice. This is the ultimate quality signal -- but it requires the scorer to be trained first (P2) and meaningful to evaluate (P3).
 
-**Independent Test**: Can be tested by running the evaluation with a trained checkpoint and verifying it produces a win rate percentage and completes within a reasonable time (~4 minutes for 20 pools).
+**Independent Test**: Can be tested by running the evaluation with a trained checkpoint and verifying it produces per-pool and aggregate win rate comparisons and completes within a reasonable time.
 
 **Acceptance Scenarios**:
 
-1. **Given** a trained model checkpoint and a requested number of evaluation pools, **When** the researcher runs evaluation, **Then** the Python script generates fresh pools, builds deck A for each pool using the scorer-guided greedy search, and writes a validation matches file where each line contains `{deck_A}:{pool_B}` -- deck A as a pipe-separated list of exactly 40 card names, pool B as a pipe-separated list of the full pool of cards.
-2. **Given** a validation matches file, **When** evaluation proceeds, **Then** the Python script splits the matches across multiple Java workers, each receiving its own subset of matches to play.
-3. **Given** a subset of matches, **When** a Java worker processes them, **Then** for each match the worker builds deck B from pool B using Forge's SealedDeckBuilder, plays a best-of-3 match between deck A and deck B via the Forge AI, and appends the result as `{wins_A};{wins_B}` to an outcomes file (`{input_file}-outcomes.txt`).
-4. **Given** all workers have completed, **When** the Python script collects results, **Then** it reads all outcome files and prints a summary to the console including: number of pools evaluated, total games played, and aggregate win rate.
+1. **Given** a trained model checkpoint and a requested number of evaluation pools N, **When** the researcher runs evaluation, **Then** the Python script invokes a Java process to generate N fresh pools, builds one deck A_i per pool using the scorer-guided greedy search, and invokes a Java command-line tool to build one deck B_i per pool using Forge's SealedDeckBuilder from the same pool (returned via stdout).
+2. **Given** N A-decks and N B-decks, **When** evaluation proceeds, **Then** the system writes N² validation match lines (every A deck paired with every B deck) split into per-worker files upfront, one file per Java worker.
+3. **Given** a subset of matches, **When** a Java worker processes them, **Then** for each match the worker plays a best-of-K match between the two pre-built decks via the Forge AI and appends the result as `{wins_A};{wins_B}` to an outcomes file (`{input_file}-outcomes.txt`).
+4. **Given** all workers have completed, **When** the Python script collects results, **Then** it reads all outcome files and prints a summary to the console including: per-deck win rates, per-pool comparison (A_i win rate vs B_i win rate), and aggregate win rate for each builder group.
 5. **Given** a scorer-guided deck, **When** the deck is constructed, **Then** the greedy search starts from a random selection of 23 non-land cards from the pool, iteratively tries swapping each non-land card in the deck with each card remaining in the pool, picks the swap that most improves the score, recomputes basic lands after each swap, and repeats until no swap improves the score.
 6. **Given** a Java worker that crashes mid-evaluation with some matches already played, **When** the Python script retries that worker's subset, **Then** the restarted worker skips matches whose outcomes are already in the outcomes file and only plays the remaining matches.
 
@@ -99,7 +99,7 @@ After initial training with fixed card representations (Phase A), the researcher
 
 ### Edge Cases
 
-- If a card name from the match outcomes file has no corresponding embedding file, the system reports a clear error identifying the missing card(s) rather than silently skipping the match.
+- If a card name from the match outcomes file has no corresponding embedding file, the system logs a warning identifying the missing card(s) to stderr and skips matches containing those cards, reporting a summary of skipped matches at the end of data loading.
 - If the match outcomes file is empty or missing, the system reports a clear error before attempting to train.
 - Variable-length decks (different numbers of non-basic lands per deck) are handled by the scorer -- shorter decks within a batch are padded, and padding does not influence the score.
 - Stale 512-dimensional embedding files from feature 011 are not auto-detected; the researcher must use `encode-cards --clean` to delete and re-encode all cards in the new 544-dimensional format (see P1, acceptance scenario 2).
@@ -151,16 +151,17 @@ After initial training with fixed card representations (Phase A), the researcher
 
 **Evaluation**
 
-- **FR-018**: The evaluation pipeline MUST coordinate Python and Java: the Python script generates pools (reusing the same Forge booster-generation classes as `generate-pools`), builds deck A using the scorer-guided greedy search, writes a validation matches file (`{deck_A};{pool_B}` per line, pipe-separated card names, exactly 40 cards for deck A, full pool for pool B), splits matches across multiple Java workers, waits for all workers to complete, and collects results. If any worker crashes, the Python script retries the failed worker's subset; workers MUST skip matches whose outcomes are already recorded in their outcomes file (no replaying completed matches).
-- **FR-018a**: Each Java worker MUST build deck B from the provided pool using Forge's SealedDeckBuilder, play a best-of-3 match via the Forge AI, and write the outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`). Before playing a match, the worker MUST check the outcomes file and skip any match line whose outcome is already recorded.
-- **FR-018b**: After all workers complete, the Python script MUST read all outcome files, compute the aggregate win rate, and print a summary including: number of pools evaluated, total games played, and aggregate win rate.
+- **FR-018**: The evaluation pipeline MUST use a round-robin design: generate N pools (configurable, default 12), build one scorer deck (A_i) and one Forge deck (B_i) from each pool, then play N² cross-group matches (every A deck vs every B deck) as best-of-K (configurable K, default 3). Pool generation and Forge deck building are performed by invoking Java processes from Python. The N² match pairings are split into per-worker files upfront. If any worker crashes, the Python script retries the failed worker's subset; workers MUST skip matches whose outcomes are already recorded in their outcomes file (no replaying completed matches).
+- **FR-018a**: Forge decks (B_i) MUST be built from the same pools as the scorer decks (A_i), using Forge's SealedDeckBuilder invoked via a Java command-line tool that returns the built deck via stdout. Both builders receive identical pools.
+- **FR-018b**: Each Java match worker MUST play a best-of-K match between two pre-built decks (both A and B are fully specified 40-card decks) via the Forge AI and write the outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`). Before playing a match, the worker MUST check the outcomes file and skip any match line whose outcome is already recorded.
+- **FR-018c**: After all workers complete, the Python script MUST read all outcome files and print a summary including: per-deck win rates, per-pool comparison (A_i win rate vs B_i win rate), and aggregate win rate for each builder group (all A decks vs all B decks).
 - **FR-019**: The scorer-guided greedy search used in evaluation MUST: start from a random selection of 23 non-land cards from the pool, iteratively evaluate all possible single-card swaps (one non-land card out, one pool card in), apply the best-improving swap, recompute basic lands after each swap, and repeat until no swap improves the score. See parent spec [Phase 2 — Search-Based Deck Builder](../sealed-deck-picker.md#phase-2--search-based-deck-builder-inference) for the full search procedure, non-basic land handling, and local optima considerations.
 - **FR-020**: Validation prediction accuracy MUST be computed as the fraction of held-out matchups where the deck that scored higher actually won the match.
 
 **CLI**
 
 - **FR-021**: Training MUST be invocable from the command line with configurable parameters including: paths to match outcomes and card embeddings folder, model checkpoint output path, training hyperparameters, and embedding mode (frozen or unfrozen with separate learning rate).
-- **FR-022**: Evaluation MUST be invocable from the command line with configurable parameters including: model checkpoint path, number of evaluation pools, and games per matchup.
+- **FR-022**: Evaluation MUST be invocable from the command line with configurable parameters including: model checkpoint path, number of evaluation pools, games per matchup (best-of-K), and number of Java worker processes.
 
 ### Key Entities
 
@@ -179,7 +180,7 @@ After initial training with fixed card representations (Phase A), the researcher
 - **SC-003**: Validation prediction accuracy exceeds 55%, meaningfully above the 50% random baseline (accounting for inherent noise in individual game outcomes where the weaker deck sometimes wins on draws alone).
 - **SC-004**: The scorer assigns higher scores to Forge-built decks than to randomly-assembled decks from the same pool in at least 80% of comparisons, demonstrating it has learned basic deck quality.
 - **SC-005**: A trained model checkpoint can be saved, loaded in a fresh session, and used to score decks -- producing identical scores for the same input across sessions.
-- **SC-006**: The Forge baseline evaluation completes and reports a win rate. The scorer-guided deck selection achieves at least a 40% win rate against Forge's builder, demonstrating competitive deck quality.
+- **SC-006**: The Forge baseline round-robin evaluation completes and reports per-pool and aggregate win rates. The scorer-built decks achieve a higher aggregate win rate than the Forge-built decks across the shared opponent field, demonstrating competitive deck quality.
 
 ## Assumptions
 

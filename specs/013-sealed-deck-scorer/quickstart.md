@@ -38,7 +38,7 @@ Once Phase A validation loss plateaus, resume with unfrozen embeddings:
 
 ```bash
 python -m sealed train-scorer \
-    --resume models/sealed/scorer/best.pt \
+    --resume models/sealed/scorer/best_l2_h4_s4_ff1088_mlp256.pt \
     --checkpoint-dir models/sealed/scorer/ \
     --unfreeze-embeddings \
     --embedding-lr 1e-5 \
@@ -51,15 +51,19 @@ Monitor embedding drift — if it climbs rapidly, lower `--embedding-lr`.
 
 ```bash
 python -m sealed evaluate-scorer \
-    --checkpoint models/sealed/scorer/best.pt \
-    --pools 20 \
+    --checkpoint models/sealed/scorer/best_l2_h4_s4_ff1088_mlp256.pt \
+    --pools 12 \
+    --best-of 3 \
     --workers 4
 ```
 
-Prints: pools evaluated, total games played, scorer win rate against Forge's builder.
+This generates 12 pools, builds one scorer deck and one Forge deck from each pool, then plays
+144 best-of-3 matches (every scorer deck vs every Forge deck). Prints per-pool win rate
+comparisons and aggregate win rates for each builder group.
 
 ## Expected Outcomes
 
 - **Validation accuracy**: >55% (above 50% random baseline)
-- **Forge baseline win rate**: >40% (competitive with Forge's builder)
+- **Forge baseline aggregate win rate**: scorer decks win more than Forge decks across the shared opponent field
+- **Per-pool comparison**: scorer decks outperform Forge decks from the same pool in the majority of pools
 - **Sanity check**: Scorer ranks Forge-built decks higher than random decks >80% of the time

@@ -403,9 +403,9 @@ Three metrics are tracked to detect overfitting and measure progress:
 2. **Validation prediction accuracy** — the fraction of held-out matchups where the higher-scored deck actually won.
    The theoretical ceiling is well below 100% because individual MTG games are noisy (the worse deck sometimes wins on
    draws alone), but this should climb and plateau.
-3. **Forge baseline win rate** — the external evaluation described under "Evaluation Against External Baseline" below.
-   This is the ground truth check that the scorer generalizes to actual deck quality, not just fitting the training
-   distribution.
+3. **Forge baseline comparison** — the round-robin evaluation described under "Evaluation Against External Baseline"
+   below. Per-pool paired win rate comparisons and aggregate win rates across a shared opponent field. This is the
+   ground truth check that the scorer generalizes to actual deck quality, not just fitting the training distribution.
 
 Note: Bradley-Terry scores have no fixed scale — all scores could drift up by 1000 and the loss would be unchanged
 because only the *difference* between scores enters the sigmoid. Score magnitude is therefore not a useful metric.
@@ -493,21 +493,51 @@ This is the RL approach that previously failed — but now it works because:
 
 # Evaluation Against External Baseline
 
-Every N training iterations, freeze weights and run an evaluation. The workflow spans Python and Java:
+The evaluation uses a round-robin design to compare the scorer's deck building against Forge's built-in SealedDeckBuilder.
+Both builders receive the same pools, and all decks face a shared opponent field — this isolates builder quality from
+pool quality.
 
-1. **Pool generation (Python)**: Generate 20 fresh pools by invoking the same Forge booster-generation classes used by
-   the `generate-pools` command.
-2. **Deck A selection (Python)**: For each pool, the scorer-guided greedy search builds deck A (exactly 40 cards).
-3. **Write validation matches file (Python)**: Each line contains `{deck_A};{pool_B}` — deck A as a pipe-separated list
-   of exactly 40 card names, pool B as a pipe-separated list of the full pool of cards (deck B is built in Java, not
-   Python, because it uses Forge's SealedDeckBuilder).
-4. **Split across workers (Python)**: The validation matches are distributed across multiple Java worker processes,
-   each receiving its own subset of matches.
-5. **Play matches (Java workers)**: Each worker reads its assigned matches. For each match, it builds deck B from pool B
-   using Forge's SealedDeckBuilder, plays a best-of-3 match between deck A and deck B via the Forge AI, and writes the
-   outcome as `{wins_A};{wins_B}` to a companion outcomes file (`{input_file}-outcomes.txt`).
-6. **Collect results (Python)**: After all workers complete, the Python script reads all outcome files and prints an
-   aggregate summary (pools evaluated, total games played, win rate).
+## Design
+
+1. **Generate N pools** (configurable, default 12) using the same Forge booster-generation classes as `generate-pools`.
+2. **Build decks from each pool**: For each pool, build one deck using the scorer-guided greedy search (deck A_i) and
+   one deck using Forge's SealedDeckBuilder (deck B_i). Both builders work from the same pool, so each has access to
+   exactly the same cards. This produces N A-decks and N B-decks — 2N decks total.
+3. **Play round-robin cross-group matches**: Every A deck plays every B deck in a best-of-K match (configurable K,
+   default 3). That is N² matches total. A decks do not play other A decks, and B decks do not play other B decks —
+   intra-group matches would mainly reflect pool quality differences rather than builder quality.
+4. **Report results**: For each deck, compute its win rate across its N opponents. Compare the win rate of A_i (scorer)
+   against B_i (Forge) built from the same pool — this is a paired comparison that controls for pool quality. Also
+   report the aggregate win rate of all A decks vs the aggregate win rate of all B decks.
+
+## Why round-robin
+
+In the simplest evaluation, each scorer-built deck plays only the Forge deck from its own pool (N matches). A single
+best-of-3 is extremely noisy — the worse deck frequently wins on draws alone. By giving each deck N opponents, the
+per-deck win rate is averaged over a diverse field, dramatically reducing variance. With 12 pools, the round-robin
+produces 144 matches (432 games at best-of-3) instead of 12, giving a much more stable signal.
+
+The paired per-pool comparison (A_i win rate vs B_i win rate) is the most informative metric: pool quality cancels out,
+so the delta directly measures builder quality. The aggregate win rates provide a high-level summary.
+
+## Workflow
+
+The evaluation workflow is orchestrated by Python, with Java processes handling Forge-dependent steps:
+
+1. **Pool generation (Python → Java)**: Python invokes a Java process to generate N fresh pools using Forge's booster
+   generation (the same mechanism as `generate-pools`).
+2. **Deck building**:
+   - **A decks (Python)**: For each pool, the Python script builds deck A_i using the scorer-guided greedy search.
+   - **B decks (Python → Java)**: For each pool, Python invokes a Java command-line tool that builds a deck using
+     Forge's SealedDeckBuilder and returns the 40-card deck list via stdout.
+3. **Write validation matches files (Python)**: The N² match pairings (every A deck vs every B deck) are split into
+   per-worker files upfront. Each line contains `{deck_A};{deck_B}` — both are pipe-separated lists of exactly 40
+   card names. Each worker gets its own file, which simplifies result collection.
+4. **Play matches (Java workers)**: Each worker reads its assigned matches file. For each match, it plays a best-of-K
+   match between the two pre-built decks via the Forge AI and writes the outcome as `{wins_A};{wins_B}` to a companion
+   outcomes file (`{input_file}-outcomes.txt`).
+5. **Collect results (Python)**: After all workers complete, the Python script reads all per-worker outcome files and
+   computes: per-deck win rates, per-pool A_i vs B_i comparison, and aggregate win rates for each builder group.
 
 This tracks absolute quality independently of training data generation, catching the trap where the scorer learns to
 rank training variants correctly but doesn't generalize to truly strong decks.
@@ -516,7 +546,7 @@ rank training variants correctly but doesn't generalize to truly strong decks.
 
 Training is considered done when all of the following are stable across several consecutive evaluation checkpoints:
 
-- Forge builder win rate -> plateaued (absolute quality peaked)
+- Forge baseline comparison -> scorer decks consistently outperform Forge decks from the same pool
 - Scorer validation loss -> converged
 - Human spot check -> built decks look strategically coherent
 

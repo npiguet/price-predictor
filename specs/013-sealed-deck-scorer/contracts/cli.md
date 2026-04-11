@@ -49,14 +49,17 @@ python -m sealed train-scorer [OPTIONS]
 
 **Output**:
 - `{checkpoint-dir}/latest.pt` — overwritten after each validation
-- `{checkpoint-dir}/best.pt` — overwritten only when validation loss improves
+- `{checkpoint-dir}/best_l{n-layers}_h{n-heads}_s{n-seeds}_ff{d-ff}_mlp{mlp-hidden}.pt` — overwritten only when validation loss improves
 - Console: training loss, validation loss, prediction accuracy, embedding drift (if unfrozen)
 
 **Exit codes**: 0 = success, 2 = fatal error
 
 ## evaluate-scorer (NEW)
 
-Evaluate the trained scorer against Forge's deck builder.
+Evaluate the trained scorer against Forge's deck builder using round-robin cross-group matches.
+
+Generates N pools, builds one scorer deck (A) and one Forge deck (B) from each pool, then plays
+N² matches where every A deck faces every B deck. Reports per-pool and aggregate win rate comparisons.
 
 ```
 python -m sealed evaluate-scorer [OPTIONS]
@@ -64,12 +67,13 @@ python -m sealed evaluate-scorer [OPTIONS]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--checkpoint` | `models/sealed/scorer/best.pt` | Model checkpoint to evaluate |
+| `--checkpoint` | (none) | Model checkpoint to evaluate (e.g. `models/sealed/scorer/best_l2_h4_s4_ff1088_mlp256.pt`) |
 | `--cards-path` | `output/cardsfolder/` | Directory with `.npz` card embeddings |
-| `--pools` | `20` | Number of evaluation pools |
+| `--pools` | `12` | Number of evaluation pools (N); produces N² cross-group matches |
+| `--best-of` | `3` | Games per match (best-of-K) |
 | `--workers` | `4` | Number of Java worker processes |
 | `--work-dir` | (temp dir) | Directory for validation match/outcome files |
 
-**Output**: Console summary with pools evaluated, total games, and win rate.
+**Output**: Console summary with per-deck win rates, per-pool A vs B comparison, and aggregate win rates.
 
 **Exit codes**: 0 = success, 2 = fatal error

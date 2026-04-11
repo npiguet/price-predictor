@@ -77,10 +77,10 @@ For the PMA pooling layer, the same mask is used as `key_padding_mask` when seed
 
 **Decision**: Reuse the existing flat-file coordination pattern from feature 012 (match-outcomes). The Python script writes a validation matches file, splits it across workers, each Java worker processes its subset and writes outcomes to a companion file. Python collects and aggregates.
 
-**Rationale**: The existing match-outcomes pipeline already proves this pattern works: flat-text files for IPC, one file per worker, append-only outcomes. The evaluation pipeline uses the same forge-connector JAR and Forge classes, just with a different entry point (ValidationWorkerMain) that reads pre-built deck A from the file instead of generating both decks.
+**Rationale**: The existing match-outcomes pipeline already proves this pattern works: flat-text files for IPC, one file per worker, append-only outcomes. The evaluation pipeline uses the same forge-connector JAR and Forge classes, just with a different entry point (ValidationWorkerMain) that reads two pre-built decks from the match file and plays the game.
 
 Key difference from match-outcomes: workers are finite (process a fixed number of matches and exit) rather than infinite loops. The Python supervisor does a simple run-and-wait with retry, not continuous monitoring.
 
 **Alternatives considered**:
-- **Socket-based IPC**: More complex, no benefit for a batch evaluation of ~20 pools.
+- **Socket-based IPC**: More complex, no benefit for a batch evaluation.
 - **Single Java process**: Slower (no parallelism), and Forge JVMs crash — parallelism provides both speed and resilience.
