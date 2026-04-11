@@ -63,6 +63,96 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory; pools.txt is written here. Default: output/sealed/pools/{set}/",
     )
 
+    # ── train-scorer ──────────────────────────────────────────────
+    train_parser = subparsers.add_parser(
+        "train-scorer",
+        help="Train the deck scorer model on match outcome data",
+    )
+    train_parser.add_argument(
+        "--outcomes-path",
+        default="output/sealed/match-outcomes.txt",
+        help="Path to match outcomes file (default: output/sealed/match-outcomes.txt)",
+    )
+    train_parser.add_argument(
+        "--cards-path",
+        default="output/cardsfolder/",
+        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
+    )
+    train_parser.add_argument(
+        "--checkpoint-dir",
+        default="models/sealed/scorer/",
+        help="Directory for saving checkpoints (default: models/sealed/scorer/)",
+    )
+    train_parser.add_argument(
+        "--resume",
+        default=None,
+        help="Path to checkpoint to resume training from (default: none)",
+    )
+    train_parser.add_argument(
+        "--epochs", type=int, default=100,
+        help="Number of training epochs (default: 100)",
+    )
+    train_parser.add_argument(
+        "--batch-size", type=int, default=64,
+        help="Training batch size (default: 64)",
+    )
+    train_parser.add_argument(
+        "--lr", type=float, default=1e-3,
+        help="Learning rate (default: 1e-3)",
+    )
+    train_parser.add_argument(
+        "--n-layers", type=int, default=2,
+        help="Number of Set Transformer SAB layers (default: 2)",
+    )
+    train_parser.add_argument(
+        "--n-heads", type=int, default=4,
+        help="Number of attention heads (default: 4)",
+    )
+    train_parser.add_argument(
+        "--n-seeds", type=int, default=4,
+        help="Number of PMA seed vectors (default: 4)",
+    )
+    train_parser.add_argument(
+        "--d-ff", type=int, default=1088,
+        help="Feed-forward dimension in SAB layers (default: 1088)",
+    )
+    train_parser.add_argument(
+        "--mlp-hidden", type=int, default=256,
+        help="Hidden dimension of the scoring MLP head (default: 256)",
+    )
+    train_parser.add_argument(
+        "--val-interval", type=int, default=1,
+        help="Run validation every N epochs (default: 1)",
+    )
+    train_parser.add_argument(
+        "--unfreeze-embeddings",
+        action="store_true",
+        help="Enable embedding fine-tuning (Phase B, default: off)",
+    )
+    train_parser.add_argument(
+        "--embedding-lr", type=float, default=1e-5,
+        help="Learning rate for embedding fine-tuning (default: 1e-5)",
+    )
+
+    # ── evaluate-scorer ──────────────────────────────────────────
+    eval_parser = subparsers.add_parser(
+        "evaluate-scorer",
+        help="Evaluate the trained scorer against Forge's deck builder",
+    )
+    eval_parser.add_argument(
+        "--checkpoint",
+        default=None,
+        help="Model checkpoint to evaluate (e.g. models/sealed/scorer/best_l2_h4_s4_ff1088_mlp256.pt)",
+    )
+    eval_parser.add_argument(
+        "--cards-path",
+        default="output/cardsfolder/",
+        help="Directory with .npz card embeddings",
+    )
+    eval_parser.add_argument("--pools", type=int, default=20)
+    eval_parser.add_argument("--workers", type=int, default=4)
+    eval_parser.add_argument("--work-dir", default=None, help="Working directory for match files")
+
     # ── match-outcomes ────────────────────────────────────────────
     match_parser = subparsers.add_parser(
         "match-outcomes",
@@ -80,11 +170,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_encode_cards(args: argparse.Namespace) -> int:
     """Execute the encode-cards command."""
-    from price_predictor.infrastructure.transformer_store import load_model
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+    from price_predictor.infrastructure.transformer_store import load_model
+    from sealed.application.encode_cards import EncodeCardsUseCase
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
-    from sealed.application.encode_cards import EncodeCardsUseCase
 
     encoder_path = Path(args.encoder_path)
     vocab_path = Path(args.vocab_path)
@@ -121,7 +211,10 @@ def run_encode_cards(args: argparse.Namespace) -> int:
 
     result = use_case.execute(cards_path, encoder, store)
 
-    print(f"Done: {result.processed} processed, {result.skipped} skipped, {len(result.errors)} errors")
+    print(
+        f"Done: {result.processed} processed, "
+        f"{result.skipped} skipped, {len(result.errors)} errors"
+    )
 
     for err in result.errors:
         print(f"  Error: {err}", file=sys.stderr)
@@ -131,9 +224,8 @@ def run_encode_cards(args: argparse.Namespace) -> int:
 
 def run_generate_pools(args: argparse.Namespace) -> int:
     """Execute the generate-pools command."""
-    import platform
-    from sealed.infrastructure.pool_connector import PoolConnector
     from sealed.application.generate_pools import GeneratePoolsUseCase
+    from sealed.infrastructure.pool_connector import PoolConnector
 
     set_code = args.set_code
     pool_count = args.size
@@ -153,6 +245,66 @@ def run_generate_pools(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    return 0
+
+
+def run_train_scorer(args: argparse.Namespace) -> int:
+    """Execute the train-scorer command."""
+    from sealed.application.train_scorer import TrainScorerConfig, TrainScorerUseCase
+
+    config = TrainScorerConfig(
+        outcomes_path=Path(args.outcomes_path),
+        cards_path=Path(args.cards_path),
+        checkpoint_dir=Path(args.checkpoint_dir),
+        resume=Path(args.resume) if args.resume else None,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        lr=args.lr,
+        n_layers=args.n_layers,
+        n_heads=args.n_heads,
+        n_seeds=args.n_seeds,
+        d_ff=args.d_ff,
+        mlp_hidden=args.mlp_hidden,
+        val_interval=args.val_interval,
+        unfreeze_embeddings=args.unfreeze_embeddings,
+        embedding_lr=args.embedding_lr,
+    )
+
+    try:
+        use_case = TrainScorerUseCase()
+        use_case.execute(config)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    return 0
+
+
+def run_evaluate_scorer(args: argparse.Namespace) -> int:
+    """Execute the evaluate-scorer command."""
+    from sealed.application.evaluate_scorer import EvaluateScorerConfig, EvaluateScorerUseCase
+
+    config = EvaluateScorerConfig(
+        checkpoint=Path(args.checkpoint),
+        cards_path=Path(args.cards_path),
+        pools=args.pools,
+        workers=args.workers,
+        work_dir=Path(args.work_dir) if args.work_dir else None,
+    )
+
+    try:
+        use_case = EvaluateScorerUseCase()
+        use_case.execute(config)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
@@ -191,6 +343,10 @@ def main() -> None:
         sys.exit(run_encode_cards(args))
     elif args.command == "generate-pools":
         sys.exit(run_generate_pools(args))
+    elif args.command == "train-scorer":
+        sys.exit(run_train_scorer(args))
+    elif args.command == "evaluate-scorer":
+        sys.exit(run_evaluate_scorer(args))
     elif args.command == "match-outcomes":
         sys.exit(run_match_outcomes(args))
     else:
