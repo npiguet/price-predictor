@@ -70,7 +70,7 @@ A single training sample derived from one MatchOutcome.
 | winner_cards | tensor (N, 544) | Feature vectors for non-basic-land cards of the winning deck |
 | loser_cards | tensor (M, 544) | Feature vectors for non-basic-land cards of the losing deck |
 
-**Batching**: Winner and loser decks are batched separately. Within each batch, shorter decks are padded to the longest deck in that batch. A boolean mask of shape `(batch, max_cards)` marks real cards as True.
+**Batching**: Winner and loser decks are batched separately. Within each batch, shorter decks are padded to the longest deck in that batch. A boolean mask of shape `(batch, max_cards)` marks real cards as `True` (attend) and padding as `False` (ignore). Note: PyTorch's `nn.MultiheadAttention` `key_padding_mask` uses the **inverted** convention (`True` = ignore), so the mask must be inverted (`~mask`) before passing to the attention layer.
 
 ### SetTransformerScorer (nn.Module)
 
@@ -78,6 +78,7 @@ The core model.
 
 | Component | Shape / Details |
 |-----------|-----------------|
+| Card embedding table | Optional `nn.Parameter` of shape `(num_cards, 544)`. Initialized from `.npz` files at training startup. During Phase A (frozen): excluded from optimizer (`requires_grad=False`). During Phase B (unfrozen): included in optimizer with separate learning rate (`requires_grad=True`). Card indices are resolved by the data loader; the model receives indices and looks up vectors from this table (when present) or receives pre-loaded vectors directly (when embeddings are not trainable). |
 | Self-attention layers | 2-4 SAB blocks, each with `nn.MultiheadAttention(d_model=544, nhead=4-8)` + feedforward + LayerNorm |
 | PMA pooling | 4-8 learned seed vectors of dim 544, cross-attend over card representations |
 | Scoring MLP | Linear(seeds * d_model, 256-512) → ReLU → Linear(_, 256-512) → ReLU → Linear(_, 1) |
