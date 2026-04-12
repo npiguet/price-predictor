@@ -7,6 +7,14 @@ import sys
 from pathlib import Path
 
 
+def _add_cards_path(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--cards-path",
+        default="output/cardsfolder/",
+        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sealed",
@@ -73,11 +81,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="output/sealed/match-outcomes.txt",
         help="Path to match outcomes file (default: output/sealed/match-outcomes.txt)",
     )
-    train_parser.add_argument(
-        "--cards-path",
-        default="output/cardsfolder/",
-        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
-    )
+    _add_cards_path(train_parser)
     train_parser.add_argument(
         "--checkpoint-dir",
         default="models/sealed/scorer/",
@@ -144,11 +148,7 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Model checkpoint to evaluate (e.g. best_l2_h4_s4_ff1088_mlp256.pt)",
     )
-    eval_parser.add_argument(
-        "--cards-path",
-        default="output/cardsfolder/",
-        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
-    )
+    _add_cards_path(eval_parser)
     eval_parser.add_argument(
         "--pools",
         type=int,

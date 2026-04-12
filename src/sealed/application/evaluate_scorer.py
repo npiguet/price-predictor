@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from price_predictor.infrastructure.converted_card_parser import extract_mana_cost_line
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -251,7 +252,7 @@ def _write_decks_file(
 
     def cost_for(name: str) -> str:
         if name not in cost_cache:
-            cost_cache[name] = _extract_mana_cost(locator.load_text(name))
+            cost_cache[name] = extract_mana_cost_line(locator.load_text(name)) or ""
         return cost_cache[name]
 
     lines: list[str] = []
@@ -264,14 +265,6 @@ def _write_decks_file(
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _extract_mana_cost(card_text: str) -> str:
-    """Return the mana cost string (e.g. `{1}{R}`) from a card text file, or ''."""
-    for line in card_text.splitlines():
-        if line.startswith("mana cost:"):
-            return line[len("mana cost:"):].strip()
-    return ""
 
 
 def _parse_pools(pools_file: Path) -> list[list[str]]:

@@ -26,7 +26,10 @@ import numpy as np
 
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import WUBRG, ManaCost
-from price_predictor.infrastructure.converted_card_parser import parse_converted_text
+from price_predictor.infrastructure.converted_card_parser import (
+    extract_mana_cost_line,
+    parse_converted_text,
+)
 
 _COLOR_FLAGS = {c: i + 10 for i, c in enumerate(WUBRG)}     # W=10, U=11, B=12, R=13, G=14
 _PRODUCE_SYMBOLS = {c: i + 16 for i, c in enumerate(WUBRG)} # W=16, U=17, B=18, R=19, G=20
@@ -81,11 +84,10 @@ def _fill_mana_cost_features(
 
 
 def _count_x_in_cost(card_text: str) -> int:
-    """Count X braces in the mana cost line (preserves the original feature semantics)."""
-    for line in card_text.splitlines():
-        if line.strip().lower().startswith("mana cost:"):
-            return sum(1 for m in _MANA_BRACE_RE.finditer(line) if m.group(1) == "X")
-    return 0
+    cost_line = extract_mana_cost_line(card_text)
+    if cost_line is None:
+        return 0
+    return sum(1 for m in _MANA_BRACE_RE.finditer(cost_line) if m.group(1) == "X")
 
 
 def _fill_color_flags(
