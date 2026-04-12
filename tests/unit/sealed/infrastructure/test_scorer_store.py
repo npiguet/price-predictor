@@ -23,11 +23,11 @@ class TestCheckpointRoundTrip:
 
         store = ScorerStore()
         path = tmp_path / "test.pt"
-        store.save_checkpoint(model, optimizer, epoch=5, best_val_loss=0.42, config=config, path=path)
+        store.save_checkpoint(model, optimizer, epoch=5, best_val_accuracy=0.42, config=config, path=path)
 
         loaded = store.load_checkpoint(path)
         assert loaded["epoch"] == 5
-        assert loaded["best_val_loss"] == pytest.approx(0.42)
+        assert loaded["best_val_accuracy"] == pytest.approx(0.42)
         assert loaded["config"] == config
         assert "model_state_dict" in loaded
         assert "optimizer_state_dict" in loaded
@@ -39,7 +39,7 @@ class TestCheckpointRoundTrip:
 
         store = ScorerStore()
         path = tmp_path / "test.pt"
-        store.save_checkpoint(model, optimizer, epoch=1, best_val_loss=1.0, config=config, path=path)
+        store.save_checkpoint(model, optimizer, epoch=1, best_val_accuracy=1.0, config=config, path=path)
 
         loaded = store.load_checkpoint(path)
         model2 = _make_model()
@@ -56,7 +56,7 @@ class TestCheckpointRoundTrip:
 
         store = ScorerStore()
         path = tmp_path / "test.pt"
-        store.save_checkpoint(model, optimizer, epoch=1, best_val_loss=1.0, config={}, path=path)
+        store.save_checkpoint(model, optimizer, epoch=1, best_val_accuracy=1.0, config={}, path=path)
 
         loaded = store.load_checkpoint(path)
         model2 = _make_model()
@@ -74,8 +74,8 @@ class TestFileNaming:
 
         latest = tmp_path / "latest.pt"
         best = tmp_path / "best.pt"
-        store.save_checkpoint(model, optimizer, epoch=1, best_val_loss=1.0, config={}, path=latest)
-        store.save_checkpoint(model, optimizer, epoch=2, best_val_loss=0.5, config={}, path=best)
+        store.save_checkpoint(model, optimizer, epoch=1, best_val_accuracy=0.5, config={}, path=latest)
+        store.save_checkpoint(model, optimizer, epoch=2, best_val_accuracy=0.8, config={}, path=best)
 
         assert latest.exists()
         assert best.exists()

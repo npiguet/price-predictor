@@ -16,7 +16,7 @@ class ScorerStore:
         model: nn.Module,
         optimizer: torch.optim.Optimizer,
         epoch: int,
-        best_val_loss: float,
+        best_val_accuracy: float,
         config: dict,
         path: Path,
     ) -> None:
@@ -26,7 +26,7 @@ class ScorerStore:
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "epoch": epoch,
-                "best_val_loss": best_val_loss,
+                "best_val_accuracy": best_val_accuracy,
                 "config": config,
             },
             path,

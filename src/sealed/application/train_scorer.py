@@ -89,11 +89,11 @@ class TrainScorerUseCase:
             model = SetTransformerScorer(**checkpoint["config"])
             model.load_state_dict(checkpoint["model_state_dict"])
             start_epoch = checkpoint["epoch"] + 1
-            best_val_loss = checkpoint["best_val_loss"]
+            best_val_accuracy = checkpoint.get("best_val_accuracy", -1.0)
         else:
             model = SetTransformerScorer(**model_config)
             start_epoch = 0
-            best_val_loss = float("inf")
+            best_val_accuracy = -1.0
 
         # Compute normalization statistics from training data
         _set_normalization_stats(model, train_examples)
@@ -221,15 +221,15 @@ class TrainScorerUseCase:
 
                 # Save latest
                 store.save_checkpoint(
-                    model, optimizer, epoch, best_val_loss,
+                    model, optimizer, epoch, best_val_accuracy,
                     model_config, config.checkpoint_dir / "latest.pt",
                 )
 
                 # Save best
-                if val.loss < best_val_loss:
-                    best_val_loss = val.loss
+                if val.accuracy > best_val_accuracy:
+                    best_val_accuracy = val.accuracy
                     store.save_checkpoint(
-                        model, optimizer, epoch, best_val_loss,
+                        model, optimizer, epoch, best_val_accuracy,
                         model_config, config.checkpoint_dir / f"best{arch_suffix}.pt",
                     )
 

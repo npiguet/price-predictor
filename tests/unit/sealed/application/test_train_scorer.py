@@ -175,7 +175,7 @@ class TestEmbeddingUnfreezing:
             outcomes_path=outcomes_file,
             cards_path=cards_dir,
             checkpoint_dir=tmp_path / "checkpoints_b",
-            resume=tmp_path / "checkpoints_a" / "best_l2_h4_s4_ff1088_mlp256.pt",
+            resume=tmp_path / "checkpoints_a" / "best_l2_h4_s4_ff1088_mlp256_lr0.001.pt",
             epochs=1,
             batch_size=8,
             lr=1e-3,
@@ -229,7 +229,7 @@ class TestEmbeddingUnfreezing:
             outcomes_path=outcomes_file,
             cards_path=cards_dir,
             checkpoint_dir=tmp_path / "checkpoints_b",
-            resume=tmp_path / "checkpoints_a" / "best_l2_h4_s4_ff1088_mlp256.pt",
+            resume=tmp_path / "checkpoints_a" / "best_l2_h4_s4_ff1088_mlp256_lr0.001.pt",
             epochs=2,
             batch_size=8,
             lr=1e-3,
@@ -261,7 +261,7 @@ class TestCheckpointing:
         use_case = TrainScorerUseCase()
         use_case.execute(config)
 
-        assert (ckpt_dir / "best_l2_h4_s4_ff1088_mlp256.pt").exists()
+        assert (ckpt_dir / "best_l2_h4_s4_ff1088_mlp256_lr0.001.pt").exists()
 
     def test_latest_checkpoint_saved_every_validation(self, tmp_path):
         outcomes_file, cards_dir = _make_synthetic_data(tmp_path, n_matches=20)
