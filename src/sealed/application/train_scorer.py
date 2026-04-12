@@ -150,7 +150,7 @@ class TrainScorerUseCase:
         config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         arch_suffix = (
             f"_l{config.n_layers}_h{config.n_heads}_s{config.n_seeds}"
-            f"_ff{config.d_ff}_mlp{config.mlp_hidden}"
+            f"_ff{config.d_ff}_mlp{config.mlp_hidden}_lr{config.lr}"
         )
 
         for epoch in range(start_epoch, start_epoch + config.epochs):
