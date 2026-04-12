@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import platform
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -54,46 +55,123 @@ class EvaluationConnector:
         self,
         split_files: list[Path],
         best_of: int = 3,
-        max_retries: int = 1,
+        idle_timeout_s: float = 300.0,
+        poll_interval_s: float = 10.0,
     ) -> list[Path]:
         """Launch Java workers in parallel and wait for completion.
+
+        Watchdog: each worker is polled every ``poll_interval_s`` seconds.
+        If a worker has not appended a new outcome line for ``idle_timeout_s``
+        seconds, or if it exits with a non-zero code before finishing all
+        matches, it is killed and restarted on the same matches file.
+        ``ValidationMatchPlayer`` skips already-completed matches based on
+        the outcomes file line count, so a restart resumes where the
+        previous attempt left off. There is no restart cap.
 
         Returns outcome file paths in the same order as split_files.
         """
         outcome_files = [self.outcome_file_path(f) for f in split_files]
 
-        # Start all workers in parallel
-        processes = []
-        for matches_file in split_files:
-            cmd = self._build_worker_command(matches_file, best_of=best_of)
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            )
-            processes.append((proc, matches_file))
+        def count_outcomes(path: Path) -> int:
+            if not path.exists():
+                return 0
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    return sum(1 for line in f if line.strip())
+            except OSError:
+                return 0
 
-        # Wait for all and retry failures
-        for proc, matches_file in processes:
-            proc.wait()
-            if proc.returncode != 0:
-                print(
-                    f"Worker failed for {matches_file} (rc={proc.returncode}), "
-                    f"retrying..."
+        def spawn(matches_file: Path, log_file):
+            cmd = self._build_worker_command(matches_file, best_of=best_of)
+            # start_new_session puts the child in its own process group on
+            # POSIX (no-op on Windows) so os.killpg can take down the whole
+            # tree if Java spawns subprocesses.
+            return subprocess.Popen(
+                cmd, stdout=log_file, stderr=log_file, start_new_session=True,
+            )
+
+        def kill_proc(proc: subprocess.Popen) -> None:
+            if proc.poll() is not None:
+                return
+            if platform.system() == "Windows":
+                # taskkill /T walks the parent-child PID tree and /F forces
+                # termination, killing the JVM and any child processes.
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
                 )
-                for attempt in range(max_retries):
-                    cmd = self._build_worker_command(matches_file, best_of=best_of)
-                    try:
-                        retry_proc = subprocess.Popen(
-                            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                        )
-                        retry_proc.wait()
-                        if retry_proc.returncode == 0:
-                            break
-                        print(
-                            f"Worker retry {attempt + 1}/{max_retries} failed "
-                            f"for {matches_file} (rc={retry_proc.returncode})"
-                        )
-                    except Exception as e:
-                        print(f"Worker retry error for {matches_file}: {e}")
+            else:
+                import os
+                import signal
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pass
+
+        now = time.monotonic()
+        workers: list[dict] = []
+        for matches_file, outcomes_file in zip(split_files, outcome_files):
+            log_path = matches_file.with_suffix(".worker.log")
+            log_file = log_path.open("ab")
+            proc = spawn(matches_file, log_file)
+            workers.append({
+                "proc": proc,
+                "matches_file": matches_file,
+                "outcomes_file": outcomes_file,
+                "log_file": log_file,
+                "last_count": count_outcomes(outcomes_file),
+                "last_progress": now,
+                "done": False,
+            })
+
+        try:
+            while True:
+                all_done = True
+                for w in workers:
+                    if w["done"]:
+                        continue
+                    proc = w["proc"]
+                    rc = proc.poll()
+
+                    if rc == 0:
+                        print(f"Worker completed: {w['matches_file'].name}")
+                        w["done"] = True
+                        continue
+
+                    if rc is not None:
+                        print(f"Worker restarted (rc={rc}): {w['matches_file'].name}")
+                        w["proc"] = spawn(w["matches_file"], w["log_file"])
+                        w["last_count"] = count_outcomes(w["outcomes_file"])
+                        w["last_progress"] = time.monotonic()
+                        all_done = False
+                        continue
+
+                    current_count = count_outcomes(w["outcomes_file"])
+                    now2 = time.monotonic()
+                    if current_count > w["last_count"]:
+                        w["last_count"] = current_count
+                        w["last_progress"] = now2
+                    elif now2 - w["last_progress"] >= idle_timeout_s:
+                        print(f"Worker restarted (idle): {w['matches_file'].name}")
+                        kill_proc(proc)
+                        w["proc"] = spawn(w["matches_file"], w["log_file"])
+                        w["last_count"] = count_outcomes(w["outcomes_file"])
+                        w["last_progress"] = time.monotonic()
+                    all_done = False
+
+                if all_done:
+                    break
+                time.sleep(poll_interval_s)
+        finally:
+            for w in workers:
+                try:
+                    w["log_file"].close()
+                except Exception:
+                    pass
 
         return outcome_files
 

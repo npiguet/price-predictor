@@ -26,6 +26,7 @@ class EvaluateScorerConfig:
 
 _MANA_SYMBOL_RE = re.compile(r"\{([WUBRGC])\}")
 _COLOR_TO_LAND = {"W": "Plains", "U": "Island", "B": "Swamp", "R": "Mountain", "G": "Forest"}
+_BASIC_LANDS = frozenset(_COLOR_TO_LAND.values())
 
 
 def greedy_deck_search(
@@ -99,19 +100,72 @@ def greedy_deck_search(
     return [pool_names[i] for i in deck_idx]
 
 
-def compute_basic_lands(nonland_texts: dict[str, str]) -> dict[str, int]:
+def score_decks(
+    model: SetTransformerScorer,
+    decks: list[list[str]],
+    cards_path: Path,
+) -> list[float]:
+    """Score each deck (nonland portion) using the scorer model.
+
+    Loads embeddings for all nonland cards, pads to the longest nonland set
+    in the batch, and runs a single forward pass on the model's device so
+    the GPU is used for both scorer and Forge deck dumps.
+    """
+    model.eval()
+    if not decks:
+        return []
+
+    device = next(model.parameters()).device
+
+    deck_embeddings: list[list[np.ndarray]] = []
+    for deck in decks:
+        embeds: list[np.ndarray] = []
+        for name in deck:
+            if name in _BASIC_LANDS:
+                continue
+            emb = _load_card_embedding(cards_path, name)
+            if emb is not None:
+                embeds.append(emb)
+        deck_embeddings.append(embeds)
+
+    max_len = max((len(e) for e in deck_embeddings), default=0)
+    if max_len == 0:
+        return [0.0] * len(decks)
+
+    d_model = next(e[0].shape[0] for e in deck_embeddings if e)
+    n_decks = len(decks)
+    cards_arr = np.zeros((n_decks, max_len, d_model), dtype=np.float32)
+    mask_arr = np.zeros((n_decks, max_len), dtype=bool)
+    for i, embeds in enumerate(deck_embeddings):
+        for j, emb in enumerate(embeds):
+            cards_arr[i, j] = emb
+        if embeds:
+            mask_arr[i, :len(embeds)] = True
+
+    cards_t = torch.from_numpy(cards_arr).to(device)
+    mask_t = torch.from_numpy(mask_arr).to(device)
+
+    with torch.no_grad():
+        out = model(cards_t, mask_t).squeeze(-1)
+    return out.cpu().tolist()
+
+
+def compute_basic_lands(nonland_texts: list[str]) -> dict[str, int]:
     """Compute basic land distribution for a 40-card deck.
 
     Args:
-        nonland_texts: mapping of card name → card text for the 23 non-land cards.
+        nonland_texts: card text for each nonland slot (one entry per card,
+            so duplicates appear multiple times).
 
     Returns:
-        Mapping of basic land name → count, summing to 17 (40 - 23).
+        Mapping of basic land name → count, summing to (40 - len(nonland_texts)).
+        Any color with at least one pip gets at least 2 basics, when there is
+        room; the remainder is distributed proportional to pip counts.
     """
     n_basics = 40 - len(nonland_texts)
     pips = {"W": 0, "U": 0, "B": 0, "R": 0, "G": 0}
 
-    for text in nonland_texts.values():
+    for text in nonland_texts:
         for line in text.splitlines():
             if line.startswith("mana cost:"):
                 for match in _MANA_SYMBOL_RE.finditer(line):
@@ -125,21 +179,27 @@ def compute_basic_lands(nonland_texts: dict[str, str]) -> dict[str, int]:
         pips = {"W": 1, "U": 1, "B": 1, "R": 1, "G": 1}
         total_pips = 5
 
+    active_colors = [c for c in ["W", "U", "B", "R", "G"] if pips[c] > 0]
+    n_active = len(active_colors)
+
+    # Reserve 2 basics for each active color when there is room.
+    min_per_color = 2 if 2 * n_active <= n_basics else 0
+    proportional_pool = n_basics - min_per_color * n_active
+
     lands: dict[str, int] = {}
-    remaining = n_basics
+    remaining = proportional_pool
     remaining_pips = total_pips
 
-    for color in ["W", "U", "B", "R", "G"]:
-        if pips[color] == 0 or remaining == 0:
-            continue
+    for color in active_colors:
         if remaining_pips == pips[color]:
-            count = remaining
+            extra = remaining
         else:
-            count = round(remaining * pips[color] / remaining_pips)
-        count = max(0, min(count, remaining))
+            extra = round(remaining * pips[color] / remaining_pips)
+        extra = max(0, min(extra, remaining))
+        count = min_per_color + extra
         if count > 0:
             lands[_COLOR_TO_LAND[color]] = count
-        remaining -= count
+        remaining -= extra
         remaining_pips -= pips[color]
 
     return lands
@@ -262,8 +322,14 @@ class EvaluateScorerUseCase:
         eval_connector = EvaluationConnector()
         b_decks = eval_connector.build_forge_decks(pools)
 
-        _write_decks_file(work_dir / "decks-scorer.txt", a_decks, config.cards_path)
-        _write_decks_file(work_dir / "decks-forge.txt", b_decks, config.cards_path)
+        a_scores = score_decks(model, a_decks, config.cards_path)
+        b_scores = score_decks(model, b_decks, config.cards_path)
+        _write_decks_file(
+            work_dir / "decks-scorer.txt", a_decks, config.cards_path, a_scores,
+        )
+        _write_decks_file(
+            work_dir / "decks-forge.txt", b_decks, config.cards_path, b_scores,
+        )
 
         n = len(a_decks)
         print(f"Writing {n}² = {n * n} round-robin match pairings...")
@@ -306,10 +372,13 @@ def _print_results(result: dict) -> None:
 
 
 def _write_decks_file(
-    path: Path, decks: list[list[str]], cards_path: Path,
+    path: Path,
+    decks: list[list[str]],
+    cards_path: Path,
+    scores: list[float],
 ) -> None:
     """Write decks for human inspection: one card per line with mana cost,
-    blank-line-separated, with a `=== Deck N ===` header per deck."""
+    blank-line-separated, with a `=== Deck N (score=X.XXXX) ===` header."""
     cost_cache: dict[str, str] = {}
 
     def cost_for(name: str) -> str:
@@ -319,7 +388,8 @@ def _write_decks_file(
 
     lines: list[str] = []
     for i, deck in enumerate(decks):
-        lines.append(f"=== Deck {i + 1} ===")
+        score = scores[i] if i < len(scores) else 0.0
+        lines.append(f"=== Deck {i + 1}  score={score:+.4f} ===")
         for card in deck:
             cost = cost_for(card)
             lines.append(f"{card:<32}{cost}".rstrip())
@@ -365,7 +435,7 @@ def _build_a_decks(
             continue
 
         nonland_deck = greedy_deck_search(model, valid_names, pool_embeddings)
-        nonland_texts = {n: _load_card_text(cards_path, n) for n in nonland_deck}
+        nonland_texts = [_load_card_text(cards_path, n) for n in nonland_deck]
         lands = compute_basic_lands(nonland_texts)
         full_deck: list[str] = list(nonland_deck)
         for land_name, count in lands.items():

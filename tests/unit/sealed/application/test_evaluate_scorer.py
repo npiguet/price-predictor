@@ -55,27 +55,53 @@ class TestGreedyDeckSearch:
 class TestBasicLandComputation:
     def test_fills_to_40_total(self):
         """Basic lands should fill remaining slots to 40 total cards."""
-        nonland_texts = {f"card_{i}": f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)}
+        nonland_texts = [
+            f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)
+        ]
         lands = compute_basic_lands(nonland_texts)
         assert sum(lands.values()) == 17
 
+    def test_counts_duplicate_card_slots(self):
+        """Duplicate card slots must each contribute to n_basics and pip counts."""
+        # 23 nonland slots but only 1 unique text → must still produce 17 lands.
+        text = "name: card\nmana cost: {R}\ntypes: creature"
+        nonland_texts = [text] * 23
+        lands = compute_basic_lands(nonland_texts)
+        assert sum(lands.values()) == 17
+        assert lands.get("Mountain", 0) == 17
+
     def test_proportional_to_color_pips(self):
-        """Land distribution should be proportional to color pips."""
-        nonland_texts = {f"card_{i}": f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)}
+        """Mono-color decks put all basics in that color."""
+        nonland_texts = [
+            f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)
+        ]
         lands = compute_basic_lands(nonland_texts)
         assert lands.get("Mountain", 0) == 17
 
     def test_multicolor_distributes_proportionally(self):
         """Multi-color decks distribute lands proportionally."""
-        texts = {}
+        texts = []
         for i in range(12):
-            texts[f"red_{i}"] = f"name: red_{i}\nmana cost: {{R}}\ntypes: creature"
+            texts.append(f"name: red_{i}\nmana cost: {{R}}\ntypes: creature")
         for i in range(11):
-            texts[f"green_{i}"] = f"name: green_{i}\nmana cost: {{G}}\ntypes: creature"
+            texts.append(f"name: green_{i}\nmana cost: {{G}}\ntypes: creature")
         lands = compute_basic_lands(texts)
         assert sum(lands.values()) == 17
         assert "Mountain" in lands
         assert "Forest" in lands
+
+    def test_min_two_per_active_color(self):
+        """A splash color with low pip count still gets at least 2 basics."""
+        # 22 white-only cards + 1 single-black card → B has 1 pip vs W's 22.
+        # Without the min-2 rule, B would round to 0 or 1.
+        texts = [
+            f"name: w_{i}\nmana cost: {{W}}\ntypes: creature" for i in range(22)
+        ]
+        texts.append("name: splash\nmana cost: {1}{B}\ntypes: creature")
+        lands = compute_basic_lands(texts)
+        assert sum(lands.values()) == 17
+        assert lands.get("Swamp", 0) >= 2
+        assert lands.get("Plains", 0) >= 2
 
 
 class TestResultAggregation:
