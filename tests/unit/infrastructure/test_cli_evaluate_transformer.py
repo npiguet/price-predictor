@@ -21,7 +21,7 @@ class TestEvaluateTransformerParser:
     def test_default_model_path(self):
         parser = build_parser()
         args = parser.parse_args(["evaluate", "transformer"])
-        assert args.model_path == "./models/transformer/"
+        assert args.model_path == "./models/price-predictor/transformer/"
 
     def test_default_output_dir(self):
         parser = build_parser()

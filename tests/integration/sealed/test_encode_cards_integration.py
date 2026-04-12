@@ -58,7 +58,7 @@ def encoder_artifacts(tmp_path):
     model_dir = tmp_path / "models"
     model_dir.mkdir()
     encoder_path = model_dir / "latest.pt"
-    torch.save({"model_state_dict": model.state_dict(), "config": config}, encoder_path)
+    torch.save({"state_dict": model.state_dict(), "config": config}, encoder_path)
 
     # Build a minimal vocab (line index = token ID; [PAD]=0, [UNK]=1 required)
     vocab_tokens = [

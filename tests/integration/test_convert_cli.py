@@ -2,10 +2,32 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+
+def _convert_environment_available() -> bool:
+    """Return True iff Java + connector JAR + Forge dependency JARs are present."""
+    if shutil.which("java") is None:
+        return False
+    project_root = Path(__file__).resolve().parent.parent.parent
+    connector_jar = (
+        project_root / "forge-connector" / "target"
+        / "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
+    )
+    forge_dir = project_root.parent / "forge"
+    forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
+    forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
+    forge_deps_dir = forge_dir / "forge-game" / "target" / "dependency"
+    if not connector_jar.exists() or not forge_game_jar.exists() or not forge_core_jar.exists():
+        return False
+    if not forge_deps_dir.is_dir() or not any(forge_deps_dir.glob("*.jar")):
+        return False
+    return True
 
 
 def test_convert_subcommand_in_help():
@@ -33,6 +55,10 @@ def test_convert_help_shows_expected_arguments():
 
 
 @pytest.mark.integration
+@pytest.mark.skipif(
+    not _convert_environment_available(),
+    reason="Java + Forge JARs + dependency directory required",
+)
 def test_convert_produces_output(tmp_path):
     """Running convert on fixture files produces output."""
     fixture_dir = (
@@ -54,8 +80,5 @@ def test_convert_produces_output(tmp_path):
         text=True,
         cwd="src",
     )
-    # This test only passes if Java + Forge JARs are available
-    if result.returncode == 2:
-        pytest.skip("Java/JARs not available for convert command")
-    assert result.returncode == 0
+    assert result.returncode == 0, result.stderr
     assert (output_dir / "t" / "test_bear.txt").exists()

@@ -58,8 +58,13 @@ def load_model(model_dir: Path) -> tuple[CardPriceTransformerModel, TransformerC
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
-    checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
-    config = TransformerConfig(**checkpoint["config"])
+    # Legacy checkpoints store the config as a TransformerConfig instance;
+    # newer ones store it as a plain dict via asdict(). Allowlist the dataclass
+    # so weights_only=True accepts both shapes.
+    with torch.serialization.safe_globals([TransformerConfig]):
+        checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
+    raw_config = checkpoint["config"]
+    config = raw_config if isinstance(raw_config, TransformerConfig) else TransformerConfig(**raw_config)
     model = CardPriceTransformerModel(config)
     model.load_state_dict(checkpoint["state_dict"])
     return model, config
