@@ -11,7 +11,8 @@ from torch import nn
 
 from price_predictor.application.train_transformer import (
     _BestCheckpoint,
-    _run_epoch,
+    _run_eval_epoch,
+    _run_training_epoch,
     analyze_sequence_lengths,
     train_transformer,
 )
@@ -67,7 +68,7 @@ class TestAnalyzeSequenceLengths:
 
 
 class _StubModel(nn.Module):
-    """Tiny model with the (input_ids, attention_mask, meta) signature `_run_epoch` expects."""
+    """Tiny model with the (input_ids, attention_mask, meta) signature the epoch helpers expect."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -136,7 +137,7 @@ class TestBestCheckpoint:
         assert torch.allclose(model.weight, original)
 
 
-class TestRunEpoch:
+class TestRunEpochHelpers:
     def test_train_mode_updates_weights(self):
         torch.manual_seed(0)
         model = _StubModel()
@@ -144,7 +145,7 @@ class TestRunEpoch:
         loader = [_make_batch(target=10.0) for _ in range(3)]
         optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
 
-        loss = _run_epoch(model, loader, nn.MSELoss(), torch.device("cpu"), optimizer=optimizer)
+        loss = _run_training_epoch(model, loader, nn.MSELoss(), torch.device("cpu"), optimizer)
 
         assert isinstance(loss, float)
         assert not torch.allclose(model.linear.weight, before)
@@ -155,7 +156,7 @@ class TestRunEpoch:
         before = model.linear.weight.detach().clone()
         loader = [_make_batch(target=10.0) for _ in range(3)]
 
-        loss = _run_epoch(model, loader, nn.MSELoss(), torch.device("cpu"))
+        loss = _run_eval_epoch(model, loader, nn.MSELoss(), torch.device("cpu"))
 
         assert isinstance(loss, float)
         assert torch.allclose(model.linear.weight, before)
@@ -164,7 +165,7 @@ class TestRunEpoch:
         model = _StubModel()
         loader = [_make_batch(target=0.0) for _ in range(4)]
 
-        loss = _run_epoch(model, loader, nn.MSELoss(), torch.device("cpu"))
+        loss = _run_eval_epoch(model, loader, nn.MSELoss(), torch.device("cpu"))
 
         assert loss >= 0.0
 

@@ -26,79 +26,50 @@ def allprices_path() -> Path:
     return Path(__file__).parents[2] / "fixtures" / "allprices_sample.json"
 
 
+@pytest.fixture
+def train_kwargs(
+    converted_cards_dir: Path,
+    allprintings_path: Path,
+    allprices_path: Path,
+    tmp_path: Path,
+) -> dict:
+    return {
+        "output_dir": converted_cards_dir,
+        "prices_path": allprices_path,
+        "printings_path": allprintings_path,
+        "output_path": tmp_path,
+        "test_split": 0.2,
+        "random_seed": 42,
+    }
+
+
 class TestTrainModelUseCase:
-    def test_train_produces_trained_model(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
+    def test_train_produces_trained_model(self, train_kwargs: dict) -> None:
         use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path,
-            test_split=0.2,
-            random_seed=42,
-        )
+        result = use_case.execute(**train_kwargs)
         assert result.trained_model.card_count > 0
         assert result.trained_model.model_version
         assert result.trained_model.price_range_min_eur > 0
         assert result.trained_model.price_range_max_eur > result.trained_model.price_range_min_eur
         assert result.model_path.exists()
 
-    def test_skip_report_has_reasons(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
+    def test_skip_report_has_reasons(self, train_kwargs: dict) -> None:
         use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path,
-            test_split=0.2,
-            random_seed=42,
-        )
-        # Island has price < threshold or some cards may not match
+        result = use_case.execute(**train_kwargs)
         assert isinstance(result.skipped_reasons, dict)
 
-    def test_model_is_saved(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
+    def test_model_is_saved(self, train_kwargs: dict, tmp_path: Path) -> None:
         use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path,
-            test_split=0.2,
-            random_seed=42,
-        )
-        # Model file should exist
+        result = use_case.execute(**train_kwargs)
         assert result.model_path.exists()
-        # Latest symlink/copy should exist
         latest = tmp_path / "latest.joblib"
         assert latest.exists()
 
-    def test_reproducible_training(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
+    def test_reproducible_training(self, train_kwargs: dict, tmp_path: Path) -> None:
         use_case1 = TrainModelUseCase()
-        result1 = use_case1.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path / "run1",
-            test_split=0.2,
-            random_seed=42,
-        )
+        result1 = use_case1.execute(**{**train_kwargs, "output_path": tmp_path / "run1"})
         use_case2 = TrainModelUseCase()
-        result2 = use_case2.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path / "run2",
-            test_split=0.2,
-            random_seed=42,
-        )
+        result2 = use_case2.execute(**{**train_kwargs, "output_path": tmp_path / "run2"})
         assert result1.trained_model.card_count == result2.trained_model.card_count
 
     def test_insufficient_data_raises(self, tmp_path: Path) -> None:
@@ -123,23 +94,14 @@ class TestTrainModelUseCase:
                 random_seed=42,
             )
 
-    def test_trained_cards_have_printing_data(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
+    def test_trained_cards_have_printing_data(self, train_kwargs: dict) -> None:
         """Training enriches Cards with printing_data so the printing-data feature
         block is non-zero for cards whose metadata was found."""
         from price_predictor.domain.entities import Card
         from price_predictor.domain.value_objects import ManaCost, PrintingData
 
         use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path,
-            test_split=0.2,
-            random_seed=42,
-        )
+        result = use_case.execute(**train_kwargs)
         artifact = joblib.load(result.model_path)
         fe = artifact["feature_engineering"]
 

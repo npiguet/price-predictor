@@ -20,6 +20,21 @@ from price_predictor.domain.value_objects import RECOGNIZED_FORMATS
 
 _TOP_KEYWORD_LIMIT = 30
 
+_MANA_FEATURE_WIDTH = 13
+_SUPERTYPE_FEATURE_WIDTH = len(SUPERTYPES) + 1
+_KEYWORD_FEATURE_WIDTH = _TOP_KEYWORD_LIMIT + 2
+_PT_FEATURE_WIDTH = 6
+_PRINTING_FEATURE_WIDTH = 19
+_DENSE_FEATURE_WIDTH = (
+    _MANA_FEATURE_WIDTH
+    + len(CARD_TYPES)
+    + _SUPERTYPE_FEATURE_WIDTH
+    + _KEYWORD_FEATURE_WIDTH
+    + _PT_FEATURE_WIDTH
+    + len(LAYOUTS)
+    + _PRINTING_FEATURE_WIDTH
+)
+
 
 def _parse_pt(value: str | None) -> tuple[float, bool]:
     """Parse power/toughness string to (numeric_value, is_star).
@@ -60,12 +75,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         texts = [card.oracle_text or "" for card in X]
         self.tfidf_.fit(texts)
 
-        # Probe one card to discover the dense feature width — guarantees
-        # get_feature_count never drifts from the actual transform output.
-        probe = X[0] if X else Card(name="probe", types=["Creature"])
-        self.n_dense_features_ = sum(
-            len(group(probe)) for group in self._feature_groups()
-        )
+        self.n_dense_features_ = _DENSE_FEATURE_WIDTH
         return self
 
     def transform(self, X: list[Card]) -> np.ndarray:

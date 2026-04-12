@@ -12,22 +12,13 @@ import torch
 from price_predictor.application.converted_card_dataset import load_training_samples
 from price_predictor.application.metrics import compute_regression_metrics
 from price_predictor.application.transformer_inference import predict_batch
+from price_predictor.domain.price_buckets import REPORTING_BUCKETS
 from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
 
 logger = logging.getLogger(__name__)
-
-
-_PRICE_BUCKETS: list[tuple[float, float, str]] = [
-    (0.0,   0.1,          "<€0.10"),
-    (0.1,   0.5,          "€0.10–0.50"),
-    (0.5,   2.0,          "€0.50–2"),
-    (2.0,   10.0,         "€2–10"),
-    (10.0,  50.0,         "€10–50"),
-    (50.0,  float("inf"), ">€50"),
-]
 
 
 @dataclass
@@ -53,6 +44,24 @@ class TransformerEvalResult:
     sample_count: int
     per_bucket: list[BucketMetrics] | None = None
     per_card: list[dict] | None = None
+
+    def format_per_bucket_table(self) -> str:
+        """Render the per-price-bucket breakdown as a fixed-width text table."""
+        if not self.per_bucket:
+            return ""
+        lines = [
+            "Per-bucket breakdown:",
+            f"  {'Bucket':<10} {'n':>6}   {'med%err':>8}   {'med|log|':>9}   {'med_signed_log':>15}",
+            f"  {'-'*10} {'-'*6}   {'-'*8}   {'-'*9}   {'-'*15}",
+        ]
+        for b in self.per_bucket:
+            sign = "+" if b.median_signed_log_error >= 0 else ""
+            lines.append(
+                f"  {b.label:<10} {b.count:>6}    {b.median_pct_error:>7.1f}%"
+                f"      {b.median_log_error:>6.3f}"
+                f"          {sign}{b.median_signed_log_error:>6.3f}"
+            )
+        return "\n".join(lines)
 
 
 def evaluate_transformer(
@@ -153,13 +162,13 @@ def _compute_per_bucket(
     )
 
     per_bucket = []
-    for lo, hi, label in _PRICE_BUCKETS:
-        mask = (actual >= lo) & (actual < hi)
+    for bucket in REPORTING_BUCKETS:
+        mask = (actual >= bucket.low) & (actual < bucket.high)
         n = int(mask.sum())
         if n == 0:
             continue
         per_bucket.append(BucketMetrics(
-            label=label,
+            label=bucket.label,
             count=n,
             median_pct_error=round(float(np.median(pct_errors[mask])), 1),
             median_log_error=round(float(np.median(log_errors[mask])), 3),

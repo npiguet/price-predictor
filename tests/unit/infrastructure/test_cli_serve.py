@@ -45,13 +45,13 @@ class TestServeSubcommand:
 
 
 class TestRunServe:
-    def test_exits_2_when_model_not_found(self, capsys: pytest.CaptureFixture) -> None:
+    def test_exits_2_when_model_not_found(self, caplog: pytest.LogCaptureFixture) -> None:
         parser = build_parser()
         args = parser.parse_args(["serve", "--model-path", "nonexistent/model.joblib"])
-        exit_code = run_serve(args)
+        with caplog.at_level("ERROR"):
+            exit_code = run_serve(args)
         assert exit_code == 2
-        captured = capsys.readouterr()
-        assert "not found" in captured.err.lower()
+        assert "not found" in caplog.text.lower()
 
     @patch("uvicorn.run")
     @patch("price_predictor.infrastructure.model_store.load_model")

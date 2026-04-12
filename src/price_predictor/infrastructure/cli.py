@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +15,7 @@ def _require_path_exists(path: Path, label: str) -> bool:
     """Print an error and return False when ``path`` is missing; True otherwise."""
     if path.exists():
         return True
-    print(f"Error: {label} not found: {path}", file=sys.stderr)
+    logger.error("%s not found: %s", label, path)
     return False
 
 
@@ -83,7 +82,7 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
     train_transformer.add_argument("--ff-dim", type=int, default=1024,
                                    help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
-    train_transformer.set_defaults(func=run_train_transformer_new)
+    train_transformer.set_defaults(func=run_train_transformer)
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
@@ -131,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     eval_transformer.add_argument("--vocab-path", type=str,
                                   default="models/price-predictor/transformer/vocab.txt",
                                   help="Path to vocab.txt")
-    eval_transformer.set_defaults(func=run_evaluate_transformer_new)
+    eval_transformer.set_defaults(func=run_evaluate_transformer)
 
     # ── serve ─────────────────────────────────────────────────────
     serve_parser = subparsers.add_parser("serve",
@@ -228,23 +227,22 @@ def run_vocabulary(args: argparse.Namespace) -> int:
 
     txt_files = list(cards_path.rglob("*.txt"))
     if not txt_files:
-        print(f"Error: No .txt files found in {cards_path}", file=sys.stderr)
+        logger.error("No .txt files found in %s", cards_path)
         return 1
 
     output_dir = Path(args.output_dir)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        print(f"Error: Could not create output directory {output_dir}: {e}", file=sys.stderr)
+        logger.error("Could not create output directory %s: %s", output_dir, e)
         return 2
 
     printings_path_raw = getattr(args, "printings_path", "resources/AllPrintings.json")
     printings_path: Path | None = Path(printings_path_raw)
     if not printings_path.exists():
-        print(
-            f"Note: AllPrintings.json not found at {printings_path} — "
-            "set-code tokens will not be seeded.",
-            file=sys.stderr,
+        logger.warning(
+            "AllPrintings.json not found at %s — set-code tokens will not be seeded.",
+            printings_path,
         )
         printings_path = None
 
@@ -276,12 +274,12 @@ def run_serve(args: argparse.Namespace) -> int:
     from price_predictor.infrastructure.server import create_app
 
     model_path = Path(args.model_path)
-    print(f"Loading model from {model_path}...", file=sys.stderr)
+    logger.info("Loading model from %s...", model_path)
 
     try:
         artifact = load_model(model_path)
     except ModelNotFoundError:
-        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
+        logger.error("Model file not found at %s", model_path)
         return 2
 
     artifact["model_version"] = model_path.stem
@@ -290,7 +288,6 @@ def run_serve(args: argparse.Namespace) -> int:
         Path(args.vocab_path)
     )
 
-    # Build metadata map for auto-fill (optional — graceful if files missing)
     metadata_map = None
     printings_path = Path(args.printings_path)
     prices_path = Path(args.prices_path)
@@ -299,15 +296,15 @@ def run_serve(args: argparse.Namespace) -> int:
             from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
             metadata_map_result, _ = build_metadata_map(printings_path, prices_path)
             metadata_map = metadata_map_result
-            print(f"Metadata map loaded ({len(metadata_map)} cards).", file=sys.stderr)
-        except Exception as e:
-            print(f"Warning: Failed to build metadata map: {e}", file=sys.stderr)
+            logger.info("Metadata map loaded (%d cards).", len(metadata_map))
+        except (OSError, ValueError) as e:
+            logger.warning("Failed to build metadata map: %s", e)
     else:
-        print("Metadata files not found — auto-fill disabled.", file=sys.stderr)
+        logger.info("Metadata files not found — auto-fill disabled.")
 
     app = create_app(artifact, transformer_artifact=transformer_artifact,
                       metadata_map=metadata_map, tokenizer=tokenizer)
-    print(f"Prediction service started on http://{args.host}:{args.port}", file=sys.stderr)
+    logger.info("Prediction service started on http://%s:%d", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
 
@@ -324,10 +321,10 @@ def run_convert(args: argparse.Namespace) -> int:
     )
 
     if not connector_jar.exists():
-        print(
-            f"Error: Connector JAR not found at {connector_jar}\n"
+        logger.error(
+            "Connector JAR not found at %s\n"
             "Build it first: cd forge-connector && mvn package -DskipTests",
-            file=sys.stderr,
+            connector_jar,
         )
         return 2
 
@@ -338,7 +335,7 @@ def run_convert(args: argparse.Namespace) -> int:
 
     for jar in [forge_game_jar, forge_core_jar]:
         if not jar.exists():
-            print(f"Error: Forge JAR not found at {jar}", file=sys.stderr)
+            logger.error("Forge JAR not found at %s", jar)
             return 2
 
     sep = ";" if platform.system() == "Windows" else ":"
@@ -357,7 +354,7 @@ def run_convert(args: argparse.Namespace) -> int:
         result = subprocess.run(cmd, check=False)
         return result.returncode
     except FileNotFoundError:
-        print("Error: Java not found. Ensure java is on PATH.", file=sys.stderr)
+        logger.error("Java not found. Ensure java is on PATH.")
         return 2
 
 
@@ -373,15 +370,13 @@ def run_check_convert(args: argparse.Namespace) -> int:
     if not _require_path_exists(cards_dir, "Cards directory"):
         return 1
 
-    print(f"Checking converted files in {output_dir} against {cards_dir}...",
-          file=sys.stderr)
+    logger.info("Checking converted files in %s against %s...", output_dir, cards_dir)
 
     results = check_all(output_dir, cards_dir, threshold=args.threshold)
 
     report_path = output_dir / "check_report.txt"
     report_path.write_text(format_report(results), encoding="utf-8")
-    print(f"Report written to {report_path} ({len(results)} cards with issues)",
-          file=sys.stderr)
+    logger.info("Report written to %s (%d cards with issues)", report_path, len(results))
     print(format_report(results, limit=args.limit))
     return 0
 
@@ -392,7 +387,7 @@ def run_train_sklearn(args: argparse.Namespace) -> int:
 
     output_dir = Path(args.output_dir)
     if not _require_path_exists(output_dir, "Converted cards directory"):
-        print("Run 'convert' first to generate converted card text files.", file=sys.stderr)
+        logger.error("Run 'convert' first to generate converted card text files.")
         return 1
     prices_path = Path(args.prices_path)
     if not _require_path_exists(prices_path, "Prices file"):
@@ -411,10 +406,7 @@ def run_train_sklearn(args: argparse.Namespace) -> int:
             random_seed=args.random_seed,
         )
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         return 2
     output = {
         "model_version": result.trained_model.model_version,
@@ -431,16 +423,16 @@ def run_train_sklearn(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_train_transformer_new(args: argparse.Namespace) -> int:
+def run_train_transformer(args: argparse.Namespace) -> int:
     """Train the transformer model using converted card text files."""
     from price_predictor.application.train_transformer import train_transformer
 
     vocab_path = Path(args.vocab_path)
     if not vocab_path.exists():
-        print(
-            f"Error: Vocabulary file not found at {vocab_path}. "
+        logger.error(
+            "Vocabulary file not found at %s. "
             "Run 'python -m price_predictor vocabulary' first.",
-            file=sys.stderr,
+            vocab_path,
         )
         return 1
 
@@ -465,13 +457,10 @@ def run_train_transformer_new(args: argparse.Namespace) -> int:
             ff_dim=args.ff_dim,
         )
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         return 1
     except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         return 2
     return 0
 
@@ -486,9 +475,40 @@ def _load_metadata_map_optional() -> dict | None:
         from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
         metadata_map, _ = build_metadata_map(printings_path, prices_path)
         return metadata_map
-    except Exception as e:
+    except (OSError, ValueError) as e:
         logger.warning("Failed to load metadata map: %s", e)
         return None
+
+
+def _write_per_card_csv(path: Path, per_card: list[dict]) -> None:
+    """Write per-card evaluation rows to CSV at ``path``."""
+    import csv
+
+    fieldnames = [
+        "name", "actual_price_eur",
+        "predicted_price_eur", "absolute_error_eur",
+    ]
+    with open(path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(per_card)
+
+
+def _resolve_optional_printing_data(card_name: str):
+    """Look up PrintingData for a card name from the default metadata map.
+
+    Returns None when the metadata map is unavailable or the card name is
+    unknown — both cases mean the caller should fall back to its own default.
+    """
+    from price_predictor.domain.card_name_resolver import CardNameResolver
+
+    metadata_map = _load_metadata_map_optional()
+    if not metadata_map:
+        return None
+    resolver = CardNameResolver(metadata_map=metadata_map)
+    if resolver.canonicalize(card_name) is None:
+        return None
+    return resolver.lookup_printing_data(card_name)
 
 
 def _read_card_text(args: argparse.Namespace) -> str | None:
@@ -500,7 +520,7 @@ def _read_card_text(args: argparse.Namespace) -> str | None:
         try:
             return file_path.read_text(encoding="utf-8")
         except OSError as e:
-            print(f"Error: Could not read file: {e}", file=sys.stderr)
+            logger.error("Could not read file: %s", e)
             return None
     return args.card
 
@@ -562,34 +582,20 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
     try:
         card = parse_converted_text(card_text)
     except ValueError as e:
-        print(f"Error: Failed to parse card text: {e}", file=sys.stderr)
+        logger.error("Failed to parse card text: %s", e)
         return 1
 
-    # Look up PrintingData from metadata_map and attach to card. When unknown,
-    # leave printing_data unset so FeatureEngineering uses its zeroed branch.
-    metadata_map = _load_metadata_map_optional()
-    if metadata_map:
+    printing_data = _resolve_optional_printing_data(card.name)
+    if printing_data is not None:
         from dataclasses import replace
-
-        from price_predictor.domain.card_name_resolver import CardNameResolver
-        resolver = CardNameResolver(metadata_map=metadata_map)
-        if resolver.canonicalize(card.name) is not None:
-            card = replace(
-                card, printing_data=resolver.lookup_printing_data(card.name)
-            )
+        card = replace(card, printing_data=printing_data)
 
     model_path = Path("models/price-predictor/sklearn/latest.joblib")
     try:
         use_case = PredictPriceUseCase()
         result = use_case.execute(card, model_path)
     except ModelNotFoundError:
-        print(
-            f"Error: Model not found at {model_path}. Run 'train sklearn' first.",
-            file=sys.stderr,
-        )
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("Model not found at %s. Run 'train sklearn' first.", model_path)
         return 2
 
     output = {
@@ -610,30 +616,27 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     if card_text is None:
         return 1
 
-    # Look up PrintingData from metadata_map (side-channel, not in card text)
-    printing_data: PrintingData = PrintingData.defaults()
-    metadata_map = _load_metadata_map_optional()
-    if metadata_map:
-        from price_predictor.domain.card_name_resolver import CardNameResolver
-        from price_predictor.domain.tokenizer import extract_card_name
-        card_name = extract_card_name(card_text)
-        if card_name:
-            resolver = CardNameResolver(metadata_map=metadata_map)
-            printing_data = resolver.lookup_printing_data(card_name)
+    from price_predictor.domain.tokenizer import extract_card_name
+    card_name = extract_card_name(card_text)
+    printing_data: PrintingData | None = None
+    if card_name:
+        printing_data = _resolve_optional_printing_data(card_name)
+    if printing_data is None:
+        printing_data = PrintingData.defaults()
 
     vocab_path = Path(args.vocab_path)
     if not vocab_path.exists():
-        print(
-            f"Error: Vocabulary file not found at {vocab_path}. "
+        logger.error(
+            "Vocabulary file not found at %s. "
             "Run 'python -m price_predictor vocabulary' first.",
-            file=sys.stderr,
+            vocab_path,
         )
         return 1
 
     try:
         tokenizer = load_tokenizer(vocab_path)
-    except Exception as e:
-        print(f"Error: Failed to load tokenizer: {e}", file=sys.stderr)
+    except (OSError, ValueError) as e:
+        logger.error("Failed to load tokenizer: %s", e)
         return 1
 
     model_dir = Path("models/price-predictor/transformer/")
@@ -642,13 +645,7 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
         result = use_case.execute(card_text, model_dir, tokenizer=tokenizer,
                                   printing_data=printing_data)
     except FileNotFoundError:
-        print(
-            f"Error: Model not found at {model_dir}. Run 'train transformer' first.",
-            file=sys.stderr,
-        )
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("Model not found at %s. Run 'train transformer' first.", model_dir)
         return 2
 
     output = {
@@ -676,25 +673,14 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
             random_seed=args.random_seed,
         )
     except ModelNotFoundError:
-        print(f"Error: Model file not found at {model_path}", file=sys.stderr)
+        logger.error("Model file not found at %s", model_path)
         return 1
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         return 2
 
     if hasattr(args, 'output_csv') and args.output_csv and result.per_card:
-        import csv
-        with open(args.output_csv, "w", newline="") as f:
-            fieldnames = [
-                "name", "actual_price_eur",
-                "predicted_price_eur", "absolute_error_eur",
-            ]
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(result.per_card)
+        _write_per_card_csv(Path(args.output_csv), result.per_card)
 
     output = {
         "model_name": "sklearn",
@@ -709,16 +695,16 @@ def run_evaluate_sklearn(args: argparse.Namespace) -> int:
     return 0
 
 
-def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
+def run_evaluate_transformer(args: argparse.Namespace) -> int:
     """Evaluate the transformer model on held-out validation data."""
     from price_predictor.application.evaluate_transformer import evaluate_transformer
 
     vocab_path = Path(args.vocab_path)
     if not vocab_path.exists():
-        print(
-            f"Error: Vocabulary file not found at {vocab_path}. "
+        logger.error(
+            "Vocabulary file not found at %s. "
             "Run 'python -m price_predictor vocabulary' first.",
-            file=sys.stderr,
+            vocab_path,
         )
         return 1
 
@@ -733,13 +719,10 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
             random_seed=args.random_seed,
         )
     except FileNotFoundError:
-        print(f"Error: Model not found at {model_path}", file=sys.stderr)
+        logger.error("Model not found at %s", model_path)
         return 1
     except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 2
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("%s", e)
         return 2
 
     output = {
@@ -754,15 +737,7 @@ def run_evaluate_transformer_new(args: argparse.Namespace) -> int:
     print(json.dumps(output, indent=2))
 
     if result.per_bucket:
-        print("\nPer-bucket breakdown:")
-        print(f"  {'Bucket':<10} {'n':>6}   {'med%err':>8}   {'med|log|':>9}   {'med_signed_log':>15}")
-        print(f"  {'-'*10} {'-'*6}   {'-'*8}   {'-'*9}   {'-'*15}")
-        for b in result.per_bucket:
-            sign = "+" if b.median_signed_log_error >= 0 else ""
-            print(
-                f"  {b.label:<10} {b.count:>6}    {b.median_pct_error:>7.1f}%"
-                f"      {b.median_log_error:>6.3f}"
-                f"          {sign}{b.median_signed_log_error:>6.3f}"
-            )
+        print()
+        print(result.format_per_bucket_table())
 
     return 0

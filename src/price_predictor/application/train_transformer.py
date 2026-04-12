@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from price_predictor.application.converted_card_dataset import load_training_samples
 from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.entities import TransformerConfig
+from price_predictor.domain.price_buckets import SAMPLING_BUCKETS
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
@@ -68,17 +69,6 @@ def analyze_sequence_lengths(card_texts: list[str], tokenizer: MtgTokenizer) -> 
     return max_seq_len, stats
 
 
-def _price_bucket(price_eur: float) -> int:
-    """Assign a price to a bucket index for stratification/weighting."""
-    if price_eur < 2.0:
-        return 0
-    if price_eur < 10.0:
-        return 1
-    if price_eur < 50.0:
-        return 2
-    return 3
-
-
 def _make_weighted_sampler(prices: list[float], exponent: float = 0.5) -> WeightedRandomSampler:
     """Build a WeightedRandomSampler that upsamples expensive cards.
 
@@ -92,8 +82,8 @@ def _make_weighted_sampler(prices: list[float], exponent: float = 0.5) -> Weight
     makes a card expensive. Full inverse overcorrects and makes cheap cards wrong.
     Square-root weighting is the standard compromise.
     """
-    buckets = [_price_bucket(p) for p in prices]
-    bucket_counts = [0, 0, 0, 0]
+    buckets = [SAMPLING_BUCKETS.index_for(p) for p in prices]
+    bucket_counts = [0] * len(SAMPLING_BUCKETS)
     for b in buckets:
         bucket_counts[b] += 1
     weights = [1.0 / (bucket_counts[b] ** exponent) for b in buckets]
@@ -151,21 +141,6 @@ def _run_eval_epoch(
             loss = loss_fn(predictions, targets)
             losses.append(loss.item())
     return sum(losses) / len(losses)
-
-
-def _run_epoch(
-    model: CardPriceTransformerModel,
-    loader: DataLoader,
-    loss_fn: torch.nn.Module,
-    device: torch.device,
-    *,
-    optimizer: torch.optim.Optimizer | None = None,
-    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
-) -> float:
-    """Backwards-compatible wrapper that dispatches to the train or eval helper."""
-    if optimizer is not None:
-        return _run_training_epoch(model, loader, loss_fn, device, optimizer, scheduler)
-    return _run_eval_epoch(model, loader, loss_fn, device)
 
 
 class _BestCheckpoint:
@@ -297,7 +272,7 @@ def _build_loaders(
     random_seed: int,
 ) -> tuple[DataLoader, DataLoader]:
     """Stratified split + oversampled train loader + plain val loader."""
-    buckets_all = [_price_bucket(s.price_eur) for s in samples]
+    buckets_all = [SAMPLING_BUCKETS.index_for(s.price_eur) for s in samples]
     train_data, val_data = train_test_split(
         samples, test_size=0.2, random_state=random_seed, stratify=buckets_all,
     )

@@ -39,10 +39,10 @@ class TestEvaluateTransformerParser:
         assert args.model_path == "custom/path/"
 
 
-class TestRunEvaluateTransformerNew:
+class TestRunEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.evaluate_transformer")
     def test_success_prints_json(self, mock_eval, capsys, tmp_path):
-        from price_predictor.infrastructure.cli import run_evaluate_transformer_new
+        from price_predictor.infrastructure.cli import run_evaluate_transformer
 
         mock_result = MagicMock()
         mock_result.model_version = "transformer"
@@ -67,7 +67,7 @@ class TestRunEvaluateTransformerNew:
             vocab_path=str(vocab_path),
             random_seed=42,
         )
-        exit_code = run_evaluate_transformer_new(args)
+        exit_code = run_evaluate_transformer(args)
 
         assert exit_code == 0
         out = capsys.readouterr().out

@@ -30,36 +30,30 @@ def trained_model_path(fixtures_dir: Path, tmp_path: Path) -> Path:
     return result.model_path
 
 
+@pytest.fixture
+def evaluate_kwargs(fixtures_dir: Path, trained_model_path: Path) -> dict:
+    return {
+        "model_path": trained_model_path,
+        "output_dir": fixtures_dir / "converted_cards",
+        "prices_path": fixtures_dir / "allprices_sample.json",
+        "printings_path": fixtures_dir / "allprintings_sample.json",
+        "test_split": 0.2,
+        "random_seed": 42,
+    }
+
+
 class TestEvaluateModelUseCase:
-    def test_evaluate_returns_metrics(
-        self, trained_model_path: Path, fixtures_dir: Path
-    ) -> None:
+    def test_evaluate_returns_metrics(self, evaluate_kwargs: dict) -> None:
         use_case = EvaluateModelUseCase()
-        result = use_case.execute(
-            model_path=trained_model_path,
-            output_dir=fixtures_dir / "converted_cards",
-            prices_path=fixtures_dir / "allprices_sample.json",
-            printings_path=fixtures_dir / "allprintings_sample.json",
-            test_split=0.2,
-            random_seed=42,
-        )
+        result = use_case.execute(**evaluate_kwargs)
         assert result.metrics.sample_count > 0
         assert result.metrics.mean_absolute_error_eur >= 0
         assert result.metrics.median_percentage_error >= 0
         assert 0 <= result.metrics.top_20_overlap <= 1.0
 
-    def test_per_card_breakdown(
-        self, trained_model_path: Path, fixtures_dir: Path
-    ) -> None:
+    def test_per_card_breakdown(self, evaluate_kwargs: dict) -> None:
         use_case = EvaluateModelUseCase()
-        result = use_case.execute(
-            model_path=trained_model_path,
-            output_dir=fixtures_dir / "converted_cards",
-            prices_path=fixtures_dir / "allprices_sample.json",
-            printings_path=fixtures_dir / "allprintings_sample.json",
-            test_split=0.2,
-            random_seed=42,
-        )
+        result = use_case.execute(**evaluate_kwargs)
         assert result.per_card is not None
         assert len(result.per_card) == result.metrics.sample_count
         for entry in result.per_card:
@@ -67,26 +61,10 @@ class TestEvaluateModelUseCase:
             assert "actual_price_eur" in entry
             assert "predicted_price_eur" in entry
 
-    def test_reproducible_evaluation(
-        self, trained_model_path: Path, fixtures_dir: Path
-    ) -> None:
+    def test_reproducible_evaluation(self, evaluate_kwargs: dict) -> None:
         use_case = EvaluateModelUseCase()
-        r1 = use_case.execute(
-            model_path=trained_model_path,
-            output_dir=fixtures_dir / "converted_cards",
-            prices_path=fixtures_dir / "allprices_sample.json",
-            printings_path=fixtures_dir / "allprintings_sample.json",
-            test_split=0.2,
-            random_seed=42,
-        )
-        r2 = use_case.execute(
-            model_path=trained_model_path,
-            output_dir=fixtures_dir / "converted_cards",
-            prices_path=fixtures_dir / "allprices_sample.json",
-            printings_path=fixtures_dir / "allprintings_sample.json",
-            test_split=0.2,
-            random_seed=42,
-        )
+        r1 = use_case.execute(**evaluate_kwargs)
+        r2 = use_case.execute(**evaluate_kwargs)
         assert r1.metrics.mean_absolute_error_eur == r2.metrics.mean_absolute_error_eur
         assert r1.metrics.median_percentage_error == r2.metrics.median_percentage_error
 
