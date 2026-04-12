@@ -50,13 +50,13 @@ class TestMtgTokenizerConstruction:
 class TestMtgTokenizerTokenize:
     def test_lowercases_plain_text(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("Flying Vigilance")
+        tokens = tok.tokenize("Flying Vigilance")
         assert "flying" in tokens
         assert "vigilance" in tokens
 
     def test_mana_symbols_stay_uppercase(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("{W}{R}")
+        tokens = tok.tokenize("{W}{R}")
         assert "{W}" in tokens
         assert "{R}" in tokens
         assert "{w}" not in tokens
@@ -64,31 +64,31 @@ class TestMtgTokenizerTokenize:
 
     def test_multi_word_keyword_replaced_before_split(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("first strike")
+        tokens = tok.tokenize("first strike")
         assert "first_strike" in tokens
         assert "first" not in tokens
         assert "strike" not in tokens
 
     def test_double_strike_takes_priority_over_strike(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("double strike")
+        tokens = tok.tokenize("double strike")
         assert "double_strike" in tokens
         assert "double" not in tokens
         assert "strike" not in tokens
 
     def test_cardname_lowercased(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("CARDNAME deals damage")
+        tokens = tok.tokenize("CARDNAME deals damage")
         assert "cardname" in tokens
 
     def test_numbers_extracted(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("deals 3 damage")
+        tokens = tok.tokenize("deals 3 damage")
         assert "3" in tokens
 
     def test_punctuation_extracted(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("flying, vigilance")
+        tokens = tok.tokenize("flying, vigilance")
         assert "," in tokens
 
 
@@ -191,20 +191,20 @@ class TestNameLineNormalization:
 
     def test_card_name_words_not_in_token_stream(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("name: kumano faces kakkazan\ntypes: creature")
+        tokens = tok.tokenize("name: kumano faces kakkazan\ntypes: creature")
         assert "kumano" not in tokens
         assert "faces" not in tokens
         assert "kakkazan" not in tokens
 
     def test_cardname_placeholder_present_after_name_line(self):
         tok = _make_tokenizer()
-        tokens = tok._tokenize("name: lightning bolt\ntypes: instant")
+        tokens = tok.tokenize("name: lightning bolt\ntypes: instant")
         assert "cardname" in tokens
 
     def test_both_name_lines_normalized_in_double_faced_card(self):
         tok = _make_tokenizer()
         text = "name: delver of secrets\ntypes: creature\n\nALTERNATE\n\nname: insectile aberration\ntypes: creature"
-        tokens = tok._tokenize(text)
+        tokens = tok.tokenize(text)
         assert "delver" not in tokens
         assert "insectile" not in tokens
         assert "aberration" not in tokens
@@ -214,7 +214,7 @@ class TestNameLineNormalization:
         """'name:' only matches at line start — mid-sentence occurrences are untouched."""
         tok = _make_tokenizer()
         # "flying" should still appear; "name:" mid-sentence won't match ^name:
-        tokens = tok._tokenize("keyword: flying\nname: test card\nother: text")
+        tokens = tok.tokenize("keyword: flying\nname: test card\nother: text")
         assert "flying" in tokens
         assert "cardname" in tokens
 
@@ -237,7 +237,7 @@ class TestManaCostNormalization:
             "creature": 6,
         }
         tok = MtgTokenizer(vocab)
-        tokens = tok._tokenize("name: Island\ntypes: land basic island")
+        tokens = tok.tokenize("name: Island\ntypes: land basic island")
         assert "none" in tokens
 
     def test_card_with_mana_cost_line_no_none_appended(self):
@@ -247,7 +247,7 @@ class TestManaCostNormalization:
             "creature": 6,
         }
         tok = MtgTokenizer(vocab)
-        tokens = tok._tokenize("name: Lightning Bolt\nmana cost: {R}\ntypes: instant")
+        tokens = tok.tokenize("name: Lightning Bolt\nmana cost: {R}\ntypes: instant")
         assert "none" not in tokens
 
     def test_zero_cost_card_no_none_appended(self):
@@ -257,7 +257,7 @@ class TestManaCostNormalization:
             "mana": 3, "cost": 4, "none": 5,
         }
         tok = MtgTokenizer(vocab)
-        tokens = tok._tokenize("name: Black Lotus\nmana cost: {0}\ntypes: artifact")
+        tokens = tok.tokenize("name: Black Lotus\nmana cost: {0}\ntypes: artifact")
         assert "none" not in tokens
 
 

@@ -5,7 +5,14 @@ from __future__ import annotations
 import re
 
 _NAME_LINE_RE = re.compile(r"(?m)^name:.*$")
+_NAME_VALUE_RE = re.compile(r"(?im)^\s*name:\s*(.+?)\s*$")
 _MANA_COST_LINE_RE = re.compile(r"(?m)^mana cost:", re.IGNORECASE)
+
+
+def extract_card_name(text: str) -> str | None:
+    """Return the value of the ``name:`` line in converted card text, or None."""
+    match = _NAME_VALUE_RE.search(text)
+    return match.group(1) if match else None
 
 
 class MtgTokenizer:
@@ -51,7 +58,7 @@ class MtgTokenizer:
         Normalizes text → tokenizes → maps to IDs → truncates → pads.
         attention_mask is 1 for real tokens and 0 for padding.
         """
-        tokens = self._tokenize(text)
+        tokens = self.tokenize(text)
         ids = [self._vocab.get(t, self.UNK_ID) for t in tokens]
 
         # Truncate to max_length
@@ -77,7 +84,7 @@ class MtgTokenizer:
             tokens.append(self._reverse_vocab.get(tid, self.UNK))
         return " ".join(tokens)
 
-    def _tokenize(self, text: str) -> list[str]:
+    def tokenize(self, text: str) -> list[str]:
         """Normalize text and split into tokens.
 
         Steps:

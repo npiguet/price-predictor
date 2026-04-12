@@ -130,7 +130,7 @@ class TestEndToEnd:
         fe = artifact["feature_engineering"]
         # Dense features should be 95 (76 old + 18 printing data + 1 has_mana_cost)
         # TF-IDF vocab may be smaller than 500 on small fixture data
-        tfidf_count = len(fe._tfidf.vocabulary_)
+        tfidf_count = len(fe.tfidf_.vocabulary_)
         dense_count = fe.get_feature_count() - tfidf_count
         assert dense_count == 95  # 76 old dense + 18 printing data + 1 has_mana_cost
 

@@ -31,10 +31,9 @@ class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_tokenizer")
     @patch("price_predictor.application.evaluate_transformer.load_model")
     @patch("price_predictor.application.evaluate_transformer.build_metadata_map")
-    @patch("price_predictor.application.evaluate_transformer.build_name_to_uuids")
     @patch("price_predictor.application.evaluate_transformer._match_texts_to_prices")
     def test_returns_eval_result_with_metrics(
-        self, mock_match, mock_name_uuids, mock_metadata_map, mock_load,
+        self, mock_match, mock_metadata_map, mock_load,
         mock_load_tokenizer, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
@@ -55,7 +54,6 @@ class TestEvaluateTransformer:
         mock_load.return_value = (mock_model, config)
 
         mock_metadata_map.return_value = ({}, {})
-        mock_name_uuids.return_value = ({}, {})
 
         # _match_texts_to_prices returns 25 matched cards (reads files directly)
         from price_predictor.domain.value_objects import PrintingData

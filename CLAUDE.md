@@ -58,8 +58,8 @@ Subcommands:
 
 Key modules inside `price_predictor`:
 - `domain/` — `entities.py` (Card, PriceEstimate, TrainingExample, TrainedModel, EvaluationMetrics), `value_objects.py` (ManaCost, PrintingData), `tokenizer.py` (custom MTG tokenizer).
-- `application/` — one file per use case (`train.py`, `train_transformer.py`, `predict.py`, `predict_transformer.py`, `evaluate.py`, `evaluate_transformer.py`, `build_vocabulary.py`, `feature_engineering.py`, `card_enrichment.py`, `check_convert.py`).
-- `infrastructure/` — `cli.py` (argparse wiring), `server.py` (FastAPI app), `forge_parser.py`, `converted_card_parser.py`, `mtgjson_loader.py`, `model_store.py` (joblib), `transformer_model.py`, `transformer_store.py` (`.pt`), `transformer_dataset.py`, `tokenizer_store.py`, `metadata_encoder.py`.
+- `application/` — one file per use case (`train.py`, `train_transformer.py`, `predict.py`, `predict_transformer.py`, `evaluate.py`, `evaluate_transformer.py`, `build_vocabulary.py`, `feature_engineering.py`, `check_convert.py`).
+- `infrastructure/` — `cli.py` (argparse wiring), `server.py` (FastAPI app), `converted_card_parser.py`, `mtgjson_loader.py`, `model_store.py` (joblib), `transformer_model.py`, `transformer_store.py` (`.pt`), `transformer_dataset.py`, `tokenizer_store.py`, `metadata_encoder.py`.
 
 The two model types have **different input contracts**:
 - `sklearn` takes a parsed `Card` object and runs it through `FeatureEngineering` to produce a numeric vector.

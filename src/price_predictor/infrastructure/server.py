@@ -13,6 +13,8 @@ import numpy as np
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from price_predictor.domain.card_name_resolver import CardNameResolver
+from price_predictor.domain.tokenizer import extract_card_name
 from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
 logger = logging.getLogger(__name__)
@@ -32,15 +34,6 @@ def _build_log_entry(
     }
     entry.update(extra)
     return entry
-
-
-def _extract_card_name_from_text(text: str) -> str | None:
-    """Extract card name from a 'name: ...' line in card text."""
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.lower().startswith("name:"):
-            return stripped[len("name:"):].strip()
-    return None
 
 
 def create_app(
@@ -63,6 +56,9 @@ def create_app(
     app.state.model_artifact = model_artifact
     app.state.transformer_artifact = transformer_artifact
     app.state.metadata_map = metadata_map or {}
+    app.state.card_name_resolver = (
+        CardNameResolver(metadata_map=metadata_map) if metadata_map else None
+    )
     app.state.tokenizer = tokenizer
 
     @app.post("/api/v1/predict")
@@ -70,15 +66,17 @@ def create_app(
         start = time.perf_counter()
         body = (await request.body()).decode("utf-8")
 
-        # Look up PrintingData from metadata_map for the card in the request
+        # Look up PrintingData from metadata_map for the card in the request.
+        # When unknown, leave it None so feature engineering uses its zeroed
+        # branch instead of the (real-looking) PrintingData.defaults() values.
         from price_predictor.domain.value_objects import PrintingData
         printing_data: PrintingData | None = None
-        card_name_for_lookup = _extract_card_name_from_text(body)
-        meta_map = request.app.state.metadata_map
-        if card_name_for_lookup and meta_map:
-            pd = meta_map.get(card_name_for_lookup) or meta_map.get(card_name_for_lookup.lower())
-            if pd is not None:
-                printing_data = pd
+        card_name_for_lookup = extract_card_name(body)
+        resolver: CardNameResolver | None = request.app.state.card_name_resolver
+        if card_name_for_lookup and resolver is not None:
+            canonical = resolver.canonicalize(card_name_for_lookup)
+            if canonical is not None:
+                printing_data = resolver.lookup_printing_data(card_name_for_lookup)
 
         try:
             card = parse_converted_text(body)

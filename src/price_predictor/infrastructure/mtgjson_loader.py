@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,32 @@ def _is_constructed_legal(legalities: dict) -> bool:
         legalities.get(fmt, "") in ("Legal", "Restricted")
         for fmt in RECOGNIZED_FORMATS
     )
+
+
+def _iter_cardmarket_prices(uuid_data: dict) -> Iterator[float]:
+    """Yield the latest-date CardMarket retail price for each finish, when present."""
+    retail = uuid_data.get("paper", {}).get("cardmarket", {}).get("retail", {})
+    for finish in ("normal", "foil"):
+        finish_data = retail.get(finish, {})
+        if not finish_data:
+            continue
+        latest_date = max(finish_data.keys())
+        price = finish_data[latest_date]
+        if price is not None and price >= 0:
+            yield price
+
+
+def _compute_is_abu(
+    card_legal_uuids: Sequence[str],
+    uuid_meta: dict[str, dict[str, Any]],
+) -> bool:
+    """Return True iff every tournament-legal printing is in Alpha/Beta/Unlimited."""
+    legal_set_codes = {
+        uuid_meta[u]["setCode"].lower()
+        for u in card_legal_uuids
+        if u in uuid_meta
+    }
+    return bool(legal_set_codes) and legal_set_codes.issubset(_ABU_SET_CODES)
 
 
 def build_name_to_uuids(
@@ -90,51 +117,6 @@ def build_name_to_uuids(
     return mapping, uuid_meta
 
 
-def get_cheapest_price(
-    allprices_path: Path, uuids: list[str]
-) -> float | None:
-    """Get the cheapest Cardmarket EUR price across all given UUIDs.
-
-    Checks both normal and foil finishes. Applies a €0.01 price floor.
-    Returns None if no price found.
-    """
-    with open(allprices_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    prices_data = data.get("data", {})
-    all_prices: list[float] = []
-
-    for uuid in uuids:
-        uuid_data = prices_data.get(uuid, {})
-        paper = uuid_data.get("paper", {})
-        cardmarket = paper.get("cardmarket", {})
-        retail = cardmarket.get("retail", {})
-
-        for finish in ("normal", "foil"):
-            finish_data = retail.get(finish, {})
-            if finish_data:
-                # Get the most recent date's price
-                latest_date = max(finish_data.keys())
-                price = finish_data[latest_date]
-                if price is not None and price >= 0:
-                    all_prices.append(price)
-
-    return max(min(all_prices), 0.01) if all_prices else None
-
-
-def build_price_map(
-    allprices_path: Path, name_to_uuids: dict[str, list[str]]
-) -> dict[str, float]:
-    """Build a mapping of card name -> cheapest EUR price.
-
-    Loads the prices file once and looks up all cards.
-    Applies a €0.01 price floor to all prices.
-    Returns only cards with a valid price >= 0.
-    """
-    price_map, _ = build_price_map_with_uuids(allprices_path, name_to_uuids)
-    return price_map
-
-
 def build_price_map_with_uuids(
     allprices_path: Path,
     name_to_uuids: dict[str, list[str]],
@@ -167,20 +149,10 @@ def build_price_map_with_uuids(
 
         candidate_uuids = [u for u in uuids if legal_uuids is None or u in legal_uuids]
         for uuid in candidate_uuids:
-            uuid_data = prices_data.get(uuid, {})
-            paper = uuid_data.get("paper", {})
-            cardmarket = paper.get("cardmarket", {})
-            retail = cardmarket.get("retail", {})
-
-            for finish in ("normal", "foil"):
-                finish_data = retail.get(finish, {})
-                if finish_data:
-                    latest_date = max(finish_data.keys())
-                    price = finish_data[latest_date]
-                    if price is not None and price >= 0:
-                        if best_price is None or price < best_price:
-                            best_price = price
-                            best_uuid = uuid
+            for price in _iter_cardmarket_prices(prices_data.get(uuid, {})):
+                if best_price is None or price < best_price:
+                    best_price = price
+                    best_uuid = uuid
 
         if best_price is not None and best_uuid is not None:
             selected_price = max(best_price, 0.01)
@@ -269,14 +241,8 @@ def build_metadata_map(
             if raw_legalities.get(fmt, "") == "Legal"
         )
 
-        # is_abu: all tournament-legal printings of this card are in Alpha/Beta/Unlimited
         card_legal_uuids = [u for u in name_to_uuids.get(name, []) if u in legal_uuids]
-        legal_set_codes = {
-            uuid_meta[u]["setCode"].lower()
-            for u in card_legal_uuids
-            if u in uuid_meta
-        }
-        is_abu = bool(legal_set_codes) and legal_set_codes.issubset(_ABU_SET_CODES)
+        is_abu = _compute_is_abu(card_legal_uuids, uuid_meta)
 
         metadata_map[name] = PrintingData(
             is_reserved=is_reserved,

@@ -17,7 +17,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from price_predictor.domain.tokenizer import _NAME_LINE_RE, _MANA_COST_LINE_RE
+from price_predictor.domain.tokenizer import MtgTokenizer
 
 # Multi-word keywords derived from forge.game.keyword.Keyword enum.
 # Entries whose display name contains a space, normalized to:
@@ -70,10 +70,10 @@ _COLOR_NAMES: tuple[str, ...] = (
     "white",
 )
 
-# Printing-data field names and values added by card_enrichment.py at training
-# time. These never appear in raw converted card texts, so they would always be
-# UNK without explicit seeding — causing rarity, reserved list, and legality
-# information to be completely invisible to the model.
+# Printing-data field names and values fed to the model as side-channel
+# metadata at training time. These never appear in raw converted card texts,
+# so they would always be UNK without explicit seeding — causing rarity,
+# reserved list, and legality information to be completely invisible.
 _PRINTING_DATA_TERMS: tuple[str, ...] = (
     # Boolean values (used by reserved:)
     "false",
@@ -139,36 +139,20 @@ class VocabBuildResult:
     unk_pct: float
 
 
-def _selective_normalize(text: str) -> str:
-    """Lowercase non-brace-enclosed text; keep mana symbols as-is."""
-    parts = re.split(r"(\{[^}]+\})", text)
-    return "".join(p if p.startswith("{") else p.lower() for p in parts)
+def _bootstrap_tokenizer() -> MtgTokenizer:
+    """Build a tokenizer suitable for vocabulary scanning.
 
-
-def _replace_multi_word_keywords(text: str) -> str:
-    """Replace multi-word keyword display forms with underscore form.
-
-    Sorted longest-first to handle overlaps (e.g. "double strike" before "strike").
+    The token IDs are irrelevant here — only the tokenize() output is used.
+    Multi-word keywords must be present in the vocab so that MtgTokenizer's
+    longest-first replacement step recognizes them.
     """
-    sorted_kws = sorted(MULTI_WORD_KEYWORDS, key=len, reverse=True)
-    for kw in sorted_kws:
-        display = kw.replace("_", " ")
-        text = text.replace(display, kw)
-    return text
-
-
-def _tokenize_text(text: str) -> list[str]:
-    """Full tokenization pipeline: normalize → replace keywords → split.
-
-    Mirrors MtgTokenizer._tokenize so the vocabulary only contains tokens
-    that can actually appear at training/inference time.
-    """
-    text = _NAME_LINE_RE.sub("name: cardname", text)
-    if not _MANA_COST_LINE_RE.search(text):
-        text = text + "\nmana cost: none"
-    text = _selective_normalize(text)
-    text = _replace_multi_word_keywords(text)
-    return re.findall(r"[a-z_]+|\{[^}]+\}|\d+|[^\s\w]", text)
+    bootstrap_vocab: dict[str, int] = {
+        MtgTokenizer.PAD: MtgTokenizer.PAD_ID,
+        MtgTokenizer.UNK: MtgTokenizer.UNK_ID,
+    }
+    for kw in MULTI_WORD_KEYWORDS:
+        bootstrap_vocab[kw] = len(bootstrap_vocab)
+    return MtgTokenizer(bootstrap_vocab)
 
 
 def build_vocabulary(
@@ -236,13 +220,14 @@ def build_vocabulary(
 
     token_counts: Counter[str] = Counter()
     total_token_occurrences = 0
+    tokenizer = _bootstrap_tokenizer()
 
     for txt_file in txt_files:
         try:
             text = txt_file.read_text(encoding="utf-8")
         except OSError:
             continue
-        tokens = _tokenize_text(text)
+        tokens = tokenizer.tokenize(text)
         token_counts.update(tokens)
         total_token_occurrences += len(tokens)
 

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.utils.validation import check_is_fitted
 
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import RECOGNIZED_FORMATS
@@ -16,6 +20,8 @@ CARD_TYPES = [
 SUPERTYPES = ["Legendary", "Basic", "Snow", "World", "Ongoing", "Host"]
 LAYOUTS = ["normal", "doublefaced", "split", "adventure", "modal", "flip"]
 RARITIES = ["common", "uncommon", "rare", "mythic"]
+
+_TOP_KEYWORD_LIMIT = 30
 
 
 def _parse_pt(value: str | None) -> tuple[float, bool]:
@@ -34,150 +40,137 @@ def _parse_pt(value: str | None) -> tuple[float, bool]:
         return float("nan"), False
 
 
-class FeatureEngineering:
+class FeatureEngineering(BaseEstimator, TransformerMixin):
     """Transforms Card entities into numeric feature vectors for ML models."""
 
-    def __init__(self, random_seed: int = 42):
-        self._random_seed = random_seed
-        self._top_keywords: list[str] = []
-        self._tfidf = TfidfVectorizer(
+    def __init__(self, random_seed: int = 42) -> None:
+        self.random_seed = random_seed
+
+    def fit(self, X: list[Card], y: object = None) -> "FeatureEngineering":
+        """Learn TF-IDF vocabulary and top-30 keywords from training cards."""
+        keyword_counts: dict[str, int] = {}
+        for card in X:
+            for kw in card.keywords:
+                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
+        sorted_kw = sorted(keyword_counts.items(), key=lambda x: -x[1])
+        self.top_keywords_ = [kw for kw, _ in sorted_kw[:_TOP_KEYWORD_LIMIT]]
+
+        self.tfidf_ = TfidfVectorizer(
             max_features=500,
             stop_words="english",
             lowercase=True,
         )
-        self._is_fitted = False
+        texts = [card.oracle_text or "" for card in X]
+        self.tfidf_.fit(texts)
 
-    def fit(self, cards: list[Card]) -> "FeatureEngineering":
-        """Learn TF-IDF vocabulary and top-30 keywords from training cards."""
-        # Learn top keywords
-        keyword_counts: dict[str, int] = {}
-        for card in cards:
-            for kw in card.keywords:
-                keyword_counts[kw] = keyword_counts.get(kw, 0) + 1
-        sorted_kw = sorted(keyword_counts.items(), key=lambda x: -x[1])
-        self._top_keywords = [kw for kw, _ in sorted_kw[:30]]
-
-        # Fit TF-IDF on oracle texts
-        texts = [card.oracle_text or "" for card in cards]
-        self._tfidf.fit(texts)
-
-        self._is_fitted = True
+        # Probe one card to discover the dense feature width — guarantees
+        # get_feature_count never drifts from the actual transform output.
+        probe = X[0] if X else Card(name="probe", types=["Creature"])
+        self.n_dense_features_ = sum(
+            len(group(probe)) for group in self._feature_groups()
+        )
         return self
 
-    def transform(self, cards: list[Card]) -> np.ndarray:
+    def transform(self, X: list[Card]) -> np.ndarray:
         """Transform cards into a numeric feature matrix."""
-        if not self._is_fitted:
-            raise RuntimeError("FeatureEngineering must be fitted before transform")
+        check_is_fitted(self, ["top_keywords_", "tfidf_"])
 
-        rows = []
-        for card in cards:
-            row = self._transform_single(card)
-            rows.append(row)
-
-        # Combine dense features
-        dense = np.array([r[0] for r in rows], dtype=np.float64)
-
-        # TF-IDF sparse → dense
-        texts = [card.oracle_text or "" for card in cards]
-        tfidf_matrix = self._tfidf.transform(texts).toarray()
-
+        dense = np.array(
+            [self._dense_features(card) for card in X],
+            dtype=np.float64,
+        )
+        texts = [card.oracle_text or "" for card in X]
+        tfidf_matrix = self.tfidf_.transform(texts).toarray()
         return np.hstack([dense, tfidf_matrix])
-
-    def _transform_single(self, card: Card) -> tuple[list[float], None]:
-        """Transform a single card into a dense feature list."""
-        features: list[float] = []
-
-        # Mana cost features
-        mc = card.mana_cost
-        if mc is not None:
-            features.append(1.0)  # has_mana_cost
-            features.append(mc.total_mana_value)
-            features.extend([float(mc.w), float(mc.u), float(mc.b), float(mc.r), float(mc.g)])
-            features.append(float(mc.color_count))
-            features.append(float(mc.generic_mana))
-            features.append(float(mc.colorless_mana))
-            features.append(float(mc.has_x))
-            features.append(float(mc.has_hybrid))
-            features.append(float(mc.has_phyrexian))
-        else:
-            features.extend([0.0] * 13)  # has_mana_cost=0, all other mana features = 0
-
-        # Card type multi-hot
-        for ct in CARD_TYPES:
-            features.append(1.0 if ct in card.types else 0.0)
-
-        # Supertype multi-hot
-        for st in SUPERTYPES:
-            features.append(1.0 if st in card.supertypes else 0.0)
-
-        # Subtypes count
-        features.append(float(len(card.subtypes)))
-
-        # Keywords multi-hot (top 30) — always 30 features
-        card_keywords_set = set(card.keywords)
-        for kw in self._top_keywords:
-            features.append(1.0 if kw in card_keywords_set else 0.0)
-        # Pad to 30 if fewer keywords were learned from training data
-        features.extend([0.0] * (30 - len(self._top_keywords)))
-
-        # Keyword count
-        features.append(float(len(card.keywords)))
-
-        # Oracle text length
-        features.append(float(len(card.oracle_text)) if card.oracle_text else 0.0)
-
-        # Power, toughness
-        power_val, power_star = _parse_pt(card.power)
-        toughness_val, toughness_star = _parse_pt(card.toughness)
-        features.append(power_val if not np.isnan(power_val) else 0.0)
-        features.append(toughness_val if not np.isnan(toughness_val) else 0.0)
-        features.append(float(power_star))
-        features.append(float(toughness_star))
-
-        # Loyalty
-        if card.loyalty is not None:
-            try:
-                features.append(float(card.loyalty))
-            except ValueError:
-                features.append(0.0)
-        else:
-            features.append(0.0)
-
-        # Ability count
-        features.append(float(card.ability_count))
-
-        # Layout one-hot
-        for layout in LAYOUTS:
-            features.append(1.0 if card.layout == layout else 0.0)
-
-        # Printing data features (17 total)
-        pd = card.printing_data
-        if pd is not None:
-            features.append(1.0 if pd.is_reserved else 0.0)
-            features.append(1.0 if pd.is_abu else 0.0)
-            # Rarity one-hot (4: common/uncommon/rare/mythic)
-            effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
-            for r in RARITIES:
-                features.append(1.0 if effective_rarity == r else 0.0)
-            features.append(float(pd.printings_count))
-            legalities_set = set(pd.legalities)
-            features.append(float(len(legalities_set)))
-            for fmt in RECOGNIZED_FORMATS:
-                features.append(1.0 if fmt in legalities_set else 0.0)
-        else:
-            features.extend([0.0] * 18)
-
-        return features, None
 
     def get_feature_count(self) -> int:
         """Return the total number of features produced by transform."""
-        # Dense features: 13 (mana: has_mana_cost + 12) + 13 (types) + 6 (supertypes) + 1 (subtypes count)
-        #   + 30 (keywords) + 1 (kw count) + 1 (text len)
-        #   + 2 (power/toughness) + 2 (star indicators) + 1 (loyalty) + 1 (ability count)
-        #   + 6 (layout) + 18 (printing data: is_reserved, is_abu, 4 rarity, printings, legalities_count, 10 formats)
-        dense = 13 + 13 + 6 + 1 + 30 + 1 + 1 + 2 + 2 + 1 + 1 + 6 + 18
-        if self._is_fitted and hasattr(self._tfidf, "vocabulary_"):
-            tfidf = len(self._tfidf.vocabulary_)
-        else:
-            tfidf = self._tfidf.max_features or 500
-        return dense + tfidf
+        check_is_fitted(self, ["tfidf_"])
+        return self.n_dense_features_ + len(self.tfidf_.vocabulary_)
+
+    def _feature_groups(self) -> tuple[Callable[[Card], list[float]], ...]:
+        return (
+            self._mana_features,
+            self._type_features,
+            self._supertype_features,
+            self._keyword_features,
+            self._pt_features,
+            self._layout_features,
+            self._printing_features,
+        )
+
+    def _dense_features(self, card: Card) -> list[float]:
+        result: list[float] = []
+        for group in self._feature_groups():
+            result.extend(group(card))
+        return result
+
+    def _mana_features(self, card: Card) -> list[float]:
+        mc = card.mana_cost
+        if mc is None:
+            return [0.0] * 13
+        return [
+            1.0,  # has_mana_cost
+            mc.total_mana_value,
+            float(mc.w), float(mc.u), float(mc.b), float(mc.r), float(mc.g),
+            float(mc.color_count),
+            float(mc.generic_mana),
+            float(mc.colorless_mana),
+            float(mc.has_x),
+            float(mc.has_hybrid),
+            float(mc.has_phyrexian),
+        ]
+
+    def _type_features(self, card: Card) -> list[float]:
+        return [1.0 if ct in card.types else 0.0 for ct in CARD_TYPES]
+
+    def _supertype_features(self, card: Card) -> list[float]:
+        features = [1.0 if st in card.supertypes else 0.0 for st in SUPERTYPES]
+        features.append(float(len(card.subtypes)))
+        return features
+
+    def _keyword_features(self, card: Card) -> list[float]:
+        card_keywords_set = set(card.keywords)
+        features = [1.0 if kw in card_keywords_set else 0.0 for kw in self.top_keywords_]
+        # Pad to fixed width when training data was too small to learn full top-K.
+        features.extend([0.0] * (_TOP_KEYWORD_LIMIT - len(self.top_keywords_)))
+        features.append(float(len(card.keywords)))
+        features.append(float(len(card.oracle_text)) if card.oracle_text else 0.0)
+        return features
+
+    def _pt_features(self, card: Card) -> list[float]:
+        power_val, power_star = _parse_pt(card.power)
+        toughness_val, toughness_star = _parse_pt(card.toughness)
+        loyalty = 0.0
+        if card.loyalty is not None:
+            try:
+                loyalty = float(card.loyalty)
+            except ValueError:
+                loyalty = 0.0
+        return [
+            power_val if not np.isnan(power_val) else 0.0,
+            toughness_val if not np.isnan(toughness_val) else 0.0,
+            float(power_star),
+            float(toughness_star),
+            loyalty,
+            float(card.ability_count),
+        ]
+
+    def _layout_features(self, card: Card) -> list[float]:
+        return [1.0 if card.layout == layout else 0.0 for layout in LAYOUTS]
+
+    def _printing_features(self, card: Card) -> list[float]:
+        pd = card.printing_data
+        if pd is None:
+            return [0.0] * 18
+        features = [
+            1.0 if pd.is_reserved else 0.0,
+            1.0 if pd.is_abu else 0.0,
+        ]
+        effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
+        features.extend(1.0 if effective_rarity == r else 0.0 for r in RARITIES)
+        features.append(float(pd.printings_count))
+        legalities_set = set(pd.legalities)
+        features.append(float(len(legalities_set)))
+        features.extend(1.0 if fmt in legalities_set else 0.0 for fmt in RECOGNIZED_FORMATS)
+        return features

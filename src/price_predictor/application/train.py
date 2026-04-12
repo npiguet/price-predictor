@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,6 +12,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 
 from price_predictor.application.feature_engineering import FeatureEngineering
+from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.entities import TrainedModel
 from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import save_model
@@ -50,45 +51,25 @@ class TrainModelUseCase:
 
         # 2. Build metadata map and price map
         metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+        resolver = CardNameResolver(price_map, metadata_map)
 
-        # 3. Build case-insensitive lookup
-        lower_to_canonical: dict[str, str] = {k.lower(): k for k in price_map}
-
-        # 4. Join cards to prices and attach printing data
+        # 3. Join cards to prices and attach printing data
         training_cards = []
         training_prices = []
         skipped_reasons: dict[str, int] = {
             "parse_error": len(parse_errors),
             "no_printings_match": 0,
-            "no_price": 0,
         }
 
         for card in cards:
-            card_name_lower = card.name.lower()
-            canonical = lower_to_canonical.get(card_name_lower)
-            if canonical is None:
-                # Try split card naming convention: "front // back"
-                found = False
-                for full_lower, full_canonical in lower_to_canonical.items():
-                    if full_lower.startswith(card_name_lower + " // "):
-                        canonical = full_canonical
-                        found = True
-                        break
-                if not found:
-                    skipped_reasons["no_printings_match"] += 1
-                    continue
-
-            if canonical not in price_map:
-                skipped_reasons["no_price"] += 1
+            resolved = resolver.resolve(card.name)
+            if resolved is None:
+                skipped_reasons["no_printings_match"] += 1
                 continue
 
-            # Attach printing data from metadata map (Card is frozen, create new)
-            pd = metadata_map.get(canonical)
-            from dataclasses import replace
-            enriched_card = replace(card, printing_data=pd) if pd else card
-
+            enriched_card = replace(card, printing_data=resolved.printing_data)
             training_cards.append(enriched_card)
-            training_prices.append(price_map[canonical])
+            training_prices.append(resolved.price_eur)
 
         total_skipped = sum(skipped_reasons.values())
 

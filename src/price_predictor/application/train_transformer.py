@@ -13,13 +13,11 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
+from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.entities import TransformerConfig
-from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.tokenizer import MtgTokenizer, extract_card_name
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.mtgjson_loader import (
-    build_metadata_map,
-    build_name_to_uuids,
-)
+from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
@@ -46,56 +44,35 @@ class TransformerTrainResult:
 
 def _match_cards_to_texts(
     output_dir: Path,
-    name_to_uuids: dict,
     price_map: dict,
     metadata_map: dict | None = None,
 ) -> list[tuple[str, str, float, PrintingData]]:
     """Read converted text files from output_dir, match to prices and PrintingData.
 
     Returns list of (card_name, text, price_eur, printing_data) tuples.
-    PrintingData is looked up from metadata_map (or defaults if not found).
     """
-    lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
+    resolver = CardNameResolver(price_map, metadata_map)
     matched = []
     skipped = 0
-    txt_files = sorted(output_dir.rglob("*.txt"))
-    for txt_file in txt_files:
+    for txt_file in sorted(output_dir.rglob("*.txt")):
         try:
             text = txt_file.read_text(encoding="utf-8")
         except OSError:
             skipped += 1
             continue
 
-        # Extract card name from the name: line
-        card_name = None
-        for line in text.splitlines():
-            line = line.strip()
-            if line.lower().startswith("name:"):
-                card_name = line[len("name:"):].strip()
-                break
-
+        card_name = extract_card_name(text)
         if not card_name:
             skipped += 1
             continue
 
-        # Case-insensitive matching (converted cards are lowercase)
-        card_name_lower = card_name.lower()
-        canonical = lower_to_canonical.get(card_name_lower)
-        if canonical is None:
-            for full_lower, full_canonical in lower_to_canonical.items():
-                if full_lower.startswith(card_name_lower + " // "):
-                    canonical = full_canonical
-                    break
-
-        if canonical is None or canonical not in price_map:
+        resolved = resolver.resolve(card_name)
+        if resolved is None:
             continue
 
-        # Look up PrintingData from metadata_map (no longer embedded in text)
-        printing_data = PrintingData.defaults()
-        if metadata_map and canonical in metadata_map:
-            printing_data = metadata_map[canonical]
-
-        matched.append((card_name, text, price_map[canonical], printing_data))
+        matched.append(
+            (card_name, text, resolved.price_eur, resolved.printing_data)
+        )
 
     if skipped > 0:
         logger.info("Skipped %d text files (unreadable or missing name)", skipped)
@@ -110,7 +87,7 @@ def analyze_sequence_lengths(card_texts: list[str], tokenizer: MtgTokenizer) -> 
     to a minimum of 64. This ensures zero truncation — every card is fully
     represented.
     """
-    lengths = [len(tokenizer._tokenize(text)) for text in card_texts]
+    lengths = [len(tokenizer.tokenize(text)) for text in card_texts]
 
     p95 = int(np.percentile(lengths, 95))
     p99 = int(np.percentile(lengths, 99))
@@ -160,6 +137,71 @@ def _make_weighted_sampler(prices: list[float], exponent: float = 0.5) -> Weight
     return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
 
 
+def _run_epoch(
+    model: CardPriceTransformerModel,
+    loader: DataLoader,
+    loss_fn: torch.nn.Module,
+    device: torch.device,
+    *,
+    optimizer: torch.optim.Optimizer | None = None,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+) -> float:
+    """Run a single epoch and return the mean batch loss.
+
+    Training mode is selected when ``optimizer`` is given, eval mode otherwise.
+    """
+    is_train = optimizer is not None
+    model.train(is_train)
+
+    losses: list[float] = []
+    context = torch.enable_grad() if is_train else torch.no_grad()
+    with context:
+        for batch in loader:
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            targets = batch["target"].to(device)
+            meta = batch["meta"].to(device)
+
+            predictions = model(input_ids, attention_mask, meta)
+            loss = loss_fn(predictions, targets)
+
+            if is_train:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
+
+            losses.append(loss.item())
+
+    return sum(losses) / len(losses)
+
+
+class _BestCheckpoint:
+    """Tracks the lowest val_loss seen and the model weights at that epoch."""
+
+    def __init__(self) -> None:
+        self.best_val_loss: float = float("inf")
+        self.best_epoch: int = 0
+        self._state_dict: dict[str, torch.Tensor] | None = None
+
+    def update(self, epoch: int, val_loss: float, model: torch.nn.Module) -> bool:
+        """Snapshot model weights when val_loss improves. Returns True on new best."""
+        if val_loss >= self.best_val_loss:
+            return False
+        self.best_val_loss = val_loss
+        self.best_epoch = epoch
+        self._state_dict = {
+            k: v.cpu().clone() for k, v in model.state_dict().items()
+        }
+        return True
+
+    def restore(self, model: torch.nn.Module) -> None:
+        """Reload the best snapshot into the model (no-op if never updated)."""
+        if self._state_dict is not None:
+            model.load_state_dict(self._state_dict)
+
+
 def _train_loop(
     model: CardPriceTransformerModel,
     train_loader: DataLoader,
@@ -176,7 +218,6 @@ def _train_loop(
     """
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-    # Linear warmup scheduler
     warmup_steps = warmup_epochs * len(train_loader)
 
     def lr_lambda(step: int) -> float:
@@ -186,48 +227,16 @@ def _train_loop(
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     loss_fn = torch.nn.HuberLoss(delta=1.0)
-
-    best_val_loss = float("inf")
-    best_epoch = 0
-    best_state_dict = None
+    best = _BestCheckpoint()
     patience_counter = 0
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
-
-        # Train
-        model.train()
-        train_losses = []
-        for batch in train_loader:
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            targets = batch["target"].to(device)
-            meta = batch["meta"].to(device)
-
-            optimizer.zero_grad()
-            predictions = model(input_ids, attention_mask, meta)
-            loss = loss_fn(predictions, targets)
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-            train_losses.append(loss.item())
-
-        # Validate
-        model.eval()
-        val_losses = []
-        with torch.no_grad():
-            for batch in val_loader:
-                input_ids = batch["input_ids"].to(device)
-                attention_mask = batch["attention_mask"].to(device)
-                targets = batch["target"].to(device)
-                meta = batch["meta"].to(device)
-
-                predictions = model(input_ids, attention_mask, meta)
-                loss = loss_fn(predictions, targets)
-                val_losses.append(loss.item())
-
-        train_loss = sum(train_losses) / len(train_losses)
-        val_loss = sum(val_losses) / len(val_losses)
+        train_loss = _run_epoch(
+            model, train_loader, loss_fn, device,
+            optimizer=optimizer, scheduler=scheduler,
+        )
+        val_loss = _run_epoch(model, val_loader, loss_fn, device)
         elapsed = time.perf_counter() - epoch_start
 
         print(
@@ -236,23 +245,17 @@ def _train_loop(
             f"{elapsed:.1f}s"
         )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_epoch = epoch
-            best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+        if best.update(epoch, val_loss, model):
             patience_counter = 0
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 print(f"Early stopping triggered at epoch {epoch}")
-                # Restore best weights
-                model.load_state_dict(best_state_dict)
-                return best_epoch, best_val_loss, True, epoch
+                best.restore(model)
+                return best.best_epoch, best.best_val_loss, True, epoch
 
-    # Restore best weights
-    if best_state_dict is not None:
-        model.load_state_dict(best_state_dict)
-    return best_epoch, best_val_loss, False, epochs
+    best.restore(model)
+    return best.best_epoch, best.best_val_loss, False, epochs
 
 
 def train_transformer(
@@ -282,10 +285,9 @@ def train_transformer(
 
     # 1. Read converted text files and match to prices and PrintingData
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-    name_to_uuids, _uuid_meta = build_name_to_uuids(printings_path)
 
     txt_file_count = len(list(output_dir.rglob("*.txt")))
-    matched = _match_cards_to_texts(output_dir, name_to_uuids, price_map, metadata_map)
+    matched = _match_cards_to_texts(output_dir, price_map, metadata_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 5:

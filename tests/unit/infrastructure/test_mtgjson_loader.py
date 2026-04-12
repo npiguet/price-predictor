@@ -11,9 +11,14 @@ from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.mtgjson_loader import (
     build_metadata_map,
     build_name_to_uuids,
-    build_price_map,
-    get_cheapest_price,
+    build_price_map_with_uuids,
 )
+
+
+def build_price_map(allprices_path, name_to_uuids):
+    """Test helper: thin wrapper around build_price_map_with_uuids that drops the uuid map."""
+    price_map, _ = build_price_map_with_uuids(allprices_path, name_to_uuids)
+    return price_map
 
 
 @pytest.fixture
@@ -59,59 +64,6 @@ class TestBuildNameToUuids:
         mapping, _uuid_meta = build_name_to_uuids(allprintings_path)
         assert len(mapping["Lightning Bolt"]) == 2  # A25 + 2XM
         assert len(mapping["Sol Ring"]) == 2  # C21 + C20
-
-
-class TestGetCheapestPrice:
-    def test_cheapest_across_printings(self, allprices_path: Path) -> None:
-        # Grizzly Bears: 10E normal = 0.15, 7ED normal = 0.10, 7ED foil = 0.30
-        uuids = [
-            "aaaaaaaa-1111-1111-1111-111111111111",
-            "bbbbbbbb-1111-1111-1111-111111111111",
-        ]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price == 0.10  # cheapest across all printings/finishes
-
-    def test_cheapest_includes_normal_and_foil(self, allprices_path: Path) -> None:
-        # Lightning Bolt A25: normal = 2.50, foil = 5.30
-        # Lightning Bolt 2XM: normal = 1.50 (cheapest)
-        uuids = [
-            "aaaaaaaa-3333-3333-3333-333333333333",
-            "bbbbbbbb-3333-3333-3333-333333333333",
-        ]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price == 1.50
-
-    def test_missing_price_returns_none(self, allprices_path: Path) -> None:
-        # Swords to Plowshares: empty price data
-        uuids = ["eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price is None
-
-    def test_unknown_uuid_returns_none(self, allprices_path: Path) -> None:
-        price = get_cheapest_price(allprices_path, ["nonexistent-uuid"])
-        assert price is None
-
-    def test_missing_cardmarket_section(self, allprices_path: Path) -> None:
-        price = get_cheapest_price(allprices_path, ["eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"])
-        assert price is None
-
-    def test_zero_price_clamped_to_floor(self, allprices_path: Path) -> None:
-        # Zero Price Card: normal = 0.00 -> should be clamped to 0.01
-        uuids = ["ffffffff-0000-0000-0000-000000000000"]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price == 0.01
-
-    def test_sub_cent_price_clamped_to_floor(self, allprices_path: Path) -> None:
-        # Sub Cent Card: normal = 0.005 -> should be clamped to 0.01
-        uuids = ["ffffffff-0001-0001-0001-000000000001"]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price == 0.01
-
-    def test_normal_price_above_floor_unchanged(self, allprices_path: Path) -> None:
-        # Island: normal = 0.05 -> above floor, should be unchanged
-        uuids = ["aaaaaaaa-cccc-cccc-cccc-cccccccccccc"]
-        price = get_cheapest_price(allprices_path, uuids)
-        assert price == 0.05
 
 
 class TestBuildPriceMapFloor:

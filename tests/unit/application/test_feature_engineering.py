@@ -82,17 +82,18 @@ class TestFeatureEngineeringFit:
         assert result is fe
 
     def test_fit_learns_keywords(self, fitted_fe: FeatureEngineering) -> None:
-        assert "Flying" in fitted_fe._top_keywords
-        assert "Vigilance" in fitted_fe._top_keywords
+        assert "Flying" in fitted_fe.top_keywords_
+        assert "Vigilance" in fitted_fe.top_keywords_
 
     def test_fit_learns_tfidf(self, fitted_fe: FeatureEngineering) -> None:
-        assert fitted_fe._tfidf.vocabulary_ is not None
-        assert len(fitted_fe._tfidf.vocabulary_) > 0
+        assert fitted_fe.tfidf_.vocabulary_ is not None
+        assert len(fitted_fe.tfidf_.vocabulary_) > 0
 
     def test_transform_before_fit_raises(self) -> None:
+        from sklearn.exceptions import NotFittedError
         fe = FeatureEngineering()
         card = Card(name="Test", types=["Creature"], power="1", toughness="1")
-        with pytest.raises(RuntimeError, match="must be fitted"):
+        with pytest.raises(NotFittedError):
             fe.transform([card])
 
 
@@ -314,7 +315,7 @@ class TestPrintingDataFeatures:
 
         # The 18 printing data features are at the end of the dense block,
         # just before the TF-IDF features.
-        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
         dense_count = total_features - tfidf_count
         pd_start = dense_count - 18
 
@@ -361,7 +362,7 @@ class TestPrintingDataFeatures:
         )
         result = fitted_fe.transform([card])
         total_features = fitted_fe.get_feature_count()
-        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
         dense_count = total_features - tfidf_count
         pd_start = dense_count - 18
 
@@ -376,7 +377,7 @@ class TestPrintingDataFeatures:
     ) -> None:
         """Dense feature count is 95 (was 76 before printing data + has_mana_cost).
         The 19 extra features: 18 printing data + 1 has_mana_cost flag."""
-        tfidf_count = len(fitted_fe._tfidf.vocabulary_)
+        tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
         total = fitted_fe.get_feature_count()
         dense_count = total - tfidf_count
         assert dense_count == 95

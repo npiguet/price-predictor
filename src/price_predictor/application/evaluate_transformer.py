@@ -10,11 +10,11 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from price_predictor.application.metrics import compute_regression_metrics
+from price_predictor.domain.card_name_resolver import CardNameResolver
+from price_predictor.domain.tokenizer import extract_card_name
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.mtgjson_loader import (
-    build_metadata_map,
-    build_name_to_uuids,
-)
+from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_store import load_model
@@ -59,7 +59,6 @@ class TransformerEvalResult:
 
 def _match_texts_to_prices(
     output_dir: Path,
-    name_to_uuids: dict,
     price_map: dict,
     metadata_map: dict | None = None,
 ) -> list[tuple[str, str, float, PrintingData]]:
@@ -67,7 +66,7 @@ def _match_texts_to_prices(
 
     Returns list of (card_name, text, price_eur, printing_data) tuples.
     """
-    lower_to_canonical: dict[str, str] = {k.lower(): k for k in name_to_uuids}
+    resolver = CardNameResolver(price_map, metadata_map)
     matched = []
     skipped = 0
     for txt_file in sorted(output_dir.rglob("*.txt")):
@@ -77,35 +76,18 @@ def _match_texts_to_prices(
             skipped += 1
             continue
 
-        # Extract card name from the name: line
-        card_name = None
-        for line in text.splitlines():
-            line = line.strip()
-            if line.lower().startswith("name:"):
-                card_name = line[len("name:"):].strip()
-                break
-
+        card_name = extract_card_name(text)
         if not card_name:
             skipped += 1
             continue
 
-        card_name_lower = card_name.lower()
-        canonical = lower_to_canonical.get(card_name_lower)
-        if canonical is None:
-            for full_lower, full_canonical in lower_to_canonical.items():
-                if full_lower.startswith(card_name_lower + " // "):
-                    canonical = full_canonical
-                    break
-
-        if canonical is None or canonical not in price_map:
+        resolved = resolver.resolve(card_name)
+        if resolved is None:
             continue
 
-        # Look up PrintingData from metadata_map
-        printing_data = PrintingData.defaults()
-        if metadata_map and canonical in metadata_map:
-            printing_data = metadata_map[canonical]
-
-        matched.append((card_name, text, price_map[canonical], printing_data))
+        matched.append(
+            (card_name, text, resolved.price_eur, resolved.printing_data)
+        )
 
     if skipped > 0:
         logger.info("Skipped %d text files (unreadable or missing name)", skipped)
@@ -130,9 +112,8 @@ def evaluate_transformer(
 
     # Read text files directly and match to prices and PrintingData
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-    name_to_uuids, _uuid_meta = build_name_to_uuids(printings_path)
 
-    matched = _match_texts_to_prices(output_dir, name_to_uuids, price_map, metadata_map)
+    matched = _match_texts_to_prices(output_dir, price_map, metadata_map)
     logger.info("Matched %d cards to texts and prices", len(matched))
 
     if len(matched) < 2:
@@ -174,50 +155,16 @@ def evaluate_transformer(
     targets = torch.cat(all_targets).numpy()
 
     # Convert from shifted-log space back to EUR: exp(x) - log_offset
-    predicted_prices = np.exp(predictions) - config.log_offset
+    predicted_prices = np.maximum(np.exp(predictions) - config.log_offset, 0.0)
     actual_prices = np.exp(targets) - config.log_offset
 
-    # Clamp to non-negative
-    predicted_prices = np.maximum(predicted_prices, 0.0)
-
-    # Compute metrics
-    abs_errors = np.abs(predicted_prices - actual_prices)
-    mae = float(np.mean(abs_errors))
-
-    # Median percentage error
-    pct_errors = np.abs(predicted_prices - actual_prices) / np.maximum(actual_prices, 0.01) * 100
-    median_percentage_error = float(np.median(pct_errors))
-
-    # Median absolute error in shifted-log space
-    log_errors = np.abs(np.log(actual_prices + config.log_offset) - np.log(predicted_prices + config.log_offset))
-    median_log_error = float(np.median(log_errors))
-
-    # Top-20% overlap
-    n_top = max(1, int(len(actual_prices) * 0.2))
-    actual_top_indices = set(np.argsort(actual_prices.flatten())[-n_top:])
-    predicted_top_indices = set(np.argsort(predicted_prices.flatten())[-n_top:])
-    top_20_overlap = float(len(actual_top_indices & predicted_top_indices) / n_top)
-
-    # Per-bucket metrics
-    signed_log_errors = (
-        np.log(np.maximum(predicted_prices, 0.01))
-        - np.log(np.maximum(actual_prices, 0.01))
+    metrics = compute_regression_metrics(
+        actual_prices, predicted_prices, log_offset=config.log_offset,
     )
-    per_bucket = []
-    for lo, hi, label in _PRICE_BUCKETS:
-        mask = (actual_prices >= lo) & (actual_prices < hi)
-        n = int(mask.sum())
-        if n == 0:
-            continue
-        per_bucket.append(BucketMetrics(
-            label=label,
-            count=n,
-            median_pct_error=round(float(np.median(pct_errors[mask])), 1),
-            median_log_error=round(float(np.median(log_errors[mask])), 3),
-            median_signed_log_error=round(float(np.median(signed_log_errors[mask])), 3),
-        ))
 
-    # Per-card breakdown
+    per_bucket = _compute_per_bucket(actual_prices, predicted_prices, config.log_offset)
+
+    abs_errors = np.abs(predicted_prices - actual_prices)
     per_card = []
     for i, (name, _text, _price, _pd) in enumerate(val_data):
         per_card.append({
@@ -229,7 +176,7 @@ def evaluate_transformer(
 
     logger.info(
         "Evaluation complete — MAE: €%.2f, median abs error (log): %.3f",
-        mae, median_log_error,
+        metrics.mean_absolute_error_eur, metrics.median_abs_error_log,
     )
 
     # Model version from directory name
@@ -237,11 +184,43 @@ def evaluate_transformer(
 
     return TransformerEvalResult(
         model_version=model_version,
-        mean_absolute_error_eur=round(mae, 2),
-        median_percentage_error=round(median_percentage_error, 1),
-        median_abs_error_log=round(median_log_error, 3),
-        top_20_overlap=round(top_20_overlap, 2),
-        sample_count=len(val_data),
+        mean_absolute_error_eur=metrics.mean_absolute_error_eur,
+        median_percentage_error=metrics.median_percentage_error,
+        median_abs_error_log=metrics.median_abs_error_log,
+        top_20_overlap=metrics.top_20_overlap,
+        sample_count=metrics.sample_count,
         per_bucket=per_bucket,
         per_card=per_card,
     )
+
+
+def _compute_per_bucket(
+    actual_prices: np.ndarray,
+    predicted_prices: np.ndarray,
+    log_offset: float,
+) -> list[BucketMetrics]:
+    """Slice cards by price bucket and report local error metrics."""
+    actual = actual_prices.flatten()
+    predicted = predicted_prices.flatten()
+
+    safe_actual = np.maximum(actual, 0.01)
+    pct_errors = np.abs(predicted - actual) / safe_actual * 100
+    log_errors = np.abs(np.log(actual + log_offset) - np.log(predicted + log_offset))
+    signed_log_errors = (
+        np.log(np.maximum(predicted, 0.01)) - np.log(safe_actual)
+    )
+
+    per_bucket = []
+    for lo, hi, label in _PRICE_BUCKETS:
+        mask = (actual >= lo) & (actual < hi)
+        n = int(mask.sum())
+        if n == 0:
+            continue
+        per_bucket.append(BucketMetrics(
+            label=label,
+            count=n,
+            median_pct_error=round(float(np.median(pct_errors[mask])), 1),
+            median_log_error=round(float(np.median(log_errors[mask])), 3),
+            median_signed_log_error=round(float(np.median(signed_log_errors[mask])), 3),
+        ))
+    return per_bucket

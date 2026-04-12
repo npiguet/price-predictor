@@ -140,7 +140,7 @@ class TestTrainModelUseCase:
         artifact = joblib.load(result.model_path)
         fe = artifact["feature_engineering"]
         # Dense feature count should be 95 (includes 18 printing data features + 1 has_mana_cost)
-        tfidf_count = len(fe._tfidf.vocabulary_)
+        tfidf_count = len(fe.tfidf_.vocabulary_)
         dense_count = fe.get_feature_count() - tfidf_count
         assert dense_count == 95
 
@@ -160,7 +160,7 @@ class TestTrainModelUseCase:
         )
         artifact = joblib.load(result.model_path)
         fe = artifact["feature_engineering"]
-        tfidf_count = len(fe._tfidf.vocabulary_)
+        tfidf_count = len(fe.tfidf_.vocabulary_)
         dense_count = fe.get_feature_count() - tfidf_count
         old_dense_count = 76
         assert dense_count - old_dense_count == 19

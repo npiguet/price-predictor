@@ -4,25 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
+from typing import Any
 from urllib.request import Request, urlopen
 
-
-def _add_shared_train_args(parser: argparse.ArgumentParser) -> None:
-    """Add shared training options to a parser."""
-    parser.add_argument("--output-dir", type=str, default="./output",
-                        help="Converted card text directory")
-    parser.add_argument("--prices-path", type=str,
-                        default="resources/AllPricesToday.json")
-    parser.add_argument("--printings-path", type=str,
-                        default="resources/AllPrintings.json")
-    parser.add_argument("--test-split", type=float, default=0.2)
-    parser.add_argument("--random-seed", type=int, default=42)
+logger = logging.getLogger(__name__)
 
 
-def _add_shared_evaluate_args(parser: argparse.ArgumentParser) -> None:
-    """Add shared evaluate options to a parser."""
+def _add_shared_dataset_args(parser: argparse.ArgumentParser) -> None:
+    """Add the input/split flags shared by every train/evaluate subcommand."""
     parser.add_argument("--output-dir", type=str, default="./output",
                         help="Converted card text directory")
     parser.add_argument("--prices-path", type=str,
@@ -43,19 +35,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── train {model} ─────────────────────────────────────────────
     train_parser = subparsers.add_parser("train", help="Train model on card data")
-    train_subparsers = train_parser.add_subparsers(dest="model")
+    train_subparsers = train_parser.add_subparsers(dest="model", required=True)
 
     # train sklearn
     train_sklearn = train_subparsers.add_parser("sklearn",
                                                  help="Train sklearn model")
-    _add_shared_train_args(train_sklearn)
+    _add_shared_dataset_args(train_sklearn)
     train_sklearn.add_argument("--model-output", type=str,
                                default="./models/price-predictor/sklearn/")
+    train_sklearn.set_defaults(func=run_train_sklearn)
 
     # train transformer
     train_transformer = train_subparsers.add_parser("transformer",
                                                      help="Train transformer model")
-    _add_shared_train_args(train_transformer)
+    _add_shared_dataset_args(train_transformer)
     train_transformer.add_argument("--model-output", type=str,
                                    default="./models/price-predictor/transformer/")
     train_transformer.add_argument("--batch-size", type=int, default=64)
@@ -83,13 +76,18 @@ def build_parser() -> argparse.ArgumentParser:
                                    help="Number of attention heads (default: 4). Must divide d-model evenly.")
     train_transformer.add_argument("--ff-dim", type=int, default=1024,
                                    help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
+    train_transformer.set_defaults(func=run_train_transformer_new)
 
     # ── predict {model} ──────────────────────────────────────────
     predict_parser = subparsers.add_parser("predict",
                                            help="Predict price for a card")
-    predict_subparsers = predict_parser.add_subparsers(dest="model")
+    predict_subparsers = predict_parser.add_subparsers(dest="model", required=True)
 
-    for model_name in ("sklearn", "transformer"):
+    _PREDICT_HANDLERS = {
+        "sklearn": run_predict_sklearn,
+        "transformer": run_predict_transformer,
+    }
+    for model_name, handler in _PREDICT_HANDLERS.items():
         p = predict_subparsers.add_parser(model_name,
                                           help=f"Predict using {model_name} model")
         group = p.add_mutually_exclusive_group(required=True)
@@ -101,29 +99,32 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--vocab-path", type=str,
                            default="models/price-predictor/transformer/vocab.txt",
                            help="Path to vocab.txt")
+        p.set_defaults(func=handler)
 
     # ── evaluate {model} ─────────────────────────────────────────
     evaluate_parser = subparsers.add_parser("evaluate",
                                             help="Evaluate model accuracy")
-    evaluate_subparsers = evaluate_parser.add_subparsers(dest="model")
+    evaluate_subparsers = evaluate_parser.add_subparsers(dest="model", required=True)
 
     # evaluate sklearn
     eval_sklearn = evaluate_subparsers.add_parser("sklearn",
                                                    help="Evaluate sklearn model")
-    _add_shared_evaluate_args(eval_sklearn)
+    _add_shared_dataset_args(eval_sklearn)
     eval_sklearn.add_argument("--model-path", type=str,
                               default="./models/price-predictor/sklearn/latest.joblib")
     eval_sklearn.add_argument("--output-csv", type=str, default=None)
+    eval_sklearn.set_defaults(func=run_evaluate_sklearn)
 
     # evaluate transformer
     eval_transformer = evaluate_subparsers.add_parser(
         "transformer", help="Evaluate transformer model")
-    _add_shared_evaluate_args(eval_transformer)
+    _add_shared_dataset_args(eval_transformer)
     eval_transformer.add_argument("--model-path", type=str,
                                   default="./models/price-predictor/transformer/")
     eval_transformer.add_argument("--vocab-path", type=str,
                                   default="models/price-predictor/transformer/vocab.txt",
                                   help="Path to vocab.txt")
+    eval_transformer.set_defaults(func=run_evaluate_transformer_new)
 
     # ── serve ─────────────────────────────────────────────────────
     serve_parser = subparsers.add_parser("serve",
@@ -139,6 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser.add_argument("--vocab-path", type=str,
                               default="models/price-predictor/transformer/vocab.txt",
                               help="Path to vocab.txt for transformer predictions")
+    serve_parser.set_defaults(func=run_serve)
 
     # ── vocabulary ────────────────────────────────────────────────
     vocab_parser = subparsers.add_parser(
@@ -164,6 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
             "texts never produce UNK for set codes. Silently skipped if absent."
         ),
     )
+    vocab_parser.set_defaults(func=run_vocabulary)
 
     # ── convert ───────────────────────────────────────────────────
     convert_parser = subparsers.add_parser(
@@ -178,6 +181,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-path", type=str, default="./output",
         help="Output directory for converted files",
     )
+    convert_parser.set_defaults(func=run_convert)
 
     # ── check-convert ─────────────────────────────────────────────
     check_parser = subparsers.add_parser(
@@ -201,6 +205,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit", type=int, default=0,
         help="Max number of results to show (0 = all)",
     )
+    check_parser.set_defaults(func=run_check_convert)
 
     return parser
 
@@ -346,46 +351,9 @@ def run_serve(args: argparse.Namespace) -> int:
         model_version = "latest"
     artifact["model_version"] = model_version
 
-    # Try loading transformer model (optional — graceful degradation)
-    transformer_artifact = None
-    transformer_dir = Path("models/price-predictor/transformer/")
-    transformer_pt = transformer_dir / "latest.pt"
-    if transformer_pt.exists():
-        try:
-            from price_predictor.infrastructure.transformer_store import (
-                load_model as load_transformer,
-            )
-
-            model, config = load_transformer(transformer_dir)
-            transformer_artifact = {
-                "model": model,
-                "config": config,
-                "model_version": "transformer-v1",
-            }
-            print("Transformer model loaded.", file=sys.stderr)
-        except Exception as e:
-            print(f"Warning: Failed to load transformer model: {e}", file=sys.stderr)
-    else:
-        print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
-
-    # Load custom tokenizer for transformer predictions
-    tokenizer = None
-    vocab_path = Path(args.vocab_path)
-    if vocab_path.exists():
-        try:
-            from price_predictor.infrastructure.tokenizer_store import load_tokenizer
-            tokenizer = load_tokenizer(vocab_path)
-            print(
-                f"Tokenizer loaded from {vocab_path} ({tokenizer.vocab_size} tokens).",
-                file=sys.stderr,
-            )
-        except Exception as e:
-            print(f"Warning: Failed to load tokenizer: {e}", file=sys.stderr)
-    else:
-        print(
-            f"Tokenizer vocab not found at {vocab_path} — transformer encoding may fail.",
-            file=sys.stderr,
-        )
+    transformer_artifact, tokenizer = _load_optional_transformer_bundle(
+        Path(args.vocab_path)
+    )
 
     # Build metadata map for auto-fill (optional — graceful if files missing)
     metadata_map = None
@@ -582,14 +550,74 @@ def _load_metadata_map_optional() -> dict | None:
     """Try to load metadata map from default paths. Returns None if unavailable."""
     printings_path = Path("resources/AllPrintings.json")
     prices_path = Path("resources/AllPricesToday.json")
-    if printings_path.exists() and prices_path.exists():
+    if not (printings_path.exists() and prices_path.exists()):
+        return None
+    try:
+        from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
+        metadata_map, _ = build_metadata_map(printings_path, prices_path)
+        return metadata_map
+    except Exception as e:
+        logger.warning("Failed to load metadata map: %s", e)
+        return None
+
+
+def _read_card_text(args: argparse.Namespace) -> str | None:
+    """Resolve the card text from --file or --card. None means a printed error."""
+    if args.file:
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"Error: File not found: {file_path}", file=sys.stderr)
+            return None
         try:
-            from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
-            metadata_map, _ = build_metadata_map(printings_path, prices_path)
-            return metadata_map
-        except Exception:
-            pass
-    return None
+            return file_path.read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"Error: Could not read file: {e}", file=sys.stderr)
+            return None
+    return args.card
+
+
+def _load_optional_transformer_bundle(
+    vocab_path: Path,
+) -> tuple[dict[str, Any] | None, Any | None]:
+    """Load the transformer artifact + tokenizer for `serve`. Either may be None."""
+    transformer_artifact: dict[str, Any] | None = None
+    transformer_dir = Path("models/price-predictor/transformer/")
+    transformer_pt = transformer_dir / "latest.pt"
+    if transformer_pt.exists():
+        try:
+            from price_predictor.infrastructure.transformer_store import (
+                load_model as load_transformer,
+            )
+            model, config = load_transformer(transformer_dir)
+            transformer_artifact = {
+                "model": model,
+                "config": config,
+                "model_version": "transformer-v1",
+            }
+            print("Transformer model loaded.", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Failed to load transformer model: {e}", file=sys.stderr)
+    else:
+        print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
+
+    tokenizer: Any | None = None
+    if vocab_path.exists():
+        try:
+            from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+            tokenizer = load_tokenizer(vocab_path)
+            print(
+                f"Tokenizer loaded from {vocab_path} ({tokenizer.vocab_size} tokens).",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"Warning: Failed to load tokenizer: {e}", file=sys.stderr)
+    else:
+        print(
+            f"Tokenizer vocab not found at {vocab_path} — transformer encoding may fail.",
+            file=sys.stderr,
+        )
+
+    return transformer_artifact, tokenizer
 
 
 def run_predict_sklearn(args: argparse.Namespace) -> int:
@@ -598,19 +626,9 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
     from price_predictor.infrastructure.converted_card_parser import parse_converted_text
     from price_predictor.infrastructure.model_store import ModelNotFoundError
 
-    # Read card text from file or inline
-    if args.file:
-        file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"Error: File not found: {file_path}", file=sys.stderr)
-            return 1
-        try:
-            card_text = file_path.read_text(encoding="utf-8")
-        except OSError as e:
-            print(f"Error: Could not read file: {e}", file=sys.stderr)
-            return 1
-    else:
-        card_text = args.card
+    card_text = _read_card_text(args)
+    if card_text is None:
+        return 1
 
     try:
         card = parse_converted_text(card_text)
@@ -618,13 +636,18 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
         print(f"Error: Failed to parse card text: {e}", file=sys.stderr)
         return 1
 
-    # Look up PrintingData from metadata_map and attach to card
+    # Look up PrintingData from metadata_map and attach to card. When unknown,
+    # leave printing_data unset so FeatureEngineering uses its zeroed branch.
     metadata_map = _load_metadata_map_optional()
     if metadata_map:
-        printing_data = metadata_map.get(card.name) or metadata_map.get(card.name.lower())
-        if printing_data is not None:
-            from dataclasses import replace
-            card = replace(card, printing_data=printing_data)
+        from dataclasses import replace
+
+        from price_predictor.domain.card_name_resolver import CardNameResolver
+        resolver = CardNameResolver(metadata_map=metadata_map)
+        if resolver.canonicalize(card.name) is not None:
+            card = replace(
+                card, printing_data=resolver.lookup_printing_data(card.name)
+            )
 
     model_path = Path("models/price-predictor/sklearn/latest.joblib")
     try:
@@ -654,33 +677,20 @@ def run_predict_transformer(args: argparse.Namespace) -> int:
     from price_predictor.domain.value_objects import PrintingData
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 
-    # Read card text from file or inline
-    if args.file:
-        file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"Error: File not found: {file_path}", file=sys.stderr)
-            return 1
-        try:
-            card_text = file_path.read_text(encoding="utf-8")
-        except OSError as e:
-            print(f"Error: Could not read file: {e}", file=sys.stderr)
-            return 1
-    else:
-        card_text = args.card
+    card_text = _read_card_text(args)
+    if card_text is None:
+        return 1
 
     # Look up PrintingData from metadata_map (side-channel, not in card text)
     printing_data: PrintingData = PrintingData.defaults()
     metadata_map = _load_metadata_map_optional()
     if metadata_map:
-        # Extract card name from text to look up metadata
-        for line in card_text.splitlines():
-            stripped = line.strip()
-            if stripped.lower().startswith("name:"):
-                card_name = stripped[len("name:"):].strip()
-                pd = metadata_map.get(card_name) or metadata_map.get(card_name.lower())
-                if pd is not None:
-                    printing_data = pd
-                break
+        from price_predictor.domain.card_name_resolver import CardNameResolver
+        from price_predictor.domain.tokenizer import extract_card_name
+        card_name = extract_card_name(card_text)
+        if card_name:
+            resolver = CardNameResolver(metadata_map=metadata_map)
+            printing_data = resolver.lookup_printing_data(card_name)
 
     vocab_path = Path(args.vocab_path)
     if not vocab_path.exists():

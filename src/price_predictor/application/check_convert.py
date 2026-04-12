@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 # Lines in converted output that are metadata, not ability text
@@ -58,48 +60,39 @@ _LANDWALK_MAP: list[tuple[str, str]] = [
     ("desertwalk",         "landwalk desert"),
 ]
 
-# Cards whose Oracle text uses shorthand card-name references (unofficial sets that don't
-# follow standard MTG conventions) rather than rules text. Our converter outputs the full
-# ability text, which is correct; the oracle mismatch is unfixable.
-_SKIP_ORACLE_SHORTHAND: frozenset[str] = frozenset({
-    "g/growth_charm.txt",
-    "i/innistrad_charm.txt",
-    "k/kamigawa_charm.txt",
-    "t/tarkir_charm.txt",
-    "t/theros_charm.txt",
-    "u/ulgrotha_charm.txt",
-})
+class SkipReason(Enum):
+    """Why a converted card is intentionally excluded from the similarity check."""
 
-# Cards where Oracle groups multiple protection/hexproof keywords (or same-effect static
-# abilities for different creature types) into a single compound line, but the converter
-# correctly emits each Forge keyword as its own separate static ability.  The word-bag
-# comparison flags these due to the extra "from"/"and" conjunction words in the oracle
-# compound line.  The converter behaviour is intentional and correct.
-_SKIP_ORACLE_AGGREGATION: frozenset[str] = frozenset({
-    "c/caterwauling_boggart.txt",   # two menace statics (Goblin / Elemental) → one oracle line
-    "e/elite_inquisitor.txt",       # three protection keywords → one oracle compound line
-    "j/jaheira_harper_emissary.txt",# two hexproof keywords → one oracle compound line
-    "o/oversoul_of_dusk.txt",       # three color-protection keywords → one oracle compound line
-})
+    ORACLE_SHORTHAND = (
+        "Oracle text uses shorthand card-name references rather than rules text "
+        "(unofficial sets that don't follow standard MTG conventions)"
+    )
+    ORACLE_AGGREGATION = (
+        "Oracle groups multiple protection/hexproof keywords into one compound "
+        "line; the converter correctly emits each Forge keyword separately"
+    )
+    MISSING_DESCRIPTION = (
+        "Forge script has no SpellDescription for the main spell effect"
+    )
+    UNOFFICIAL_ERRATA = (
+        "Forge implementation uses errata that diverges fundamentally from oracle"
+    )
 
-# Cards where the Forge script has no SpellDescription for the main spell effect —
-# the converter correctly emits the additional cost but cannot produce a spell-effect line.
-_SKIP_MISSING_DESCRIPTION: frozenset[str] = frozenset({
-    "c/crashing_wave.txt",  # A:SP$ Tap + DBPutCounter SVars have no description
-})
 
-# Cards whose Forge implementation uses unofficial errata that diverges fundamentally
-# from the printed oracle text; mismatch is not fixable without altering the oracle.
-_SKIP_UNOFFICIAL_ERRATA: frozenset[str] = frozenset({
-    "n/1996_world_champion.txt",  # EDH Silver errata: ETB choose-opponent + emblem not in oracle
-})
-
-_SKIP_FILES: frozenset[str] = (
-    _SKIP_ORACLE_SHORTHAND
-    | _SKIP_ORACLE_AGGREGATION
-    | _SKIP_MISSING_DESCRIPTION
-    | _SKIP_UNOFFICIAL_ERRATA
-)
+_SKIPPED_CARDS: dict[str, SkipReason] = {
+    "g/growth_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "i/innistrad_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "k/kamigawa_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "t/tarkir_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "t/theros_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "u/ulgrotha_charm.txt": SkipReason.ORACLE_SHORTHAND,
+    "c/caterwauling_boggart.txt": SkipReason.ORACLE_AGGREGATION,
+    "e/elite_inquisitor.txt": SkipReason.ORACLE_AGGREGATION,
+    "j/jaheira_harper_emissary.txt": SkipReason.ORACLE_AGGREGATION,
+    "o/oversoul_of_dusk.txt": SkipReason.ORACLE_AGGREGATION,
+    "c/crashing_wave.txt": SkipReason.MISSING_DESCRIPTION,
+    "n/1996_world_champion.txt": SkipReason.UNOFFICIAL_ERRATA,
+}
 
 # Mapping from basic land subtypes to their intrinsic mana ability text
 _LAND_TYPE_MANA: dict[str, str] = {
@@ -157,31 +150,65 @@ def _split_keyword_line(line: str) -> list[str]:
     return [line]
 
 
-def _normalize(text: str, card_name: str | None = None) -> str:
-    """Normalize text for comparison: lowercase, strip reminder text,
-    replace card name, collapse whitespace/punctuation."""
-    text = text.lower()
-    text = text.replace("nickname", "cardname")
-    # Strip reminder text (parenthesized)
-    text = _REMINDER_TEXT.sub("", text)
-    # Strip "as an additional cost to cast this spell, " prefix: oracle includes it but
-    # our converter drops it (using the "additional cost:" key instead).
-    text = _ADDITIONAL_COST_PREFIX.sub("", text)
-    # Normalise landwalk portmanteaus: oracle says "swampwalk", converter outputs
-    # "landwalk swamp". Map oracle form to converter form before further processing.
+@dataclass(frozen=True)
+class _NormalizationRule:
+    """One step in the oracle-vs-converted text normalization pipeline.
+
+    Each rule rewrites text the same way for oracle and converter input so the
+    downstream word-bag comparison is fair. ``card_name`` is supplied so rules
+    that need to mask the literal card name can do so before punctuation
+    stripping shreds multi-word names.
+    """
+
+    name: str
+    apply: Callable[[str, str | None], str]
+
+
+def _replace_landwalk(text: str, _card_name: str | None) -> str:
     for oracle_form, converted_form in _LANDWALK_MAP:
         text = text.replace(oracle_form, converted_form)
-    # Normalise "protection from Xs" → "protection X" (oracle plural + "from" vs
-    # converter singular internal format "protection:X" → "protection X").
-    text = _PROTECTION_PLURAL.sub(r"protection \1", text)
-    text = _PROTECTION_FROM.sub("protection", text)
-    # Replace card name with placeholder
-    if card_name:
-        text = text.replace(card_name.lower(), "cardname")
-    # Strip punctuation (keep braces for mana symbols)
-    text = _NON_ALNUM.sub(" ", text)
-    # Collapse whitespace
-    text = _WHITESPACE.sub(" ", text).strip()
+    return text
+
+
+def _replace_card_name(text: str, card_name: str | None) -> str:
+    if not card_name:
+        return text
+    return text.replace(card_name.lower(), "cardname")
+
+
+# Rules run top-to-bottom. Order matters: lowercase first so subsequent rules
+# can be lowercase-only; reminder/prefix strips before token rewrites; card-name
+# replacement before punctuation strip; whitespace collapse last.
+_NORMALIZATION_RULES: tuple[_NormalizationRule, ...] = (
+    _NormalizationRule("lowercase", lambda t, _: t.lower()),
+    _NormalizationRule("nickname_alias", lambda t, _: t.replace("nickname", "cardname")),
+    _NormalizationRule("strip_reminder_text", lambda t, _: _REMINDER_TEXT.sub("", t)),
+    _NormalizationRule(
+        "strip_additional_cost_prefix",
+        lambda t, _: _ADDITIONAL_COST_PREFIX.sub("", t),
+    ),
+    _NormalizationRule("expand_landwalk_portmanteau", _replace_landwalk),
+    _NormalizationRule(
+        "protection_from_plural",
+        lambda t, _: _PROTECTION_PLURAL.sub(r"protection \1", t),
+    ),
+    _NormalizationRule(
+        "protection_from_bare",
+        lambda t, _: _PROTECTION_FROM.sub("protection", t),
+    ),
+    _NormalizationRule("mask_card_name", _replace_card_name),
+    _NormalizationRule("strip_punctuation", lambda t, _: _NON_ALNUM.sub(" ", t)),
+    _NormalizationRule(
+        "collapse_whitespace",
+        lambda t, _: _WHITESPACE.sub(" ", t).strip(),
+    ),
+)
+
+
+def _normalize(text: str, card_name: str | None = None) -> str:
+    """Run text through the normalization pipeline."""
+    for rule in _NORMALIZATION_RULES:
+        text = rule.apply(text, card_name)
     return text
 
 
@@ -298,39 +325,10 @@ def _extract_ability_text(converted_text: str) -> tuple[list[str], list[str]]:
     return lines, duplicates
 
 
-def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
-    """Check a single converted card against its Forge source."""
-    card_name, oracle = _extract_oracle(forge_text)
-    ability_lines, duplicates = _extract_ability_text(converted_text)
-
-    # Get the name from converted output for display
-    display_name = card_name or "unknown"
-    for line in converted_text.splitlines():
-        line = line.strip()
-        if line.startswith("name:"):
-            display_name = line[5:].strip()
-            break
-
-    has_oracle = oracle is not None and oracle.strip() != ""
-    empty_lines = any(not ln.strip() for ln in ability_lines)
-
-    if not has_oracle or not ability_lines:
-        # Can't compute similarity without both sides
-        return CardCheckResult(
-            filename="",
-            card_name=display_name,
-            similarity=1.0 if not has_oracle else 0.0,
-            oracle_lines=len(oracle.split("\n")) if oracle else 0,
-            converted_lines=len(ability_lines),
-            duplicate_lines=duplicates,
-            empty_lines=empty_lines,
-            has_oracle=has_oracle,
-        )
-
-    # Compare using word-bag (multiset) Jaccard similarity.
-    # This is order-independent, line-grouping-independent, and robust to
-    # cases where oracle splits text differently than the converter (e.g.
-    # one oracle paragraph vs several sub-ability lines in the output).
+def _word_bag_jaccard(
+    oracle: str, ability_lines: list[str], card_name: str | None,
+) -> float:
+    """Multiset Jaccard similarity over normalized oracle vs converted lines."""
     oracle_words: Counter[str] = Counter()
     for ln in oracle.split("\n"):
         oracle_words.update(_normalize(ln, card_name).split())
@@ -341,13 +339,41 @@ def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
 
     intersection = sum((oracle_words & converted_words).values())
     union = sum((oracle_words | converted_words).values())
-    similarity = intersection / union if union > 0 else 1.0
+    return intersection / union if union > 0 else 1.0
+
+
+def _display_name_from_converted(converted_text: str, fallback: str | None) -> str:
+    for line in converted_text.splitlines():
+        line = line.strip()
+        if line.startswith("name:"):
+            return line[5:].strip()
+    return fallback or "unknown"
+
+
+def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
+    """Check a single converted card against its Forge source."""
+    card_name, oracle = _extract_oracle(forge_text)
+    ability_lines, duplicates = _extract_ability_text(converted_text)
+
+    display_name = _display_name_from_converted(converted_text, card_name)
+    has_oracle = oracle is not None and oracle.strip() != ""
+    empty_lines = any(not ln.strip() for ln in ability_lines)
+
+    # Word-bag (multiset) Jaccard similarity is order-independent, robust to
+    # different line groupings between oracle and converter, and degenerates
+    # to 1.0 when there's nothing to compare on either side.
+    if not has_oracle:
+        similarity = 1.0
+    elif not ability_lines:
+        similarity = 0.0
+    else:
+        similarity = _word_bag_jaccard(oracle, ability_lines, card_name)
 
     return CardCheckResult(
         filename="",
         card_name=display_name,
         similarity=similarity,
-        oracle_lines=len(oracle.split("\n")),
+        oracle_lines=len(oracle.split("\n")) if oracle else 0,
         converted_lines=len(ability_lines),
         duplicate_lines=duplicates,
         empty_lines=empty_lines,
@@ -375,9 +401,7 @@ def check_all(
         if not forge_path.exists():
             continue
 
-        # Skip cards with known-unfixable oracle mismatches
-        rel_posix = rel.as_posix()
-        if rel_posix in _SKIP_FILES:
+        if rel.as_posix() in _SKIPPED_CARDS:
             continue
 
         try:

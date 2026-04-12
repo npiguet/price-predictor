@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 from price_predictor.application.feature_engineering import FeatureEngineering
+from price_predictor.application.metrics import compute_regression_metrics
+from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.entities import EvaluationMetrics
 from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import load_model
@@ -51,27 +53,17 @@ class EvaluateModelUseCase:
         cards, parse_errors = parse_converted_cards(output_dir)
         logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
         metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-
-        # Case-insensitive lookup (converted cards are lowercase)
-        lower_to_canonical: dict[str, str] = {k.lower(): k for k in price_map}
+        resolver = CardNameResolver(price_map, metadata_map)
 
         eval_cards = []
         eval_prices = []
         for card in cards:
-            card_name_lower = card.name.lower()
-            canonical = lower_to_canonical.get(card_name_lower)
-            if canonical is None:
-                for full_lower, full_canonical in lower_to_canonical.items():
-                    if full_lower.startswith(card_name_lower + " // "):
-                        canonical = full_canonical
-                        break
-            if canonical is not None and canonical in price_map:
-                # Attach printing data (Card is frozen, create new instance)
-                pd = metadata_map.get(canonical)
-                from dataclasses import replace
-                enriched_card = replace(card, printing_data=pd) if pd else card
-                eval_cards.append(enriched_card)
-                eval_prices.append(price_map[canonical])
+            resolved = resolver.resolve(card.name)
+            if resolved is None:
+                continue
+            enriched_card = replace(card, printing_data=resolved.printing_data)
+            eval_cards.append(enriched_card)
+            eval_prices.append(resolved.price_eur)
 
         logger.info(
             "Matched %d cards to prices, skipped %d",
@@ -99,33 +91,9 @@ class EvaluateModelUseCase:
         log_predicted = model.predict(X_test)
         predicted_prices = np.exp(log_predicted)
 
-        # Compute metrics
+        metrics = compute_regression_metrics(test_prices, predicted_prices)
+
         abs_errors = np.abs(predicted_prices - test_prices)
-        mean_absolute_error = float(np.mean(abs_errors))
-
-        pct_errors = np.abs(predicted_prices - test_prices) / test_prices * 100
-        median_percentage_error = float(np.median(pct_errors))
-
-        # Median absolute error in shifted-log space
-        log_errors = np.abs(np.log(test_prices + 2) - np.log(predicted_prices + 2))
-        median_abs_error_log = float(np.median(log_errors))
-
-        # Top-20% overlap
-        n_top = max(1, int(len(test_prices) * 0.2))
-        actual_top_indices = set(np.argsort(test_prices)[-n_top:])
-        predicted_top_indices = set(np.argsort(predicted_prices)[-n_top:])
-        overlap = len(actual_top_indices & predicted_top_indices) / n_top
-        top_20_overlap = float(overlap)
-
-        metrics = EvaluationMetrics(
-            mean_absolute_error_eur=round(mean_absolute_error, 2),
-            median_percentage_error=round(median_percentage_error, 1),
-            median_abs_error_log=round(median_abs_error_log, 3),
-            top_20_overlap=round(top_20_overlap, 2),
-            sample_count=len(test_cards),
-        )
-
-        # Per-card breakdown
         per_card = []
         for i, card in enumerate(test_cards):
             per_card.append({
