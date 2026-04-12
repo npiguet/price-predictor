@@ -3,21 +3,18 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from sklearn.model_selection import train_test_split
 
+from price_predictor.application.converted_card_dataset import load_parsed_cards
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.application.metrics import compute_regression_metrics
-from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.entities import EvaluationMetrics
-from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import load_model
-from price_predictor.infrastructure.mtgjson_loader import (
-    build_metadata_map,
-)
+from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 
 logger = logging.getLogger(__name__)
 
@@ -49,26 +46,10 @@ class EvaluateModelUseCase:
         model = artifact["model"]
         fe: FeatureEngineering = artifact["feature_engineering"]
 
-        # Re-derive the dataset (same pipeline as training)
-        cards, parse_errors = parse_converted_cards(output_dir)
-        logger.info("Parsed %d cards (%d parse errors)", len(cards), len(parse_errors))
         metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-        resolver = CardNameResolver(price_map, metadata_map)
-
-        eval_cards = []
-        eval_prices = []
-        for card in cards:
-            resolved = resolver.resolve(card.name)
-            if resolved is None:
-                continue
-            enriched_card = replace(card, printing_data=resolved.printing_data)
-            eval_cards.append(enriched_card)
-            eval_prices.append(resolved.price_eur)
-
-        logger.info(
-            "Matched %d cards to prices, skipped %d",
-            len(eval_cards), len(cards) - len(eval_cards),
-        )
+        dataset = load_parsed_cards(output_dir, price_map, metadata_map)
+        eval_cards = dataset.cards
+        eval_prices = dataset.prices
 
         if len(eval_cards) < 2:
             raise ValueError("Insufficient data for evaluation")

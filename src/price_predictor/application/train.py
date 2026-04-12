@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,14 +11,11 @@ import numpy as np
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import train_test_split
 
+from price_predictor.application.converted_card_dataset import load_parsed_cards
 from price_predictor.application.feature_engineering import FeatureEngineering
-from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.entities import TrainedModel
-from price_predictor.infrastructure.converted_card_parser import parse_converted_cards
 from price_predictor.infrastructure.model_store import save_model
-from price_predictor.infrastructure.mtgjson_loader import (
-    build_metadata_map,
-)
+from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 
 logger = logging.getLogger(__name__)
 
@@ -45,39 +42,24 @@ class TrainModelUseCase:
         test_split: float = 0.2,
         random_seed: int = 42,
     ) -> TrainResult:
-        # 1. Parse converted card texts
-        cards, parse_errors = parse_converted_cards(output_dir)
-        logger.info("Parsed %d cards, %d parse errors", len(cards), len(parse_errors))
-
-        # 2. Build metadata map and price map
         metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-        resolver = CardNameResolver(price_map, metadata_map)
+        dataset = load_parsed_cards(output_dir, price_map, metadata_map)
+        logger.info(
+            "Parsed %d cards (%d parse errors)",
+            len(dataset.cards) + dataset.skipped_reasons.get("no_printings_match", 0),
+            dataset.skipped_reasons.get("parse_error", 0),
+        )
 
-        # 3. Join cards to prices and attach printing data
-        training_cards = []
-        training_prices = []
-        skipped_reasons: dict[str, int] = {
-            "parse_error": len(parse_errors),
-            "no_printings_match": 0,
-        }
-
-        for card in cards:
-            resolved = resolver.resolve(card.name)
-            if resolved is None:
-                skipped_reasons["no_printings_match"] += 1
-                continue
-
-            enriched_card = replace(card, printing_data=resolved.printing_data)
-            training_cards.append(enriched_card)
-            training_prices.append(resolved.price_eur)
-
-        total_skipped = sum(skipped_reasons.values())
-
-        if len(training_cards) < 2:
+        if len(dataset.cards) < 2:
             raise ValueError(
-                f"Insufficient training data: only {len(training_cards)} cards with prices. "
+                f"Insufficient training data: only {len(dataset.cards)} cards with prices. "
                 "Need at least 2 cards to train."
             )
+
+        training_cards = dataset.cards
+        training_prices = dataset.prices
+        skipped_reasons = dataset.skipped_reasons
+        total_skipped = dataset.total_skipped
 
         logger.info(
             "Training on %d cards, skipped %d", len(training_cards), total_skipped

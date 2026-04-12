@@ -10,10 +10,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 
+from price_predictor.application.converted_card_dataset import load_training_samples
 from price_predictor.application.metrics import compute_regression_metrics
-from price_predictor.domain.card_name_resolver import CardNameResolver
-from price_predictor.domain.tokenizer import extract_card_name
-from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
@@ -57,43 +55,6 @@ class TransformerEvalResult:
     per_card: list[dict] | None = None
 
 
-def _match_texts_to_prices(
-    output_dir: Path,
-    price_map: dict,
-    metadata_map: dict | None = None,
-) -> list[tuple[str, str, float, PrintingData]]:
-    """Read converted text files directly and match to prices and PrintingData by name.
-
-    Returns list of (card_name, text, price_eur, printing_data) tuples.
-    """
-    resolver = CardNameResolver(price_map, metadata_map)
-    matched = []
-    skipped = 0
-    for txt_file in sorted(output_dir.rglob("*.txt")):
-        try:
-            text = txt_file.read_text(encoding="utf-8")
-        except OSError:
-            skipped += 1
-            continue
-
-        card_name = extract_card_name(text)
-        if not card_name:
-            skipped += 1
-            continue
-
-        resolved = resolver.resolve(card_name)
-        if resolved is None:
-            continue
-
-        matched.append(
-            (card_name, text, resolved.price_eur, resolved.printing_data)
-        )
-
-    if skipped > 0:
-        logger.info("Skipped %d text files (unreadable or missing name)", skipped)
-    return matched
-
-
 def evaluate_transformer(
     model_dir: Path,
     output_dir: Path,
@@ -110,30 +71,28 @@ def evaluate_transformer(
     model.to(device)
     model.eval()
 
-    # Read text files directly and match to prices and PrintingData
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+    samples = load_training_samples(output_dir, price_map, metadata_map)
+    logger.info("Matched %d cards to texts and prices", len(samples))
 
-    matched = _match_texts_to_prices(output_dir, price_map, metadata_map)
-    logger.info("Matched %d cards to texts and prices", len(matched))
-
-    if len(matched) < 2:
+    if len(samples) < 2:
         raise ValueError("Insufficient data for evaluation")
 
     # Re-derive 80/20 split using same seed
     from sklearn.model_selection import train_test_split
 
-    train_data, val_data = train_test_split(
-        matched, test_size=0.2, random_state=random_seed
+    _train_data, val_data = train_test_split(
+        samples, test_size=0.2, random_state=random_seed
     )
 
     logger.info("Validation set: %d cards", len(val_data))
 
-    val_tuples = [(n, t, p) for n, t, p, _ in val_data]
-    val_pd = [pd for _, _, _, pd in val_data]
-
     dataset = TransformerTrainingDataset(
-        val_tuples, max_seq_len=config.max_seq_len, tokenizer=tokenizer,
-        log_offset=config.log_offset, printing_data_list=val_pd,
+        [(s.name, s.text, s.price_eur) for s in val_data],
+        max_seq_len=config.max_seq_len,
+        tokenizer=tokenizer,
+        log_offset=config.log_offset,
+        printing_data_list=[s.printing_data for s in val_data],
     )
     loader = DataLoader(dataset, batch_size=64, shuffle=False)
 
@@ -166,9 +125,9 @@ def evaluate_transformer(
 
     abs_errors = np.abs(predicted_prices - actual_prices)
     per_card = []
-    for i, (name, _text, _price, _pd) in enumerate(val_data):
+    for i, sample in enumerate(val_data):
         per_card.append({
-            "name": name,
+            "name": sample.name,
             "actual_price_eur": round(float(actual_prices[i]), 2),
             "predicted_price_eur": round(float(predicted_prices[i]), 2),
             "absolute_error_eur": round(float(abs_errors[i]), 2),

@@ -13,10 +13,10 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from price_predictor.domain.card_name_resolver import CardNameResolver
+from price_predictor.application.converted_card_dataset import load_training_samples
+from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.entities import TransformerConfig
-from price_predictor.domain.tokenizer import MtgTokenizer, extract_card_name
-from price_predictor.domain.value_objects import PrintingData
+from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
@@ -40,43 +40,6 @@ class TransformerTrainResult:
     price_range_min_eur: float
     price_range_max_eur: float
     max_seq_len: int
-
-
-def _match_cards_to_texts(
-    output_dir: Path,
-    price_map: dict,
-    metadata_map: dict | None = None,
-) -> list[tuple[str, str, float, PrintingData]]:
-    """Read converted text files from output_dir, match to prices and PrintingData.
-
-    Returns list of (card_name, text, price_eur, printing_data) tuples.
-    """
-    resolver = CardNameResolver(price_map, metadata_map)
-    matched = []
-    skipped = 0
-    for txt_file in sorted(output_dir.rglob("*.txt")):
-        try:
-            text = txt_file.read_text(encoding="utf-8")
-        except OSError:
-            skipped += 1
-            continue
-
-        card_name = extract_card_name(text)
-        if not card_name:
-            skipped += 1
-            continue
-
-        resolved = resolver.resolve(card_name)
-        if resolved is None:
-            continue
-
-        matched.append(
-            (card_name, text, resolved.price_eur, resolved.printing_data)
-        )
-
-    if skipped > 0:
-        logger.info("Skipped %d text files (unreadable or missing name)", skipped)
-    return matched
 
 
 def analyze_sequence_lengths(card_texts: list[str], tokenizer: MtgTokenizer) -> tuple[int, dict]:
@@ -280,26 +243,23 @@ def train_transformer(
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
 
-    # 0. Load tokenizer
     tokenizer = load_tokenizer(vocab_path)
 
-    # 1. Read converted text files and match to prices and PrintingData
     metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-
     txt_file_count = len(list(output_dir.rglob("*.txt")))
-    matched = _match_cards_to_texts(output_dir, price_map, metadata_map)
-    logger.info("Matched %d cards to texts and prices", len(matched))
+    samples = load_training_samples(output_dir, price_map, metadata_map)
+    logger.info("Matched %d cards to texts and prices", len(samples))
 
-    if len(matched) < 5:
+    if len(samples) < 5:
         raise ValueError(
-            f"Insufficient training data: only {len(matched)} matched cards. Need at least 5."
+            f"Insufficient training data: only {len(samples)} matched cards. Need at least 5."
         )
 
-    cards_skipped = txt_file_count - len(matched)
+    cards_skipped = txt_file_count - len(samples)
 
-    # 2. Analyze sequence lengths
-    texts = [text for _, text, _, _ in matched]
-    max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
+    max_seq_len, stats = analyze_sequence_lengths(
+        [s.text for s in samples], tokenizer,
+    )
     logger.info(
         "Token length stats: p95=%d, p99=%d, max=%d",
         stats["p95"], stats["p99"], stats["max"],
@@ -309,33 +269,21 @@ def train_transformer(
         max_seq_len,
     )
 
-    # 3. Split data 80/20, stratified by price bucket so expensive cards land in both sets
-    prices_all = [p for _, _, p, _ in matched]
-    buckets_all = [_price_bucket(p) for p in prices_all]
+    # 80/20 split stratified by price bucket so expensive cards land in both sets.
+    buckets_all = [_price_bucket(s.price_eur) for s in samples]
     train_data, val_data = train_test_split(
-        matched, test_size=0.2, random_state=random_seed, stratify=buckets_all
+        samples, test_size=0.2, random_state=random_seed, stratify=buckets_all
     )
     logger.info("Split: %d train, %d validation", len(train_data), len(val_data))
 
-    # 4. Build datasets (strip PrintingData into separate list for dataset)
-    train_tuples = [(n, t, p) for n, t, p, _ in train_data]
-    val_tuples = [(n, t, p) for n, t, p, _ in val_data]
-    train_pd = [pd for _, _, _, pd in train_data]
-    val_pd = [pd for _, _, _, pd in val_data]
-
-    train_dataset = TransformerTrainingDataset(
-        train_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer,
-        log_offset=log_offset, printing_data_list=train_pd,
-    )
-    val_dataset = TransformerTrainingDataset(
-        val_tuples, max_seq_len=max_seq_len, tokenizer=tokenizer,
-        log_offset=log_offset, printing_data_list=val_pd,
-    )
+    train_dataset = _build_dataset(train_data, max_seq_len, tokenizer, log_offset)
+    val_dataset = _build_dataset(val_data, max_seq_len, tokenizer, log_offset)
 
     # Oversample expensive cards during training so their gradient signal isn't
     # drowned out by the ~90% cheap-card majority.
-    train_prices = [p for _, _, p, _ in train_data]
-    sampler = _make_weighted_sampler(train_prices, exponent=sampler_exponent)
+    sampler = _make_weighted_sampler(
+        [s.price_eur for s in train_data], exponent=sampler_exponent,
+    )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
@@ -363,11 +311,10 @@ def train_transformer(
         model, train_loader, val_loader, device, epochs, lr, patience,
     )
 
-    # 7. Save
     model.cpu()
     version, model_path = save_model(model, config, model_output)
 
-    prices = [price for _, _, price, _ in matched]
+    prices = [s.price_eur for s in samples]
     print(
         f"\nTraining complete. Best epoch: {best_epoch}/{epochs}, "
         f"val_loss: {best_val_loss:.3f}. "
@@ -381,9 +328,25 @@ def train_transformer(
         best_val_loss=best_val_loss,
         stopped_early=stopped_early,
         final_epoch=final_epoch,
-        card_count=len(matched),
+        card_count=len(samples),
         cards_skipped=cards_skipped,
         price_range_min_eur=min(prices),
         price_range_max_eur=max(prices),
         max_seq_len=max_seq_len,
+    )
+
+
+def _build_dataset(
+    samples: list[TrainingSample],
+    max_seq_len: int,
+    tokenizer: MtgTokenizer,
+    log_offset: float,
+) -> TransformerTrainingDataset:
+    """Build a TransformerTrainingDataset from a list of TrainingSamples."""
+    return TransformerTrainingDataset(
+        [(s.name, s.text, s.price_eur) for s in samples],
+        max_seq_len=max_seq_len,
+        tokenizer=tokenizer,
+        log_offset=log_offset,
+        printing_data_list=[s.printing_data for s in samples],
     )

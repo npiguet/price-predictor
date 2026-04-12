@@ -177,15 +177,18 @@ class TestRunEpoch:
 
 class TestTrainTransformer:
     @patch("price_predictor.application.train_transformer.build_metadata_map")
-    @patch("price_predictor.application.train_transformer._match_cards_to_texts")
+    @patch("price_predictor.application.train_transformer.load_training_samples")
     def test_insufficient_data_raises(
-        self, mock_match, mock_metadata_map, tmp_path
+        self, mock_load_samples, mock_metadata_map, tmp_path
     ):
         from price_predictor.application.train_transformer import train_transformer
+        from price_predictor.application.training_sample import TrainingSample
 
         mock_metadata_map.return_value = ({}, {})
         pd = _make_printing_data()
-        mock_match.return_value = [("Card 1", "text", 1.0, pd)]  # Only 1 card
+        mock_load_samples.return_value = [
+            TrainingSample(name="Card 1", text="text", price_eur=1.0, printing_data=pd),
+        ]
 
         vocab_path = tmp_path / "vocab.txt"
         vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
@@ -200,83 +203,3 @@ class TestTrainTransformer:
                     model_output=Path("models/transformer/"),
                     vocab_path=vocab_path,
                 )
-
-
-class TestMatchCardsToTexts:
-    """Tests for _match_cards_to_texts."""
-
-    def test_returns_printing_data_from_metadata_map(self, tmp_path: Path):
-        """When metadata_map is provided, the returned tuple includes the PrintingData."""
-        from price_predictor.application.train_transformer import _match_cards_to_texts
-        from price_predictor.domain.value_objects import PrintingData
-
-        cards_dir = tmp_path / "cards"
-        cards_dir.mkdir()
-        (cards_dir / "test_card.txt").write_text(
-            "name: Test Card\nmana cost: {1}{G}\ntypes: creature\npower toughness: 2/2\n",
-            encoding="utf-8",
-        )
-
-        price_map = {"Test Card": 1.50}
-        expected_pd = PrintingData(
-            is_reserved=True,
-            rarity="rare",
-            printings_count=5,
-            release_year=2021,
-            legalities=["commander", "modern", "legacy"],
-        )
-        metadata_map = {"Test Card": expected_pd}
-
-        matched = _match_cards_to_texts(cards_dir, price_map, metadata_map)
-
-        assert len(matched) == 1
-        card_name, text, price, printing_data = matched[0]
-        assert card_name == "Test Card"
-        assert price == 1.50
-        assert printing_data is expected_pd
-
-    def test_no_metadata_map_returns_defaults(self, tmp_path: Path):
-        """When metadata_map is None, PrintingData.defaults() is used."""
-        from price_predictor.application.train_transformer import _match_cards_to_texts
-        from price_predictor.domain.value_objects import PrintingData
-
-        cards_dir = tmp_path / "cards"
-        cards_dir.mkdir()
-        original_text = "name: Plain Card\nmana cost: {R}\ntypes: instant\n"
-        (cards_dir / "plain_card.txt").write_text(original_text, encoding="utf-8")
-
-        price_map = {"Plain Card": 2.00}
-
-        matched = _match_cards_to_texts(cards_dir, price_map, metadata_map=None)
-
-        assert len(matched) == 1
-        _, text, _, printing_data = matched[0]
-        defaults = PrintingData.defaults()
-        assert printing_data.rarity == defaults.rarity
-        assert printing_data.printings_count == defaults.printings_count
-
-    def test_text_does_not_contain_metadata_lines(self, tmp_path: Path):
-        """Card text returned should NOT contain printing data lines — they're in the tensor."""
-        from price_predictor.application.train_transformer import _match_cards_to_texts
-        from price_predictor.domain.value_objects import PrintingData
-
-        cards_dir = tmp_path / "cards"
-        cards_dir.mkdir()
-        (cards_dir / "test_card.txt").write_text(
-            "name: Test Card\nmana cost: {1}{G}\ntypes: creature\n",
-            encoding="utf-8",
-        )
-
-        price_map = {"Test Card": 1.50}
-        metadata_map = {
-            "Test Card": PrintingData(rarity="rare", printings_count=5, release_year=2021),
-        }
-
-        matched = _match_cards_to_texts(cards_dir, price_map, metadata_map)
-        _, text, _, _ = matched[0]
-
-        # Text should be clean card text only
-        assert "reserved:" not in text
-        assert "rarity:" not in text
-        assert "printings:" not in text
-        assert "legalities:" not in text

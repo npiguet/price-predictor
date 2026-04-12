@@ -31,12 +31,13 @@ class TestEvaluateTransformer:
     @patch("price_predictor.application.evaluate_transformer.load_tokenizer")
     @patch("price_predictor.application.evaluate_transformer.load_model")
     @patch("price_predictor.application.evaluate_transformer.build_metadata_map")
-    @patch("price_predictor.application.evaluate_transformer._match_texts_to_prices")
+    @patch("price_predictor.application.evaluate_transformer.load_training_samples")
     def test_returns_eval_result_with_metrics(
-        self, mock_match, mock_metadata_map, mock_load,
+        self, mock_load_samples, mock_metadata_map, mock_load,
         mock_load_tokenizer, tmp_path
     ):
         from price_predictor.application.evaluate_transformer import evaluate_transformer
+        from price_predictor.application.training_sample import TrainingSample
 
         config = _make_config()
         tokenizer = _make_fixture_tokenizer()
@@ -55,11 +56,18 @@ class TestEvaluateTransformer:
 
         mock_metadata_map.return_value = ({}, {})
 
-        # _match_texts_to_prices returns 25 matched cards (reads files directly)
         from price_predictor.domain.value_objects import PrintingData
         pd = PrintingData()
-        matched = [(f"Card {i}", f"name: card {i}", float(i + 1), pd) for i in range(25)]
-        mock_match.return_value = matched
+        samples = [
+            TrainingSample(
+                name=f"Card {i}",
+                text=f"name: card {i}",
+                price_eur=float(i + 1),
+                printing_data=pd,
+            )
+            for i in range(25)
+        ]
+        mock_load_samples.return_value = samples
 
         vocab_path = tmp_path / "vocab.txt"
         vocab_path.write_text("[PAD]\n[UNK]\n", encoding="utf-8")
