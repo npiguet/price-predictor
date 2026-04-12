@@ -144,3 +144,21 @@ class TestCardPriceTransformerModelForward:
             out_zeros = model(input_ids, attention_mask, meta_zeros)
             out_ones = model(input_ids, attention_mask, meta_ones)
         assert not torch.allclose(out_zeros, out_ones)
+
+
+class TestEncodeMatchesForwardPooling:
+    def test_encode_returns_same_pooled_text_as_forward(self):
+        """encode() and forward() must run the same _encode_and_pool path."""
+        config = _make_config(dropout=0.0)
+        model = CardPriceTransformerModel(config)
+        model.eval()
+        torch.manual_seed(0)
+        input_ids = torch.randint(0, config.vocab_size, (2, config.max_seq_len))
+        attention_mask = torch.ones(2, config.max_seq_len, dtype=torch.long)
+        attention_mask[0, 50:] = 0  # mix of padding to exercise the mask path
+
+        encoded = model.encode(input_ids, attention_mask)
+        with torch.no_grad():
+            pooled = model._encode_and_pool(input_ids, attention_mask)
+        assert encoded.shape == (2, 2 * config.d_model)
+        assert torch.allclose(encoded, pooled)

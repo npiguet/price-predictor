@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 
 from price_predictor.application.converted_card_dataset import load_training_samples
 from price_predictor.application.metrics import compute_regression_metrics
+from price_predictor.application.transformer_inference import predict_batch
 from price_predictor.infrastructure.mtgjson_loader import build_metadata_map
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
@@ -94,26 +94,9 @@ def evaluate_transformer(
         log_offset=config.log_offset,
         printing_data_list=[s.printing_data for s in val_data],
     )
-    loader = DataLoader(dataset, batch_size=64, shuffle=False)
 
-    all_predictions = []
-    all_targets = []
+    predictions, targets = predict_batch(model, dataset, device)
 
-    with torch.no_grad():
-        for batch in loader:
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            targets = batch["target"]
-            meta = batch["meta"].to(device)
-
-            outputs = model(input_ids, attention_mask, meta)
-            all_predictions.append(outputs.cpu())
-            all_targets.append(targets)
-
-    predictions = torch.cat(all_predictions).numpy()
-    targets = torch.cat(all_targets).numpy()
-
-    # Convert from shifted-log space back to EUR: exp(x) - log_offset
     predicted_prices = np.maximum(np.exp(predictions) - config.log_offset, 0.0)
     actual_prices = np.exp(targets) - config.log_offset
 

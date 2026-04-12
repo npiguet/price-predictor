@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
-import torch
-
+from price_predictor.application.transformer_inference import (
+    predict_shifted_log,
+    shifted_log_to_eur,
+)
 from price_predictor.domain.entities import PriceEstimate
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.metadata_encoder import encode_metadata
 from price_predictor.infrastructure.transformer_store import load_model
 
 
@@ -37,33 +37,12 @@ class PredictTransformerUseCase:
             PriceEstimate with predicted EUR price and model version.
         """
         model, config = load_model(model_dir)
-
-        if printing_data is None:
-            printing_data = PrintingData.defaults()
-
-        input_ids, attention_mask = tokenizer.encode(card_text, config.max_seq_len)
-        meta = encode_metadata(printing_data)
-
-        try:
-            device = next(model.parameters()).device
-        except StopIteration:
-            device = torch.device("cpu")
-
-        input_ids_t = torch.tensor([input_ids], dtype=torch.long).to(device)
-        attention_mask_t = torch.tensor([attention_mask], dtype=torch.long).to(device)
-        meta_t = meta.unsqueeze(0).to(device)
-
-        model.eval()
-        with torch.no_grad():
-            shifted_log_pred = model(input_ids_t, attention_mask_t, meta_t).item()
-
-        predicted_price = round(float(math.exp(shifted_log_pred) - config.log_offset), 2)
-        predicted_price = max(predicted_price, 0.0)
-
-        # Extract version from model directory name
-        model_version = model_dir.name or "transformer"
+        shifted_log_pred = predict_shifted_log(
+            model, tokenizer, card_text, printing_data, config
+        )
+        predicted_price = round(shifted_log_to_eur(shifted_log_pred, config.log_offset), 2)
 
         return PriceEstimate(
             predicted_price_eur=predicted_price,
-            model_version=model_version,
+            model_version=model_dir.name or "transformer",
         )

@@ -91,12 +91,24 @@ class TestTransformerTrainingDataset:
         assert item["target"].shape == ()
 
     def test_meta_shape_without_printing_data(self):
-        """When printing_data_list is None, meta should be zero vector of shape (15,)."""
+        """When printing_data_list is None, meta is encoded from PrintingData.defaults()."""
+        from price_predictor.domain.value_objects import PrintingData
+        from price_predictor.infrastructure.metadata_encoder import encode_metadata
+
         tok = _make_tokenizer()
         ds = TransformerTrainingDataset(SAMPLE_CARDS, max_seq_len=64, tokenizer=tok)
         item = ds[0]
-        assert item["meta"].shape == (15,)
-        assert (item["meta"] == 0.0).all()
+        expected = encode_metadata(PrintingData.defaults())
+        assert item["meta"].shape == expected.shape
+        assert torch.allclose(item["meta"], expected)
+
+    def test_mismatched_printing_data_length_raises(self):
+        tok = _make_tokenizer()
+        with pytest.raises(ValueError, match="length"):
+            TransformerTrainingDataset(
+                SAMPLE_CARDS, max_seq_len=64, tokenizer=tok,
+                printing_data_list=SAMPLE_PRINTING_DATA[:1],
+            )
 
     def test_meta_shape_with_printing_data(self):
         """When printing_data_list is provided, meta should be encoded tensor of shape (15,)."""

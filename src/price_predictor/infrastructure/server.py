@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +12,10 @@ import numpy as np
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
+from price_predictor.application.transformer_inference import (
+    predict_shifted_log,
+    shifted_log_to_eur,
+)
 from price_predictor.domain.card_name_resolver import CardNameResolver
 from price_predictor.domain.tokenizer import extract_card_name
 from price_predictor.infrastructure.converted_card_parser import parse_converted_text
@@ -111,9 +114,6 @@ def create_app(
             t_artifact = request.app.state.transformer_artifact
             if t_artifact is not None:
                 try:
-                    import torch
-                    from price_predictor.infrastructure.metadata_encoder import encode_metadata
-
                     t_model = t_artifact["model"]
                     t_config = t_artifact["config"]
                     t_version = t_artifact["model_version"]
@@ -122,28 +122,12 @@ def create_app(
                     if tok is None:
                         raise RuntimeError("Tokenizer not loaded — run 'vocabulary' first")
 
-                    input_ids_list, attention_mask_list = tok.encode(
-                        body, t_config.max_seq_len
+                    shifted_log_pred = predict_shifted_log(
+                        t_model, tok, body, printing_data, t_config
                     )
-                    meta = encode_metadata(printing_data or PrintingData.defaults())
-
-                    try:
-                        device = next(t_model.parameters()).device
-                    except StopIteration:
-                        device = torch.device("cpu")
-
-                    input_ids = torch.tensor([input_ids_list], dtype=torch.long).to(device)
-                    attention_mask = torch.tensor(
-                        [attention_mask_list], dtype=torch.long
-                    ).to(device)
-                    meta_t = meta.unsqueeze(0).to(device)
-
-                    t_model.eval()
-                    with torch.no_grad():
-                        shifted_log_pred = t_model(input_ids, attention_mask, meta_t).item()
-
-                    t_price = round(float(math.exp(shifted_log_pred) - t_config.log_offset), 2)
-                    t_price = max(t_price, 0.0)
+                    t_price = round(
+                        shifted_log_to_eur(shifted_log_pred, t_config.log_offset), 2
+                    )
                     transformer_result = {
                         "predicted_price_eur": t_price,
                         "model_version": t_version,
