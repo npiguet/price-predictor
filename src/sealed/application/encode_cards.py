@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass
+class EncodeCardsConfig:
+    cards_path: Path
+    clean: bool = False
 
 
 @dataclass
@@ -20,13 +27,23 @@ class EncodeCardsUseCase:
     Errors in individual cards are collected; processing continues.
     """
 
-    def execute(self, cards_path: Path, encoder, store) -> EncodeCardsResult:
-        txt_files = sorted(cards_path.rglob("*.txt"))
+    def execute(
+        self,
+        config: EncodeCardsConfig,
+        encoder,
+        store,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> EncodeCardsResult:
+        if config.clean:
+            for f in config.cards_path.rglob("*.npz"):
+                f.unlink()
+
+        txt_files = sorted(config.cards_path.rglob("*.txt"))
         processed = 0
         skipped = 0
         errors: list[str] = []
 
-        for i, txt_path in enumerate(txt_files):
+        for txt_path in txt_files:
             npz_path = txt_path.with_suffix(".npz")
 
             if npz_path.exists():
@@ -42,10 +59,7 @@ class EncodeCardsUseCase:
                 errors.append(f"{txt_path}: {exc}")
                 continue
 
-            if processed % 100 == 0 and processed > 0:
-                print(f"\rProgress: {processed} encoded ({skipped} skipped)", end="", flush=True)
-
-        if processed > 0 or skipped > 0:
-            print()  # newline after \r progress
+            if progress and processed % 100 == 0 and processed > 0:
+                progress(processed, skipped)
 
         return EncodeCardsResult(processed=processed, skipped=skipped, errors=errors)

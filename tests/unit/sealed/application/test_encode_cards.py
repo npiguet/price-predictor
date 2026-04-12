@@ -8,7 +8,19 @@ from unittest.mock import MagicMock, call
 import numpy as np
 import pytest
 
-from sealed.application.encode_cards import EncodeCardsUseCase, EncodeCardsResult
+from sealed.application.encode_cards import (
+    EncodeCardsConfig,
+    EncodeCardsResult,
+    EncodeCardsUseCase,
+)
+
+
+def _execute(use_case, cards_dir, encoder, store, *, clean=False):
+    return use_case.execute(
+        EncodeCardsConfig(cards_path=cards_dir, clean=clean),
+        encoder,
+        store,
+    )
 
 
 def _make_fixture_dir(tmp_path: Path, cards: dict[str, str]) -> Path:
@@ -41,7 +53,7 @@ class TestEncodeCardsSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         encoder.encode.assert_not_called()
         store.save.assert_not_called()
@@ -54,7 +66,7 @@ class TestEncodeCardsSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         encoder.encode.assert_called_once()
         store.save.assert_called_once()
@@ -72,7 +84,7 @@ class TestEncodeCardsSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         assert result.processed == 2
         assert result.skipped == 1
@@ -90,7 +102,7 @@ class TestEncodeCardsErrorHandling:
         # Make the first call raise, second succeed
         encoder.encode.side_effect = [RuntimeError("bad card"), np.zeros(16, dtype=np.float32)]
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         assert len(result.errors) == 1
         assert result.processed == 1
@@ -105,7 +117,7 @@ class TestEncodeCardsErrorHandling:
         encoder = _mock_encoder()
         encoder.encode.side_effect = RuntimeError("boom")
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         assert len(result.errors) == 2
 
@@ -133,7 +145,7 @@ class TestEncodeCards544DimSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder(embedding_544)
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         assert result.processed == 1
         saved_embedding = store.save.call_args[0][1]
@@ -148,7 +160,7 @@ class TestEncodeCards544DimSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         encoder.encode.assert_not_called()
         assert result.skipped == 1
@@ -162,25 +174,21 @@ class TestEncodeCards544DimSkipLogic:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store)
 
         encoder.encode.assert_not_called()
         assert result.skipped == 1
 
     def test_clean_deletes_and_re_encodes(self, tmp_path):
-        """--clean deletes all .npz files; the use case then encodes them fresh."""
+        """clean=True deletes all .npz files before encoding so cards are re-encoded."""
         cards_dir = _make_fixture_dir(tmp_path, {"card_a.txt": "type: Creature"})
         npz_path = cards_dir / "card_a.npz"
         np.savez_compressed(npz_path, embedding=np.zeros(512, dtype=np.float32))
 
-        # Simulate --clean: delete .npz files before running use case
-        for f in cards_dir.rglob("*.npz"):
-            f.unlink()
-
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder(np.zeros(544, dtype=np.float32))
         store = _mock_store()
-        result = use_case.execute(cards_dir, encoder, store)
+        result = _execute(use_case, cards_dir, encoder, store, clean=True)
 
         assert result.processed == 1
         assert result.skipped == 0
@@ -193,7 +201,7 @@ class TestEncodeCardsSaveArgs:
         use_case = EncodeCardsUseCase()
         encoder = _mock_encoder()
         store = _mock_store()
-        use_case.execute(cards_dir, encoder, store)
+        _execute(use_case, cards_dir, encoder, store)
 
         saved_path = store.save.call_args[0][0]
         assert saved_path.suffix == ".npz"

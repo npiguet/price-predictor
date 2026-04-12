@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 from sealed.domain.card_embedding_layout import DET_FEATURE_DIM
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -94,17 +94,6 @@ class TrainScorerResult:
     model: SetTransformerScorer
     metrics: TrainingMetrics
     embedding_table: EmbeddingTable
-
-
-class _ExampleDataset(Dataset):
-    def __init__(self, examples: list[TrainingExample]):
-        self.examples = examples
-
-    def __len__(self):
-        return len(self.examples)
-
-    def __getitem__(self, idx):
-        return self.examples[idx]
 
 
 class TrainScorerUseCase:
@@ -225,13 +214,13 @@ def _make_loaders(
     batch_size: int,
 ) -> tuple[DataLoader, DataLoader]:
     train_loader = DataLoader(
-        _ExampleDataset(train_examples),
+        train_examples,
         batch_size=batch_size,
         shuffle=True,
         collate_fn=collate_training_examples,
     )
     val_loader = DataLoader(
-        _ExampleDataset(val_examples),
+        val_examples,
         batch_size=batch_size,
         shuffle=False,
         collate_fn=collate_training_examples,
@@ -255,10 +244,7 @@ def _train_one_epoch(
     for batch in loader:
         optimizer.zero_grad()
         score_winner, score_loser = _score_batch(model, embedding_table, batch)
-        loss = F.binary_cross_entropy_with_logits(
-            score_winner - score_loser,
-            torch.ones_like(score_winner),
-        )
+        loss = _pairwise_bce(score_winner, score_loser)
         loss.backward()
         grad_norms = _gradient_norms(model)
         optimizer.step()
@@ -292,10 +278,7 @@ def _validate(
     with torch.no_grad():
         for batch in val_loader:
             score_winner, score_loser = _score_batch(model, embedding_table, batch)
-            loss = F.binary_cross_entropy_with_logits(
-                score_winner - score_loser,
-                torch.ones_like(score_winner),
-            )
+            loss = _pairwise_bce(score_winner, score_loser)
             total_loss += loss.item()
             n_batches += 1
             correct += (score_winner > score_loser).sum().item()
@@ -327,6 +310,16 @@ def _score_batch(
     return (
         model(winner_cards, batch.winner_mask),
         model(loser_cards, batch.loser_mask),
+    )
+
+
+def _pairwise_bce(
+    score_winner: torch.Tensor, score_loser: torch.Tensor,
+) -> torch.Tensor:
+    """Bradley-Terry pairwise loss: BCE on (winner − loser) with target=1."""
+    return F.binary_cross_entropy_with_logits(
+        score_winner - score_loser,
+        torch.ones_like(score_winner),
     )
 
 

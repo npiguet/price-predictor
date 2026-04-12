@@ -81,9 +81,9 @@ class TestTextPath:
         loc = ConvertedCardLocator(tmp_path)
         assert loc.load_text("Lightning Bolt").startswith("name:")
 
-    def test_missing_text_returns_empty_string(self, tmp_path):
+    def test_missing_text_returns_none(self, tmp_path):
         loc = ConvertedCardLocator(tmp_path)
-        assert loc.load_text("Nonexistent") == ""
+        assert loc.load_text("Nonexistent") is None
 
 
 class TestLoadEmbedding:

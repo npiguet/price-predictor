@@ -20,13 +20,14 @@ def build_parser() -> argparse.ArgumentParser:
         prog="sealed",
         description="Sealed dataset preparation tools",
     )
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    subparsers = parser.add_subparsers(help="Available commands")
 
     # ── encode-cards ──────────────────────────────────────────────
     encode_parser = subparsers.add_parser(
         "encode-cards",
         help="Encode card scripts to .npz embedding files",
     )
+    encode_parser.set_defaults(func=run_encode_cards)
     encode_parser.add_argument(
         "--encoder-path",
         default="models/price-predictor/transformer/latest.pt",
@@ -53,6 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         "generate-pools",
         help="Generate sealed pools using Forge's booster generation logic",
     )
+    generate_parser.set_defaults(func=run_generate_pools)
     generate_parser.add_argument(
         "--set",
         default="RVR",
@@ -76,6 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
         "train-scorer",
         help="Train the deck scorer model on match outcome data",
     )
+    train_parser.set_defaults(func=run_train_scorer)
     train_parser.add_argument(
         "--outcomes-path",
         default="output/sealed/match-outcomes.txt",
@@ -143,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         "evaluate-scorer",
         help="Evaluate the trained scorer against Forge's deck builder",
     )
+    eval_parser.set_defaults(func=run_evaluate_scorer)
     eval_parser.add_argument(
         "--checkpoint",
         required=True,
@@ -178,6 +182,7 @@ def build_parser() -> argparse.ArgumentParser:
         "match-outcomes",
         help="Generate sealed match outcome training data using Forge AI",
     )
+    match_parser.set_defaults(func=run_match_outcomes)
     match_parser.add_argument(
         "--workers",
         type=int,
@@ -192,7 +197,7 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     """Execute the encode-cards command."""
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
     from price_predictor.infrastructure.transformer_store import load_model
-    from sealed.application.encode_cards import EncodeCardsUseCase
+    from sealed.application.encode_cards import EncodeCardsConfig, EncodeCardsUseCase
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
 
@@ -210,26 +215,31 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         print(f"Error: Cards path not found: {cards_path}", file=sys.stderr)
         return 2
 
-    if args.clean:
-        npz_files = list(cards_path.rglob("*.npz"))
-        print(f"Cleaning {len(npz_files)} existing .npz files...")
-        for f in npz_files:
-            f.unlink()
-
     print(f"Encoding cards in {cards_path}")
 
-    # Load model
     model, config = load_model(encoder_path)
     model.eval()
-
-    # Load tokenizer
     tokenizer = load_tokenizer(vocab_path)
 
     encoder = CardEncoder(model, tokenizer, max_seq_len=config.max_seq_len)
     store = EmbeddingStore()
     use_case = EncodeCardsUseCase()
 
-    result = use_case.execute(cards_path, encoder, store)
+    def report(processed: int, skipped: int) -> None:
+        print(
+            f"\rProgress: {processed} encoded ({skipped} skipped)",
+            end="",
+            flush=True,
+        )
+
+    result = use_case.execute(
+        EncodeCardsConfig(cards_path=cards_path, clean=args.clean),
+        encoder,
+        store,
+        progress=report,
+    )
+    if result.processed > 0 or result.skipped > 0:
+        print()
 
     print(
         f"Done: {result.processed} processed, "
@@ -355,21 +365,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-
-    if args.command is None:
+    if not getattr(args, "func", None):
         parser.print_help()
         sys.exit(0)
-
-    if args.command == "encode-cards":
-        sys.exit(run_encode_cards(args))
-    elif args.command == "generate-pools":
-        sys.exit(run_generate_pools(args))
-    elif args.command == "train-scorer":
-        sys.exit(run_train_scorer(args))
-    elif args.command == "evaluate-scorer":
-        sys.exit(run_evaluate_scorer(args))
-    elif args.command == "match-outcomes":
-        sys.exit(run_match_outcomes(args))
-    else:
-        parser.print_help()
-        sys.exit(1)
+    sys.exit(args.func(args))

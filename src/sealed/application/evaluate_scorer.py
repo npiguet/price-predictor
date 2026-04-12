@@ -252,7 +252,8 @@ def _write_decks_file(
 
     def cost_for(name: str) -> str:
         if name not in cost_cache:
-            cost_cache[name] = extract_mana_cost_line(locator.load_text(name)) or ""
+            text = locator.load_text(name) or ""
+            cost_cache[name] = extract_mana_cost_line(text) or ""
         return cost_cache[name]
 
     lines: list[str] = []
@@ -296,7 +297,9 @@ def _build_a_decks(
             continue
 
         nonland_deck = greedy_deck_search(model, valid_names, pool_embeddings)
-        nonland_texts = [locator.load_text(n) for n in nonland_deck]
+        nonland_texts = [
+            text for n in nonland_deck if (text := locator.load_text(n)) is not None
+        ]
         lands = compute_basic_lands(nonland_texts)
         full_deck: list[str] = list(nonland_deck)
         for land_name, count in lands.items():

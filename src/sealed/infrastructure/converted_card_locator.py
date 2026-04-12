@@ -44,9 +44,9 @@ class ConvertedCardLocator:
     def embedding_path(self, card_name: str) -> Path | None:
         return self._find_file(card_name, ".npz")
 
-    def load_text(self, card_name: str) -> str:
+    def load_text(self, card_name: str) -> str | None:
         path = self.text_path(card_name)
-        return path.read_text(encoding="utf-8") if path else ""
+        return path.read_text(encoding="utf-8") if path else None
 
     def load_embedding(self, card_name: str) -> np.ndarray | None:
         path = self.embedding_path(card_name)
