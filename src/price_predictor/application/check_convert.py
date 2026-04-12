@@ -117,6 +117,21 @@ class CardCheckResult:
     empty_lines: bool
     has_oracle: bool
 
+    def has_issues(self, threshold: float) -> bool:
+        """Return True if this card should appear in the issues report.
+
+        Duplicate lines are only flagged when similarity is not perfect: if
+        oracle and converter both emit N identical lines (e.g. Bounty of
+        Might), the word-bag similarity is 100% and the duplicates are
+        intentional.
+        """
+        return (
+            self.similarity < threshold
+            or (bool(self.duplicate_lines) and self.similarity < 1.0)
+            or self.empty_lines
+            or (self.has_oracle and self.converted_lines == 0)
+        )
+
 
 def _is_keyword_token(token: str) -> bool:
     """Return True if token looks like a standalone MTG keyword phrase."""
@@ -227,55 +242,85 @@ def _strip_reminder(text: str) -> str:
     return _REMINDER_TEXT.sub("", text).strip()
 
 
-def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
-    """Extract Oracle text and card name from a Forge script string.
-
-    Strips reminder text from Oracle lines and appends implicit mana
-    abilities for lands with basic land subtypes.
-    """
-    card_name = None
-    oracle = None
-    types_line = None
+def _parse_forge_header(
+    forge_text: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Walk the front face of a Forge script and pull out (name, types, oracle)."""
+    card_name = oracle = types_line = None
     for line in forge_text.splitlines():
         line = line.strip()
         if line == "ALTERNATE":
-            break  # Only compare front face; back-face oracle is a separate card face
+            break
         if line.startswith("Name:") and card_name is None:
             card_name = line[5:].strip()
         elif line.startswith("Types:") and types_line is None:
             types_line = line[6:].strip()
         elif line.startswith("Oracle:") and oracle is None:
             oracle = line[7:].strip()
+    return card_name, types_line, oracle
+
+
+def _strip_oracle_reminders(lines: list[str]) -> list[str]:
+    """Strip parenthesized reminder text from each line and drop blanks."""
+    return [ln for ln in (_strip_reminder(ln) for ln in lines) if ln]
+
+
+def _drop_class_level_lines(lines: list[str]) -> list[str]:
+    """Drop Class/Talent "{cost}: Level N" lines — the converter omits them."""
+    return [ln for ln in lines if not _CLASS_LEVEL_LINE.match(ln)]
+
+
+def _mask_card_name_in_lines(lines: list[str], card_name: str | None) -> list[str]:
+    """Replace literal card name and NICKNAME with CARDNAME so name commas don't split.
+
+    Done before keyword-list splitting so multi-word names containing commas
+    (e.g. "Silvos, Rogue Elemental") never cause an incorrect split.
+    """
+    if not card_name:
+        return lines
+    return [
+        ln.replace(card_name, "CARDNAME").replace("NICKNAME", "CARDNAME")
+        for ln in lines
+    ]
+
+
+def _split_keyword_lines_in_list(lines: list[str]) -> list[str]:
+    """Expand comma-separated keyword lines so counts match the converter's per-line output."""
+    expanded: list[str] = []
+    for ln in lines:
+        expanded.extend(_split_keyword_line(ln))
+    return expanded
+
+
+def _maybe_append_land_mana(lines: list[str], types_line: str | None) -> list[str]:
+    """Append the implicit basic-land mana ability when applicable."""
+    if not types_line:
+        return lines
+    land_mana = _build_land_mana(types_line)
+    if not land_mana:
+        return lines
+    return [*lines, land_mana]
+
+
+def _extract_oracle(forge_text: str) -> tuple[str | None, str | None]:
+    """Extract Oracle text and card name from a Forge script string.
+
+    Strips reminder text from Oracle lines and appends implicit mana
+    abilities for lands with basic land subtypes.
+    """
+    card_name, types_line, oracle = _parse_forge_header(forge_text)
+
     if oracle:
-        oracle = oracle.replace("\\n", "\n")
-        # Strip reminder text from each oracle line
-        oracle_lines = [_strip_reminder(ln) for ln in oracle.split("\n")]
-        oracle_lines = [ln for ln in oracle_lines if ln]
-        # Drop Class/Talent "{cost}: Level N" lines — converter omits them
-        oracle_lines = [ln for ln in oracle_lines if not _CLASS_LEVEL_LINE.match(ln)]
-        # Replace card name and NICKNAME with CARDNAME before splitting, so card names
-        # containing commas (e.g., "Silvos, Rogue Elemental") do not cause incorrect splits.
-        if card_name:
-            oracle_lines = [
-                ln.replace(card_name, "CARDNAME").replace("NICKNAME", "CARDNAME")
-                for ln in oracle_lines
-            ]
-        # Split comma-separated keyword-only lines so line counts match the converter
-        expanded: list[str] = []
-        for ln in oracle_lines:
-            expanded.extend(_split_keyword_line(ln))
-        oracle_lines = expanded
-        # Append implicit land mana ability if applicable
-        if types_line:
-            land_mana = _build_land_mana(types_line)
-            if land_mana:
-                oracle_lines.append(land_mana)
-        oracle = "\n".join(oracle_lines) if oracle_lines else None
+        raw_lines = oracle.replace("\\n", "\n").split("\n")
+        lines = _strip_oracle_reminders(raw_lines)
+        lines = _drop_class_level_lines(lines)
+        lines = _mask_card_name_in_lines(lines, card_name)
+        lines = _split_keyword_lines_in_list(lines)
+        lines = _maybe_append_land_mana(lines, types_line)
+        oracle = "\n".join(lines) if lines else None
     elif types_line:
-        # No oracle text, but may have implicit land mana
-        land_mana = _build_land_mana(types_line)
-        if land_mana:
-            oracle = land_mana
+        oracle = _build_land_mana(types_line)
+
     return card_name, oracle
 
 
@@ -413,16 +458,7 @@ def check_all(
         result = check_card(converted_text, forge_text)
         result.filename = str(rel)
 
-        has_issues = (
-            result.similarity < threshold
-            # Only flag duplicate lines when similarity is not perfect: if oracle and
-            # converter both emit N identical lines (e.g. Bounty of Might), the
-            # word-bag similarity is 100% and the duplicates are intentional.
-            or (result.duplicate_lines and result.similarity < 1.0)
-            or result.empty_lines
-            or (result.has_oracle and result.converted_lines == 0)
-        )
-        if has_issues:
+        if result.has_issues(threshold):
             results.append(result)
 
     results.sort(key=lambda r: r.similarity)

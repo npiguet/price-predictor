@@ -155,6 +155,89 @@ def _bootstrap_tokenizer() -> MtgTokenizer:
     return MtgTokenizer(bootstrap_vocab)
 
 
+def _add_token(vocab: dict[str, int], token: str) -> None:
+    if token not in vocab:
+        vocab[token] = len(vocab)
+
+
+def _seed_special_tokens(vocab: dict[str, int]) -> None:
+    """Seed [PAD], [UNK], and the cardname placeholder."""
+    _add_token(vocab, "[PAD]")
+    _add_token(vocab, "[UNK]")
+    _add_token(vocab, "cardname")
+
+
+def _seed_domain_terms(vocab: dict[str, int]) -> None:
+    """Seed game zones, color names, multi-word keywords, and printing-data terms."""
+    for zone in sorted(_GAME_ZONES):
+        _add_token(vocab, zone)
+    for color in sorted(_COLOR_NAMES):
+        _add_token(vocab, color)
+    for kw in sorted(MULTI_WORD_KEYWORDS):
+        _add_token(vocab, kw)
+    for term in sorted(_PRINTING_DATA_TERMS):
+        _add_token(vocab, term)
+
+
+def _seed_set_codes(vocab: dict[str, int], printings_path: Path | None) -> None:
+    """Seed alphabetic fragments of every MTGJSON set code, when available."""
+    if printings_path is None:
+        return
+    for token in _extract_set_code_tokens(printings_path):
+        _add_token(vocab, token)
+
+
+def _scan_corpus_frequencies(
+    cards_path: Path, tokenizer: MtgTokenizer
+) -> tuple[Counter[str], int]:
+    """Walk the corpus and return (token_counts, total_occurrences)."""
+    token_counts: Counter[str] = Counter()
+    total_token_occurrences = 0
+    for txt_file in cards_path.rglob("*.txt"):
+        try:
+            text = txt_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        tokens = tokenizer.tokenize(text)
+        token_counts.update(tokens)
+        total_token_occurrences += len(tokens)
+    return token_counts, total_token_occurrences
+
+
+def _add_freq_tokens(
+    vocab: dict[str, int], counts: Counter[str], freq_threshold: int
+) -> None:
+    """Add corpus tokens meeting freq_threshold, sorted desc by freq then alpha."""
+    freq_tokens = [
+        (token, count)
+        for token, count in counts.items()
+        if count >= freq_threshold
+        and token not in vocab
+        and not _MANA_SYMBOL_PATTERN.fullmatch(token)
+    ]
+    freq_tokens.sort(key=lambda x: (-x[1], x[0]))
+    for token, _ in freq_tokens:
+        _add_token(vocab, token)
+
+
+def _add_remaining_mana_symbols(vocab: dict[str, int], counts: Counter[str]) -> None:
+    """Add every mana symbol seen in the corpus that isn't already in the vocab."""
+    for token in counts:
+        if _MANA_SYMBOL_PATTERN.fullmatch(token) and token not in vocab:
+            _add_token(vocab, token)
+
+
+def _compute_coverage(
+    counts: Counter[str], vocab: dict[str, int], total_occurrences: int
+) -> tuple[float, float]:
+    """Return (coverage_pct, unk_pct) of corpus tokens captured by the vocab."""
+    if total_occurrences == 0:
+        return 100.0, 0.0
+    covered = sum(count for token, count in counts.items() if token in vocab)
+    coverage_pct = round(covered / total_occurrences * 100.0, 1)
+    return coverage_pct, round(100.0 - coverage_pct, 1)
+
+
 def build_vocabulary(
     cards_path: Path,
     freq_threshold: int = 5,
@@ -184,82 +267,21 @@ def build_vocabulary(
     """
     vocab: dict[str, int] = {}
 
-    def _add(token: str) -> None:
-        if token not in vocab:
-            vocab[token] = len(vocab)
-
-    # 1. Special tokens
-    _add("[PAD]")
-    _add("[UNK]")
-
-    # 2. Structural placeholder
-    _add("cardname")
-
-    # 3. Fixed domain terms — alphabetical within each group
-    for zone in sorted(_GAME_ZONES):
-        _add(zone)
-
-    for color in sorted(_COLOR_NAMES):
-        _add(color)
-
-    for kw in sorted(MULTI_WORD_KEYWORDS):
-        _add(kw)
-
-    for term in sorted(_PRINTING_DATA_TERMS):
-        _add(term)
-
-    # 4. Set-code letter fragments from AllPrintings (optional)
-    if printings_path is not None:
-        for token in _extract_set_code_tokens(printings_path):
-            _add(token)
-
+    _seed_special_tokens(vocab)
+    _seed_domain_terms(vocab)
+    _seed_set_codes(vocab, printings_path)
     domain_token_count = len(vocab)
 
-    # 5. Scan card corpus
-    txt_files = list(cards_path.rglob("*.txt"))
+    counts, total_occurrences = _scan_corpus_frequencies(
+        cards_path, _bootstrap_tokenizer(),
+    )
 
-    token_counts: Counter[str] = Counter()
-    total_token_occurrences = 0
-    tokenizer = _bootstrap_tokenizer()
-
-    for txt_file in txt_files:
-        try:
-            text = txt_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        tokens = tokenizer.tokenize(text)
-        token_counts.update(tokens)
-        total_token_occurrences += len(tokens)
-
-    # 6. Add corpus tokens meeting freq_threshold (sorted by desc freq, alpha tie-break)
-    freq_tokens = [
-        (token, count)
-        for token, count in token_counts.items()
-        if count >= freq_threshold and token not in vocab
-        and not _MANA_SYMBOL_PATTERN.fullmatch(token)
-    ]
-    freq_tokens.sort(key=lambda x: (-x[1], x[0]))
-
-    for token, _ in freq_tokens:
-        _add(token)
-
+    _add_freq_tokens(vocab, counts, freq_threshold)
     freq_threshold_token_count = len(vocab) - domain_token_count
 
-    # 6. Add all mana symbols not yet in vocab (regardless of frequency)
-    for token in token_counts:
-        if _MANA_SYMBOL_PATTERN.fullmatch(token) and token not in vocab:
-            _add(token)
+    _add_remaining_mana_symbols(vocab, counts)
 
-    # 7. Compute coverage statistics
-    if total_token_occurrences > 0:
-        covered = sum(
-            count for token, count in token_counts.items() if token in vocab
-        )
-        coverage_pct = round(covered / total_token_occurrences * 100.0, 1)
-    else:
-        coverage_pct = 100.0
-
-    unk_pct = round(100.0 - coverage_pct, 1)
+    coverage_pct, unk_pct = _compute_coverage(counts, vocab, total_occurrences)
 
     return VocabBuildResult(
         vocab=vocab,

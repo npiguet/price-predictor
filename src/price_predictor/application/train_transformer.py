@@ -100,6 +100,59 @@ def _make_weighted_sampler(prices: list[float], exponent: float = 0.5) -> Weight
     return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
 
 
+def _batch_to_device(batch: dict, device: torch.device) -> tuple[torch.Tensor, ...]:
+    return (
+        batch["input_ids"].to(device),
+        batch["attention_mask"].to(device),
+        batch["target"].to(device),
+        batch["meta"].to(device),
+    )
+
+
+def _run_training_epoch(
+    model: CardPriceTransformerModel,
+    loader: DataLoader,
+    loss_fn: torch.nn.Module,
+    device: torch.device,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
+) -> float:
+    """Run one training epoch and return the mean batch loss."""
+    model.train(True)
+    losses: list[float] = []
+    for batch in loader:
+        input_ids, attention_mask, targets, meta = _batch_to_device(batch, device)
+        predictions = model(input_ids, attention_mask, meta)
+        loss = loss_fn(predictions, targets)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
+
+        losses.append(loss.item())
+    return sum(losses) / len(losses)
+
+
+def _run_eval_epoch(
+    model: CardPriceTransformerModel,
+    loader: DataLoader,
+    loss_fn: torch.nn.Module,
+    device: torch.device,
+) -> float:
+    """Run one evaluation epoch (no grad, no optimizer) and return the mean batch loss."""
+    model.train(False)
+    losses: list[float] = []
+    with torch.no_grad():
+        for batch in loader:
+            input_ids, attention_mask, targets, meta = _batch_to_device(batch, device)
+            predictions = model(input_ids, attention_mask, meta)
+            loss = loss_fn(predictions, targets)
+            losses.append(loss.item())
+    return sum(losses) / len(losses)
+
+
 def _run_epoch(
     model: CardPriceTransformerModel,
     loader: DataLoader,
@@ -109,35 +162,10 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None = None,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
 ) -> float:
-    """Run a single epoch and return the mean batch loss.
-
-    Training mode is selected when ``optimizer`` is given, eval mode otherwise.
-    """
-    is_train = optimizer is not None
-    model.train(is_train)
-
-    losses: list[float] = []
-    context = torch.enable_grad() if is_train else torch.no_grad()
-    with context:
-        for batch in loader:
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            targets = batch["target"].to(device)
-            meta = batch["meta"].to(device)
-
-            predictions = model(input_ids, attention_mask, meta)
-            loss = loss_fn(predictions, targets)
-
-            if is_train:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                if scheduler is not None:
-                    scheduler.step()
-
-            losses.append(loss.item())
-
-    return sum(losses) / len(losses)
+    """Backwards-compatible wrapper that dispatches to the train or eval helper."""
+    if optimizer is not None:
+        return _run_training_epoch(model, loader, loss_fn, device, optimizer, scheduler)
+    return _run_eval_epoch(model, loader, loss_fn, device)
 
 
 class _BestCheckpoint:
@@ -195,11 +223,10 @@ def _train_loop(
 
     for epoch in range(1, epochs + 1):
         epoch_start = time.perf_counter()
-        train_loss = _run_epoch(
-            model, train_loader, loss_fn, device,
-            optimizer=optimizer, scheduler=scheduler,
+        train_loss = _run_training_epoch(
+            model, train_loader, loss_fn, device, optimizer, scheduler,
         )
-        val_loss = _run_epoch(model, val_loader, loss_fn, device)
+        val_loss = _run_eval_epoch(model, val_loader, loss_fn, device)
         elapsed = time.perf_counter() - epoch_start
 
         print(
@@ -219,6 +246,137 @@ def _train_loop(
 
     best.restore(model)
     return best.best_epoch, best.best_val_loss, False, epochs
+
+
+@dataclass
+class _LoadedSamples:
+    samples: list[TrainingSample]
+    cards_skipped: int
+
+
+def _load_samples(
+    output_dir: Path, prices_path: Path, printings_path: Path
+) -> _LoadedSamples:
+    """Resolve cards against price + metadata maps and report skip count."""
+    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
+    txt_file_count = len(list(output_dir.rglob("*.txt")))
+    samples = load_training_samples(output_dir, price_map, metadata_map)
+    logger.info("Matched %d cards to texts and prices", len(samples))
+
+    if len(samples) < 5:
+        raise ValueError(
+            f"Insufficient training data: only {len(samples)} matched cards. Need at least 5."
+        )
+
+    return _LoadedSamples(samples=samples, cards_skipped=txt_file_count - len(samples))
+
+
+def _build_dataset(
+    samples: list[TrainingSample],
+    max_seq_len: int,
+    tokenizer: MtgTokenizer,
+    log_offset: float,
+) -> TransformerTrainingDataset:
+    """Build a TransformerTrainingDataset from a list of TrainingSamples."""
+    return TransformerTrainingDataset(
+        [(s.name, s.text, s.price_eur) for s in samples],
+        max_seq_len=max_seq_len,
+        tokenizer=tokenizer,
+        log_offset=log_offset,
+        printing_data_list=[s.printing_data for s in samples],
+    )
+
+
+def _build_loaders(
+    samples: list[TrainingSample],
+    tokenizer: MtgTokenizer,
+    max_seq_len: int,
+    batch_size: int,
+    log_offset: float,
+    sampler_exponent: float,
+    random_seed: int,
+) -> tuple[DataLoader, DataLoader]:
+    """Stratified split + oversampled train loader + plain val loader."""
+    buckets_all = [_price_bucket(s.price_eur) for s in samples]
+    train_data, val_data = train_test_split(
+        samples, test_size=0.2, random_state=random_seed, stratify=buckets_all,
+    )
+    logger.info("Split: %d train, %d validation", len(train_data), len(val_data))
+
+    train_dataset = _build_dataset(train_data, max_seq_len, tokenizer, log_offset)
+    val_dataset = _build_dataset(val_data, max_seq_len, tokenizer, log_offset)
+
+    sampler = _make_weighted_sampler(
+        [s.price_eur for s in train_data], exponent=sampler_exponent,
+    )
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    return train_loader, val_loader
+
+
+def _build_model(
+    config: TransformerConfig, device: torch.device
+) -> CardPriceTransformerModel:
+    """Instantiate the model on the chosen device."""
+    model = CardPriceTransformerModel(config)
+    model.to(device)
+    return model
+
+
+def _require_cuda_device() -> torch.device:
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA GPU required for training. No GPU detected.")
+    return torch.device("cuda")
+
+
+def _log_sequence_length_stats(max_seq_len: int, stats: dict) -> None:
+    logger.info(
+        "Token length stats: p95=%d, p99=%d, max=%d",
+        stats["p95"], stats["p99"], stats["max"],
+    )
+    logger.info(
+        "Chosen max_seq_len=%d (max rounded up to multiple of 8). "
+        "No cards will be truncated.",
+        max_seq_len,
+    )
+
+
+def _finalise_and_save(
+    model: CardPriceTransformerModel,
+    config: TransformerConfig,
+    model_output: Path,
+    samples: list[TrainingSample],
+    cards_skipped: int,
+    best_epoch: int,
+    best_val_loss: float,
+    stopped_early: bool,
+    final_epoch: int,
+    epochs: int,
+) -> TransformerTrainResult:
+    """Move model to CPU, persist it, and assemble the train result."""
+    model.cpu()
+    _version, model_path = save_model(model, config, model_output)
+
+    prices = [s.price_eur for s in samples]
+    print(
+        f"\nTraining complete. Best epoch: {best_epoch}/{epochs}, "
+        f"val_loss: {best_val_loss:.3f}. "
+        + (f"Early stopping triggered at epoch {final_epoch}." if stopped_early else "")
+    )
+    print(f"Model saved to {model_path}")
+
+    return TransformerTrainResult(
+        model_path=model_path,
+        best_epoch=best_epoch,
+        best_val_loss=best_val_loss,
+        stopped_early=stopped_early,
+        final_epoch=final_epoch,
+        card_count=len(samples),
+        cards_skipped=cards_skipped,
+        price_range_min_eur=min(prices),
+        price_range_max_eur=max(prices),
+        max_seq_len=config.max_seq_len,
+    )
 
 
 def train_transformer(
@@ -242,111 +400,34 @@ def train_transformer(
 ) -> TransformerTrainResult:
     """Train a transformer model on converted card texts."""
     torch.manual_seed(random_seed)
-
     tokenizer = load_tokenizer(vocab_path)
 
-    metadata_map, price_map = build_metadata_map(printings_path, prices_path)
-    txt_file_count = len(list(output_dir.rglob("*.txt")))
-    samples = load_training_samples(output_dir, price_map, metadata_map)
-    logger.info("Matched %d cards to texts and prices", len(samples))
-
-    if len(samples) < 5:
-        raise ValueError(
-            f"Insufficient training data: only {len(samples)} matched cards. Need at least 5."
-        )
-
-    cards_skipped = txt_file_count - len(samples)
+    loaded = _load_samples(output_dir, prices_path, printings_path)
 
     max_seq_len, stats = analyze_sequence_lengths(
-        [s.text for s in samples], tokenizer,
+        [s.text for s in loaded.samples], tokenizer,
     )
-    logger.info(
-        "Token length stats: p95=%d, p99=%d, max=%d",
-        stats["p95"], stats["p99"], stats["max"],
-    )
-    logger.info(
-        "Chosen max_seq_len=%d (max rounded up to multiple of 8). No cards will be truncated.",
-        max_seq_len,
+    _log_sequence_length_stats(max_seq_len, stats)
+
+    train_loader, val_loader = _build_loaders(
+        loaded.samples, tokenizer, max_seq_len, batch_size,
+        log_offset, sampler_exponent, random_seed,
     )
 
-    # 80/20 split stratified by price bucket so expensive cards land in both sets.
-    buckets_all = [_price_bucket(s.price_eur) for s in samples]
-    train_data, val_data = train_test_split(
-        samples, test_size=0.2, random_state=random_seed, stratify=buckets_all
-    )
-    logger.info("Split: %d train, %d validation", len(train_data), len(val_data))
-
-    train_dataset = _build_dataset(train_data, max_seq_len, tokenizer, log_offset)
-    val_dataset = _build_dataset(val_data, max_seq_len, tokenizer, log_offset)
-
-    # Oversample expensive cards during training so their gradient signal isn't
-    # drowned out by the ~90% cheap-card majority.
-    sampler = _make_weighted_sampler(
-        [s.price_eur for s in train_data], exponent=sampler_exponent,
-    )
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    # 5. Build model
     config = TransformerConfig(
-        d_model=d_model,
-        n_layers=n_layers,
-        n_heads=n_heads,
-        ff_dim=ff_dim,
-        max_seq_len=max_seq_len,
-        vocab_size=tokenizer.vocab_size,
-        dropout=dropout,
-        log_offset=log_offset,
+        d_model=d_model, n_layers=n_layers, n_heads=n_heads, ff_dim=ff_dim,
+        max_seq_len=max_seq_len, vocab_size=tokenizer.vocab_size,
+        dropout=dropout, log_offset=log_offset,
     )
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA GPU required for training. No GPU detected.")
-    device = torch.device("cuda")
+    device = _require_cuda_device()
+    model = _build_model(config, device)
 
-    model = CardPriceTransformerModel(config)
-    model.to(device)
-
-    # 6. Train
     best_epoch, best_val_loss, stopped_early, final_epoch = _train_loop(
         model, train_loader, val_loader, device, epochs, lr, patience,
     )
 
-    model.cpu()
-    version, model_path = save_model(model, config, model_output)
-
-    prices = [s.price_eur for s in samples]
-    print(
-        f"\nTraining complete. Best epoch: {best_epoch}/{epochs}, "
-        f"val_loss: {best_val_loss:.3f}. "
-        + (f"Early stopping triggered at epoch {final_epoch}." if stopped_early else "")
-    )
-    print(f"Model saved to {model_path}")
-
-    return TransformerTrainResult(
-        model_path=model_path,
-        best_epoch=best_epoch,
-        best_val_loss=best_val_loss,
-        stopped_early=stopped_early,
-        final_epoch=final_epoch,
-        card_count=len(samples),
-        cards_skipped=cards_skipped,
-        price_range_min_eur=min(prices),
-        price_range_max_eur=max(prices),
-        max_seq_len=max_seq_len,
-    )
-
-
-def _build_dataset(
-    samples: list[TrainingSample],
-    max_seq_len: int,
-    tokenizer: MtgTokenizer,
-    log_offset: float,
-) -> TransformerTrainingDataset:
-    """Build a TransformerTrainingDataset from a list of TrainingSamples."""
-    return TransformerTrainingDataset(
-        [(s.name, s.text, s.price_eur) for s in samples],
-        max_seq_len=max_seq_len,
-        tokenizer=tokenizer,
-        log_offset=log_offset,
-        printing_data_list=[s.printing_data for s in samples],
+    return _finalise_and_save(
+        model, config, model_output, loaded.samples, loaded.cards_skipped,
+        best_epoch, best_val_loss, stopped_early, final_epoch, epochs,
     )
