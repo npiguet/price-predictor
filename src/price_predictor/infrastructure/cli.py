@@ -8,9 +8,16 @@ import logging
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
+
+
+def _require_path_exists(path: Path, label: str) -> bool:
+    """Print an error and return False when ``path`` is missing; True otherwise."""
+    if path.exists():
+        return True
+    print(f"Error: {label} not found: {path}", file=sys.stderr)
+    return False
 
 
 def _add_shared_dataset_args(parser: argparse.ArgumentParser) -> None:
@@ -216,8 +223,7 @@ def run_vocabulary(args: argparse.Namespace) -> int:
     from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
     cards_path = Path(args.cards_path)
-    if not cards_path.exists():
-        print(f"Error: Cards path not found: {cards_path}", file=sys.stderr)
+    if not _require_path_exists(cards_path, "Cards path"):
         return 1
 
     txt_files = list(cards_path.rglob("*.txt"))
@@ -259,73 +265,6 @@ def run_vocabulary(args: argparse.Namespace) -> int:
         "unk_pct": result.unk_pct,
     }
     print(json.dumps(output, indent=2))
-    return 0
-
-
-def run_eval(args: argparse.Namespace) -> int:
-    """Execute the eval command — send a card file to the prediction endpoint."""
-    from urllib.error import HTTPError, URLError
-
-    file_path = Path(args.file)
-    if not file_path.exists():
-        print(f"Error: File not found: {file_path}", file=sys.stderr)
-        return 1
-    if not file_path.is_file():
-        print(f"Error: Path is not a file: {file_path}", file=sys.stderr)
-        return 1
-
-    try:
-        content = file_path.read_text(encoding="utf-8")
-    except OSError as e:
-        print(f"Error: Could not read file: {e}", file=sys.stderr)
-        return 1
-
-    req = Request(
-        args.endpoint,
-        data=content.encode("utf-8"),
-        headers={"Content-Type": "text/plain"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except HTTPError as e:
-        try:
-            error_data = json.loads(e.read().decode("utf-8"))
-            msg = error_data.get("error", str(e))
-        except Exception:
-            msg = str(e)
-        print(
-            f"Error: Prediction service returned error ({e.code}): {msg}",
-            file=sys.stderr,
-        )
-        return 2
-    except URLError:
-        print(
-            f"Error: Could not connect to prediction service at {args.endpoint}",
-            file=sys.stderr,
-        )
-        return 2
-
-    if "sklearn" in data:
-        sklearn = data["sklearn"]
-        print("sklearn:")
-        print(f"  Predicted price: \u20ac{sklearn['predicted_price_eur']}")
-        print(f"  Model version:   {sklearn['model_version']}")
-        transformer = data.get("transformer")
-        if transformer is not None:
-            print("transformer:")
-            print(f"  Predicted price: \u20ac{transformer['predicted_price_eur']}")
-            print(f"  Model version:   {transformer['model_version']}")
-        else:
-            print("transformer:")
-            print("  not available")
-    else:
-        price = data["predicted_price_eur"]
-        version = data["model_version"]
-        print(f"Predicted price: \u20ac{price}")
-        print(f"Model version:   {version}")
     return 0
 
 
@@ -429,11 +368,9 @@ def run_check_convert(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_path)
     cards_dir = Path(args.cards_path)
 
-    if not output_dir.exists():
-        print(f"Error: Output directory not found: {output_dir}", file=sys.stderr)
+    if not _require_path_exists(output_dir, "Output directory"):
         return 1
-    if not cards_dir.exists():
-        print(f"Error: Cards directory not found: {cards_dir}", file=sys.stderr)
+    if not _require_path_exists(cards_dir, "Cards directory"):
         return 1
 
     print(f"Checking converted files in {output_dir} against {cards_dir}...",
@@ -454,17 +391,14 @@ def run_train_sklearn(args: argparse.Namespace) -> int:
     from price_predictor.application.train import TrainModelUseCase
 
     output_dir = Path(args.output_dir)
-    if not output_dir.exists():
-        print(f"Error: Converted cards directory not found: {output_dir}", file=sys.stderr)
+    if not _require_path_exists(output_dir, "Converted cards directory"):
         print("Run 'convert' first to generate converted card text files.", file=sys.stderr)
         return 1
     prices_path = Path(args.prices_path)
-    if not prices_path.exists():
-        print(f"Error: Prices file not found: {prices_path}", file=sys.stderr)
+    if not _require_path_exists(prices_path, "Prices file"):
         return 1
     printings_path = Path(args.printings_path)
-    if not printings_path.exists():
-        print(f"Error: Printings file not found: {printings_path}", file=sys.stderr)
+    if not _require_path_exists(printings_path, "Printings file"):
         return 1
     try:
         use_case = TrainModelUseCase()
@@ -561,8 +495,7 @@ def _read_card_text(args: argparse.Namespace) -> str | None:
     """Resolve the card text from --file or --card. None means a printed error."""
     if args.file:
         file_path = Path(args.file)
-        if not file_path.exists():
-            print(f"Error: File not found: {file_path}", file=sys.stderr)
+        if not _require_path_exists(file_path, "File"):
             return None
         try:
             return file_path.read_text(encoding="utf-8")
@@ -590,27 +523,27 @@ def _load_optional_transformer_bundle(
                 "config": config,
                 "model_version": "transformer-v1",
             }
-            print("Transformer model loaded.", file=sys.stderr)
+            logger.info("Transformer model loaded.")
         except Exception as e:
-            print(f"Warning: Failed to load transformer model: {e}", file=sys.stderr)
+            logger.warning("Failed to load transformer model: %s", e)
     else:
-        print("No transformer model found — transformer predictions disabled.", file=sys.stderr)
+        logger.info("No transformer model found — transformer predictions disabled.")
 
     tokenizer: Any | None = None
     if vocab_path.exists():
         try:
             from price_predictor.infrastructure.tokenizer_store import load_tokenizer
             tokenizer = load_tokenizer(vocab_path)
-            print(
-                f"Tokenizer loaded from {vocab_path} ({tokenizer.vocab_size} tokens).",
-                file=sys.stderr,
+            logger.info(
+                "Tokenizer loaded from %s (%d tokens).",
+                vocab_path, tokenizer.vocab_size,
             )
         except Exception as e:
-            print(f"Warning: Failed to load tokenizer: {e}", file=sys.stderr)
+            logger.warning("Failed to load tokenizer: %s", e)
     else:
-        print(
-            f"Tokenizer vocab not found at {vocab_path} — transformer encoding may fail.",
-            file=sys.stderr,
+        logger.warning(
+            "Tokenizer vocab not found at %s — transformer encoding may fail.",
+            vocab_path,
         )
 
     return transformer_artifact, tokenizer

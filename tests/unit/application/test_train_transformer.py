@@ -9,39 +9,43 @@ import pytest
 import torch
 from torch import nn
 
+from price_predictor.application.train_transformer import (
+    _BestCheckpoint,
+    _run_epoch,
+    analyze_sequence_lengths,
+    train_transformer,
+)
+from price_predictor.application.training_sample import TrainingSample
+from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.value_objects import PrintingData
 
-def _make_fixture_tokenizer(vocab_size: int = 512) -> "MtgTokenizer":
+
+def _make_fixture_tokenizer(vocab_size: int = 512) -> MtgTokenizer:
     """Build a fixture MtgTokenizer with a given vocab size."""
-    from price_predictor.domain.tokenizer import MtgTokenizer
-
     vocab = {"[PAD]": 0, "[UNK]": 1}
     for i in range(vocab_size - 2):
         vocab[f"token_{i}"] = i + 2
     return MtgTokenizer(vocab)
 
 
-def _make_printing_data():
-    from price_predictor.domain.value_objects import PrintingData
+def _make_printing_data() -> PrintingData:
     return PrintingData(rarity="rare", printings_count=1, release_year=2020)
 
 
 class TestAnalyzeSequenceLengths:
     def test_returns_multiple_of_8(self):
-        from price_predictor.application.train_transformer import analyze_sequence_lengths
         tokenizer = _make_fixture_tokenizer()
         texts = ["hello world"] * 100
         max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len % 8 == 0
 
     def test_minimum_is_64(self):
-        from price_predictor.application.train_transformer import analyze_sequence_lengths
         tokenizer = _make_fixture_tokenizer()
         texts = ["hi"] * 100  # Very short texts
         max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len >= 64
 
     def test_stats_contain_expected_keys(self):
-        from price_predictor.application.train_transformer import analyze_sequence_lengths
         tokenizer = _make_fixture_tokenizer()
         texts = ["hello world token test"] * 100
         _, stats = analyze_sequence_lengths(texts, tokenizer)
@@ -50,14 +54,12 @@ class TestAnalyzeSequenceLengths:
         assert "max" in stats
 
     def test_max_seq_len_covers_all_cards(self):
-        from price_predictor.application.train_transformer import analyze_sequence_lengths
         tokenizer = _make_fixture_tokenizer()
         texts = ["word " * i for i in range(1, 101)]
         max_seq_len, stats = analyze_sequence_lengths(texts, tokenizer)
         assert max_seq_len >= stats["max"]
 
     def test_p95_less_than_or_equal_to_max(self):
-        from price_predictor.application.train_transformer import analyze_sequence_lengths
         tokenizer = _make_fixture_tokenizer()
         texts = ["word " * i for i in range(1, 101)]
         _, stats = analyze_sequence_lengths(texts, tokenizer)
@@ -92,7 +94,6 @@ def _make_batch(target: float = 1.0) -> dict:
 
 class TestBestCheckpoint:
     def test_first_update_is_always_improvement(self):
-        from price_predictor.application.train_transformer import _BestCheckpoint
         best = _BestCheckpoint()
         improved = best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
         assert improved is True
@@ -100,7 +101,6 @@ class TestBestCheckpoint:
         assert best.best_val_loss == 0.5
 
     def test_higher_loss_does_not_improve(self):
-        from price_predictor.application.train_transformer import _BestCheckpoint
         best = _BestCheckpoint()
         best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
         improved = best.update(epoch=2, val_loss=0.7, model=nn.Linear(2, 1))
@@ -108,7 +108,6 @@ class TestBestCheckpoint:
         assert best.best_epoch == 1
 
     def test_lower_loss_replaces_best(self):
-        from price_predictor.application.train_transformer import _BestCheckpoint
         best = _BestCheckpoint()
         best.update(epoch=1, val_loss=0.5, model=nn.Linear(2, 1))
         improved = best.update(epoch=2, val_loss=0.3, model=nn.Linear(2, 1))
@@ -117,7 +116,6 @@ class TestBestCheckpoint:
         assert best.best_val_loss == 0.3
 
     def test_restore_loads_snapshot_back_into_model(self):
-        from price_predictor.application.train_transformer import _BestCheckpoint
         torch.manual_seed(0)
         snapshot_model = nn.Linear(2, 1)
         snapshot_weight = snapshot_model.weight.detach().clone()
@@ -131,7 +129,6 @@ class TestBestCheckpoint:
         assert torch.allclose(snapshot_model.weight, snapshot_weight)
 
     def test_restore_is_noop_when_never_updated(self):
-        from price_predictor.application.train_transformer import _BestCheckpoint
         best = _BestCheckpoint()
         model = nn.Linear(2, 1)
         original = model.weight.detach().clone()
@@ -141,7 +138,6 @@ class TestBestCheckpoint:
 
 class TestRunEpoch:
     def test_train_mode_updates_weights(self):
-        from price_predictor.application.train_transformer import _run_epoch
         torch.manual_seed(0)
         model = _StubModel()
         before = model.linear.weight.detach().clone()
@@ -154,7 +150,6 @@ class TestRunEpoch:
         assert not torch.allclose(model.linear.weight, before)
 
     def test_eval_mode_leaves_weights_unchanged(self):
-        from price_predictor.application.train_transformer import _run_epoch
         torch.manual_seed(0)
         model = _StubModel()
         before = model.linear.weight.detach().clone()
@@ -166,7 +161,6 @@ class TestRunEpoch:
         assert torch.allclose(model.linear.weight, before)
 
     def test_returns_mean_batch_loss(self):
-        from price_predictor.application.train_transformer import _run_epoch
         model = _StubModel()
         loader = [_make_batch(target=0.0) for _ in range(4)]
 
@@ -181,9 +175,6 @@ class TestTrainTransformer:
     def test_insufficient_data_raises(
         self, mock_load_samples, mock_metadata_map, tmp_path
     ):
-        from price_predictor.application.train_transformer import train_transformer
-        from price_predictor.application.training_sample import TrainingSample
-
         mock_metadata_map.return_value = ({}, {})
         pd = _make_printing_data()
         mock_load_samples.return_value = [

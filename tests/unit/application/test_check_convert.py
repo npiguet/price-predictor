@@ -194,27 +194,27 @@ class TestCheckCard:
         result = check_card(converted, forge)
         assert result.similarity > 0.9
 
-    def test_landwalk_portmanteau_normalized(self):
+    @pytest.mark.parametrize("oracle_word,converted_word", [
+        ("Swampwalk", "landwalk swamp"),
+        ("Forestwalk", "landwalk forest"),
+        ("Islandwalk", "landwalk island"),
+        ("Mountainwalk", "landwalk mountain"),
+        ("Plainswalk", "landwalk plains"),
+        ("Desertwalk", "landwalk desert"),
+        ("Legendary landwalk", "landwalk legendary land"),
+        ("Nonbasic landwalk", "landwalk nonbasic land"),
+    ])
+    def test_landwalk_portmanteau_normalized(self, oracle_word, converted_word):
         # Oracle uses portmanteau forms ("Swampwalk", "Forestwalk", etc.)
         # but our converter outputs the split form ("landwalk swamp", "landwalk forest").
         # The checker must normalize oracle portmanteaus before comparing.
-        for oracle_word, converted_word in [
-            ("Swampwalk", "landwalk swamp"),
-            ("Forestwalk", "landwalk forest"),
-            ("Islandwalk", "landwalk island"),
-            ("Mountainwalk", "landwalk mountain"),
-            ("Plainswalk", "landwalk plains"),
-            ("Desertwalk", "landwalk desert"),
-            ("Legendary landwalk", "landwalk legendary land"),
-            ("Nonbasic landwalk", "landwalk nonbasic land"),
-        ]:
-            forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_word}\n"
-            converted = f"name: test card\ntypes: creature\nstatic: {converted_word}\n"
-            result = check_card(converted, forge)
-            assert result.similarity > 0.8, (
-                f"Oracle '{oracle_word}' vs converted '{converted_word}' "
-                f"should normalize to same text, got {result.similarity:.2%}"
-            )
+        forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_word}\n"
+        converted = f"name: test card\ntypes: creature\nstatic: {converted_word}\n"
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Oracle '{oracle_word}' vs converted '{converted_word}' "
+            f"should normalize to same text, got {result.similarity:.2%}"
+        )
 
     def test_text_key_counted_as_ability_line(self):
         # "text" is intentionally NOT in _HEADER_KEYS so text: values are treated
@@ -272,28 +272,30 @@ class TestCheckCard:
             f"Long similar strings should score high similarity, got {result.similarity:.2%}."
         )
 
-    def test_protection_from_normalized_to_match_converter(self):
+    @pytest.mark.parametrize("oracle_text,converted_text", [
+        ("Protection from creatures",     "protection:creature"),
+        ("Protection from artifacts",     "protection:artifact"),
+        ("Protection from enchantments",  "protection:enchantment"),
+        ("Protection from Dragons",       "protection:dragon"),
+        ("Protection from instants",      "protection:instant"),
+        ("Protection from spells",        "protection:spell"),
+        ("Protection from multicolored",  "protection:multicolored"),
+        ("Protection from monocolored",   "protection:monocolored"),
+        ("Protection from everything",    "protection:everything"),
+    ])
+    def test_protection_from_normalized_to_match_converter(
+        self, oracle_text, converted_text
+    ):
         # Oracle says "Protection from creatures" but converter outputs "protection:creature"
         # (Forge internal format: no "from", singular type).  The checker must normalise
         # "protection from Xs" → "protection X" so both sides compare equal.
-        for oracle_text, converted_text in [
-            ("Protection from creatures",     "protection:creature"),
-            ("Protection from artifacts",     "protection:artifact"),
-            ("Protection from enchantments",  "protection:enchantment"),
-            ("Protection from Dragons",       "protection:dragon"),
-            ("Protection from instants",      "protection:instant"),
-            ("Protection from spells",        "protection:spell"),
-            ("Protection from multicolored",  "protection:multicolored"),
-            ("Protection from monocolored",   "protection:monocolored"),
-            ("Protection from everything",    "protection:everything"),
-        ]:
-            forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_text}\n"
-            converted = f"name: test card\ntypes: creature\nstatic: {converted_text}\n"
-            result = check_card(converted, forge)
-            assert result.similarity > 0.8, (
-                f"Oracle '{oracle_text}' vs converted '{converted_text}' "
-                f"should normalise to same text, got {result.similarity:.2%}"
-            )
+        forge = f"Name:Test Card\nTypes:Creature\nOracle:{oracle_text}\n"
+        converted = f"name: test card\ntypes: creature\nstatic: {converted_text}\n"
+        result = check_card(converted, forge)
+        assert result.similarity > 0.8, (
+            f"Oracle '{oracle_text}' vs converted '{converted_text}' "
+            f"should normalise to same text, got {result.similarity:.2%}"
+        )
 
     def test_protection_plus_keyword_normalized(self):
         # "Flying, protection from enchantments." (one oracle line split into two)
