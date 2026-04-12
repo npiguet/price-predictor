@@ -10,18 +10,30 @@ import forge.game.player.RegisteredPlayer;
 import java.util.List;
 
 /**
- * Plays a best-of-3 sealed match between two decks using Forge's AI.
+ * Plays a sealed match between two decks using Forge's AI.
  *
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called before use.
  */
 public class GamePlayer {
 
+    private final int gamesPerMatch;
+
+    /** Create a player with the default best-of-3 match format. */
+    public GamePlayer() {
+        this(3);
+    }
+
+    /** Create a player with a configurable best-of-K match format. */
+    public GamePlayer(int gamesPerMatch) {
+        this.gamesPerMatch = gamesPerMatch;
+    }
+
     /**
-     * Play a best-of-3 match and return the win counts.
+     * Play a match and return the win counts.
      *
      * @param deckA first deck
      * @param deckB second deck
-     * @return int[]{winsA, winsB} where winsA + winsB is 2 or 3
+     * @return int[]{winsA, winsB}
      */
     public int[] playMatch(Deck deckA, Deck deckB) {
         var players = List.of(
@@ -30,7 +42,7 @@ public class GamePlayer {
         );
 
         var rules = new GameRules(GameType.Sealed);
-        rules.setGamesPerMatch(3);
+        rules.setGamesPerMatch(gamesPerMatch);
 
         var match = new Match(rules, players, "sealed-match");
 

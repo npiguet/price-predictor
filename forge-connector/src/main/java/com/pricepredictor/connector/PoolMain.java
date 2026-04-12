@@ -67,7 +67,7 @@ public class PoolMain {
                     List<List<String>> pools = generator.generate(setCode, batch);
 
                     for (List<String> pool : pools) {
-                        StringJoiner joiner = new StringJoiner(";");
+                        StringJoiner joiner = new StringJoiner("|");
                         for (String name : pool) {
                             joiner.add(name);
                         }

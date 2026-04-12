@@ -16,26 +16,24 @@ import java.util.List;
 /**
  * Reads a validation matches file, plays each match, and writes outcomes.
  *
- * <p>For each line: deck A is fully specified (40 card names), pool B is a raw
- * pool from which deck B is built via Forge's {@link forge.gamemodes.limited.SealedDeckBuilder}.
+ * <p>For each line: both deck A and deck B are fully specified as 40 card names.
+ * The format is {@code deckA_card1|...|card40;deckB_card1|...|card40}.
  *
  * <p>Supports crash recovery: on startup, checks the outcomes file line count
  * and skips that many matches in the input file.
  */
 public class ValidationMatchPlayer {
 
-    private final DeckBuilder deckBuilder;
     private final GamePlayer gamePlayer;
 
-    public ValidationMatchPlayer(DeckBuilder deckBuilder, GamePlayer gamePlayer) {
-        this.deckBuilder = deckBuilder;
+    public ValidationMatchPlayer(GamePlayer gamePlayer) {
         this.gamePlayer = gamePlayer;
     }
 
     /**
      * Process all matches in the input file, writing outcomes to the derived path.
      *
-     * @param matchesFile path to the validation matches file
+     * @param matchesFile  path to the validation matches file
      * @param outcomesFile path to the outcomes output file
      */
     public void processAll(Path matchesFile, Path outcomesFile) throws IOException {
@@ -51,14 +49,10 @@ public class ValidationMatchPlayer {
             try {
                 ParsedMatch parsed = parseLine(line);
 
-                // Build deck A from card names
+                // Both sides are pre-built decks
                 Deck deckA = buildDeckFromNames(parsed.deckANames());
+                Deck deckB = buildDeckFromNames(parsed.deckBNames());
 
-                // Build deck B from pool using Forge's builder
-                List<PaperCard> poolB = resolvePaperCards(parsed.poolBNames());
-                Deck deckB = deckBuilder.buildDeck(poolB);
-
-                // Play best-of-3
                 int[] result = gamePlayer.playMatch(deckA, deckB);
                 appendOutcome(outcomesFile, result[0], result[1]);
 
@@ -85,22 +79,15 @@ public class ValidationMatchPlayer {
         return deck;
     }
 
-    private List<PaperCard> resolvePaperCards(List<String> names) {
-        return names.stream()
-                .map(name -> FModel.getMagicDb().getCommonCards().getCard(name))
-                .filter(card -> card != null)
-                .toList();
-    }
-
     // ── Static helpers (package-visible for testing) ────────────────
 
-    record ParsedMatch(List<String> deckANames, List<String> poolBNames) {}
+    record ParsedMatch(List<String> deckANames, List<String> deckBNames) {}
 
     static ParsedMatch parseLine(String line) {
         String[] parts = line.split(";", 2);
         List<String> deckA = Arrays.asList(parts[0].split("\\|", -1));
-        List<String> poolB = Arrays.asList(parts[1].split("\\|", -1));
-        return new ParsedMatch(deckA, poolB);
+        List<String> deckB = Arrays.asList(parts[1].split("\\|", -1));
+        return new ParsedMatch(deckA, deckB);
     }
 
     static void appendOutcome(Path outcomesFile, int winsA, int winsB) throws IOException {

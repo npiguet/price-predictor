@@ -1,8 +1,7 @@
-"""Evaluation use case: greedy deck search + Forge baseline evaluation."""
+"""Evaluation use case: round-robin cross-group deck comparison vs Forge baseline."""
 
 from __future__ import annotations
 
-import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,7 +18,8 @@ from sealed.infrastructure.scorer_store import ScorerStore
 class EvaluateScorerConfig:
     checkpoint: Path
     cards_path: Path = Path("output/cardsfolder/")
-    pools: int = 20
+    pools: int = 12
+    best_of: int = 3
     workers: int = 4
     work_dir: Path | None = None
 
@@ -45,6 +45,7 @@ def greedy_deck_search(
         return pool_names[:len(pool_names)]
 
     # Start with 23 random cards
+    import random
     deck = list(random.sample(pool_names, n_nonland))
     remaining = [c for c in pool_names if c not in deck]
 
@@ -127,13 +128,20 @@ def compute_basic_lands(nonland_texts: dict[str, str]) -> dict[str, int]:
     return lands
 
 
-def aggregate_results(outcome_files: list[Path]) -> dict:
-    """Aggregate evaluation outcomes from worker output files."""
-    pools_evaluated = 0
-    wins_scorer = 0
-    wins_forge = 0
-    total_games = 0
+def aggregate_results(outcome_files: list[Path], n_pools: int) -> dict:
+    """Aggregate round-robin evaluation outcomes.
 
+    Outcomes are written in row-major order: match index k corresponds to
+    A deck k // n_pools vs B deck k % n_pools.
+
+    Returns a dict with:
+        n_pools, n_matches, total_games,
+        a_win_rates (list[float]), b_win_rates (list[float]),
+        pool_deltas (list[float]),
+        a_aggregate_win_rate, b_aggregate_win_rate
+    """
+    # Read all outcomes in order across worker files
+    outcomes: list[tuple[int, int]] = []
     for f in outcome_files:
         if not f.exists():
             continue
@@ -141,24 +149,65 @@ def aggregate_results(outcome_files: list[Path]) -> dict:
             if not line.strip():
                 continue
             parts = line.strip().split(";")
-            wa, wb = int(parts[0]), int(parts[1])
-            pools_evaluated += 1
-            wins_scorer += wa
-            wins_forge += wb
-            total_games += wa + wb
+            outcomes.append((int(parts[0]), int(parts[1])))
 
-    win_rate = wins_scorer / max(total_games, 1)
+    n_matches = len(outcomes)
+    total_games = sum(wa + wb for wa, wb in outcomes)
+
+    if n_pools == 0 or n_matches == 0:
+        return {
+            "n_pools": n_pools,
+            "n_matches": n_matches,
+            "total_games": total_games,
+            "a_win_rates": [],
+            "b_win_rates": [],
+            "pool_deltas": [],
+            "a_aggregate_win_rate": 0.0,
+            "b_aggregate_win_rate": 0.0,
+        }
+
+    # Per-A-deck win rate: A_i plays N matches (one per B deck)
+    a_wins_total = [0] * n_pools
+    a_games_total = [0] * n_pools
+    b_wins_total = [0] * n_pools
+    b_games_total = [0] * n_pools
+
+    for k, (wa, wb) in enumerate(outcomes):
+        i = k // n_pools   # A deck index
+        j = k % n_pools    # B deck index
+        games = wa + wb
+        a_wins_total[i] += wa
+        a_games_total[i] += games
+        b_wins_total[j] += wb
+        b_games_total[j] += games
+
+    a_win_rates = [
+        a_wins_total[i] / max(a_games_total[i], 1) for i in range(n_pools)
+    ]
+    b_win_rates = [
+        b_wins_total[j] / max(b_games_total[j], 1) for j in range(n_pools)
+    ]
+    pool_deltas = [a_win_rates[i] - b_win_rates[i] for i in range(n_pools)]
+
+    total_a_wins = sum(wa for wa, _ in outcomes)
+    total_b_wins = sum(wb for _, wb in outcomes)
+    a_aggregate = total_a_wins / max(total_games, 1)
+    b_aggregate = total_b_wins / max(total_games, 1)
+
     return {
-        "pools_evaluated": pools_evaluated,
+        "n_pools": n_pools,
+        "n_matches": n_matches,
         "total_games": total_games,
-        "wins_scorer": wins_scorer,
-        "wins_forge": wins_forge,
-        "win_rate": win_rate,
+        "a_win_rates": a_win_rates,
+        "b_win_rates": b_win_rates,
+        "pool_deltas": pool_deltas,
+        "a_aggregate_win_rate": a_aggregate,
+        "b_aggregate_win_rate": b_aggregate,
     }
 
 
 class EvaluateScorerUseCase:
-    """Full evaluation pipeline: generate pools, build decks, play matches, report."""
+    """Round-robin evaluation pipeline: build N A-decks and N B-decks, play N² matches."""
 
     def execute(self, config: EvaluateScorerConfig) -> dict:
         import tempfile
@@ -175,7 +224,6 @@ class EvaluateScorerUseCase:
             work_dir = Path(tempfile.mkdtemp(prefix="eval_"))
         work_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load pool data (reuse generate-pools output or generate fresh)
         from sealed.infrastructure.pool_connector import PoolConnector
         pools_path = work_dir / "pools"
         pools_path.mkdir(exist_ok=True)
@@ -186,28 +234,51 @@ class EvaluateScorerUseCase:
         pools_file = pools_path / "pools.txt"
         pools = _parse_pools(pools_file)
 
-        # Build deck A per pool using greedy search
-        matches_file = work_dir / "validation-matches.txt"
-        _build_validation_matches(model, pools, config.cards_path, matches_file)
+        print(f"Building {len(pools)} scorer decks (A)...")
+        a_decks = _build_a_decks(model, pools, config.cards_path)
 
-        # Launch workers
+        print(f"Building {len(pools)} Forge decks (B)...")
         eval_connector = EvaluationConnector()
-        split_files = eval_connector.split_matches_file(
-            matches_file, config.workers, work_dir,
+        b_decks = eval_connector.build_forge_decks(pools)
+
+        n = len(a_decks)
+        print(f"Writing {n}² = {n * n} round-robin match pairings...")
+        worker_files = _write_round_robin_matches(
+            a_decks, b_decks, config.workers, work_dir,
         )
-        outcome_files = eval_connector.launch_workers(split_files)
 
-        # Aggregate results
-        result = aggregate_results(outcome_files)
+        print(f"Launching {config.workers} workers (best-of-{config.best_of})...")
+        outcome_files = eval_connector.launch_workers(worker_files, best_of=config.best_of)
 
-        print("\n=== Evaluation Results ===")
-        print(f"Pools evaluated: {result['pools_evaluated']}")
-        print(f"Total games:     {result['total_games']}")
-        print(f"Scorer wins:     {result['wins_scorer']}")
-        print(f"Forge wins:      {result['wins_forge']}")
-        print(f"Win rate:        {result['win_rate']:.1%}")
+        result = aggregate_results(outcome_files, n_pools=n)
 
+        _print_results(result)
         return result
+
+
+def _print_results(result: dict) -> None:
+    n = result["n_pools"]
+    n_matches = result["n_matches"]
+    total_games = result["total_games"]
+    a_agg = result["a_aggregate_win_rate"]
+    b_agg = result["b_aggregate_win_rate"]
+    deltas = result["pool_deltas"]
+    a_rates = result["a_win_rates"]
+    b_rates = result["b_win_rates"]
+
+    print("\n=== Evaluation Results ===")
+    print(f"Pools: {n}  |  Matches: {n_matches}  |  Games: {total_games}")
+    print(f"Scorer aggregate win rate: {a_agg:.1%}")
+    print(f"Forge  aggregate win rate: {b_agg:.1%}")
+
+    if a_rates:
+        print("\nPer-pool comparison (scorer vs Forge from same pool):")
+        for i, (ar, br, delta) in enumerate(zip(a_rates, b_rates, deltas)):
+            sign = "+" if delta >= 0 else ""
+            print(f"  Pool {i + 1:2d}: scorer {ar:.1%}  forge {br:.1%}  delta {sign}{delta:.1%}")
+        mean_delta = sum(deltas) / len(deltas)
+        sign = "+" if mean_delta >= 0 else ""
+        print(f"Mean delta: {sign}{mean_delta:.1%}")
 
 
 def _parse_pools(pools_file: Path) -> list[list[str]]:
@@ -217,6 +288,74 @@ def _parse_pools(pools_file: Path) -> list[list[str]]:
         if line.strip():
             pools.append(line.strip().split("|"))
     return pools
+
+
+def _build_a_decks(
+    model: SetTransformerScorer,
+    pools: list[list[str]],
+    cards_path: Path,
+) -> list[list[str]]:
+    """Build one scorer deck per pool via greedy search. Returns list of 40-card decks."""
+    a_decks = []
+    for pool_names in pools:
+        pool_embeddings: dict[str, np.ndarray] = {}
+        valid_names = []
+        for name in pool_names:
+            emb = _load_card_embedding(cards_path, name)
+            if emb is not None:
+                pool_embeddings[name] = emb
+                valid_names.append(name)
+
+        if len(valid_names) < 23:
+            continue
+
+        nonland_deck = greedy_deck_search(model, valid_names, pool_embeddings)
+        nonland_texts = {n: _load_card_text(cards_path, n) for n in nonland_deck}
+        lands = compute_basic_lands(nonland_texts)
+        full_deck: list[str] = list(nonland_deck)
+        for land_name, count in lands.items():
+            full_deck.extend([land_name] * count)
+
+        a_decks.append(full_deck)
+
+    return a_decks
+
+
+def _write_round_robin_matches(
+    a_decks: list[list[str]],
+    b_decks: list[list[str]],
+    n_workers: int,
+    work_dir: Path,
+) -> list[Path]:
+    """Write N² match lines split into per-worker files.
+
+    Match lines are in row-major order: A_0 vs B_0, A_0 vs B_1, ...,
+    A_{N-1} vs B_0, ..., A_{N-1} vs B_{N-1}.
+
+    Returns list of per-worker match file paths.
+    """
+    lines = []
+    for a_deck in a_decks:
+        for b_deck in b_decks:
+            lines.append("|".join(a_deck) + ";" + "|".join(b_deck))
+
+    total = len(lines)
+    chunk_size = total // n_workers
+    remainder = total % n_workers
+    worker_files = []
+
+    offset = 0
+    for i in range(n_workers):
+        size = chunk_size + (1 if i < remainder else 0)
+        worker_file = work_dir / f"validation-matches-{i}.txt"
+        worker_file.write_text(
+            "\n".join(lines[offset:offset + size]) + "\n",
+            encoding="utf-8",
+        )
+        worker_files.append(worker_file)
+        offset += size
+
+    return worker_files
 
 
 def _sanitize_name(card_name: str) -> str:
@@ -288,43 +427,3 @@ def _load_card_embedding(
     if path:
         return np.load(path)["embedding"]
     return None
-
-
-def _build_validation_matches(
-    model: SetTransformerScorer,
-    pools: list[list[str]],
-    cards_path: Path,
-    matches_file: Path,
-) -> None:
-    """For each pool, build deck A via greedy search and write validation matches."""
-    lines = []
-
-    for pool_names in pools:
-        # Load embeddings for pool cards
-        pool_embeddings: dict[str, np.ndarray] = {}
-        valid_names = []
-        for name in pool_names:
-            emb = _load_card_embedding(cards_path, name)
-            if emb is not None:
-                pool_embeddings[name] = emb
-                valid_names.append(name)
-
-        if len(valid_names) < 23:
-            continue
-
-        # Build deck A (23 non-land cards)
-        nonland_deck = greedy_deck_search(model, valid_names, pool_embeddings)
-
-        # Compute basic lands
-        nonland_texts = {n: _load_card_text(cards_path, n) for n in nonland_deck}
-        lands = compute_basic_lands(nonland_texts)
-        full_deck: list[str] = list(nonland_deck)
-        for land_name, count in lands.items():
-            full_deck.extend([land_name] * count)
-
-        # Write match line: deck_A (40 cards) ; pool_B (all pool cards)
-        deck_a_str = "|".join(full_deck)
-        pool_b_str = "|".join(pool_names)
-        lines.append(f"{deck_a_str};{pool_b_str}")
-
-    matches_file.write_text("\n".join(lines) + "\n", encoding="utf-8")

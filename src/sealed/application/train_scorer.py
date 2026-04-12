@@ -157,7 +157,10 @@ class TrainScorerUseCase:
             # Training
             model.train()
             epoch_loss = 0.0
+            train_correct = 0
+            train_total = 0
             n_batches = 0
+            grad_norms: dict[str, float] = {}
 
             for batch in train_loader:
                 optimizer.zero_grad()
@@ -175,18 +178,23 @@ class TrainScorerUseCase:
                     torch.ones_like(score_winner),
                 )
                 loss.backward()
+                grad_norms = _gradient_norms(model)
                 optimizer.step()
                 epoch_loss += loss.item()
                 n_batches += 1
+                with torch.no_grad():
+                    train_correct += (score_winner > score_loser).sum().item()
+                    train_total += score_winner.size(0)
 
             avg_train_loss = epoch_loss / max(n_batches, 1)
+            train_accuracy = train_correct / max(train_total, 1)
             metrics.train_losses.append(avg_train_loss)
 
             # Validation
             if (epoch - start_epoch + 1) % config.val_interval == 0:
-                val_loss, val_accuracy = _validate(model, val_loader, embedding_table)
-                metrics.val_losses.append(val_loss)
-                metrics.val_accuracies.append(val_accuracy)
+                val = _validate(model, val_loader, embedding_table)
+                metrics.val_losses.append(val.loss)
+                metrics.val_accuracies.append(val.accuracy)
 
                 drift_str = ""
                 if embedding_table is not None and initial_embeddings is not None:
@@ -194,13 +202,22 @@ class TrainScorerUseCase:
                     metrics.embedding_drifts.append(drift)
                     drift_str = f"  embedding_drift={drift:.6f}"
 
+                grad_str = "  ".join(f"{k}={v:.4f}" for k, v in grad_norms.items())
+
                 print(
                     f"Epoch {epoch + 1}: "
                     f"train_loss={avg_train_loss:.4f}  "
-                    f"val_loss={val_loss:.4f}  "
-                    f"val_accuracy={val_accuracy:.4f}"
+                    f"train_acc={train_accuracy:.4f}  "
+                    f"val_loss={val.loss:.4f}  "
+                    f"val_acc={val.accuracy:.4f}"
                     f"{drift_str}"
                 )
+                print(
+                    f"  scores: "
+                    f"winner={val.score_winner_mean:.4f}±{val.score_winner_std:.4f}  "
+                    f"loser={val.score_loser_mean:.4f}±{val.score_loser_std:.4f}"
+                )
+                print(f"  grad_norms: {grad_str}")
 
                 # Save latest
                 store.save_checkpoint(
@@ -209,14 +226,36 @@ class TrainScorerUseCase:
                 )
 
                 # Save best
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                if val.loss < best_val_loss:
+                    best_val_loss = val.loss
                     store.save_checkpoint(
                         model, optimizer, epoch, best_val_loss,
                         model_config, config.checkpoint_dir / f"best{arch_suffix}.pt",
                     )
 
         return model, metrics
+
+
+def _gradient_norms(model: SetTransformerScorer) -> dict[str, float]:
+    """Compute L2 gradient norm for each named component of the model."""
+    norms: dict[str, float] = {}
+    for i, sab in enumerate(model.sab_layers):
+        total = 0.0
+        for p in sab.parameters():
+            if p.grad is not None:
+                total += p.grad.data.norm(2).item() ** 2
+        norms[f"sab{i}"] = total ** 0.5
+    pma_total = 0.0
+    for p in model.pma.parameters():
+        if p.grad is not None:
+            pma_total += p.grad.data.norm(2).item() ** 2
+    norms["pma"] = pma_total ** 0.5
+    mlp_total = 0.0
+    for p in model.mlp.parameters():
+        if p.grad is not None:
+            mlp_total += p.grad.data.norm(2).item() ** 2
+    norms["mlp"] = mlp_total ** 0.5
+    return norms
 
 
 def _set_normalization_stats(model: SetTransformerScorer, examples: list[TrainingExample]) -> None:
@@ -236,17 +275,29 @@ def _set_normalization_stats(model: SetTransformerScorer, examples: list[Trainin
     model.feat_std.copy_(std)
 
 
+@dataclass
+class ValidationResult:
+    loss: float
+    accuracy: float
+    score_winner_mean: float
+    score_winner_std: float
+    score_loser_mean: float
+    score_loser_std: float
+
+
 def _validate(
     model: SetTransformerScorer,
     val_loader: DataLoader,
     embedding_table: torch.nn.Parameter | None = None,
-) -> tuple[float, float]:
-    """Compute validation loss and prediction accuracy."""
+) -> ValidationResult:
+    """Compute validation loss, accuracy, and score statistics."""
     model.eval()
     total_loss = 0.0
     correct = 0
     total = 0
     n_batches = 0
+    all_winner_scores: list[torch.Tensor] = []
+    all_loser_scores: list[torch.Tensor] = []
 
     with torch.no_grad():
         for batch in val_loader:
@@ -267,10 +318,23 @@ def _validate(
 
             correct += (score_winner > score_loser).sum().item()
             total += score_winner.size(0)
+            all_winner_scores.append(score_winner.squeeze(1))
+            all_loser_scores.append(score_loser.squeeze(1))
 
     avg_loss = total_loss / max(n_batches, 1)
     accuracy = correct / max(total, 1)
-    return avg_loss, accuracy
+
+    all_w = torch.cat(all_winner_scores) if all_winner_scores else torch.zeros(1)
+    all_l = torch.cat(all_loser_scores) if all_loser_scores else torch.zeros(1)
+
+    return ValidationResult(
+        loss=avg_loss,
+        accuracy=accuracy,
+        score_winner_mean=all_w.mean().item(),
+        score_winner_std=all_w.std().item(),
+        score_loser_mean=all_l.mean().item(),
+        score_loser_std=all_l.std().item(),
+    )
 
 
 def _build_embedding_table(

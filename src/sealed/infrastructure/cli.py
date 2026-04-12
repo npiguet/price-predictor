@@ -141,17 +141,37 @@ def build_parser() -> argparse.ArgumentParser:
     )
     eval_parser.add_argument(
         "--checkpoint",
-        default=None,
-        help="Model checkpoint to evaluate (e.g. models/sealed/scorer/best_l2_h4_s4_ff1088_mlp256.pt)",
+        required=True,
+        help="Model checkpoint to evaluate (e.g. best_l2_h4_s4_ff1088_mlp256.pt)",
     )
     eval_parser.add_argument(
         "--cards-path",
         default="output/cardsfolder/",
-        help="Directory with .npz card embeddings",
+        help="Directory with .npz card embeddings (default: output/cardsfolder/)",
     )
-    eval_parser.add_argument("--pools", type=int, default=20)
-    eval_parser.add_argument("--workers", type=int, default=4)
-    eval_parser.add_argument("--work-dir", default=None, help="Working directory for match files")
+    eval_parser.add_argument(
+        "--pools",
+        type=int,
+        default=12,
+        help="Number of sealed pools to generate for evaluation (default: 12)",
+    )
+    eval_parser.add_argument(
+        "--best-of",
+        type=int,
+        default=3,
+        help="Number of games per match (default: 3)",
+    )
+    eval_parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Number of parallel Java worker processes (default: 4)",
+    )
+    eval_parser.add_argument(
+        "--work-dir",
+        default=None,
+        help="Working directory for match files (default: temp dir)",
+    )
 
     # ── match-outcomes ────────────────────────────────────────────
     match_parser = subparsers.add_parser(
@@ -294,6 +314,7 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
         pools=args.pools,
+        best_of=args.best_of,
         workers=args.workers,
         work_dir=Path(args.work_dir) if args.work_dir else None,
     )

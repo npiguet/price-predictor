@@ -14,10 +14,10 @@ class ValidationMatchPlayerTest {
 
     @Test
     void parsesValidationMatchLine() {
-        String line = "CardA|CardB|CardC;PoolD|PoolE|PoolF";
+        String line = "CardA|CardB|CardC;DeckD|DeckE|DeckF";
         ValidationMatchPlayer.ParsedMatch match = ValidationMatchPlayer.parseLine(line);
         assertEquals(List.of("CardA", "CardB", "CardC"), match.deckANames());
-        assertEquals(List.of("PoolD", "PoolE", "PoolF"), match.poolBNames());
+        assertEquals(List.of("DeckD", "DeckE", "DeckF"), match.deckBNames());
     }
 
     @Test
@@ -26,7 +26,7 @@ class ValidationMatchPlayerTest {
         ValidationMatchPlayer.ParsedMatch match = ValidationMatchPlayer.parseLine(line);
         assertEquals("Lightning Bolt", match.deckANames().get(0));
         assertEquals("Mountain", match.deckANames().get(1));
-        assertEquals("Llanowar Elves", match.poolBNames().get(0));
+        assertEquals("Llanowar Elves", match.deckBNames().get(0));
     }
 
     @Test
