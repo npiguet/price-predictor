@@ -35,6 +35,14 @@ def _convert_mana_cost(raw: str) -> str:
     return " ".join(shards)
 
 
+def extract_mana_cost_line(text: str) -> str | None:
+    """Return the raw value of the ``mana cost:`` line, or None when missing/empty."""
+    for line in text.splitlines():
+        if line.strip().lower().startswith("mana cost:"):
+            return line.split(":", 1)[1].strip() or None
+    return None
+
+
 def _classify_types(types_str: str) -> tuple[list[str], list[str], list[str]]:
     """Split a converted-format types line into (supertypes, card_types, subtypes).
 
