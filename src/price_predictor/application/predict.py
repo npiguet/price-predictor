@@ -35,12 +35,7 @@ class PredictPriceUseCase:
         log_price = model.predict(X)[0]
         predicted_price = float(np.exp(log_price))
 
-        # Extract version from model path filename
-        model_version = model_path.stem
-        if model_version == "latest":
-            model_version = "latest"
-
         return PriceEstimate(
             predicted_price_eur=round(predicted_price, 2),
-            model_version=model_version,
+            model_version=model_path.stem,
         )

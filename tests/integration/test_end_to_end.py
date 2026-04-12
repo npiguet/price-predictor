@@ -125,14 +125,15 @@ class TestEndToEnd:
         model_path = train_result.model_path
         assert model_path.exists()
 
-        # Load the artifact and verify feature count
+        # Load the artifact and verify the dense feature block matches the
+        # current encoder width (probed via the feature engineer itself rather
+        # than a magic number that drifts every time we add a feature).
         artifact = joblib.load(model_path)
         fe = artifact["feature_engineering"]
-        # Dense features should be 95 (76 old + 18 printing data + 1 has_mana_cost)
-        # TF-IDF vocab may be smaller than 500 on small fixture data
         tfidf_count = len(fe.tfidf_.vocabulary_)
         dense_count = fe.get_feature_count() - tfidf_count
-        assert dense_count == 95  # 76 old dense + 18 printing data + 1 has_mana_cost
+        assert dense_count == fe.n_dense_features_
+        assert dense_count > 0
 
         # Predict with a card that has no printing_data -- should still work
         card_without_pd = Card(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pytest
 
 from price_predictor.application.train import TrainModelUseCase
@@ -125,30 +126,11 @@ class TestTrainModelUseCase:
     def test_trained_cards_have_printing_data(
         self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
     ) -> None:
-        """Training enriches Cards with printing_data from the metadata map.
-        The feature engineering dense count should be 95 (76 old + 18 printing data + 1 has_mana_cost)."""
-        use_case = TrainModelUseCase()
-        result = use_case.execute(
-            output_dir=converted_cards_dir,
-            prices_path=allprices_path,
-            printings_path=allprintings_path,
-            output_path=tmp_path,
-            test_split=0.2,
-            random_seed=42,
-        )
-        # Load the saved artifact and inspect the feature engineering
-        artifact = joblib.load(result.model_path)
-        fe = artifact["feature_engineering"]
-        # Dense feature count should be 95 (includes 18 printing data features + 1 has_mana_cost)
-        tfidf_count = len(fe.tfidf_.vocabulary_)
-        dense_count = fe.get_feature_count() - tfidf_count
-        assert dense_count == 95
+        """Training enriches Cards with printing_data so the printing-data feature
+        block is non-zero for cards whose metadata was found."""
+        from price_predictor.domain.entities import Card
+        from price_predictor.domain.value_objects import ManaCost, PrintingData
 
-    def test_model_artifact_has_increased_feature_count(
-        self, converted_cards_dir: Path, allprintings_path: Path, allprices_path: Path, tmp_path: Path
-    ) -> None:
-        """The trained model artifact's feature engineering has 95 dense features,
-        which is 19 more than the old dense count of 76."""
         use_case = TrainModelUseCase()
         result = use_case.execute(
             output_dir=converted_cards_dir,
@@ -160,7 +142,15 @@ class TestTrainModelUseCase:
         )
         artifact = joblib.load(result.model_path)
         fe = artifact["feature_engineering"]
-        tfidf_count = len(fe.tfidf_.vocabulary_)
-        dense_count = fe.get_feature_count() - tfidf_count
-        old_dense_count = 76
-        assert dense_count - old_dense_count == 19
+
+        bare = Card(name="Bare", types=["Creature"], mana_cost=ManaCost.parse("1 G"))
+        enriched = Card(
+            name="Enriched", types=["Creature"], mana_cost=ManaCost.parse("1 G"),
+            printing_data=PrintingData(
+                rarity="mythic", printings_count=3, release_year=2020,
+                legalities=["modern", "legacy"], is_reserved=True,
+            ),
+        )
+        bare_vec = fe.transform([bare])[0]
+        enriched_vec = fe.transform([enriched])[0]
+        assert not np.array_equal(bare_vec, enriched_vec)

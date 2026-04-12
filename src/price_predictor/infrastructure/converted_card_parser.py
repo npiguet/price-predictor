@@ -6,17 +6,11 @@ import logging
 import re
 from pathlib import Path
 
+from price_predictor.domain.card_taxonomy import KNOWN_CARD_TYPES, KNOWN_SUPERTYPES
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import ManaCost
 
 logger = logging.getLogger(__name__)
-
-KNOWN_SUPERTYPES = frozenset({"Legendary", "Basic", "Snow", "World", "Ongoing", "Host"})
-KNOWN_CARD_TYPES = frozenset({
-    "Creature", "Instant", "Sorcery", "Enchantment", "Artifact",
-    "Planeswalker", "Land", "Battle", "Tribal", "Kindred",
-    "Scheme", "Plane", "Conspiracy", "Vanguard", "Phenomenon",
-})
 
 # Lines whose values contribute to oracle_text and ability_count.
 # Matches prefixes like spell[1]:, triggered:, activated:, planeswalker[2]:,

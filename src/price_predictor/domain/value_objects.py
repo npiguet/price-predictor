@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from price_predictor.domain.card_taxonomy import VALID_RARITIES
+
 COLORS = frozenset({"W", "U", "B", "R", "G"})
 
 RECOGNIZED_FORMATS = (
@@ -11,9 +13,11 @@ RECOGNIZED_FORMATS = (
     "vintage", "pauper", "commander", "penny", "oathbreaker",
 )
 
-VALID_RARITIES = frozenset({
-    "common", "uncommon", "rare", "mythic", "special", "bonus",
-})
+# Normalization constants for release year: (year - YEAR_BASE) / YEAR_RANGE.
+# 1993 → ~0.029, 2026 → 1.0. Used by both the sklearn feature engineer and
+# the transformer metadata encoder so they stay in lockstep.
+YEAR_BASE = 1992
+YEAR_RANGE = 34.0
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,10 @@ class PrintingData:
             release_year=1993,
             legalities=list(RECOGNIZED_FORMATS),
         )
+
+    def normalized_release_year(self) -> float:
+        """Return ``release_year`` mapped to ``[0, 1]`` via the shared YEAR_BASE/YEAR_RANGE."""
+        return min(max((self.release_year - YEAR_BASE) / YEAR_RANGE, 0.0), 1.0)
 
 # Two-character hybrid pairs (e.g., WU, WB, UB, UR, UG, BR, BG, RG, RW, GW, GU)
 _HYBRID_PAIRS = {

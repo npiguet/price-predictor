@@ -182,10 +182,11 @@ class TestFeatureEngineeringTransform:
             toughness="2",
         )
         result = fitted_fe.transform([card])
-        # Supertypes at index 26: Legendary, Basic, Snow, World, Ongoing, Host
-        assert result[0, 26] == 1.0  # Legendary
-        assert result[0, 27] == 0.0  # Basic
-        assert result[0, 28] == 0.0  # Snow
+        # Supertypes start at index 28 (13 mana + 15 types), order:
+        # Legendary, Basic, Snow, World, Ongoing, Host
+        assert result[0, 28] == 1.0  # Legendary
+        assert result[0, 29] == 0.0  # Basic
+        assert result[0, 30] == 0.0  # Snow
 
     def test_colorless_mana_encoding(self, fitted_fe: FeatureEngineering) -> None:
         card = Card(
@@ -286,12 +287,14 @@ class TestFeatureEngineeringTransform:
 
 
 class TestPrintingDataFeatures:
-    """Tests for the 18 printing-data features appended to the dense vector."""
+    """Tests for the 19 printing-data features appended to the dense vector."""
 
-    def test_card_with_printing_data_produces_18_additional_features(
+    PRINTING_FEATURE_COUNT = 19
+
+    def test_card_with_printing_data_produces_19_additional_features(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """A Card with printing_data populated produces 18 additional dense features
+        """A Card with printing_data populated produces 19 additional dense features
         at the END of the feature vector, with correct values."""
         pd = PrintingData(
             is_reserved=True,
@@ -313,11 +316,9 @@ class TestPrintingDataFeatures:
         total_features = fitted_fe.get_feature_count()
         assert result.shape == (1, total_features)
 
-        # The 18 printing data features are at the end of the dense block,
-        # just before the TF-IDF features.
         tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
         dense_count = total_features - tfidf_count
-        pd_start = dense_count - 18
+        pd_start = dense_count - self.PRINTING_FEATURE_COUNT
 
         row = result[0]
 
@@ -335,23 +336,24 @@ class TestPrintingDataFeatures:
         # printings_count = 3.0
         assert row[pd_start + 6] == 3.0
 
+        # release_year normalized = (2018 - 1992) / 34 ≈ 0.7647
+        assert row[pd_start + 7] == pytest.approx((2018 - 1992) / 34.0)
+
         # legalities_count = 2.0
-        assert row[pd_start + 7] == 2.0
+        assert row[pd_start + 8] == 2.0
 
         # format multi-hot (10 positions matching RECOGNIZED_FORMATS order)
-        # RECOGNIZED_FORMATS = ("standard", "pioneer", "modern", "brawl", "legacy",
-        #                       "vintage", "pauper", "commander", "penny", "oathbreaker")
-        fmt_start = pd_start + 8
+        fmt_start = pd_start + 9
         for i, fmt in enumerate(RECOGNIZED_FORMATS):
             expected = 1.0 if fmt in ("commander", "legacy") else 0.0
             assert row[fmt_start + i] == expected, (
                 f"Format {fmt} at position {i}: expected {expected}, got {row[fmt_start + i]}"
             )
 
-    def test_card_without_printing_data_produces_18_zeros(
+    def test_card_without_printing_data_produces_19_zeros(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """A Card with printing_data=None produces 18 zeros at the end of the dense block."""
+        """A Card with printing_data=None produces 19 zeros at the end of the dense block."""
         card = Card(
             name="No Printing Data",
             types=["Creature"],
@@ -364,22 +366,29 @@ class TestPrintingDataFeatures:
         total_features = fitted_fe.get_feature_count()
         tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
         dense_count = total_features - tfidf_count
-        pd_start = dense_count - 18
+        pd_start = dense_count - self.PRINTING_FEATURE_COUNT
 
         row = result[0]
-        for i in range(18):
+        for i in range(self.PRINTING_FEATURE_COUNT):
             assert row[pd_start + i] == 0.0, (
                 f"Printing data feature at offset {i}: expected 0.0, got {row[pd_start + i]}"
             )
 
-    def test_feature_count_increased_by_19(
+    def test_release_year_feature_present(
         self, fitted_fe: FeatureEngineering
     ) -> None:
-        """Dense feature count is 95 (was 76 before printing data + has_mana_cost).
-        The 19 extra features: 18 printing data + 1 has_mana_cost flag."""
-        tfidf_count = len(fitted_fe.tfidf_.vocabulary_)
-        total = fitted_fe.get_feature_count()
-        dense_count = total - tfidf_count
-        assert dense_count == 95
-        old_dense_count = 76
-        assert dense_count - old_dense_count == 19
+        """Two cards differing only by release_year produce different feature vectors,
+        proving the release_year feature is wired into the dense block."""
+        early = Card(
+            name="Early", types=["Creature"], mana_cost=ManaCost.parse("2 G"),
+            power="2", toughness="2",
+            printing_data=PrintingData(release_year=1995),
+        )
+        recent = Card(
+            name="Recent", types=["Creature"], mana_cost=ManaCost.parse("2 G"),
+            power="2", toughness="2",
+            printing_data=PrintingData(release_year=2024),
+        )
+        early_vec = fitted_fe.transform([early])[0]
+        recent_vec = fitted_fe.transform([recent])[0]
+        assert not np.array_equal(early_vec, recent_vec)

@@ -9,17 +9,14 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.utils.validation import check_is_fitted
 
+from price_predictor.domain.card_taxonomy import (
+    CARD_TYPES,
+    LAYOUTS,
+    RARITIES,
+    SUPERTYPES,
+)
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import RECOGNIZED_FORMATS
-
-CARD_TYPES = [
-    "Creature", "Instant", "Sorcery", "Enchantment",
-    "Artifact", "Planeswalker", "Land", "Battle",
-    "Scheme", "Plane", "Conspiracy", "Vanguard", "Phenomenon",
-]
-SUPERTYPES = ["Legendary", "Basic", "Snow", "World", "Ongoing", "Host"]
-LAYOUTS = ["normal", "doublefaced", "split", "adventure", "modal", "flip"]
-RARITIES = ["common", "uncommon", "rare", "mythic"]
 
 _TOP_KEYWORD_LIMIT = 30
 
@@ -162,7 +159,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
     def _printing_features(self, card: Card) -> list[float]:
         pd = card.printing_data
         if pd is None:
-            return [0.0] * 18
+            return [0.0] * 19
         features = [
             1.0 if pd.is_reserved else 0.0,
             1.0 if pd.is_abu else 0.0,
@@ -170,6 +167,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         effective_rarity = pd.rarity if pd.rarity in RARITIES else "rare"
         features.extend(1.0 if effective_rarity == r else 0.0 for r in RARITIES)
         features.append(float(pd.printings_count))
+        features.append(pd.normalized_release_year())
         legalities_set = set(pd.legalities)
         features.append(float(len(legalities_set)))
         features.extend(1.0 if fmt in legalities_set else 0.0 for fmt in RECOGNIZED_FORMATS)

@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from price_predictor.domain.card_taxonomy import VALID_LAYOUTS
 from price_predictor.domain.value_objects import ManaCost, PrintingData
-
-VALID_LAYOUTS = frozenset(
-    {"normal", "doublefaced", "split", "adventure", "modal", "flip"}
-)
 
 VALID_PT_PATTERN_CHARS = frozenset("0123456789*X+-")
 

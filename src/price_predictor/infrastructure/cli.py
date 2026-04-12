@@ -345,11 +345,7 @@ def run_serve(args: argparse.Namespace) -> int:
         print(f"Error: Model file not found at {model_path}", file=sys.stderr)
         return 2
 
-    # Extract model version from filename
-    model_version = model_path.stem
-    if model_version == "latest":
-        model_version = "latest"
-    artifact["model_version"] = model_version
+    artifact["model_version"] = model_path.stem
 
     transformer_artifact, tokenizer = _load_optional_transformer_bundle(
         Path(args.vocab_path)
