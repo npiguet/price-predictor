@@ -6,7 +6,8 @@ from dataclasses import dataclass, field
 
 from price_predictor.domain.card_taxonomy import VALID_RARITIES
 
-COLORS = frozenset({"W", "U", "B", "R", "G"})
+WUBRG: tuple[str, ...] = ("W", "U", "B", "R", "G")
+COLORS = frozenset(WUBRG)
 
 RECOGNIZED_FORMATS = (
     "standard", "pioneer", "modern", "brawl", "legacy",

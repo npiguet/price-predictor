@@ -1,0 +1,69 @@
+"""Shared fixtures for sealed unit tests."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+
+class FakeProcess:
+    """Fake subprocess.Popen that exits immediately or hangs until terminated."""
+
+    def __init__(self, pid: int = 99, returncode: int = 0, hang: bool = False):
+        self.pid = pid
+        self.returncode = returncode
+        self._hang = hang
+        self._terminated = False
+
+    def wait(self):
+        if self._hang:
+            while not self._terminated:
+                time.sleep(0.01)
+        return self.returncode
+
+    def terminate(self):
+        self._terminated = True
+
+    def kill(self):
+        self._terminated = True
+
+    def poll(self):
+        return None if (self._hang and not self._terminated) else self.returncode
+
+
+@pytest.fixture
+def synthetic_cards_dir(tmp_path: Path) -> Path:
+    """Create ``tmp_path/cards/<letter>/<name>.npz`` for 50 random 544-dim embeddings."""
+    cards_dir = tmp_path / "cards"
+    cards_dir.mkdir()
+    for i in range(50):
+        name = f"card_{i}"
+        letter_dir = cards_dir / name[0]
+        letter_dir.mkdir(exist_ok=True)
+        np.savez_compressed(
+            letter_dir / f"{name}.npz",
+            embedding=np.random.randn(544).astype(np.float32),
+        )
+    return cards_dir
+
+
+@pytest.fixture
+def synthetic_outcomes_file(tmp_path: Path, synthetic_cards_dir: Path) -> Path:
+    """Write a 20-match outcomes.txt referencing only cards in ``synthetic_cards_dir``."""
+    return _write_outcomes(tmp_path, n_matches=20, n_cards_per_deck=10)
+
+
+def _write_outcomes(tmp_path: Path, n_matches: int, n_cards_per_deck: int) -> Path:
+    card_names = [f"card_{i}" for i in range(50)]
+    outcomes_file = tmp_path / "outcomes.txt"
+    lines = []
+    for _ in range(n_matches):
+        deck_a = np.random.choice(card_names, n_cards_per_deck, replace=True)
+        deck_b = np.random.choice(card_names, n_cards_per_deck, replace=True)
+        wins_a, wins_b = (2, int(np.random.choice([0, 1])))
+        lines.append(f"{'|'.join(deck_a)};{'|'.join(deck_b)};{wins_a};{wins_b}")
+    outcomes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return outcomes_file

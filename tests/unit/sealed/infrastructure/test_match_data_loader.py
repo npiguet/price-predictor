@@ -8,13 +8,13 @@ import numpy as np
 import pytest
 import torch
 
+from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
     parse_match_outcome,
     MatchOutcome,
     load_match_outcomes,
     build_training_examples,
     collate_training_examples,
-    BASIC_LANDS,
 )
 
 
@@ -43,7 +43,7 @@ class TestBasicLandFiltering:
         """Basic lands should be filtered from deck card lists."""
         line = "Lightning Bolt|Mountain|Mountain|Forest;Llanowar Elves|Island|Plains;2;0"
         outcome = parse_match_outcome(line)
-        winner_non_basic = [n for n in outcome.winner_names if n.lower() not in BASIC_LANDS]
+        winner_non_basic = [n for n in outcome.winner_names if n.lower() not in BASIC_LAND_NAMES]
         assert "Lightning Bolt" in winner_non_basic
         assert "Mountain" not in winner_non_basic
 

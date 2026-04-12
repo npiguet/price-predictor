@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from sealed.domain.card_encoder import CardEncoder
+from sealed.domain.deterministic_features import parse_deterministic_features
 
 
 def _make_tokenizer(vocab_size: int = 50, max_seq_len: int = 16):
@@ -134,8 +135,6 @@ class TestCardEncoder544Dim:
         np.testing.assert_array_equal(text_embedding, expected)
 
     def test_last_32_dims_match_deterministic_features(self):
-        from sealed.domain.deterministic_features import parse_deterministic_features
-
         d_model = 256
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)

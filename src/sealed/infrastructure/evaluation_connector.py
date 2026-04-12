@@ -2,10 +2,40 @@
 
 from __future__ import annotations
 
-import platform
 import subprocess
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
+
+from price_predictor.infrastructure.forge_jvm import (
+    build_forge_classpath,
+    build_jvm_command,
+    kill_process_tree,
+)
+
+
+@dataclass
+class _ManagedWorker:
+    """Tracks one validation worker through its spawn / restart lifecycle."""
+
+    proc: subprocess.Popen
+    matches_file: Path
+    outcomes_file: Path
+    log_file: IO[bytes]
+    last_count: int
+    last_progress: float
+    done: bool = False
+
+
+def _count_outcomes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip())
+    except OSError:
+        return 0
 
 
 class EvaluationConnector:
@@ -14,15 +44,9 @@ class EvaluationConnector:
     def build_forge_decks(self, pools: list[list[str]]) -> list[list[str]]:
         """Build one Forge deck per pool using DeckBuilderMain.
 
-        Sends all pools to a single JVM invocation via stdin (one pool per line,
-        pipe-separated card names) and reads back one built deck per line from
-        stdout. This avoids N separate JVM startups with Forge initialization.
-
-        Args:
-            pools: list of pools, each pool is a list of card names.
-
-        Returns:
-            list of decks, each deck is a list of 40 card names.
+        Sends all pools to a single JVM invocation via stdin (one pool per
+        line, pipe-separated card names) and reads back one built deck per
+        line from stdout. Avoids N separate JVM startups with Forge init.
         """
         cmd = self._build_deck_builder_command()
         stdin_text = "\n".join("|".join(pool) for pool in pools) + "\n"
@@ -33,6 +57,7 @@ class EvaluationConnector:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            check=False,
         )
 
         if result.returncode != 0:
@@ -40,7 +65,7 @@ class EvaluationConnector:
                 f"DeckBuilderMain failed (rc={result.returncode}):\n{result.stderr}"
             )
 
-        decks = []
+        decks: list[list[str]] = []
         for line in result.stdout.strip().splitlines():
             line = line.strip()
             if line:
@@ -66,183 +91,138 @@ class EvaluationConnector:
         matches, it is killed and restarted on the same matches file.
         ``ValidationMatchPlayer`` skips already-completed matches based on
         the outcomes file line count, so a restart resumes where the
-        previous attempt left off. There is no restart cap.
+        previous attempt left off.
 
-        Returns outcome file paths in the same order as split_files.
+        Returns outcome file paths in the same order as ``split_files``.
         """
         outcome_files = [self.outcome_file_path(f) for f in split_files]
 
-        def count_outcomes(path: Path) -> int:
-            if not path.exists():
-                return 0
-            try:
-                with path.open("r", encoding="utf-8") as f:
-                    return sum(1 for line in f if line.strip())
-            except OSError:
-                return 0
-
-        def spawn(matches_file: Path, log_file):
-            cmd = self._build_worker_command(matches_file, best_of=best_of)
-            # start_new_session puts the child in its own process group on
-            # POSIX (no-op on Windows) so os.killpg can take down the whole
-            # tree if Java spawns subprocesses.
-            return subprocess.Popen(
-                cmd, stdout=log_file, stderr=log_file, start_new_session=True,
-            )
-
-        def kill_proc(proc: subprocess.Popen) -> None:
-            if proc.poll() is not None:
-                return
-            if platform.system() == "Windows":
-                # taskkill /T walks the parent-child PID tree and /F forces
-                # termination, killing the JVM and any child processes.
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                )
-            else:
-                import os
-                import signal
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, PermissionError):
-                    proc.kill()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                pass
-
-        now = time.monotonic()
-        workers: list[dict] = []
-        for matches_file, outcomes_file in zip(split_files, outcome_files):
-            log_path = matches_file.with_suffix(".worker.log")
-            log_file = log_path.open("ab")
-            proc = spawn(matches_file, log_file)
-            workers.append({
-                "proc": proc,
-                "matches_file": matches_file,
-                "outcomes_file": outcomes_file,
-                "log_file": log_file,
-                "last_count": count_outcomes(outcomes_file),
-                "last_progress": now,
-                "done": False,
-            })
-
+        workers = self._spawn_initial_workers(
+            split_files, outcome_files, best_of=best_of,
+        )
         try:
-            while True:
-                all_done = True
-                for w in workers:
-                    if w["done"]:
-                        continue
-                    proc = w["proc"]
-                    rc = proc.poll()
-
-                    if rc == 0:
-                        print(f"Worker completed: {w['matches_file'].name}")
-                        w["done"] = True
-                        continue
-
-                    if rc is not None:
-                        print(f"Worker restarted (rc={rc}): {w['matches_file'].name}")
-                        w["proc"] = spawn(w["matches_file"], w["log_file"])
-                        w["last_count"] = count_outcomes(w["outcomes_file"])
-                        w["last_progress"] = time.monotonic()
-                        all_done = False
-                        continue
-
-                    current_count = count_outcomes(w["outcomes_file"])
-                    now2 = time.monotonic()
-                    if current_count > w["last_count"]:
-                        w["last_count"] = current_count
-                        w["last_progress"] = now2
-                    elif now2 - w["last_progress"] >= idle_timeout_s:
-                        print(f"Worker restarted (idle): {w['matches_file'].name}")
-                        kill_proc(proc)
-                        w["proc"] = spawn(w["matches_file"], w["log_file"])
-                        w["last_count"] = count_outcomes(w["outcomes_file"])
-                        w["last_progress"] = time.monotonic()
-                    all_done = False
-
-                if all_done:
-                    break
-                time.sleep(poll_interval_s)
+            self._poll_until_done(
+                workers,
+                best_of=best_of,
+                idle_timeout_s=idle_timeout_s,
+                poll_interval_s=poll_interval_s,
+            )
         finally:
             for w in workers:
                 try:
-                    w["log_file"].close()
+                    w.log_file.close()
                 except Exception:
                     pass
 
         return outcome_files
 
+    def _spawn(
+        self,
+        matches_file: Path,
+        log_file: IO[bytes],
+        best_of: int,
+    ) -> subprocess.Popen:
+        cmd = self._build_worker_command(matches_file, best_of=best_of)
+        return subprocess.Popen(
+            cmd, stdout=log_file, stderr=log_file, start_new_session=True,
+        )
+
+    def _spawn_initial_workers(
+        self,
+        split_files: list[Path],
+        outcome_files: list[Path],
+        *,
+        best_of: int,
+    ) -> list[_ManagedWorker]:
+        now = time.monotonic()
+        workers: list[_ManagedWorker] = []
+        for matches_file, outcomes_file in zip(split_files, outcome_files):
+            log_path = matches_file.with_suffix(".worker.log")
+            log_file = log_path.open("ab")
+            proc = self._spawn(matches_file, log_file, best_of)
+            workers.append(_ManagedWorker(
+                proc=proc,
+                matches_file=matches_file,
+                outcomes_file=outcomes_file,
+                log_file=log_file,
+                last_count=_count_outcomes(outcomes_file),
+                last_progress=now,
+            ))
+        return workers
+
+    def _poll_until_done(
+        self,
+        workers: list[_ManagedWorker],
+        *,
+        best_of: int,
+        idle_timeout_s: float,
+        poll_interval_s: float,
+    ) -> None:
+        while True:
+            all_done = True
+            for w in workers:
+                if w.done:
+                    continue
+                if self._poll_worker(
+                    w, best_of=best_of, idle_timeout_s=idle_timeout_s,
+                ):
+                    all_done = False
+            if all_done:
+                break
+            time.sleep(poll_interval_s)
+
+    def _poll_worker(
+        self,
+        w: _ManagedWorker,
+        *,
+        best_of: int,
+        idle_timeout_s: float,
+    ) -> bool:
+        """Advance one worker's state. Returns True if it's still running."""
+        rc = w.proc.poll()
+
+        if rc == 0:
+            print(f"Worker completed: {w.matches_file.name}")
+            w.done = True
+            return False
+
+        if rc is not None:
+            print(f"Worker restarted (rc={rc}): {w.matches_file.name}")
+            self._restart(w, best_of)
+            return True
+
+        current_count = _count_outcomes(w.outcomes_file)
+        now = time.monotonic()
+        if current_count > w.last_count:
+            w.last_count = current_count
+            w.last_progress = now
+        elif now - w.last_progress >= idle_timeout_s:
+            print(f"Worker restarted (idle): {w.matches_file.name}")
+            kill_process_tree(w.proc)
+            self._restart(w, best_of)
+        return True
+
+    def _restart(self, w: _ManagedWorker, best_of: int) -> None:
+        w.proc = self._spawn(w.matches_file, w.log_file, best_of)
+        w.last_count = _count_outcomes(w.outcomes_file)
+        w.last_progress = time.monotonic()
+
     def _build_worker_command(self, matches_file: Path, best_of: int = 3) -> list[str]:
         """Build the Java command for a validation worker."""
-        jar_path = self._resolve_jar_path()
-
-        project_root = jar_path.parent.parent.parent
-        forge_dir = project_root.parent / "forge"
-
-        forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
-        forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
-        forge_gui_jar = forge_dir / "forge-gui" / "target" / "forge-gui-2.0.10-SNAPSHOT.jar"
-        forge_ai_jar = forge_dir / "forge-ai" / "target" / "forge-ai-2.0.10-SNAPSHOT.jar"
-
-        sep = ";" if platform.system() == "Windows" else ":"
-        classpath = sep.join([
-            str(jar_path),
-            str(forge_game_jar),
-            str(forge_core_jar),
-            str(forge_gui_jar),
-            str(forge_ai_jar),
-        ])
-
-        return [
-            "java",
-            f"-Dmatches.file={matches_file}",
-            f"-Dbest.of={best_of}",
-            "-Xmx1200m",
-            "-cp", classpath,
-            "com.pricepredictor.connector.ValidationWorkerMain",
-        ]
+        return build_jvm_command(
+            main_class="com.pricepredictor.connector.ValidationWorkerMain",
+            classpath=build_forge_classpath(),
+            system_properties={
+                "matches.file": str(matches_file),
+                "best.of": str(best_of),
+            },
+            xmx="1200m",
+        )
 
     def _build_deck_builder_command(self) -> list[str]:
         """Build the Java command for the batch Forge deck builder."""
-        jar_path = self._resolve_jar_path()
-
-        project_root = jar_path.parent.parent.parent
-        forge_dir = project_root.parent / "forge"
-
-        forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
-        forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
-        forge_gui_jar = forge_dir / "forge-gui" / "target" / "forge-gui-2.0.10-SNAPSHOT.jar"
-        forge_ai_jar = forge_dir / "forge-ai" / "target" / "forge-ai-2.0.10-SNAPSHOT.jar"
-
-        sep = ";" if platform.system() == "Windows" else ":"
-        classpath = sep.join([
-            str(jar_path),
-            str(forge_game_jar),
-            str(forge_core_jar),
-            str(forge_gui_jar),
-            str(forge_ai_jar),
-        ])
-
-        return [
-            "java",
-            "-Xmx1200m",
-            "-cp", classpath,
-            "com.pricepredictor.connector.DeckBuilderMain",
-        ]
-
-    def _resolve_jar_path(self) -> Path:
-        """Resolve the forge-connector fat JAR path."""
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
-        jar = (
-            project_root / "forge-connector" / "target"
-            / "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
+        return build_jvm_command(
+            main_class="com.pricepredictor.connector.DeckBuilderMain",
+            classpath=build_forge_classpath(),
+            xmx="1200m",
         )
-        if not jar.exists():
-            raise FileNotFoundError(
-                f"Connector JAR not found at {jar}\n"
-                "Build it first: cd forge-connector && mvn package -DskipTests"
-            )
-        return jar

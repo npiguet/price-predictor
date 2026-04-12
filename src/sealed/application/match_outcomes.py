@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import platform
 import signal
 import subprocess
 import threading
 import time
 from pathlib import Path
 
+from price_predictor.infrastructure.forge_jvm import kill_process_tree
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 
@@ -48,7 +48,6 @@ class MatchOutcomeSupervisor:
 
         self._status_reporter_loop()
 
-        # Wait for all monitor threads to exit
         for t in monitor_threads:
             t.join(timeout=10)
 
@@ -80,9 +79,11 @@ class MatchOutcomeSupervisor:
                     print(f"Monitor error for worker {worker_id}: {exc}")
 
     def _start_worker(self, worker_id: int) -> subprocess.Popen:
-        """Start one Java worker subprocess."""
-        proc = self._connector.start(self._output_path)
-        print(f"Worker {worker_id} started (PID {proc.pid})")
+        """Start one Java worker subprocess with a per-worker log file."""
+        log_path = self._output_path.parent / f"worker-{worker_id}.log"
+        log_file = log_path.open("ab")
+        proc = self._connector.start(self._output_path, log_file=log_file)
+        print(f"Worker {worker_id} started (PID {proc.pid}, log {log_path.name})")
         return proc
 
     def _status_reporter_loop(self) -> None:
@@ -122,7 +123,12 @@ class MatchOutcomeSupervisor:
         print(f"Shutting down, terminating {self._worker_count} workers...")
 
     def _kill_oldest_worker(self) -> None:
-        """Kill the longest-running worker to prevent slowdown from stale JVMs."""
+        """Kill the longest-running worker so the monitor thread restarts it fresh.
+
+        Why: stale Forge JVMs slow down over time (memory pressure, classloader
+        churn). Recycling the oldest one each status interval keeps throughput
+        steady. Introduced in commit eda4505.
+        """
         with self._processes_lock:
             alive = [(p, t) for p, t in self._start_times.items() if p.poll() is None]
             if not alive:
@@ -130,7 +136,7 @@ class MatchOutcomeSupervisor:
             oldest_proc, oldest_time = min(alive, key=lambda x: x[1])
             age = time.monotonic() - oldest_time
 
-        self._kill_process_tree(oldest_proc)
+        kill_process_tree(oldest_proc)
         print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")
 
     def _terminate_all(self) -> None:
@@ -139,31 +145,7 @@ class MatchOutcomeSupervisor:
             procs = list(self._processes)
 
         for proc in procs:
-            self._kill_process_tree(proc)
-
-    @staticmethod
-    def _kill_process_tree(proc: subprocess.Popen) -> None:
-        """Kill a process and its entire child tree.
-
-        On Windows, subprocess.terminate() only kills the parent process;
-        child processes (e.g. JVM child spawned by the java launcher) survive.
-        Use taskkill /F /T to kill the entire tree instead.
-        """
-        try:
-            if platform.system() == "Windows":
-                subprocess.call(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-            else:
-                proc.terminate()
-            proc.wait(timeout=10)
-        except Exception:
-            try:
-                proc.kill()
-            except Exception:
-                pass
+            kill_process_tree(proc)
 
     def _handle_signal(self, signum, frame) -> None:
         """Signal handler: set shutdown event to stop workers."""

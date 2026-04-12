@@ -37,6 +37,12 @@ class TrainScorerConfig:
     unfreeze_embeddings: bool = False
     embedding_lr: float = 1e-5
 
+    def best_checkpoint_name(self) -> str:
+        return (
+            f"best_l{self.n_layers}_h{self.n_heads}_s{self.n_seeds}"
+            f"_ff{self.d_ff}_mlp{self.mlp_hidden}_lr{self.lr}.pt"
+        )
+
 
 @dataclass
 class TrainingMetrics:
@@ -148,10 +154,7 @@ class TrainScorerUseCase:
 
         metrics = TrainingMetrics()
         config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        arch_suffix = (
-            f"_l{config.n_layers}_h{config.n_heads}_s{config.n_seeds}"
-            f"_ff{config.d_ff}_mlp{config.mlp_hidden}_lr{config.lr}"
-        )
+        best_checkpoint_path = config.checkpoint_dir / config.best_checkpoint_name()
 
         for epoch in range(start_epoch, start_epoch + config.epochs):
             # Training
@@ -230,7 +233,7 @@ class TrainScorerUseCase:
                     best_val_accuracy = val.accuracy
                     store.save_checkpoint(
                         model, optimizer, epoch, best_val_accuracy,
-                        model_config, config.checkpoint_dir / f"best{arch_suffix}.pt",
+                        model_config, best_checkpoint_path,
                     )
 
         return model, metrics

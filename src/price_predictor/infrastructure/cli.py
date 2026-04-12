@@ -311,44 +311,30 @@ def run_serve(args: argparse.Namespace) -> int:
 
 def run_convert(args: argparse.Namespace) -> int:
     """Execute the convert command — launch Java batch converter."""
-    import platform
     import subprocess
 
-    project_root = Path(__file__).resolve().parent.parent.parent.parent
-    connector_jar = (
-        project_root / "forge-connector" / "target"
-        / "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
+    from price_predictor.infrastructure.forge_jvm import (
+        build_forge_classpath,
+        build_jvm_command,
     )
 
-    if not connector_jar.exists():
-        logger.error(
-            "Connector JAR not found at %s\n"
-            "Build it first: cd forge-connector && mvn package -DskipTests",
-            connector_jar,
+    try:
+        classpath = build_forge_classpath(
+            include_full_runtime=False,
+            include_dependency_glob=True,
         )
+    except FileNotFoundError as exc:
+        logger.error("%s", exc)
         return 2
 
-    forge_dir = project_root.parent / "forge"
-    forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
-    forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
-    forge_deps = forge_dir / "forge-game" / "target" / "dependency" / "*"
-
-    for jar in [forge_game_jar, forge_core_jar]:
-        if not jar.exists():
-            logger.error("Forge JAR not found at %s", jar)
-            return 2
-
-    sep = ";" if platform.system() == "Windows" else ":"
-    classpath = sep.join([
-        str(connector_jar), str(forge_game_jar), str(forge_core_jar), str(forge_deps),
-    ])
-
-    cmd = [
-        "java", "-cp", classpath,
-        "com.pricepredictor.connector.ConvertMain",
-        "--cards-path", args.cards_path,
-        "--output-path", args.output_path,
-    ]
+    cmd = build_jvm_command(
+        main_class="com.pricepredictor.connector.ConvertMain",
+        classpath=classpath,
+        main_args=[
+            "--cards-path", args.cards_path,
+            "--output-path", args.output_path,
+        ],
+    )
 
     try:
         result = subprocess.run(cmd, check=False)

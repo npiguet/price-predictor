@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import torch
 
-BASIC_LANDS = frozenset({"plains", "island", "swamp", "mountain", "forest"})
+from sealed.infrastructure.converted_card_locator import (
+    BASIC_LAND_NAMES,
+    ConvertedCardLocator,
+)
 
 
 @dataclass
@@ -62,69 +66,6 @@ def load_match_outcomes(path: Path) -> list[MatchOutcome]:
     return outcomes
 
 
-def _card_name_to_filename(name: str) -> str:
-    """Convert a card name to its embedding filename (lowercase, spaces→underscores).
-
-    Unicode accents are stripped (e.g. â → a) to match the on-disk filenames
-    produced by the card-script converter.  Known filename typos are corrected
-    via the corrections table.
-    """
-    import unicodedata
-
-    from sealed.infrastructure.card_name_corrections import FILENAME_CORRECTIONS
-
-    # Decompose then drop combining marks (accents)
-    nfkd = unicodedata.normalize("NFKD", name)
-    ascii_name = "".join(c for c in nfkd if not unicodedata.combining(c))
-    sanitized = (
-        ascii_name.lower()
-        .replace(" // ", "_")
-        .replace(" ", "_")
-        .replace("'", "")
-        .replace(",", "")
-        .replace(":", "")
-        .replace("!", "")
-        .replace('"', "")
-        .replace("&", "")
-        .replace("+", "")
-        .replace(".", "")
-        .replace("-", "_")
-        .replace("/", "")
-    )
-    return FILENAME_CORRECTIONS.get(sanitized, sanitized)
-
-
-def _load_card_embedding(cards_path: Path, card_name: str) -> np.ndarray | None:
-    """Load a single card's embedding from its .npz file.
-
-    Double-faced / split / adventure cards have filenames like
-    ``frontface_backface.npz`` but the match outcomes file uses only the
-    front-face name.  When the exact file is missing we fall back to the
-    first ``.npz`` whose name starts with the sanitized front-face name.
-    """
-    resolved = _card_name_to_filename(card_name)
-    if "/" in resolved:
-        first_letter, filename = resolved.split("/", 1)
-    else:
-        filename = resolved
-        first_letter = filename[0] if filename else "_"
-    letter_dir = cards_path / first_letter
-
-    # Exact match first (fast path)
-    npz_path = letter_dir / f"{filename}.npz"
-    if npz_path.exists():
-        return np.load(npz_path)["embedding"]
-
-    # Prefix search for double-faced / split / adventure cards
-    if letter_dir.is_dir():
-        prefix = filename + "_"
-        for candidate in letter_dir.iterdir():
-            if candidate.suffix == ".npz" and candidate.stem.startswith(prefix):
-                return np.load(candidate)["embedding"]
-
-    return None
-
-
 def build_training_examples(
     outcomes: list[MatchOutcome],
     cards_path: Path,
@@ -134,61 +75,24 @@ def build_training_examples(
     Matches containing cards with missing embeddings are skipped with a
     warning printed to stderr.
     """
-    import sys
-
+    locator = ConvertedCardLocator(cards_path)
     embedding_cache: dict[str, np.ndarray | None] = {}
     missing_cards: set[str] = set()
-    examples = []
+    examples: list[TrainingExample] = []
     skipped = 0
 
     for outcome in outcomes:
-        winner_names = [n for n in outcome.winner_names if n.lower() not in BASIC_LANDS]
-        loser_names = [n for n in outcome.loser_names if n.lower() not in BASIC_LANDS]
-
-        skip = False
-        winner_vecs = []
-        for name in winner_names:
-            if name not in embedding_cache:
-                embedding_cache[name] = _load_card_embedding(cards_path, name)
-            emb = embedding_cache[name]
-            if emb is None:
-                if name not in missing_cards:
-                    filename = _card_name_to_filename(name)
-                    first_letter = filename[0] if filename else "_"
-                    print(
-                        f"Missing card embedding: {cards_path / first_letter / filename}.npz"
-                        f" (card: {name})",
-                        file=sys.stderr,
-                    )
-                    missing_cards.add(name)
-                skip = True
-                break
-            winner_vecs.append(emb)
-
-        if skip:
+        winner_vecs = _resolve_deck(
+            outcome.winner_names, locator, embedding_cache, missing_cards,
+        )
+        if winner_vecs is None:
             skipped += 1
             continue
 
-        loser_vecs = []
-        for name in loser_names:
-            if name not in embedding_cache:
-                embedding_cache[name] = _load_card_embedding(cards_path, name)
-            emb = embedding_cache[name]
-            if emb is None:
-                if name not in missing_cards:
-                    filename = _card_name_to_filename(name)
-                    first_letter = filename[0] if filename else "_"
-                    print(
-                        f"Missing card embedding: {cards_path / first_letter / filename}.npz"
-                        f" (card: {name})",
-                        file=sys.stderr,
-                    )
-                    missing_cards.add(name)
-                skip = True
-                break
-            loser_vecs.append(emb)
-
-        if skip:
+        loser_vecs = _resolve_deck(
+            outcome.loser_names, locator, embedding_cache, missing_cards,
+        )
+        if loser_vecs is None:
             skipped += 1
             continue
 
@@ -205,6 +109,33 @@ def build_training_examples(
         )
 
     return examples
+
+
+def _resolve_deck(
+    names: list[str],
+    locator: ConvertedCardLocator,
+    cache: dict[str, np.ndarray | None],
+    missing: set[str],
+) -> list[np.ndarray] | None:
+    """Resolve a deck's nonland cards to embeddings, or None if any are missing."""
+    vecs: list[np.ndarray] = []
+    for name in names:
+        if name.lower() in BASIC_LAND_NAMES:
+            continue
+        if name not in cache:
+            cache[name] = locator.load_embedding(name)
+        emb = cache[name]
+        if emb is None:
+            if name not in missing:
+                expected = locator.expected_path(name, ".npz")
+                print(
+                    f"Missing card embedding: {expected} (card: {name})",
+                    file=sys.stderr,
+                )
+                missing.add(name)
+            return None
+        vecs.append(emb)
+    return vecs
 
 
 def collate_training_examples(batch: list[TrainingExample]) -> TrainingBatch:

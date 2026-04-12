@@ -3,51 +3,59 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from sealed.infrastructure.evaluation_connector import EvaluationConnector
 
 
-class TestWorkerCommandConstruction:
-    def test_builds_java_command(self):
-        connector = EvaluationConnector()
-        cmd = connector._build_worker_command(
-            matches_file=Path("/tmp/matches-0.txt"),
-        )
-        assert "java" in cmd[0]
-        assert "com.pricepredictor.connector.ValidationWorkerMain" in cmd
-        assert any("/tmp/matches-0.txt" in str(arg) or "\\tmp\\matches-0.txt" in str(arg) for arg in cmd)
+@pytest.fixture
+def stub_classpath():
+    """Stub build_forge_classpath at the consumer site."""
+    with patch(
+        "sealed.infrastructure.evaluation_connector.build_forge_classpath",
+        return_value="fake-classpath",
+    ):
+        yield
 
-    def test_correct_main_class(self):
+
+class TestWorkerCommandConstruction:
+    def test_builds_java_command(self, stub_classpath):
+        connector = EvaluationConnector()
+        cmd = connector._build_worker_command(matches_file=Path("/tmp/matches-0.txt"))
+        assert cmd[0] == "java"
+        assert "com.pricepredictor.connector.ValidationWorkerMain" in cmd
+        assert any("matches-0.txt" in str(arg) for arg in cmd)
+
+    def test_correct_main_class(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_worker_command(matches_file=Path("/tmp/test.txt"))
         assert "com.pricepredictor.connector.ValidationWorkerMain" in cmd
 
-    def test_best_of_included_in_command(self):
+    def test_best_of_included_in_command(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_worker_command(matches_file=Path("/tmp/test.txt"), best_of=5)
         assert "-Dbest.of=5" in cmd
 
-    def test_default_best_of_is_three(self):
+    def test_default_best_of_is_three(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_worker_command(matches_file=Path("/tmp/test.txt"))
         assert "-Dbest.of=3" in cmd
 
 
 class TestDeckBuilderCommand:
-    def test_correct_main_class(self):
+    def test_correct_main_class(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_deck_builder_command()
         assert "com.pricepredictor.connector.DeckBuilderMain" in cmd
 
-    def test_is_java_command(self):
+    def test_is_java_command(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_deck_builder_command()
-        assert "java" in cmd[0]
+        assert cmd[0] == "java"
 
-    def test_does_not_include_matches_file_arg(self):
+    def test_does_not_include_matches_file_arg(self, stub_classpath):
         connector = EvaluationConnector()
         cmd = connector._build_deck_builder_command()
         assert not any("matches.file" in str(arg) for arg in cmd)
@@ -63,7 +71,7 @@ class TestOutcomeFilePath:
 
 
 class TestBuildForgeDecks:
-    def test_parses_stdout_into_decks(self):
+    def test_parses_stdout_into_decks(self, stub_classpath):
         """build_forge_decks splits stdout lines into lists of card names."""
         connector = EvaluationConnector()
         fake_result = MagicMock()
@@ -71,14 +79,14 @@ class TestBuildForgeDecks:
         fake_result.stdout = "CardA|CardB|CardC\nCardD|CardE|CardF\n"
         fake_result.stderr = ""
 
-        with patch("subprocess.run", return_value=fake_result) as mock_run:
+        with patch("subprocess.run", return_value=fake_result):
             decks = connector.build_forge_decks([["CardA", "CardB"], ["CardD", "CardE"]])
 
         assert len(decks) == 2
         assert decks[0] == ["CardA", "CardB", "CardC"]
         assert decks[1] == ["CardD", "CardE", "CardF"]
 
-    def test_raises_on_nonzero_exit(self):
+    def test_raises_on_nonzero_exit(self, stub_classpath):
         """build_forge_decks raises RuntimeError if DeckBuilderMain fails."""
         connector = EvaluationConnector()
         fake_result = MagicMock()
@@ -90,7 +98,7 @@ class TestBuildForgeDecks:
             with pytest.raises(RuntimeError, match="DeckBuilderMain failed"):
                 connector.build_forge_decks([["CardA"]])
 
-    def test_stdin_is_pipe_separated_pools(self):
+    def test_stdin_is_pipe_separated_pools(self, stub_classpath):
         """build_forge_decks sends each pool as a pipe-separated line on stdin."""
         connector = EvaluationConnector()
         fake_result = MagicMock()
@@ -101,8 +109,5 @@ class TestBuildForgeDecks:
         with patch("subprocess.run", return_value=fake_result) as mock_run:
             connector.build_forge_decks([["Card A", "Card B"]])
 
-        call_kwargs = mock_run.call_args
-        stdin_text = call_kwargs.kwargs.get("input") or call_kwargs.args[1] if len(call_kwargs.args) > 1 else None
-        if stdin_text is None:
-            stdin_text = call_kwargs.kwargs["input"]
+        stdin_text = mock_run.call_args.kwargs["input"]
         assert "Card A|Card B" in stdin_text

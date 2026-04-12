@@ -2,41 +2,11 @@
 
 from __future__ import annotations
 
-import signal
 import threading
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
-
-import pytest
 
 from sealed.application.match_outcomes import MatchOutcomeSupervisor
-
-
-class FakeProcess:
-    """Fake subprocess.Popen that exits immediately with a given code."""
-
-    def __init__(self, pid: int = 99, returncode: int = 0, hang: bool = False):
-        self.pid = pid
-        self.returncode = returncode
-        self._hang = hang
-        self._terminated = False
-
-    def wait(self):
-        if self._hang:
-            # Block until terminated
-            while not self._terminated:
-                time.sleep(0.01)
-        return self.returncode
-
-    def terminate(self):
-        self._terminated = True
-
-    def kill(self):
-        self._terminated = True
-
-    def poll(self):
-        return None if (self._hang and not self._terminated) else self.returncode
+from tests.unit.sealed.conftest import FakeProcess
 
 
 class TestSupervisorSpawnCount:

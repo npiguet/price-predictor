@@ -24,125 +24,135 @@ import re
 
 import numpy as np
 
-_MANA_SYMBOLS = {"W": 1, "U": 2, "B": 3, "R": 4, "G": 5}
-_PRODUCE_SYMBOLS = {"W": 16, "U": 17, "B": 18, "R": 19, "G": 20}
-_COLOR_FLAGS = {"W": 10, "U": 11, "B": 12, "R": 13, "G": 14}
+from price_predictor.domain.entities import Card
+from price_predictor.domain.value_objects import WUBRG, ManaCost
+from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
-_MANA_SYMBOL_RE = re.compile(r"\{([^}]+)\}")
+_COLOR_FLAGS = {c: i + 10 for i, c in enumerate(WUBRG)}     # W=10, U=11, B=12, R=13, G=14
+_PRODUCE_SYMBOLS = {c: i + 16 for i, c in enumerate(WUBRG)} # W=16, U=17, B=18, R=19, G=20
+
+_MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
+_DEVOID_LINE = "static: devoid"
 
 
 def parse_deterministic_features(card_text: str) -> np.ndarray:
-    """Parse converted card text and return a 32-element float32 feature array."""
+    """Parse converted card text and return a 32-element float32 feature array.
+
+    Returns the zero vector for inputs that aren't well-formed converted card
+    text (no ``name:``/``types:`` line). The encoder feeds short test snippets
+    through here, so this contract has to stay lenient.
+    """
     feats = np.zeros(32, dtype=np.float32)
 
-    lines: dict[str, str] = {}
-    activated_lines: list[str] = []
+    try:
+        card = parse_converted_text(card_text)
+    except ValueError:
+        return feats
 
-    for line in card_text.splitlines():
-        line = line.strip()
-        if line.startswith("activated"):
-            activated_lines.append(line)
-        colon_idx = line.find(":")
-        if colon_idx > 0:
-            key = line[:colon_idx].strip().lower()
-            val = line[colon_idx + 1:].strip()
-            if key not in lines:
-                lines[key] = val
-
-    # is_land (index 0)
-    types_line = lines.get("types", "")
-    if "land" in types_line.lower().split():
+    if _is_land(card):
         feats[0] = 1.0
 
-    # Mana cost parsing (indices 1-9)
-    mana_cost = lines.get("mana cost", "")
-    if mana_cost:
-        for match in _MANA_SYMBOL_RE.finditer(mana_cost):
-            symbol = match.group(1)
-            if symbol in _MANA_SYMBOLS:
-                feats[_MANA_SYMBOLS[symbol]] += 1.0
-            elif symbol == "C":
-                feats[6] += 1.0  # colorless pip
-            elif symbol == "X":
-                feats[8] += 1.0  # X count
-            else:
-                try:
-                    feats[7] += float(symbol)  # generic mana
-                except ValueError:
-                    pass
+    _fill_mana_cost_features(feats, card.mana_cost, card_text)
+    _fill_color_flags(feats, card.mana_cost, _has_devoid(card_text))
+    _fill_mana_production(feats, card_text)
+    _fill_combat_stats(feats, card)
 
-        # Mana value = sum of colored + colorless + generic (X counts as 0)
-        feats[9] = feats[1] + feats[2] + feats[3] + feats[4] + feats[5] + feats[6] + feats[7]
+    return feats
 
-    # Devoid detection
-    is_devoid = False
+
+def _is_land(card: Card) -> bool:
+    return any(t.lower() == "land" for t in card.types)
+
+
+def _fill_mana_cost_features(
+    feats: np.ndarray, mana_cost: ManaCost | None, card_text: str,
+) -> None:
+    if mana_cost is None:
+        return
+    feats[1] = float(mana_cost.w)
+    feats[2] = float(mana_cost.u)
+    feats[3] = float(mana_cost.b)
+    feats[4] = float(mana_cost.r)
+    feats[5] = float(mana_cost.g)
+    feats[6] = float(mana_cost.colorless_mana)
+    feats[7] = float(mana_cost.generic_mana)
+    feats[8] = float(_count_x_in_cost(card_text))
+    feats[9] = feats[1] + feats[2] + feats[3] + feats[4] + feats[5] + feats[6] + feats[7]
+
+
+def _count_x_in_cost(card_text: str) -> int:
+    """Count X braces in the mana cost line (preserves the original feature semantics)."""
     for line in card_text.splitlines():
-        if line.strip().lower() == "static: devoid":
-            is_devoid = True
-            break
+        if line.strip().lower().startswith("mana cost:"):
+            return sum(1 for m in _MANA_BRACE_RE.finditer(line) if m.group(1) == "X")
+    return 0
 
-    # Color flags (indices 10-15)
-    if is_devoid:
-        feats[15] = 1.0  # is_colorless
-    elif mana_cost:
-        has_color = False
-        for sym, idx in _COLOR_FLAGS.items():
-            if feats[_MANA_SYMBOLS[sym]] > 0:
-                feats[idx] = 1.0
-                has_color = True
-        if not has_color:
-            feats[15] = 1.0  # no colored pips → colorless
-    else:
-        feats[15] = 1.0  # no mana cost → colorless
 
-    # Mana production from activated abilities (indices 16-22)
-    for act_line in activated_lines:
-        # Look for "add" in the activated ability text
-        colon_idx = act_line.find(":")
-        if colon_idx < 0:
+def _fill_color_flags(
+    feats: np.ndarray, mana_cost: ManaCost | None, is_devoid: bool,
+) -> None:
+    if is_devoid or mana_cost is None:
+        feats[15] = 1.0
+        return
+
+    color_pips = (mana_cost.w, mana_cost.u, mana_cost.b, mana_cost.r, mana_cost.g)
+    has_color = False
+    for color, pips in zip(WUBRG, color_pips):
+        if pips > 0:
+            feats[_COLOR_FLAGS[color]] = 1.0
+            has_color = True
+    if not has_color:
+        feats[15] = 1.0
+
+
+def _has_devoid(card_text: str) -> bool:
+    return any(line.strip().lower() == _DEVOID_LINE for line in card_text.splitlines())
+
+
+def _fill_mana_production(feats: np.ndarray, card_text: str) -> None:
+    for activated_line in _activated_lines(card_text):
+        add_clause = _extract_add_clause(activated_line)
+        if add_clause is None:
             continue
-        ability_text = act_line[colon_idx + 1:].lower()
-        if "add" not in ability_text:
-            continue
-
-        # Find the add clause
-        add_idx = ability_text.index("add")
-        add_clause = ability_text[add_idx:]
 
         mana_count = 0
-        for match in _MANA_SYMBOL_RE.finditer(add_clause):
+        for match in _MANA_BRACE_RE.finditer(add_clause):
             symbol = match.group(1).upper()
             if symbol in _PRODUCE_SYMBOLS:
                 feats[_PRODUCE_SYMBOLS[symbol]] = 1.0
                 mana_count += 1
             elif symbol == "C":
-                feats[21] = 1.0  # produces C
+                feats[21] = 1.0
                 mana_count += 1
 
-        # "or" in add clause means one mana of choice, not multiple
         if " or " in add_clause and mana_count > 1:
             mana_count = 1
 
         feats[22] = max(feats[22], float(mana_count))
 
-    # Power/toughness (indices 23-24)
-    pt_line = lines.get("power toughness", "")
-    if pt_line:
-        parts = pt_line.split("/")
-        if len(parts) == 2:
-            feats[23] = _parse_stat(parts[0].strip())
-            feats[24] = _parse_stat(parts[1].strip())
 
-    # Loyalty (index 25)
-    loyalty_str = lines.get("loyalty", "")
-    if loyalty_str:
-        try:
-            feats[25] = float(loyalty_str)
-        except ValueError:
-            pass
+def _activated_lines(card_text: str) -> list[str]:
+    return [
+        line.strip()
+        for line in card_text.splitlines()
+        if line.strip().startswith("activated")
+    ]
 
-    # Indices 26-31 remain zero (padding)
-    return feats
+
+def _extract_add_clause(activated_line: str) -> str | None:
+    colon_idx = activated_line.find(":")
+    if colon_idx < 0:
+        return None
+    ability_text = activated_line[colon_idx + 1:].lower()
+    if "add" not in ability_text:
+        return None
+    return ability_text[ability_text.index("add"):]
+
+
+def _fill_combat_stats(feats: np.ndarray, card: Card) -> None:
+    feats[23] = _parse_stat(card.power) if card.power else 0.0
+    feats[24] = _parse_stat(card.toughness) if card.toughness else 0.0
+    feats[25] = _parse_stat(card.loyalty) if card.loyalty else 0.0
 
 
 def _parse_stat(value: str) -> float:

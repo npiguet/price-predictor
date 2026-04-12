@@ -26,7 +26,7 @@ _ABILITY_LINE_RE = re.compile(
 _MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
 
 
-def _convert_mana_cost(raw: str) -> str:
+def convert_mana_cost(raw: str) -> str:
     """Convert brace-delimited mana cost to space-separated Forge format.
 
     E.g. ``{2}{U}{U}`` becomes ``2 U U``.
@@ -116,7 +116,7 @@ def parse_converted_text(text: str) -> Card:
     mana_cost_raw = fields.get("mana cost", "").strip()
     mana_cost: ManaCost | None = None
     if mana_cost_raw:
-        forge_mana = _convert_mana_cost(mana_cost_raw)
+        forge_mana = convert_mana_cost(mana_cost_raw)
         mana_cost = ManaCost.parse(forge_mana)
 
     # --- Power / Toughness ---
