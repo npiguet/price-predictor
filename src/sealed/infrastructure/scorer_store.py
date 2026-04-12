@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 
 import torch
 import torch.nn as nn
+
+from sealed.domain.scorer_model import ScorerConfig
 
 
 class ScorerStore:
@@ -17,7 +20,7 @@ class ScorerStore:
         optimizer: torch.optim.Optimizer,
         epoch: int,
         best_val_accuracy: float,
-        config: dict,
+        config: ScorerConfig,
         path: Path,
     ) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,10 +30,16 @@ class ScorerStore:
                 "optimizer_state_dict": optimizer.state_dict(),
                 "epoch": epoch,
                 "best_val_accuracy": best_val_accuracy,
-                "config": config,
+                "config": asdict(config),
             },
             path,
         )
 
     def load_checkpoint(self, path: Path) -> dict:
-        return torch.load(path, weights_only=False)
+        checkpoint = torch.load(path, weights_only=False)
+        raw = checkpoint["config"]
+        if isinstance(raw, dict):
+            checkpoint["config"] = ScorerConfig(**raw)
+        elif not isinstance(raw, ScorerConfig):
+            raise ValueError(f"Unexpected checkpoint config type: {type(raw).__name__}")
+        return checkpoint

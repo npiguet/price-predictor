@@ -5,16 +5,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-import pytest
 import torch
 
 from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
-    parse_match_outcome,
+    EmbeddingTable,
     MatchOutcome,
-    load_match_outcomes,
+    TrainingExample,
     build_training_examples,
     collate_training_examples,
+    load_match_outcomes,
+    parse_match_outcome,
 )
 
 
@@ -75,7 +76,7 @@ class TestBuildTrainingExamples:
             np.savez_compressed(letter_dir / f"{name}.npz", embedding=emb)
         return cards_dir
 
-    def test_builds_winner_loser_tensors(self, tmp_path):
+    def test_builds_winner_loser_index_tensors(self, tmp_path):
         emb = np.random.randn(544).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {
             "card_a": emb,
@@ -85,10 +86,11 @@ class TestBuildTrainingExamples:
             deck_a_names=["card_a"], deck_b_names=["card_b"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
+        examples, table = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
-        assert examples[0].winner_cards.shape == (1, 544)
-        assert examples[0].loser_cards.shape == (1, 544)
+        assert examples[0].winner_indices.shape == (1,)
+        assert examples[0].loser_indices.shape == (1,)
+        assert table.num_cards == 2
 
     def test_filters_basic_lands(self, tmp_path):
         emb = np.random.randn(544).astype(np.float32)
@@ -98,9 +100,8 @@ class TestBuildTrainingExamples:
             deck_b_names=["card_a"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
-        # Mountain should be filtered, so winner has only 1 card
-        assert examples[0].winner_cards.shape[0] == 1
+        examples, _ = build_training_examples(outcomes, cards_dir)
+        assert examples[0].winner_indices.shape[0] == 1
 
     def test_double_slash_card_name_resolved(self, tmp_path):
         """Glassworks // Shattered Yard resolves to glassworks_shattered_yard.npz."""
@@ -113,7 +114,7 @@ class TestBuildTrainingExamples:
             deck_b_names=["Glassworks // Shattered Yard"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
+        examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
 
     def test_accented_card_name_resolved(self, tmp_path):
@@ -129,7 +130,7 @@ class TestBuildTrainingExamples:
             deck_b_names=["Dand\u00e2n"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
+        examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
 
     def test_double_faced_card_found_by_prefix(self, tmp_path):
@@ -148,11 +149,10 @@ class TestBuildTrainingExamples:
             deck_b_names=["Mosswood Dreadknight"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
+        examples, table = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
-        np.testing.assert_array_equal(
-            examples[0].winner_cards[0].numpy(), emb,
-        )
+        idx = examples[0].winner_indices[0].item()
+        np.testing.assert_array_equal(table.embedding.weight[idx].numpy(), emb)
 
     def test_missing_card_skips_match(self, tmp_path):
         cards_dir = tmp_path / "cards"
@@ -161,45 +161,75 @@ class TestBuildTrainingExamples:
             deck_a_names=["nonexistent"], deck_b_names=["also_missing"],
             wins_a=2, wins_b=0,
         )]
-        examples = build_training_examples(outcomes, cards_dir)
+        examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 0
+
+    def test_shared_table_across_examples(self, tmp_path):
+        """Two matches reusing the same card share one table row."""
+        emb = np.random.randn(544).astype(np.float32)
+        cards_dir = self._make_embeddings(tmp_path, {
+            "card_a": emb,
+            "card_b": emb + 1,
+        })
+        outcomes = [
+            MatchOutcome(["card_a"], ["card_b"], 2, 0),
+            MatchOutcome(["card_a"], ["card_b"], 2, 1),
+        ]
+        examples, table = build_training_examples(outcomes, cards_dir)
+        assert len(examples) == 2
+        assert table.num_cards == 2
+        assert examples[0].winner_indices.tolist() == examples[1].winner_indices.tolist()
+
+
+class TestEmbeddingTable:
+    def test_frozen_by_default(self):
+        table = EmbeddingTable(torch.randn(3, 544), {"a": 0, "b": 1, "c": 2})
+        assert table.is_frozen()
+        assert not table.embedding.weight.requires_grad
+
+    def test_unfreeze_flips_requires_grad(self):
+        table = EmbeddingTable(torch.randn(3, 544), {"a": 0, "b": 1, "c": 2})
+        table.unfreeze()
+        assert not table.is_frozen()
+        assert table.embedding.weight.requires_grad
+
+    def test_lookup_returns_seeded_vectors(self):
+        vecs = torch.randn(3, 544)
+        table = EmbeddingTable(vecs, {"a": 0, "b": 1, "c": 2})
+        out = table(torch.tensor([0, 2]))
+        torch.testing.assert_close(out[0], vecs[0])
+        torch.testing.assert_close(out[1], vecs[2])
 
 
 class TestCollateFunction:
     def test_variable_length_padding(self):
         """Collate should pad to max length with boolean masks."""
-        from sealed.infrastructure.match_data_loader import TrainingExample
-
         ex1 = TrainingExample(
-            winner_cards=torch.randn(5, 544),
-            loser_cards=torch.randn(3, 544),
+            winner_indices=torch.arange(5, dtype=torch.long),
+            loser_indices=torch.arange(3, dtype=torch.long),
         )
         ex2 = TrainingExample(
-            winner_cards=torch.randn(8, 544),
-            loser_cards=torch.randn(6, 544),
+            winner_indices=torch.arange(8, dtype=torch.long),
+            loser_indices=torch.arange(6, dtype=torch.long),
         )
 
         batch = collate_training_examples([ex1, ex2])
-        assert batch.winner_cards.shape == (2, 8, 544)  # padded to max=8
-        assert batch.loser_cards.shape == (2, 6, 544)    # padded to max=6
+        assert batch.winner_indices.shape == (2, 8)
+        assert batch.loser_indices.shape == (2, 6)
         assert batch.winner_mask.shape == (2, 8)
         assert batch.loser_mask.shape == (2, 6)
 
     def test_mask_marks_real_cards_true(self):
-        from sealed.infrastructure.match_data_loader import TrainingExample
-
         ex1 = TrainingExample(
-            winner_cards=torch.randn(3, 544),
-            loser_cards=torch.randn(2, 544),
+            winner_indices=torch.arange(3, dtype=torch.long),
+            loser_indices=torch.arange(2, dtype=torch.long),
         )
         ex2 = TrainingExample(
-            winner_cards=torch.randn(5, 544),
-            loser_cards=torch.randn(4, 544),
+            winner_indices=torch.arange(5, dtype=torch.long),
+            loser_indices=torch.arange(4, dtype=torch.long),
         )
 
         batch = collate_training_examples([ex1, ex2])
-        # First example: 3 real cards, padded to 5
         assert batch.winner_mask[0, :3].all()
         assert not batch.winner_mask[0, 3:].any()
-        # Second example: 5 real cards, no padding needed
         assert batch.winner_mask[1, :5].all()

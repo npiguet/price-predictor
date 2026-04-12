@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
@@ -33,16 +34,49 @@ class MatchOutcome:
 
 @dataclass
 class TrainingExample:
-    winner_cards: torch.Tensor  # (N, 544)
-    loser_cards: torch.Tensor   # (M, 544)
+    winner_indices: torch.Tensor  # (N,) long, rows into the EmbeddingTable
+    loser_indices: torch.Tensor   # (M,) long
 
 
 @dataclass
 class TrainingBatch:
-    winner_cards: torch.Tensor  # (batch, max_winner_cards, 544)
-    loser_cards: torch.Tensor   # (batch, max_loser_cards, 544)
-    winner_mask: torch.Tensor   # (batch, max_winner_cards) bool
-    loser_mask: torch.Tensor    # (batch, max_loser_cards) bool
+    winner_indices: torch.Tensor  # (batch, max_winner_cards) long
+    loser_indices: torch.Tensor   # (batch, max_loser_cards) long
+    winner_mask: torch.Tensor     # (batch, max_winner_cards) bool
+    loser_mask: torch.Tensor      # (batch, max_loser_cards) bool
+
+
+class EmbeddingTable(nn.Module):
+    """Lookup table mapping card name → 544-dim vector.
+
+    Frozen by default; ``unfreeze()`` flips ``requires_grad`` so the optimizer
+    can fine-tune card embeddings during the second phase of training.
+    """
+
+    def __init__(self, vectors: torch.Tensor, name_to_idx: dict[str, int]) -> None:
+        super().__init__()
+        num_cards, d_model = vectors.shape
+        self.embedding = nn.Embedding(num_cards, d_model)
+        with torch.no_grad():
+            self.embedding.weight.copy_(vectors)
+        self.embedding.weight.requires_grad = False
+        self.name_to_idx = dict(name_to_idx)
+
+    @property
+    def num_cards(self) -> int:
+        return self.embedding.num_embeddings
+
+    def freeze(self) -> None:
+        self.embedding.weight.requires_grad = False
+
+    def unfreeze(self) -> None:
+        self.embedding.weight.requires_grad = True
+
+    def is_frozen(self) -> bool:
+        return not self.embedding.weight.requires_grad
+
+    def forward(self, indices: torch.Tensor) -> torch.Tensor:
+        return self.embedding(indices)
 
 
 def parse_match_outcome(line: str) -> MatchOutcome:
@@ -69,93 +103,105 @@ def load_match_outcomes(path: Path) -> list[MatchOutcome]:
 def build_training_examples(
     outcomes: list[MatchOutcome],
     cards_path: Path,
-) -> list[TrainingExample]:
-    """Build training examples from match outcomes, filtering basic lands.
+) -> tuple[list[TrainingExample], EmbeddingTable]:
+    """Build a shared embedding table and per-match training examples.
 
-    Matches containing cards with missing embeddings are skipped with a
-    warning printed to stderr.
+    Walks every deck once, loading each unique card embedding into a single
+    ``EmbeddingTable``. Each example then carries integer indices into that
+    table instead of repeating the 544-dim vectors. Matches that reference
+    cards without an embedding on disk are skipped with a warning to stderr.
     """
-    locator = ConvertedCardLocator(cards_path)
-    embedding_cache: dict[str, np.ndarray | None] = {}
-    missing_cards: set[str] = set()
-    examples: list[TrainingExample] = []
-    skipped = 0
-
-    for outcome in outcomes:
-        winner_vecs = _resolve_deck(
-            outcome.winner_names, locator, embedding_cache, missing_cards,
-        )
-        if winner_vecs is None:
-            skipped += 1
-            continue
-
-        loser_vecs = _resolve_deck(
-            outcome.loser_names, locator, embedding_cache, missing_cards,
-        )
-        if loser_vecs is None:
-            skipped += 1
-            continue
-
-        if winner_vecs and loser_vecs:
-            examples.append(TrainingExample(
-                winner_cards=torch.from_numpy(np.stack(winner_vecs)),
-                loser_cards=torch.from_numpy(np.stack(loser_vecs)),
-            ))
-
-    if skipped:
-        print(
-            f"Skipped {skipped} matches due to {len(missing_cards)} missing card(s)",
-            file=sys.stderr,
-        )
-
-    return examples
+    builder = _ExampleBuilder(ConvertedCardLocator(cards_path))
+    examples = builder.build(outcomes)
+    return examples, builder.into_table()
 
 
-def _resolve_deck(
-    names: list[str],
-    locator: ConvertedCardLocator,
-    cache: dict[str, np.ndarray | None],
-    missing: set[str],
-) -> list[np.ndarray] | None:
-    """Resolve a deck's nonland cards to embeddings, or None if any are missing."""
-    vecs: list[np.ndarray] = []
-    for name in names:
-        if name.lower() in BASIC_LAND_NAMES:
-            continue
-        if name not in cache:
-            cache[name] = locator.load_embedding(name)
-        emb = cache[name]
+class _ExampleBuilder:
+    def __init__(self, locator: ConvertedCardLocator) -> None:
+        self._locator = locator
+        self._name_to_idx: dict[str, int] = {}
+        self._vectors: list[np.ndarray] = []
+        self._missing: set[str] = set()
+
+    def build(self, outcomes: list[MatchOutcome]) -> list[TrainingExample]:
+        examples: list[TrainingExample] = []
+        skipped = 0
+        for outcome in outcomes:
+            winner = self._resolve_deck(outcome.winner_names)
+            if winner is None:
+                skipped += 1
+                continue
+            loser = self._resolve_deck(outcome.loser_names)
+            if loser is None:
+                skipped += 1
+                continue
+            if winner and loser:
+                examples.append(TrainingExample(
+                    winner_indices=torch.tensor(winner, dtype=torch.long),
+                    loser_indices=torch.tensor(loser, dtype=torch.long),
+                ))
+        if skipped:
+            print(
+                f"Skipped {skipped} matches due to {len(self._missing)} missing card(s)",
+                file=sys.stderr,
+            )
+        return examples
+
+    def into_table(self) -> EmbeddingTable:
+        if self._vectors:
+            stacked = torch.from_numpy(np.stack(self._vectors)).float()
+        else:
+            stacked = torch.zeros(1, 544)
+        return EmbeddingTable(stacked, self._name_to_idx)
+
+    def _resolve_deck(self, names: list[str]) -> list[int] | None:
+        indices: list[int] = []
+        for name in names:
+            if name.lower() in BASIC_LAND_NAMES:
+                continue
+            idx = self._intern(name)
+            if idx is None:
+                return None
+            indices.append(idx)
+        return indices
+
+    def _intern(self, name: str) -> int | None:
+        existing = self._name_to_idx.get(name)
+        if existing is not None:
+            return existing
+        emb = self._locator.load_embedding(name)
         if emb is None:
-            if name not in missing:
-                expected = locator.expected_path(name, ".npz")
+            if name not in self._missing:
+                expected = self._locator.expected_path(name, ".npz")
                 print(
                     f"Missing card embedding: {expected} (card: {name})",
                     file=sys.stderr,
                 )
-                missing.add(name)
+                self._missing.add(name)
             return None
-        vecs.append(emb)
-    return vecs
+        idx = len(self._vectors)
+        self._vectors.append(emb)
+        self._name_to_idx[name] = idx
+        return idx
 
 
 def collate_training_examples(batch: list[TrainingExample]) -> TrainingBatch:
     """Collate variable-length training examples into a padded batch."""
-    max_winner = max(ex.winner_cards.size(0) for ex in batch)
-    max_loser = max(ex.loser_cards.size(0) for ex in batch)
-    d = batch[0].winner_cards.size(1)
+    max_winner = max(ex.winner_indices.size(0) for ex in batch)
+    max_loser = max(ex.loser_indices.size(0) for ex in batch)
     bs = len(batch)
 
-    winner_cards = torch.zeros(bs, max_winner, d)
-    loser_cards = torch.zeros(bs, max_loser, d)
+    winner_indices = torch.zeros(bs, max_winner, dtype=torch.long)
+    loser_indices = torch.zeros(bs, max_loser, dtype=torch.long)
     winner_mask = torch.zeros(bs, max_winner, dtype=torch.bool)
     loser_mask = torch.zeros(bs, max_loser, dtype=torch.bool)
 
     for i, ex in enumerate(batch):
-        nw = ex.winner_cards.size(0)
-        nl = ex.loser_cards.size(0)
-        winner_cards[i, :nw] = ex.winner_cards
-        loser_cards[i, :nl] = ex.loser_cards
+        nw = ex.winner_indices.size(0)
+        nl = ex.loser_indices.size(0)
+        winner_indices[i, :nw] = ex.winner_indices
+        loser_indices[i, :nl] = ex.loser_indices
         winner_mask[i, :nw] = True
         loser_mask[i, :nl] = True
 
-    return TrainingBatch(winner_cards, loser_cards, winner_mask, loser_mask)
+    return TrainingBatch(winner_indices, loser_indices, winner_mask, loser_mask)

@@ -203,7 +203,7 @@ class EvaluateScorerUseCase:
     def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:
         store = ScorerStore()
         checkpoint = store.load_checkpoint(checkpoint_path)
-        model = SetTransformerScorer(**checkpoint["config"])
+        model = SetTransformerScorer(checkpoint["config"])
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

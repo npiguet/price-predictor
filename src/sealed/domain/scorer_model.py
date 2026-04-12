@@ -2,8 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import torch
 import torch.nn as nn
+
+
+@dataclass
+class ScorerConfig:
+    d_model: int = 544
+    n_layers: int = 2
+    n_heads: int = 4
+    n_seeds: int = 4
+    d_ff: int = 1088
+    mlp_hidden: int = 256
 
 
 class SAB(nn.Module):
@@ -59,35 +71,25 @@ class SetTransformerScorer(nn.Module):
         4. Scoring MLP → scalar
     """
 
-    def __init__(
-        self,
-        d_model: int = 544,
-        n_layers: int = 2,
-        n_heads: int = 4,
-        n_seeds: int = 4,
-        d_ff: int = 1088,
-        mlp_hidden: int = 256,
-    ) -> None:
+    def __init__(self, config: ScorerConfig) -> None:
         super().__init__()
-        self.d_model = d_model
+        self.config = config
+        self.d_model = config.d_model
 
-        # Normalization buffers for indices 512-543 (deterministic features)
         self.register_buffer("feat_mean", torch.zeros(32))
         self.register_buffer("feat_std", torch.ones(32))
 
-        # Self-attention layers
-        self.sab_layers = nn.ModuleList([SAB(d_model, n_heads, d_ff) for _ in range(n_layers)])
-
-        # Pooling
-        self.pma = PMA(d_model, n_heads, n_seeds)
-
-        # Scoring MLP
+        self.sab_layers = nn.ModuleList([
+            SAB(config.d_model, config.n_heads, config.d_ff)
+            for _ in range(config.n_layers)
+        ])
+        self.pma = PMA(config.d_model, config.n_heads, config.n_seeds)
         self.mlp = nn.Sequential(
-            nn.Linear(n_seeds * d_model, mlp_hidden),
+            nn.Linear(config.n_seeds * config.d_model, config.mlp_hidden),
             nn.ReLU(),
-            nn.Linear(mlp_hidden, mlp_hidden),
+            nn.Linear(config.mlp_hidden, config.mlp_hidden),
             nn.ReLU(),
-            nn.Linear(mlp_hidden, 1),
+            nn.Linear(config.mlp_hidden, 1),
         )
 
     def _normalize(self, x: torch.Tensor) -> torch.Tensor:

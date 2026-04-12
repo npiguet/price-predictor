@@ -8,13 +8,13 @@ from sealed.application.evaluate_scorer import (
     _write_round_robin_matches,
     greedy_deck_search,
 )
-from sealed.domain.scorer_model import SetTransformerScorer
+from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 
 
 def _make_model():
-    model = SetTransformerScorer(
-        d_model=544, n_layers=1, n_heads=4, n_seeds=4, d_ff=544, mlp_hidden=64,
-    )
+    model = SetTransformerScorer(ScorerConfig(
+        n_layers=1, n_heads=4, n_seeds=4, d_ff=544, mlp_hidden=64,
+    ))
     model.eval()
     return model
 

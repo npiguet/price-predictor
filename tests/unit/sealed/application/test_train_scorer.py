@@ -27,10 +27,10 @@ class TestNormalizationStats:
         config = _config(
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
         )
-        model, _ = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert model.feat_mean.shape == (32,)
-        assert model.feat_std.shape == (32,)
+        assert result.model.feat_mean.shape == (32,)
+        assert result.model.feat_std.shape == (32,)
 
 
 class TestBradleyTerryLoss:
@@ -55,10 +55,10 @@ class TestTrainingReducesLoss:
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
             epochs=5, val_interval=5,
         )
-        model, metrics = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert len(metrics.train_losses) > 0
-        assert metrics.train_losses[-1] <= metrics.train_losses[0] + 0.5
+        assert len(result.metrics.train_losses) > 0
+        assert result.metrics.train_losses[-1] <= result.metrics.train_losses[0] + 0.5
 
 
 class TestValidationSplit:
@@ -69,9 +69,9 @@ class TestValidationSplit:
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
             epochs=2,
         )
-        _, metrics = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert len(metrics.val_losses) > 0
+        assert len(result.metrics.val_losses) > 0
 
 
 class TestPredictionAccuracy:
@@ -82,10 +82,10 @@ class TestPredictionAccuracy:
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
             epochs=3,
         )
-        _, metrics = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert len(metrics.val_accuracies) == 3
-        for acc in metrics.val_accuracies:
+        assert len(result.metrics.val_accuracies) == 3
+        for acc in result.metrics.val_accuracies:
             assert 0.0 <= acc <= 1.0
 
     def test_perfect_accuracy_on_trivial_data(
@@ -94,10 +94,10 @@ class TestPredictionAccuracy:
         config = _config(
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
         )
-        _, metrics = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert len(metrics.val_accuracies) > 0
-        assert 0.0 <= metrics.val_accuracies[0] <= 1.0
+        assert len(result.metrics.val_accuracies) > 0
+        assert 0.0 <= result.metrics.val_accuracies[0] <= 1.0
 
 
 class TestEmbeddingUnfreezing:
@@ -116,22 +116,23 @@ class TestEmbeddingUnfreezing:
             unfreeze_embeddings=True,
             embedding_lr=1e-5,
         )
-        _, metrics = TrainScorerUseCase().execute(config_b)
+        result = TrainScorerUseCase().execute(config_b)
 
-        assert len(metrics.train_losses) == 1
-        assert len(metrics.val_losses) == 1
+        assert len(result.metrics.train_losses) == 1
+        assert len(result.metrics.val_losses) == 1
+        assert not result.embedding_table.is_frozen()
 
     def test_frozen_embeddings_by_default(
         self, tmp_path, synthetic_cards_dir, synthetic_outcomes_file,
     ):
-        """Without --unfreeze-embeddings, no embedding table is created."""
+        """Without --unfreeze-embeddings, the embedding table stays frozen."""
         config = _config(
             synthetic_outcomes_file, synthetic_cards_dir, tmp_path / "checkpoints",
             unfreeze_embeddings=False,
         )
-        model, _ = TrainScorerUseCase().execute(config)
+        result = TrainScorerUseCase().execute(config)
 
-        assert not hasattr(model, "embedding_table") or model.embedding_table is None
+        assert result.embedding_table.is_frozen()
 
     def test_drift_metric_reported_when_unfrozen(
         self, tmp_path, synthetic_cards_dir, synthetic_outcomes_file,
@@ -149,10 +150,10 @@ class TestEmbeddingUnfreezing:
             unfreeze_embeddings=True,
             embedding_lr=1e-5,
         )
-        _, metrics = TrainScorerUseCase().execute(config_b)
+        result = TrainScorerUseCase().execute(config_b)
 
-        assert len(metrics.embedding_drifts) > 0
-        for drift in metrics.embedding_drifts:
+        assert len(result.metrics.embedding_drifts) > 0
+        for drift in result.metrics.embedding_drifts:
             assert drift >= 0.0
 
 

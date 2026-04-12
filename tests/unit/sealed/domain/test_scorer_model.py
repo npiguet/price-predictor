@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import torch
-import pytest
 
-from sealed.domain.scorer_model import SetTransformerScorer
-
-
-def _default_config():
-    return dict(d_model=544, n_layers=2, n_heads=4, n_seeds=4, d_ff=1088, mlp_hidden=256)
+from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 
 
-def _make_scorer(**overrides):
-    config = _default_config()
-    config.update(overrides)
-    model = SetTransformerScorer(**config)
+def _make_scorer(**overrides) -> SetTransformerScorer:
+    config = ScorerConfig(**overrides) if overrides else ScorerConfig()
+    model = SetTransformerScorer(config)
     model.eval()
     return model
 
