@@ -35,14 +35,16 @@ class PoolConnector:
         forge_dir = project_root.parent / "forge"
         forge_game_jar = forge_dir / "forge-game" / "target" / "forge-game-2.0.10-SNAPSHOT.jar"
         forge_core_jar = forge_dir / "forge-core" / "target" / "forge-core-2.0.10-SNAPSHOT.jar"
-        forge_deps = forge_dir / "forge-game" / "target" / "dependency" / "*"
+        forge_gui_jar = forge_dir / "forge-gui" / "target" / "forge-gui-2.0.10-SNAPSHOT.jar"
+        forge_ai_jar = forge_dir / "forge-ai" / "target" / "forge-ai-2.0.10-SNAPSHOT.jar"
 
         sep = ";" if platform.system() == "Windows" else ":"
         classpath = sep.join([
             str(jar_path),
             str(forge_game_jar),
             str(forge_core_jar),
-            str(forge_deps),
+            str(forge_gui_jar),
+            str(forge_ai_jar),
         ])
 
         cmd = [

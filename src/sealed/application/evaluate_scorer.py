@@ -35,8 +35,9 @@ def greedy_deck_search(
 ) -> list[str]:
     """Build the best 23-card non-land deck from a pool using greedy single-card swaps.
 
-    Starting from 23 random cards, iteratively try all single-card swaps.
-    Apply the swap that improves the score the most. Stop when no swap improves.
+    Starting from 23 random cards, iteratively scores all (position × candidate)
+    swaps in a single batched forward pass on the model's device. Applies the
+    best swap if it improves the score. Stops when no swap improves.
     """
     model.eval()
     n_nonland = 23
@@ -44,42 +45,58 @@ def greedy_deck_search(
     if len(pool_names) < n_nonland:
         return pool_names[:len(pool_names)]
 
-    # Start with 23 random cards
-    import random
-    deck = list(random.sample(pool_names, n_nonland))
-    remaining = [c for c in pool_names if c not in deck]
+    device = next(model.parameters()).device
 
-    def score_deck(card_list: list[str]) -> float:
-        vecs = np.stack([pool_embeddings[c] for c in card_list])
-        cards_t = torch.from_numpy(vecs).unsqueeze(0)
-        mask_t = torch.ones(1, len(card_list), dtype=torch.bool)
+    # Pre-load all pool embeddings to the model's device once
+    pool_arr = torch.from_numpy(
+        np.stack([pool_embeddings[c] for c in pool_names])
+    ).to(device)
+
+    import random
+    perm = list(range(len(pool_names)))
+    random.shuffle(perm)
+    deck_idx = perm[:n_nonland]
+    rem_idx = perm[n_nonland:]
+
+    def score_one(idx_list: list[int]) -> float:
+        cards_t = pool_arr[torch.tensor(idx_list, device=device)].unsqueeze(0)
+        mask_t = torch.ones(1, len(idx_list), dtype=torch.bool, device=device)
         with torch.no_grad():
             return model(cards_t, mask_t).item()
 
-    current_score = score_deck(deck)
+    current_score = score_one(deck_idx)
 
-    while True:
-        best_swap = None
-        best_score = current_score
+    while rem_idx:
+        r = len(rem_idx)
+        deck_t = torch.tensor(deck_idx, device=device)  # (23,)
+        rem_t = torch.tensor(rem_idx, device=device)    # (R,)
 
-        for i, deck_card in enumerate(deck):
-            for pool_card in remaining:
-                candidate = deck[:i] + [pool_card] + deck[i + 1:]
-                candidate_score = score_deck(candidate)
-                if candidate_score > best_score:
-                    best_score = candidate_score
-                    best_swap = (i, deck_card, pool_card)
+        # Build (23*R, 23) batch: row k corresponds to position (k // R)
+        # being replaced by remaining card (k % R).
+        batch = deck_t.unsqueeze(0).expand(n_nonland * r, -1).clone()
+        positions = torch.arange(n_nonland, device=device).repeat_interleave(r)
+        replacements = rem_t.repeat(n_nonland)
+        rows = torch.arange(n_nonland * r, device=device)
+        batch[rows, positions] = replacements
 
-        if best_swap is None:
+        cards_batch = pool_arr[batch]  # (23*R, 23, 544)
+        mask_batch = torch.ones(n_nonland * r, n_nonland, dtype=torch.bool, device=device)
+
+        with torch.no_grad():
+            scores = model(cards_batch, mask_batch).squeeze(-1)
+
+        best_local = int(scores.argmax().item())
+        best_score = float(scores[best_local].item())
+
+        if best_score <= current_score:
             break
 
-        i, old_card, new_card = best_swap
-        deck[i] = new_card
-        remaining.remove(new_card)
-        remaining.append(old_card)
+        i_pos = best_local // r
+        j_rem = best_local % r
+        deck_idx[i_pos], rem_idx[j_rem] = rem_idx[j_rem], deck_idx[i_pos]
         current_score = best_score
 
-    return deck
+    return [pool_names[i] for i in deck_idx]
 
 
 def compute_basic_lands(nonland_texts: dict[str, str]) -> dict[str, int]:
@@ -218,6 +235,10 @@ class EvaluateScorerUseCase:
         model.load_state_dict(checkpoint["model_state_dict"])
         model.eval()
 
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        print(f"Scorer model on device: {device}")
+
         if config.work_dir:
             work_dir = Path(config.work_dir)
         else:
@@ -240,6 +261,9 @@ class EvaluateScorerUseCase:
         print(f"Building {len(pools)} Forge decks (B)...")
         eval_connector = EvaluationConnector()
         b_decks = eval_connector.build_forge_decks(pools)
+
+        _write_decks_file(work_dir / "decks-scorer.txt", a_decks, config.cards_path)
+        _write_decks_file(work_dir / "decks-forge.txt", b_decks, config.cards_path)
 
         n = len(a_decks)
         print(f"Writing {n}² = {n * n} round-robin match pairings...")
@@ -279,6 +303,37 @@ def _print_results(result: dict) -> None:
         mean_delta = sum(deltas) / len(deltas)
         sign = "+" if mean_delta >= 0 else ""
         print(f"Mean delta: {sign}{mean_delta:.1%}")
+
+
+def _write_decks_file(
+    path: Path, decks: list[list[str]], cards_path: Path,
+) -> None:
+    """Write decks for human inspection: one card per line with mana cost,
+    blank-line-separated, with a `=== Deck N ===` header per deck."""
+    cost_cache: dict[str, str] = {}
+
+    def cost_for(name: str) -> str:
+        if name not in cost_cache:
+            cost_cache[name] = _extract_mana_cost(_load_card_text(cards_path, name))
+        return cost_cache[name]
+
+    lines: list[str] = []
+    for i, deck in enumerate(decks):
+        lines.append(f"=== Deck {i + 1} ===")
+        for card in deck:
+            cost = cost_for(card)
+            lines.append(f"{card:<32}{cost}".rstrip())
+        lines.append("")
+
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _extract_mana_cost(card_text: str) -> str:
+    """Return the mana cost string (e.g. `{1}{R}`) from a card text file, or ''."""
+    for line in card_text.splitlines():
+        if line.startswith("mana cost:"):
+            return line[len("mana cost:"):].strip()
+    return ""
 
 
 def _parse_pools(pools_file: Path) -> list[list[str]]:
