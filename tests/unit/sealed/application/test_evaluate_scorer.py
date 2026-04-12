@@ -8,7 +8,10 @@ from sealed.application.evaluate_scorer import (
     _write_round_robin_matches,
     greedy_deck_search,
 )
+from sealed.domain.card_embedding_layout import total_dim
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
+
+D_MODEL = total_dim(256)
 
 
 def _make_model():
@@ -22,7 +25,7 @@ def _make_model():
 def _make_pool_embeddings(n_cards=60):
     """Create synthetic card embeddings for a pool."""
     names = [f"card_{i}" for i in range(n_cards)]
-    embeddings = {name: np.random.randn(544).astype(np.float32) for name in names}
+    embeddings = {name: np.random.randn(D_MODEL).astype(np.float32) for name in names}
     return names, embeddings
 
 

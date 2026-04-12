@@ -7,10 +7,12 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
+from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, total_dim
+
 
 @dataclass
 class ScorerConfig:
-    d_model: int = 544
+    d_model: int = total_dim(256)  # 2*256 text dims + 32 deterministic features
     n_layers: int = 2
     n_heads: int = 4
     n_seeds: int = 4
@@ -65,7 +67,7 @@ class SetTransformerScorer(nn.Module):
     """Scores a deck (unordered set of card vectors) to produce a scalar quality score.
 
     Architecture:
-        1. Normalize deterministic features (indices 512-543)
+        1. Normalize deterministic features (the trailing ``DET_FEATURE_DIM`` dims)
         2. Stack of SAB layers (self-attention over cards)
         3. PMA pooling to fixed-size representation
         4. Scoring MLP → scalar
@@ -75,9 +77,10 @@ class SetTransformerScorer(nn.Module):
         super().__init__()
         self.config = config
         self.d_model = config.d_model
+        self.det_feature_offset = config.d_model - DET_FEATURE_DIM
 
-        self.register_buffer("feat_mean", torch.zeros(32))
-        self.register_buffer("feat_std", torch.ones(32))
+        self.register_buffer("feat_mean", torch.zeros(DET_FEATURE_DIM))
+        self.register_buffer("feat_std", torch.ones(DET_FEATURE_DIM))
 
         self.sab_layers = nn.ModuleList([
             SAB(config.d_model, config.n_heads, config.d_ff)
@@ -93,20 +96,21 @@ class SetTransformerScorer(nn.Module):
         )
 
     def _normalize(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize deterministic features (last 32 dims) using stored statistics."""
+        """Normalize the trailing deterministic-feature slice using stored stats."""
         x = x.clone()
-        x[:, :, 512:] = (x[:, :, 512:] - self.feat_mean) / self.feat_std
+        offset = self.det_feature_offset
+        x[:, :, offset:] = (x[:, :, offset:] - self.feat_mean) / self.feat_std
         return x
 
     def forward(self, cards: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Score a batch of decks.
 
         Args:
-            cards: (batch, max_cards, 544) card feature vectors.
-            mask: (batch, max_cards) boolean mask, True = real card, False = padding.
+            cards: ``(batch, max_cards, d_model)`` card feature vectors.
+            mask: ``(batch, max_cards)`` boolean mask, True = real card, False = padding.
 
         Returns:
-            (batch, 1) scalar score per deck.
+            ``(batch, 1)`` scalar score per deck.
         """
         x = self._normalize(cards)
 

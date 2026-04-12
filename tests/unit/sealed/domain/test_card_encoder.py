@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import torch
 
+from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, text_dim, total_dim
 from sealed.domain.card_encoder import CardEncoder
 from sealed.domain.deterministic_features import parse_deterministic_features
 
@@ -86,13 +87,13 @@ class TestCardEncoderOutputShape:
         result = encoder.encode("name: Test\ntype: Creature")
         assert isinstance(result, np.ndarray)
 
-    def test_output_shape_is_2x_d_model_plus_32(self):
+    def test_output_shape_matches_layout_total_dim(self):
         d_model = 8
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
         encoder = CardEncoder(model, tok, max_seq_len=16)
         result = encoder.encode("name: Test\ntype: Creature")
-        assert result.shape == (2 * d_model + 32,)
+        assert result.shape == (total_dim(d_model),)
 
     def test_output_dtype_is_float32(self):
         tok = _make_tokenizer()
@@ -102,18 +103,18 @@ class TestCardEncoderOutputShape:
         assert result.dtype == np.float32
 
 
-class TestCardEncoder544Dim:
-    """Test that CardEncoder concatenates 512-dim text embedding with 32 deterministic features."""
+class TestCardEncoderConcatenatedLayout:
+    """CardEncoder concatenates the text embedding with deterministic features."""
 
-    def test_output_is_544_dimensions(self):
+    def test_output_matches_total_dim(self):
         d_model = 256
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
         encoder = CardEncoder(model, tok, max_seq_len=16)
         result = encoder.encode("name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2")
-        assert result.shape == (2 * d_model + 32,)
+        assert result.shape == (total_dim(d_model),)
 
-    def test_first_512_dims_match_text_embedding(self):
+    def test_text_slice_matches_text_embedding(self):
         d_model = 256
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
@@ -121,7 +122,7 @@ class TestCardEncoder544Dim:
 
         card_text = "name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2"
         full_result = encoder.encode(card_text)
-        text_embedding = full_result[:2 * d_model]
+        text_embedding = full_result[:text_dim(d_model)]
 
         # Re-encode using model directly to get just the text embedding
         lines = [line for line in card_text.splitlines() if not line.startswith("name:")]
@@ -134,7 +135,7 @@ class TestCardEncoder544Dim:
 
         np.testing.assert_array_equal(text_embedding, expected)
 
-    def test_last_32_dims_match_deterministic_features(self):
+    def test_deterministic_slice_matches_parsed_features(self):
         d_model = 256
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
@@ -142,7 +143,8 @@ class TestCardEncoder544Dim:
 
         card_text = "name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2"
         full_result = encoder.encode(card_text)
-        det_feats = full_result[2 * d_model:]
+        det_feats = full_result[text_dim(d_model):]
+        assert det_feats.shape == (DET_FEATURE_DIM,)
 
         expected = parse_deterministic_features(card_text)
         np.testing.assert_array_equal(det_feats, expected)

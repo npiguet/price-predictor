@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from sealed.domain.scorer_model import ScorerConfig
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
@@ -47,7 +48,7 @@ class TrainingBatch:
 
 
 class EmbeddingTable(nn.Module):
-    """Lookup table mapping card name → 544-dim vector.
+    """Lookup table mapping card name → ``d_model``-dim card vector.
 
     Frozen by default; ``unfreeze()`` flips ``requires_grad`` so the optimizer
     can fine-tune card embeddings during the second phase of training.
@@ -108,8 +109,12 @@ def build_training_examples(
 
     Walks every deck once, loading each unique card embedding into a single
     ``EmbeddingTable``. Each example then carries integer indices into that
-    table instead of repeating the 544-dim vectors. Matches that reference
+    table instead of repeating the full card vectors. Matches that reference
     cards without an embedding on disk are skipped with a warning to stderr.
+
+    Each match's two decks come from independent sealed pools — they share
+    no cards by construction. Don't introduce cross-deck features (e.g.
+    shared-card counts) here; they would be vacuously zero.
     """
     builder = _ExampleBuilder(ConvertedCardLocator(cards_path))
     examples = builder.build(outcomes)
@@ -151,7 +156,7 @@ class _ExampleBuilder:
         if self._vectors:
             stacked = torch.from_numpy(np.stack(self._vectors)).float()
         else:
-            stacked = torch.zeros(1, 544)
+            stacked = torch.zeros(1, ScorerConfig().d_model)
         return EmbeddingTable(stacked, self._name_to_idx)
 
     def _resolve_deck(self, names: list[str]) -> list[int] | None:

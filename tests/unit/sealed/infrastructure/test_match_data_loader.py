@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from sealed.domain.card_embedding_layout import total_dim
 from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
@@ -17,6 +18,8 @@ from sealed.infrastructure.match_data_loader import (
     load_match_outcomes,
     parse_match_outcome,
 )
+
+D_MODEL = total_dim(256)
 
 
 class TestParseMatchOutcome:
@@ -77,7 +80,7 @@ class TestBuildTrainingExamples:
         return cards_dir
 
     def test_builds_winner_loser_index_tensors(self, tmp_path):
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {
             "card_a": emb,
             "card_b": emb + 1,
@@ -93,7 +96,7 @@ class TestBuildTrainingExamples:
         assert table.num_cards == 2
 
     def test_filters_basic_lands(self, tmp_path):
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {"card_a": emb})
         outcomes = [MatchOutcome(
             deck_a_names=["card_a", "Mountain", "Mountain"],
@@ -105,7 +108,7 @@ class TestBuildTrainingExamples:
 
     def test_double_slash_card_name_resolved(self, tmp_path):
         """Glassworks // Shattered Yard resolves to glassworks_shattered_yard.npz."""
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {
             "glassworks_shattered_yard": emb,
         })
@@ -119,7 +122,7 @@ class TestBuildTrainingExamples:
 
     def test_accented_card_name_resolved(self, tmp_path):
         """Dandân (with accent) resolves to dandan.npz on disk."""
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
         d_dir = cards_dir / "d"
@@ -135,7 +138,7 @@ class TestBuildTrainingExamples:
 
     def test_double_faced_card_found_by_prefix(self, tmp_path):
         """A DFC stored as 'frontface_backface.npz' is found by front-face name."""
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
         m_dir = cards_dir / "m"
@@ -166,7 +169,7 @@ class TestBuildTrainingExamples:
 
     def test_shared_table_across_examples(self, tmp_path):
         """Two matches reusing the same card share one table row."""
-        emb = np.random.randn(544).astype(np.float32)
+        emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {
             "card_a": emb,
             "card_b": emb + 1,
@@ -183,18 +186,18 @@ class TestBuildTrainingExamples:
 
 class TestEmbeddingTable:
     def test_frozen_by_default(self):
-        table = EmbeddingTable(torch.randn(3, 544), {"a": 0, "b": 1, "c": 2})
+        table = EmbeddingTable(torch.randn(3, D_MODEL), {"a": 0, "b": 1, "c": 2})
         assert table.is_frozen()
         assert not table.embedding.weight.requires_grad
 
     def test_unfreeze_flips_requires_grad(self):
-        table = EmbeddingTable(torch.randn(3, 544), {"a": 0, "b": 1, "c": 2})
+        table = EmbeddingTable(torch.randn(3, D_MODEL), {"a": 0, "b": 1, "c": 2})
         table.unfreeze()
         assert not table.is_frozen()
         assert table.embedding.weight.requires_grad
 
     def test_lookup_returns_seeded_vectors(self):
-        vecs = torch.randn(3, 544)
+        vecs = torch.randn(3, D_MODEL)
         table = EmbeddingTable(vecs, {"a": 0, "b": 1, "c": 2})
         out = table(torch.tensor([0, 2]))
         torch.testing.assert_close(out[0], vecs[0])

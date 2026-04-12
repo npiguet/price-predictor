@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from sealed.domain.card_embedding_layout import total_dim
+
 
 class FakeProcess:
     """Fake subprocess.Popen that exits immediately or hangs until terminated."""
@@ -36,7 +38,7 @@ class FakeProcess:
 
 @pytest.fixture
 def synthetic_cards_dir(tmp_path: Path) -> Path:
-    """Create ``tmp_path/cards/<letter>/<name>.npz`` for 50 random 544-dim embeddings."""
+    """Create ``tmp_path/cards/<letter>/<name>.npz`` for 50 random card embeddings."""
     cards_dir = tmp_path / "cards"
     cards_dir.mkdir()
     for i in range(50):
@@ -45,7 +47,7 @@ def synthetic_cards_dir(tmp_path: Path) -> Path:
         letter_dir.mkdir(exist_ok=True)
         np.savez_compressed(
             letter_dir / f"{name}.npz",
-            embedding=np.random.randn(544).astype(np.float32),
+            embedding=np.random.randn(total_dim(256)).astype(np.float32),
         )
     return cards_dir
 

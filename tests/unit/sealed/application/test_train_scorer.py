@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 
 from sealed.application.train_scorer import TrainScorerConfig, TrainScorerUseCase
+from sealed.domain.card_embedding_layout import DET_FEATURE_DIM
 
 
 def _config(outcomes_file, cards_dir, checkpoint_dir, *, epochs=1, val_interval=1, **overrides):
@@ -29,8 +30,8 @@ class TestNormalizationStats:
         )
         result = TrainScorerUseCase().execute(config)
 
-        assert result.model.feat_mean.shape == (32,)
-        assert result.model.feat_std.shape == (32,)
+        assert result.model.feat_mean.shape == (DET_FEATURE_DIM,)
+        assert result.model.feat_std.shape == (DET_FEATURE_DIM,)
 
 
 class TestBradleyTerryLoss:

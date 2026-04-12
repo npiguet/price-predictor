@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
+from sealed.domain.card_embedding_layout import DET_FEATURE_DIM
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
@@ -352,7 +353,7 @@ def _set_normalization_stats(
     examples: list[TrainingExample],
     embedding_table: EmbeddingTable,
 ) -> None:
-    """Compute per-feature mean and std for deterministic features (indices 512-543)."""
+    """Compute per-feature mean and std for the deterministic-feature slice."""
     indices: list[torch.Tensor] = []
     for ex in examples:
         indices.append(ex.winner_indices)
@@ -360,7 +361,8 @@ def _set_normalization_stats(
     if not indices:
         return
     flat = torch.cat(indices)
-    feats = embedding_table.embedding.weight.detach()[flat, 512:]
+    offset = embedding_table.embedding.embedding_dim - DET_FEATURE_DIM
+    feats = embedding_table.embedding.weight.detach()[flat, offset:]
     model.feat_mean.copy_(feats.mean(dim=0))
     std = feats.std(dim=0)
     std[std == 0] = 1.0
