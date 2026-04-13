@@ -7,6 +7,18 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
+class RoundRobinOutcome:
+    """One match in a round-robin: A's wins and B's wins (best-of-N)."""
+
+    wins_a: int
+    wins_b: int
+
+    @property
+    def total_games(self) -> int:
+        return self.wins_a + self.wins_b
+
+
+@dataclass(frozen=True)
 class RoundRobinResults:
     """Per-pool and aggregate win rates for an N×N round-robin evaluation."""
 
@@ -66,7 +78,7 @@ def aggregate_results(outcome_files: list[Path], n_pools: int) -> RoundRobinResu
     """
     outcomes = _read_outcomes(outcome_files)
     n_matches = len(outcomes)
-    total_games = sum(wa + wb for wa, wb in outcomes)
+    total_games = sum(o.total_games for o in outcomes)
 
     if n_pools == 0 or n_matches == 0:
         return RoundRobinResults.empty(n_pools, n_matches, total_games)
@@ -74,8 +86,8 @@ def aggregate_results(outcome_files: list[Path], n_pools: int) -> RoundRobinResu
     a_win_rates, b_win_rates = _per_pool_win_rates(outcomes, n_pools)
     pool_deltas = [a - b for a, b in zip(a_win_rates, b_win_rates)]
 
-    total_a_wins = sum(wa for wa, _ in outcomes)
-    total_b_wins = sum(wb for _, wb in outcomes)
+    total_a_wins = sum(o.wins_a for o in outcomes)
+    total_b_wins = sum(o.wins_b for o in outcomes)
     a_aggregate = total_a_wins / max(total_games, 1)
     b_aggregate = total_b_wins / max(total_games, 1)
 
@@ -91,8 +103,8 @@ def aggregate_results(outcome_files: list[Path], n_pools: int) -> RoundRobinResu
     )
 
 
-def _read_outcomes(outcome_files: list[Path]) -> list[tuple[int, int]]:
-    outcomes: list[tuple[int, int]] = []
+def _read_outcomes(outcome_files: list[Path]) -> list[RoundRobinOutcome]:
+    outcomes: list[RoundRobinOutcome] = []
     for f in outcome_files:
         if not f.exists():
             continue
@@ -101,26 +113,25 @@ def _read_outcomes(outcome_files: list[Path]) -> list[tuple[int, int]]:
             if not stripped:
                 continue
             parts = stripped.split(";")
-            outcomes.append((int(parts[0]), int(parts[1])))
+            outcomes.append(RoundRobinOutcome(int(parts[0]), int(parts[1])))
     return outcomes
 
 
 def _per_pool_win_rates(
-    outcomes: list[tuple[int, int]], n_pools: int,
+    outcomes: list[RoundRobinOutcome], n_pools: int,
 ) -> tuple[list[float], list[float]]:
     a_wins = [0] * n_pools
     a_games = [0] * n_pools
     b_wins = [0] * n_pools
     b_games = [0] * n_pools
 
-    for k, (wa, wb) in enumerate(outcomes):
+    for k, outcome in enumerate(outcomes):
         i = k // n_pools
         j = k % n_pools
-        games = wa + wb
-        a_wins[i] += wa
-        a_games[i] += games
-        b_wins[j] += wb
-        b_games[j] += games
+        a_wins[i] += outcome.wins_a
+        a_games[i] += outcome.total_games
+        b_wins[j] += outcome.wins_b
+        b_games[j] += outcome.total_games
 
     a_rates = [a_wins[i] / max(a_games[i], 1) for i in range(n_pools)]
     b_rates = [b_wins[j] / max(b_games[j], 1) for j in range(n_pools)]

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import numpy as np
-import pytest
 
 from sealed.infrastructure.embedding_store import EmbeddingStore
 
@@ -39,34 +37,8 @@ class TestEmbeddingStoreSave:
         path = tmp_path / "card.npz"
         store.save(path, np.array([1.0], dtype=np.float32))
         store.save(path, np.array([99.0], dtype=np.float32))
-        loaded = store.load(path)
+        loaded = np.load(path)["embedding"]
         np.testing.assert_array_almost_equal(loaded, [99.0])
-
-
-class TestEmbeddingStoreLoad:
-    def test_load_round_trip(self, tmp_path):
-        store = EmbeddingStore()
-        path = tmp_path / "card.npz"
-        original = np.array([1.5, 2.5, 3.5], dtype=np.float32)
-        store.save(path, original)
-        loaded = store.load(path)
-        np.testing.assert_array_almost_equal(loaded, original)
-
-    def test_load_preserves_dtype(self, tmp_path):
-        store = EmbeddingStore()
-        path = tmp_path / "card.npz"
-        original = np.array([1.0, 2.0], dtype=np.float32)
-        store.save(path, original)
-        loaded = store.load(path)
-        assert loaded.dtype == np.float32
-
-    def test_load_preserves_shape(self, tmp_path):
-        store = EmbeddingStore()
-        path = tmp_path / "card.npz"
-        original = np.zeros(256, dtype=np.float32)
-        store.save(path, original)
-        loaded = store.load(path)
-        assert loaded.shape == (256,)
 
 
 class TestEmbeddingStoreAtomicity:

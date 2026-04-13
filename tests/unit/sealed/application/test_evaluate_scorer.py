@@ -1,14 +1,12 @@
-"""Unit tests for greedy deck search and round-robin match writing."""
+"""Unit tests for greedy deck builder and round-robin match writing."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from sealed.application.evaluate_scorer import (
-    _write_round_robin_matches,
-    greedy_deck_search,
-)
+from sealed.application.evaluate_scorer import _write_round_robin_matches
 from sealed.domain.card_embedding_layout import total_dim
+from sealed.domain.greedy_deck_builder import GreedyDeckBuilder
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 
 D_MODEL = total_dim(256)
@@ -29,17 +27,17 @@ def _make_pool_embeddings(n_cards=60):
     return names, embeddings
 
 
-class TestGreedyDeckSearch:
+class TestGreedyDeckBuilder:
     def test_returns_23_nonland_cards(self):
         model = _make_model()
         pool_names, pool_embeddings = _make_pool_embeddings(60)
-        deck = greedy_deck_search(model, pool_names, pool_embeddings)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         assert len(deck) == 23
 
     def test_deck_cards_are_from_pool(self):
         model = _make_model()
         pool_names, pool_embeddings = _make_pool_embeddings(60)
-        deck = greedy_deck_search(model, pool_names, pool_embeddings)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         for card in deck:
             assert card in pool_names
 
@@ -47,7 +45,7 @@ class TestGreedyDeckSearch:
         """Greedy search should converge (finite iterations)."""
         model = _make_model()
         pool_names, pool_embeddings = _make_pool_embeddings(40)
-        deck = greedy_deck_search(model, pool_names, pool_embeddings)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         assert len(deck) == 23
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +10,7 @@ import numpy as np
 import torch
 
 from price_predictor.infrastructure.converted_card_parser import extract_mana_cost_line
+from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -22,8 +22,6 @@ from sealed.infrastructure.evaluation_connector import EvaluationConnector
 from sealed.infrastructure.pool_connector import PoolConnector
 from sealed.infrastructure.scorer_store import ScorerStore
 
-NONLAND_DECK_SIZE = 23
-
 
 @dataclass
 class EvaluateScorerConfig:
@@ -33,92 +31,6 @@ class EvaluateScorerConfig:
     best_of: int = 3
     workers: int = 4
     work_dir: Path | None = None
-
-
-def greedy_deck_search(
-    model: SetTransformerScorer,
-    pool_names: list[str],
-    pool_embeddings: dict[str, np.ndarray],
-) -> list[str]:
-    """Build the best 23-card non-land deck from a pool using greedy single-card swaps.
-
-    Starts from a random 23-card subset, then iteratively scores all
-    (position, candidate) swaps in a single batched forward pass and applies
-    the best swap if it improves the score. Stops when no swap improves.
-    """
-    model.eval()
-    if len(pool_names) < NONLAND_DECK_SIZE:
-        return list(pool_names)
-
-    device = next(model.parameters()).device
-    pool_arr = torch.from_numpy(
-        np.stack([pool_embeddings[c] for c in pool_names])
-    ).to(device)
-
-    perm = list(range(len(pool_names)))
-    random.shuffle(perm)
-    deck_idx = perm[:NONLAND_DECK_SIZE]
-    rem_idx = perm[NONLAND_DECK_SIZE:]
-
-    current_score = _score_indices(model, pool_arr, deck_idx, device)
-
-    while rem_idx:
-        cards_batch, mask_batch = _build_swap_batch(
-            pool_arr, deck_idx, rem_idx, device,
-        )
-        with torch.no_grad():
-            scores = model(cards_batch, mask_batch).squeeze(-1)
-
-        best_local = int(scores.argmax().item())
-        best_score = float(scores[best_local].item())
-        if best_score <= current_score:
-            break
-
-        r = len(rem_idx)
-        i_pos, j_rem = best_local // r, best_local % r
-        deck_idx[i_pos], rem_idx[j_rem] = rem_idx[j_rem], deck_idx[i_pos]
-        current_score = best_score
-
-    return [pool_names[i] for i in deck_idx]
-
-
-def _score_indices(
-    model: SetTransformerScorer,
-    pool_arr: torch.Tensor,
-    idx_list: list[int],
-    device: torch.device,
-) -> float:
-    cards_t = pool_arr[torch.tensor(idx_list, device=device)].unsqueeze(0)
-    mask_t = torch.ones(1, len(idx_list), dtype=torch.bool, device=device)
-    with torch.no_grad():
-        return model(cards_t, mask_t).item()
-
-
-def _build_swap_batch(
-    pool_arr: torch.Tensor,
-    deck_idx: list[int],
-    rem_idx: list[int],
-    device: torch.device,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Build the (n_nonland*R, n_nonland) candidate matrix for one swap step.
-
-    Row ``k`` corresponds to position ``k // R`` of the current deck being
-    replaced by remaining card ``k % R``.
-    """
-    n = NONLAND_DECK_SIZE
-    r = len(rem_idx)
-    deck_t = torch.tensor(deck_idx, device=device)
-    rem_t = torch.tensor(rem_idx, device=device)
-
-    batch = deck_t.unsqueeze(0).expand(n * r, -1).clone()
-    positions = torch.arange(n, device=device).repeat_interleave(r)
-    replacements = rem_t.repeat(n)
-    rows = torch.arange(n * r, device=device)
-    batch[rows, positions] = replacements
-
-    cards_batch = pool_arr[batch]
-    mask_batch = torch.ones(n * r, n, dtype=torch.bool, device=device)
-    return cards_batch, mask_batch
 
 
 def score_decks(
@@ -296,7 +208,7 @@ def _build_a_decks(
         if len(valid_names) < NONLAND_DECK_SIZE:
             continue
 
-        nonland_deck = greedy_deck_search(model, valid_names, pool_embeddings)
+        nonland_deck = GreedyDeckBuilder(model, pool_embeddings).build(valid_names)
         nonland_texts = [
             text for n in nonland_deck if (text := locator.load_text(n)) is not None
         ]

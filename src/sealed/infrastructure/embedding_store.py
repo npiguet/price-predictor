@@ -21,7 +21,3 @@ class EmbeddingStore:
         tmp = path.parent / (path.stem + ".tmp.npz")
         np.savez_compressed(tmp, embedding=embedding)
         os.replace(str(tmp), str(path))
-
-    def load(self, path: Path) -> np.ndarray:
-        """Load embedding from a .npz file."""
-        return np.load(path)["embedding"]
