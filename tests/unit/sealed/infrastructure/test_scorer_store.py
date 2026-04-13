@@ -27,11 +27,11 @@ class TestCheckpointRoundTrip:
         )
 
         loaded = store.load_checkpoint(path)
-        assert loaded["epoch"] == 5
-        assert loaded["best_val_accuracy"] == pytest.approx(0.42)
-        assert loaded["config"] == config
-        assert "model_state_dict" in loaded
-        assert "optimizer_state_dict" in loaded
+        assert loaded.epoch == 5
+        assert loaded.best_val_accuracy == pytest.approx(0.42)
+        assert loaded.config == config
+        assert loaded.model_state_dict
+        assert loaded.optimizer_state_dict
 
     def test_model_weights_survive_roundtrip(self, tmp_path):
         model = _make_model()
@@ -46,7 +46,7 @@ class TestCheckpointRoundTrip:
 
         loaded = store.load_checkpoint(path)
         model2 = _make_model()
-        model2.load_state_dict(loaded["model_state_dict"])
+        model2.load_state_dict(loaded.model_state_dict)
 
         for p1, p2 in zip(model.parameters(), model2.parameters()):
             torch.testing.assert_close(p1, p2)
@@ -66,7 +66,7 @@ class TestCheckpointRoundTrip:
 
         loaded = store.load_checkpoint(path)
         model2 = _make_model()
-        model2.load_state_dict(loaded["model_state_dict"])
+        model2.load_state_dict(loaded.model_state_dict)
 
         torch.testing.assert_close(model2.feat_mean, torch.full((32,), 3.14))
         torch.testing.assert_close(model2.feat_std, torch.full((32,), 2.72))
@@ -86,8 +86,8 @@ class TestCheckpointRoundTrip:
             path,
         )
         loaded = ScorerStore().load_checkpoint(path)
-        assert isinstance(loaded["config"], ScorerConfig)
-        assert loaded["config"].n_layers == 2
+        assert isinstance(loaded.config, ScorerConfig)
+        assert loaded.config.n_layers == 2
 
 
 class TestFileNaming:
@@ -112,5 +112,5 @@ class TestFileNaming:
 
         loaded_latest = store.load_checkpoint(latest)
         loaded_best = store.load_checkpoint(best)
-        assert loaded_latest["epoch"] == 1
-        assert loaded_best["epoch"] == 2
+        assert loaded_latest.epoch == 1
+        assert loaded_best.epoch == 2

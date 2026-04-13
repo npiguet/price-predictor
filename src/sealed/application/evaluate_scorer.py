@@ -13,6 +13,7 @@ from price_predictor.infrastructure.converted_card_parser import extract_mana_co
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
+from sealed.domain.round_robin_scheduling import row_major_pairings, split_evenly
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_TITLE_NAMES,
@@ -45,22 +46,21 @@ def score_decks(
 
     device = next(model.parameters()).device
     deck_embeddings = [_load_nonland_embeddings(deck, locator) for deck in decks]
-    max_len = max((len(e) for e in deck_embeddings), default=0)
-    if max_len == 0:
+    lengths = [len(e) for e in deck_embeddings]
+    if max(lengths, default=0) == 0:
         return [0.0] * len(decks)
 
-    d_model = next(e[0].shape[0] for e in deck_embeddings if e)
-    n_decks = len(decks)
-    cards_arr = np.zeros((n_decks, max_len, d_model), dtype=np.float32)
-    mask_arr = np.zeros((n_decks, max_len), dtype=bool)
-    for i, embeds in enumerate(deck_embeddings):
-        for j, emb in enumerate(embeds):
-            cards_arr[i, j] = emb
-        if embeds:
-            mask_arr[i, :len(embeds)] = True
+    d_model = model.d_model
+    deck_tensors = [
+        torch.from_numpy(np.stack(embeds)) if embeds else torch.zeros(0, d_model)
+        for embeds in deck_embeddings
+    ]
+    cards_t = torch.nn.utils.rnn.pad_sequence(
+        deck_tensors, batch_first=True,
+    ).to(device)
+    lengths_t = torch.tensor(lengths, device=device)
+    mask_t = torch.arange(cards_t.size(1), device=device)[None, :] < lengths_t[:, None]
 
-    cards_t = torch.from_numpy(cards_arr).to(device)
-    mask_t = torch.from_numpy(mask_arr).to(device)
     with torch.no_grad():
         out = model(cards_t, mask_t).squeeze(-1)
     return out.cpu().tolist()
@@ -100,7 +100,7 @@ class EvaluateScorerUseCase:
 
         n = len(a_decks)
         print(f"Writing {n}² = {n * n} round-robin match pairings...")
-        worker_files = _write_round_robin_matches(
+        worker_files = write_round_robin_matches(
             a_decks, b_decks, config.workers, work_dir,
         )
 
@@ -116,8 +116,8 @@ class EvaluateScorerUseCase:
     def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:
         store = ScorerStore()
         checkpoint = store.load_checkpoint(checkpoint_path)
-        model = SetTransformerScorer(checkpoint["config"])
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model = SetTransformerScorer(checkpoint.config)
+        model.load_state_dict(checkpoint.model_state_dict)
         model.eval()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.to(device)
@@ -222,7 +222,7 @@ def _build_a_decks(
     return a_decks
 
 
-def _write_round_robin_matches(
+def write_round_robin_matches(
     a_decks: list[list[str]],
     b_decks: list[list[str]],
     n_workers: int,
@@ -230,24 +230,12 @@ def _write_round_robin_matches(
 ) -> list[Path]:
     """Write N² match lines split into per-worker files (row-major A-vs-B order)."""
     lines = [
-        "|".join(a_deck) + ";" + "|".join(b_deck)
-        for a_deck in a_decks
-        for b_deck in b_decks
+        "|".join(a) + ";" + "|".join(b)
+        for a, b in row_major_pairings(a_decks, b_decks)
     ]
-    total = len(lines)
-    chunk_size = total // n_workers
-    remainder = total % n_workers
-    worker_files = []
-
-    offset = 0
-    for i in range(n_workers):
-        size = chunk_size + (1 if i < remainder else 0)
+    worker_files: list[Path] = []
+    for i, chunk in enumerate(split_evenly(lines, n_workers)):
         worker_file = work_dir / f"validation-matches-{i}.txt"
-        worker_file.write_text(
-            "\n".join(lines[offset:offset + size]) + "\n",
-            encoding="utf-8",
-        )
+        worker_file.write_text("\n".join(chunk) + "\n", encoding="utf-8")
         worker_files.append(worker_file)
-        offset += size
-
     return worker_files

@@ -7,9 +7,9 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
-from sealed.domain.card_embedding_layout import DET_FEATURE_DIM
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
@@ -39,6 +39,8 @@ class TrainScorerConfig:
     val_interval: int = 1
     unfreeze_embeddings: bool = False
     embedding_lr: float = 1e-5
+    val_fraction: float = 0.2
+    random_seed: int = 42
 
     def best_checkpoint_name(self) -> str:
         return (
@@ -96,12 +98,99 @@ class TrainScorerResult:
     embedding_table: EmbeddingTable
 
 
+@dataclass
+class _TrainingContext:
+    model: SetTransformerScorer
+    optimizer: torch.optim.Optimizer
+    embedding_table: EmbeddingTable
+    train_loader: DataLoader
+    val_loader: DataLoader
+    initial_embeddings: torch.Tensor | None
+    latest_path: Path
+    best_path: Path
+    start_epoch: int
+    best_val_accuracy: float
+
+
+class _BatchStats:
+    """Accumulate pairwise-BCE batch statistics across a training or validation epoch."""
+
+    def __init__(self) -> None:
+        self._total_loss = 0.0
+        self._n_batches = 0
+        self._correct = 0
+        self._total = 0
+        self._winner_scores: list[torch.Tensor] = []
+        self._loser_scores: list[torch.Tensor] = []
+
+    def add(
+        self,
+        loss: torch.Tensor,
+        score_winner: torch.Tensor,
+        score_loser: torch.Tensor,
+    ) -> None:
+        self._total_loss += loss.item()
+        self._n_batches += 1
+        self._correct += (score_winner > score_loser).sum().item()
+        self._total += score_winner.size(0)
+        self._winner_scores.append(score_winner.detach().squeeze(1))
+        self._loser_scores.append(score_loser.detach().squeeze(1))
+
+    @property
+    def mean_loss(self) -> float:
+        return self._total_loss / max(self._n_batches, 1)
+
+    @property
+    def accuracy(self) -> float:
+        return self._correct / max(self._total, 1)
+
+    def score_summary(self) -> tuple[float, float, float, float]:
+        winners = torch.cat(self._winner_scores) if self._winner_scores else torch.zeros(1)
+        losers = torch.cat(self._loser_scores) if self._loser_scores else torch.zeros(1)
+        return (
+            winners.mean().item(), winners.std().item(),
+            losers.mean().item(), losers.std().item(),
+        )
+
+
 class TrainScorerUseCase:
     """Train the deck scorer on match outcome data."""
 
     def execute(self, config: TrainScorerConfig) -> TrainScorerResult:
         store = ScorerStore()
+        ctx = self._prepare(config, store)
 
+        metrics = TrainingMetrics()
+        best_val_accuracy = ctx.best_val_accuracy
+
+        for epoch in range(ctx.start_epoch, ctx.start_epoch + config.epochs):
+            train_stats = _train_one_epoch(
+                ctx.model, ctx.embedding_table, ctx.train_loader, ctx.optimizer,
+            )
+            metrics.train_losses.append(train_stats.loss)
+
+            if (epoch - ctx.start_epoch + 1) % config.val_interval == 0:
+                val = _validate(ctx.model, ctx.embedding_table, ctx.val_loader)
+                metrics.val_losses.append(val.loss)
+                metrics.val_accuracies.append(val.accuracy)
+                if ctx.initial_embeddings is not None:
+                    metrics.embedding_drifts.append(
+                        _embedding_drift(ctx.embedding_table, ctx.initial_embeddings),
+                    )
+                _print_epoch_report(epoch, train_stats, val, metrics)
+                best_val_accuracy = self._persist_checkpoint(
+                    ctx, store, epoch, val.accuracy, best_val_accuracy,
+                )
+
+        return TrainScorerResult(
+            model=ctx.model,
+            metrics=metrics,
+            embedding_table=ctx.embedding_table,
+        )
+
+    def _prepare(
+        self, config: TrainScorerConfig, store: ScorerStore,
+    ) -> _TrainingContext:
         train_examples, val_examples, embedding_table = _load_dataset(config)
         if config.unfreeze_embeddings:
             embedding_table.unfreeze()
@@ -118,60 +207,61 @@ class TrainScorerUseCase:
         )
 
         config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        latest_path = config.checkpoint_dir / "latest.pt"
-        best_path = config.checkpoint_dir / config.best_checkpoint_name()
-
-        metrics = TrainingMetrics()
         initial_embeddings = (
             embedding_table.embedding.weight.detach().clone()
             if not embedding_table.is_frozen()
             else None
         )
-        best_val_accuracy = resume.best_val_accuracy
 
-        for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
-            train_stats = _train_one_epoch(
-                resume.model, embedding_table, train_loader, optimizer,
-            )
-            metrics.train_losses.append(train_stats.loss)
-
-            if (epoch - resume.start_epoch + 1) % config.val_interval == 0:
-                val = _validate(resume.model, embedding_table, val_loader)
-                metrics.val_losses.append(val.loss)
-                metrics.val_accuracies.append(val.accuracy)
-                if initial_embeddings is not None:
-                    metrics.embedding_drifts.append(
-                        _embedding_drift(embedding_table, initial_embeddings),
-                    )
-
-                _print_epoch_report(epoch, train_stats, val, metrics)
-
-                store.save_checkpoint(
-                    resume.model, optimizer, epoch, best_val_accuracy,
-                    resume.model.config, latest_path,
-                )
-                if val.accuracy > best_val_accuracy:
-                    best_val_accuracy = val.accuracy
-                    store.save_checkpoint(
-                        resume.model, optimizer, epoch, best_val_accuracy,
-                        resume.model.config, best_path,
-                    )
-
-        return TrainScorerResult(
+        return _TrainingContext(
             model=resume.model,
-            metrics=metrics,
+            optimizer=optimizer,
             embedding_table=embedding_table,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            initial_embeddings=initial_embeddings,
+            latest_path=config.checkpoint_dir / "latest.pt",
+            best_path=config.checkpoint_dir / config.best_checkpoint_name(),
+            start_epoch=resume.start_epoch,
+            best_val_accuracy=resume.best_val_accuracy,
         )
+
+    def _persist_checkpoint(
+        self,
+        ctx: _TrainingContext,
+        store: ScorerStore,
+        epoch: int,
+        val_accuracy: float,
+        current_best: float,
+    ) -> float:
+        store.save_checkpoint(
+            ctx.model, ctx.optimizer, epoch, current_best,
+            ctx.model.config, ctx.latest_path,
+        )
+        if val_accuracy > current_best:
+            current_best = val_accuracy
+            store.save_checkpoint(
+                ctx.model, ctx.optimizer, epoch, current_best,
+                ctx.model.config, ctx.best_path,
+            )
+        return current_best
 
 
 def _load_dataset(
     config: TrainScorerConfig,
 ) -> tuple[list[TrainingExample], list[TrainingExample], EmbeddingTable]:
-    """Load all outcomes, build a shared EmbeddingTable, and 80/20-split examples."""
+    """Load all outcomes, build a shared EmbeddingTable, and randomly split examples."""
     outcomes = load_match_outcomes(config.outcomes_path)
     examples, embedding_table = build_training_examples(outcomes, config.cards_path)
-    split_idx = int(len(examples) * 0.8)
-    return examples[:split_idx], examples[split_idx:], embedding_table
+    if len(examples) < 2:
+        return examples, [], embedding_table
+    train_examples, val_examples = train_test_split(
+        examples,
+        test_size=config.val_fraction,
+        random_state=config.random_seed,
+        shuffle=True,
+    )
+    return train_examples, val_examples, embedding_table
 
 
 def _resume_or_build_model(
@@ -185,13 +275,13 @@ def _resume_or_build_model(
             optimizer_state=None,
         )
     checkpoint = store.load_checkpoint(config.resume)
-    model = SetTransformerScorer(checkpoint["config"])
-    model.load_state_dict(checkpoint["model_state_dict"])
+    model = SetTransformerScorer(checkpoint.config)
+    model.load_state_dict(checkpoint.model_state_dict)
     return ResumeState(
         model=model,
-        start_epoch=checkpoint["epoch"] + 1,
-        best_val_accuracy=checkpoint.get("best_val_accuracy", -1.0),
-        optimizer_state=checkpoint.get("optimizer_state_dict"),
+        start_epoch=checkpoint.epoch + 1,
+        best_val_accuracy=checkpoint.best_val_accuracy,
+        optimizer_state=checkpoint.optimizer_state_dict or None,
     )
 
 
@@ -235,10 +325,7 @@ def _train_one_epoch(
     optimizer: torch.optim.Optimizer,
 ) -> EpochStats:
     model.train()
-    total_loss = 0.0
-    correct = 0
-    total = 0
-    n_batches = 0
+    stats = _BatchStats()
     grad_norms: dict[str, float] = {}
 
     for batch in loader:
@@ -248,15 +335,11 @@ def _train_one_epoch(
         loss.backward()
         grad_norms = _gradient_norms(model)
         optimizer.step()
-        total_loss += loss.item()
-        n_batches += 1
-        with torch.no_grad():
-            correct += (score_winner > score_loser).sum().item()
-            total += score_winner.size(0)
+        stats.add(loss, score_winner, score_loser)
 
     return EpochStats(
-        loss=total_loss / max(n_batches, 1),
-        accuracy=correct / max(total, 1),
+        loss=stats.mean_loss,
+        accuracy=stats.accuracy,
         grad_norms=grad_norms,
     )
 
@@ -268,35 +351,21 @@ def _validate(
 ) -> ValidationResult:
     """Compute validation loss, accuracy, and score statistics."""
     model.eval()
-    total_loss = 0.0
-    correct = 0
-    total = 0
-    n_batches = 0
-    all_winner_scores: list[torch.Tensor] = []
-    all_loser_scores: list[torch.Tensor] = []
-
+    stats = _BatchStats()
     with torch.no_grad():
         for batch in val_loader:
             score_winner, score_loser = _score_batch(model, embedding_table, batch)
             loss = _pairwise_bce(score_winner, score_loser)
-            total_loss += loss.item()
-            n_batches += 1
-            correct += (score_winner > score_loser).sum().item()
-            total += score_winner.size(0)
-            all_winner_scores.append(score_winner.squeeze(1))
-            all_loser_scores.append(score_loser.squeeze(1))
+            stats.add(loss, score_winner, score_loser)
 
-    avg_loss = total_loss / max(n_batches, 1)
-    accuracy = correct / max(total, 1)
-    all_w = torch.cat(all_winner_scores) if all_winner_scores else torch.zeros(1)
-    all_l = torch.cat(all_loser_scores) if all_loser_scores else torch.zeros(1)
+    w_mean, w_std, l_mean, l_std = stats.score_summary()
     return ValidationResult(
-        loss=avg_loss,
-        accuracy=accuracy,
-        score_winner_mean=all_w.mean().item(),
-        score_winner_std=all_w.std().item(),
-        score_loser_mean=all_l.mean().item(),
-        score_loser_std=all_l.std().item(),
+        loss=stats.mean_loss,
+        accuracy=stats.accuracy,
+        score_winner_mean=w_mean,
+        score_winner_std=w_std,
+        score_loser_mean=l_mean,
+        score_loser_std=l_std,
     )
 
 
@@ -316,7 +385,6 @@ def _score_batch(
 def _pairwise_bce(
     score_winner: torch.Tensor, score_loser: torch.Tensor,
 ) -> torch.Tensor:
-    """Bradley-Terry pairwise loss: BCE on (winner − loser) with target=1."""
     return F.binary_cross_entropy_with_logits(
         score_winner - score_loser,
         torch.ones_like(score_winner),
@@ -347,18 +415,14 @@ def _set_normalization_stats(
     embedding_table: EmbeddingTable,
 ) -> None:
     """Compute per-feature mean and std for the deterministic-feature slice."""
-    indices: list[torch.Tensor] = []
-    for ex in examples:
-        indices.append(ex.winner_indices)
-        indices.append(ex.loser_indices)
-    if not indices:
+    if not examples:
         return
-    flat = torch.cat(indices)
-    offset = embedding_table.embedding.embedding_dim - DET_FEATURE_DIM
-    feats = embedding_table.embedding.weight.detach()[flat, offset:]
-    model.feat_mean.copy_(feats.mean(dim=0))
-    std = feats.std(dim=0)
-    std[std == 0] = 1.0
+    flat = torch.cat(
+        [ex.winner_indices for ex in examples]
+        + [ex.loser_indices for ex in examples]
+    )
+    mean, std = embedding_table.deterministic_feature_stats(flat)
+    model.feat_mean.copy_(mean)
     model.feat_std.copy_(std)
 
 

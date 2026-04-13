@@ -46,7 +46,7 @@ class MatchOutcomeSupervisor:
             t.start()
             monitor_threads.append(t)
 
-        self._status_reporter_loop()
+        self._supervisor_loop()
 
         for t in monitor_threads:
             t.join(timeout=10)
@@ -86,8 +86,8 @@ class MatchOutcomeSupervisor:
         print(f"Worker {worker_id} started (PID {proc.pid}, log {log_path.name})")
         return proc
 
-    def _status_reporter_loop(self) -> None:
-        """Print status every STATUS_INTERVAL seconds until shutdown."""
+    def _supervisor_loop(self) -> None:
+        """Report status and recycle the oldest worker every STATUS_INTERVAL seconds."""
         start_time = time.monotonic()
         last_count = 0
         last_time = start_time
@@ -98,29 +98,37 @@ class MatchOutcomeSupervisor:
                 break
 
             now = time.monotonic()
-            elapsed = now - start_time
-            interval = now - last_time
-
-            count = self._count_output_lines()
-            delta = count - last_count
-            rate = delta / interval * 60 if interval > 0 else 0.0
-
-            with self._processes_lock:
-                alive = sum(1 for p in self._processes if p.poll() is None)
-
-            print(
-                f"[{elapsed:.0f}s] {count} matches completed"
-                f" | {rate:.1f} matches/min"
-                f" | {alive}/{self._worker_count} workers alive"
+            last_count, last_time = self._report_status(
+                start_time, now, last_count, last_time,
             )
-
             self._kill_oldest_worker()
-
-            last_count = count
-            last_time = now
 
         self._terminate_all()
         print(f"Shutting down, terminating {self._worker_count} workers...")
+
+    def _report_status(
+        self,
+        start_time: float,
+        now: float,
+        last_count: int,
+        last_time: float,
+    ) -> tuple[int, float]:
+        elapsed = now - start_time
+        interval = now - last_time
+
+        count = self._count_output_lines()
+        delta = count - last_count
+        rate = delta / interval * 60 if interval > 0 else 0.0
+
+        with self._processes_lock:
+            alive = sum(1 for p in self._processes if p.poll() is None)
+
+        print(
+            f"[{elapsed:.0f}s] {count} matches completed"
+            f" | {rate:.1f} matches/min"
+            f" | {alive}/{self._worker_count} workers alive"
+        )
+        return count, now
 
     def _kill_oldest_worker(self) -> None:
         """Kill the longest-running worker so the monitor thread restarts it fresh.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from sealed.application.evaluate_scorer import _write_round_robin_matches
+from sealed.application.evaluate_scorer import write_round_robin_matches
 from sealed.domain.card_embedding_layout import total_dim
 from sealed.domain.greedy_deck_builder import GreedyDeckBuilder
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -57,7 +57,7 @@ class TestWriteRoundRobinMatches:
         """3 A-decks × 3 B-decks = 9 total match lines."""
         a_decks = [self._make_deck(f"a{i}") for i in range(3)]
         b_decks = [self._make_deck(f"b{i}") for i in range(3)]
-        worker_files = _write_round_robin_matches(
+        worker_files = write_round_robin_matches(
             a_decks, b_decks, n_workers=1, work_dir=tmp_path,
         )
         total_lines = sum(
@@ -70,7 +70,7 @@ class TestWriteRoundRobinMatches:
         """First line is A0 vs B0, second is A0 vs B1."""
         a_decks = [["a0"], ["a1"]]
         b_decks = [["b0"], ["b1"]]
-        worker_files = _write_round_robin_matches(
+        worker_files = write_round_robin_matches(
             a_decks, b_decks, n_workers=1, work_dir=tmp_path,
         )
         lines = [
@@ -85,7 +85,7 @@ class TestWriteRoundRobinMatches:
         """9 matches across 2 workers are split ~evenly."""
         a_decks = [self._make_deck(f"a{i}") for i in range(3)]
         b_decks = [self._make_deck(f"b{i}") for i in range(3)]
-        worker_files = _write_round_robin_matches(
+        worker_files = write_round_robin_matches(
             a_decks, b_decks, n_workers=2, work_dir=tmp_path,
         )
         assert len(worker_files) == 2

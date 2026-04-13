@@ -1,51 +1,58 @@
 """Parse 32 deterministic game features from converted card text.
 
-Feature index mapping (within the 32-element array):
-  0       is_land
-  1-5     W/U/B/R/G pip counts
-  6       colorless pip count (C)
-  7       generic mana
-  8       X pip count
-  9       mana value
-  10-14   is_white..is_green (binary, zeroed if devoid)
-  15      is_colorless
-  16-20   produces W/U/B/R/G (binary, from activated abilities)
-  21      produces C (binary)
-  22      mana_count (total mana produced per activation)
-  23      power
-  24      toughness
-  25      loyalty
-  26-31   zero padding
+The feature layout is defined by named slot constants in
+``sealed.domain.card_embedding_layout`` — edit those constants if you need
+to reorganise the feature block, not the literal indices here.
 """
 
 from __future__ import annotations
-
-import re
 
 import numpy as np
 
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import WUBRG, ManaCost
 from price_predictor.infrastructure.converted_card_parser import (
+    MANA_BRACE_RE,
     extract_mana_cost_line,
     parse_converted_text,
 )
+from sealed.domain.card_embedding_layout import (
+    COLOR_FLAGS,
+    COLOR_PIPS,
+    COLORLESS_PIP,
+    FEATURE_COUNT,
+    GENERIC,
+    IS_COLORLESS,
+    IS_LAND,
+    LOYALTY,
+    MANA_PRODUCED,
+    MANA_VALUE,
+    POWER,
+    PRODUCES_COLORLESS,
+    PRODUCES_COLORS,
+    TOUGHNESS,
+    X_COUNT,
+)
 
-_COLOR_FLAGS = {c: i + 10 for i, c in enumerate(WUBRG)}     # W=10, U=11, B=12, R=13, G=14
-_PRODUCE_SYMBOLS = {c: i + 16 for i, c in enumerate(WUBRG)} # W=16, U=17, B=18, R=19, G=20
-
-_MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
-_DEVOID_LINE = "static: devoid"
+_COLOR_PIP_BY_COLOR: dict[str, int] = dict(
+    zip(WUBRG, range(COLOR_PIPS.start, COLOR_PIPS.stop))
+)
+_COLOR_FLAG_BY_COLOR: dict[str, int] = dict(
+    zip(WUBRG, range(COLOR_FLAGS.start, COLOR_FLAGS.stop))
+)
+_PRODUCE_BY_COLOR: dict[str, int] = dict(
+    zip(WUBRG, range(PRODUCES_COLORS.start, PRODUCES_COLORS.stop))
+)
 
 
 def parse_deterministic_features(card_text: str) -> np.ndarray:
-    """Parse converted card text and return a 32-element float32 feature array.
+    """Parse converted card text and return a float32 feature array of length ``FEATURE_COUNT``.
 
     Returns the zero vector for inputs that aren't well-formed converted card
     text (no ``name:``/``types:`` line). The encoder feeds short test snippets
     through here, so this contract has to stay lenient.
     """
-    feats = np.zeros(32, dtype=np.float32)
+    feats = np.zeros(FEATURE_COUNT, dtype=np.float32)
 
     try:
         card = parse_converted_text(card_text)
@@ -53,10 +60,10 @@ def parse_deterministic_features(card_text: str) -> np.ndarray:
         return feats
 
     if _is_land(card):
-        feats[0] = 1.0
+        feats[IS_LAND] = 1.0
 
     _fill_mana_cost_features(feats, card.mana_cost, card_text)
-    _fill_color_flags(feats, card.mana_cost, _has_devoid(card_text))
+    _fill_color_flags(feats, card)
     _fill_mana_production(feats, card_text)
     _fill_combat_stats(feats, card)
 
@@ -72,43 +79,40 @@ def _fill_mana_cost_features(
 ) -> None:
     if mana_cost is None:
         return
-    feats[1] = float(mana_cost.w)
-    feats[2] = float(mana_cost.u)
-    feats[3] = float(mana_cost.b)
-    feats[4] = float(mana_cost.r)
-    feats[5] = float(mana_cost.g)
-    feats[6] = float(mana_cost.colorless_mana)
-    feats[7] = float(mana_cost.generic_mana)
-    feats[8] = float(_count_x_in_cost(card_text))
-    feats[9] = feats[1] + feats[2] + feats[3] + feats[4] + feats[5] + feats[6] + feats[7]
+    pip_counts = (mana_cost.w, mana_cost.u, mana_cost.b, mana_cost.r, mana_cost.g)
+    for color, count in zip(WUBRG, pip_counts):
+        feats[_COLOR_PIP_BY_COLOR[color]] = float(count)
+    feats[COLORLESS_PIP] = float(mana_cost.colorless_mana)
+    feats[GENERIC] = float(mana_cost.generic_mana)
+    feats[X_COUNT] = float(_count_x_in_cost(card_text))
+    feats[MANA_VALUE] = float(mana_cost.total_mana_value)
 
 
 def _count_x_in_cost(card_text: str) -> int:
     cost_line = extract_mana_cost_line(card_text)
     if cost_line is None:
         return 0
-    return sum(1 for m in _MANA_BRACE_RE.finditer(cost_line) if m.group(1) == "X")
+    return sum(1 for m in MANA_BRACE_RE.finditer(cost_line) if m.group(1) == "X")
 
 
-def _fill_color_flags(
-    feats: np.ndarray, mana_cost: ManaCost | None, is_devoid: bool,
-) -> None:
-    if is_devoid or mana_cost is None:
-        feats[15] = 1.0
+def _fill_color_flags(feats: np.ndarray, card: Card) -> None:
+    mana_cost = card.mana_cost
+    if _has_devoid(card) or mana_cost is None:
+        feats[IS_COLORLESS] = 1.0
         return
 
-    color_pips = (mana_cost.w, mana_cost.u, mana_cost.b, mana_cost.r, mana_cost.g)
+    pip_counts = (mana_cost.w, mana_cost.u, mana_cost.b, mana_cost.r, mana_cost.g)
     has_color = False
-    for color, pips in zip(WUBRG, color_pips):
+    for color, pips in zip(WUBRG, pip_counts):
         if pips > 0:
-            feats[_COLOR_FLAGS[color]] = 1.0
+            feats[_COLOR_FLAG_BY_COLOR[color]] = 1.0
             has_color = True
     if not has_color:
-        feats[15] = 1.0
+        feats[IS_COLORLESS] = 1.0
 
 
-def _has_devoid(card_text: str) -> bool:
-    return any(line.strip().lower() == _DEVOID_LINE for line in card_text.splitlines())
+def _has_devoid(card: Card) -> bool:
+    return "devoid" in (card.oracle_text or "").lower()
 
 
 def _fill_mana_production(feats: np.ndarray, card_text: str) -> None:
@@ -118,19 +122,19 @@ def _fill_mana_production(feats: np.ndarray, card_text: str) -> None:
             continue
 
         mana_count = 0
-        for match in _MANA_BRACE_RE.finditer(add_clause):
+        for match in MANA_BRACE_RE.finditer(add_clause):
             symbol = match.group(1).upper()
-            if symbol in _PRODUCE_SYMBOLS:
-                feats[_PRODUCE_SYMBOLS[symbol]] = 1.0
+            if symbol in _PRODUCE_BY_COLOR:
+                feats[_PRODUCE_BY_COLOR[symbol]] = 1.0
                 mana_count += 1
             elif symbol == "C":
-                feats[21] = 1.0
+                feats[PRODUCES_COLORLESS] = 1.0
                 mana_count += 1
 
         if " or " in add_clause and mana_count > 1:
             mana_count = 1
 
-        feats[22] = max(feats[22], float(mana_count))
+        feats[MANA_PRODUCED] = max(feats[MANA_PRODUCED], float(mana_count))
 
 
 def _activated_lines(card_text: str) -> list[str]:
@@ -152,9 +156,9 @@ def _extract_add_clause(activated_line: str) -> str | None:
 
 
 def _fill_combat_stats(feats: np.ndarray, card: Card) -> None:
-    feats[23] = _parse_stat(card.power) if card.power else 0.0
-    feats[24] = _parse_stat(card.toughness) if card.toughness else 0.0
-    feats[25] = _parse_stat(card.loyalty) if card.loyalty else 0.0
+    feats[POWER] = _parse_stat(card.power) if card.power else 0.0
+    feats[TOUGHNESS] = _parse_stat(card.toughness) if card.toughness else 0.0
+    feats[LOYALTY] = _parse_stat(card.loyalty) if card.loyalty else 0.0
 
 
 def _parse_stat(value: str) -> float:

@@ -39,6 +39,7 @@ class FakeProcess:
 @pytest.fixture
 def synthetic_cards_dir(tmp_path: Path) -> Path:
     """Create ``tmp_path/cards/<letter>/<name>.npz`` for 50 random card embeddings."""
+    rng = np.random.default_rng(0)
     cards_dir = tmp_path / "cards"
     cards_dir.mkdir()
     for i in range(50):
@@ -47,7 +48,7 @@ def synthetic_cards_dir(tmp_path: Path) -> Path:
         letter_dir.mkdir(exist_ok=True)
         np.savez_compressed(
             letter_dir / f"{name}.npz",
-            embedding=np.random.randn(total_dim(256)).astype(np.float32),
+            embedding=rng.standard_normal(total_dim(256)).astype(np.float32),
         )
     return cards_dir
 
@@ -59,13 +60,14 @@ def synthetic_outcomes_file(tmp_path: Path, synthetic_cards_dir: Path) -> Path:
 
 
 def _write_outcomes(tmp_path: Path, n_matches: int, n_cards_per_deck: int) -> Path:
+    rng = np.random.default_rng(0)
     card_names = [f"card_{i}" for i in range(50)]
     outcomes_file = tmp_path / "outcomes.txt"
     lines = []
     for _ in range(n_matches):
-        deck_a = np.random.choice(card_names, n_cards_per_deck, replace=True)
-        deck_b = np.random.choice(card_names, n_cards_per_deck, replace=True)
-        wins_a, wins_b = (2, int(np.random.choice([0, 1])))
+        deck_a = rng.choice(card_names, n_cards_per_deck, replace=True)
+        deck_b = rng.choice(card_names, n_cards_per_deck, replace=True)
+        wins_a, wins_b = (2, int(rng.choice([0, 1])))
         lines.append(f"{'|'.join(deck_a)};{'|'.join(deck_b)};{wins_a};{wins_b}")
     outcomes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return outcomes_file

@@ -23,7 +23,7 @@ _ABILITY_LINE_RE = re.compile(
 )
 
 # Pattern for the {X}{Y}{Z} mana cost format.
-_MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
+MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
 
 
 def convert_mana_cost(raw: str) -> str:
@@ -31,7 +31,7 @@ def convert_mana_cost(raw: str) -> str:
 
     E.g. ``{2}{U}{U}`` becomes ``2 U U``.
     """
-    shards = _MANA_BRACE_RE.findall(raw)
+    shards = MANA_BRACE_RE.findall(raw)
     return " ".join(shards)
 
 

@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn as nn
 
+from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.scorer_model import ScorerConfig
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
+
+
+class MatchDropReason(Enum):
+    MISSING_CARD = "missing_card"
+    EMPTY_AFTER_BASICS = "empty_after_basics"
 
 
 @dataclass
@@ -79,6 +87,17 @@ class EmbeddingTable(nn.Module):
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
         return self.embedding(indices)
 
+    def deterministic_feature_stats(
+        self, indices: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return ``(mean, std)`` of the deterministic-feature slice over the given rows."""
+        offset = self.embedding.embedding_dim - FEATURE_COUNT
+        feats = self.embedding.weight.detach()[indices, offset:]
+        mean = feats.mean(dim=0)
+        std = feats.std(dim=0)
+        std[std == 0] = 1.0
+        return mean, std
+
 
 def parse_match_outcome(line: str) -> MatchOutcome:
     """Parse a single line from match-outcomes.txt."""
@@ -130,27 +149,36 @@ class _ExampleBuilder:
 
     def build(self, outcomes: list[MatchOutcome]) -> list[TrainingExample]:
         examples: list[TrainingExample] = []
-        skipped = 0
+        drops: Counter[MatchDropReason] = Counter()
         for outcome in outcomes:
             winner = self._resolve_deck(outcome.winner_names)
             if winner is None:
-                skipped += 1
+                drops[MatchDropReason.MISSING_CARD] += 1
                 continue
             loser = self._resolve_deck(outcome.loser_names)
             if loser is None:
-                skipped += 1
+                drops[MatchDropReason.MISSING_CARD] += 1
                 continue
-            if winner and loser:
-                examples.append(TrainingExample(
-                    winner_indices=torch.tensor(winner, dtype=torch.long),
-                    loser_indices=torch.tensor(loser, dtype=torch.long),
-                ))
-        if skipped:
-            print(
-                f"Skipped {skipped} matches due to {len(self._missing)} missing card(s)",
-                file=sys.stderr,
-            )
+            if not winner or not loser:
+                drops[MatchDropReason.EMPTY_AFTER_BASICS] += 1
+                continue
+            examples.append(TrainingExample(
+                winner_indices=torch.tensor(winner, dtype=torch.long),
+                loser_indices=torch.tensor(loser, dtype=torch.long),
+            ))
+        self._report_drops(drops)
         return examples
+
+    def _report_drops(self, drops: Counter[MatchDropReason]) -> None:
+        if not drops:
+            return
+        missing = drops.get(MatchDropReason.MISSING_CARD, 0)
+        empty = drops.get(MatchDropReason.EMPTY_AFTER_BASICS, 0)
+        print(
+            f"Skipped matches: {missing} missing-card "
+            f"({len(self._missing)} unique cards), {empty} empty-after-basics",
+            file=sys.stderr,
+        )
 
     def into_table(self) -> EmbeddingTable:
         if self._vectors:

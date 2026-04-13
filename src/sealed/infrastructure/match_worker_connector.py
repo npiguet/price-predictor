@@ -44,8 +44,6 @@ class MatchWorkerConnector:
         )
 
         stdio = log_file if log_file is not None else subprocess.DEVNULL
-        # start_new_session puts the child in its own process group on POSIX
-        # so kill_process_tree's os.killpg can take down the whole tree.
         return subprocess.Popen(
             cmd, stdout=stdio, stderr=stdio, start_new_session=True,
         )
