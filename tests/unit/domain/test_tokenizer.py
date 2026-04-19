@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from price_predictor.domain.tokenizer import MtgTokenizer
 
 
@@ -203,7 +201,10 @@ class TestNameLineNormalization:
 
     def test_both_name_lines_normalized_in_double_faced_card(self):
         tok = _make_tokenizer()
-        text = "name: delver of secrets\ntypes: creature\n\nALTERNATE\n\nname: insectile aberration\ntypes: creature"
+        text = (
+            "name: delver of secrets\ntypes: creature\n\n"
+            "ALTERNATE\n\nname: insectile aberration\ntypes: creature"
+        )
         tokens = tok.tokenize(text)
         assert "delver" not in tokens
         assert "insectile" not in tokens

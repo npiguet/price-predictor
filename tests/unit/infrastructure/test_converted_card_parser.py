@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.infrastructure.converted_card_parser import (
     parse_converted_cards,
     parse_converted_file,
@@ -20,7 +21,7 @@ FIXTURES = Path(__file__).resolve().parent.parent.parent / "fixtures" / "convert
 
 def test_parse_creature_with_power_toughness():
     text = (FIXTURES / "grizzly_bears.txt").read_text()
-    card = parse_converted_text(text)
+    card = parse_converted_text(ConvertedCardText(text))
 
     assert card.name == "grizzly bears"
     assert "Creature" in card.types
@@ -38,7 +39,7 @@ def test_parse_creature_with_power_toughness():
 
 def test_parse_instant_with_spell_ability():
     text = (FIXTURES / "lightning_bolt.txt").read_text()
-    card = parse_converted_text(text)
+    card = parse_converted_text(ConvertedCardText(text))
 
     assert card.name == "lightning bolt"
     assert "Instant" in card.types
@@ -55,7 +56,7 @@ def test_parse_instant_with_spell_ability():
 
 def test_parse_planeswalker_with_loyalty():
     text = (FIXTURES / "jace_the_mind_sculptor.txt").read_text()
-    card = parse_converted_text(text)
+    card = parse_converted_text(ConvertedCardText(text))
 
     assert card.name == "jace, the mind sculptor"
     assert "Planeswalker" in card.types
@@ -75,7 +76,7 @@ def test_parse_planeswalker_with_loyalty():
 
 def test_missing_optional_fields_still_parse():
     text = "name: Nameless One\ntypes: creature\n"
-    card = parse_converted_text(text)
+    card = parse_converted_text(ConvertedCardText(text))
 
     assert card.name == "Nameless One"
     assert "Creature" in card.types
@@ -93,7 +94,7 @@ def test_missing_optional_fields_still_parse():
 def test_missing_name_raises_value_error():
     text = "types: instant\nspell[1]: deal damage\n"
     with pytest.raises(ValueError, match="(?i)name"):
-        parse_converted_text(text)
+        parse_converted_text(ConvertedCardText(text))
 
 
 # --- 6. Missing types raises ValueError ---
@@ -102,7 +103,7 @@ def test_missing_name_raises_value_error():
 def test_missing_types_raises_value_error():
     text = "name: Bad Card\nspell[1]: deal damage\n"
     with pytest.raises(ValueError, match="(?i)types"):
-        parse_converted_text(text)
+        parse_converted_text(ConvertedCardText(text))
 
 
 # --- 7. Empty text raises ValueError ---
@@ -110,12 +111,12 @@ def test_missing_types_raises_value_error():
 
 def test_empty_text_raises_value_error():
     with pytest.raises(ValueError, match="(?i)empty"):
-        parse_converted_text("")
+        parse_converted_text(ConvertedCardText(""))
 
 
 def test_whitespace_only_raises_value_error():
     with pytest.raises(ValueError, match="(?i)empty"):
-        parse_converted_text("   \n\n  ")
+        parse_converted_text(ConvertedCardText("   \n\n  "))
 
 
 # --- 8. parse_converted_file with valid file ---
@@ -209,8 +210,8 @@ def test_printing_data_lines_produce_same_card():
         "set: 7ed\n"
         "legalities: commander, legacy, modern, pauper, penny, vintage\n"
     )
-    card_base = parse_converted_text(base_text)
-    card_enriched = parse_converted_text(enriched_text)
+    card_base = parse_converted_text(ConvertedCardText(base_text))
+    card_enriched = parse_converted_text(ConvertedCardText(enriched_text))
 
     # Core Card attributes must be identical
     assert card_enriched.name == card_base.name

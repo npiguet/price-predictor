@@ -91,6 +91,39 @@ def build_jvm_command(
     return cmd
 
 
+def run_forge_worker(
+    main_class: str,
+    *,
+    main_args: list[str] | None = None,
+    xmx: str | None = None,
+    input_text: str | None = None,
+) -> subprocess.CompletedProcess:
+    """Run a one-shot forge-connector main class and return the result.
+
+    Raises FileNotFoundError if ``java`` is not on PATH.
+    """
+    cmd = build_jvm_command(
+        main_class=main_class,
+        classpath=build_forge_classpath(),
+        main_args=main_args,
+        xmx=xmx,
+    )
+    capture = input_text is not None
+    try:
+        return subprocess.run(
+            cmd,
+            input=input_text,
+            capture_output=capture,
+            text=capture,
+            encoding="utf-8" if capture else None,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            "Java not found. Ensure java is on PATH."
+        ) from exc
+
+
 def kill_process_tree(proc: subprocess.Popen) -> None:
     """Kill a subprocess and its entire child tree.
 

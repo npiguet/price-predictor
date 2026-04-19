@@ -88,13 +88,16 @@ class TestPredictBatch:
     def test_returns_predictions_and_targets_in_dataset_order(self):
         model = _ConstantModel(value=0.42)
         tok = _make_tokenizer()
-        cards = [
-            ("Card A", "name: card a", 1.0),
-            ("Card B", "name: card b", 5.0),
-            ("Card C", "name: card c", 25.0),
+        from price_predictor.application.training_sample import TrainingSample
+
+        pd = PrintingData.defaults()
+        samples = [
+            TrainingSample("Card A", "name: card a", 1.0, pd),
+            TrainingSample("Card B", "name: card b", 5.0, pd),
+            TrainingSample("Card C", "name: card c", 25.0, pd),
         ]
         dataset = TransformerTrainingDataset(
-            cards, max_seq_len=16, tokenizer=tok, log_offset=2.0,
+            samples, max_seq_len=16, tokenizer=tok, log_offset=2.0,
         )
 
         preds, targets = predict_batch(model, dataset, torch.device("cpu"))
@@ -103,5 +106,5 @@ class TestPredictBatch:
         assert targets.shape == (3,)
         for value in preds:
             assert abs(float(value) - 0.42) < 1e-6
-        for actual, (_, _, price) in zip(targets, cards):
-            assert abs(float(actual) - math.log(price + 2.0)) < 1e-6
+        for actual, sample in zip(targets, samples):
+            assert abs(float(actual) - math.log(sample.price_eur + 2.0)) < 1e-6

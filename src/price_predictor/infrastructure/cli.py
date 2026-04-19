@@ -64,24 +64,34 @@ def build_parser() -> argparse.ArgumentParser:
     train_transformer.add_argument("--vocab-path", type=str,
                                    default="models/price-predictor/transformer/vocab.txt",
                                    help="Path to vocab.txt built by 'vocabulary' command")
-    train_transformer.add_argument("--log-offset", type=float, default=2.0,
-                                   help="Offset used in log(price + offset) target transform "
-                                        "(stored in model artifact; use 0.5 for better high-price signal)")
-    train_transformer.add_argument("--dropout", type=float, default=0.1,
-                                   help="Dropout rate for embeddings and transformer layers (default: 0.1; "
-                                        "try 0.05 or 0.0 for small datasets)")
-    train_transformer.add_argument("--sampler-exponent", type=float, default=1.0,
-                                   help="Exponent for price-bucket oversampling: "
-                                        "0.0=uniform, 0.5=sqrt, 1.0=full inverse (default). "
-                                        "Higher values oversample expensive cards more aggressively.")
-    train_transformer.add_argument("--d-model", type=int, default=256,
-                                   help="Embedding dimension (default: 256). Must be divisible by n-heads.")
-    train_transformer.add_argument("--n-layers", type=int, default=2,
-                                   help="Number of transformer encoder layers (default: 2).")
-    train_transformer.add_argument("--n-heads", type=int, default=4,
-                                   help="Number of attention heads (default: 4). Must divide d-model evenly.")
-    train_transformer.add_argument("--ff-dim", type=int, default=1024,
-                                   help="Feed-forward inner dimension (default: 1024, typically 4×d-model).")
+    train_transformer.add_argument(
+        "--log-offset", type=float, default=2.0,
+        help="Offset for log(price+offset) transform (use 0.5 for high-price signal)",
+    )
+    train_transformer.add_argument(
+        "--dropout", type=float, default=0.1,
+        help="Dropout rate (default: 0.1; try 0.05 or 0.0 for small datasets)",
+    )
+    train_transformer.add_argument(
+        "--sampler-exponent", type=float, default=1.0,
+        help="Price-bucket oversampling exponent: 0=uniform, 0.5=sqrt, 1=full",
+    )
+    train_transformer.add_argument(
+        "--d-model", type=int, default=256,
+        help="Embedding dimension (default: 256). Must divide by n-heads.",
+    )
+    train_transformer.add_argument(
+        "--n-layers", type=int, default=2,
+        help="Number of transformer encoder layers (default: 2).",
+    )
+    train_transformer.add_argument(
+        "--n-heads", type=int, default=4,
+        help="Number of attention heads (default: 4). Must divide d-model.",
+    )
+    train_transformer.add_argument(
+        "--ff-dim", type=int, default=1024,
+        help="Feed-forward inner dim (default: 1024, typically 4x d-model).",
+    )
     train_transformer.set_defaults(func=run_train_transformer)
 
     # ── predict {model} ──────────────────────────────────────────
@@ -558,6 +568,7 @@ def _load_optional_transformer_bundle(
 def run_predict_sklearn(args: argparse.Namespace) -> int:
     """Predict with the sklearn model using converted card text."""
     from price_predictor.application.predict import PredictPriceUseCase
+    from price_predictor.domain.card_text import ConvertedCardText
     from price_predictor.infrastructure.converted_card_parser import parse_converted_text
     from price_predictor.infrastructure.model_store import ModelNotFoundError
 
@@ -566,7 +577,7 @@ def run_predict_sklearn(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        card = parse_converted_text(card_text)
+        card = parse_converted_text(ConvertedCardText(card_text))
     except ValueError as e:
         logger.error("Failed to parse card text: %s", e)
         return 1

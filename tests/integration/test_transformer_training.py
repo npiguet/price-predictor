@@ -8,21 +8,38 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 
+from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
-from price_predictor.infrastructure.transformer_store import save_model, load_model
+from price_predictor.infrastructure.transformer_store import load_model, save_model
 
 FIXTURES_DIR = Path(__file__).parents[1] / "fixtures" / "converted_cards"
+_PD = PrintingData.defaults()
 
 
-def _load_fixture_texts() -> list[tuple[str, str, float]]:
+def _load_fixture_samples() -> list[TrainingSample]:
     """Load fixture card texts with fake prices."""
     return [
-        ("Lightning Bolt", (FIXTURES_DIR / "lightning_bolt.txt").read_text(encoding="utf-8"), 2.50),
-        ("Grizzly Bears", (FIXTURES_DIR / "grizzly_bears.txt").read_text(encoding="utf-8"), 0.10),
-        ("Jace, the Mind Sculptor", (FIXTURES_DIR / "jace_the_mind_sculptor.txt").read_text(encoding="utf-8"), 45.00),
+        TrainingSample(
+            "Lightning Bolt",
+            (FIXTURES_DIR / "lightning_bolt.txt").read_text(encoding="utf-8"),
+            2.50, _PD,
+        ),
+        TrainingSample(
+            "Grizzly Bears",
+            (FIXTURES_DIR / "grizzly_bears.txt").read_text(encoding="utf-8"),
+            0.10, _PD,
+        ),
+        TrainingSample(
+            "Jace, the Mind Sculptor",
+            (FIXTURES_DIR / "jace_the_mind_sculptor.txt").read_text(
+                encoding="utf-8",
+            ),
+            45.00, _PD,
+        ),
     ]
 
 
@@ -38,7 +55,7 @@ def _make_tokenizer(vocab_size: int = 512) -> MtgTokenizer:
 class TestTransformerTrainingIntegration:
     def test_train_tiny_model_and_save(self, tmp_path: Path):
         """Train a 2-epoch model on 3 fixture cards and verify artifact."""
-        card_tuples = _load_fixture_texts()
+        card_tuples = _load_fixture_samples()
         max_seq_len = 64
         tokenizer = _make_tokenizer(vocab_size=512)
 

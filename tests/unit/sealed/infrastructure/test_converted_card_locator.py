@@ -6,11 +6,10 @@ from pathlib import Path
 
 import numpy as np
 
+from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
-    BASIC_LAND_TITLE_NAMES,
     ConvertedCardLocator,
-    sanitize_card_name,
 )
 
 
@@ -79,7 +78,7 @@ class TestTextPath:
         l_dir.mkdir()
         (l_dir / "lightning_bolt.txt").write_text("name:Lightning Bolt\n")
         loc = ConvertedCardLocator(tmp_path)
-        assert loc.load_text("Lightning Bolt").startswith("name:")
+        assert loc.load_text("Lightning Bolt").text.startswith("name:")
 
     def test_missing_text_returns_none(self, tmp_path):
         loc = ConvertedCardLocator(tmp_path)
@@ -102,6 +101,3 @@ class TestLoadEmbedding:
 class TestBasicLandConstants:
     def test_lowercase_set_contents(self):
         assert BASIC_LAND_NAMES == {"plains", "island", "swamp", "mountain", "forest"}
-
-    def test_title_case_set_contents(self):
-        assert BASIC_LAND_TITLE_NAMES == {"Plains", "Island", "Swamp", "Mountain", "Forest"}

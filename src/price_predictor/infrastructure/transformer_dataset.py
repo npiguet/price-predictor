@@ -7,8 +7,8 @@ import math
 import torch
 from torch.utils.data import Dataset
 
+from price_predictor.application.training_sample import TrainingSample
 from price_predictor.domain.tokenizer import MtgTokenizer
-from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.metadata_encoder import encode_metadata
 
 
@@ -17,40 +17,33 @@ class TransformerTrainingDataset(Dataset):
 
     def __init__(
         self,
-        card_tuples: list[tuple[str, str, float]],
+        samples: list[TrainingSample],
         max_seq_len: int,
         tokenizer: MtgTokenizer,
         log_offset: float = 2.0,
-        printing_data_list: list[PrintingData] | None = None,
     ) -> None:
-        """Construct dataset from (card_name, text_content, price_eur) tuples.
+        """Construct dataset from TrainingSample objects.
 
         Args:
             log_offset: Offset used in log(price + log_offset) target transform.
                 Must match the value stored in TransformerConfig so that inference
                 applies the correct inverse transform.
-            printing_data_list: Per-card PrintingData for side-channel metadata.
-                When None, every card is encoded with PrintingData.defaults().
         """
-        if printing_data_list is None:
-            printing_data_list = [PrintingData.defaults()] * len(card_tuples)
-        elif len(printing_data_list) != len(card_tuples):
-            raise ValueError(
-                f"printing_data_list length ({len(printing_data_list)}) must match "
-                f"card_tuples length ({len(card_tuples)})"
-            )
-
         all_input_ids = []
         all_attention_masks = []
         all_targets = []
         all_meta = []
 
-        for (_name, text, price), printing_data in zip(card_tuples, printing_data_list):
-            input_ids, attention_mask = tokenizer.encode(text, max_seq_len)
+        for sample in samples:
+            input_ids, attention_mask = tokenizer.encode(
+                sample.text, max_seq_len,
+            )
             all_input_ids.append(torch.tensor(input_ids, dtype=torch.long))
-            all_attention_masks.append(torch.tensor(attention_mask, dtype=torch.long))
-            all_targets.append(math.log(price + log_offset))
-            all_meta.append(encode_metadata(printing_data))
+            all_attention_masks.append(
+                torch.tensor(attention_mask, dtype=torch.long),
+            )
+            all_targets.append(math.log(sample.price_eur + log_offset))
+            all_meta.append(encode_metadata(sample.printing_data))
 
         self.input_ids = torch.stack(all_input_ids)
         self.attention_masks = torch.stack(all_attention_masks)

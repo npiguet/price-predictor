@@ -13,8 +13,8 @@ from torch.utils.data import DataLoader
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
+    MatchTrainingExample,
     TrainingBatch,
-    TrainingExample,
     build_training_examples,
     collate_training_examples,
     load_match_outcomes,
@@ -249,7 +249,7 @@ class TrainScorerUseCase:
 
 def _load_dataset(
     config: TrainScorerConfig,
-) -> tuple[list[TrainingExample], list[TrainingExample], EmbeddingTable]:
+) -> tuple[list[MatchTrainingExample], list[MatchTrainingExample], EmbeddingTable]:
     """Load all outcomes, build a shared EmbeddingTable, and randomly split examples."""
     outcomes = load_match_outcomes(config.outcomes_path)
     examples, embedding_table = build_training_examples(outcomes, config.cards_path)
@@ -299,8 +299,8 @@ def _build_optimizer(
 
 
 def _make_loaders(
-    train_examples: list[TrainingExample],
-    val_examples: list[TrainingExample],
+    train_examples: list[MatchTrainingExample],
+    val_examples: list[MatchTrainingExample],
     batch_size: int,
 ) -> tuple[DataLoader, DataLoader]:
     train_loader = DataLoader(
@@ -411,7 +411,7 @@ def _component_grad_norm(module: torch.nn.Module) -> float:
 
 def _set_normalization_stats(
     model: SetTransformerScorer,
-    examples: list[TrainingExample],
+    examples: list[MatchTrainingExample],
     embedding_table: EmbeddingTable,
 ) -> None:
     """Compute per-feature mean and std for the deterministic-feature slice."""

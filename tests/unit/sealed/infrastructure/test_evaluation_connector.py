@@ -45,20 +45,21 @@ class TestWorkerCommandConstruction:
 
 
 class TestDeckBuilderCommand:
-    def test_correct_main_class(self, stub_classpath):
+    def test_calls_run_forge_worker_with_correct_main_class(self, stub_classpath):
         connector = EvaluationConnector()
-        cmd = connector._build_deck_builder_command()
-        assert "com.pricepredictor.connector.DeckBuilderMain" in cmd
-
-    def test_is_java_command(self, stub_classpath):
-        connector = EvaluationConnector()
-        cmd = connector._build_deck_builder_command()
-        assert cmd[0] == "java"
-
-    def test_does_not_include_matches_file_arg(self, stub_classpath):
-        connector = EvaluationConnector()
-        cmd = connector._build_deck_builder_command()
-        assert not any("matches.file" in str(arg) for arg in cmd)
+        fake_result = MagicMock()
+        fake_result.returncode = 0
+        fake_result.stdout = "X|Y\n"
+        fake_result.stderr = ""
+        with patch(
+            "sealed.infrastructure.evaluation_connector.run_forge_worker",
+            return_value=fake_result,
+        ) as mock:
+            connector.build_forge_decks([["Card"]])
+        mock.assert_called_once()
+        assert mock.call_args[0][0] == (
+            "com.pricepredictor.connector.DeckBuilderMain"
+        )
 
 
 class TestOutcomeFilePath:
@@ -79,7 +80,10 @@ class TestBuildForgeDecks:
         fake_result.stdout = "CardA|CardB|CardC\nCardD|CardE|CardF\n"
         fake_result.stderr = ""
 
-        with patch("subprocess.run", return_value=fake_result):
+        with patch(
+            "sealed.infrastructure.evaluation_connector.run_forge_worker",
+            return_value=fake_result,
+        ):
             decks = connector.build_forge_decks([["CardA", "CardB"], ["CardD", "CardE"]])
 
         assert len(decks) == 2
@@ -94,7 +98,10 @@ class TestBuildForgeDecks:
         fake_result.stdout = ""
         fake_result.stderr = "fatal error"
 
-        with patch("subprocess.run", return_value=fake_result):
+        with patch(
+            "sealed.infrastructure.evaluation_connector.run_forge_worker",
+            return_value=fake_result,
+        ):
             with pytest.raises(RuntimeError, match="DeckBuilderMain failed"):
                 connector.build_forge_decks([["CardA"]])
 
@@ -106,8 +113,11 @@ class TestBuildForgeDecks:
         fake_result.stdout = "X|Y\n"
         fake_result.stderr = ""
 
-        with patch("subprocess.run", return_value=fake_result) as mock_run:
+        with patch(
+            "sealed.infrastructure.evaluation_connector.run_forge_worker",
+            return_value=fake_result,
+        ) as mock_run:
             connector.build_forge_decks([["Card A", "Card B"]])
 
-        stdin_text = mock_run.call_args.kwargs["input"]
+        stdin_text = mock_run.call_args.kwargs["input_text"]
         assert "Card A|Card B" in stdin_text

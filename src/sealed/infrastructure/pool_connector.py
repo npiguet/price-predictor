@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import (
-    build_forge_classpath,
-    build_jvm_command,
-)
+from price_predictor.infrastructure.forge_jvm import run_forge_worker
 
 
 class PoolConnector:
@@ -29,20 +25,14 @@ class PoolConnector:
             FileNotFoundError: If the JAR is not found or java is not on PATH.
             RuntimeError: If the subprocess exits with a non-zero code.
         """
-        cmd = build_jvm_command(
-            main_class="com.pricepredictor.connector.PoolMain",
-            classpath=build_forge_classpath(),
+        result = run_forge_worker(
+            "com.pricepredictor.connector.PoolMain",
             main_args=[
                 "--set", set_code,
                 "--size", str(pool_count),
                 "--pools-path", str(pools_path),
             ],
         )
-
-        try:
-            result = subprocess.run(cmd, check=False)
-        except FileNotFoundError as exc:
-            raise FileNotFoundError("Java not found. Ensure java is on PATH.") from exc
 
         if result.returncode != 0:
             raise RuntimeError(

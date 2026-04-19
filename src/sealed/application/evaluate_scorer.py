@@ -9,14 +9,13 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from price_predictor.infrastructure.converted_card_parser import extract_mana_cost_line
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
 from sealed.domain.round_robin_scheduling import row_major_pairings, split_evenly
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import (
-    BASIC_LAND_TITLE_NAMES,
+    BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
 from sealed.infrastructure.evaluation_connector import EvaluationConnector
@@ -71,7 +70,7 @@ def _load_nonland_embeddings(
 ) -> list[np.ndarray]:
     embeds: list[np.ndarray] = []
     for name in deck:
-        if name in BASIC_LAND_TITLE_NAMES:
+        if name.lower() in BASIC_LAND_NAMES:
             continue
         emb = locator.load_embedding(name)
         if emb is not None:
@@ -164,8 +163,8 @@ def _write_decks_file(
 
     def cost_for(name: str) -> str:
         if name not in cost_cache:
-            text = locator.load_text(name) or ""
-            cost_cache[name] = extract_mana_cost_line(text) or ""
+            converted = locator.load_text(name)
+            cost_cache[name] = (converted.mana_cost_line() if converted else None) or ""
         return cost_cache[name]
 
     lines: list[str] = []

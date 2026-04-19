@@ -9,18 +9,18 @@ single locator handles both.
 
 from __future__ import annotations
 
-import unicodedata
 from pathlib import Path
 
 import numpy as np
 
+from price_predictor.domain.card_text import ConvertedCardText
+from price_predictor.infrastructure.card_filenames import (
+    sanitize_card_name,
+)
 from sealed.infrastructure.card_name_corrections import FILENAME_CORRECTIONS
 
 BASIC_LAND_NAMES: frozenset[str] = frozenset(
     {"plains", "island", "swamp", "mountain", "forest"}
-)
-BASIC_LAND_TITLE_NAMES: frozenset[str] = frozenset(
-    {"Plains", "Island", "Swamp", "Mountain", "Forest"}
 )
 
 
@@ -44,9 +44,9 @@ class ConvertedCardLocator:
     def embedding_path(self, card_name: str) -> Path | None:
         return self._find_file(card_name, ".npz")
 
-    def load_text(self, card_name: str) -> str | None:
+    def load_text(self, card_name: str) -> ConvertedCardText | None:
         path = self.text_path(card_name)
-        return path.read_text(encoding="utf-8") if path else None
+        return ConvertedCardText.from_file(path) if path else None
 
     def load_embedding(self, card_name: str) -> np.ndarray | None:
         path = self.embedding_path(card_name)
@@ -75,36 +75,10 @@ class ConvertedCardLocator:
         return None
 
     def _split_filename(self, card_name: str) -> tuple[str, str]:
-        resolved = sanitize_card_name(card_name)
+        resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
         if "/" in resolved:
             first_letter, filename = resolved.split("/", 1)
         else:
             filename = resolved
             first_letter = filename[0] if filename else "_"
         return filename, first_letter
-
-
-def sanitize_card_name(name: str) -> str:
-    """Convert a Forge card name to its on-disk filename.
-
-    NFKD-decomposes accents (â → a), lowercases, strips punctuation, and
-    applies known filename corrections from ``FILENAME_CORRECTIONS``.
-    """
-    nfkd = unicodedata.normalize("NFKD", name)
-    ascii_name = "".join(c for c in nfkd if not unicodedata.combining(c))
-    sanitized = (
-        ascii_name.lower()
-        .replace(" // ", "_")
-        .replace(" ", "_")
-        .replace("'", "")
-        .replace(",", "")
-        .replace(":", "")
-        .replace("!", "")
-        .replace('"', "")
-        .replace("&", "")
-        .replace("+", "")
-        .replace(".", "")
-        .replace("-", "_")
-        .replace("/", "")
-    )
-    return FILENAME_CORRECTIONS.get(sanitized, sanitized)

@@ -6,8 +6,8 @@ import math
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import torch
 import pytest
+import torch
 
 from price_predictor.application.predict_transformer import PredictTransformerUseCase
 from price_predictor.domain.entities import PriceEstimate, TransformerConfig

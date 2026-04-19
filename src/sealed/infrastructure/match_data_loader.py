@@ -42,7 +42,7 @@ class MatchOutcome:
 
 
 @dataclass
-class TrainingExample:
+class MatchTrainingExample:
     winner_indices: torch.Tensor  # (N,) long, rows into the EmbeddingTable
     loser_indices: torch.Tensor   # (M,) long
 
@@ -123,7 +123,7 @@ def load_match_outcomes(path: Path) -> list[MatchOutcome]:
 def build_training_examples(
     outcomes: list[MatchOutcome],
     cards_path: Path,
-) -> tuple[list[TrainingExample], EmbeddingTable]:
+) -> tuple[list[MatchTrainingExample], EmbeddingTable]:
     """Build a shared embedding table and per-match training examples.
 
     Walks every deck once, loading each unique card embedding into a single
@@ -147,8 +147,8 @@ class _ExampleBuilder:
         self._vectors: list[np.ndarray] = []
         self._missing: set[str] = set()
 
-    def build(self, outcomes: list[MatchOutcome]) -> list[TrainingExample]:
-        examples: list[TrainingExample] = []
+    def build(self, outcomes: list[MatchOutcome]) -> list[MatchTrainingExample]:
+        examples: list[MatchTrainingExample] = []
         drops: Counter[MatchDropReason] = Counter()
         for outcome in outcomes:
             winner = self._resolve_deck(outcome.winner_names)
@@ -162,7 +162,7 @@ class _ExampleBuilder:
             if not winner or not loser:
                 drops[MatchDropReason.EMPTY_AFTER_BASICS] += 1
                 continue
-            examples.append(TrainingExample(
+            examples.append(MatchTrainingExample(
                 winner_indices=torch.tensor(winner, dtype=torch.long),
                 loser_indices=torch.tensor(loser, dtype=torch.long),
             ))
@@ -218,7 +218,7 @@ class _ExampleBuilder:
         return idx
 
 
-def collate_training_examples(batch: list[TrainingExample]) -> TrainingBatch:
+def collate_training_examples(batch: list[MatchTrainingExample]) -> TrainingBatch:
     """Collate variable-length training examples into a padded batch."""
     max_winner = max(ex.winner_indices.size(0) for ex in batch)
     max_loser = max(ex.loser_indices.size(0) for ex in batch)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from sealed.domain.deterministic_features import parse_deterministic_features
@@ -30,10 +31,9 @@ class CardEncoder:
         self._max_seq_len = max_seq_len
         self._device = device
 
-    def encode(self, card_text: str) -> np.ndarray:
+    def encode(self, converted: ConvertedCardText) -> np.ndarray:
         """Encode card text, returning a ``(total_dim(d_model),)`` float32 array."""
-        lines = [line for line in card_text.splitlines() if not line.startswith("name:")]
-        text = "\n".join(lines)
+        text = converted.without_name_line()
 
         input_ids, attention_mask = self._tokenizer.encode(text, self._max_seq_len)
 
@@ -43,5 +43,5 @@ class CardEncoder:
         embedding = self._model.encode(ids_tensor, mask_tensor)
         text_vec = embedding.squeeze(0).cpu().numpy().astype(np.float32)
 
-        det_feats = parse_deterministic_features(card_text)
+        det_feats = parse_deterministic_features(converted)
         return np.concatenate([text_vec, det_feats])

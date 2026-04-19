@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from price_predictor.infrastructure.cli import build_parser
 
 

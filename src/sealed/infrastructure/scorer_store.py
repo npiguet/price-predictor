@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import torch
 import torch.nn as nn
+import torch.optim
 
+from price_predictor.infrastructure.torch_checkpoint import (
+    load_checkpoint,
+    save_checkpoint,
+)
 from sealed.domain.scorer_model import ScorerConfig
 
 
@@ -35,33 +39,25 @@ class ScorerStore:
         config: ScorerConfig,
         path: Path,
     ) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(
+        save_checkpoint(
+            path,
             {
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "epoch": epoch,
                 "best_val_accuracy": best_val_accuracy,
-                "config": asdict(config),
             },
-            path,
+            config,
         )
 
     def load_checkpoint(self, path: Path) -> LoadedScorerCheckpoint:
-        raw = torch.load(path, weights_only=False)
-        config = _parse_config(raw["config"])
+        payload, config = load_checkpoint(
+            path, ScorerConfig, weights_only=False,
+        )
         return LoadedScorerCheckpoint(
-            model_state_dict=raw["model_state_dict"],
-            optimizer_state_dict=raw.get("optimizer_state_dict", {}),
-            epoch=raw["epoch"],
-            best_val_accuracy=raw.get("best_val_accuracy", -1.0),
+            model_state_dict=payload["model_state_dict"],
+            optimizer_state_dict=payload.get("optimizer_state_dict", {}),
+            epoch=payload["epoch"],
+            best_val_accuracy=payload.get("best_val_accuracy", -1.0),
             config=config,
         )
-
-
-def _parse_config(raw: Any) -> ScorerConfig:
-    if isinstance(raw, ScorerConfig):
-        return raw
-    if isinstance(raw, dict):
-        return ScorerConfig(**raw)
-    raise ValueError(f"Unexpected checkpoint config type: {type(raw).__name__}")

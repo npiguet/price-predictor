@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from price_predictor.domain.card_text import ForgeCardScript
+
 # Lines in converted output that are metadata, not ability text
 _HEADER_KEYS = frozenset({
     "name", "mana cost", "types", "power toughness",
@@ -395,7 +397,7 @@ def _display_name_from_converted(converted_text: str, fallback: str | None) -> s
     return fallback or "unknown"
 
 
-def check_card(converted_text: str, forge_text: str) -> CardCheckResult:
+def check_card(converted_text: str, forge_text: ForgeCardScript) -> CardCheckResult:
     """Check a single converted card against its Forge source."""
     card_name, oracle = _extract_oracle(forge_text)
     ability_lines, duplicates = _extract_ability_text(converted_text)
@@ -451,7 +453,9 @@ def check_all(
 
         try:
             converted_text = converted_path.read_text(encoding="utf-8", errors="replace")
-            forge_text = forge_path.read_text(encoding="utf-8", errors="replace")
+            forge_text = ForgeCardScript(
+                forge_path.read_text(encoding="utf-8", errors="replace")
+            )
         except OSError:
             continue
 

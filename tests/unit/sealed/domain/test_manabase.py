@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+from price_predictor.domain.card_text import ConvertedCardText
 from sealed.domain.manabase import compute_basic_lands
+
+
+def _ct(text: str) -> ConvertedCardText:
+    return ConvertedCardText(text)
 
 
 class TestBasicLandComputation:
     def test_fills_to_40_total(self):
         """Basic lands should fill remaining slots to 40 total cards."""
         nonland_texts = [
-            f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)
+            _ct(f"name: card_{i}\nmana cost: {{R}}\ntypes: creature") for i in range(23)
         ]
         lands = compute_basic_lands(nonland_texts)
         assert sum(lands.values()) == 17
 
     def test_counts_duplicate_card_slots(self):
         """Duplicate card slots must each contribute to n_basics and pip counts."""
-        text = "name: card\nmana cost: {R}\ntypes: creature"
+        text = _ct("name: card\nmana cost: {R}\ntypes: creature")
         nonland_texts = [text] * 23
         lands = compute_basic_lands(nonland_texts)
         assert sum(lands.values()) == 17
@@ -24,7 +29,7 @@ class TestBasicLandComputation:
 
     def test_proportional_to_color_pips(self):
         nonland_texts = [
-            f"name: card_{i}\nmana cost: {{R}}\ntypes: creature" for i in range(23)
+            _ct(f"name: card_{i}\nmana cost: {{R}}\ntypes: creature") for i in range(23)
         ]
         lands = compute_basic_lands(nonland_texts)
         assert lands.get("Mountain", 0) == 17
@@ -32,9 +37,9 @@ class TestBasicLandComputation:
     def test_multicolor_distributes_proportionally(self):
         texts = []
         for i in range(12):
-            texts.append(f"name: red_{i}\nmana cost: {{R}}\ntypes: creature")
+            texts.append(_ct(f"name: red_{i}\nmana cost: {{R}}\ntypes: creature"))
         for i in range(11):
-            texts.append(f"name: green_{i}\nmana cost: {{G}}\ntypes: creature")
+            texts.append(_ct(f"name: green_{i}\nmana cost: {{G}}\ntypes: creature"))
         lands = compute_basic_lands(texts)
         assert sum(lands.values()) == 17
         assert "Mountain" in lands
@@ -43,9 +48,9 @@ class TestBasicLandComputation:
     def test_min_two_per_active_color(self):
         """A splash color with low pip count still gets at least 2 basics."""
         texts = [
-            f"name: w_{i}\nmana cost: {{W}}\ntypes: creature" for i in range(22)
+            _ct(f"name: w_{i}\nmana cost: {{W}}\ntypes: creature") for i in range(22)
         ]
-        texts.append("name: splash\nmana cost: {1}{B}\ntypes: creature")
+        texts.append(_ct("name: splash\nmana cost: {1}{B}\ntypes: creature"))
         lands = compute_basic_lands(texts)
         assert sum(lands.values()) == 17
         assert lands.get("Swamp", 0) >= 2
@@ -54,7 +59,7 @@ class TestBasicLandComputation:
     def test_colorless_deck_fans_out(self):
         """A deck with no colored pips falls back to an even five-color split."""
         texts = [
-            f"name: c_{i}\nmana cost: {{2}}\ntypes: artifact" for i in range(23)
+            _ct(f"name: c_{i}\nmana cost: {{2}}\ntypes: artifact") for i in range(23)
         ]
         lands = compute_basic_lands(texts)
         assert sum(lands.values()) == 17

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from price_predictor.domain.card_name_resolver import CardNameResolver, ResolvedCard
 from price_predictor.domain.value_objects import PrintingData
 

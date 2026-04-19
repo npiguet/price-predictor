@@ -5,21 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from price_predictor.domain.card_taxonomy import VALID_LAYOUTS
+from price_predictor.domain.power_toughness import validate_pt_chars
 from price_predictor.domain.value_objects import ManaCost, PrintingData
-
-VALID_PT_PATTERN_CHARS = frozenset("0123456789*X+-")
-
-
-def _validate_pt(value: str | None, field_name: str) -> None:
-    if value is None:
-        return
-    stripped = value.strip()
-    if not stripped:
-        raise ValueError(f"{field_name} must not be empty if provided")
-    if not all(c in VALID_PT_PATTERN_CHARS for c in stripped):
-        raise ValueError(
-            f"{field_name} must be a number, '*', or 'X', got '{value}'"
-        )
 
 
 @dataclass(frozen=True)
@@ -45,12 +32,23 @@ class Card:
             raise ValueError("Card name must not be empty")
         if not self.types:
             raise ValueError("Card must have at least one type")
-        _validate_pt(self.power, "power")
-        _validate_pt(self.toughness, "toughness")
+        validate_pt_chars(self.power, "power")
+        validate_pt_chars(self.toughness, "toughness")
         if self.layout not in VALID_LAYOUTS:
             raise ValueError(
                 f"layout must be one of {sorted(VALID_LAYOUTS)}, got '{self.layout}'"
             )
+
+    def is_land(self) -> bool:
+        return any(t.lower() == "land" for t in self.types)
+
+    def has_devoid(self) -> bool:
+        return "devoid" in (self.oracle_text or "").lower()
+
+    def is_colorless(self) -> bool:
+        if self.has_devoid() or self.mana_cost is None:
+            return True
+        return self.mana_cost.color_count == 0
 
 
 @dataclass(frozen=True)
@@ -123,7 +121,7 @@ class TransformerConfig:
     dropout: float
     regression_hidden_dim: int = 64
     log_offset: float = 2.0
-    meta_dim: int = 15
+    meta_dim: int = 15  # must match metadata_encoder.encode_metadata output length
 
     def __post_init__(self) -> None:
         for name in (

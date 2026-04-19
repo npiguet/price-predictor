@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import torch
 import pytest
+import torch
 
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
-from price_predictor.infrastructure.transformer_store import save_model, load_model
+from price_predictor.infrastructure.transformer_store import load_model, save_model
 
 
 def _make_config(**overrides) -> TransformerConfig:
-    defaults = dict(d_model=128, n_layers=4, n_heads=4, ff_dim=512, max_seq_len=64, vocab_size=30522, dropout=0.1)
+    defaults = dict(
+        d_model=128, n_layers=4, n_heads=4, ff_dim=512,
+        max_seq_len=64, vocab_size=30522, dropout=0.1,
+    )
     defaults.update(overrides)
     return TransformerConfig(**defaults)
 

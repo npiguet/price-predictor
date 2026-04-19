@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import shutil
-from dataclasses import asdict
 from pathlib import Path
-
-import torch
 
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.model_store import generate_model_version
+from price_predictor.infrastructure.torch_checkpoint import (
+    load_checkpoint,
+    save_checkpoint,
+)
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 
 
@@ -30,12 +31,10 @@ def save_model(
         version = generate_model_version()
 
     model_path = output_dir / f"{version}.pt"
-    torch.save(
-        {
-            "state_dict": model.state_dict(),
-            "config": asdict(config),
-        },
+    save_checkpoint(
         model_path,
+        {"state_dict": model.state_dict()},
+        config,
     )
 
     # Update latest copy
@@ -58,13 +57,12 @@ def load_model(model_dir: Path) -> tuple[CardPriceTransformerModel, TransformerC
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
-    # Legacy checkpoints store the config as a TransformerConfig instance;
-    # newer ones store it as a plain dict via asdict(). Allowlist the dataclass
-    # so weights_only=True accepts both shapes.
-    with torch.serialization.safe_globals([TransformerConfig]):
-        checkpoint = torch.load(model_path, map_location="cpu", weights_only=True)
-    raw_config = checkpoint["config"]
-    config = raw_config if isinstance(raw_config, TransformerConfig) else TransformerConfig(**raw_config)
+    payload, config = load_checkpoint(
+        model_path,
+        TransformerConfig,
+        weights_only=True,
+        safe_globals=[TransformerConfig],
+    )
     model = CardPriceTransformerModel(config)
-    model.load_state_dict(checkpoint["state_dict"])
+    model.load_state_dict(payload["state_dict"])
     return model, config

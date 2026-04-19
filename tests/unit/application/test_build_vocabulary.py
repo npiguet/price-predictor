@@ -72,7 +72,10 @@ class TestBuildVocabulary:
         assert result.vocab["[UNK]"] == 1
 
     def test_all_multi_word_keywords_present_as_underscore_tokens(self, tmp_path: Path):
-        from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS, build_vocabulary
+        from price_predictor.application.build_vocabulary import (
+            MULTI_WORD_KEYWORDS,
+            build_vocabulary,
+        )
 
         (tmp_path / "card.txt").write_text(
             "name: Test Card\nmana cost: {R}\ntypes: instant\n",
@@ -154,7 +157,9 @@ class TestSC001SC002Validation:
         """Build vocabulary from the training fixture corpus and check size < 10,000."""
         from price_predictor.application.build_vocabulary import build_vocabulary
 
-        fixture_corpus = Path(__file__).parent.parent.parent / "fixtures" / "converted_cards_training"
+        fixture_corpus = (
+            Path(__file__).parent.parent.parent / "fixtures" / "converted_cards_training"
+        )
         if not fixture_corpus.exists():
             pytest.skip("Fixture corpus not found")
 
@@ -162,8 +167,9 @@ class TestSC001SC002Validation:
         assert result.vocab_size < 10000
 
     def test_color_names_present_as_tokens(self):
-        from price_predictor.application.build_vocabulary import build_vocabulary
         import tempfile
+
+        from price_predictor.application.build_vocabulary import build_vocabulary
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
@@ -176,8 +182,9 @@ class TestSC001SC002Validation:
                 assert color in result.vocab, f"Expected color token: {color!r}"
 
     def test_game_zones_present_as_tokens(self):
-        from price_predictor.application.build_vocabulary import build_vocabulary
         import tempfile
+
+        from price_predictor.application.build_vocabulary import build_vocabulary
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
@@ -194,8 +201,12 @@ class TestSC003DomainCoverage:
     """Validate SC-003: all MTG domain terms present in vocabulary."""
 
     def test_all_24_multi_word_keywords_in_vocab(self):
-        from price_predictor.application.build_vocabulary import MULTI_WORD_KEYWORDS, build_vocabulary
         import tempfile
+
+        from price_predictor.application.build_vocabulary import (
+            MULTI_WORD_KEYWORDS,
+            build_vocabulary,
+        )
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
@@ -208,8 +219,9 @@ class TestSC003DomainCoverage:
                 assert kw in result.vocab, f"Missing multi-word keyword: {kw!r}"
 
     def test_basic_mana_symbols_in_vocab(self):
-        from price_predictor.application.build_vocabulary import build_vocabulary
         import tempfile
+
+        from price_predictor.application.build_vocabulary import build_vocabulary
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)
@@ -224,8 +236,9 @@ class TestSC003DomainCoverage:
                 assert sym in result.vocab, f"Missing mana symbol: {sym!r}"
 
     def test_domain_terms_in_vocab(self):
-        from price_predictor.application.build_vocabulary import build_vocabulary
         import tempfile
+
+        from price_predictor.application.build_vocabulary import build_vocabulary
 
         with tempfile.TemporaryDirectory() as td:
             tmp_path = Path(td)

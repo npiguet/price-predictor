@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 from price_predictor.application.predict import PredictPriceUseCase
 from price_predictor.application.train import TrainModelUseCase
-from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost, PrintingData
+from price_predictor.domain.card_text import ConvertedCardText
+from price_predictor.domain.value_objects import PrintingData
 from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 from price_predictor.infrastructure.model_store import load_model
 from price_predictor.infrastructure.server import create_app
@@ -83,7 +83,7 @@ class TestServerIntegration:
 
         # Same card through standalone use case — parse from identical text so
         # oracle_text and all fields match exactly what the server sees
-        card = parse_converted_text(BOLT_SCRIPT)
+        card = parse_converted_text(ConvertedCardText(BOLT_SCRIPT))
         use_case = PredictPriceUseCase()
         standalone = use_case.execute(card, model_path)
 
@@ -108,15 +108,24 @@ class TestServerConcurrency:
         """FR-009 / SC-004: 10 concurrent requests without degradation."""
         card_scripts = [
             "name: lightning bolt\nmana cost: {R}\ntypes: instant",
-            "name: grizzly bears\nmana cost: {1}{G}\ntypes: creature bear\npower toughness: 2/2",
-            "name: serra angel\nmana cost: {3}{W}{W}\ntypes: creature angel\npower toughness: 4/4\nspell[1]: flying\nspell[2]: vigilance",
+            ("name: grizzly bears\nmana cost: {1}{G}\n"
+             "types: creature bear\npower toughness: 2/2"),
+            ("name: serra angel\nmana cost: {3}{W}{W}\n"
+             "types: creature angel\npower toughness: 4/4\n"
+             "spell[1]: flying\nspell[2]: vigilance"),
             "name: sol ring\nmana cost: {1}\ntypes: artifact",
             "name: island\ntypes: basic land island",
-            "name: ragavan\nmana cost: {R}\ntypes: legendary creature monkey pirate\npower toughness: 2/1\nspell[1]: dash",
-            "name: jace\nmana cost: {2}{U}{U}\ntypes: legendary planeswalker jace\nloyalty: 3",
+            ("name: ragavan\nmana cost: {R}\n"
+             "types: legendary creature monkey pirate\n"
+             "power toughness: 2/1\nspell[1]: dash"),
+            ("name: jace\nmana cost: {2}{U}{U}\n"
+             "types: legendary planeswalker jace\nloyalty: 3"),
             "name: breeding pool\ntypes: land forest island",
-            "name: made up dragon\nmana cost: {4}{R}{R}\ntypes: creature dragon\npower toughness: 6/6\nspell[1]: flying",
-            "name: test enchantment\nmana cost: {1}{W}\ntypes: enchantment",
+            ("name: made up dragon\nmana cost: {4}{R}{R}\n"
+             "types: creature dragon\npower toughness: 6/6\n"
+             "spell[1]: flying"),
+            ("name: test enchantment\nmana cost: {1}{W}\n"
+             "types: enchantment"),
         ]
 
         def send_request(script: str) -> tuple[int, dict]:

@@ -23,7 +23,7 @@ YEAR_RANGE = 34.0
 
 @dataclass(frozen=True)
 class PrintingData:
-    """Printing context for a card: reserve list, rarity, reprint count, release year, legalities."""
+    """Printing context: reserve list, rarity, reprint count, release year, legalities."""
 
     is_reserved: bool = False
     rarity: str = "rare"

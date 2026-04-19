@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
+from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.domain.value_objects import WUBRG, ManaCost
-from price_predictor.infrastructure.converted_card_parser import (
-    convert_mana_cost,
-    extract_mana_cost_line,
-)
+from price_predictor.infrastructure.converted_card_parser import convert_mana_cost
 
 DECK_SIZE = 40
 
@@ -19,7 +17,7 @@ COLOR_TO_LAND: dict[str, str] = {
 }
 
 
-def compute_basic_lands(nonland_texts: list[str]) -> dict[str, int]:
+def compute_basic_lands(nonland_texts: list[ConvertedCardText]) -> dict[str, int]:
     """Compute basic land distribution for a 40-card deck.
 
     Args:
@@ -41,10 +39,10 @@ def compute_basic_lands(nonland_texts: list[str]) -> dict[str, int]:
     return _distribute_basics(pips, n_basics)
 
 
-def _count_color_pips(nonland_texts: list[str]) -> dict[str, int]:
+def _count_color_pips(nonland_texts: list[ConvertedCardText]) -> dict[str, int]:
     pips: dict[str, int] = dict.fromkeys(WUBRG, 0)
-    for text in nonland_texts:
-        cost = _parse_card_mana_cost(text)
+    for converted in nonland_texts:
+        cost = _parse_card_mana_cost(converted)
         if cost is None:
             continue
         pips["W"] += cost.w
@@ -55,8 +53,8 @@ def _count_color_pips(nonland_texts: list[str]) -> dict[str, int]:
     return pips
 
 
-def _parse_card_mana_cost(text: str) -> ManaCost | None:
-    raw = extract_mana_cost_line(text)
+def _parse_card_mana_cost(converted: ConvertedCardText) -> ManaCost | None:
+    raw = converted.mana_cost_line()
     if raw is None:
         return None
     return ManaCost.parse(convert_mana_cost(raw))

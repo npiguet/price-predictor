@@ -8,19 +8,21 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import torch
-import pytest
 
 from price_predictor.domain.entities import TransformerConfig
+from price_predictor.domain.tokenizer import MtgTokenizer
 
 
 def _make_config(**overrides) -> TransformerConfig:
-    defaults = dict(d_model=128, n_layers=4, n_heads=4, ff_dim=512, max_seq_len=64, vocab_size=30522, dropout=0.1)
+    defaults = dict(
+        d_model=128, n_layers=4, n_heads=4, ff_dim=512,
+        max_seq_len=64, vocab_size=30522, dropout=0.1,
+    )
     defaults.update(overrides)
     return TransformerConfig(**defaults)
 
 
-def _make_fixture_tokenizer(vocab_size: int = 30522) -> "MtgTokenizer":
-    from price_predictor.domain.tokenizer import MtgTokenizer
+def _make_fixture_tokenizer(vocab_size: int = 30522) -> MtgTokenizer:
     vocab = {"[PAD]": 0, "[UNK]": 1}
     for i in range(vocab_size - 2):
         vocab[f"tok_{i}"] = i + 2

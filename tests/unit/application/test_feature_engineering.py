@@ -5,7 +5,7 @@ import pytest
 
 from price_predictor.application.feature_engineering import FeatureEngineering
 from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost, PrintingData, RECOGNIZED_FORMATS
+from price_predictor.domain.value_objects import RECOGNIZED_FORMATS, ManaCost, PrintingData
 
 
 @pytest.fixture

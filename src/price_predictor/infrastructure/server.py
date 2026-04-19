@@ -18,13 +18,11 @@ from price_predictor.application.transformer_inference import (
     shifted_log_to_eur,
 )
 from price_predictor.domain.card_name_resolver import CardNameResolver
+from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.domain.entities import Card
 from price_predictor.domain.tokenizer import MtgTokenizer, extract_card_name
 from price_predictor.domain.value_objects import PrintingData
-from price_predictor.infrastructure.converted_card_parser import (
-    extract_mana_cost_line,
-    parse_converted_text,
-)
+from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 
 logger = logging.getLogger(__name__)
 
@@ -151,8 +149,10 @@ def create_app(
             body, request.app.state.card_name_resolver,
         )
 
+        converted = ConvertedCardText(body)
+
         try:
-            card = parse_converted_text(body)
+            card = parse_converted_text(converted)
             if printing_data is not None:
                 card = replace(card, printing_data=printing_data)
         except (ValueError, TypeError) as e:
@@ -182,7 +182,7 @@ def create_app(
             log_extra: dict[str, Any] = {
                 "card_name": card.name,
                 "card_types": list(card.types),
-                "card_mana_cost": extract_mana_cost_line(body),
+                "card_mana_cost": converted.mana_cost_line(),
                 "sklearn_predicted_price_eur": sklearn_price,
                 "sklearn_model_version": sklearn_version,
             }

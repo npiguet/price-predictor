@@ -6,6 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from price_predictor.domain.card_text import ConvertedCardText
+
 
 @dataclass
 class EncodeCardsConfig:
@@ -51,8 +53,8 @@ class EncodeCardsUseCase:
                 continue
 
             try:
-                text = txt_path.read_text(encoding="utf-8")
-                embedding = encoder.encode(text)
+                converted = ConvertedCardText.from_file(txt_path)
+                embedding = encoder.encode(converted)
                 store.save(npz_path, embedding)
                 processed += 1
             except Exception as exc:

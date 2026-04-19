@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import sys
-import typing
 from pathlib import Path
 
+from price_predictor.infrastructure.cli_helpers import add_dataclass_arg
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
@@ -19,61 +18,6 @@ def _add_cards_path(parser: argparse.ArgumentParser) -> None:
         default="output/cardsfolder/",
         help="Directory with .npz card embeddings (default: output/cardsfolder/)",
     )
-
-
-def _add_dataclass_arg(
-    parser: argparse.ArgumentParser,
-    dataclass_cls: type,
-    field_name: str,
-    help_text: str,
-    *,
-    cli_name: str | None = None,
-    type_override: typing.Callable | None = None,
-) -> None:
-    """Register an argparse option whose default is pulled from a dataclass field.
-
-    The CLI flag name defaults to ``--{field_name.replace('_', '-')}``; pass
-    ``cli_name`` to override (e.g. ``--set`` for ``set_code``). Boolean fields
-    become ``store_true`` flags and the dataclass default must be ``False``.
-    """
-    field = dataclass_cls.__dataclass_fields__[field_name]  # type: ignore[attr-defined]
-    default = _field_default(field)
-    cli_flag = cli_name if cli_name is not None else f"--{field_name.replace('_', '-')}"
-
-    if field.type is bool or field.type == "bool":
-        if default is not False:
-            raise ValueError(
-                f"store_true flag {cli_flag} needs dataclass default=False, got {default!r}"
-            )
-        parser.add_argument(cli_flag, dest=field_name, action="store_true", help=help_text)
-        return
-
-    arg_type = type_override or _infer_type(field.type)
-    parser.add_argument(
-        cli_flag,
-        dest=field_name,
-        type=arg_type,
-        default=default,
-        help=f"{help_text} (default: {default})",
-    )
-
-
-def _field_default(field: dataclasses.Field) -> typing.Any:
-    if field.default is not dataclasses.MISSING:
-        return field.default
-    if field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-        return field.default_factory()  # type: ignore[misc]
-    raise ValueError(
-        f"dataclass field {field.name!r} has no default; CLI helper needs one"
-    )
-
-
-def _infer_type(annotation: typing.Any) -> typing.Callable:
-    if annotation is int or annotation == "int":
-        return int
-    if annotation is float or annotation == "float":
-        return float
-    return str
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -113,7 +57,7 @@ def _build_encode_cards_parser(subparsers) -> None:
         default="output/cardsfolder/",
         help="Directory containing .txt card script files (searched recursively)",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         encode_parser, EncodeCardsConfig, "clean",
         help_text="Delete all existing .npz files before encoding (forces full re-encode)",
     )
@@ -166,50 +110,50 @@ def _build_train_scorer_parser(subparsers) -> None:
         default=None,
         help="Path to checkpoint to resume training from (default: none)",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "epochs", "Number of training epochs",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "batch_size", "Training batch size",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "lr", "Learning rate", type_override=float,
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "n_layers",
         "Number of Set Transformer SAB layers",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "n_heads", "Number of attention heads",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "n_seeds", "Number of PMA seed vectors",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "d_ff",
         "Feed-forward dimension in SAB layers",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "mlp_hidden",
         "Hidden dimension of the scoring MLP head",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "val_interval",
         "Run validation every N epochs",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "unfreeze_embeddings",
         help_text="Enable embedding fine-tuning (Phase B)",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "embedding_lr",
         help_text="Learning rate for embedding fine-tuning", type_override=float,
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "val_fraction",
         help_text="Fraction of examples held out for validation", type_override=float,
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "random_seed",
         help_text="RNG seed for the train/val split",
     )
@@ -227,15 +171,15 @@ def _build_evaluate_scorer_parser(subparsers) -> None:
         help="Model checkpoint to evaluate (e.g. best_l2_h4_s4_ff1088_mlp256.pt)",
     )
     _add_cards_path(eval_parser)
-    _add_dataclass_arg(
+    add_dataclass_arg(
         eval_parser, EvaluateScorerConfig, "pools",
         help_text="Number of sealed pools to generate for evaluation",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         eval_parser, EvaluateScorerConfig, "best_of",
         help_text="Number of games per match",
     )
-    _add_dataclass_arg(
+    add_dataclass_arg(
         eval_parser, EvaluateScorerConfig, "workers",
         help_text="Number of parallel Java worker processes",
     )

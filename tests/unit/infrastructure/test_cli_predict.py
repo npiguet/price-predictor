@@ -21,7 +21,9 @@ class TestPredictParserStructure:
 
     def test_predict_transformer_subcommand_registered(self) -> None:
         parser = build_parser()
-        args = parser.parse_args(["predict", "transformer", "--card", "name: test\ntypes: creature"])
+        args = parser.parse_args([
+            "predict", "transformer", "--card", "name: test\ntypes: creature",
+        ])
         assert args.command == "predict"
         assert args.model == "transformer"
 

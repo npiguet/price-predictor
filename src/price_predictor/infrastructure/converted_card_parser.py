@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import NamedTuple
 
 from price_predictor.domain.card_taxonomy import KNOWN_CARD_TYPES, KNOWN_SUPERTYPES
+from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost
+from price_predictor.domain.value_objects import WUBRG, ManaCost
 
 logger = logging.getLogger(__name__)
 
@@ -35,14 +37,6 @@ def convert_mana_cost(raw: str) -> str:
     return " ".join(shards)
 
 
-def extract_mana_cost_line(text: str) -> str | None:
-    """Return the raw value of the ``mana cost:`` line, or None when missing/empty."""
-    for line in text.splitlines():
-        if line.strip().lower().startswith("mana cost:"):
-            return line.split(":", 1)[1].strip() or None
-    return None
-
-
 def _classify_types(types_str: str) -> tuple[list[str], list[str], list[str]]:
     """Split a converted-format types line into (supertypes, card_types, subtypes).
 
@@ -64,19 +58,19 @@ def _classify_types(types_str: str) -> tuple[list[str], list[str], list[str]]:
     return supertypes, card_types, subtypes
 
 
-def parse_converted_text(text: str) -> Card:
-    """Parse a single converted card text string into a Card entity.
+def parse_converted_text(converted: ConvertedCardText) -> Card:
+    """Parse a single converted card text into a Card entity.
 
     Raises ValueError if the text is empty or missing required fields
     (``name:`` or ``types:``).
     """
-    if not text or not text.strip():
+    if not converted.text or not converted.text.strip():
         raise ValueError("Card text is empty")
 
     fields: dict[str, str] = {}
     ability_lines: list[str] = []
 
-    for line in text.splitlines():
+    for line in converted.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -159,13 +153,13 @@ def parse_converted_file(path: Path) -> Card | None:
     Returns None if the file cannot be read or parsed.
     """
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        converted = ConvertedCardText.from_file(path)
     except OSError as e:
         logger.warning("Failed to read %s: %s", path, e)
         return None
 
     try:
-        return parse_converted_text(text)
+        return parse_converted_text(converted)
     except (ValueError, TypeError) as e:
         logger.warning("Failed to parse %s: %s", path, e)
         return None
@@ -205,3 +199,58 @@ def parse_converted_cards(
 
     logger.info("Parsed %d cards total, %d errors", len(cards), len(errors))
     return cards, errors
+
+
+# ---------------------------------------------------------------------------
+# Mana production parsing
+# ---------------------------------------------------------------------------
+
+_WUBRG_SET = frozenset(WUBRG)
+
+
+class ManaProduction(NamedTuple):
+    """Mana production facts extracted from activated abilities."""
+
+    colors: frozenset[str]
+    produces_colorless: bool
+    max_mana_count: int
+
+
+def parse_mana_production(converted: ConvertedCardText) -> ManaProduction:
+    """Parse activated abilities and return what mana the card can produce."""
+    colors: set[str] = set()
+    produces_colorless = False
+    max_mana_count = 0
+
+    for activated_line in converted.activated_lines():
+        add_clause = _extract_add_clause(activated_line)
+        if add_clause is None:
+            continue
+
+        mana_count = 0
+        for match in MANA_BRACE_RE.finditer(add_clause):
+            symbol = match.group(1).upper()
+            if symbol in _WUBRG_SET:
+                colors.add(symbol)
+                mana_count += 1
+            elif symbol == "C":
+                produces_colorless = True
+                mana_count += 1
+
+        if " or " in add_clause and mana_count > 1:
+            mana_count = 1
+
+        max_mana_count = max(max_mana_count, mana_count)
+
+    return ManaProduction(frozenset(colors), produces_colorless, max_mana_count)
+
+
+def _extract_add_clause(activated_line: str) -> str | None:
+    """Extract the ``add …`` portion from an activated ability line."""
+    colon_idx = activated_line.find(":")
+    if colon_idx < 0:
+        return None
+    ability_text = activated_line[colon_idx + 1:].lower()
+    if "add" not in ability_text:
+        return None
+    return ability_text[ability_text.index("add"):]

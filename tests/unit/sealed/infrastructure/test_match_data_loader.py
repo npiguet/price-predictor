@@ -12,7 +12,7 @@ from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
     MatchOutcome,
-    TrainingExample,
+    MatchTrainingExample,
     build_training_examples,
     collate_training_examples,
     load_match_outcomes,
@@ -68,7 +68,7 @@ class TestLoadMatchOutcomes:
         assert len(outcomes) == 2
 
 
-class TestBuildTrainingExamples:
+class TestBuildMatchTrainingExamples:
     def _make_embeddings(self, tmp_path, cards: dict[str, np.ndarray]) -> Path:
         """Create .npz embedding files for test cards (in first-letter subdirs)."""
         cards_dir = tmp_path / "cards"
@@ -207,11 +207,11 @@ class TestEmbeddingTable:
 class TestCollateFunction:
     def test_variable_length_padding(self):
         """Collate should pad to max length with boolean masks."""
-        ex1 = TrainingExample(
+        ex1 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(3, dtype=torch.long),
         )
-        ex2 = TrainingExample(
+        ex2 = MatchTrainingExample(
             winner_indices=torch.arange(8, dtype=torch.long),
             loser_indices=torch.arange(6, dtype=torch.long),
         )
@@ -223,11 +223,11 @@ class TestCollateFunction:
         assert batch.loser_mask.shape == (2, 6)
 
     def test_mask_marks_real_cards_true(self):
-        ex1 = TrainingExample(
+        ex1 = MatchTrainingExample(
             winner_indices=torch.arange(3, dtype=torch.long),
             loser_indices=torch.arange(2, dtype=torch.long),
         )
-        ex2 = TrainingExample(
+        ex2 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(4, dtype=torch.long),
         )

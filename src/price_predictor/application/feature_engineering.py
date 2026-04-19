@@ -16,6 +16,10 @@ from price_predictor.domain.card_taxonomy import (
     SUPERTYPES,
 )
 from price_predictor.domain.entities import Card
+from price_predictor.domain.power_toughness import (
+    is_variable_stat,
+    parse_combat_stat,
+)
 from price_predictor.domain.value_objects import RECOGNIZED_FORMATS
 
 _TOP_KEYWORD_LIMIT = 30
@@ -34,22 +38,6 @@ _DENSE_FEATURE_WIDTH = (
     + len(LAYOUTS)
     + _PRINTING_FEATURE_WIDTH
 )
-
-
-def _parse_pt(value: str | None) -> tuple[float, bool]:
-    """Parse power/toughness string to (numeric_value, is_star).
-    Returns (nan, False) if value is None.
-    Returns (nan, True) if value is '*' or 'X'.
-    """
-    if value is None:
-        return float("nan"), False
-    stripped = value.strip()
-    if stripped in ("*", "X"):
-        return float("nan"), True
-    try:
-        return float(stripped), False
-    except ValueError:
-        return float("nan"), False
 
 
 class FeatureEngineering(BaseEstimator, TransformerMixin):
@@ -146,20 +134,12 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
         return features
 
     def _pt_features(self, card: Card) -> list[float]:
-        power_val, power_star = _parse_pt(card.power)
-        toughness_val, toughness_star = _parse_pt(card.toughness)
-        loyalty = 0.0
-        if card.loyalty is not None:
-            try:
-                loyalty = float(card.loyalty)
-            except ValueError:
-                loyalty = 0.0
         return [
-            power_val if not np.isnan(power_val) else 0.0,
-            toughness_val if not np.isnan(toughness_val) else 0.0,
-            float(power_star),
-            float(toughness_star),
-            loyalty,
+            parse_combat_stat(card.power),
+            parse_combat_stat(card.toughness),
+            float(is_variable_stat(card.power)),
+            float(is_variable_stat(card.toughness)),
+            parse_combat_stat(card.loyalty),
             float(card.ability_count),
         ]
 

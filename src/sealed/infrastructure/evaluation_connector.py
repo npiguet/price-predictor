@@ -12,6 +12,7 @@ from price_predictor.infrastructure.forge_jvm import (
     build_forge_classpath,
     build_jvm_command,
     kill_process_tree,
+    run_forge_worker,
 )
 
 
@@ -48,16 +49,12 @@ class EvaluationConnector:
         line, pipe-separated card names) and reads back one built deck per
         line from stdout. Avoids N separate JVM startups with Forge init.
         """
-        cmd = self._build_deck_builder_command()
         stdin_text = "\n".join("|".join(pool) for pool in pools) + "\n"
 
-        result = subprocess.run(
-            cmd,
-            input=stdin_text,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
+        result = run_forge_worker(
+            "com.pricepredictor.connector.DeckBuilderMain",
+            xmx="1200m",
+            input_text=stdin_text,
         )
 
         if result.returncode != 0:
@@ -219,10 +216,3 @@ class EvaluationConnector:
             xmx="1200m",
         )
 
-    def _build_deck_builder_command(self) -> list[str]:
-        """Build the Java command for the batch Forge deck builder."""
-        return build_jvm_command(
-            main_class="com.pricepredictor.connector.DeckBuilderMain",
-            classpath=build_forge_classpath(),
-            xmx="1200m",
-        )

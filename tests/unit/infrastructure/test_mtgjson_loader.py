@@ -158,7 +158,7 @@ class TestBuildPriceMapSummaryLogging:
         with caplog.at_level(
             logging.DEBUG, logger="price_predictor.infrastructure.mtgjson_loader"
         ):
-            price_map = build_price_map(allprices_path, mapping)
+            build_price_map(allprices_path, mapping)
 
         summary_msgs = [m for m in caplog.messages if "summary" in m.lower()]
         assert len(summary_msgs) == 1

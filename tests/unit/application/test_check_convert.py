@@ -222,7 +222,8 @@ class TestCheckCard:
         forge = (
             "Name:Conspiracy Card\n"
             "Types:Conspiracy\n"
-            "Oracle:Hidden agenda (Start the game with this conspiracy face down in the command zone.)\n"
+            "Oracle:Hidden agenda (Start the game with this conspiracy "
+            "face down in the command zone.)\n"
         )
         converted = (
             "name: conspiracy card\n"
@@ -336,8 +337,10 @@ class TestCheckCard:
         assert result.similarity > 0.99, f"Expected ~100% similarity, got {result.similarity:.2%}"
         assert len(result.duplicate_lines) == 2, "Should detect 2 duplicates"
         # The real test: check_all must NOT treat this as an issue.
+        import pathlib
+        import tempfile
+
         from price_predictor.application.check_convert import check_all
-        import tempfile, pathlib
         with tempfile.TemporaryDirectory() as tmp:
             tp = pathlib.Path(tmp)
             out_dir = tp / "output" / "b"
@@ -459,7 +462,8 @@ class TestCheckCard:
         assert result.similarity > 0.8, f"Got {result.similarity:.2%}"
 
     def test_nickname_in_converter_matches_cardname_in_oracle(self):
-        # Converter may output NICKNAME; oracle uses the card name; both should normalize to CARDNAME.
+        # Converter may output NICKNAME; oracle uses the card name;
+        # both should normalize to CARDNAME.
         forge = (
             "Name:Test Card\n"
             "Types:Creature\n"

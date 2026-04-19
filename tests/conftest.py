@@ -8,10 +8,36 @@ from pathlib import Path
 import pytest
 
 from price_predictor.domain.entities import Card
-from price_predictor.domain.value_objects import ManaCost
+from price_predictor.domain.value_objects import ManaCost, PrintingData
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 FORGE_CARDS_DIR = FIXTURES_DIR / "forge_cards"
+
+
+def make_printing_data(**overrides) -> PrintingData:
+    """Build a PrintingData with sensible defaults; override any field by name."""
+    defaults = {
+        "is_reserved": False,
+        "rarity": "common",
+        "printings_count": 1,
+        "release_year": 2020,
+    }
+    defaults.update(overrides)
+    return PrintingData(**defaults)
+
+
+def make_card(**overrides) -> Card:
+    """Build a Card with sensible defaults; override any field by name."""
+    defaults = {
+        "name": "Test Card",
+        "types": ["Creature"],
+        "subtypes": [],
+        "mana_cost": ManaCost.parse("1 G"),
+        "power": "2",
+        "toughness": "2",
+    }
+    defaults.update(overrides)
+    return Card(**defaults)
 
 
 @pytest.fixture

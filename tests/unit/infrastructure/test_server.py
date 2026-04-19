@@ -9,6 +9,11 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+_BOLT_TEXT = (
+    "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
+    "spell[1]: CARDNAME deals 3 damage to any target."
+)
+
 
 @pytest.fixture
 def mock_model_artifact() -> dict:
@@ -40,7 +45,7 @@ class TestPredictEndpoint:
     def test_valid_complete_converted_card_returns_200(self, client: TestClient) -> None:
         response = client.post(
             "/api/v1/predict",
-            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
+            content=_BOLT_TEXT,
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -113,7 +118,7 @@ class TestStructuredRequestLogging:
         with caplog.at_level(logging.INFO, logger="price_predictor.infrastructure.server"):
             client.post(
                 "/api/v1/predict",
-                content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
+                content=_BOLT_TEXT,
                 headers={"Content-Type": "text/plain"},
             )
 
@@ -154,7 +159,6 @@ class TestStructuredRequestLogging:
     def test_prediction_error_log_contains_required_fields(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        import numpy as np
 
         mock_model = MagicMock()
         mock_model.predict.side_effect = RuntimeError("model crashed")
@@ -226,16 +230,21 @@ class TestDualModelResponse:
 
     def test_both_models_present(self):
         """When both models loaded, response has sklearn and transformer objects."""
-        import numpy as np
         from unittest.mock import MagicMock
+
+        import numpy as np
         from fastapi.testclient import TestClient
+
         from price_predictor.infrastructure.server import create_app
 
         mock_model = MagicMock()
         mock_model.predict.return_value = np.array([np.log(2.35)])
         mock_fe = MagicMock()
         mock_fe.transform.return_value = [[1, 2, 3]]
-        sklearn_artifact = {"model": mock_model, "feature_engineering": mock_fe, "model_version": "20260301-143000"}
+        sklearn_artifact = {
+            "model": mock_model, "feature_engineering": mock_fe,
+            "model_version": "20260301-143000",
+        }
 
         # Mock transformer that returns a tensor
         import torch
@@ -250,7 +259,10 @@ class TestDualModelResponse:
         mock_config.max_seq_len = 64
         mock_config.log_offset = 2.0
 
-        transformer_artifact = {"model": mock_transformer, "config": mock_config, "model_version": "transformer-v1"}
+        transformer_artifact = {
+            "model": mock_transformer, "config": mock_config,
+            "model_version": "transformer-v1",
+        }
 
         from price_predictor.domain.tokenizer import MtgTokenizer
         tok = MtgTokenizer({"[PAD]": 0, "[UNK]": 1, "name": 2, "lightning": 3, "bolt": 4,
@@ -264,7 +276,7 @@ class TestDualModelResponse:
 
         response = client.post(
             "/api/v1/predict",
-            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
+            content=_BOLT_TEXT,
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -278,23 +290,28 @@ class TestDualModelResponse:
 
     def test_transformer_null_when_unavailable(self):
         """When no transformer loaded, transformer is null."""
-        import numpy as np
         from unittest.mock import MagicMock
+
+        import numpy as np
         from fastapi.testclient import TestClient
+
         from price_predictor.infrastructure.server import create_app
 
         mock_model = MagicMock()
         mock_model.predict.return_value = np.array([np.log(2.35)])
         mock_fe = MagicMock()
         mock_fe.transform.return_value = [[1, 2, 3]]
-        sklearn_artifact = {"model": mock_model, "feature_engineering": mock_fe, "model_version": "20260301-143000"}
+        sklearn_artifact = {
+            "model": mock_model, "feature_engineering": mock_fe,
+            "model_version": "20260301-143000",
+        }
 
         app = create_app(sklearn_artifact, transformer_artifact=None)
         client = TestClient(app)
 
         response = client.post(
             "/api/v1/predict",
-            content="name: lightning bolt\nmana cost: {R}\ntypes: instant\nspell[1]: CARDNAME deals 3 damage to any target.",
+            content=_BOLT_TEXT,
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 200
@@ -305,9 +322,11 @@ class TestDualModelResponse:
 
     def test_response_schema_structure(self):
         """Response must have exactly sklearn and transformer keys at top level."""
-        import numpy as np
         from unittest.mock import MagicMock
+
+        import numpy as np
         from fastapi.testclient import TestClient
+
         from price_predictor.infrastructure.server import create_app
 
         mock_model = MagicMock()

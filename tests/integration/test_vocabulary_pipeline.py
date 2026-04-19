@@ -1,11 +1,10 @@
-"""Integration tests for the vocabulary build → tokenizer pipeline."""
+"""Integration tests for the vocabulary build -> tokenizer pipeline."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-
 
 FIXTURE_CORPUS = Path(__file__).parent.parent / "fixtures" / "converted_cards_training"
 
@@ -62,10 +61,11 @@ class TestVocabularyBuildPipeline:
 
 
 class TestVocabularyToDatasetPipeline:
-    """T018: Full pipeline: build vocabulary → save → load tokenizer → construct dataset → verify batch shapes."""
+    """T018: Full pipeline: vocab -> tokenizer -> dataset -> batch shapes."""
 
     def test_full_pipeline_batch_shapes(self, tmp_path: Path):
         import torch
+
         from price_predictor.application.build_vocabulary import build_vocabulary
         from price_predictor.infrastructure.tokenizer_store import load_tokenizer, save_vocabulary
         from price_predictor.infrastructure.transformer_dataset import TransformerTrainingDataset
@@ -82,12 +82,24 @@ class TestVocabularyToDatasetPipeline:
         tok = load_tokenizer(vocab_path)
 
         # Construct dataset
-        card_tuples = [
-            ("Lightning Bolt", "name: lightning bolt\nmana cost: {R}\ntypes: instant\n", 2.50),
-            ("Serra Angel", "name: serra angel\nmana cost: {3}{W}{W}\ntypes: creature angel\n", 1.00),
+        from price_predictor.application.training_sample import TrainingSample
+        from price_predictor.domain.value_objects import PrintingData
+
+        pd = PrintingData.defaults()
+        samples = [
+            TrainingSample(
+                "Lightning Bolt",
+                "name: lightning bolt\nmana cost: {R}\ntypes: instant\n",
+                2.50, pd,
+            ),
+            TrainingSample(
+                "Serra Angel",
+                "name: serra angel\nmana cost: {3}{W}{W}\ntypes: creature angel\n",
+                1.00, pd,
+            ),
         ]
         max_seq_len = 64
-        ds = TransformerTrainingDataset(card_tuples, max_seq_len=max_seq_len, tokenizer=tok)
+        ds = TransformerTrainingDataset(samples, max_seq_len=max_seq_len, tokenizer=tok)
 
         assert len(ds) == 2
         item = ds[0]

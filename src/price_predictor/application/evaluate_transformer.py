@@ -51,7 +51,8 @@ class TransformerEvalResult:
             return ""
         lines = [
             "Per-bucket breakdown:",
-            f"  {'Bucket':<10} {'n':>6}   {'med%err':>8}   {'med|log|':>9}   {'med_signed_log':>15}",
+            f"  {'Bucket':<10} {'n':>6}   {'med%err':>8}"
+            f"   {'med|log|':>9}   {'med_signed_log':>15}",
             f"  {'-'*10} {'-'*6}   {'-'*8}   {'-'*9}   {'-'*15}",
         ]
         for b in self.per_bucket:
@@ -97,11 +98,10 @@ def evaluate_transformer(
     logger.info("Validation set: %d cards", len(val_data))
 
     dataset = TransformerTrainingDataset(
-        [(s.name, s.text, s.price_eur) for s in val_data],
+        val_data,
         max_seq_len=config.max_seq_len,
         tokenizer=tokenizer,
         log_offset=config.log_offset,
-        printing_data_list=[s.printing_data for s in val_data],
     )
 
     predictions, targets = predict_batch(model, dataset, device)

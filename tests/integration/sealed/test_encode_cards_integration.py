@@ -9,10 +9,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-
 FIXTURE_CARDS = {
     "air_elemental.txt": "name: Air Elemental\ntype: Creature - Elemental\npt: 4/4\nflying\n",
-    "llanowar_elves.txt": "name: Llanowar Elves\ntype: Creature - Elf Druid\npt: 1/1\nadd {G} to mana pool\n",
+    "llanowar_elves.txt": (
+        "name: Llanowar Elves\ntype: Creature - Elf Druid\n"
+        "pt: 1/1\nadd {G} to mana pool\n"
+    ),
     "lightning_bolt.txt": "name: Lightning Bolt\ntype: Instant\ndeal 3 damage to any target\n",
     "counterspell.txt": "name: Counterspell\ntype: Instant\ncounter target spell\n",
     "forest.txt": "name: Forest\ntype: Basic Land - Forest\nbasicLandType: Forest\n",
@@ -36,9 +38,9 @@ def fixture_cards_dir(tmp_path):
 def encoder_artifacts(tmp_path):
     """Build a minimal real encoder and vocab, save them, return paths."""
     import torch
+
     from price_predictor.domain.entities import TransformerConfig
     from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
-    from price_predictor.domain.tokenizer import MtgTokenizer
 
     config = TransformerConfig(
         vocab_size=50,

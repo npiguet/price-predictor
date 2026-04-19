@@ -254,11 +254,10 @@ def _build_dataset(
 ) -> TransformerTrainingDataset:
     """Build a TransformerTrainingDataset from a list of TrainingSamples."""
     return TransformerTrainingDataset(
-        [(s.name, s.text, s.price_eur) for s in samples],
+        samples,
         max_seq_len=max_seq_len,
         tokenizer=tokenizer,
         log_offset=log_offset,
-        printing_data_list=[s.printing_data for s in samples],
     )
 
 

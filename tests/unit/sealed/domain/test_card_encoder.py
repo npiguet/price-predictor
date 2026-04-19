@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 import torch
 
+from price_predictor.domain.card_text import ConvertedCardText
 from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, text_dim, total_dim
 from sealed.domain.card_encoder import CardEncoder
 from sealed.domain.deterministic_features import parse_deterministic_features
@@ -55,7 +55,7 @@ class TestCardEncoderNameStripping:
         model = _make_model()
         encoder = CardEncoder(model, tok, max_seq_len=16)
 
-        encoder.encode("name: Lightning Bolt\ninstant\ndeal 3 damage")
+        encoder.encode(ConvertedCardText("name: Lightning Bolt\ninstant\ndeal 3 damage"))
         call_text = tok.encode.call_args[0][0]
         assert not any(line.startswith("name:") for line in call_text.splitlines())
 
@@ -64,7 +64,7 @@ class TestCardEncoderNameStripping:
         model = _make_model()
         encoder = CardEncoder(model, tok, max_seq_len=16)
 
-        encoder.encode("name: Foo\ntype: Creature\npt: 2/2")
+        encoder.encode(ConvertedCardText("name: Foo\ntype: Creature\npt: 2/2"))
         call_text = tok.encode.call_args[0][0]
         assert "type: Creature" in call_text
         assert "pt: 2/2" in call_text
@@ -74,7 +74,7 @@ class TestCardEncoderNameStripping:
         model = _make_model()
         encoder = CardEncoder(model, tok, max_seq_len=16)
 
-        encoder.encode("type: Land\nbasicLandType: Forest")
+        encoder.encode(ConvertedCardText("type: Land\nbasicLandType: Forest"))
         call_text = tok.encode.call_args[0][0]
         assert "type: Land" in call_text
 
@@ -84,7 +84,7 @@ class TestCardEncoderOutputShape:
         tok = _make_tokenizer()
         model = _make_model(d_model=8)
         encoder = CardEncoder(model, tok, max_seq_len=16)
-        result = encoder.encode("name: Test\ntype: Creature")
+        result = encoder.encode(ConvertedCardText("name: Test\ntype: Creature"))
         assert isinstance(result, np.ndarray)
 
     def test_output_shape_matches_layout_total_dim(self):
@@ -92,14 +92,14 @@ class TestCardEncoderOutputShape:
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
         encoder = CardEncoder(model, tok, max_seq_len=16)
-        result = encoder.encode("name: Test\ntype: Creature")
+        result = encoder.encode(ConvertedCardText("name: Test\ntype: Creature"))
         assert result.shape == (total_dim(d_model),)
 
     def test_output_dtype_is_float32(self):
         tok = _make_tokenizer()
         model = _make_model(d_model=8)
         encoder = CardEncoder(model, tok, max_seq_len=16)
-        result = encoder.encode("name: Test\ntype: Creature")
+        result = encoder.encode(ConvertedCardText("name: Test\ntype: Creature"))
         assert result.dtype == np.float32
 
 
@@ -111,7 +111,9 @@ class TestCardEncoderConcatenatedLayout:
         tok = _make_tokenizer()
         model = _make_model(d_model=d_model)
         encoder = CardEncoder(model, tok, max_seq_len=16)
-        result = encoder.encode("name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2")
+        result = encoder.encode(ConvertedCardText(
+            "name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2"
+        ))
         assert result.shape == (total_dim(d_model),)
 
     def test_text_slice_matches_text_embedding(self):
@@ -121,14 +123,13 @@ class TestCardEncoderConcatenatedLayout:
         encoder = CardEncoder(model, tok, max_seq_len=16)
 
         card_text = "name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2"
-        full_result = encoder.encode(card_text)
+        full_result = encoder.encode(ConvertedCardText(card_text))
         text_embedding = full_result[:text_dim(d_model)]
 
         # Re-encode using model directly to get just the text embedding
         lines = [line for line in card_text.splitlines() if not line.startswith("name:")]
         text = "\n".join(lines)
         input_ids, attention_mask = tok.encode(text, 16)
-        import torch
         ids_t = torch.tensor([input_ids], dtype=torch.long)
         mask_t = torch.tensor([attention_mask], dtype=torch.long)
         expected = model.encode(ids_t, mask_t).squeeze(0).cpu().numpy().astype(np.float32)
@@ -142,11 +143,11 @@ class TestCardEncoderConcatenatedLayout:
         encoder = CardEncoder(model, tok, max_seq_len=16)
 
         card_text = "name: Test\nmana cost: {R}\ntypes: creature\npower toughness: 2/2"
-        full_result = encoder.encode(card_text)
+        full_result = encoder.encode(ConvertedCardText(card_text))
         det_feats = full_result[text_dim(d_model):]
         assert det_feats.shape == (DET_FEATURE_DIM,)
 
-        expected = parse_deterministic_features(card_text)
+        expected = parse_deterministic_features(ConvertedCardText(card_text))
         np.testing.assert_array_equal(det_feats, expected)
 
 
@@ -157,6 +158,6 @@ class TestCardEncoderTokenization:
         model = _make_model(max_seq_len=seq_len)
         encoder = CardEncoder(model, tok, max_seq_len=seq_len)
 
-        encoder.encode("some text")
+        encoder.encode(ConvertedCardText("some text"))
         tok.encode.assert_called_once()
         assert tok.encode.call_args[0][1] == seq_len
