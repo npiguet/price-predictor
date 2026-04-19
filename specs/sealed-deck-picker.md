@@ -3,6 +3,35 @@
 Train a sealed deck builder that takes a pool of cards opened from 6 boosters and selects an optimal 40-card deck, using
 game outcomes as the training signal. This is a stepping stone toward a full MTG-playing AI.
 
+# Overall Approach
+
+The system is built in five sequential phases:
+
+0. **Training Dataset Generation** — Generate pools, build deck variants, play games, and store the results.
+1. **Deck Scorer** — A Set Transformer trained via Bradley-Terry pairwise loss on game outcomes to score how good a
+   deck is. This is the core model and the most training-intensive component.
+2. **Search-Based Deck Builder** — At inference, a heuristic builder seeds a starting deck, and greedy hill-climbing
+   guided by the scorer iteratively swaps cards to improve the deck. No ML needed for this step.
+3. **Self-Play Refinement** — Iteratively improve the scorer by adding scorer-built decks to the training data,
+   retraining, and evaluating against an external baseline until the results are satisfactory.
+4. **One-Shot Policy Model (optional)** — Once the scorer is reliable, distill the search-based builder into a single
+   forward-pass model that directly selects cards from a pool.
+
+## Why This Approach
+
+A previous attempt using RL with sequential card selection (PPO with per-step rewards) failed. The model could not learn
+correct land-color coordination: it regressed to a "2 lands of each color" strategy because the sparse win/loss signal
+made credit assignment across 40 sequential decisions intractable. Color balance is a 6D coupled optimization with a
+moving target — every spell pick shifts the ideal distribution across all 6 color buckets simultaneously, and the model
+could never get meaningful per-step gradient signal for this global property.
+
+The current approach avoids this in two ways:
+- **Basic lands are assigned deterministically**, not predicted. Land distribution is a near-deterministic function of
+  the non-land cards selected — if you chose 12 red cards and 10 blue cards, the correct split is ~9 mountains and
+  ~8 islands. Removing this from the model's decision space eliminates the regression-to-the-mean trap.
+- **The scorer evaluates complete decks**, not partial sequences. One deck in, one score out — no credit assignment
+  problem across sequential steps.
+
 # Card Representation
 
 Each card is encoded by your pretrained price predictor transformer, producing a 512-dimensional vector (256 mean pool +
@@ -10,8 +39,8 @@ Each card is encoded by your pretrained price predictor transformer, producing a
 so that the embedding captures what the card does, not its name. This encoder is frozen initially and unfrozen in later
 training stages.
 
-At the pool level, each of the 90 entries is represented as the card embeddings plus a number of important features 
-deterministically extractable from card text that are known to be difficult for transformer models to represent 
+At the pool level, each of the 90 entries is represented as the card embeddings plus a number of important features
+deterministically extractable from card text that are known to be difficult for transformer models to represent
 accurately, but are also important for judging card quality:
 
 - card_embedding [512]
@@ -143,52 +172,6 @@ reasonable scale. Only the 32 deterministic features are standardized (zero mean
   to GPU with `.to(device)`, and can never get out of sync with the model that depends on them.
 - At inference, the same buffers are used to normalize incoming feature vectors before scoring.
 
-## Scorer Input — Non-Land Cards Only
-
-The scorer sees only spells and non-basic lands — basic lands are excluded. Since basic lands are assigned
-deterministically from the selected spells (see Phase 0 Step 3 and Phase 2), they carry no information beyond what the
-spell selection already provides. Including them would only inflate the sequence length with redundant tokens.
-
-This means the scorer input is variable-length: typically ~20-29 cards per deck, depending on how many non-basic lands
-the pool contained and the builder selected. The Set Transformer handles this natively — self-attention computes over
-however many tokens are present, and the pooling seed vectors cross-attend over all cards regardless of count.
-
-**Batching with variable lengths:** within a training batch, shorter decks are padded to the length of the longest deck
-in that batch. A boolean attention mask of shape `(batch, max_cards)` marks real cards as `True` and padding as `False`.
-Self-attention and seed-vector cross-attention both use this mask (setting pad positions to `-inf` before softmax) so
-padding tokens contribute nothing to the output.
-
-## Card Pool Composition
-
-- 84-90 cards (opened from 6 boosters, varies by set, 14-15 cards per booster. Contain lands, including basic lands)
-
-# Overall Approach
-
-The system is built in four sequential phases:
-
-0. **Training Dataset Generation**
-1. **Deck Scorer** — A Set Transformer trained via Bradley-Terry pairwise loss on game outcomes to score how good a
-   deck is. This is the core model and the most training-intensive component.
-2. **Search-Based Deck Builder** — At inference, a heuristic builder seeds a starting deck, and greedy hill-climbing
-   guided by the scorer iteratively swaps cards to improve the deck. No ML needed for this step.
-3. **One-Shot Policy Model (optional)** — Once the scorer is reliable, distill the search-based builder into a single
-   forward-pass model that directly selects cards from a pool.
-
-## Why This Approach
-
-A previous attempt using RL with sequential card selection (PPO with per-step rewards) failed. The model could not learn
-correct land-color coordination: it regressed to a "2 lands of each color" strategy because the sparse win/loss signal
-made credit assignment across 40 sequential decisions intractable. Color balance is a 6D coupled optimization with a
-moving target — every spell pick shifts the ideal distribution across all 6 color buckets simultaneously, and the model
-could never get meaningful per-step gradient signal for this global property.
-
-The current approach avoids this in two ways:
-- **Basic lands are assigned deterministically**, not predicted. Land distribution is a near-deterministic function of
-  the non-land cards selected — if you chose 12 red cards and 10 blue cards, the correct split is ~9 mountains and
-  ~8 islands. Removing this from the model's decision space eliminates the regression-to-the-mean trap.
-- **The scorer evaluates complete decks**, not partial sequences. One deck in, one score out — no credit assignment
-  problem across sequential steps.
-
 # Phase 0 — Training Dataset Generation
 
 Producing training data is the most time-consuming part of the pipeline. The scorer learns entirely from pairwise game
@@ -197,19 +180,50 @@ outcomes, so this phase generates pools, builds deck variants, plays games, and 
 The training dataset consists of the outcomes of a collection of 1v1 best-of-3 games between decks generated from
 distinct card pools.
 
-The process for generating each outcome is the following:
+## Card Embedding Generation
+
+Before Phase 1 can run, each card must have a precomputed 544-dimensional feature vector. The Python
+application scans cards-path and generates a feature vector for each card found. Each feature vector is stored as a
+`.npz` file named after the card (e.g. `Lightning-Bolt.npz`) in the same cards-path folder. Cards that already have a
+corresponding `.npz` file are skipped, making it safe to run incrementally when new cards are added or when the encoder
+is retrained.
+
+The `.npz` file contains a single array of 544 floats:
+- **[0:512]** — the 512-dimensional embedding from the pretrained price predictor transformer, following the process
+  described in spec 006-card-script-parsing (256 mean pool + 256 max pool, name line stripped)
+- **[512:544]** — the 32 deterministic features parsed from the card's converted text file (see Card Representation
+  above): is_land, mana cost fields, card color, mana produced, P/T, loyalty, and zero-padding
+
+Storing both components together means training only needs a single `.npz` lookup per card name — no reparsing of card
+text at training time.
+
+```bash
+python -m sealed encode-cards \
+    --encoder-path [path] \
+    --vocab-path [path] \
+    --cards-path [path]
+```
+
+Defaults:
+- **--encoder-path**: models/price-predictor/transformer/latest.pt
+- **--vocab-path**: models/price-predictor/transformer/vocab.txt
+- **--cards-path**: output/cardsfolder/
+
+## Card Pool Composition
+
+- 84-90 cards (opened from 6 boosters, varies by set, 14-15 cards per booster. Contain lands, including basic lands)
 
 ## Step 1 — Choose an expansion set
 
 An MTG expansion set is selected at random from the list of sets for which the sealed format is available. This excludes
 un-sets (joke sets) as well as aftermath-style sets. The selected set must provide "draft boosters" or "play boosters".
 
-## Step 2 - Generate one pool of boosters for each player
+## Step 2 — Generate one pool of boosters for each player
 
 For each player, generate a pool of cards using 6 boosters from the selected set. Each player gets different boosters,
 so 12 distinct boosters are generated per match.
 
-## Step 3 - Create a deck from each pool
+## Step 3 — Create a deck from each pool
 
 A new 40-card deck is generated from each card pool. There are 4 distinct deck generation methods. One method is
 selected at random for each deck, according to the following weights:
@@ -236,7 +250,7 @@ deck (non-basic lands are kept) and basic lands are added back using a pip-propo
    a subset of its input rather than treating all cards as already-chosen. The pip-proportional logic
    is therefore reimplemented directly in `DeckBuilder.rebalanceLands(spells, nonbasicLands)`.
 
-## Step 4 - Use the Forge AI to play the game and record the result
+## Step 4 — Play the game and record the result
 
 The Forge AI then pits these 2 decks against each other in a best-of-3 match.
 
@@ -270,43 +284,22 @@ keeping throughput stable over long generation runs.
 
 An example of this single-supervisor / multiple-worker pattern is available at `..\jumpstart-tierlist`.
 
-## Future improvement — Scorer-guided deck generation
-
-As the scorer improves (in Phase 1), it can be used to generate better deck variants by running the search-based builder
-(Phase 2) instead of random perturbations. This creates a curriculum: early data distinguishes bad from decent, later
-data distinguishes good from great. Re-run Phase 0 periodically with the improved scorer to produce higher-quality
-training data.
-
 # Phase 1 — Deck Scorer
 
-## Prerequisite — Card Embedding Generation
+## Scorer Input — Non-Land Cards Only
 
-Before Phase 0 or Phase 1 can run, each card must have a precomputed 544-dimensional feature vector. The Python
-application scans cards-path and generates a feature vector for each card found. Each feature vector is stored as a
-`.npz` file named after the card (e.g. `Lightning-Bolt.npz`) in the same cards-path folder. Cards that already have a
-corresponding `.npz` file are skipped, making it safe to run incrementally when new cards are added or when the encoder
-is retrained.
+The scorer sees only spells and non-basic lands — basic lands are excluded. Since basic lands are assigned
+deterministically from the selected spells (see Phase 0 Step 3 and Phase 2), they carry no information beyond what the
+spell selection already provides. Including them would only inflate the sequence length with redundant tokens.
 
-The `.npz` file contains a single array of 544 floats:
-- **[0:512]** — the 512-dimensional embedding from the pretrained price predictor transformer, following the process
-  described in spec 006-card-script-parsing (256 mean pool + 256 max pool, name line stripped)
-- **[512:544]** — the 32 deterministic features parsed from the card's converted text file (see Card Representation
-  above): is_land, mana cost fields, card color, mana produced, P/T, loyalty, and zero-padding
+This means the scorer input is variable-length: typically ~20-29 cards per deck, depending on how many non-basic lands
+the pool contained and the builder selected. The Set Transformer handles this natively — self-attention computes over
+however many tokens are present, and the pooling seed vectors cross-attend over all cards regardless of count.
 
-Storing both components together means training only needs a single `.npz` lookup per card name — no reparsing of card
-text at training time.
-
-```bash
-python -m sealed encode-cards \
-    --encoder-path [path] \
-    --vocab-path [path] \
-    --cards-path [path]
-```
-
-Defaults:
-- **--encoder-path**: models/price-predictor/transformer/latest.pt
-- **--vocab-path**: models/price-predictor/transformer/vocab.txt
-- **--cards-path**: output/cardsfolder/
+**Batching with variable lengths:** within a training batch, shorter decks are padded to the length of the longest deck
+in that batch. A boolean attention mask of shape `(batch, max_cards)` marks real cards as `True` and padding as `False`.
+Self-attention and seed-vector cross-attention both use this mask (setting pad positions to `-inf` before softmax) so
+padding tokens contribute nothing to the output.
 
 ## Architecture
 
@@ -403,8 +396,8 @@ Three metrics are tracked to detect overfitting and measure progress:
 2. **Validation prediction accuracy** — the fraction of held-out matchups where the higher-scored deck actually won.
    The theoretical ceiling is well below 100% because individual MTG games are noisy (the worse deck sometimes wins on
    draws alone), but this should climb and plateau.
-3. **Forge baseline comparison** — the round-robin evaluation described under "Evaluation Against External Baseline"
-   below. Per-pool paired win rate comparisons and aggregate win rates across a shared opponent field. This is the
+3. **Forge baseline comparison** — the round-robin evaluation described under Phase 3 "Evaluation Against External
+   Baseline." Per-pool paired win rate comparisons and aggregate win rates across a shared opponent field. This is the
    ground truth check that the scorer generalizes to actual deck quality, not just fitting the training distribution.
 
 Note: Bradley-Terry scores have no fixed scale — all scores could drift up by 1000 and the loss would be unchanged
@@ -459,7 +452,91 @@ starting deck is red-green, because every individual swap away from red-green ma
 If this is a problem, use simulated annealing or beam search instead of pure greedy search. The scorer supports any
 search strategy since it evaluates complete decks.
 
-# Phase 3 — One-Shot Policy Model (Optional)
+# Phase 3 — Self-Play Refinement
+
+Once the initial scorer (Phase 1) and search-based builder (Phase 2) are working, the training data can be improved
+by adding scorer-built decks to the mix. This creates a curriculum: early data (Phase 0) distinguishes bad decks from
+decent ones; self-play data distinguishes good decks from great ones.
+
+The process adds a 5th deck generation method to the four defined in Phase 0 Step 3:
+
+5. Use the scorer-guided search-based builder (Phase 2) to build a deck from the pool. The builder seeds a starting
+   deck, then iteratively swaps cards guided by the scorer until no swap improves the score. Basic lands are assigned
+   deterministically as in the other methods.
+
+This method is included alongside the existing four when generating new training data. The weights across methods may
+be adjusted as training progresses — early iterations may use a low weight for method 5 (the scorer is still weak),
+increasing it as the scorer improves.
+
+The self-play refinement loop:
+
+1. Generate new training data using all 5 methods (scorer-built decks now included)
+2. Retrain or fine-tune the scorer on the combined dataset (original Phase 0 data + new self-play data)
+3. Run the external baseline evaluation (see below)
+4. Inspect the results: Are scorer decks improving? Are they beating Forge? Do they look strategically coherent?
+5. Decide next steps: stop if satisfactory, generate more data if not, adjust method weights or hyperparameters
+6. Repeat from step 1
+
+## Evaluation Against External Baseline
+
+The evaluation uses a round-robin design to compare the scorer's deck building against Forge's built-in SealedDeckBuilder.
+Both builders receive the same pools, and all decks face a shared opponent field — this isolates builder quality from
+pool quality.
+
+### Design
+
+1. **Generate N pools** (configurable, default 12) using the same Forge booster-generation classes as `generate-pools`.
+2. **Build decks from each pool**: For each pool, build one deck using the scorer-guided greedy search (deck A_i) and
+   one deck using Forge's SealedDeckBuilder (deck B_i). Both builders work from the same pool, so each has access to
+   exactly the same cards. This produces N A-decks and N B-decks — 2N decks total.
+3. **Play round-robin cross-group matches**: Every A deck plays every B deck in a best-of-K match (configurable K,
+   default 3). That is N² matches total. A decks do not play other A decks, and B decks do not play other B decks —
+   intra-group matches would mainly reflect pool quality differences rather than builder quality.
+4. **Report results**: For each deck, compute its win rate across its N opponents. Compare the win rate of A_i (scorer)
+   against B_i (Forge) built from the same pool — this is a paired comparison that controls for pool quality. Also
+   report the aggregate win rate of all A decks vs the aggregate win rate of all B decks.
+
+### Why Round-Robin
+
+In the simplest evaluation, each scorer-built deck plays only the Forge deck from its own pool (N matches). A single
+best-of-3 is extremely noisy — the worse deck frequently wins on draws alone. By giving each deck N opponents, the
+per-deck win rate is averaged over a diverse field, dramatically reducing variance. With 12 pools, the round-robin
+produces 144 matches (432 games at best-of-3) instead of 12, giving a much more stable signal.
+
+The paired per-pool comparison (A_i win rate vs B_i win rate) is the most informative metric: pool quality cancels out,
+so the delta directly measures builder quality. The aggregate win rates provide a high-level summary.
+
+### Workflow
+
+The evaluation workflow is orchestrated by Python, with Java processes handling Forge-dependent steps:
+
+1. **Pool generation (Python → Java)**: Python invokes a Java process to generate N fresh pools using Forge's booster
+   generation (the same mechanism as `generate-pools`).
+2. **Deck building**:
+   - **A decks (Python)**: For each pool, the Python script builds deck A_i using the scorer-guided greedy search.
+   - **B decks (Python → Java)**: For each pool, Python invokes a Java command-line tool that builds a deck using
+     Forge's SealedDeckBuilder and returns the 40-card deck list via stdout.
+3. **Write validation matches files (Python)**: The N² match pairings (every A deck vs every B deck) are split into
+   per-worker files upfront. Each line contains `{deck_A};{deck_B}` — both are pipe-separated lists of exactly 40
+   card names. Each worker gets its own file, which simplifies result collection.
+4. **Play matches (Java workers)**: Each worker reads its assigned matches file. For each match, it plays a best-of-K
+   match between the two pre-built decks via the Forge AI and writes the outcome as `{wins_A};{wins_B}` to a companion
+   outcomes file (`{input_file}-outcomes.txt`).
+5. **Collect results (Python)**: After all workers complete, the Python script reads all per-worker outcome files and
+   computes: per-deck win rates, per-pool A_i vs B_i comparison, and aggregate win rates for each builder group.
+
+## Training Completion Criteria
+
+Training is considered done when all of the following are stable across several consecutive evaluation checkpoints:
+
+- Forge baseline comparison → scorer decks consistently outperform Forge decks from the same pool
+- Scorer validation loss → converged
+- Human spot check → built decks look strategically coherent
+
+This tracks absolute quality independently of training data generation, catching the trap where the scorer learns to
+rank training variants correctly but doesn't generalize to truly strong decks.
+
+# Phase 4 — One-Shot Policy Model (Optional)
 
 Once the scorer is reliable, distill the search-based builder into a model that selects a deck from a pool in a single
 forward pass.
@@ -490,72 +567,6 @@ This is the RL approach that previously failed — but now it works because:
 - The scorer provides a **dense per-deck reward** instead of sparse noisy game outcomes
 - The model is initialized from distillation, not from scratch, so it never hits the "2 lands of each color" collapse
 - Lands are deterministic, removing the hardest credit assignment problem
-
-# Evaluation Against External Baseline
-
-The evaluation uses a round-robin design to compare the scorer's deck building against Forge's built-in SealedDeckBuilder.
-Both builders receive the same pools, and all decks face a shared opponent field — this isolates builder quality from
-pool quality.
-
-## Design
-
-1. **Generate N pools** (configurable, default 12) using the same Forge booster-generation classes as `generate-pools`.
-2. **Build decks from each pool**: For each pool, build one deck using the scorer-guided greedy search (deck A_i) and
-   one deck using Forge's SealedDeckBuilder (deck B_i). Both builders work from the same pool, so each has access to
-   exactly the same cards. This produces N A-decks and N B-decks — 2N decks total.
-3. **Play round-robin cross-group matches**: Every A deck plays every B deck in a best-of-K match (configurable K,
-   default 3). That is N² matches total. A decks do not play other A decks, and B decks do not play other B decks —
-   intra-group matches would mainly reflect pool quality differences rather than builder quality.
-4. **Report results**: For each deck, compute its win rate across its N opponents. Compare the win rate of A_i (scorer)
-   against B_i (Forge) built from the same pool — this is a paired comparison that controls for pool quality. Also
-   report the aggregate win rate of all A decks vs the aggregate win rate of all B decks.
-
-## Why round-robin
-
-In the simplest evaluation, each scorer-built deck plays only the Forge deck from its own pool (N matches). A single
-best-of-3 is extremely noisy — the worse deck frequently wins on draws alone. By giving each deck N opponents, the
-per-deck win rate is averaged over a diverse field, dramatically reducing variance. With 12 pools, the round-robin
-produces 144 matches (432 games at best-of-3) instead of 12, giving a much more stable signal.
-
-The paired per-pool comparison (A_i win rate vs B_i win rate) is the most informative metric: pool quality cancels out,
-so the delta directly measures builder quality. The aggregate win rates provide a high-level summary.
-
-## Workflow
-
-The evaluation workflow is orchestrated by Python, with Java processes handling Forge-dependent steps:
-
-1. **Pool generation (Python → Java)**: Python invokes a Java process to generate N fresh pools using Forge's booster
-   generation (the same mechanism as `generate-pools`).
-2. **Deck building**:
-   - **A decks (Python)**: For each pool, the Python script builds deck A_i using the scorer-guided greedy search.
-   - **B decks (Python → Java)**: For each pool, Python invokes a Java command-line tool that builds a deck using
-     Forge's SealedDeckBuilder and returns the 40-card deck list via stdout.
-3. **Write validation matches files (Python)**: The N² match pairings (every A deck vs every B deck) are split into
-   per-worker files upfront. Each line contains `{deck_A};{deck_B}` — both are pipe-separated lists of exactly 40
-   card names. Each worker gets its own file, which simplifies result collection.
-4. **Play matches (Java workers)**: Each worker reads its assigned matches file. For each match, it plays a best-of-K
-   match between the two pre-built decks via the Forge AI and writes the outcome as `{wins_A};{wins_B}` to a companion
-   outcomes file (`{input_file}-outcomes.txt`).
-5. **Collect results (Python)**: After all workers complete, the Python script reads all per-worker outcome files and
-   computes: per-deck win rates, per-pool A_i vs B_i comparison, and aggregate win rates for each builder group.
-
-This tracks absolute quality independently of training data generation, catching the trap where the scorer learns to
-rank training variants correctly but doesn't generalize to truly strong decks.
-
-# Training Completion Criteria
-
-Training is considered done when all of the following are stable across several consecutive evaluation checkpoints:
-
-- Forge baseline comparison -> scorer decks consistently outperform Forge decks from the same pool
-- Scorer validation loss -> converged
-- Human spot check -> built decks look strategically coherent
-
-# Expansion Path
-
-Once the model is performing well on a single set:
-
-Expand to multiple sets by including pools from different sets in training data. The architecture requires no changes —
-the Set Transformer handles variable-size sets natively. Retrain or fine-tune on the expanded card pool.
 
 # Longer Term
 
