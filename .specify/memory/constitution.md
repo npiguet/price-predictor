@@ -1,34 +1,31 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 2.0.0 → 2.1.0
+  Version change: 2.1.0 → 2.2.0
   Modified principles: None
   Added sections:
-    - VI. Documentation (new principle requiring README,
-      workflow descriptions, ML process rationale, and
-      artifact documentation)
+    - VII. Codebase-Aware Planning (new principle requiring
+      a deliberate survey of the existing codebase during
+      /speckit.plan and /speckit.tasks, with findings
+      recorded in research.md and only summarized in
+      plan.md, to prevent pigeonholed designs, duplicate
+      entities, and domain-concept drift)
   Removed sections: None
   Templates requiring updates:
-    - .specify/templates/plan-template.md — ✅ No change needed
-      (Documentation deliverables can be captured in the
-      existing Deliverables section of any plan.)
-    - .specify/templates/spec-template.md — ✅ No change needed
-      (Specs already have a scope section that can include
-      documentation deliverables.)
-    - .specify/templates/tasks-template.md — ✅ No change needed
-      (Documentation tasks can be added as a Polish phase
-      task using existing categories.)
+    - .specify/templates/plan-template.md — ✅ updated
+      (Constitution Check gate now includes a Codebase
+      Survey subsection with required outputs)
+    - .specify/templates/tasks-template.md — ✅ updated
+      (Notes section now reminds the agent to reference
+      prior art before creating new entities/services)
+    - .specify/templates/spec-template.md — ✅ No change
+      (the spec is upstream of plan; survey belongs in
+      plan/research, not in the problem statement)
   Quality Gates updated:
-    - ✅ Added documentation completeness gate
-  Follow-up TODOs:
-    - Create README.md covering executables, workflows, ML
-      rationale, and artifacts for feature 001
-    - Carry forward from v2.0.0: Update plan.md to include
-      Java stub library deliverable
-    - Carry forward from v2.0.0: Define API contract between
-      price predictor and stub
-    - Carry forward from v2.0.0: Add Java 17+ / Maven to
-      CLAUDE.md for stub library
+    - ✅ Added codebase survey gate: plans that introduce
+      new domain concepts must cite prior art or justify
+      divergence
+  Follow-up TODOs: None
 -->
 # Price Predictor Constitution
 
@@ -177,6 +174,56 @@ pipelines with data ingestion and CLI tooling; without clear
 documentation, onboarding is slow, workflows are opaque, and
 users cannot evaluate whether the system meets their needs.
 
+### VII. Codebase-Aware Planning
+
+Before a plan or task list is finalized, the agent MUST deliberately
+survey the existing codebase and ground its design in what is already
+there. Planning in isolation is forbidden.
+
+- The `/speckit.plan` workflow MUST include an explicit codebase
+  survey step before the Technical Context section is filled in. The
+  survey MUST look for:
+  - domain entities, value objects, ports, and services whose
+    vocabulary overlaps with the feature;
+  - utilities, adapters, infrastructure, and CLI subcommands that
+    already solve adjacent problems;
+  - conventions used by sibling modules (folder layout, naming,
+    dependency direction, test style).
+- Survey findings MUST be recorded in `research.md` under a
+  `## Codebase Survey` section, with concrete file and symbol
+  references so reviewers can verify them. `plan.md` MUST link to
+  that section under its Constitution Check and summarize the
+  outcome; the detailed findings do not belong in `plan.md`.
+- New domain concepts MUST NOT silently duplicate existing ones. If
+  a concept with a similar name or responsibility already exists, the
+  plan MUST either (a) reuse it, (b) extend it, or (c) explicitly
+  justify why a parallel concept is warranted and propose a rename of
+  the older concept so the codebase converges rather than diverges.
+- Tasks in `tasks.md` that introduce a new entity, service, port, or
+  adapter MUST reference the nearest prior art identified in the
+  survey. A new sibling is acceptable only when its divergence is
+  explained.
+- Where an existing library, internal utility, or upstream API (e.g.,
+  Forge, MTGJSON loader, transformer encoder) already covers a
+  sub-problem, the plan MUST prefer reuse. Reimplementation is
+  permitted only with a documented reason (behavior gap, licensing,
+  required isolation).
+- When the survey reveals that the feature is a third instance of a
+  pattern already present twice in the codebase, the plan MUST
+  propose extracting the shared abstraction rather than hand-coding
+  another parallel copy.
+
+**Rationale**: Every planning session that skips the codebase survey
+risks reinventing an existing entity, adding a sideways variant of a
+domain concept, or designing against assumptions that the rest of the
+code has already contradicted. The price predictor and sealed modules
+share transformer encoders, tokenizers, Forge adapters, and MTGJSON
+loaders; without deliberate awareness, features drift into pigeonholed
+local solutions that rot as the surrounding code evolves. Treating
+the survey as a first-class planning step — on the same footing as
+the Constitution Check itself — is the cheapest insurance against
+duplication and domain decay.
+
 ## Quality Gates
 
 Every pull request and feature delivery MUST satisfy these gates:
@@ -190,6 +237,9 @@ Every pull request and feature delivery MUST satisfy these gates:
 - Remote API contract tests MUST pass for both stub and server.
 - Documentation MUST be complete for any new or changed
   workflows, CLI commands, artifacts, or ML processes.
+- Plans introducing new domain concepts MUST cite prior art
+  from the codebase survey (Principle VII) or document why a
+  parallel concept is warranted.
 - Code has been reviewed by at least one other contributor (or
   self-reviewed with a structured checklist for solo work).
 
@@ -222,4 +272,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 2.1.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-03-01
+**Version**: 2.2.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-04-20

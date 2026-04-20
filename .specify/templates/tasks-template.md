@@ -249,3 +249,4 @@ With multiple developers:
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
+- **Principle VII (Codebase-Aware Planning)**: Any task that creates a new entity, service, port, or adapter MUST reference the nearest prior art identified in plan.md's Codebase Survey. If no prior art is cited, either reuse/extend existing code or document in the task description why a parallel concept is warranted.

@@ -33,6 +33,46 @@
 
 [Gates determined based on constitution file]
 
+### Codebase Survey (Principle VII — required)
+
+*GATE: Complete BEFORE filling in Technical Context below. Design must
+be grounded in the existing codebase, not conceived in isolation.*
+
+Before proposing any data model, module layout, or new domain concept,
+survey what already exists in this repository and record the findings
+in `research.md` under a `## Codebase Survey` section. Each bullet
+MUST cite concrete files/symbols so a reviewer can verify.
+
+The survey in `research.md` MUST contain these four subsections:
+
+- **Overlapping domain vocabulary** — existing entities, value
+  objects, ports, and services whose names or responsibilities
+  overlap with the feature. For each, record the decision: reuse,
+  extend, or (with justification) introduce a parallel concept. If a
+  parallel concept is introduced, propose how the older concept
+  should be renamed so the codebase converges.
+- **Adjacent prior art** — existing utilities, adapters,
+  infrastructure, or CLI subcommands that already solve adjacent
+  sub-problems (e.g., MTGJSON loading, Forge bridging, transformer
+  encoding, tokenization, model persistence). For each, record the
+  decision: reuse, wrap, or reimplement (with documented reason).
+- **Convention alignment** — the sibling module whose structure this
+  feature should mirror (folder layout, naming, dependency direction,
+  test style). Deviations MUST be justified.
+- **Third-instance check** — if any sub-problem of this feature is
+  already solved *twice* elsewhere in the codebase, the survey MUST
+  propose extracting the shared abstraction rather than adding a
+  third parallel implementation.
+
+In this `plan.md`, under the Constitution Check, record only the
+pointer and the outcome:
+
+- Link to `research.md#codebase-survey` (or equivalent anchor).
+- One-line status per subsection: e.g., "Overlapping vocabulary: 2
+  concepts reused, 0 parallel concepts introduced."
+- Any follow-up tasks the survey surfaced (e.g., a rename, an
+  extraction) that must be added to `tasks.md`.
+
 ## Project Structure
 
 ### Documentation (this feature)
