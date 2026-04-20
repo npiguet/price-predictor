@@ -112,7 +112,8 @@ pools come from a randomly selected set. Run with `--set RVR` and verify all poo
 ### Edge Cases
 
 - What happens when a generated-decks file contains no other deck with the same set code as
-  deck A when method 5 is selected? With 10,000 decks across ~215 eligible sets, this is
+  deck A when method 5 is selected? (Deck B must differ from deck A, so at least 2 decks
+  from the same set are needed.) With 10,000 decks across ~215 eligible sets, this is
   statistically negligible and not handled — accepted trade-off.
 - What happens when `build-decks` encounters a pool with fewer than 23 non-land cards that
   have valid embeddings? The greedy builder should return the best deck possible from the
@@ -126,7 +127,10 @@ pools come from a randomly selected set. Run with `--set RVR` and verify all poo
 ### Functional Requirements
 
 - **FR-001**: `generate-pools` MUST support omitting `--set`, in which case each pool is
-  generated from a randomly selected sealed-legal set.
+  generated from a randomly selected sealed-legal set. When `--set` is omitted and
+  `--pools-path` is not specified, the default output path is
+  `output/sealed/pools/pools.txt`. When `--set` is given, the default remains
+  `output/sealed/pools/{set}/pools.txt`. The CLI help text MUST document both defaults.
 - **FR-002**: `generate-pools` output MUST always include the set code as the first
   semicolon-delimited field on every line, regardless of whether `--set` was specified.
   Format: `SET_CODE;Card1|Card2|...|CardN`.
@@ -134,19 +138,35 @@ pools come from a randomly selected set. Run with `--set RVR` and verify all poo
   generation: sets with a draft booster template, excluding un-sets (funny type).
 - **FR-004**: A new `build-decks` subcommand MUST read a pools file, build a scorer-guided
   greedy deck for each pool (including deterministic basic land assignment), and write a
-  generated-decks file.
+  generated-decks file. When `--output` is not specified, the default output path is
+  `output/sealed/generated-decks.txt`. When `--checkpoint` is not specified, the default
+  scorer checkpoint is `models/sealed/scorer/latest.pt`. The CLI help text MUST document
+  both defaults.
 - **FR-005**: The generated-decks file format MUST be one line per deck:
   `SET_CODE;Card1|Card2|...|Card40` — a complete 40-card deck with its source set code.
 - **FR-006**: `match-outcomes` MUST accept an optional `--generated-decks-path` argument.
   When absent, behavior MUST be identical to the existing Phase 0 flow.
 - **FR-007**: When `--generated-decks-path` is present, deck A MUST be a random line from
-  the generated-decks file, and deck B MUST be built using one of 5 weighted methods.
+  the generated-decks file, and deck B MUST be built using one of 5 weighted methods:
+
+  | Method | Weight | Description |
+  |--------|--------|-------------|
+  | 1      | 4      | Forge SealedDeckBuilder (standard) |
+  | 2      | 3      | Forge builder + 3 type-matched swaps + land rebalance |
+  | 3      | 2      | Forge builder + 8 type-matched swaps + land rebalance |
+  | 4      | 1      | 23 random spells + land rebalance |
+  | 5      | 4      | Random scorer-built deck from the generated-decks file |
+
+  Methods 1–4 match the existing Phase 0 deck-building strategies. Method 5 is the only
+  new addition for self-play.
 - **FR-008**: Deck B method selection MUST use relative weights 4:3:2:1:4 for methods 1
   through 5 respectively.
 - **FR-009**: For methods 1–4, deck B's pool MUST be generated from the same set as deck A
   (same-set constraint).
 - **FR-010**: For method 5, deck B MUST be a random line from the generated-decks file with
-  the same set code as deck A.
+  the same set code as deck A. Deck B MUST NOT be the same line as deck A (re-roll if
+  selected); identical decks produce misleading training signal since the winner is
+  determined purely by RNG.
 - **FR-011**: Self-play match outcomes MUST be appended to the same `match-outcomes.txt` file
   in the same format as Phase 0 outcomes.
 - **FR-012**: `evaluate-scorer` MUST use a randomly selected sealed-legal set by default
@@ -178,6 +198,16 @@ pools come from a randomly selected set. Run with `--set RVR` and verify all poo
 - **SC-004**: After one iteration of the self-play loop, the retrained scorer's evaluation
   win rate against Forge is at least as good as the pre-self-play scorer (no regression from
   adding self-play data).
+
+## Clarifications
+
+### Session 2026-04-20
+
+- Q: Default output path for `generate-pools` when `--set` is omitted? → A: Single flat file at `output/sealed/pools/pools.txt`. CLI help text must document both defaults: `output/sealed/pools/{set}/pools.txt` when `--set` is given, `output/sealed/pools/pools.txt` when omitted.
+- Q: Should the spec include explicit definitions for deck B methods 1–4? → A: Yes, adopt the source doc's table as-is. Methods 1–4 match existing Phase 0 behavior; method 5 is the only new addition.
+- Q: For method 5, can deck B be the same line as deck A (mirror match)? → A: No, exclude it. Identical decks produce a winner purely from RNG, creating a misleading training signal about deck quality. Re-roll if deck B matches deck A.
+- Q: Default output path for `build-decks` generated-decks file? → A: `output/sealed/generated-decks.txt`. CLI help text must document this default.
+- Q: Default scorer checkpoint for `build-decks`? → A: `models/sealed/scorer/latest.pt`; override with `--checkpoint`. Consistent with other subcommands' artifact resolution.
 
 ## Assumptions
 
