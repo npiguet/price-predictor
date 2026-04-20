@@ -458,24 +458,82 @@ Once the initial scorer (Phase 1) and search-based builder (Phase 2) are working
 by adding scorer-built decks to the mix. This creates a curriculum: early data (Phase 0) distinguishes bad decks from
 decent ones; self-play data distinguishes good decks from great ones.
 
-The process adds a 5th deck generation method to the four defined in Phase 0 Step 3:
+Self-play refinement bridges the Python scorer and the Java game engine through a **generated-decks file** — a flat
+text artifact that the Python side writes and the Java side reads. This avoids any runtime coupling between the two
+languages during match generation.
 
-5. Use the scorer-guided search-based builder (Phase 2) to build a deck from the pool. The builder seeds a starting
-   deck, then iteratively swaps cards guided by the scorer until no swap improves the score. Basic lands are assigned
-   deterministically as in the other methods.
+## Generated Decks Preparation
 
-This method is included alongside the existing four when generating new training data. The weights across methods may
-be adjusted as training progresses — early iterations may use a low weight for method 5 (the scorer is still weak),
-increasing it as the scorer improves.
+Before running self-play match generation, the Python side pre-builds a corpus of scorer-guided decks:
 
-The self-play refinement loop:
+1. **Generate pools from random sets.** Invoke `generate-pools` without `--set` to produce N pools (e.g. 10,000).
+   When `--set` is omitted, each pool is generated from a randomly selected sealed-legal set (same eligible-set
+   criteria as Phase 0 Step 1: sets with a draft booster template, excluding un-sets). The output always includes
+   the set code as the first field on every line, regardless of whether `--set` was specified:
 
-1. Generate new training data using all 5 methods (scorer-built decks now included)
-2. Retrain or fine-tune the scorer on the combined dataset (original Phase 0 data + new self-play data)
-3. Run the external baseline evaluation (see below)
-4. Inspect the results: Are scorer decks improving? Are they beating Forge? Do they look strategically coherent?
-5. Decide next steps: stop if satisfactory, generate more data if not, adjust method weights or hyperparameters
-6. Repeat from step 1
+       SET_CODE;Card1|Card2|...|CardN
+
+2. **Build scorer decks.** For each pool, build a deck using the scorer-guided greedy search (Phase 2), including
+   deterministic basic land assignment. Write the results to a generated-decks file: one line per deck, formatted as:
+
+       SET_CODE;Card1|Card2|...|Card40
+
+   Each line is a complete 40-card deck (spells + non-basic lands + basic lands) with its source set code.
+
+```bash
+# Step 1: Generate pools from random sets
+python -m sealed generate-pools --size 10000
+
+# Step 2: Build scorer decks from those pools and write generated-decks file
+python -m sealed build-decks \
+    --checkpoint models/sealed/scorer/best_*.pt \
+    --pools-path output/sealed/pools/pools.txt \
+    --output output/sealed/generated-decks.txt
+```
+
+## Self-Play Match Generation
+
+Self-play match generation is triggered by passing `--generated-decks-path` to `match-outcomes`. When this argument
+is absent, `match-outcomes` uses the unchanged Phase 0 behavior.
+
+When `--generated-decks-path` is present, each match works as follows:
+
+1. **Pick deck A**: select a random line from the generated-decks file. This gives a scorer-built 40-card deck and
+   its set code.
+2. **Roll for deck B's method**: choose one of 5 methods. Method 5 has the same relative weight as method 1 (the
+   Forge standard builder):
+
+   | Method | Weight | Description |
+   |--------|--------|-------------|
+   | 1      | 4      | Forge SealedDeckBuilder (standard) |
+   | 2      | 3      | Forge builder + 3 type-matched swaps + land rebalance |
+   | 3      | 2      | Forge builder + 8 type-matched swaps + land rebalance |
+   | 4      | 1      | 23 random spells + land rebalance |
+   | 5      | 4      | Random scorer-built deck from the generated-decks file |
+
+3. **Build deck B**:
+   - **Methods 1–4**: Generate a fresh pool from **deck A's set code**, then build deck B from that pool using the
+     selected method. This ensures both decks come from the same set, matching Phase 0's same-set design.
+   - **Method 5**: Pick a random line from the generated-decks file with the **same set code** as deck A.
+4. **Play and record**: Play a best-of-3 match and append the result to `match-outcomes.txt` in the standard format.
+
+The same-set constraint is critical: without it, set-level power differences (e.g. Modern Horizons vs a core set)
+would dominate the training signal, drowning out the deck-building quality signal.
+
+```bash
+python -m sealed match-outcomes --generated-decks-path output/sealed/generated-decks.txt
+```
+
+## Self-Play Refinement Loop
+
+Each iteration of the self-play loop:
+
+1. Pre-build scorer decks (see Generated Decks Preparation above)
+2. Generate self-play training data using `match-outcomes --generated-decks-path` — runs indefinitely, Ctrl-C to stop
+3. Retrain the scorer from scratch on the full corpus (Phase 0 data + self-play data, all in `match-outcomes.txt`)
+4. Run the external baseline evaluation (see below)
+5. Inspect: Are scorer decks improving? Do they beat Forge? Do they look strategically coherent?
+6. Repeat from step 1 with the improved scorer
 
 ## Evaluation Against External Baseline
 
@@ -485,7 +543,8 @@ pool quality.
 
 ### Design
 
-1. **Generate N pools** (configurable, default 12) using the same Forge booster-generation classes as `generate-pools`.
+1. **Generate N pools** (configurable, default 12) from a randomly selected sealed-legal set. If `--set` is specified
+   on the CLI, all pools use that set instead.
 2. **Build decks from each pool**: For each pool, build one deck using the scorer-guided greedy search (deck A_i) and
    one deck using Forge's SealedDeckBuilder (deck B_i). Both builders work from the same pool, so each has access to
    exactly the same cards. This produces N A-decks and N B-decks — 2N decks total.
@@ -510,8 +569,8 @@ so the delta directly measures builder quality. The aggregate win rates provide 
 
 The evaluation workflow is orchestrated by Python, with Java processes handling Forge-dependent steps:
 
-1. **Pool generation (Python → Java)**: Python invokes a Java process to generate N fresh pools using Forge's booster
-   generation (the same mechanism as `generate-pools`).
+1. **Pool generation (Python → Java)**: Python invokes a Java process to generate N fresh pools from a randomly
+   selected sealed-legal set (or a specific set if `--set` is provided).
 2. **Deck building**:
    - **A decks (Python)**: For each pool, the Python script builds deck A_i using the scorer-guided greedy search.
    - **B decks (Python → Java)**: For each pool, Python invokes a Java command-line tool that builds a deck using
