@@ -88,3 +88,37 @@ class TestMatchWorkerConnectorCommandConstruction:
         ):
             with pytest.raises(FileNotFoundError):
                 connector.start(tmp_path / "outcomes.txt")
+
+
+class TestMatchWorkerConnectorGeneratedDecksPath:
+    """US3: --generated-decks-path triggers self-play mode in the Java worker."""
+
+    def test_generated_decks_path_added_as_system_property(
+        self, tmp_path, stub_classpath,
+    ):
+        connector = MatchWorkerConnector()
+        gen_decks = tmp_path / "generated-decks.txt"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt",
+                generated_decks_path=gen_decks,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert f"-Dgenerated.decks.file={gen_decks}" in cmd
+
+    def test_generated_decks_path_omitted_when_none(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(tmp_path / "outcomes.txt", generated_decks_path=None)
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)
+
+    def test_generated_decks_path_default_is_none(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(tmp_path / "outcomes.txt")
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)

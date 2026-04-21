@@ -41,17 +41,47 @@ public class PoolGenerator {
 
         for (int p = 0; p < poolCount; p++) {
             List<String> poolCards = new ArrayList<>();
-            for (int b = 0; b < BOOSTERS_PER_POOL; b++) {
-                List<PaperCard> boosterCards = new UnOpenedProduct(boosterTemplate).get();
-                for (PaperCard card : boosterCards) {
-                    if (!card.getRules().getMainPart().getType().isBasicLand()) {
-                        poolCards.add(card.getName());
-                    }
-                }
+            for (PaperCard card : openSinglePool(boosterTemplate)) {
+                poolCards.add(card.getName());
             }
             pools.add(poolCards);
         }
 
         return pools;
+    }
+
+    /**
+     * Generate a single pool as {@link PaperCard}s (basic lands excluded).
+     *
+     * <p>Used by self-play match generation to feed deck B's pool directly into
+     * {@link DeckBuilder#buildDeck(List)}, which requires {@code PaperCard}s.
+     *
+     * @param setCode MTG set code (must not be null)
+     * @return Non-basic-land cards from 6 boosters of the given set.
+     */
+    public List<PaperCard> generatePool(String setCode) {
+        if (setCode == null) {
+            throw new IllegalArgumentException("Set code must not be null");
+        }
+
+        SealedTemplate boosterTemplate = StaticData.instance().getBoosters().get(setCode);
+        if (boosterTemplate == null) {
+            throw new IllegalArgumentException("Unknown or unsupported set code: " + setCode);
+        }
+
+        return openSinglePool(boosterTemplate);
+    }
+
+    private List<PaperCard> openSinglePool(SealedTemplate boosterTemplate) {
+        List<PaperCard> pool = new ArrayList<>();
+        for (int b = 0; b < BOOSTERS_PER_POOL; b++) {
+            List<PaperCard> boosterCards = new UnOpenedProduct(boosterTemplate).get();
+            for (PaperCard card : boosterCards) {
+                if (!card.getRules().getMainPart().getType().isBasicLand()) {
+                    pool.add(card);
+                }
+            }
+        }
+        return pool;
     }
 }

@@ -50,3 +50,16 @@ class TestPoolConnectorErrorPropagation:
         args = mock_run.call_args.kwargs["main_args"]
         assert "--set" in args and "RVR" in args
         assert "--size" in args and "10" in args
+
+    def test_set_code_none_omits_set_argument(self, tmp_path):
+        connector = PoolConnector()
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch(_RFW, return_value=mock_result) as mock_run:
+            connector.generate(None, 10, tmp_path / "pools")
+
+        args = mock_run.call_args.kwargs["main_args"]
+        assert "--set" not in args
+        assert "--size" in args and "10" in args
+        assert "--pools-path" in args

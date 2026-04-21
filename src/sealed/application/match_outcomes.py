@@ -22,9 +22,15 @@ class MatchOutcomeSupervisor:
 
     STATUS_INTERVAL = 60  # seconds between status reports
 
-    def __init__(self, worker_count: int, output_path: Path) -> None:
+    def __init__(
+        self,
+        worker_count: int,
+        output_path: Path,
+        generated_decks_path: Path | None = None,
+    ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
+        self._generated_decks_path = generated_decks_path
         self._shutdown_event = threading.Event()
         self._processes: list[subprocess.Popen] = []
         self._start_times: dict[subprocess.Popen, float] = {}
@@ -82,7 +88,11 @@ class MatchOutcomeSupervisor:
         """Start one Java worker subprocess with a per-worker log file."""
         log_path = self._output_path.parent / f"worker-{worker_id}.log"
         log_file = log_path.open("ab")
-        proc = self._connector.start(self._output_path, log_file=log_file)
+        proc = self._connector.start(
+            self._output_path,
+            log_file=log_file,
+            generated_decks_path=self._generated_decks_path,
+        )
         print(f"Worker {worker_id} started (PID {proc.pid}, log {log_path.name})")
         return proc
 

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import numpy as np
 
-from sealed.application.evaluate_scorer import write_round_robin_matches
+from sealed.application.evaluate_scorer import (
+    EvaluateScorerUseCase,
+    write_round_robin_matches,
+)
 from sealed.domain.card_embedding_layout import total_dim
 from sealed.domain.greedy_deck_builder import GreedyDeckBuilder
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -96,3 +101,44 @@ class TestWriteRoundRobinMatches:
         assert sum(counts) == 9
         assert counts[0] == 5
         assert counts[1] == 4
+
+
+class TestResolveSetCode:
+    def test_explicit_set_code_returned_as_is(self):
+        use_case = EvaluateScorerUseCase()
+        assert use_case._resolve_set_code("RVR") == "RVR"
+
+    def test_explicit_set_code_does_not_call_eligible(self):
+        use_case = EvaluateScorerUseCase()
+        with patch(
+            "sealed.application.evaluate_scorer.eligible_sealed_sets",
+        ) as mock_eligible:
+            use_case._resolve_set_code("DMU")
+        mock_eligible.assert_not_called()
+
+    def test_none_picks_random_from_eligible(self):
+        use_case = EvaluateScorerUseCase()
+        with patch(
+            "sealed.application.evaluate_scorer.eligible_sealed_sets",
+            return_value=["A", "B", "C"],
+        ) as mock_eligible, patch(
+            "sealed.application.evaluate_scorer.random.choice",
+            return_value="B",
+        ) as mock_choice:
+            result = use_case._resolve_set_code(None)
+        mock_eligible.assert_called_once()
+        mock_choice.assert_called_once_with(["A", "B", "C"])
+        assert result == "B"
+
+    def test_none_with_empty_eligible_raises(self):
+        use_case = EvaluateScorerUseCase()
+        with patch(
+            "sealed.application.evaluate_scorer.eligible_sealed_sets",
+            return_value=[],
+        ):
+            try:
+                use_case._resolve_set_code(None)
+            except RuntimeError as e:
+                assert "eligible" in str(e).lower()
+            else:
+                raise AssertionError("Expected RuntimeError")

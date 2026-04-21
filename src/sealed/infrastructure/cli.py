@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     _build_encode_cards_parser(subparsers)
     _build_generate_pools_parser(subparsers)
+    _build_build_decks_parser(subparsers)
     _build_train_scorer_parser(subparsers)
     _build_evaluate_scorer_parser(subparsers)
     _build_match_outcomes_parser(subparsers)
@@ -71,9 +72,12 @@ def _build_generate_pools_parser(subparsers) -> None:
     generate_parser.set_defaults(func=run_generate_pools)
     generate_parser.add_argument(
         "--set",
-        default="RVR",
+        default=None,
         dest="set_code",
-        help="MTG set code to generate boosters from (e.g. RVR, MH3, BLB)",
+        help=(
+            "MTG set code to generate boosters from (e.g. RVR, MH3, BLB). "
+            "When omitted, each pool uses a randomly selected sealed-legal set."
+        ),
     )
     generate_parser.add_argument(
         "--size",
@@ -84,7 +88,35 @@ def _build_generate_pools_parser(subparsers) -> None:
     generate_parser.add_argument(
         "--pools-path",
         default=None,
-        help="Output directory; pools.txt is written here. Default: output/sealed/pools/{set}/",
+        help=(
+            "Output directory; pools.txt is written here. "
+            "Default: output/sealed/pools/{set}/ when --set is given, "
+            "output/sealed/pools/ otherwise."
+        ),
+    )
+
+
+def _build_build_decks_parser(subparsers) -> None:
+    build_parser = subparsers.add_parser(
+        "build-decks",
+        help="Build scorer-guided 40-card decks from a sealed pools file",
+    )
+    build_parser.set_defaults(func=run_build_decks)
+    build_parser.add_argument(
+        "--pools-path",
+        required=True,
+        help="Input pools file (with SET_CODE; prefixes)",
+    )
+    build_parser.add_argument(
+        "--checkpoint",
+        default="models/sealed/scorer/latest.pt",
+        help="Scorer model checkpoint (default: models/sealed/scorer/latest.pt)",
+    )
+    _add_cards_path(build_parser)
+    build_parser.add_argument(
+        "--output",
+        default="output/sealed/generated-decks.txt",
+        help="Output generated-decks file (default: output/sealed/generated-decks.txt)",
     )
 
 
@@ -188,6 +220,15 @@ def _build_evaluate_scorer_parser(subparsers) -> None:
         default=None,
         help="Working directory for match files (default: temp dir)",
     )
+    eval_parser.add_argument(
+        "--set",
+        default=None,
+        dest="set_code",
+        help=(
+            "MTG set code to evaluate on (e.g. RVR, MH3, BLB). When omitted,"
+            " a random sealed-legal set is selected."
+        ),
+    )
 
 
 def _build_match_outcomes_parser(subparsers) -> None:
@@ -201,6 +242,17 @@ def _build_match_outcomes_parser(subparsers) -> None:
         type=int,
         default=12,
         help="Number of parallel Java worker processes to spawn (default: 12)",
+    )
+    match_parser.add_argument(
+        "--generated-decks-path",
+        default=None,
+        help=(
+            "Optional path to a generated-decks.txt file. When given, workers run"
+            " in self-play mode: deck A is sampled from this file each match and"
+            " deck B is built by one of 5 weighted methods (4:3:2:1:4) with"
+            " same-set pairing. When omitted, Phase 0 random-pool behavior is"
+            " unchanged."
+        ),
     )
 
 
@@ -272,9 +324,12 @@ def run_generate_pools(args: argparse.Namespace) -> int:
     pool_count = args.size
 
     if args.pools_path is None:
-        pools_path = Path("output") / "sealed" / "pools" / set_code
+        if set_code is None:
+            pools_path = Path("output") / "sealed" / "pools"
+        else:
+            pools_path = Path("output") / "sealed" / "pools" / set_code
     else:
-        raw = args.pools_path.replace("{set}", set_code)
+        raw = args.pools_path.replace("{set}", set_code) if set_code else args.pools_path
         pools_path = Path(raw)
 
     connector = PoolConnector()
@@ -289,6 +344,31 @@ def run_generate_pools(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    return 0
+
+
+def run_build_decks(args: argparse.Namespace) -> int:
+    """Execute the build-decks command."""
+    from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
+
+    config = BuildDecksConfig(
+        pools_path=Path(args.pools_path),
+        checkpoint=Path(args.checkpoint),
+        cards_path=Path(args.cards_path),
+        output=Path(args.output),
+    )
+
+    try:
+        use_case = BuildDecksUseCase()
+        written = use_case.execute(config)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"Wrote {written} decks to {config.output}")
     return 0
 
 
@@ -340,6 +420,7 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
         best_of=args.best_of,
         workers=args.workers,
         work_dir=Path(args.work_dir) if args.work_dir else None,
+        set_code=args.set_code,
     )
 
     try:
@@ -360,10 +441,14 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     from sealed.application.match_outcomes import MatchOutcomeSupervisor
 
     output_path = Path("output") / "sealed" / "match-outcomes.txt"
+    generated_decks_path = (
+        Path(args.generated_decks_path) if args.generated_decks_path else None
+    )
 
     supervisor = MatchOutcomeSupervisor(
         worker_count=args.workers,
         output_path=output_path,
+        generated_decks_path=generated_decks_path,
     )
 
     try:

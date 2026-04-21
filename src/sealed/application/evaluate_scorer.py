@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,8 +19,10 @@ from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
+from sealed.infrastructure.eligible_sets import eligible_sealed_sets
 from sealed.infrastructure.evaluation_connector import EvaluationConnector
 from sealed.infrastructure.pool_connector import PoolConnector
+from sealed.infrastructure.pool_file_reader import parse_pools
 from sealed.infrastructure.scorer_store import ScorerStore
 
 
@@ -31,6 +34,7 @@ class EvaluateScorerConfig:
     best_of: int = 3
     workers: int = 4
     work_dir: Path | None = None
+    set_code: str | None = None
 
 
 def score_decks(
@@ -86,7 +90,9 @@ class EvaluateScorerUseCase:
         locator = ConvertedCardLocator(config.cards_path)
         work_dir = self._prepare_work_dir(config.work_dir)
 
-        pools = self._generate_pools(config.pools, work_dir)
+        set_code = self._resolve_set_code(config.set_code)
+        print(f"Generating pools from set: {set_code}")
+        pools = self._generate_pools(config.pools, work_dir, set_code)
 
         print(f"Building {len(pools)} scorer decks (A)...")
         a_decks = _build_a_decks(model, pools, locator)
@@ -131,11 +137,24 @@ class EvaluateScorerUseCase:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    def _generate_pools(self, n_pools: int, work_dir: Path) -> list[list[str]]:
+    def _generate_pools(
+        self, n_pools: int, work_dir: Path, set_code: str,
+    ) -> list[list[str]]:
         pools_path = work_dir / "pools"
         pools_path.mkdir(exist_ok=True)
-        PoolConnector().generate("RVR", n_pools, pools_path)
-        return _parse_pools(pools_path / "pools.txt")
+        PoolConnector().generate(set_code, n_pools, pools_path)
+        return [names for _, names in parse_pools(pools_path / "pools.txt")]
+
+    def _resolve_set_code(self, set_code: str | None) -> str:
+        """Return the given set code, or a random sealed-legal set when None."""
+        if set_code is not None:
+            return set_code
+        eligible = eligible_sealed_sets()
+        if not eligible:
+            raise RuntimeError(
+                "No eligible sealed-legal sets found in AllPrintings.json"
+            )
+        return random.choice(eligible)
 
     def _dump_decks(
         self,
@@ -177,15 +196,6 @@ def _write_decks_file(
         lines.append("")
 
     path.write_text("\n".join(lines), encoding="utf-8")
-
-
-def _parse_pools(pools_file: Path) -> list[list[str]]:
-    """Parse a pools.txt file into a list of pools (each pool = list of card names)."""
-    pools = []
-    for line in pools_file.read_text(encoding="utf-8").strip().splitlines():
-        if line.strip():
-            pools.append(line.strip().split("|"))
-    return pools
 
 
 def _build_a_decks(

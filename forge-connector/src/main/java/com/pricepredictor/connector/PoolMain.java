@@ -1,10 +1,13 @@
 package com.pricepredictor.connector;
 
+import forge.util.MyRandom;
+
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Random;
 import java.util.StringJoiner;
 
 /**
@@ -13,19 +16,22 @@ import java.util.StringJoiner;
  * <p>Usage:
  * <pre>
  *   java -cp &lt;classpath&gt; com.pricepredictor.connector.PoolMain
- *       --set &lt;SET_CODE&gt;
+ *       [--set &lt;SET_CODE&gt;]
  *       --size &lt;N&gt;
  *       --pools-path &lt;PATH&gt;
  * </pre>
  *
+ * <p>When {@code --set} is omitted, each pool is generated from a randomly
+ * selected sealed-legal set (per-pool randomness).
+ *
  * <p>Writes {@code pools.txt} to the specified path — one pool per line,
- * card names separated by semicolons. Streams a progress line to stdout
- * every 1000 pools. Exits 0 on success, 1 on error.
+ * formatted as {@code SET_CODE;Card1|Card2|...|CardN}. Streams a progress
+ * line to stdout every 1000 pools. Exits 0 on success, 1 on error.
  */
 public class PoolMain {
 
     public static void main(String[] args) {
-        String setCode = "RVR";
+        String setCode = null;
         int poolCount = 10000;
         String poolsPath = "./output/sealed/pools/";
 
@@ -58,19 +64,44 @@ public class PoolMain {
             Files.createDirectories(outputDir);
             Path outputFile = outputDir.resolve("pools.txt");
 
-            System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
+            List<String> eligibleSets = null;
+            Random random = null;
+            if (setCode == null) {
+                eligibleSets = MatchGenerator.computeEligibleSets();
+                if (eligibleSets.isEmpty()) {
+                    System.err.println("Error: no eligible sealed-legal sets found");
+                    System.exit(1);
+                }
+                random = MyRandom.getRandom();
+                System.out.println("Generating " + poolCount
+                        + " sealed pools from random sets ("
+                        + eligibleSets.size() + " eligible)...");
+            } else {
+                System.out.println("Generating " + poolCount + " " + setCode + " sealed pools...");
+            }
 
             try (BufferedWriter writer = Files.newBufferedWriter(outputFile)) {
                 int written = 0;
                 while (written < poolCount) {
-                    int batch = Math.min(1000, poolCount - written);
-                    List<List<String>> pools = generator.generate(setCode, batch);
+                    int batch;
+                    String poolSetCode;
+                    if (setCode != null) {
+                        batch = Math.min(1000, poolCount - written);
+                        poolSetCode = setCode;
+                    } else {
+                        // Random set per pool — generate one at a time.
+                        batch = 1;
+                        poolSetCode = eligibleSets.get(random.nextInt(eligibleSets.size()));
+                    }
 
+                    List<List<String>> pools = generator.generate(poolSetCode, batch);
                     for (List<String> pool : pools) {
                         StringJoiner joiner = new StringJoiner("|");
                         for (String name : pool) {
                             joiner.add(name);
                         }
+                        writer.write(poolSetCode);
+                        writer.write(";");
                         writer.write(joiner.toString());
                         writer.newLine();
                         written++;

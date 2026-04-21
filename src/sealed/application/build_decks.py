@@ -1,0 +1,97 @@
+"""BuildDecksUseCase: build scorer-guided 40-card decks from a sealed pools file."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import numpy as np
+import torch
+
+from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
+from sealed.domain.manabase import compute_basic_lands
+from sealed.domain.scorer_model import SetTransformerScorer
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+from sealed.infrastructure.pool_file_reader import parse_pools
+from sealed.infrastructure.scorer_store import ScorerStore
+
+
+@dataclass
+class BuildDecksConfig:
+    pools_path: Path
+    checkpoint: Path = field(
+        default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
+    )
+    cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
+    output: Path = field(
+        default_factory=lambda: Path("output/sealed/generated-decks.txt"),
+    )
+
+
+class BuildDecksUseCase:
+    """Build one scorer-guided 40-card deck per pool and write the result file.
+
+    Mirrors the build pattern in
+    ``sealed.application.evaluate_scorer._build_a_decks``: each pool's
+    embeddable card subset is fed to ``GreedyDeckBuilder``; basic lands are
+    added by ``compute_basic_lands`` over the chosen nonland texts. Pools
+    with fewer than 23 embeddable cards are skipped.
+    """
+
+    def execute(self, config: BuildDecksConfig) -> int:
+        pools = parse_pools(config.pools_path)
+        model = self._load_model(config.checkpoint)
+        locator = ConvertedCardLocator(config.cards_path)
+
+        config.output.parent.mkdir(parents=True, exist_ok=True)
+
+        written = 0
+        with open(config.output, "w", encoding="utf-8") as out:
+            for set_code, pool_names in pools:
+                deck = self._build_one_deck(model, pool_names, locator)
+                if deck is None:
+                    continue
+                out.write(set_code)
+                out.write(";")
+                out.write("|".join(deck))
+                out.write("\n")
+                written += 1
+        return written
+
+    def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:
+        store = ScorerStore()
+        checkpoint = store.load_checkpoint(checkpoint_path)
+        model = SetTransformerScorer(checkpoint.config)
+        model.load_state_dict(checkpoint.model_state_dict)
+        model.eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model.to(device)
+        return model
+
+    def _build_one_deck(
+        self,
+        model: SetTransformerScorer,
+        pool_names: list[str],
+        locator: ConvertedCardLocator,
+    ) -> list[str] | None:
+        pool_embeddings: dict[str, np.ndarray] = {}
+        valid_names: list[str] = []
+        for name in pool_names:
+            emb = locator.load_embedding(name)
+            if emb is not None:
+                pool_embeddings[name] = emb
+                valid_names.append(name)
+
+        if len(valid_names) < NONLAND_DECK_SIZE:
+            return None
+
+        nonland_deck = GreedyDeckBuilder(model, pool_embeddings).build(valid_names)
+        nonland_texts = [
+            text for n in nonland_deck if (text := locator.load_text(n)) is not None
+        ]
+        lands = compute_basic_lands(nonland_texts)
+
+        full_deck: list[str] = list(nonland_deck)
+        for land_name, count in lands.items():
+            full_deck.extend([land_name] * count)
+        return full_deck

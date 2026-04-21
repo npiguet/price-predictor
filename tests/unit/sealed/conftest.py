@@ -59,6 +59,24 @@ def synthetic_outcomes_file(tmp_path: Path, synthetic_cards_dir: Path) -> Path:
     return _write_outcomes(tmp_path, n_matches=20, n_cards_per_deck=10)
 
 
+@pytest.fixture
+def synthetic_generated_decks_file(tmp_path: Path) -> Path:
+    """Write a generated-decks.txt with three 40-card decks across two sets.
+
+    Each line: ``SET_CODE;Card1|Card2|...|Card40``. Useful for tests that
+    consume the generated-decks format (build-decks output, self-play index).
+    """
+    path = tmp_path / "generated-decks.txt"
+    decks = [
+        ("MH3", [f"mh3_card_{i}" for i in range(23)] + ["Plains"] * 8 + ["Island"] * 9),
+        ("MH3", [f"mh3_card_{i}" for i in range(23, 46)] + ["Mountain"] * 8 + ["Forest"] * 9),
+        ("BLB", [f"blb_card_{i}" for i in range(23)] + ["Swamp"] * 17),
+    ]
+    lines = [f"{set_code};" + "|".join(deck) for set_code, deck in decks]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 def _write_outcomes(tmp_path: Path, n_matches: int, n_cards_per_deck: int) -> Path:
     rng = np.random.default_rng(0)
     card_names = [f"card_{i}" for i in range(50)]

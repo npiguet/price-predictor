@@ -73,16 +73,23 @@ Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli
 
 Subcommands:
 - **`encode-cards`** — loads the pretrained price-predictor transformer, strips the `name:` line from each card, and writes a `.npz` file next to every `.txt` in `output/cardsfolder/`. Each `.npz` stores a `float32` array of shape `(2 * d_model,)` under key `"embedding"`, produced by `cat([max_pool, mean_pool])` over the encoder's token outputs (padding masked). Re-running is idempotent; `--clean` forces a full re-encode.
-- **`generate-pools`** — invokes the forge-connector JAR (`PoolMain`) to generate N sealed pools (6 boosters each) for a given set code; writes `pools.txt` (one pool per line, semicolon-separated card names, basics excluded) to `output/sealed/pools/{set}/`.
-- **`match-outcomes`** — long-running supervisor that spawns Java `MatchWorkerMain` workers; each worker picks a random sealed-legal set, generates two pools, builds decks (four weighted strategies: 40/30/20/10% from Forge optimal to fully random), plays a best-of-3 match via Forge AI, and appends the result to `output/sealed/match-outcomes.txt`. The supervisor restarts crashed workers — long Forge AI games can crash the JVM and that's expected. Ctrl-C to stop.
+- **`generate-pools`** — invokes the forge-connector JAR (`PoolMain`) to generate N sealed pools (6 boosters each); writes `pools.txt` (one pool per line in `SET_CODE;Card1|Card2|...|CardN` format, basics excluded). With `--set RVR` all pools come from the given set and are written to `output/sealed/pools/{set}/`; without `--set`, each pool uses an independently-selected random sealed-legal set and output defaults to `output/sealed/pools/`.
+- **`build-decks`** — reads a pools file (`SET_CODE;Card1|...` format), loads a trained scorer checkpoint, and greedily builds one 40-card deck per pool (23 nonlands chosen by the scorer + basic lands from the manabase heuristic). Writes `generated-decks.txt` (one deck per line in `SET_CODE;Card1|...|Card40` format) to `output/sealed/` by default. Consumed by `match-outcomes --generated-decks-path` for self-play.
+- **`match-outcomes`** — long-running supervisor that spawns Java `MatchWorkerMain` workers. Two modes:
+  - **Phase 0 (default, no `--generated-decks-path`)**: each worker picks a random sealed-legal set, generates two pools, builds decks (four weighted strategies 4:3:2:1 from Forge optimal to fully random), and plays best-of-3 via Forge AI.
+  - **Self-play (`--generated-decks-path path/to/generated-decks.txt`)**: each match samples deck A from the generated-decks file; deck B is built by one of 5 weighted methods (4:3:2:1:4) — methods 1–4 are the standard DeckBuilder strategies on a freshly-generated pool from the same set as deck A; method 5 samples another deck from the generated-decks file matching deck A's set (excluding deck A itself). Mirror matches are excluded.
+
+  Outcomes are appended to `output/sealed/match-outcomes.txt`. The supervisor restarts crashed workers — long Forge AI games can crash the JVM and that's expected. Ctrl-C to stop.
 - **`train-scorer`** — trains a Set Transformer deck scorer on `match-outcomes.txt`. Architecture is a stack of SAB layers + PMA pooling + MLP head; all hyperparameters are CLI flags (`--n-layers/--n-heads/--n-seeds/--d-ff/--mlp-hidden`). Checkpoints saved to `models/sealed/scorer/`; best checkpoint selected by validation accuracy. Supports `--resume` and two-phase training with `--unfreeze-embeddings` for card embedding fine-tuning.
-- **`evaluate-scorer`** — generates fresh sealed pools, has the scorer greedily build a deck from each, and has Forge AI play matches between the scorer's deck and Forge's own optimal builder. Outputs win/loss stats. Spawns Java workers via `evaluation_connector.py`.
+- **`evaluate-scorer`** — generates fresh sealed pools, has the scorer greedily build a deck from each, and has Forge AI play matches between the scorer's deck and Forge's own optimal builder. Outputs win/loss stats. Spawns Java workers via `evaluation_connector.py`. With `--set BLB` all pools are from the given set; without `--set`, a random sealed-legal set is selected.
 
 Match-outcome file format (`output/sealed/match-outcomes.txt`): one line per match, four semicolon-separated fields `deck_a;deck_b;wins_a;wins_b`, where each deck is a pipe-separated list of 40 Forge canonical card names (duplicates repeat) and `wins_a + wins_b` is 2 or 3.
 
+Pool file format (`output/sealed/pools/*/pools.txt`): one pool per line, `SET_CODE;Card1|Card2|...|CardN`. The set-code prefix lets downstream tools (`build-decks`, self-play `match-outcomes`) honor same-set constraints.
+
 Key modules inside `sealed`:
 - `domain/` — `card_encoder.py` (wraps the transformer for inference), `scorer_model.py` (Set Transformer architecture), `deterministic_features.py`.
-- `application/` — `encode_cards.py`, `generate_pools.py`, `match_outcomes.py`, `train_scorer.py`, `evaluate_scorer.py`.
+- `application/` — `encode_cards.py`, `generate_pools.py`, `build_decks.py`, `match_outcomes.py`, `train_scorer.py`, `evaluate_scorer.py`.
 - `infrastructure/` — `cli.py`, `embedding_store.py`, `pool_connector.py`, `match_worker_connector.py`, `evaluation_connector.py`, `match_data_loader.py`, `scorer_store.py`, `card_name_corrections.py`.
 
 ### `forge-connector` — Java Maven module
@@ -125,7 +132,8 @@ Inputs the code expects to find on disk:
 - `resources/AllPrintings.json`, `resources/AllPricesToday.json` — MTGJSON dumps.
 - `../forge/forge-gui/res/cardsfolder/` — Forge card scripts (source for `convert`).
 - `output/cardsfolder/` — converted card text files, each paired with a `.npz` after `encode-cards` runs.
-- `output/sealed/pools/{set}/pools.txt` — generated sealed pools.
+- `output/sealed/pools/{set}/pools.txt` or `output/sealed/pools/pools.txt` — generated sealed pools (`SET_CODE;Card1|...` per line).
+- `output/sealed/generated-decks.txt` — scorer-built 40-card decks from `build-decks` (`SET_CODE;Card1|...|Card40` per line); input to `match-outcomes --generated-decks-path`.
 - `output/sealed/match-outcomes.txt` — append-only training data for the scorer.
 
 ## Specs

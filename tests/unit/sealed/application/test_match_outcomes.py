@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from unittest.mock import MagicMock
 
 from sealed.application.match_outcomes import MatchOutcomeSupervisor
 from tests.unit.sealed.conftest import FakeProcess
@@ -217,3 +218,56 @@ class TestSupervisorStatusReporting:
         supervisor.run()
 
         assert output_file.parent.exists(), "Output directory must be created"
+
+
+class TestSupervisorGeneratedDecksPath:
+    """US3: generated_decks_path is forwarded to MatchWorkerConnector.start()."""
+
+    def test_default_generated_decks_path_is_none(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        assert supervisor._generated_decks_path is None
+
+    def test_explicit_generated_decks_path_stored(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        gen = tmp_path / "generated-decks.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1,
+            output_path=output_file,
+            generated_decks_path=gen,
+        )
+        assert supervisor._generated_decks_path == gen
+
+    def test_generated_decks_path_forwarded_to_connector(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        gen = tmp_path / "generated-decks.txt"
+
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1,
+            output_path=output_file,
+            generated_decks_path=gen,
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        # Drive _start_worker once and immediately stop the supervisor.
+        proc = supervisor._start_worker(0)
+
+        kwargs = fake_connector.start.call_args.kwargs
+        assert kwargs.get("generated_decks_path") == gen
+        assert proc.returncode == 0
+
+    def test_no_generated_decks_path_passes_none(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+
+        kwargs = fake_connector.start.call_args.kwargs
+        assert kwargs.get("generated_decks_path") is None

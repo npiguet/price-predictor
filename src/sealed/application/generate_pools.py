@@ -10,7 +10,7 @@ class GeneratePoolsUseCase:
 
     def execute(
         self,
-        set_code: str,
+        set_code: str | None,
         pool_count: int,
         pools_path: Path,
         connector,
@@ -18,7 +18,8 @@ class GeneratePoolsUseCase:
         """Generate sealed pools and write them to pools_path/pools.txt.
 
         Args:
-            set_code: MTG set code (e.g. "RVR").
+            set_code: MTG set code (e.g. "RVR"). When ``None``, the Java
+                worker selects a random sealed-legal set per pool.
             pool_count: Number of sealed pools to generate.
             pools_path: Directory where pools.txt will be written.
             connector: PoolConnector (or compatible) instance.
