@@ -19,7 +19,7 @@
 
 **Purpose**: New shared module that multiple user stories depend on (eligible set enumeration).
 
-- [ ] T001 [P] Create `eligible_sealed_sets()` function in `src/sealed/infrastructure/eligible_sets.py` — parse `AllPrintings.json` to return set codes matching `hasDraftBoosterTemplate && type != "funny"`, mirroring `MatchGenerator.computeEligibleSets()` (Java). Prior art: `src/sealed/infrastructure/pool_connector.py` for infrastructure-layer conventions.
+- [ ] T001 [P] Create `eligible_sealed_sets(all_printings_path: Path = Path("resources/AllPrintings.json"))` function in `src/sealed/infrastructure/eligible_sets.py` — parse `AllPrintings.json` to return `list[str]` of set codes matching `hasDraftBoosterTemplate && type != "funny"`, mirroring `MatchGenerator.computeEligibleSets()` (Java). The path parameter enables testing with trimmed fixtures. Prior art: `src/sealed/infrastructure/pool_connector.py` for infrastructure-layer conventions.
 - [ ] T002 [P] Create unit tests for `eligible_sealed_sets()` in `tests/unit/sealed/infrastructure/test_eligible_sets.py` — test with a trimmed `AllPrintings.json` fixture containing eligible sets, un-sets, and sets without draft templates. Prior art: `tests/unit/sealed/infrastructure/test_pool_connector.py`.
 
 **Checkpoint**: Eligible set enumeration available for US1 (evaluate-scorer) and US4 (generate-pools random selection).
@@ -33,7 +33,7 @@
 **CRITICAL**: No user story work can begin until this phase is complete.
 
 - [ ] T003 Modify `PoolMain.java` at `forge-connector/src/main/java/com/pricepredictor/connector/PoolMain.java` to prepend `setCode + ";"` to each pool line. Change the output format from `Card1|Card2|...|CardN` to `SET_CODE;Card1|Card2|...|CardN`. No backward compatibility needed (research.md Decision 7).
-- [ ] T004 Update `_parse_pools()` in `src/sealed/application/evaluate_scorer.py:182` to handle the new `SET_CODE;Card1|Card2|...|CardN` format — split on first `";"` to extract set code, then split remainder on `"|"` for card names. Return a list of `(set_code, list[str])` tuples (or just the card names if the set code is not needed by the caller). Prior art: the existing `_parse_pools()` at line 182.
+- [ ] T004 Extract pool parsing to `parse_pools()` in `src/sealed/infrastructure/pool_file_reader.py` — parse the new `SET_CODE;Card1|Card2|...|CardN` format, returning `list[tuple[str, list[str]]]` (set code + card names). Split on first `";"` for set code, then `"|"` for card names. Replace the old `_parse_pools()` in `evaluate_scorer.py:182` with a call to the new function (callers that don't need the set code can discard it). Prior art: `src/sealed/infrastructure/match_data_loader.py` for infrastructure-layer file parsing conventions.
 - [ ] T005 [P] Update pool-format-dependent tests: `tests/unit/sealed/application/test_evaluate_scorer.py` and `tests/unit/sealed/application/test_generate_pools.py` — update any pool file fixtures to use the new `SET_CODE;Card1|Card2|...` format. Update assertions that parse pool files.
 - [ ] T006 [P] Update `tests/unit/sealed/infrastructure/test_pool_connector.py` — verify the `--set` argument is still passed correctly to `PoolMain` and adjust any mock assertions for the new format.
 - [ ] T007 Rebuild the forge-connector JAR (`cd forge-connector && mvn package -DskipTests`) and verify that `PoolMain` with `--set RVR` produces lines prefixed with `RVR;`.
@@ -79,7 +79,7 @@
 
 - [ ] T016 [US2] Create `BuildDecksConfig` dataclass and `BuildDecksUseCase` in `src/sealed/application/build_decks.py`. The use case loads the scorer checkpoint, iterates over pools from the input file (using the updated `_parse_pools()`), builds a deck per pool using `GreedyDeckBuilder` + `compute_basic_lands()` (same pattern as `_build_a_decks()` in `evaluate_scorer.py:191`), and writes the generated-decks file in `SET_CODE;Card1|Card2|...|Card40` format. Prior art: `src/sealed/application/evaluate_scorer.py:191-221`.
 - [ ] T017 [US2] Add the `build-decks` subcommand to `src/sealed/infrastructure/cli.py` — add `_build_build_decks_parser(subparsers)` and `run_build_decks(args)` functions. Arguments: `--pools-path` (required), `--checkpoint` (default `models/sealed/scorer/latest.pt`), `--cards-path` (default `output/cardsfolder/`), `--output` (default `output/sealed/generated-decks.txt`). Register in `build_parser()`. Prior art: `_build_evaluate_scorer_parser()` at `cli.py:162`.
-- [ ] T018 [US2] Add shared fixtures for generated-decks files in `tests/unit/sealed/conftest.py` — a pytest fixture that creates a temporary generated-decks file with known set codes and 40-card decks (will be needed by US3 tests).
+- [ ] T018 [US2] Add shared fixtures for generated-decks files in `tests/unit/sealed/conftest.py` — a pytest fixture that creates a temporary generated-decks file with known set codes and 40-card decks. Cross-cutting: also used by US3 tests (T021, T022).
 
 **Checkpoint**: `build-decks` reads a pools file, builds scorer decks, and writes `generated-decks.txt`. All tests pass.
 
@@ -93,8 +93,8 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Create Java unit tests in `forge-connector/src/test/java/com/pricepredictor/connector/GeneratedDecksIndexTest.java` — test parsing of generated-decks file, `randomDeck()`, `randomDeckFromSet()`, and the exclude-self behavior (method 5 re-roll). Prior art: `forge-connector/src/test/java/com/pricepredictor/connector/DeckBuilderTest.java`.
-- [ ] T020 [P] [US3] Create Java unit tests in `forge-connector/src/test/java/com/pricepredictor/connector/SelfPlayMatchGeneratorTest.java` — test method selection weights (4:3:2:1:4), same-set constraint for methods 1-4, method 5 picks from file with same set code. Prior art: `forge-connector/src/test/java/com/pricepredictor/connector/MatchGeneratorTest.java`.
+- [ ] T019 [P] [US3] Create Java unit tests in `forge-connector/src/test/java/com/pricepredictor/connector/GeneratedDecksIndexTest.java` — pure unit tests (no Forge dependency, no `@Tag("integration")`). Test parsing of generated-decks file from a temp file, `randomDeck()`, `randomDeckFromSet()`, and the exclude-self behavior (method 5 re-roll). Prior art: `forge-connector/src/test/java/com/pricepredictor/connector/DeckBuilderTest.java`.
+- [ ] T020 [P] [US3] Create Java unit tests in `forge-connector/src/test/java/com/pricepredictor/connector/SelfPlayMatchGeneratorTest.java` — unit tests with mocked `DeckBuilder`, `PoolGenerator`, and `GamePlayer` (no Forge dependency, no `@Tag("integration")`). Test method selection weights (4:3:2:1:4), same-set constraint for methods 1-4, method 5 picks from index with same set code. Use a seeded `Random` for deterministic assertions. Prior art: `forge-connector/src/test/java/com/pricepredictor/connector/MatchGeneratorTest.java`.
 - [ ] T021 [P] [US3] Add Python unit tests in `tests/unit/sealed/infrastructure/test_match_worker_connector.py` for the `generated_decks_path` parameter — verify `-Dgenerated.decks.file=<path>` is added to the JVM command when the path is provided, and absent when `None`.
 - [ ] T022 [P] [US3] Add Python unit tests in `tests/unit/sealed/application/test_match_outcomes.py` for `generated_decks_path` — verify `MatchOutcomeSupervisor` passes `generated_decks_path` through to `MatchWorkerConnector.start()`.
 
@@ -138,7 +138,8 @@
 - [ ] T033 Run full Python test suite (`pytest`) and verify all tests pass with no regressions.
 - [ ] T034 Run full Java test suite (`cd forge-connector && mvn test`) and verify all tests pass.
 - [ ] T035 Run Python linting (`ruff check src/ tests/`) and fix any issues.
-- [ ] T036 Validate quickstart workflow end-to-end: `generate-pools` (no `--set`) -> `build-decks` -> `match-outcomes --generated-decks-path` -> verify match-outcomes.txt has valid lines.
+- [ ] T036 Update CLAUDE.md sealed subcommands section: add `build-decks` subcommand documentation, update `generate-pools` (new `--set` default, random set behavior, updated `--pools-path` defaults), update `match-outcomes` (new `--generated-decks-path` argument), update `evaluate-scorer` (new `--set` argument, random set default). Required by Constitution Principle VI.
+- [ ] T037 Validate quickstart workflow end-to-end: `generate-pools` (no `--set`) -> `build-decks` -> `match-outcomes --generated-decks-path` -> verify match-outcomes.txt has valid lines. Spot-check that self-play match throughput is in the same order of magnitude as Phase 0 (SC-002).
 
 ---
 
@@ -177,19 +178,19 @@
   - US2: T015 test, then T016-T018 sequentially
   - US3: T019-T022 tests in parallel, then T023-T029 sequentially (Java before Python)
   - US4: T030 test, then T031-T032 sequentially
-- Phase 7: T033-T035 can run in parallel
+- Phase 7: T033-T036 can run in parallel
 
 ---
 
 ## Parallel Example: After Phase 2 Completes
 
 ```
-# All four user stories can start simultaneously:
+# US1-US3 can start immediately after Phase 2; US4 also requires Phase 1:
 
-Stream A (US1): T008 → T009 → T010 → T011 → T012 → T013 → T14
+Stream A (US1): T008 → T009 → T010 → T011 → T012 → T013 → T014
 Stream B (US2): T015 → T016 → T017 → T018
 Stream C (US3): T019 + T020 + T021 + T022 → T023 → T024 → T025 → T026 → T027 → T028 → T029
-Stream D (US4): T030 → T031 → T032
+Stream D (US4): (after Phase 1 + Phase 2) T030 → T031 → T032
 ```
 
 ---
