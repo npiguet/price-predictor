@@ -1,4 +1,10 @@
-"""Quick diagnostic: win rates by generation method, plus head-to-head matrix."""
+"""Quick diagnostic: win rates by generation method, with Bo1/Bo3/Bo5/Bo7 simulation.
+
+For each match, the games string (e.g. ``ABABBAB``) records every game's winner
+in order. We can therefore "rewind" the match to what the result would have
+been at Bo1/Bo3/Bo5 by walking the prefix until one side reaches the required
+number of wins. Bo7 is the actual recorded outcome.
+"""
 
 from __future__ import annotations
 
@@ -7,6 +13,27 @@ from pathlib import Path
 
 
 PATH = Path("output/sealed/match-outcomes.txt")
+BEST_OFS = [1, 3, 5, 7]  # match-length variants to simulate
+
+
+def winner_at_threshold(games: str, threshold: int) -> str:
+    """Return 'A' or 'B' — winner of a best-of-(2*threshold-1) match.
+
+    Walks the games string and returns whichever side first reaches
+    ``threshold`` game wins. Always reachable for valid Bo7 data because
+    one side always reaches 4 wins, which exceeds every threshold <= 4.
+    """
+    a = b = 0
+    for ch in games:
+        if ch == "A":
+            a += 1
+        else:
+            b += 1
+        if a == threshold:
+            return "A"
+        if b == threshold:
+            return "B"
+    return "A" if a > b else "B"  # fallback for malformed data
 
 
 def main() -> None:
@@ -14,15 +41,18 @@ def main() -> None:
         print(f"Not found: {PATH}")
         return
 
-    method_stats: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"matches": 0, "match_wins": 0, "games": 0, "game_wins": 0}
+    # method -> {best_of -> {matches, match_wins}}
+    method_stats: dict[str, dict[int, dict[str, int]]] = defaultdict(
+        lambda: {bo: {"matches": 0, "match_wins": 0} for bo in BEST_OFS}
     )
-    h2h: dict[tuple[str, str], dict[str, int]] = defaultdict(
-        lambda: {"matches": 0, "wins_for_first": 0,
-                 "games": 0, "game_wins_for_first": 0}
-    )
-
+    # best_of -> (first, second) -> {matches, wins_for_first}
+    h2h: dict[int, dict[tuple[str, str], dict[str, int]]] = {
+        bo: defaultdict(lambda: {"matches": 0, "wins_for_first": 0})
+        for bo in BEST_OFS
+    }
+    flip_counts = {bo: 0 for bo in BEST_OFS if bo != 7}
     n = 0
+
     with open(PATH, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -33,83 +63,93 @@ def main() -> None:
                 continue
             method_a, method_b = parts[3], parts[4]
             games = parts[7]
-            wa = games.count("A")
-            wb = games.count("B")
-            total = wa + wb
-            if total == 0:
+            if not games:
                 continue
             n += 1
 
-            method_stats[method_a]["matches"] += 1
-            method_stats[method_a]["games"] += total
-            method_stats[method_a]["game_wins"] += wa
-            if wa > wb:
-                method_stats[method_a]["match_wins"] += 1
+            first, second = sorted([method_a, method_b])
+            h2h_key = (first, second)
+            bo7_winner = winner_at_threshold(games, 4)
 
-            method_stats[method_b]["matches"] += 1
-            method_stats[method_b]["games"] += total
-            method_stats[method_b]["game_wins"] += wb
-            if wb > wa:
-                method_stats[method_b]["match_wins"] += 1
-
-            # Head-to-head: always store as (sorted) pair, with stats from
-            # the perspective of the first method in sorted order.
-            if method_a == method_b:
-                key = (method_a, method_b)
-                h2h[key]["matches"] += 1
-                h2h[key]["games"] += total
-                # Mirror match — credit half to "first"
-                h2h[key]["wins_for_first"] += 1 if wa > wb else 0
-                h2h[key]["game_wins_for_first"] += wa
-            else:
-                first, second = sorted([method_a, method_b])
-                key = (first, second)
-                h2h[key]["matches"] += 1
-                h2h[key]["games"] += total
-                if first == method_a:
-                    h2h[key]["wins_for_first"] += 1 if wa > wb else 0
-                    h2h[key]["game_wins_for_first"] += wa
+            for bo in BEST_OFS:
+                threshold = (bo + 1) // 2  # Bo1 -> 1, Bo3 -> 2, Bo5 -> 3, Bo7 -> 4
+                w = winner_at_threshold(games, threshold)
+                method_stats[method_a][bo]["matches"] += 1
+                method_stats[method_b][bo]["matches"] += 1
+                if w == "A":
+                    method_stats[method_a][bo]["match_wins"] += 1
                 else:
-                    h2h[key]["wins_for_first"] += 1 if wb > wa else 0
-                    h2h[key]["game_wins_for_first"] += wb
+                    method_stats[method_b][bo]["match_wins"] += 1
+                if bo != 7 and w != bo7_winner:
+                    flip_counts[bo] += 1
+
+                # Head-to-head for this Bo. Mirror matches arbitrarily credit
+                # the A side so the cell reads near the ~50% baseline.
+                h2h[bo][h2h_key]["matches"] += 1
+                if method_a == method_b:
+                    if w == "A":
+                        h2h[bo][h2h_key]["wins_for_first"] += 1
+                else:
+                    won_by_first = (
+                        (w == "A" and method_a == first)
+                        or (w == "B" and method_b == first)
+                    )
+                    if won_by_first:
+                        h2h[bo][h2h_key]["wins_for_first"] += 1
 
     print(f"Total matches parsed: {n}")
     print()
 
-    print("=== Overall win rates by method ===")
-    print(f"{'method':<14} {'matches':>8} {'match WR':>9} "
-          f"{'games':>8} {'game WR':>9}")
-    print("-" * 60)
-    for method, s in sorted(
-        method_stats.items(),
-        key=lambda x: -x[1]["match_wins"] / max(x[1]["matches"], 1)
-    ):
-        match_wr = 100 * s["match_wins"] / max(s["matches"], 1)
-        game_wr = 100 * s["game_wins"] / max(s["games"], 1)
-        print(f"{method:<14} {s['matches']:>8} {match_wr:>8.1f}% "
-              f"{s['games']:>8} {game_wr:>8.1f}%")
+    print("=== Match win rate by method, simulated across best-of-N ===")
+    print(f"{'method':<14} {'instances':>10}"
+          + "".join(f"  {'Bo' + str(bo):>8}" for bo in BEST_OFS))
+    print("-" * (14 + 10 + len(BEST_OFS) * 10))
+    methods_sorted = sorted(
+        method_stats.keys(),
+        key=lambda m: -method_stats[m][7]["match_wins"] / max(method_stats[m][7]["matches"], 1)
+    )
+    for method in methods_sorted:
+        stats = method_stats[method]
+        instances = stats[7]["matches"]
+        cells = [f"{method:<14} {instances:>10}"]
+        for bo in BEST_OFS:
+            wr = 100 * stats[bo]["match_wins"] / max(stats[bo]["matches"], 1)
+            cells.append(f"  {wr:>7.1f}%")
+        print("".join(cells))
     print()
 
-    print("=== Head-to-head match win rate (row beats column) ===")
+    print("=== Bo-N vs Bo7 flip rate ===")
+    print("(% of matches where the simulated Bo-N winner differs from the actual Bo7 winner)")
+    for bo in BEST_OFS:
+        if bo == 7:
+            continue
+        pct = 100 * flip_counts[bo] / max(n, 1)
+        print(f"  Bo{bo} vs Bo7: {pct:5.2f}% flipped ({flip_counts[bo]} of {n})")
+    print()
+
     methods = sorted(method_stats.keys())
-    print(f"{'row \\ col':<14}" + "".join(f"{m:>16}" for m in methods))
-    print("-" * (14 + 16 * len(methods)))
-    for row in methods:
-        cells = [f"{row:<14}"]
-        for col in methods:
-            first, second = sorted([row, col])
-            key = (first, second)
-            s = h2h.get(key)
-            if s is None or s["matches"] == 0:
-                cells.append(f"{'-':>16}")
-                continue
-            wins_for_row = (
-                s["wins_for_first"] if first == row
-                else s["matches"] - s["wins_for_first"]
-            )
-            wr = 100 * wins_for_row / s["matches"]
-            cells.append(f"{wr:>6.1f}% (n={s['matches']:>4})")
-        print("".join(cells))
+    for bo in BEST_OFS:
+        print(f"=== Head-to-head match win rate (Bo{bo}, row beats column) ===")
+        print(f"{'row \\ col':<14}" + "".join(f"{m:>16}" for m in methods))
+        print("-" * (14 + 16 * len(methods)))
+        bo_h2h = h2h[bo]
+        for row in methods:
+            cells = [f"{row:<14}"]
+            for col in methods:
+                first, second = sorted([row, col])
+                key = (first, second)
+                s = bo_h2h.get(key)
+                if s is None or s["matches"] == 0:
+                    cells.append(f"{'-':>16}")
+                    continue
+                wins_for_row = (
+                    s["wins_for_first"] if first == row
+                    else s["matches"] - s["wins_for_first"]
+                )
+                wr = 100 * wins_for_row / s["matches"]
+                cells.append(f"{wr:>6.1f}% (n={s['matches']:>4})")
+            print("".join(cells))
+        print()
 
 
 if __name__ == "__main__":
