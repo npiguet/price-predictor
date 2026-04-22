@@ -258,13 +258,43 @@ The outcome is recorded as a single line appended to `./output/sealed/match-outc
 
 The format of that line is:
 
-    deck_A_card_names;deck_B_card_names;wins_A;wins_B
+    timestamp;run_id;set_code;method_A;method_B;deck_A_card_names;deck_B_card_names;games;play;duration_s
 
 where:
+ - **timestamp**: ISO 8601 UTC timestamp when the match was recorded (e.g. `2026-04-22T14:30:05Z`).
+   Enables time-based filtering and correlation with external events (e.g. model training cutoffs).
+ - **run_id**: a UUID generated once at supervisor start-up and attached to every match emitted
+   by that supervisor invocation. Enables grouping or excising a specific run without
+   timestamp-range guesswork (e.g. "drop everything from the buggy run on Tuesday").
+ - **set_code**: the MTG set code from which both decks' pools were drawn (e.g. `RVR`, `MH3`).
+   Both decks always come from the same set. Enables set-bucketed analysis (duplicate detection,
+   per-set win-rate stats) without having to infer the set from card contents.
+ - **method_A**: how deck A was built. One of the following tags:
+   - `forge-best` — method 1 (Forge SealedDeckBuilder)
+   - `forge-3sub` — method 2 (Forge + 3 swaps)
+   - `forge-8sub` — method 3 (Forge + 8 swaps)
+   - `random` — method 4 (23 random spells)
+   - a user-supplied label — method 5 (scorer-built deck from the generated-decks file); only
+     present in self-play matches (see Phase 3). The label is supplied via the mandatory
+     `--self-play-label LABEL` CLI argument (e.g. `gen-2`). It is required whenever
+     `--generated-decks-path` is passed, so that matches from different self-play generations
+     can be distinguished without risk of accidental collision (e.g. two different generations
+     both getting labelled `scorer`).
+ - **method_B**: same scheme as `method_A`, describing how deck B was built.
  - **deck_A_card_names**: a pipe-separated list of the names of the cards in deck A
  - **deck_B_card_names**: same, but for deck B
- - **wins_A**: the number of games won by deck A during the match (0-2)
- - **wins_B**: same, but for deck B
+ - **games**: a 2- or 3-character string recording the winner of each game in sequence, using
+   `A` for deck A and `B` for deck B. For example, `AA` means deck A swept 2-0, `ABA` means
+   A won game 1, lost game 2, then won game 3. `wins_A` and `wins_B` can be recovered by
+   counting characters. Length is always 2 or 3 in a best-of-3 match.
+ - **play**: a string of the same length as `games` recording which deck was on the play
+   (i.e. went first) in each game. For example, `BAB` means deck B was on the play in games 1
+   and 3, deck A in game 2. Game 1's play assignment is arbitrary; subsequent games follow
+   the usual "loser of previous game chooses play or draw" rule. Useful for analyzing or
+   controlling for the play-first bias, which is a known confounder in limited formats.
+ - **duration_s**: total wall-clock duration of the match in whole seconds. Useful for
+   detecting pathological matches (JVM hang, AI stall, infinite loop) and for correlating
+   match length with outcome.
 
 ## Implementation
 
@@ -515,13 +545,23 @@ When `--generated-decks-path` is present, each match works as follows:
    - **Methods 1–4**: Generate a fresh pool from **deck A's set code**, then build deck B from that pool using the
      selected method. This ensures both decks come from the same set, matching Phase 0's same-set design.
    - **Method 5**: Pick a random line from the generated-decks file with the **same set code** as deck A.
-4. **Play and record**: Play a best-of-3 match and append the result to `match-outcomes.txt` in the standard format.
+4. **Play and record**: Play a best-of-3 match and append the result to `match-outcomes.txt` in the standard format
+   (see Phase 0 Step 4). Deck A's method is recorded as the value of the mandatory `--self-play-label` argument
+   (e.g. `gen-2`). Deck B's method is whichever of `forge-best` / `forge-3sub` / `forge-8sub` / `random` /
+   `<self-play-label>` was rolled.
 
 The same-set constraint is critical: without it, set-level power differences (e.g. Modern Horizons vs a core set)
 would dominate the training signal, drowning out the deck-building quality signal.
 
+`--self-play-label` is mandatory whenever `--generated-decks-path` is supplied. The CLI rejects the invocation
+if it is missing. This prevents accidental collisions between generations (e.g. two separate runs both emitting
+matches labelled `scorer`, which would be indistinguishable in the training corpus). Conversely, `--self-play-label`
+must **not** be supplied in Phase 0 mode (no `--generated-decks-path`), as it would have no scorer decks to apply to.
+
 ```bash
-python -m sealed match-outcomes --generated-decks-path output/sealed/generated-decks.txt
+python -m sealed match-outcomes \
+    --generated-decks-path output/sealed/generated-decks.txt \
+    --self-play-label gen-2
 ```
 
 ## Self-Play Refinement Loop
