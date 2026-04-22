@@ -177,8 +177,8 @@ reasonable scale. Only the 32 deterministic features are standardized (zero mean
 Producing training data is the most time-consuming part of the pipeline. The scorer learns entirely from pairwise game
 outcomes, so this phase generates pools, builds deck variants, plays games, and stores the results.
 
-The training dataset consists of the outcomes of a collection of 1v1 best-of-3 games between decks generated from
-distinct card pools.
+The training dataset consists of the outcomes of a collection of 1v1 best-of-N matches between decks generated from
+distinct card pools. N is configurable via the `--best-of` CLI flag (default 7, any positive odd integer).
 
 ## Card Embedding Generation
 
@@ -252,7 +252,10 @@ deck (non-basic lands are kept) and basic lands are added back using a pip-propo
 
 ## Step 4 — Play the game and record the result
 
-The Forge AI then pits these 2 decks against each other in a best-of-3 match.
+The Forge AI then pits these 2 decks against each other in a best-of-N match. N is configurable via the
+`--best-of` CLI flag on `match-outcomes`; the default is 7. Any positive odd integer is valid (Bo1, Bo3,
+Bo7, Bo17, …). Longer matches produce less-noisy labels for Bradley-Terry training at the cost of more
+games per match; the default of 7 trades game count for label reliability.
 
 The outcome is recorded as a single line appended to `./output/sealed/match-outcomes.txt`.
 
@@ -286,7 +289,8 @@ where:
  - **games**: a 2- or 3-character string recording the winner of each game in sequence, using
    `A` for deck A and `B` for deck B. For example, `AA` means deck A swept 2-0, `ABA` means
    A won game 1, lost game 2, then won game 3. `wins_A` and `wins_B` can be recovered by
-   counting characters. Length is always 2 or 3 in a best-of-3 match.
+   counting characters. Length is between `ceil(N/2)` and `N` for a best-of-N match
+   (e.g. 2-3 for Bo3, 4-7 for Bo7), depending on how decisively one side won.
  - **play**: a string of the same length as `games` recording which deck was on the play
    (i.e. went first) in each game. For example, `BAB` means deck B was on the play in games 1
    and 3, deck A in game 2. Game 1's play assignment is arbitrary; subsequent games follow
@@ -303,6 +307,8 @@ necessary harnesses to list expansion sets, generate boosters, build sealed deck
 
 For consistency, this step is invoked from the Python CLI using `python -m sealed match-outcomes`. The Python CLI
 creates a configurable number of Java worker processes (default 12) that all append game outcomes to the same file.
+The match length is configurable via `--best-of` (default 7); it must be a positive odd integer, with no upper
+bound. The supervisor propagates this value to each worker as a JVM system property.
 
 Because the Forge AI is not very stable and tends to crash the JVM in various ways, the Python process monitors the
 workers and automatically restarts any that die unexpectedly.
@@ -545,9 +551,10 @@ When `--generated-decks-path` is present, each match works as follows:
    - **Methods 1–4**: Generate a fresh pool from **deck A's set code**, then build deck B from that pool using the
      selected method. This ensures both decks come from the same set, matching Phase 0's same-set design.
    - **Method 5**: Pick a random line from the generated-decks file with the **same set code** as deck A.
-4. **Play and record**: Play a best-of-3 match and append the result to `match-outcomes.txt` in the standard format
-   (see Phase 0 Step 4). Deck A's method is recorded as the value of the mandatory `--self-play-label` argument
-   (e.g. `gen-2`). Deck B's method is whichever of `forge-best` / `forge-3sub` / `forge-8sub` / `random` /
+4. **Play and record**: Play a best-of-N match (per `--best-of`, default 7) and append the result to
+   `match-outcomes.txt` in the standard format (see Phase 0 Step 4). Deck A's method is recorded as the
+   value of the mandatory `--self-play-label` argument (e.g. `gen-2`). Deck B's method is whichever of
+   `forge-best` / `forge-3sub` / `forge-8sub` / `random` /
    `<self-play-label>` was rolled.
 
 The same-set constraint is critical: without it, set-level power differences (e.g. Modern Horizons vs a core set)

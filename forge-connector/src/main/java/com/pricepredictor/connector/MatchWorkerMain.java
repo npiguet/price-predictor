@@ -30,11 +30,15 @@ import java.util.List;
  *   <li>{@code -Dgenerated.decks.file=<path>} — enables self-play mode.</li>
  *   <li>{@code -Dself.play.label=<label>} — required <b>iff</b> {@code generated.decks.file}
  *       is set; forbidden otherwise. Recorded as the method tag for scorer-built decks.</li>
+ *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
+ *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
  * </ul>
  *
  * <p>The worker is terminated externally by the Python supervisor (process.terminate()).
  */
 public class MatchWorkerMain {
+
+    static final int DEFAULT_BEST_OF = 7;
 
     public static void main(String[] args) {
         String outputFileProp = System.getProperty("output.file");
@@ -47,6 +51,23 @@ public class MatchWorkerMain {
         if (runId == null || runId.isBlank()) {
             System.err.println("Error: -Dmatch.run.id system property is required");
             System.exit(2);
+        }
+
+        int bestOf = DEFAULT_BEST_OF;
+        String bestOfProp = System.getProperty("match.best.of");
+        if (bestOfProp != null) {
+            try {
+                bestOf = Integer.parseInt(bestOfProp);
+            } catch (NumberFormatException e) {
+                System.err.println(
+                        "Error: -Dmatch.best.of must be an integer, got: " + bestOfProp);
+                System.exit(2);
+            }
+            if (bestOf < 1 || bestOf % 2 == 0) {
+                System.err.println(
+                        "Error: -Dmatch.best.of must be a positive odd integer, got: " + bestOf);
+                System.exit(2);
+            }
         }
 
         String generatedDecksProp = System.getProperty("generated.decks.file");
@@ -68,6 +89,7 @@ public class MatchWorkerMain {
         System.out.println("Initializing Forge environment...");
         ForgeEnvironmentInitializer.initialize();
         System.out.println("Forge initialized. Starting match generation.");
+        System.out.println("Match format: best-of-" + bestOf);
 
         List<String> eligibleSets = MatchGenerator.computeEligibleSets();
         System.out.println("Eligible sets: " + eligibleSets.size());
@@ -77,7 +99,7 @@ public class MatchWorkerMain {
         MatchSource source;
         if (generatedDecksProp == null) {
             MatchGenerator generator = new MatchGenerator(
-                    eligibleSets, new DeckBuilder(), new GamePlayer(), runId);
+                    eligibleSets, new DeckBuilder(), new GamePlayer(bestOf), runId);
             source = generator::generateMatch;
         } else {
             Path generatedDecks = Path.of(generatedDecksProp);
@@ -94,7 +116,7 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " generated decks.");
             SelfPlayMatchGenerator selfPlay = new SelfPlayMatchGenerator(
                     index, new DeckBuilder(), new PoolGenerator(),
-                    new GamePlayer(), eligibleSets, runId, selfPlayLabel);
+                    new GamePlayer(bestOf), eligibleSets, runId, selfPlayLabel);
             source = selfPlay::generateMatch;
         }
 

@@ -134,12 +134,34 @@ class MatchResultWriterTest {
 
     @Test
     void invalidGamesStringRejected() {
-        assertThrows(IllegalArgumentException.class, () ->
-                sampleResult(deck40("A"), deck40("B"), "A", "A"));
+        // Non-A/B characters are rejected regardless of length.
         assertThrows(IllegalArgumentException.class, () ->
                 sampleResult(deck40("A"), deck40("B"), "ABCD", "ABAB"));
         assertThrows(IllegalArgumentException.class, () ->
                 sampleResult(deck40("A"), deck40("B"), "AC", "BA"));
+    }
+
+    @Test
+    void emptyGamesStringRejected() {
+        assertThrows(IllegalArgumentException.class, () ->
+                sampleResult(deck40("A"), deck40("B"), "", ""));
+    }
+
+    @Test
+    void variedGameLengthsAccepted(@TempDir Path tmp) {
+        // Match length is configurable via --best-of, so MatchResult must accept any
+        // non-empty A/B string. Spot-check Bo3 (len 2-3), Bo5 (len 3-5), Bo7 (len 4-7),
+        // and a large Bo9 example (len 5-9).
+        Path file = tmp.resolve("outcomes.txt");
+        MatchResultWriter writer = new MatchResultWriter(file);
+
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AABA", "BABA")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABA", "BABAB")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABAAB", "BABABAB")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "AAAAA", "BBBBB")));
+        assertDoesNotThrow(() -> writer.write(sampleResult(deck40("A"), deck40("B"), "ABABABABA", "BABABABAB")));
     }
 
     @Test

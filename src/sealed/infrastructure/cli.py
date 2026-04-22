@@ -264,6 +264,15 @@ def _build_match_outcomes_parser(subparsers) -> None:
             " different scorer generations in the combined training corpus."
         ),
     )
+    match_parser.add_argument(
+        "--best-of",
+        type=int,
+        default=7,
+        help=(
+            "Number of games per match (best-of-N). Must be a positive odd integer."
+            " Default: 7."
+        ),
+    )
 
 
 def run_encode_cards(args: argparse.Namespace) -> int:
@@ -450,6 +459,13 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     """Execute the match-outcomes command."""
     from sealed.application.match_outcomes import MatchOutcomeSupervisor
 
+    if args.best_of < 1 or args.best_of % 2 == 0:
+        print(
+            f"Error: --best-of must be a positive odd integer, got: {args.best_of}",
+            file=sys.stderr,
+        )
+        return 2
+
     # XOR check: --self-play-label is required iff --generated-decks-path is given.
     if args.generated_decks_path and not args.self_play_label:
         print(
@@ -472,6 +488,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     supervisor = MatchOutcomeSupervisor(
         worker_count=args.workers,
         output_path=output_path,
+        best_of=args.best_of,
         generated_decks_path=generated_decks_path,
         self_play_label=args.self_play_label,
     )

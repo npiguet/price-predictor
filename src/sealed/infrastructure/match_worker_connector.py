@@ -22,6 +22,7 @@ class MatchWorkerConnector:
         self,
         output_file: Path,
         run_id: str,
+        best_of: int,
         log_file: IO[bytes] | None = None,
         generated_decks_path: Path | None = None,
         self_play_label: str | None = None,
@@ -32,6 +33,8 @@ class MatchWorkerConnector:
             output_file: Path where the worker will append match outcomes.
             run_id: Supervisor-generated UUID stamped onto every match line.
                 Required by MatchWorkerMain; passed as ``-Dmatch.run.id``.
+            best_of: Number of games per match (e.g. 3, 7, 17). Must be a
+                positive odd integer. Passed as ``-Dmatch.best.of``.
             log_file: Open binary file handle for the worker's stdout/stderr.
                 When None, output is discarded.
             generated_decks_path: When provided, passed to the Java worker as
@@ -45,10 +48,15 @@ class MatchWorkerConnector:
             subprocess.Popen handle for the spawned worker process.
 
         Raises:
-            ValueError: If the self_play_label / generated_decks_path XOR rule is
-                violated (the Java worker also enforces this as a defense in depth).
+            ValueError: If ``best_of`` is not a positive odd integer, or if the
+                self_play_label / generated_decks_path XOR rule is violated (the
+                Java worker also enforces both as defense in depth).
             FileNotFoundError: If the JAR is not found or java is not on PATH.
         """
+        if best_of < 1 or best_of % 2 == 0:
+            raise ValueError(
+                f"best_of must be a positive odd integer, got: {best_of}"
+            )
         if generated_decks_path is not None and not self_play_label:
             raise ValueError(
                 "self_play_label is required when generated_decks_path is provided"
@@ -61,6 +69,7 @@ class MatchWorkerConnector:
         system_properties: dict[str, str] = {
             "output.file": str(output_file),
             "match.run.id": run_id,
+            "match.best.of": str(best_of),
         }
         if generated_decks_path is not None:
             system_properties["generated.decks.file"] = str(generated_decks_path)

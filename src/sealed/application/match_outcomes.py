@@ -27,11 +27,13 @@ class MatchOutcomeSupervisor:
         self,
         worker_count: int,
         output_path: Path,
+        best_of: int,
         generated_decks_path: Path | None = None,
         self_play_label: str | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
+        self._best_of = best_of
         self._generated_decks_path = generated_decks_path
         self._self_play_label = self_play_label
         self._run_id = str(uuid.uuid4())
@@ -100,6 +102,7 @@ class MatchOutcomeSupervisor:
         proc = self._connector.start(
             self._output_path,
             run_id=self._run_id,
+            best_of=self._best_of,
             log_file=log_file,
             generated_decks_path=self._generated_decks_path,
             self_play_label=self._self_play_label,

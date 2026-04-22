@@ -36,9 +36,9 @@ public record MatchResult(
 ) {
 
     public MatchResult {
-        if (games == null || (games.length() != 2 && games.length() != 3)) {
+        if (games == null || games.isEmpty()) {
             throw new IllegalArgumentException(
-                    "games must be 2 or 3 characters, got: " + games);
+                    "games must be non-empty, got: " + games);
         }
         if (play == null || play.length() != games.length()) {
             throw new IllegalArgumentException(

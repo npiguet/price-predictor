@@ -9,6 +9,7 @@ import pytest
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 RUN_ID = "a3f4b8c2-1234-4abc-9def-0123456789ab"
+BEST_OF = 3
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert cmd[0] == "java"
 
@@ -34,7 +35,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert "-Xmx1200m" in cmd
 
@@ -42,7 +43,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert "com.pricepredictor.connector.MatchWorkerMain" in cmd
 
@@ -50,7 +51,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert "-cp" in cmd
         cp_index = cmd.index("-cp")
@@ -61,7 +62,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         output_file = tmp_path / "sealed" / "match-outcomes.txt"
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(output_file, run_id=RUN_ID)
+            connector.start(output_file, run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert f"-Doutput.file={output_file}" in cmd
 
@@ -69,7 +70,7 @@ class TestMatchWorkerConnectorCommandConstruction:
         connector = MatchWorkerConnector()
         mock_proc = MagicMock()
         with patch("subprocess.Popen", return_value=mock_proc):
-            result = connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            result = connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         assert result is mock_proc
 
     def test_log_file_used_when_provided(self, tmp_path, stub_classpath):
@@ -77,7 +78,12 @@ class TestMatchWorkerConnectorCommandConstruction:
         log_file = MagicMock()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, log_file=log_file)
+            connector.start(
+                tmp_path / "outcomes.txt",
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                log_file=log_file,
+            )
         kwargs = mock_popen.call_args.kwargs
         assert kwargs["stdout"] is log_file
         assert kwargs["stderr"] is log_file
@@ -89,7 +95,7 @@ class TestMatchWorkerConnectorCommandConstruction:
             side_effect=FileNotFoundError("JAR not found"),
         ):
             with pytest.raises(FileNotFoundError):
-                connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+                connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
 
 
 class TestMatchWorkerConnectorGeneratedDecksPath:
@@ -105,6 +111,7 @@ class TestMatchWorkerConnectorGeneratedDecksPath:
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
+                best_of=BEST_OF,
                 generated_decks_path=gen_decks,
                 self_play_label="gen-2",
             )
@@ -118,6 +125,7 @@ class TestMatchWorkerConnectorGeneratedDecksPath:
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
+                best_of=BEST_OF,
                 generated_decks_path=None,
             )
         cmd = mock_popen.call_args[0][0]
@@ -127,7 +135,7 @@ class TestMatchWorkerConnectorGeneratedDecksPath:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)
 
@@ -139,7 +147,7 @@ class TestMatchWorkerConnectorRunIdAndLabel:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert f"-Dmatch.run.id={RUN_ID}" in cmd
 
@@ -153,6 +161,7 @@ class TestMatchWorkerConnectorRunIdAndLabel:
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
+                best_of=BEST_OF,
                 generated_decks_path=gen_decks,
                 self_play_label="gen-2",
             )
@@ -163,7 +172,7 @@ class TestMatchWorkerConnectorRunIdAndLabel:
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID)
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert not any(arg.startswith("-Dself.play.label=") for arg in cmd)
 
@@ -173,6 +182,7 @@ class TestMatchWorkerConnectorRunIdAndLabel:
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
+                best_of=BEST_OF,
                 self_play_label="gen-2",
             )
 
@@ -183,5 +193,42 @@ class TestMatchWorkerConnectorRunIdAndLabel:
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
+                best_of=BEST_OF,
                 generated_decks_path=gen_decks,
             )
+
+
+class TestMatchWorkerConnectorBestOf:
+    """best_of plumbs through as -Dmatch.best.of and validates odd+positive."""
+
+    def test_best_of_passed_as_system_property(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=7)
+        cmd = mock_popen.call_args[0][0]
+        assert "-Dmatch.best.of=7" in cmd
+
+    def test_odd_values_accepted_including_large_ones(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        for n in (1, 3, 7, 17, 101):
+            with patch("subprocess.Popen") as mock_popen:
+                mock_popen.return_value = MagicMock()
+                connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=n)
+            cmd = mock_popen.call_args[0][0]
+            assert f"-Dmatch.best.of={n}" in cmd
+
+    def test_even_best_of_raises(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with pytest.raises(ValueError, match="positive odd integer"):
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=4)
+
+    def test_zero_best_of_raises(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with pytest.raises(ValueError, match="positive odd integer"):
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=0)
+
+    def test_negative_best_of_raises(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with pytest.raises(ValueError, match="positive odd integer"):
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=-3)

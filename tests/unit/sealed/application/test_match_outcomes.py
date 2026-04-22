@@ -23,7 +23,7 @@ class TestSupervisorSpawnCount:
                     supervisor._shutdown_event.set()
             return FakeProcess(pid=1000 + worker_id, hang=True)
 
-        supervisor = MatchOutcomeSupervisor(worker_count=3, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=3, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -31,12 +31,12 @@ class TestSupervisorSpawnCount:
 
     def test_default_worker_count_is_twelve(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=12, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=12, output_path=output_file, best_of=3)
         assert supervisor._worker_count == 12
 
     def test_explicit_worker_count_respected(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file, best_of=3)
         assert supervisor._worker_count == 2
 
 
@@ -60,7 +60,7 @@ class TestSupervisorCrashRestartBehavior:
                 threading.Timer(0.05, lambda: supervisor._shutdown_event.set()).start()
                 return proc
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -76,7 +76,7 @@ class TestSupervisorCrashRestartBehavior:
             supervisor._shutdown_event.set()
             return FakeProcess(pid=1000, returncode=0)
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -93,7 +93,7 @@ class TestSupervisorShutdownSignal:
             threading.Timer(0.05, lambda: supervisor._shutdown_event.set()).start()
             return proc
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
 
         start = time.monotonic()
@@ -113,7 +113,7 @@ class TestSupervisorShutdownSignal:
                 threading.Timer(0.05, lambda: supervisor._shutdown_event.set()).start()
             return proc
 
-        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -136,7 +136,7 @@ class TestSupervisorWorkerCount:
                     supervisor._shutdown_event.set()
             return FakeProcess(pid=1000 + worker_id, hang=True)
 
-        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -145,7 +145,7 @@ class TestSupervisorWorkerCount:
 
     def test_omitted_workers_defaults_to_twelve(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=12, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=12, output_path=output_file, best_of=3)
         assert supervisor._worker_count == 12
 
     def test_single_worker_spawns_exactly_one(self, tmp_path):
@@ -157,7 +157,7 @@ class TestSupervisorWorkerCount:
             supervisor._shutdown_event.set()
             return FakeProcess(pid=1000, returncode=0)
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -167,7 +167,7 @@ class TestSupervisorWorkerCount:
 class TestSupervisorRecycleOldest:
     def test_oldest_worker_is_terminated(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=2, output_path=output_file, best_of=3)
 
         old_proc = FakeProcess(pid=100, hang=True)
         new_proc = FakeProcess(pid=200, hang=True)
@@ -184,7 +184,7 @@ class TestSupervisorRecycleOldest:
 
     def test_no_crash_when_no_workers(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         # Should not raise
         supervisor._kill_oldest_worker()
 
@@ -194,7 +194,7 @@ class TestSupervisorStatusReporting:
         output_file = tmp_path / "match-outcomes.txt"
         output_file.write_text("line1\nline2\nline3\n")
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
         # Access internal method
         line_count = supervisor._count_output_lines()
@@ -203,7 +203,7 @@ class TestSupervisorStatusReporting:
     def test_status_count_zero_when_file_absent(self, tmp_path):
         output_file = tmp_path / "nonexistent.txt"
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         assert supervisor._count_output_lines() == 0
 
     def test_output_dir_created_on_run(self, tmp_path):
@@ -213,7 +213,7 @@ class TestSupervisorStatusReporting:
             supervisor._shutdown_event.set()
             return FakeProcess(pid=1000, returncode=0)
 
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         supervisor._start_worker = fake_start_worker
         supervisor.run()
 
@@ -225,7 +225,7 @@ class TestSupervisorGeneratedDecksPath:
 
     def test_default_generated_decks_path_is_none(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         assert supervisor._generated_decks_path is None
 
     def test_explicit_generated_decks_path_stored(self, tmp_path):
@@ -234,6 +234,7 @@ class TestSupervisorGeneratedDecksPath:
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
+            best_of=3,
             generated_decks_path=gen,
         )
         assert supervisor._generated_decks_path == gen
@@ -245,6 +246,7 @@ class TestSupervisorGeneratedDecksPath:
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
+            best_of=3,
             generated_decks_path=gen,
         )
 
@@ -261,7 +263,7 @@ class TestSupervisorGeneratedDecksPath:
 
     def test_no_generated_decks_path_passes_none(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
         fake_connector = MagicMock()
         fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
@@ -278,14 +280,14 @@ class TestSupervisorRunIdAndLabel:
 
     def test_run_id_is_generated_at_construction(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         # uuid4 strings are 36 chars (8-4-4-4-12) with dashes
         assert len(supervisor.run_id) == 36
         assert supervisor.run_id.count("-") == 4
 
     def test_run_id_stable_across_worker_restarts(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
         fake_connector = MagicMock()
         fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
@@ -302,13 +304,13 @@ class TestSupervisorRunIdAndLabel:
     def test_run_ids_differ_between_supervisor_instances(self, tmp_path):
         out1 = tmp_path / "out1.txt"
         out2 = tmp_path / "out2.txt"
-        s1 = MatchOutcomeSupervisor(worker_count=1, output_path=out1)
-        s2 = MatchOutcomeSupervisor(worker_count=1, output_path=out2)
+        s1 = MatchOutcomeSupervisor(worker_count=1, output_path=out1, best_of=3)
+        s2 = MatchOutcomeSupervisor(worker_count=1, output_path=out2, best_of=3)
         assert s1.run_id != s2.run_id
 
     def test_default_self_play_label_is_none(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
         assert supervisor._self_play_label is None
 
     def test_explicit_self_play_label_stored(self, tmp_path):
@@ -317,6 +319,7 @@ class TestSupervisorRunIdAndLabel:
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
+            best_of=3,
             generated_decks_path=gen,
             self_play_label="gen-2",
         )
@@ -329,6 +332,7 @@ class TestSupervisorRunIdAndLabel:
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
+            best_of=3,
             generated_decks_path=gen,
             self_play_label="gen-2",
         )
@@ -342,3 +346,29 @@ class TestSupervisorRunIdAndLabel:
         kwargs = fake_connector.start.call_args.kwargs
         assert kwargs.get("self_play_label") == "gen-2"
         assert kwargs.get("run_id") == supervisor.run_id
+
+
+class TestSupervisorBestOf:
+    """Supervisor stores best_of and forwards it to every worker start."""
+
+    def test_best_of_stored(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=7,
+        )
+        assert supervisor._best_of == 7
+
+    def test_best_of_forwarded_to_connector(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=17,
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+
+        kwargs = fake_connector.start.call_args.kwargs
+        assert kwargs.get("best_of") == 17
