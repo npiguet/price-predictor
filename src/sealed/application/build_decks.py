@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,11 @@ from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.pool_file_reader import parse_pools
 from sealed.infrastructure.scorer_store import ScorerStore
+
+
+def _log(message: str) -> None:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
 
 
 @dataclass
@@ -38,6 +44,8 @@ class BuildDecksUseCase:
     with fewer than 23 embeddable cards are skipped.
     """
 
+    PROGRESS_INTERVAL = 100
+
     def execute(self, config: BuildDecksConfig) -> int:
         pools = parse_pools(config.pools_path)
         model = self._load_model(config.checkpoint)
@@ -45,17 +53,21 @@ class BuildDecksUseCase:
 
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
+        total = len(pools)
+        _log(f"Building decks for {total} pools...")
         written = 0
         with open(config.output, "w", encoding="utf-8") as out:
-            for set_code, pool_names in pools:
+            for i, (set_code, pool_names) in enumerate(pools, start=1):
                 deck = self._build_one_deck(model, pool_names, locator)
-                if deck is None:
-                    continue
-                out.write(set_code)
-                out.write(";")
-                out.write("|".join(deck))
-                out.write("\n")
-                written += 1
+                if deck is not None:
+                    out.write(set_code)
+                    out.write(";")
+                    out.write("|".join(deck))
+                    out.write("\n")
+                    written += 1
+                if i % self.PROGRESS_INTERVAL == 0 or i == total:
+                    _log(f"  {i}/{total} pools processed ({written} decks written)")
+        _log(f"Done: {written} decks written to {config.output}")
         return written
 
     def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:

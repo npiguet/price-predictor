@@ -29,7 +29,6 @@ class GreedyDeckBuilder:
         self._pool_embeddings = pool_embeddings
 
     def build(self, pool_names: list[str]) -> list[str]:
-        self._model.eval()
         if len(pool_names) < NONLAND_DECK_SIZE:
             return list(pool_names)
 
@@ -40,64 +39,54 @@ class GreedyDeckBuilder:
 
         perm = list(range(len(pool_names)))
         random.shuffle(perm)
-        deck_idx = perm[:NONLAND_DECK_SIZE]
-        rem_idx = perm[NONLAND_DECK_SIZE:]
+        n = NONLAND_DECK_SIZE
+        r = len(pool_names) - n
+        deck_t = torch.tensor(perm[:n], device=device)
+        rem_t = torch.tensor(perm[n:], device=device)
 
-        current_score = self._score_indices(pool_arr, deck_idx, device)
+        # These are constant across iterations of the greedy loop (r stays
+        # constant because each swap exchanges one deck slot for one rem slot).
+        positions = torch.arange(n, device=device).repeat_interleave(r)
+        rows = torch.arange(n * r, device=device)
+        mask_batch = torch.ones(n * r, n, dtype=torch.bool, device=device)
 
-        while rem_idx:
-            cards_batch, mask_batch = self._build_swap_batch(
-                pool_arr, deck_idx, rem_idx, device,
-            )
-            with torch.no_grad():
+        current_score = self._score_current_deck(pool_arr, deck_t)
+
+        while r > 0:
+            batch = deck_t.unsqueeze(0).expand(n * r, -1).clone()
+            replacements = rem_t.repeat(n)
+            batch[rows, positions] = replacements
+            cards_batch = pool_arr[batch]
+
+            with torch.no_grad(), torch.autocast(
+                device_type=device.type, dtype=torch.float16, enabled=(device.type == "cuda"),
+            ):
                 scores = self._model(cards_batch, mask_batch).squeeze(-1)
 
-            best_local = int(scores.argmax().item())
-            best_score = float(scores[best_local].item())
+            best_local_t = scores.argmax()
+            best_score = float(scores[best_local_t].item())
             if best_score <= current_score:
                 break
+            best_local = int(best_local_t.item())
 
-            r = len(rem_idx)
             i_pos, j_rem = best_local // r, best_local % r
-            deck_idx[i_pos], rem_idx[j_rem] = rem_idx[j_rem], deck_idx[i_pos]
+            old_deck_card = deck_t[i_pos].clone()
+            deck_t[i_pos] = rem_t[j_rem]
+            rem_t[j_rem] = old_deck_card
             current_score = best_score
 
-        return [pool_names[i] for i in deck_idx]
+        return [pool_names[i] for i in deck_t.tolist()]
 
-    def _score_indices(
+    def _score_current_deck(
         self,
         pool_arr: torch.Tensor,
-        idx_list: list[int],
-        device: torch.device,
+        deck_t: torch.Tensor,
     ) -> float:
-        cards_t = pool_arr[torch.tensor(idx_list, device=device)].unsqueeze(0)
-        mask_t = torch.ones(1, len(idx_list), dtype=torch.bool, device=device)
-        with torch.no_grad():
+        cards_t = pool_arr[deck_t].unsqueeze(0)
+        mask_t = torch.ones(1, deck_t.size(0), dtype=torch.bool, device=deck_t.device)
+        with torch.no_grad(), torch.autocast(
+            device_type=deck_t.device.type,
+            dtype=torch.float16,
+            enabled=(deck_t.device.type == "cuda"),
+        ):
             return self._model(cards_t, mask_t).item()
-
-    def _build_swap_batch(
-        self,
-        pool_arr: torch.Tensor,
-        deck_idx: list[int],
-        rem_idx: list[int],
-        device: torch.device,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Build the (n_nonland*R, n_nonland) candidate matrix for one swap step.
-
-        Row ``k`` corresponds to position ``k // R`` of the current deck being
-        replaced by remaining card ``k % R``.
-        """
-        n = NONLAND_DECK_SIZE
-        r = len(rem_idx)
-        deck_t = torch.tensor(deck_idx, device=device)
-        rem_t = torch.tensor(rem_idx, device=device)
-
-        batch = deck_t.unsqueeze(0).expand(n * r, -1).clone()
-        positions = torch.arange(n, device=device).repeat_interleave(r)
-        replacements = rem_t.repeat(n)
-        rows = torch.arange(n * r, device=device)
-        batch[rows, positions] = replacements
-
-        cards_batch = pool_arr[batch]
-        mask_batch = torch.ones(n * r, n, dtype=torch.bool, device=device)
-        return cards_batch, mask_batch
