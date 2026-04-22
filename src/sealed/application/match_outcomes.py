@@ -96,18 +96,19 @@ class MatchOutcomeSupervisor:
                     print(f"Monitor error for worker {worker_id}: {exc}")
 
     def _start_worker(self, worker_id: int) -> subprocess.Popen:
-        """Start one Java worker subprocess with a per-worker log file."""
-        log_path = self._output_path.parent / f"worker-{worker_id}.log"
-        log_file = log_path.open("ab")
+        """Start one Java worker subprocess. Worker stdout/stderr are discarded —
+        the supervisor's own status reports are the only operator-facing output.
+        Forge is verbose enough that capturing per-worker logs (with concurrent
+        appenders + AV scanning) becomes a measurable I/O bottleneck on long runs.
+        """
         proc = self._connector.start(
             self._output_path,
             run_id=self._run_id,
             best_of=self._best_of,
-            log_file=log_file,
             generated_decks_path=self._generated_decks_path,
             self_play_label=self._self_play_label,
         )
-        print(f"Worker {worker_id} started (PID {proc.pid}, log {log_path.name})")
+        print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc
 
     def _supervisor_loop(self) -> None:
