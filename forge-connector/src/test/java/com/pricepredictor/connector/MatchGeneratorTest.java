@@ -77,4 +77,17 @@ class MatchGeneratorTest {
                     "Known set " + set + " should be in eligible sets");
         }
     }
+
+    @Test
+    void eligibleSetsExcludeSmallBoosterSets() {
+        List<String> eligibleSets = MatchGenerator.computeEligibleSets();
+
+        // Legacy sets whose original boosters held only 8 cards are too small
+        // for a realistic sealed pool. Must be excluded.
+        List<String> tinyBoosterSets = List.of("DRK", "FEM");
+        for (String set : tinyBoosterSets) {
+            assertFalse(eligibleSets.contains(set),
+                    "Small-booster set " + set + " must not be in eligible sets");
+        }
+    }
 }
