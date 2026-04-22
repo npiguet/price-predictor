@@ -1,25 +1,74 @@
 package com.pricepredictor.connector;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
- * Value object capturing the outcome of one sealed best-of-3 match.
+ * Value object capturing the outcome of one sealed best-of-3 match, including
+ * the metadata needed to slice the training corpus later (run ID, set code,
+ * deck-build methods, per-game winner/play-first sequences, duration).
  *
- * @param deckA  All 40 cards in deck A (including basic lands, duplicates repeat).
- * @param deckB  All 40 cards in deck B.
- * @param winsA  Games won by deck A (0-2).
- * @param winsB  Games won by deck B (0-2).
+ * @param timestamp        When the match finished (UTC).
+ * @param runId            UUID identifying the supervisor invocation that produced this match.
+ * @param setCode          MTG set code both decks were drawn from.
+ * @param methodA          How deck A was built (see {@link DeckBuilder} method tags, or a
+ *                         self-play label when deck A came from a generated-decks file).
+ * @param methodB          How deck B was built (same enum as {@code methodA}).
+ * @param deckA            All 40 cards in deck A (including basic lands, duplicates repeat).
+ * @param deckB            All 40 cards in deck B.
+ * @param games            Per-game winner sequence, e.g. {@code "ABB"} means A won game 1,
+ *                         B won games 2 and 3. Length is 2 or 3.
+ * @param play             Per-game play-first sequence, same length as {@code games}, e.g.
+ *                         {@code "BAB"} means B was on the play in games 1 and 3.
+ * @param durationSeconds  Wall-clock seconds spent playing the match.
  */
-public record MatchResult(List<String> deckA, List<String> deckB, int winsA, int winsB) {
+public record MatchResult(
+        Instant timestamp,
+        String runId,
+        String setCode,
+        String methodA,
+        String methodB,
+        List<String> deckA,
+        List<String> deckB,
+        String games,
+        String play,
+        int durationSeconds
+) {
 
     public MatchResult {
-        if (winsA + winsB != 2 && winsA + winsB != 3) {
+        if (games == null || (games.length() != 2 && games.length() != 3)) {
             throw new IllegalArgumentException(
-                    "winsA + winsB must be 2 or 3, got " + winsA + " + " + winsB);
+                    "games must be 2 or 3 characters, got: " + games);
         }
-        if (winsA < 0 || winsA > 2 || winsB < 0 || winsB > 2) {
+        if (play == null || play.length() != games.length()) {
             throw new IllegalArgumentException(
-                    "wins must be in range [0,2], got winsA=" + winsA + " winsB=" + winsB);
+                    "play length must match games length: games=" + games + " play=" + play);
         }
+        for (int i = 0; i < games.length(); i++) {
+            char g = games.charAt(i);
+            char p = play.charAt(i);
+            if (g != 'A' && g != 'B') {
+                throw new IllegalArgumentException(
+                        "games must contain only 'A' or 'B', got: " + games);
+            }
+            if (p != 'A' && p != 'B') {
+                throw new IllegalArgumentException(
+                        "play must contain only 'A' or 'B', got: " + play);
+            }
+        }
+        if (durationSeconds < 0) {
+            throw new IllegalArgumentException(
+                    "durationSeconds must be non-negative, got " + durationSeconds);
+        }
+    }
+
+    /** Count of games won by deck A, derived from {@link #games}. */
+    public int winsA() {
+        return (int) games.chars().filter(c -> c == 'A').count();
+    }
+
+    /** Count of games won by deck B, derived from {@link #games}. */
+    public int winsB() {
+        return (int) games.chars().filter(c -> c == 'B').count();
     }
 }

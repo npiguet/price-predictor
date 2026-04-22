@@ -18,9 +18,11 @@ import static org.junit.jupiter.api.Assertions.*;
 @ExtendWith(ForgeExtension.class)
 class MatchGeneratorTest {
 
+    private static final String TEST_RUN_ID = "test-run-id";
+
     @Test
     void generateMatchReturnsValidResult() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders();
+        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
 
         MatchResult result = generator.generateMatch();
 
@@ -34,8 +36,49 @@ class MatchGeneratorTest {
     }
 
     @Test
+    void generateMatchPopulatesMetadata() {
+        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+
+        MatchResult result = generator.generateMatch();
+
+        assertEquals(TEST_RUN_ID, result.runId());
+        assertNotNull(result.timestamp(), "timestamp must be populated");
+        assertNotNull(result.setCode(), "setCode must be populated");
+        assertFalse(result.setCode().isBlank(), "setCode must be non-blank");
+        assertTrue(result.durationSeconds() >= 0, "duration must be non-negative");
+        assertEquals(result.games().length(), result.play().length(),
+                "games and play must have matching lengths");
+    }
+
+    @Test
+    void methodTagsComeFromDeckBuilder() {
+        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
+
+        MatchResult result = generator.generateMatch();
+
+        List<String> allowed = List.of(
+                DeckBuilder.METHOD_FORGE_BEST,
+                DeckBuilder.METHOD_FORGE_3SUB,
+                DeckBuilder.METHOD_FORGE_8SUB,
+                DeckBuilder.METHOD_RANDOM
+        );
+        assertTrue(allowed.contains(result.methodA()),
+                "methodA must be one of the phase-0 tags, got: " + result.methodA());
+        assertTrue(allowed.contains(result.methodB()),
+                "methodB must be one of the phase-0 tags, got: " + result.methodB());
+    }
+
+    @Test
+    void runIdMustBeNonBlank() {
+        assertThrows(IllegalArgumentException.class,
+                () -> MatchGenerator.withDefaultBuilders(""));
+        assertThrows(IllegalArgumentException.class,
+                () -> MatchGenerator.withDefaultBuilders(null));
+    }
+
+    @Test
     void generateMatchUsesOnlyEligibleSets() {
-        MatchGenerator generator = MatchGenerator.withDefaultBuilders();
+        MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
 
         // Eligible sets: must have draft booster template, must not be FUNNY type.
         // We don't know which set was chosen, but the generator should not throw.

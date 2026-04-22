@@ -7,16 +7,35 @@ import forge.game.GameType;
 import forge.game.Match;
 import forge.game.player.RegisteredPlayer;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plays a sealed match between two decks using Forge's AI.
+ * Plays a sealed match between two decks using Forge's AI and reports per-game detail.
  *
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called before use.
  */
 public class GamePlayer {
 
+    private static final String LOBBY_NAME_A = "p1";
+    private static final String LOBBY_NAME_B = "p2";
+
     private final int gamesPerMatch;
+
+    /** Per-game outcome: which side won and which side was on the play. */
+    public record GameOutcome(String winner, String playFirst) {
+        public GameOutcome {
+            if (!"A".equals(winner) && !"B".equals(winner)) {
+                throw new IllegalArgumentException("winner must be 'A' or 'B', got " + winner);
+            }
+            if (!"A".equals(playFirst) && !"B".equals(playFirst)) {
+                throw new IllegalArgumentException("playFirst must be 'A' or 'B', got " + playFirst);
+            }
+        }
+    }
+
+    /** Full match outcome returned by {@link #playMatch}. */
+    public record PlayedMatch(List<GameOutcome> games, int durationSeconds) {}
 
     /** Create a player with the default best-of-3 match format. */
     public GamePlayer() {
@@ -29,16 +48,14 @@ public class GamePlayer {
     }
 
     /**
-     * Play a match and return the win counts.
-     *
-     * @param deckA first deck
-     * @param deckB second deck
-     * @return int[]{winsA, winsB}
+     * Play a match and return per-game detail plus wall-clock duration in seconds.
+     * Games in which {@code game.getOutcome().getWinningLobbyPlayer()} is null (draws
+     * or aborted games) are skipped and do not appear in the returned list.
      */
-    public int[] playMatch(Deck deckA, Deck deckB) {
+    public PlayedMatch playMatch(Deck deckA, Deck deckB) {
         var players = List.of(
-                new RegisteredPlayer(deckA).setPlayer(new LobbyPlayerAi("p1", null)),
-                new RegisteredPlayer(deckB).setPlayer(new LobbyPlayerAi("p2", null))
+                new RegisteredPlayer(deckA).setPlayer(new LobbyPlayerAi(LOBBY_NAME_A, null)),
+                new RegisteredPlayer(deckB).setPlayer(new LobbyPlayerAi(LOBBY_NAME_B, null))
         );
 
         var rules = new GameRules(GameType.Sealed);
@@ -46,23 +63,28 @@ public class GamePlayer {
 
         var match = new Match(rules, players, "sealed-match");
 
-        int winsA = 0;
-        int winsB = 0;
+        List<GameOutcome> outcomes = new ArrayList<>();
+        long startMillis = System.currentTimeMillis();
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
             match.startGame(game); // blocks until game is finished
 
-            var winner = game.getOutcome().getWinningLobbyPlayer();
-            if (winner != null) {
-                if (winner.getName().equals("p1")) {
-                    winsA++;
-                } else {
-                    winsB++;
-                }
+            var winningLobby = game.getOutcome().getWinningLobbyPlayer();
+            if (winningLobby == null) {
+                continue;
             }
+            String winner = LOBBY_NAME_A.equals(winningLobby.getName()) ? "A" : "B";
+
+            var startingPlayer = game.getStartingPlayer();
+            String playFirst = (startingPlayer != null
+                    && LOBBY_NAME_A.equals(startingPlayer.getLobbyPlayer().getName()))
+                    ? "A" : "B";
+
+            outcomes.add(new GameOutcome(winner, playFirst));
         }
 
-        return new int[]{winsA, winsB};
+        int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
+        return new PlayedMatch(outcomes, durationSeconds);
     }
 }

@@ -271,3 +271,74 @@ class TestSupervisorGeneratedDecksPath:
 
         kwargs = fake_connector.start.call_args.kwargs
         assert kwargs.get("generated_decks_path") is None
+
+
+class TestSupervisorRunIdAndLabel:
+    """Supervisor generates a UUID run_id at construction and forwards the label."""
+
+    def test_run_id_is_generated_at_construction(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        # uuid4 strings are 36 chars (8-4-4-4-12) with dashes
+        assert len(supervisor.run_id) == 36
+        assert supervisor.run_id.count("-") == 4
+
+    def test_run_id_stable_across_worker_restarts(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+        supervisor._start_worker(1)
+        supervisor._start_worker(2)
+
+        run_ids = [call.kwargs["run_id"] for call in fake_connector.start.call_args_list]
+        assert len(set(run_ids)) == 1, "run_id must be identical across worker starts"
+        assert run_ids[0] == supervisor.run_id
+
+    def test_run_ids_differ_between_supervisor_instances(self, tmp_path):
+        out1 = tmp_path / "out1.txt"
+        out2 = tmp_path / "out2.txt"
+        s1 = MatchOutcomeSupervisor(worker_count=1, output_path=out1)
+        s2 = MatchOutcomeSupervisor(worker_count=1, output_path=out2)
+        assert s1.run_id != s2.run_id
+
+    def test_default_self_play_label_is_none(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file)
+        assert supervisor._self_play_label is None
+
+    def test_explicit_self_play_label_stored(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        gen = tmp_path / "generated-decks.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1,
+            output_path=output_file,
+            generated_decks_path=gen,
+            self_play_label="gen-2",
+        )
+        assert supervisor._self_play_label == "gen-2"
+
+    def test_self_play_label_forwarded_to_connector(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        gen = tmp_path / "generated-decks.txt"
+
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1,
+            output_path=output_file,
+            generated_decks_path=gen,
+            self_play_label="gen-2",
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+
+        kwargs = fake_connector.start.call_args.kwargs
+        assert kwargs.get("self_play_label") == "gen-2"
+        assert kwargs.get("run_id") == supervisor.run_id

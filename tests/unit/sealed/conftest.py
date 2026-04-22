@@ -85,7 +85,13 @@ def _write_outcomes(tmp_path: Path, n_matches: int, n_cards_per_deck: int) -> Pa
     for _ in range(n_matches):
         deck_a = rng.choice(card_names, n_cards_per_deck, replace=True)
         deck_b = rng.choice(card_names, n_cards_per_deck, replace=True)
-        wins_a, wins_b = (2, int(rng.choice([0, 1])))
-        lines.append(f"{'|'.join(deck_a)};{'|'.join(deck_b)};{wins_a};{wins_b}")
+        # A wins 2 games; B wins 0 or 1 → games is "AA" or "ABA".
+        b_wins = int(rng.choice([0, 1]))
+        games = "AA" if b_wins == 0 else "ABA"
+        play = "B" * len(games)  # arbitrary; fixture consumers don't care who was on the play
+        lines.append(
+            "2026-04-22T14:30:05Z;fixture-run;RVR;forge-best;forge-3sub;"
+            f"{'|'.join(deck_a)};{'|'.join(deck_b)};{games};{play};12"
+        )
     outcomes_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return outcomes_file

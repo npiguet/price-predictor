@@ -8,6 +8,7 @@ import forge.item.PaperCard;
 import forge.model.FModel;
 import forge.util.MyRandom;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Random;
 
@@ -46,6 +47,8 @@ public class SelfPlayMatchGenerator {
     private final PoolGenerator poolGenerator;
     private final GamePlayer gamePlayer;
     private final List<String> eligibleSets;
+    private final String runId;
+    private final String selfPlayLabel;
     private final Random random;
 
     public SelfPlayMatchGenerator(
@@ -53,8 +56,11 @@ public class SelfPlayMatchGenerator {
             DeckBuilder deckBuilder,
             PoolGenerator poolGenerator,
             GamePlayer gamePlayer,
-            List<String> eligibleSets) {
-        this(index, deckBuilder, poolGenerator, gamePlayer, eligibleSets, MyRandom.getRandom());
+            List<String> eligibleSets,
+            String runId,
+            String selfPlayLabel) {
+        this(index, deckBuilder, poolGenerator, gamePlayer, eligibleSets,
+                runId, selfPlayLabel, MyRandom.getRandom());
     }
 
     SelfPlayMatchGenerator(
@@ -63,12 +69,22 @@ public class SelfPlayMatchGenerator {
             PoolGenerator poolGenerator,
             GamePlayer gamePlayer,
             List<String> eligibleSets,
+            String runId,
+            String selfPlayLabel,
             Random random) {
+        if (runId == null || runId.isBlank()) {
+            throw new IllegalArgumentException("runId must be non-empty");
+        }
+        if (selfPlayLabel == null || selfPlayLabel.isBlank()) {
+            throw new IllegalArgumentException("selfPlayLabel must be non-empty");
+        }
         this.index = index;
         this.deckBuilder = deckBuilder;
         this.poolGenerator = poolGenerator;
         this.gamePlayer = gamePlayer;
         this.eligibleSets = List.copyOf(eligibleSets);
+        this.runId = runId;
+        this.selfPlayLabel = selfPlayLabel;
         this.random = random;
     }
 
@@ -108,6 +124,7 @@ public class SelfPlayMatchGenerator {
 
         List<String> deckBNames;
         Deck deckBForge;
+        String methodB;
 
         if (methodGroup == 5) {
             GeneratedDeck deckBFromIndex = pickMethod5DeckB(deckA);
@@ -116,25 +133,46 @@ public class SelfPlayMatchGenerator {
                 // to the builder path. The data-model assumption (≥2 decks per set)
                 // makes this rare.
                 List<PaperCard> pool = poolGenerator.generatePool(deckA.setCode());
-                Deck builtDeck = deckBuilder.buildDeck(pool);
-                deckBNames = toNames(builtDeck);
-                deckBForge = builtDeck;
+                DeckBuilder.BuiltDeck built = deckBuilder.buildDeck(pool);
+                deckBNames = toNames(built.deck());
+                deckBForge = built.deck();
+                methodB = built.method();
             } else {
                 deckBNames = deckBFromIndex.cardNames();
                 deckBForge = materializeDeck(deckBNames);
+                methodB = selfPlayLabel;
             }
         } else {
             List<PaperCard> pool = poolGenerator.generatePool(deckA.setCode());
-            Deck builtDeck = deckBuilder.buildDeck(pool);
-            deckBNames = toNames(builtDeck);
-            deckBForge = builtDeck;
+            DeckBuilder.BuiltDeck built = deckBuilder.buildDeck(pool);
+            deckBNames = toNames(built.deck());
+            deckBForge = built.deck();
+            methodB = built.method();
         }
 
         Deck deckAForge = materializeDeck(deckA.cardNames());
 
-        int[] wins = gamePlayer.playMatch(deckAForge, deckBForge);
+        GamePlayer.PlayedMatch played = gamePlayer.playMatch(deckAForge, deckBForge);
 
-        return new MatchResult(deckA.cardNames(), deckBNames, wins[0], wins[1]);
+        StringBuilder games = new StringBuilder(played.games().size());
+        StringBuilder play = new StringBuilder(played.games().size());
+        for (GamePlayer.GameOutcome g : played.games()) {
+            games.append(g.winner());
+            play.append(g.playFirst());
+        }
+
+        return new MatchResult(
+                Instant.now(),
+                runId,
+                deckA.setCode(),
+                selfPlayLabel,
+                methodB,
+                deckA.cardNames(),
+                deckBNames,
+                games.toString(),
+                play.toString(),
+                played.durationSeconds()
+        );
     }
 
     /** Resolve a list of card names into a Forge {@link Deck}. */

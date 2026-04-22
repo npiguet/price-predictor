@@ -25,7 +25,7 @@ class DeckBuilderTest {
      * Uses MatchGenerator's pool generator via the default builder factory.
      */
     private static List<PaperCard> realPool(String setCode) {
-        MatchGenerator gen = MatchGenerator.withDefaultBuilders();
+        MatchGenerator gen = MatchGenerator.withDefaultBuilders("test-run-id");
         return gen.generatePool(setCode);
     }
 
@@ -214,10 +214,34 @@ class DeckBuilderTest {
 
         // Run several times to exercise different methods
         for (int i = 0; i < 5; i++) {
-            Deck deck = builder.buildDeck(new ArrayList<>(pool));
-            assertEquals(40, deck.getMain().countAll(),
+            DeckBuilder.BuiltDeck built = builder.buildDeck(new ArrayList<>(pool));
+            assertEquals(40, built.deck().getMain().countAll(),
                     "buildDeck must always produce exactly 40 cards");
+            assertNotNull(built.method(), "buildDeck must report a method tag");
         }
+    }
+
+    @Test
+    void buildDeckMethodTagMatchesSelectedMethod() {
+        List<PaperCard> pool = realPool("RVR");
+        Random rng = new Random(42);
+        DeckBuilder builder = new DeckBuilder(rng);
+
+        // Collect method tags across many invocations; we expect all four tags to appear
+        // with the 4:3:2:1 weighting, so over 40 runs all four should be present.
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < 40; i++) {
+            DeckBuilder.BuiltDeck built = builder.buildDeck(new ArrayList<>(pool));
+            assertTrue(Set.of(
+                    DeckBuilder.METHOD_FORGE_BEST,
+                    DeckBuilder.METHOD_FORGE_3SUB,
+                    DeckBuilder.METHOD_FORGE_8SUB,
+                    DeckBuilder.METHOD_RANDOM
+            ).contains(built.method()), "unexpected method tag: " + built.method());
+            seen.add(built.method());
+        }
+        assertEquals(4, seen.size(),
+                "Expected all 4 method tags to appear across 40 weighted invocations, got " + seen);
     }
 
     // ── FR-010: Pool card uniqueness ──────────────────────────────────────────

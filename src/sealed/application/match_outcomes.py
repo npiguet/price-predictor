@@ -6,6 +6,7 @@ import signal
 import subprocess
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from price_predictor.infrastructure.forge_jvm import kill_process_tree
@@ -27,15 +28,23 @@ class MatchOutcomeSupervisor:
         worker_count: int,
         output_path: Path,
         generated_decks_path: Path | None = None,
+        self_play_label: str | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
         self._generated_decks_path = generated_decks_path
+        self._self_play_label = self_play_label
+        self._run_id = str(uuid.uuid4())
         self._shutdown_event = threading.Event()
         self._processes: list[subprocess.Popen] = []
         self._start_times: dict[subprocess.Popen, float] = {}
         self._processes_lock = threading.Lock()
         self._connector = MatchWorkerConnector()
+
+    @property
+    def run_id(self) -> str:
+        """UUID generated once at construction, shared across all worker restarts."""
+        return self._run_id
 
     def run(self) -> None:
         """Start all workers and block until shutdown."""
@@ -90,8 +99,10 @@ class MatchOutcomeSupervisor:
         log_file = log_path.open("ab")
         proc = self._connector.start(
             self._output_path,
+            run_id=self._run_id,
             log_file=log_file,
             generated_decks_path=self._generated_decks_path,
+            self_play_label=self._self_play_label,
         )
         print(f"Worker {worker_id} started (PID {proc.pid}, log {log_path.name})")
         return proc

@@ -6,12 +6,17 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class MatchResultWriterTest {
+
+    private static final Instant TS = Instant.parse("2026-04-22T14:30:05Z");
+    private static final String RUN_ID = "a3f4b8c2-1234-4abc-9def-0123456789ab";
 
     private static List<String> deck40(String prefix) {
         List<String> cards = new ArrayList<>();
@@ -21,28 +26,35 @@ class MatchResultWriterTest {
         return cards;
     }
 
+    private static MatchResult sampleResult(List<String> deckA, List<String> deckB, String games, String play) {
+        return new MatchResult(
+                TS, RUN_ID, "RVR", "forge-best", "gen-2",
+                deckA, deckB, games, play, 47
+        );
+    }
+
     @Test
     void writesOneLinePerResult(@TempDir Path tmp) throws IOException {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 1));
-        writer.write(new MatchResult(deck40("C"), deck40("D"), 0, 2));
+        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
+        writer.write(sampleResult(deck40("C"), deck40("D"), "BB", "AA"));
 
         List<String> lines = Files.readAllLines(file);
         assertEquals(2, lines.size());
     }
 
     @Test
-    void lineHasFourSemicolonSeparatedFields(@TempDir Path tmp) throws IOException {
+    void lineHasTenSemicolonSeparatedFields(@TempDir Path tmp) throws IOException {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 1));
+        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
 
         String line = Files.readAllLines(file).get(0);
         String[] parts = line.split(";", -1);
-        assertEquals(4, parts.length, "Expected 4 semicolon-separated fields");
+        assertEquals(10, parts.length, "Expected 10 semicolon-separated fields");
     }
 
     @Test
@@ -51,25 +63,32 @@ class MatchResultWriterTest {
         MatchResultWriter writer = new MatchResultWriter(file);
 
         List<String> deckA = deck40("Card");
-        writer.write(new MatchResult(deckA, deck40("B"), 2, 0));
+        writer.write(sampleResult(deckA, deck40("B"), "AA", "BA"));
 
         String line = Files.readAllLines(file).get(0);
-        String deckAEncoded = line.split(";", -1)[0];
+        String deckAEncoded = line.split(";", -1)[5];
         String[] cardNames = deckAEncoded.split("\\|", -1);
         assertEquals(40, cardNames.length, "Expected 40 pipe-separated card names");
     }
 
     @Test
-    void winsAppendedCorrectly(@TempDir Path tmp) throws IOException {
+    void fieldsAppearInExpectedOrder(@TempDir Path tmp) throws IOException {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 1));
+        writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB"));
 
         String line = Files.readAllLines(file).get(0);
         String[] parts = line.split(";", -1);
-        assertEquals("2", parts[2]);
-        assertEquals("1", parts[3]);
+        assertEquals(DateTimeFormatter.ISO_INSTANT.format(TS), parts[0]);
+        assertEquals(RUN_ID, parts[1]);
+        assertEquals("RVR", parts[2]);
+        assertEquals("forge-best", parts[3]);
+        assertEquals("gen-2", parts[4]);
+        // parts[5] = deckA, parts[6] = deckB
+        assertEquals("ABA", parts[7]);
+        assertEquals("BAB", parts[8]);
+        assertEquals("47", parts[9]);
     }
 
     @Test
@@ -77,51 +96,64 @@ class MatchResultWriterTest {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 0));
-        writer.write(new MatchResult(deck40("C"), deck40("D"), 0, 2));
-        writer.write(new MatchResult(deck40("E"), deck40("F"), 2, 1));
+        writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA"));
+        writer.write(sampleResult(deck40("C"), deck40("D"), "BB", "AB"));
+        writer.write(sampleResult(deck40("E"), deck40("F"), "ABA", "BAB"));
 
         assertEquals(3, Files.readAllLines(file).size());
     }
 
     @Test
-    void bo2WinsSumTo2(@TempDir Path tmp) throws IOException {
+    void twoGameSweepAccepted(@TempDir Path tmp) {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        // 2-0 is valid (sum = 2)
         assertDoesNotThrow(() ->
-                writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 0)));
+                writer.write(sampleResult(deck40("A"), deck40("B"), "AA", "BA")));
     }
 
     @Test
-    void bo3WinsSumTo3(@TempDir Path tmp) throws IOException {
+    void threeGameMatchAccepted(@TempDir Path tmp) {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        // 2-1 is valid (sum = 3)
         assertDoesNotThrow(() ->
-                writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 1)));
+                writer.write(sampleResult(deck40("A"), deck40("B"), "ABA", "BAB")));
     }
 
     @Test
-    void invalidWinsSumRejectedByMatchResult() {
-        // wins sum to 4 — invalid
+    void winsAandWinsBDerivedFromGamesString() {
+        MatchResult r = sampleResult(deck40("A"), deck40("B"), "ABA", "BAB");
+        assertEquals(2, r.winsA());
+        assertEquals(1, r.winsB());
+
+        MatchResult sweep = sampleResult(deck40("A"), deck40("B"), "BB", "AA");
+        assertEquals(0, sweep.winsA());
+        assertEquals(2, sweep.winsB());
+    }
+
+    @Test
+    void invalidGamesStringRejected() {
         assertThrows(IllegalArgumentException.class, () ->
-                new MatchResult(deck40("A"), deck40("B"), 2, 2));
+                sampleResult(deck40("A"), deck40("B"), "A", "A"));
+        assertThrows(IllegalArgumentException.class, () ->
+                sampleResult(deck40("A"), deck40("B"), "ABCD", "ABAB"));
+        assertThrows(IllegalArgumentException.class, () ->
+                sampleResult(deck40("A"), deck40("B"), "AC", "BA"));
     }
 
     @Test
-    void invalidWinsSumRejectedByWriter(@TempDir Path tmp) {
-        Path file = tmp.resolve("outcomes.txt");
-        MatchResultWriter writer = new MatchResultWriter(file);
+    void mismatchedGamesAndPlayLengthRejected() {
+        assertThrows(IllegalArgumentException.class, () ->
+                sampleResult(deck40("A"), deck40("B"), "AA", "BAB"));
+    }
 
-        // Create via a direct MatchResult with sum=1 (impossible via constructor guard,
-        // but we can test the writer's own guard by bypassing the record compact constructor)
-        // Since MatchResult guards via compact constructor, sum=1 isn't constructible.
-        // Verify 2+1=3 is valid:
-        assertDoesNotThrow(() ->
-                writer.write(new MatchResult(deck40("A"), deck40("B"), 2, 1)));
+    @Test
+    void negativeDurationRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new MatchResult(
+                TS, RUN_ID, "RVR", "forge-best", "gen-2",
+                deck40("A"), deck40("B"), "AA", "BA", -1
+        ));
     }
 
     @Test
@@ -129,23 +161,18 @@ class MatchResultWriterTest {
         Path file = tmp.resolve("outcomes.txt");
         MatchResultWriter writer = new MatchResultWriter(file);
 
-        List<String> deckA = List.of(
-                "Lightning Bolt", "Snapcaster Mage", "Force of Will",
-                "Black Lotus", "Mox Pearl", "Island", "Island", "Island",
-                "Mountain", "Forest", "Swamp", "Plains", "Island",
-                "Island", "Island", "Island", "Island", "Island",
-                "Island", "Island", "Island", "Island", "Island",
-                "Island", "Island", "Island", "Island", "Island",
-                "Island", "Island", "Island", "Island", "Island",
-                "Island", "Island", "Island", "Island", "Island",
-                "Island", "Island"
-        );
-        List<String> deckB = deck40("B");
+        List<String> deckA = new ArrayList<>();
+        deckA.add("Lightning Bolt");
+        deckA.add("Snapcaster Mage");
+        deckA.add("Force of Will");
+        while (deckA.size() < 40) {
+            deckA.add("Island");
+        }
 
-        writer.write(new MatchResult(deckA, deckB, 2, 0));
+        writer.write(sampleResult(deckA, deck40("B"), "AA", "BA"));
 
         String line = Files.readAllLines(file).get(0);
-        String deckAEncoded = line.split(";", -1)[0];
+        String deckAEncoded = line.split(";", -1)[5];
         String[] names = deckAEncoded.split("\\|", -1);
         assertEquals("Lightning Bolt", names[0]);
         assertEquals("Snapcaster Mage", names[1]);

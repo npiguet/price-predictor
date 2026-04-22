@@ -37,8 +37,16 @@ import java.util.Random;
  */
 public class DeckBuilder {
 
+    public static final String METHOD_FORGE_BEST = "forge-best";
+    public static final String METHOD_FORGE_3SUB = "forge-3sub";
+    public static final String METHOD_FORGE_8SUB = "forge-8sub";
+    public static final String METHOD_RANDOM = "random";
+
     private static final double[] METHOD_THRESHOLDS = {0.4, 0.7, 0.9, 1.0};
     private final Random random;
+
+    /** A constructed deck together with the method tag that produced it. */
+    public record BuiltDeck(Deck deck, String method) {}
 
     public DeckBuilder() {
         this.random = MyRandom.getRandom();
@@ -49,18 +57,20 @@ public class DeckBuilder {
     }
 
     /**
-     * Build a deck from the given pool using a randomly selected weighted method.
+     * Build a deck from the given pool using a randomly selected weighted method,
+     * returning the deck alongside the method tag so callers can record which
+     * strategy was used.
      *
      * @param pool booster pool cards (no basic lands)
-     * @return 40-card Deck
+     * @return the 40-card deck and its method tag
      */
-    public Deck buildDeck(List<PaperCard> pool) {
+    public BuiltDeck buildDeck(List<PaperCard> pool) {
         int method = selectMethod();
         return switch (method) {
-            case 1 -> buildStandard(pool);
-            case 2 -> buildWithSwaps(pool, 3);
-            case 3 -> buildWithSwaps(pool, 8);
-            case 4 -> buildRandom(pool);
+            case 1 -> new BuiltDeck(buildStandard(pool), METHOD_FORGE_BEST);
+            case 2 -> new BuiltDeck(buildWithSwaps(pool, 3), METHOD_FORGE_3SUB);
+            case 3 -> new BuiltDeck(buildWithSwaps(pool, 8), METHOD_FORGE_8SUB);
+            case 4 -> new BuiltDeck(buildRandom(pool), METHOD_RANDOM);
             default -> throw new IllegalStateException("Unexpected method: " + method);
         };
     }

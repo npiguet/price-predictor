@@ -27,10 +27,26 @@ class MatchDropReason(Enum):
 
 @dataclass
 class MatchOutcome:
+    """One match from ``match-outcomes.txt`` (see ``specs/sealed-deck-picker.md``)."""
+
+    timestamp: str
+    run_id: str
+    set_code: str
+    method_a: str
+    method_b: str
     deck_a_names: list[str]
     deck_b_names: list[str]
-    wins_a: int
-    wins_b: int
+    games: str  # per-game winner sequence, e.g. "ABB"
+    play: str   # per-game play-first sequence, same length as games
+    duration_s: int
+
+    @property
+    def wins_a(self) -> int:
+        return self.games.count("A")
+
+    @property
+    def wins_b(self) -> int:
+        return self.games.count("B")
 
     @property
     def winner_names(self) -> list[str]:
@@ -100,13 +116,32 @@ class EmbeddingTable(nn.Module):
 
 
 def parse_match_outcome(line: str) -> MatchOutcome:
-    """Parse a single line from match-outcomes.txt."""
+    """Parse a single 10-field line from match-outcomes.txt.
+
+    Format: ``timestamp;run_id;set_code;method_A;method_B;deckA;deckB;games;play;duration_s``.
+    """
     parts = line.strip().split(";")
-    deck_a_names = parts[0].split("|")
-    deck_b_names = parts[1].split("|")
-    wins_a = int(parts[2])
-    wins_b = int(parts[3])
-    return MatchOutcome(deck_a_names, deck_b_names, wins_a, wins_b)
+    if len(parts) != 10:
+        raise ValueError(
+            f"Expected 10 semicolon-delimited fields in match-outcomes line, got {len(parts)}"
+        )
+    timestamp, run_id, set_code, method_a, method_b = parts[0:5]
+    deck_a_names = parts[5].split("|")
+    deck_b_names = parts[6].split("|")
+    games, play = parts[7], parts[8]
+    duration_s = int(parts[9])
+    return MatchOutcome(
+        timestamp=timestamp,
+        run_id=run_id,
+        set_code=set_code,
+        method_a=method_a,
+        method_b=method_b,
+        deck_a_names=deck_a_names,
+        deck_b_names=deck_b_names,
+        games=games,
+        play=play,
+        duration_s=duration_s,
+    )
 
 
 def load_match_outcomes(path: Path) -> list[MatchOutcome]:

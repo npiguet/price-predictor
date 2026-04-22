@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 from sealed.domain.card_embedding_layout import total_dim
@@ -21,33 +22,103 @@ from sealed.infrastructure.match_data_loader import (
 
 D_MODEL = total_dim(256)
 
+SAMPLE_LINE = (
+    "2026-04-22T14:30:05Z;run-xyz;RVR;forge-best;gen-2;"
+    "CardA|CardB;CardC|CardD;"
+    "ABA;BAB;47"
+)
+
+
+def _outcome(
+    deck_a: list[str],
+    deck_b: list[str],
+    games: str,
+    *,
+    timestamp: str = "2026-04-22T14:30:05Z",
+    run_id: str = "run-xyz",
+    set_code: str = "RVR",
+    method_a: str = "forge-best",
+    method_b: str = "forge-3sub",
+    play: str | None = None,
+    duration_s: int = 47,
+) -> MatchOutcome:
+    """Build a MatchOutcome fixture; play defaults to all-A of matching length."""
+    if play is None:
+        play = "A" * len(games)
+    return MatchOutcome(
+        timestamp=timestamp,
+        run_id=run_id,
+        set_code=set_code,
+        method_a=method_a,
+        method_b=method_b,
+        deck_a_names=deck_a,
+        deck_b_names=deck_b,
+        games=games,
+        play=play,
+        duration_s=duration_s,
+    )
+
 
 class TestParseMatchOutcome:
     def test_basic_parse(self):
-        line = "CardA|CardB;CardC|CardD;2;1"
-        outcome = parse_match_outcome(line)
+        outcome = parse_match_outcome(SAMPLE_LINE)
         assert outcome.deck_a_names == ["CardA", "CardB"]
         assert outcome.deck_b_names == ["CardC", "CardD"]
         assert outcome.wins_a == 2
         assert outcome.wins_b == 1
 
+    def test_metadata_fields_populated(self):
+        outcome = parse_match_outcome(SAMPLE_LINE)
+        assert outcome.timestamp == "2026-04-22T14:30:05Z"
+        assert outcome.run_id == "run-xyz"
+        assert outcome.set_code == "RVR"
+        assert outcome.method_a == "forge-best"
+        assert outcome.method_b == "gen-2"
+        assert outcome.games == "ABA"
+        assert outcome.play == "BAB"
+        assert outcome.duration_s == 47
+
     def test_winner_is_deck_with_two_wins(self):
-        outcome = parse_match_outcome("A|B;C|D;2;1")
-        assert outcome.winner_names == ["A", "B"]
-        assert outcome.loser_names == ["C", "D"]
+        outcome = parse_match_outcome(SAMPLE_LINE)
+        assert outcome.winner_names == ["CardA", "CardB"]
+        assert outcome.loser_names == ["CardC", "CardD"]
 
     def test_loser_wins_two(self):
-        outcome = parse_match_outcome("A|B;C|D;0;2")
+        line = (
+            "2026-04-22T14:30:05Z;run-xyz;RVR;forge-best;gen-2;"
+            "A|B;C|D;BB;AA;12"
+        )
+        outcome = parse_match_outcome(line)
         assert outcome.winner_names == ["C", "D"]
         assert outcome.loser_names == ["A", "B"]
+
+    def test_two_game_sweep_parses(self):
+        line = (
+            "2026-04-22T14:30:05Z;run-xyz;RVR;forge-best;forge-3sub;"
+            "X|Y;Z|W;AA;BA;12"
+        )
+        outcome = parse_match_outcome(line)
+        assert outcome.wins_a == 2
+        assert outcome.wins_b == 0
+
+    def test_wrong_field_count_rejected(self):
+        legacy_line = "A|B;C|D;2;1"
+        with pytest.raises(ValueError, match="10 semicolon"):
+            parse_match_outcome(legacy_line)
 
 
 class TestBasicLandFiltering:
     def test_basic_lands_filtered(self):
-        """Basic lands should be filtered from deck card lists."""
-        line = "Lightning Bolt|Mountain|Mountain|Forest;Llanowar Elves|Island|Plains;2;0"
+        """Basic lands should be filtered from deck card lists during training-example build."""
+        line = (
+            "2026-04-22T14:30:05Z;run-xyz;RVR;forge-best;forge-3sub;"
+            "Lightning Bolt|Mountain|Mountain|Forest;Llanowar Elves|Island|Plains;"
+            "AA;BA;30"
+        )
         outcome = parse_match_outcome(line)
-        winner_non_basic = [n for n in outcome.winner_names if n.lower() not in BASIC_LAND_NAMES]
+        winner_non_basic = [
+            n for n in outcome.winner_names if n.lower() not in BASIC_LAND_NAMES
+        ]
         assert "Lightning Bolt" in winner_non_basic
         assert "Mountain" not in winner_non_basic
 
@@ -55,15 +126,14 @@ class TestBasicLandFiltering:
 class TestLoadMatchOutcomes:
     def test_load_from_file(self, tmp_path):
         f = tmp_path / "outcomes.txt"
-        f.write_text("A|B;C|D;2;1\nE|F;G|H;1;2\n", encoding="utf-8")
+        f.write_text(SAMPLE_LINE + "\n" + SAMPLE_LINE + "\n", encoding="utf-8")
         outcomes = load_match_outcomes(f)
         assert len(outcomes) == 2
         assert outcomes[0].wins_a == 2
-        assert outcomes[1].wins_b == 2
 
     def test_empty_lines_skipped(self, tmp_path):
         f = tmp_path / "outcomes.txt"
-        f.write_text("A|B;C|D;2;1\n\n\nE|F;G|H;1;2\n", encoding="utf-8")
+        f.write_text(SAMPLE_LINE + "\n\n\n" + SAMPLE_LINE + "\n", encoding="utf-8")
         outcomes = load_match_outcomes(f)
         assert len(outcomes) == 2
 
@@ -85,10 +155,7 @@ class TestBuildMatchTrainingExamples:
             "card_a": emb,
             "card_b": emb + 1,
         })
-        outcomes = [MatchOutcome(
-            deck_a_names=["card_a"], deck_b_names=["card_b"],
-            wins_a=2, wins_b=0,
-        )]
+        outcomes = [_outcome(["card_a"], ["card_b"], "AA")]
         examples, table = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
         assert examples[0].winner_indices.shape == (1,)
@@ -98,10 +165,10 @@ class TestBuildMatchTrainingExamples:
     def test_filters_basic_lands(self, tmp_path):
         emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {"card_a": emb})
-        outcomes = [MatchOutcome(
-            deck_a_names=["card_a", "Mountain", "Mountain"],
-            deck_b_names=["card_a"],
-            wins_a=2, wins_b=0,
+        outcomes = [_outcome(
+            ["card_a", "Mountain", "Mountain"],
+            ["card_a"],
+            "AA",
         )]
         examples, _ = build_training_examples(outcomes, cards_dir)
         assert examples[0].winner_indices.shape[0] == 1
@@ -112,10 +179,10 @@ class TestBuildMatchTrainingExamples:
         cards_dir = self._make_embeddings(tmp_path, {
             "glassworks_shattered_yard": emb,
         })
-        outcomes = [MatchOutcome(
-            deck_a_names=["Glassworks // Shattered Yard"],
-            deck_b_names=["Glassworks // Shattered Yard"],
-            wins_a=2, wins_b=0,
+        outcomes = [_outcome(
+            ["Glassworks // Shattered Yard"],
+            ["Glassworks // Shattered Yard"],
+            "AA",
         )]
         examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
@@ -128,10 +195,10 @@ class TestBuildMatchTrainingExamples:
         d_dir = cards_dir / "d"
         d_dir.mkdir()
         np.savez_compressed(d_dir / "dandan.npz", embedding=emb)
-        outcomes = [MatchOutcome(
-            deck_a_names=["Dand\u00e2n"],
-            deck_b_names=["Dand\u00e2n"],
-            wins_a=2, wins_b=0,
+        outcomes = [_outcome(
+            ["Dandân"],
+            ["Dandân"],
+            "AA",
         )]
         examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
@@ -147,10 +214,10 @@ class TestBuildMatchTrainingExamples:
             m_dir / "mosswood_dreadknight_dread_whispers.npz",
             embedding=emb,
         )
-        outcomes = [MatchOutcome(
-            deck_a_names=["Mosswood Dreadknight"],
-            deck_b_names=["Mosswood Dreadknight"],
-            wins_a=2, wins_b=0,
+        outcomes = [_outcome(
+            ["Mosswood Dreadknight"],
+            ["Mosswood Dreadknight"],
+            "AA",
         )]
         examples, table = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 1
@@ -160,10 +227,7 @@ class TestBuildMatchTrainingExamples:
     def test_missing_card_skips_match(self, tmp_path):
         cards_dir = tmp_path / "cards"
         cards_dir.mkdir()
-        outcomes = [MatchOutcome(
-            deck_a_names=["nonexistent"], deck_b_names=["also_missing"],
-            wins_a=2, wins_b=0,
-        )]
+        outcomes = [_outcome(["nonexistent"], ["also_missing"], "AA")]
         examples, _ = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 0
 
@@ -175,8 +239,8 @@ class TestBuildMatchTrainingExamples:
             "card_b": emb + 1,
         })
         outcomes = [
-            MatchOutcome(["card_a"], ["card_b"], 2, 0),
-            MatchOutcome(["card_a"], ["card_b"], 2, 1),
+            _outcome(["card_a"], ["card_b"], "AA"),
+            _outcome(["card_a"], ["card_b"], "ABA"),
         ]
         examples, table = build_training_examples(outcomes, cards_dir)
         assert len(examples) == 2

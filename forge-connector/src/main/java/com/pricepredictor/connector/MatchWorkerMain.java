@@ -19,13 +19,18 @@ import java.util.List;
  *       {@link SelfPlayMatchGenerator}.</li>
  * </ul>
  *
- * <p>Usage (via Python supervisor):
- * <pre>
- *   java -Doutput.file=./output/sealed/match-outcomes.txt
- *        [-Dgenerated.decks.file=./output/sealed/generated-decks.txt]
- *        -Xmx1200m -cp &lt;classpath&gt;
- *        com.pricepredictor.connector.MatchWorkerMain
- * </pre>
+ * <p>Required system properties:
+ * <ul>
+ *   <li>{@code -Doutput.file=<path>} — where to append match-outcome lines.</li>
+ *   <li>{@code -Dmatch.run.id=<UUID>} — supervisor-generated run ID written on every match.</li>
+ * </ul>
+ *
+ * <p>Optional system properties:
+ * <ul>
+ *   <li>{@code -Dgenerated.decks.file=<path>} — enables self-play mode.</li>
+ *   <li>{@code -Dself.play.label=<label>} — required <b>iff</b> {@code generated.decks.file}
+ *       is set; forbidden otherwise. Recorded as the method tag for scorer-built decks.</li>
+ * </ul>
  *
  * <p>The worker is terminated externally by the Python supervisor (process.terminate()).
  */
@@ -38,8 +43,27 @@ public class MatchWorkerMain {
             System.exit(2);
         }
 
-        Path outputFile = Path.of(outputFileProp);
+        String runId = System.getProperty("match.run.id");
+        if (runId == null || runId.isBlank()) {
+            System.err.println("Error: -Dmatch.run.id system property is required");
+            System.exit(2);
+        }
+
         String generatedDecksProp = System.getProperty("generated.decks.file");
+        String selfPlayLabel = System.getProperty("self.play.label");
+
+        if (generatedDecksProp != null && (selfPlayLabel == null || selfPlayLabel.isBlank())) {
+            System.err.println(
+                    "Error: -Dself.play.label is required when -Dgenerated.decks.file is set");
+            System.exit(2);
+        }
+        if (generatedDecksProp == null && selfPlayLabel != null) {
+            System.err.println(
+                    "Error: -Dself.play.label is forbidden when -Dgenerated.decks.file is not set");
+            System.exit(2);
+        }
+
+        Path outputFile = Path.of(outputFileProp);
 
         System.out.println("Initializing Forge environment...");
         ForgeEnvironmentInitializer.initialize();
@@ -53,11 +77,12 @@ public class MatchWorkerMain {
         MatchSource source;
         if (generatedDecksProp == null) {
             MatchGenerator generator = new MatchGenerator(
-                    eligibleSets, new DeckBuilder(), new GamePlayer());
+                    eligibleSets, new DeckBuilder(), new GamePlayer(), runId);
             source = generator::generateMatch;
         } else {
             Path generatedDecks = Path.of(generatedDecksProp);
             System.out.println("Self-play mode: loading generated decks from " + generatedDecks);
+            System.out.println("Self-play label: " + selfPlayLabel);
             GeneratedDecksIndex index;
             try {
                 index = GeneratedDecksIndex.load(generatedDecks);
@@ -69,7 +94,7 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " generated decks.");
             SelfPlayMatchGenerator selfPlay = new SelfPlayMatchGenerator(
                     index, new DeckBuilder(), new PoolGenerator(),
-                    new GamePlayer(), eligibleSets);
+                    new GamePlayer(), eligibleSets, runId, selfPlayLabel);
             source = selfPlay::generateMatch;
         }
 

@@ -53,8 +53,17 @@ public class ValidationMatchPlayer {
                 Deck deckA = buildDeckFromNames(parsed.deckANames());
                 Deck deckB = buildDeckFromNames(parsed.deckBNames());
 
-                int[] result = gamePlayer.playMatch(deckA, deckB);
-                appendOutcome(outcomesFile, result[0], result[1]);
+                GamePlayer.PlayedMatch played = gamePlayer.playMatch(deckA, deckB);
+                int winsA = 0;
+                int winsB = 0;
+                for (GamePlayer.GameOutcome g : played.games()) {
+                    if ("A".equals(g.winner())) {
+                        winsA++;
+                    } else {
+                        winsB++;
+                    }
+                }
+                appendOutcome(outcomesFile, winsA, winsB);
 
                 if ((i + 1) % 5 == 0) {
                     System.out.println("Validation: " + (i + 1) + "/" + lines.size() + " matches completed");

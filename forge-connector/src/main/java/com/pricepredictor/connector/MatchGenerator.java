@@ -8,6 +8,7 @@ import forge.item.SealedTemplate;
 import forge.item.generation.UnOpenedProduct;
 import forge.util.MyRandom;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -31,15 +32,24 @@ public class MatchGenerator {
     private final List<String> eligibleSetCodes;
     private final DeckBuilder deckBuilder;
     private final GamePlayer gamePlayer;
+    private final String runId;
     private final Random random;
 
-    public MatchGenerator(List<String> eligibleSetCodes, DeckBuilder deckBuilder, GamePlayer gamePlayer) {
+    public MatchGenerator(
+            List<String> eligibleSetCodes,
+            DeckBuilder deckBuilder,
+            GamePlayer gamePlayer,
+            String runId) {
         if (eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
+        }
+        if (runId == null || runId.isBlank()) {
+            throw new IllegalArgumentException("runId must be non-empty");
         }
         this.eligibleSetCodes = List.copyOf(eligibleSetCodes);
         this.deckBuilder = deckBuilder;
         this.gamePlayer = gamePlayer;
+        this.runId = runId;
         this.random = MyRandom.getRandom();
     }
 
@@ -47,8 +57,8 @@ public class MatchGenerator {
      * Create a MatchGenerator with default DeckBuilder and GamePlayer.
      * Computes the eligible set list from Forge's StaticData.
      */
-    public static MatchGenerator withDefaultBuilders() {
-        return new MatchGenerator(computeEligibleSets(), new DeckBuilder(), new GamePlayer());
+    public static MatchGenerator withDefaultBuilders(String runId) {
+        return new MatchGenerator(computeEligibleSets(), new DeckBuilder(), new GamePlayer(), runId);
     }
 
     /**
@@ -93,15 +103,30 @@ public class MatchGenerator {
         List<PaperCard> poolA = generatePool(setCode);
         List<PaperCard> poolB = generatePool(setCode);
 
-        Deck deckA = deckBuilder.buildDeck(poolA);
-        Deck deckB = deckBuilder.buildDeck(poolB);
+        DeckBuilder.BuiltDeck builtA = deckBuilder.buildDeck(poolA);
+        DeckBuilder.BuiltDeck builtB = deckBuilder.buildDeck(poolB);
 
-        int[] wins = gamePlayer.playMatch(deckA, deckB);
+        GamePlayer.PlayedMatch played = gamePlayer.playMatch(builtA.deck(), builtB.deck());
 
-        List<String> deckANames = toNames(deckA);
-        List<String> deckBNames = toNames(deckB);
+        StringBuilder games = new StringBuilder(played.games().size());
+        StringBuilder play = new StringBuilder(played.games().size());
+        for (GamePlayer.GameOutcome g : played.games()) {
+            games.append(g.winner());
+            play.append(g.playFirst());
+        }
 
-        return new MatchResult(deckANames, deckBNames, wins[0], wins[1]);
+        return new MatchResult(
+                Instant.now(),
+                runId,
+                setCode,
+                builtA.method(),
+                builtB.method(),
+                toNames(builtA.deck()),
+                toNames(builtB.deck()),
+                games.toString(),
+                play.toString(),
+                played.durationSeconds()
+        );
     }
 
     List<PaperCard> generatePool(String setCode) {

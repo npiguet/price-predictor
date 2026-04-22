@@ -47,8 +47,34 @@ class SelfPlayMatchGeneratorTest {
                 new PoolGenerator(),
                 new GamePlayer(),
                 List.of("MH3", "BLB", "RVR"),
+                "test-run-id",
+                "test-label",
                 random
         );
+    }
+
+    // ── constructor validation ────────────────────────────────────────────────
+
+    @Test
+    void runIdMustBeNonBlank() {
+        GeneratedDecksIndex index = indexOf(deck("MH3", "a"));
+        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
+                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
+                List.of("MH3"), "", "label", new Random(0)));
+        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
+                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
+                List.of("MH3"), null, "label", new Random(0)));
+    }
+
+    @Test
+    void selfPlayLabelMustBeNonBlank() {
+        GeneratedDecksIndex index = indexOf(deck("MH3", "a"));
+        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
+                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
+                List.of("MH3"), "run-id", "", new Random(0)));
+        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
+                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
+                List.of("MH3"), "run-id", null, new Random(0)));
     }
 
     // ── rollIsMethod5 distribution ────────────────────────────────────────────
