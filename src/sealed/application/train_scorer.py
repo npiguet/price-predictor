@@ -110,6 +110,7 @@ class _TrainingContext:
     best_path: Path
     start_epoch: int
     best_val_accuracy: float
+    device: torch.device
 
 
 class _BatchStats:
@@ -166,11 +167,14 @@ class TrainScorerUseCase:
         for epoch in range(ctx.start_epoch, ctx.start_epoch + config.epochs):
             train_stats = _train_one_epoch(
                 ctx.model, ctx.embedding_table, ctx.train_loader, ctx.optimizer,
+                ctx.device,
             )
             metrics.train_losses.append(train_stats.loss)
 
             if (epoch - ctx.start_epoch + 1) % config.val_interval == 0:
-                val = _validate(ctx.model, ctx.embedding_table, ctx.val_loader)
+                val = _validate(
+                    ctx.model, ctx.embedding_table, ctx.val_loader, ctx.device,
+                )
                 metrics.val_losses.append(val.loss)
                 metrics.val_accuracies.append(val.accuracy)
                 if ctx.initial_embeddings is not None:
@@ -198,9 +202,14 @@ class TrainScorerUseCase:
         resume = _resume_or_build_model(config, store)
         _set_normalization_stats(resume.model, train_examples, embedding_table)
 
+        device = _select_device()
+        resume.model.to(device)
+        embedding_table.to(device)
+
         optimizer = _build_optimizer(resume.model, embedding_table, config)
         if resume.optimizer_state and not config.unfreeze_embeddings:
             optimizer.load_state_dict(resume.optimizer_state)
+            _move_optimizer_state(optimizer, device)
 
         train_loader, val_loader = _make_loaders(
             train_examples, val_examples, config.batch_size,
@@ -224,6 +233,7 @@ class TrainScorerUseCase:
             best_path=config.checkpoint_dir / config.best_checkpoint_name(),
             start_epoch=resume.start_epoch,
             best_val_accuracy=resume.best_val_accuracy,
+            device=device,
         )
 
     def _persist_checkpoint(
@@ -318,17 +328,44 @@ def _make_loaders(
     return train_loader, val_loader
 
 
+def _select_device() -> torch.device:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training scorer on device: {device}")
+    return device
+
+
+def _move_optimizer_state(
+    optimizer: torch.optim.Optimizer, device: torch.device,
+) -> None:
+    """Move Adam momentum/variance buffers to ``device`` after ``load_state_dict``."""
+    for state in optimizer.state.values():
+        for k, v in state.items():
+            if isinstance(v, torch.Tensor):
+                state[k] = v.to(device)
+
+
+def _batch_to_device(batch: TrainingBatch, device: torch.device) -> TrainingBatch:
+    return TrainingBatch(
+        winner_indices=batch.winner_indices.to(device),
+        loser_indices=batch.loser_indices.to(device),
+        winner_mask=batch.winner_mask.to(device),
+        loser_mask=batch.loser_mask.to(device),
+    )
+
+
 def _train_one_epoch(
     model: SetTransformerScorer,
     embedding_table: EmbeddingTable,
     loader: DataLoader,
     optimizer: torch.optim.Optimizer,
+    device: torch.device,
 ) -> EpochStats:
     model.train()
     stats = _BatchStats()
     grad_norms: dict[str, float] = {}
 
     for batch in loader:
+        batch = _batch_to_device(batch, device)
         optimizer.zero_grad()
         score_winner, score_loser = _score_batch(model, embedding_table, batch)
         loss = _pairwise_bce(score_winner, score_loser)
@@ -348,12 +385,14 @@ def _validate(
     model: SetTransformerScorer,
     embedding_table: EmbeddingTable,
     val_loader: DataLoader,
+    device: torch.device,
 ) -> ValidationResult:
     """Compute validation loss, accuracy, and score statistics."""
     model.eval()
     stats = _BatchStats()
     with torch.no_grad():
         for batch in val_loader:
+            batch = _batch_to_device(batch, device)
             score_winner, score_loser = _score_batch(model, embedding_table, batch)
             loss = _pairwise_bce(score_winner, score_loser)
             stats.add(loss, score_winner, score_loser)
