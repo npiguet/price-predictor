@@ -51,6 +51,7 @@ def main() -> None:
         for bo in BEST_OFS
     }
     flip_counts = {bo: 0 for bo in BEST_OFS if bo != 7}
+    games_length_counts: dict[int, int] = defaultdict(int)
     n = 0
 
     with open(PATH, encoding="utf-8") as f:
@@ -66,6 +67,7 @@ def main() -> None:
             if not games:
                 continue
             n += 1
+            games_length_counts[len(games)] += 1
 
             first, second = sorted([method_a, method_b])
             h2h_key = (first, second)
@@ -98,6 +100,15 @@ def main() -> None:
                         h2h[bo][h2h_key]["wins_for_first"] += 1
 
     print(f"Total matches parsed: {n}")
+    print()
+
+    print("=== Bo7 match length distribution ===")
+    print("(how many games each match took - shorter = more lopsided, longer = closer)")
+    for length in sorted(games_length_counts):
+        count = games_length_counts[length]
+        pct = 100 * count / max(n, 1)
+        loser_wins = length - 4  # Bo7 ends as soon as one side reaches 4 wins
+        print(f"  {length} games (4-{loser_wins}): {pct:5.2f}%  ({count:>6} of {n})")
     print()
 
     print("=== Match win rate by method, simulated across best-of-N ===")
