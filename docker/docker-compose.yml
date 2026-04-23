@@ -1,0 +1,23 @@
+services:
+  match-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: price-predictor-match:latest
+    container_name: match-worker
+    restart: unless-stopped
+    # hostname is baked into the per-machine output filename the supervisor
+    # writes to (match-outcomes-<hostname>.txt) — pick something distinctive.
+    hostname: truenas
+    volumes:
+      - /mnt/tank/price-predictor/output:/app/output
+      - /mnt/tank/price-predictor/resources:/app/resources:ro
+      - /mnt/tank/price-predictor/models:/app/models:ro
+    command:
+      - --workers=8
+      # Self-play mode: uncomment both lines and set the label for this
+      # generation. Phase 0 (no generated-decks-path) uses the default CMD.
+      # - --generated-decks-path=/app/output/sealed/generated-decks.txt
+      # - --self-play-label=gen-2
+    mem_limit: 12g
+    cpus: 8.0
