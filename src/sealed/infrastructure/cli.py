@@ -453,6 +453,9 @@ def run_train_scorer(args: argparse.Namespace) -> int:
     try:
         use_case = TrainScorerUseCase()
         use_case.execute(config)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 130
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
