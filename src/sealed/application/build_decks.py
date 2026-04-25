@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -32,6 +33,10 @@ class BuildDecksConfig:
     output: Path = field(
         default_factory=lambda: Path("output/sealed/generated-decks.txt"),
     )
+    sa_temperature: float = 0.0
+    sa_cooling: float = 0.95
+    sa_max_iterations: int = 200
+    print_decks: bool = False
 
 
 class BuildDecksUseCase:
@@ -54,20 +59,34 @@ class BuildDecksUseCase:
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
         total = len(pools)
-        _log(f"Building decks for {total} pools...")
+        if config.sa_temperature > 0:
+            _log(
+                f"Building decks for {total} pools with simulated annealing "
+                f"(T0={config.sa_temperature}, cooling={config.sa_cooling}, "
+                f"max_iter={config.sa_max_iterations})..."
+            )
+        else:
+            _log(f"Building decks for {total} pools (pure greedy)...")
         written = 0
+        built_decks: list[list[str]] = []
         with open(config.output, "w", encoding="utf-8") as out:
             for i, (set_code, pool_names) in enumerate(pools, start=1):
-                deck = self._build_one_deck(model, pool_names, locator)
+                deck = self._build_one_deck(model, pool_names, locator, config)
                 if deck is not None:
                     out.write(set_code)
                     out.write(";")
                     out.write("|".join(deck))
                     out.write("\n")
                     written += 1
+                    if config.print_decks:
+                        built_decks.append(deck)
                 if i % self.PROGRESS_INTERVAL == 0 or i == total:
                     _log(f"  {i}/{total} pools processed ({written} decks written)")
         _log(f"Done: {written} decks written to {config.output}")
+
+        if config.print_decks and built_decks:
+            scores = score_decks(model, built_decks, locator)
+            print(format_decks_for_display(built_decks, locator, scores))
         return written
 
     def _load_model(self, checkpoint_path: Path) -> SetTransformerScorer:
@@ -85,6 +104,7 @@ class BuildDecksUseCase:
         model: SetTransformerScorer,
         pool_names: list[str],
         locator: ConvertedCardLocator,
+        config: BuildDecksConfig,
     ) -> list[str] | None:
         pool_embeddings: dict[str, np.ndarray] = {}
         valid_names: list[str] = []
@@ -97,7 +117,12 @@ class BuildDecksUseCase:
         if len(valid_names) < NONLAND_DECK_SIZE:
             return None
 
-        nonland_deck = GreedyDeckBuilder(model, pool_embeddings).build(valid_names)
+        nonland_deck = GreedyDeckBuilder(
+            model, pool_embeddings,
+            temperature=config.sa_temperature,
+            cooling=config.sa_cooling,
+            max_iterations=config.sa_max_iterations,
+        ).build(valid_names)
         nonland_texts = [
             text for n in nonland_deck if (text := locator.load_text(n)) is not None
         ]

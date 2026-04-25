@@ -488,6 +488,12 @@ starting deck is red-green, because every individual swap away from red-green ma
 If this is a problem, use simulated annealing or beam search instead of pure greedy search. The scorer supports any
 search strategy since it evaluates complete decks.
 
+`GreedyDeckBuilder` exposes simulated annealing via `--sa-temperature`, `--sa-cooling`, and `--sa-max-iterations`
+flags on `build-decks`. With `temperature == 0` the algorithm is pure greedy; with `temperature > 0` swaps are
+sampled from a softmax-temperature distribution over all candidates each iteration, and the best deck seen across
+all iterations is returned. See [`experiments/sa-deck-builder-tuning.md`](../experiments/sa-deck-builder-tuning.md)
+for empirical guidance on choosing `temperature`.
+
 # Phase 3 — Self-Play Refinement
 
 Once the initial scorer (Phase 1) and search-based builder (Phase 2) are working, the training data can be improved

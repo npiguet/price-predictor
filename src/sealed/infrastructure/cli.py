@@ -118,6 +118,37 @@ def _build_build_decks_parser(subparsers) -> None:
         default="output/sealed/generated-decks.txt",
         help="Output generated-decks file (default: output/sealed/generated-decks.txt)",
     )
+    build_parser.add_argument(
+        "--sa-temperature",
+        type=float,
+        default=0.0,
+        help=(
+            "Initial temperature for simulated annealing. 0 = pure greedy "
+            "(default). Try 0.1-1.0 for SA; reasonable values depend on "
+            "the magnitude of typical score differences for the model."
+        ),
+    )
+    build_parser.add_argument(
+        "--sa-cooling",
+        type=float,
+        default=0.95,
+        help="Per-iteration temperature multiplier (default: 0.95). Ignored if --sa-temperature is 0.",
+    )
+    build_parser.add_argument(
+        "--sa-max-iterations",
+        type=int,
+        default=200,
+        help="Hard cap on swap iterations (default: 200). Pure greedy stops earlier on convergence.",
+    )
+    build_parser.add_argument(
+        "--print-decks",
+        action="store_true",
+        help=(
+            "After building, also print each deck to stdout in the human-"
+            "readable format used by evaluate-scorer (=== Deck N  score=... === "
+            "header + one card per line with mana cost)."
+        ),
+    )
 
 
 def _build_train_scorer_parser(subparsers) -> None:
@@ -375,6 +406,10 @@ def run_build_decks(args: argparse.Namespace) -> int:
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
         output=Path(args.output),
+        sa_temperature=args.sa_temperature,
+        sa_cooling=args.sa_cooling,
+        sa_max_iterations=args.sa_max_iterations,
+        print_decks=args.print_decks,
     )
 
     try:

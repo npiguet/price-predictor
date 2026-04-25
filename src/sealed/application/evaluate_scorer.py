@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -166,18 +167,49 @@ class EvaluateScorerUseCase:
     ) -> None:
         a_scores = score_decks(model, a_decks, locator)
         b_scores = score_decks(model, b_decks, locator)
-        _write_decks_file(work_dir / "decks-scorer.txt", a_decks, locator, a_scores)
-        _write_decks_file(work_dir / "decks-forge.txt", b_decks, locator, b_scores)
+        write_decks_file(work_dir / "decks-scorer.txt", a_decks, locator, a_scores)
+        write_decks_file(work_dir / "decks-forge.txt", b_decks, locator, b_scores)
 
 
-def _write_decks_file(
-    path: Path,
+_MANA_BRACE_RE = re.compile(r"\{([^}]+)\}")
+_VARIABLE_MANA_TOKENS = frozenset({"X", "Y", "Z"})
+
+
+def _mana_value(cost: str) -> int:
+    """Compute mana value (a.k.a. CMC) from a cost string like ``{2}{R}{R}``.
+
+    Lands and other zero-cost cards return 0. Variable costs ({X}/{Y}/{Z})
+    contribute 0. Hybrid/split tokens with digits use the larger digit;
+    pure-color hybrids contribute 1.
+    """
+    if not cost:
+        return 0
+    total = 0
+    for match in _MANA_BRACE_RE.finditer(cost):
+        token = match.group(1)
+        if token.isdigit():
+            total += int(token)
+        elif token in _VARIABLE_MANA_TOKENS:
+            continue
+        elif "/" in token:
+            digits = [int(p) for p in token.split("/") if p.isdigit()]
+            total += max(digits) if digits else 1
+        else:
+            total += 1
+    return total
+
+
+def format_decks_for_display(
     decks: list[list[str]],
     locator: ConvertedCardLocator,
     scores: list[float],
-) -> None:
-    """Write decks for human inspection: one card per line with mana cost,
-    blank-line-separated, with a `=== Deck N (score=X.XXXX) ===` header."""
+) -> str:
+    """Format decks for human inspection: one card per line with mana cost,
+    blank-line-separated, with a `=== Deck N  score=X.XXXX ===` header.
+
+    Cards within each deck are sorted by mana value ascending, with lands
+    (no mana cost) grouped at the bottom and ties broken by name.
+    """
     cost_cache: dict[str, str] = {}
 
     def cost_for(name: str) -> str:
@@ -190,12 +222,22 @@ def _write_decks_file(
     for i, deck in enumerate(decks):
         score = scores[i] if i < len(scores) else 0.0
         lines.append(f"=== Deck {i + 1}  score={score:+.4f} ===")
-        for card in deck:
-            cost = cost_for(card)
+        deck_with_costs = [(card, cost_for(card)) for card in deck]
+        deck_with_costs.sort(key=lambda pair: (pair[1] == "", _mana_value(pair[1]), pair[0]))
+        for card, cost in deck_with_costs:
             lines.append(f"{card:<32}{cost}".rstrip())
         lines.append("")
 
-    path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def write_decks_file(
+    path: Path,
+    decks: list[list[str]],
+    locator: ConvertedCardLocator,
+    scores: list[float],
+) -> None:
+    path.write_text(format_decks_for_display(decks, locator, scores), encoding="utf-8")
 
 
 def _build_a_decks(
