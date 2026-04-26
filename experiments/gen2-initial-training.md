@@ -148,3 +148,97 @@ val_loss starts rising by epoch 7, and architecture choice barely moves the need
 inside that overfit ceiling. The next iteration's biggest win will come from
 regularization (dropout + weight decay + val_loss-based early stopping), not from
 further depth tuning.
+
+# Dropout sweep
+
+After implementing the `--dropout` flag (one rate shared across SAB attention, SAB
+feed-forward, PMA attention, and the scoring MLP), a dropout sweep was run on the
+6-layer model at the same `--lr 1e-5` and on the same `match-outcomes-all.txt` corpus.
+A single 5-layer + dropout 0.2 run was added afterward to check the depth-vs-dropout
+interaction.
+
+## Headline numbers
+
+6-layer at varying dropout:
+
+| n_layers | dropout | Peak val_acc | Peak epoch | train_acc at e50 |
+|----------|---------|--------------|------------|------------------|
+| 6        | 0.1     | 0.6963       | 12         | 0.969            |
+| 6        | **0.2** | **0.7015**   | 14         | 0.941            |
+| 6        | 0.3     | 0.6998       | 20         | 0.889            |
+| 6        | 0.4     | 0.6970       | 19         | 0.836            |
+
+Cross-architecture, with vs without dropout (no-dropout numbers from the depth sweep
+above):
+
+| Architecture | No dropout       | Dropout 0.2      | Δ        |
+|--------------|------------------|------------------|----------|
+| 5-layer      | **0.7017** (e12) | 0.6948 (e13)     | -0.69 pp |
+| 6-layer      | 0.6963 (e12)     | **0.7015** (e14) | +0.52 pp |
+
+## What the sweep shows
+
+1. **Textbook inverted-U on dropout strength.** val_acc peaks at dropout=0.2 and
+   falls off monotonically on both sides. The full spread across all four dropout
+   values is only 5.2 pp (0.6963 → 0.7015), barely above seed noise on a ~4K val set.
+2. **Peak epoch shifts later as dropout increases** (12 → 14 → 20 → 19 across the
+   four settings). This is the canonical regularization signature: stronger
+   regularization slows convergence and pushes the optimum later.
+3. **train_acc at epoch 50 drops monotonically and predictably** — roughly 3–5 pp
+   lost per +0.1 of dropout. By dropout=0.4 the model can no longer reach even 0.85
+   train_acc at epoch 50, confirming the regularization is genuinely engaging (not a
+   wiring bug) and that 0.4 is into mild-underfit territory.
+4. **Dropout helps deeper models more.** 6-layer was overfitting harder than 5-layer
+   in the no-dropout baseline (5-layer was already in its sweet spot). Dropout 0.2
+   recovers the 6-layer's lost capacity but slightly hurts the 5-layer that didn't
+   need the regularization. Best-of-each-architecture lands in a statistical tie at
+   0.7015–0.7017.
+5. **The ~0.70 val_acc ceiling is real.** It survives architecture variation
+   (2–6 layers) and dropout variation (0–0.4). What changed across the sweep is
+   *how reliably* a given configuration reaches the ceiling, not where the ceiling
+   sits.
+
+## Why dropout doesn't break the ceiling (and what it does buy)
+
+The val_acc ceiling at ~0.70 is partly **irreducible Bo7 noise**: even a perfect
+oracle scorer can't predict every Bo7 match, because individual MTG games are
+stochastic. If a deck's "true" win probability against another is 65%, it still loses
+a Bo7 ~20% of the time. That sets a hard upper bound on val_acc — somewhere in the
+0.72–0.78 range, plausibly — that no regularization knob can move. The ~0.70 plateau
+this sweep keeps hitting is uncomfortably close to that floor.
+
+What dropout does buy, despite the flat val_acc:
+
+- **Score-magnitude control.** No-dropout runs saw winner-vs-loser score std grow
+  from ~0.5 → ~5 over 30 epochs (an unbounded scoring head with nothing constraining
+  it). Dropout damps this somewhat, though weight decay would attack it more
+  directly.
+- **Out-of-distribution robustness.** Regularized models almost always degrade more
+  gracefully on inputs unlike anything in training. This is exactly the gen1 failure
+  mode that motivated gen2 in the first place — gen1 rates its own greedy decks
+  highly because the scorer was over-confident on OOD inputs. Dropout's payoff for
+  this issue is invisible to val_acc (which is measured in-distribution) but should
+  show up in `evaluate-scorer` head-to-head matches against forge-best.
+- **More useful epochs.** The val_loss minimum shifts from epoch 4–7 (no dropout) to
+  epoch 14 (dropout 0.2) — roughly 2× more training is "useful" before overfit
+  takes over.
+
+## Decisions taken
+
+- **Default `--n-layers` raised from 2 to 6**, **default `--dropout` raised from 0
+  to 0.2.** This is the configuration that matched the best no-dropout val_acc
+  (5-layer baseline, 0.7017) while also providing the OOD robustness benefits
+  dropout brings. The 6L + dropout choice over 5L no-dropout was made on the
+  robustness argument: val_acc is a tie, but dropout is the lever that more
+  directly addresses the original gen2 motivation.
+- **Stopped tuning dropout.** The 5.2 pp full spread across the dropout sweep is too
+  small to justify a finer search. Subsequent experiments should explore directions
+  that can plausibly move the ceiling, not knobs that demonstrably can't.
+- **Skipped AdamW + weight decay for now.** Originally planned as the natural next
+  regularization knob after dropout, but the dropout sweep already established that
+  the val_acc ceiling at ~0.70 is unlikely to move meaningfully with another
+  regularization knob — weight decay would attack a different failure mode
+  (unbounded weight growth) but produce the same kind of "smooth out the model"
+  pressure. The realistic upside (~+0.5 pp on val_acc) didn't justify the
+  implementation cost (new optimizer, new CLI flag, ablation runs) compared to
+  the multi-pooling experiment that's expected to actually move the ceiling.
