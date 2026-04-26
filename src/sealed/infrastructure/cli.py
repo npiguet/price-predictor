@@ -201,6 +201,11 @@ def _build_train_scorer_parser(subparsers) -> None:
         "Hidden dimension of the scoring MLP head",
     )
     add_dataclass_arg(
+        train_parser, TrainScorerConfig, "dropout",
+        "Dropout rate applied in SAB attention/FF, PMA attention, and scoring MLP",
+        type_override=float,
+    )
+    add_dataclass_arg(
         train_parser, TrainScorerConfig, "val_interval",
         "Run validation every N epochs",
     )
@@ -443,6 +448,7 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         n_seeds=args.n_seeds,
         d_ff=args.d_ff,
         mlp_hidden=args.mlp_hidden,
+        dropout=args.dropout,
         val_interval=args.val_interval,
         unfreeze_embeddings=args.unfreeze_embeddings,
         embedding_lr=args.embedding_lr,

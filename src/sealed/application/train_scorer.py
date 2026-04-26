@@ -31,11 +31,12 @@ class TrainScorerConfig:
     epochs: int = 100
     batch_size: int = 64
     lr: float = 1e-3
-    n_layers: int = 2
+    n_layers: int = 6
     n_heads: int = 4
     n_seeds: int = 4
     d_ff: int = 1088
     mlp_hidden: int = 256
+    dropout: float = 0.2
     val_interval: int = 1
     unfreeze_embeddings: bool = False
     embedding_lr: float = 1e-5
@@ -55,6 +56,7 @@ class TrainScorerConfig:
             n_seeds=self.n_seeds,
             d_ff=self.d_ff,
             mlp_hidden=self.mlp_hidden,
+            dropout=self.dropout,
         )
 
 

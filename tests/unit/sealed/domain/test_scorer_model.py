@@ -142,3 +142,38 @@ class TestSharedWeights:
         assert score_b.shape == (1, 1)
         # Scores should be different for different decks
         assert not torch.equal(score_a, score_b)
+
+
+class TestDropout:
+    def test_default_dropout(self):
+        assert ScorerConfig().dropout == 0.2
+
+    def test_forward_pass_with_dropout(self):
+        model = _make_scorer(dropout=0.5)
+        cards = torch.randn(2, 10, D_MODEL)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        scores_eval = model(cards, mask)
+        assert torch.isfinite(scores_eval).all()
+        model.train()
+        scores_train = model(cards, mask)
+        assert torch.isfinite(scores_train).all()
+
+    def test_train_mode_dropout_changes_output(self):
+        """Two forward passes in train() mode with dropout should differ."""
+        model = _make_scorer(dropout=0.5)
+        model.train()
+        cards = torch.randn(2, 10, D_MODEL)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        score_a = model(cards, mask)
+        score_b = model(cards, mask)
+        assert not torch.allclose(score_a, score_b)
+
+    def test_eval_mode_dropout_is_deterministic(self):
+        """Two forward passes in eval() mode should be identical even with dropout configured."""
+        model = _make_scorer(dropout=0.5)
+        # _make_scorer already calls model.eval()
+        cards = torch.randn(2, 10, D_MODEL)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        score_a = model(cards, mask)
+        score_b = model(cards, mask)
+        torch.testing.assert_close(score_a, score_b)

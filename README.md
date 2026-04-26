@@ -552,6 +552,51 @@ Each Java worker uses one of four weighted deck-building methods (40/30/20/10%) 
 
 **Exit codes**: `0` = clean shutdown, `2` = configuration error (Java not found, JAR not built).
 
+### train-scorer
+
+Trains the Set Transformer deck scorer on a `match-outcomes-*.txt` file. Each match in the file becomes a pairwise (winner, loser) training example optimized with Bradley-Terry binary cross-entropy on the score difference. The trainer holds out a fraction of examples for validation, runs validation every epoch, and saves the best-by-val-accuracy checkpoint to `models/sealed/scorer/`.
+
+**Prerequisites**: card embeddings have been written by `encode-cards` (one `.npz` per card under `output/cardsfolder/`); a match-outcomes file exists at the path passed to `--outcomes-path`.
+
+```bash
+# Default training run (reads output/sealed/match-outcomes.txt)
+python -m sealed train-scorer
+
+# Train against the full archived corpus with mild dropout
+python -m sealed train-scorer \
+    --outcomes-path output/sealed/match-outcomes-all.txt \
+    --n-layers 4 --dropout 0.1 --lr 1e-5
+
+# Resume from a checkpoint and unfreeze embeddings (Phase B fine-tuning)
+python -m sealed train-scorer \
+    --resume models/sealed/scorer/best_l4_h4_s4_ff1088_mlp256_lr1e-05.pt \
+    --unfreeze-embeddings --embedding-lr 1e-6
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--outcomes-path` | `output/sealed/match-outcomes.txt` | Path to the match-outcomes file to train on |
+| `--checkpoint-dir` | `models/sealed/scorer/` | Directory where checkpoints are written |
+| `--resume` | _(none)_ | Path to a checkpoint to resume training from |
+| `--epochs` | `100` | Number of training epochs |
+| `--batch-size` | `64` | Training batch size |
+| `--lr` | `1e-3` | Learning rate for the scorer parameters |
+| `--n-layers` | `6` | Number of Set Transformer SAB layers |
+| `--n-heads` | `4` | Number of attention heads |
+| `--n-seeds` | `4` | Number of PMA seed vectors |
+| `--d-ff` | `1088` | Feed-forward dimension in SAB layers |
+| `--mlp-hidden` | `256` | Hidden dimension of the scoring MLP head |
+| `--dropout` | `0.2` | Dropout rate applied in SAB attention/FF, PMA attention, and the scoring MLP |
+| `--val-interval` | `1` | Run validation every N epochs |
+| `--unfreeze-embeddings` | `False` | Enable embedding fine-tuning (Phase B) |
+| `--embedding-lr` | `1e-5` | Learning rate for embedding fine-tuning |
+| `--val-fraction` | `0.2` | Fraction of examples held out for validation |
+| `--random-seed` | `42` | RNG seed for the train/val split |
+
+**Stop**: Press **Ctrl+C** to stop training cleanly. The best-by-val-accuracy checkpoint up to that point is preserved.
+
+**Output**: `models/sealed/scorer/best_l<N>_h<H>_s<S>_ff<FF>_mlp<MH>_lr<LR>.pt` — the best checkpoint for that hyperparameter combination, updated whenever a new validation-accuracy high is reached.
+
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
 The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:

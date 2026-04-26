@@ -369,6 +369,8 @@ The model consists of:
   and deterministic features)
 - d_ff: 1088-2176 (standard 2-4x model dimension heuristic)
 - Pooling seed vectors: 4-8
+- Dropout: 0.0-0.2 (no dropout by default; raise toward 0.2 if validation loss diverges
+  from training loss within the first 10 epochs)
 - Total parameters: roughly 5-15M
 
 Architecture details matter less than training data quality. A 2-layer, 4-head model with good data will outperform
@@ -440,6 +442,21 @@ Note: Bradley-Terry scores have no fixed scale — all scores could drift up by 
 because only the *difference* between scores enters the sigmoid. Score magnitude is therefore not a useful metric.
 If constraining it is desired for logging aesthetics, a small L2 penalty on the raw scores works, but it is not
 necessary for correctness.
+
+## Regularization
+
+Dropout is applied at four sites in the scorer, all driven by the single `dropout` config field on `ScorerConfig`:
+on the SAB (Self-Attention Block — the self-attention layers that let cards attend to each other) attention output
+before the residual add+norm, on the SAB feed-forward output before the residual add+norm, on the PMA (Pooling by
+Multihead Attention — the pooling layer where learned seed vectors attend over the card representations) attention
+output before the residual add+norm, and inside the scoring MLP (Multi-Layer Perceptron — the small fully-connected
+head that maps the pooled deck vector to a scalar score) after each ReLU activation. A single rate keeps the surface
+simple; per-site rates can be added later if a sweep shows it is worth it.
+
+Without regularization, the scorer overfits within a handful of epochs because card-level patterns memorize faster
+than deck-level patterns generalize — the model latches onto specific card identities in the training set rather
+than learning compositional structure. Dropout breaks those narrow paths by randomly silencing neurons at training
+time, forcing the model to lean on broader, redundant signal that is more likely to transfer to unseen decks.
 
 ## Embedding Schedule
 
