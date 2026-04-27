@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -20,6 +22,12 @@ from sealed.infrastructure.match_data_loader import (
     load_match_outcomes,
 )
 from sealed.infrastructure.scorer_store import ScorerStore
+
+
+def _log(message: str) -> None:
+    """Print a timestamped progress line to stdout."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
 
 
 @dataclass
@@ -166,6 +174,7 @@ class TrainScorerUseCase:
         metrics = TrainingMetrics()
         best_val_accuracy = ctx.best_val_accuracy
 
+        _log(f"Starting training loop ({config.epochs} epochs)")
         for epoch in range(ctx.start_epoch, ctx.start_epoch + config.epochs):
             train_stats = _train_one_epoch(
                 ctx.model, ctx.embedding_table, ctx.train_loader, ctx.optimizer,
@@ -197,16 +206,31 @@ class TrainScorerUseCase:
     def _prepare(
         self, config: TrainScorerConfig, store: ScorerStore,
     ) -> _TrainingContext:
+        t0 = time.monotonic()
+        _log(f"Loading dataset from {config.outcomes_path}")
         train_examples, val_examples, embedding_table = _load_dataset(config)
+        _log(
+            f"Dataset ready: {len(train_examples)} train + {len(val_examples)} val "
+            f"examples, {embedding_table.num_cards} unique cards "
+            f"({time.monotonic() - t0:.1f}s)",
+        )
         if config.unfreeze_embeddings:
             embedding_table.unfreeze()
+            _log("Embedding table unfrozen for fine-tuning")
 
         resume = _resume_or_build_model(config, store)
+        if config.resume is not None:
+            _log(f"Resumed from checkpoint at epoch {resume.start_epoch}")
+        else:
+            _log(f"Built fresh scorer model (n_layers={config.n_layers}, dropout={config.dropout})")
+
+        _log("Computing per-card feature normalization stats")
         _set_normalization_stats(resume.model, train_examples, embedding_table)
 
         device = _select_device()
         resume.model.to(device)
         embedding_table.to(device)
+        _log(f"Model and embedding table moved to {device}")
 
         optimizer = _build_optimizer(resume.model, embedding_table, config)
         if resume.optimizer_state and not config.unfreeze_embeddings:
@@ -222,6 +246,11 @@ class TrainScorerUseCase:
             embedding_table.embedding.weight.detach().clone()
             if not embedding_table.is_frozen()
             else None
+        )
+        _log(
+            f"Setup complete in {time.monotonic() - t0:.1f}s "
+            f"(batch_size={config.batch_size}, "
+            f"~{len(train_examples) // max(config.batch_size, 1)} train batches/epoch)",
         )
 
         return _TrainingContext(
@@ -263,8 +292,16 @@ def _load_dataset(
     config: TrainScorerConfig,
 ) -> tuple[list[MatchTrainingExample], list[MatchTrainingExample], EmbeddingTable]:
     """Load all outcomes, build a shared EmbeddingTable, and randomly split examples."""
+    t0 = time.monotonic()
     outcomes = load_match_outcomes(config.outcomes_path)
+    _log(f"  parsed {len(outcomes)} match outcomes ({time.monotonic() - t0:.1f}s)")
+
+    t1 = time.monotonic()
     examples, embedding_table = build_training_examples(outcomes, config.cards_path)
+    _log(
+        f"  built {len(examples)} training examples "
+        f"(loaded card embeddings, {time.monotonic() - t1:.1f}s)",
+    )
     if len(examples) < 2:
         return examples, [], embedding_table
     train_examples, val_examples = train_test_split(
@@ -332,7 +369,7 @@ def _make_loaders(
 
 def _select_device() -> torch.device:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Training scorer on device: {device}")
+    _log(f"Training scorer on device: {device}")
     return device
 
 
@@ -483,7 +520,7 @@ def _print_epoch_report(
     if metrics.embedding_drifts:
         drift_str = f"  embedding_drift={metrics.embedding_drifts[-1]:.6f}"
     grad_str = "  ".join(f"{k}={v:.4f}" for k, v in train_stats.grad_norms.items())
-    print(
+    _log(
         f"Epoch {epoch + 1}: "
         f"train_loss={train_stats.loss:.4f}  "
         f"train_acc={train_stats.accuracy:.4f}  "
@@ -491,9 +528,9 @@ def _print_epoch_report(
         f"val_acc={val.accuracy:.4f}"
         f"{drift_str}"
     )
-    print(
+    _log(
         f"  scores: "
         f"winner={val.score_winner_mean:.4f}±{val.score_winner_std:.4f}  "
         f"loser={val.score_loser_mean:.4f}±{val.score_loser_std:.4f}"
     )
-    print(f"  grad_norms: {grad_str}")
+    _log(f"  grad_norms: {grad_str}")
