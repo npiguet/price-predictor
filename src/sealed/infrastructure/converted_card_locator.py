@@ -37,6 +37,7 @@ class ConvertedCardLocator:
 
     def __init__(self, cards_path: Path) -> None:
         self._cards_path = cards_path
+        self._letter_index: dict[str, dict[str, Path]] = {}
 
     def text_path(self, card_name: str) -> Path | None:
         return self._find_file(card_name, ".txt")
@@ -52,7 +53,8 @@ class ConvertedCardLocator:
         path = self.embedding_path(card_name)
         if path is None:
             return None
-        return np.load(path)["embedding"]
+        with np.load(path) as f:
+            return f["embedding"].copy()
 
     def expected_path(self, card_name: str, ext: str) -> Path:
         """Return the expected exact-match path (used for error messages)."""
@@ -61,18 +63,29 @@ class ConvertedCardLocator:
 
     def _find_file(self, card_name: str, ext: str) -> Path | None:
         filename, first_letter = self._split_filename(card_name)
-        letter_dir = self._cards_path / first_letter
+        index = self._index_for(first_letter)
 
-        exact = letter_dir / f"{filename}{ext}"
-        if exact.exists():
+        exact = index.get(f"{filename}{ext}")
+        if exact is not None:
             return exact
 
-        if letter_dir.is_dir():
-            prefix = filename + "_"
-            for candidate in letter_dir.iterdir():
-                if candidate.suffix == ext and candidate.stem.startswith(prefix):
-                    return candidate
+        prefix = filename + "_"
+        for fname, path in index.items():
+            if fname.endswith(ext) and fname.startswith(prefix):
+                return path
         return None
+
+    def _index_for(self, letter: str) -> dict[str, Path]:
+        cached = self._letter_index.get(letter)
+        if cached is not None:
+            return cached
+        letter_dir = self._cards_path / letter
+        index: dict[str, Path] = {}
+        if letter_dir.is_dir():
+            for entry in letter_dir.iterdir():
+                index[entry.name] = entry
+        self._letter_index[letter] = index
+        return index
 
     def _split_filename(self, card_name: str) -> tuple[str, str]:
         resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)

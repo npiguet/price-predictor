@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pad_sequence
 
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.scorer_model import ScorerConfig
@@ -18,6 +20,8 @@ from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
+
+_LOAD_WORKERS = 8
 
 
 class MatchDropReason(Enum):
@@ -183,35 +187,65 @@ class _ExampleBuilder:
         self._missing: set[str] = set()
 
     def build(self, outcomes: list[MatchOutcome]) -> list[MatchTrainingExample]:
+        self._preload_embeddings(outcomes)
         examples: list[MatchTrainingExample] = []
         drops: Counter[MatchDropReason] = Counter()
         for outcome in outcomes:
-            winner = self._resolve_deck(outcome.winner_names)
-            if winner is None:
-                drops[MatchDropReason.MISSING_CARD] += 1
-                continue
-            loser = self._resolve_deck(outcome.loser_names)
-            if loser is None:
-                drops[MatchDropReason.MISSING_CARD] += 1
-                continue
-            if not winner or not loser:
-                drops[MatchDropReason.EMPTY_AFTER_BASICS] += 1
-                continue
-            examples.append(MatchTrainingExample(
-                winner_indices=torch.tensor(winner, dtype=torch.long),
-                loser_indices=torch.tensor(loser, dtype=torch.long),
-            ))
+            result = self._resolve_match(outcome)
+            if isinstance(result, MatchDropReason):
+                drops[result] += 1
+            else:
+                examples.append(result)
         self._report_drops(drops)
         return examples
+
+    def _preload_embeddings(self, outcomes: list[MatchOutcome]) -> None:
+        """Load every unique non-basic card embedding once, in parallel.
+
+        NumPy releases the GIL during ``.npz`` decompression, so a small
+        thread pool gives a near-linear speedup over the sequential per-card
+        ``np.load`` path. Names are sorted before submission so the resulting
+        embedding-table row indices are deterministic across runs.
+        """
+        unique_names = sorted({
+            name
+            for outcome in outcomes
+            for deck in (outcome.deck_a_names, outcome.deck_b_names)
+            for name in deck
+            if name.lower() not in BASIC_LAND_NAMES
+        })
+        with ThreadPoolExecutor(max_workers=_LOAD_WORKERS) as executor:
+            embeddings = list(
+                executor.map(self._locator.load_embedding, unique_names),
+            )
+        for name, emb in zip(unique_names, embeddings, strict=True):
+            if emb is None:
+                self._record_missing(name)
+                continue
+            self._name_to_idx[name] = len(self._vectors)
+            self._vectors.append(emb)
+
+    def _resolve_match(
+        self, outcome: MatchOutcome,
+    ) -> MatchTrainingExample | MatchDropReason:
+        winner = self._resolve_deck(outcome.winner_names)
+        loser = self._resolve_deck(outcome.loser_names)
+        if winner is None or loser is None:
+            return MatchDropReason.MISSING_CARD
+        if not winner or not loser:
+            return MatchDropReason.EMPTY_AFTER_BASICS
+        return MatchTrainingExample(
+            winner_indices=torch.tensor(winner, dtype=torch.long),
+            loser_indices=torch.tensor(loser, dtype=torch.long),
+        )
 
     def _report_drops(self, drops: Counter[MatchDropReason]) -> None:
         if not drops:
             return
-        missing = drops.get(MatchDropReason.MISSING_CARD, 0)
-        empty = drops.get(MatchDropReason.EMPTY_AFTER_BASICS, 0)
+        parts = [f"{reason.value}={drops[reason]}" for reason in MatchDropReason]
         print(
-            f"Skipped matches: {missing} missing-card "
-            f"({len(self._missing)} unique cards), {empty} empty-after-basics",
+            f"Skipped matches: {', '.join(parts)} "
+            f"({len(self._missing)} unique missing cards)",
             file=sys.stderr,
         )
 
@@ -234,42 +268,42 @@ class _ExampleBuilder:
         return indices
 
     def _intern(self, name: str) -> int | None:
-        existing = self._name_to_idx.get(name)
-        if existing is not None:
-            return existing
+        cached = self._name_to_idx.get(name)
+        if cached is not None:
+            return cached
         emb = self._locator.load_embedding(name)
         if emb is None:
-            if name not in self._missing:
-                expected = self._locator.expected_path(name, ".npz")
-                print(
-                    f"Missing card embedding: {expected} (card: {name})",
-                    file=sys.stderr,
-                )
-                self._missing.add(name)
+            self._record_missing(name)
             return None
         idx = len(self._vectors)
         self._vectors.append(emb)
         self._name_to_idx[name] = idx
         return idx
 
+    def _record_missing(self, name: str) -> None:
+        if name in self._missing:
+            return
+        expected = self._locator.expected_path(name, ".npz")
+        print(
+            f"Missing card embedding: {expected} (card: {name})",
+            file=sys.stderr,
+        )
+        self._missing.add(name)
+
 
 def collate_training_examples(batch: list[MatchTrainingExample]) -> TrainingBatch:
     """Collate variable-length training examples into a padded batch."""
-    max_winner = max(ex.winner_indices.size(0) for ex in batch)
-    max_loser = max(ex.loser_indices.size(0) for ex in batch)
-    bs = len(batch)
+    winner_seqs = [ex.winner_indices for ex in batch]
+    loser_seqs = [ex.loser_indices for ex in batch]
 
-    winner_indices = torch.zeros(bs, max_winner, dtype=torch.long)
-    loser_indices = torch.zeros(bs, max_loser, dtype=torch.long)
-    winner_mask = torch.zeros(bs, max_winner, dtype=torch.bool)
-    loser_mask = torch.zeros(bs, max_loser, dtype=torch.bool)
-
-    for i, ex in enumerate(batch):
-        nw = ex.winner_indices.size(0)
-        nl = ex.loser_indices.size(0)
-        winner_indices[i, :nw] = ex.winner_indices
-        loser_indices[i, :nl] = ex.loser_indices
-        winner_mask[i, :nw] = True
-        loser_mask[i, :nl] = True
+    winner_indices = pad_sequence(winner_seqs, batch_first=True, padding_value=0)
+    loser_indices = pad_sequence(loser_seqs, batch_first=True, padding_value=0)
+    winner_mask = _length_mask(winner_seqs, winner_indices.size(1))
+    loser_mask = _length_mask(loser_seqs, loser_indices.size(1))
 
     return TrainingBatch(winner_indices, loser_indices, winner_mask, loser_mask)
+
+
+def _length_mask(sequences: list[torch.Tensor], padded_len: int) -> torch.Tensor:
+    lengths = torch.tensor([s.size(0) for s in sequences])
+    return torch.arange(padded_len)[None, :] < lengths[:, None]
