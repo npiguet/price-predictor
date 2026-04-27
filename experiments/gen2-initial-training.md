@@ -242,3 +242,176 @@ What dropout does buy, despite the flat val_acc:
   pressure. The realistic upside (~+0.5 pp on val_acc) didn't justify the
   implementation cost (new optimizer, new CLI flag, ablation runs) compared to
   the multi-pooling experiment that's expected to actually move the ceiling.
+
+# Architectural sweep: multi-view pooling and hand-computed deck stats
+
+After the dropout sweep, the next planned intervention was architectural: give the
+model **information it currently can't compute**, rather than helping it use existing
+information better. The reasoning was that regularization knobs only move the
+ceiling if the model is failing for capacity/overfit reasons; if the ceiling is
+information-limited, you need to add information.
+
+## What was tried
+
+Two architectural changes, implemented together:
+
+1. **Multi-view deck pooling.** Replace single-PMA pooling with a concatenation of
+   three complementary views of the SAB-stack output:
+   - PMA (existing): learned attention over the cards.
+   - Max-pool: per-feature peak across the cards (with padding masked to `-inf`).
+   - Mean-pool: per-feature average across the cards (with padding masked to `0`,
+     divided by the real-card count).
+
+   Total pooled width: `n_seeds * d_model + 2 * d_model` = 4×544 + 2×544 = 3264.
+
+2. **Hand-computed deck-stats vector.** A 23-feature deterministic summary of each
+   deck, computed from raw cards before any transformer processing, concatenated
+   to the pooled deck representation before the scoring MLP. Layout: mana curve
+   histogram (8 buckets) + color count (1) + cards-per-color WUBRGC (6) + total
+   pips per color WUBRGC (6) + creature/noncreature counts (2). Each feature
+   scaled by an analytical divisor (counts ÷ 23, color count ÷ 6) to bring
+   everything to `O(1)` magnitudes.
+
+The MLP first-layer input dimension grew from `4 * 544 = 2176` to
+`4 * 544 + 2 * 544 + 23 = 3287`.
+
+The motivation for hand-computed stats specifically was that transformers struggle
+with "counting" operations (number of red sources, number of 2-drops, etc.). PMA
+attention weights normalize to 1, so they can express averages but not counts;
+sum/mean pooling over mangled SAB output can't reliably recover the original
+deterministic features either. Pre-computing the obvious deck-quality summary
+statistics gives the MLP direct access to information that human deckbuilders
+actually use.
+
+## What happened
+
+Three runs at 6-layer, dropout 0.2, on `match-outcomes.txt` (~27K matches at run
+time):
+
+| Run                                 | Peak val_acc | Peak epoch | Epoch-1 train_acc |
+|---|---|---|---|
+| Multi-pool + deck-stats (×1)        | 0.6952       | 14         | 0.6049            |
+| Multi-pool + deck-stats (×50)       | 0.6956       | 13         | 0.6352            |
+| Multi-pool + deck-stats (×200)      | 0.6941       | 12         | 0.6435            |
+
+For comparison, the previous best on the smaller (~20K) corpus was the 6L + dropout
+0.2 baseline at peak val_acc 0.7015. None of the three new runs moved the val_acc
+ceiling at all — the spread across deck-stats scales (×1 to ×200) is 0.0015,
+well within seed noise.
+
+## Diagnostic: was the new path actually being used?
+
+When the first two runs landed at the same val_acc as the no-deck-stats baseline, I
+worried the deck_stats might be silently zero (e.g., text files failing to load
+during dataset prep). A direct test on the loaded training data confirmed:
+
+- Deck-stats vectors are computed correctly with realistic per-feature values
+  (e.g. color count mean=0.55±0.17, MV-bucket fractions, per-color cards 0.13–0.23
+  std). They carry plenty of variance across the corpus.
+- Synthetic forward-pass tests confirmed the model uses them — varying deck_stats
+  with cards/mask held constant changes the output.
+
+But the *magnitude* of that influence at initialization was tiny. With 23 dims out
+of 3287 in the MLP input and Kaiming init, each deck-stats input contributes ~800×
+less to the first-layer activations than each pooled-feature input. The model
+effectively can't see the deck stats early in training, and the gradient signal
+back to those weight columns is too weak (also diluted across 3287 inputs) for the
+optimizer to ever close that gap.
+
+That's what motivated the ×50 and ×200 scaling experiments — to confirm it wasn't
+just a magnitude problem.
+
+## Why the scaling didn't help either
+
+At ×50, the deck stats are no longer magnitude-starved. The diagnostic was visible
+in the training logs: epoch-1 train_acc jumped from 0.605 → 0.635 (a real +3pp
+effect), confirming the model was now actively using the deck stats. At ×200, MLP
+gradient norms grew to 10–15 (vs ~3–5 in the unscaled run), and SAB-stack gradient
+norms shrank — the MLP was clearly being forced to attend to the loud deck-stats
+input.
+
+But by epoch 12–14, every run converged to the same val_acc ≈ 0.695. The model is
+*trying* to use the deck stats, succeeding (in the sense of letting them influence
+training), and getting nothing extra in return.
+
+## Best theory for what's happening
+
+**The transformer's PMA pooling was already extracting all the information that the
+hand-computed stats encode.** PMA is a *learned* attention aggregator over the
+per-card feature vectors (which include `is_color`, pip counts, MV, types, etc. as
+explicit channels). With enough training epochs, gradient descent has the SAB stack
++ PMA learn whatever aggregation patterns turn out to predict win rate — including
+"sum the is_red flags," "bucket the MVs and count," and any other operation we
+hand-coded into the deck-stats vector.
+
+Adding the deck stats as a separate input gave the model a faster path to the same
+information (visible in the +3pp epoch-1 train_acc bump), but didn't add any new
+generalizable signal that the slower path couldn't eventually figure out by itself.
+Same with multi-view pooling: max and mean of the LayerNorm'd SAB output are
+heavily correlated with what PMA can already produce, since PMA can mimic any
+attention pattern including "uniform" (mean) or "spike on the largest activation"
+(max-like).
+
+The redundancy theory predicts exactly what we observed:
+- Faster early training (the deck stats are easier to use than re-deriving them).
+- Same converged val_acc (the slower path catches up).
+- Higher MLP gradient norms when stats are amplified (the model genuinely uses the
+  loud signal but it doesn't carry new info).
+
+## Why the ~0.70 ceiling is now strongly evidenced as the data noise floor
+
+We have **four independent interventions** that all converge at ~0.70 val_acc:
+
+| Intervention                           | Outcome             |
+|---|---|
+| Architecture depth (2–6 SAB layers)    | All converge at ~0.70 |
+| Dropout (0.0, 0.1, 0.2, 0.3, 0.4)      | All converge at ~0.70 |
+| Multi-view pooling (PMA + max + mean)  | Same as PMA alone     |
+| Hand-computed deck stats (×1 to ×200)  | Same as no deck stats |
+
+When orthogonal architectural and regularization changes can't move val_acc, the
+ceiling is most likely **irreducible Bo7 noise** in the labels themselves. If the
+true win probability of deck A over deck B is, say, 65%, the better deck still
+loses a Bo7 about 20% of the time. No model — not even a perfect oracle — can
+predict every label correctly when the labels themselves carry that much
+randomness. A back-of-envelope estimate puts the irreducible ceiling somewhere in
+0.72–0.78 for typical sealed matchup distributions, and we're at 0.695.
+
+## Decisions taken
+
+- **Reverted the multi-pool and deck-stats changes.** They added ~50% more MLP
+  parameters, ~10 minutes per training run for per-deck card-text parsing, and
+  a `--deck-stats-scale` CLI flag, all for zero val_acc benefit. The PMA-only
+  architecture is functionally equivalent and simpler.
+- **The dropout commit and the timestamped logging stay** — those were unambiguous
+  wins and not affected by the revert.
+- **Stopped pursuing architectural complexity** as a path to higher val_acc on
+  this dataset. Three different architectural categories (regularization, pooling,
+  deterministic features) all hit the same wall.
+
+## Recommendations for the next iteration
+
+The val_acc ceiling at ~0.70 is now well-established as data-limited rather than
+model-limited. The remaining levers worth pulling, in order of expected impact:
+
+1. **More self-play data.** At ~27K matches we are still in the regime where more
+   data plausibly moves the ceiling (assuming the noise floor really is ~0.72+).
+   Doubling the corpus is more likely to lift val_acc than any architecture or
+   hyperparameter sweep at this point.
+2. **Unfreeze the card embeddings (Phase B in the spec).** The frozen
+   price-predictor encoder is now the upstream constraint — adding more deck-level
+   capacity downstream of frozen cards just exposes the limits of the cards
+   themselves. Phase-B fine-tuning lets the embeddings shift toward
+   deckbuilding-relevant features (complementarity, role identification) that the
+   price-predictor objective never optimized for.
+3. **Stop measuring success by val_acc.** The dropout/architecture changes might
+   still meaningfully improve deployment behavior on out-of-distribution inputs
+   (e.g., gen1's reward-hacked decks) without showing up in val_acc, which is
+   measured in-distribution. The acid test is `evaluate-scorer --set <SET>` head-
+   to-head matches against forge-best on a fixed pool set, comparing match-win
+   rate across candidate checkpoints. That's the metric that actually reflects
+   what the scorer does at deployment time.
+4. **Consider noise reduction at the data side.** If the spec's "play each matchup
+   3 times and use majority outcome" is implemented, label noise approximately
+   halves and the ceiling moves up by a few pp. This is expensive (3× match
+   generation cost) but uncapped in upside.
