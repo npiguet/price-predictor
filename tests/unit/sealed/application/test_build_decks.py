@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+from price_predictor.domain.card_text import ConvertedCardText
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
 from sealed.domain.card_embedding_layout import total_dim
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -33,8 +34,10 @@ def _write_pools(path: Path, pools: list[tuple[str, list[str]]]) -> None:
 def _make_locator(known_cards: set[str]) -> MagicMock:
     """Locator that returns deterministic embeddings for known cards, None otherwise.
 
-    `load_text` returns a stub with `mana_cost_line()` returning `None`,
-    which `compute_basic_lands` accepts (it falls back to even WUBRG split).
+    ``load_text`` returns a minimal real ``ConvertedCardText`` (a creature with no
+    mana cost) so that downstream code that parses the card or queries
+    ``mana_cost_line`` still works. No ``mana cost:`` line means
+    ``compute_basic_lands`` falls back to its even WUBRG split.
     """
     locator = MagicMock()
     rng = np.random.default_rng(7)
@@ -48,9 +51,7 @@ def _make_locator(known_cards: set[str]) -> MagicMock:
     def load_text(name: str):
         if name not in known_cards:
             return None
-        text = MagicMock()
-        text.mana_cost_line.return_value = None
-        return text
+        return ConvertedCardText(f"name: {name}\ntypes: creature\n")
 
     locator.load_embedding.side_effect = load_embedding
     locator.load_text.side_effect = load_text

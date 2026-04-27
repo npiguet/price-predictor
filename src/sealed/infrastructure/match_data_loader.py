@@ -12,7 +12,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
+from sealed.domain.deck_stats import compute_deck_stats
 from sealed.domain.scorer_model import ScorerConfig
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
@@ -59,16 +61,20 @@ class MatchOutcome:
 
 @dataclass
 class MatchTrainingExample:
-    winner_indices: torch.Tensor  # (N,) long, rows into the EmbeddingTable
-    loser_indices: torch.Tensor   # (M,) long
+    winner_indices: torch.Tensor      # (N,) long, rows into the EmbeddingTable
+    loser_indices: torch.Tensor       # (M,) long
+    winner_deck_stats: torch.Tensor   # (DECK_STATS_DIM,) float
+    loser_deck_stats: torch.Tensor    # (DECK_STATS_DIM,) float
 
 
 @dataclass
 class TrainingBatch:
-    winner_indices: torch.Tensor  # (batch, max_winner_cards) long
-    loser_indices: torch.Tensor   # (batch, max_loser_cards) long
-    winner_mask: torch.Tensor     # (batch, max_winner_cards) bool
-    loser_mask: torch.Tensor      # (batch, max_loser_cards) bool
+    winner_indices: torch.Tensor      # (batch, max_winner_cards) long
+    loser_indices: torch.Tensor       # (batch, max_loser_cards) long
+    winner_mask: torch.Tensor         # (batch, max_winner_cards) bool
+    loser_mask: torch.Tensor          # (batch, max_loser_cards) bool
+    winner_deck_stats: torch.Tensor   # (batch, DECK_STATS_DIM) float
+    loser_deck_stats: torch.Tensor    # (batch, DECK_STATS_DIM) float
 
 
 class EmbeddingTable(nn.Module):
@@ -194,12 +200,16 @@ class _ExampleBuilder:
             if loser is None:
                 drops[MatchDropReason.MISSING_CARD] += 1
                 continue
-            if not winner or not loser:
+            winner_indices, winner_names = winner
+            loser_indices, loser_names = loser
+            if not winner_indices or not loser_indices:
                 drops[MatchDropReason.EMPTY_AFTER_BASICS] += 1
                 continue
             examples.append(MatchTrainingExample(
-                winner_indices=torch.tensor(winner, dtype=torch.long),
-                loser_indices=torch.tensor(loser, dtype=torch.long),
+                winner_indices=torch.tensor(winner_indices, dtype=torch.long),
+                loser_indices=torch.tensor(loser_indices, dtype=torch.long),
+                winner_deck_stats=self._deck_stats_tensor(winner_names),
+                loser_deck_stats=self._deck_stats_tensor(loser_names),
             ))
         self._report_drops(drops)
         return examples
@@ -222,8 +232,11 @@ class _ExampleBuilder:
             stacked = torch.zeros(1, ScorerConfig().d_model)
         return EmbeddingTable(stacked, self._name_to_idx)
 
-    def _resolve_deck(self, names: list[str]) -> list[int] | None:
+    def _resolve_deck(
+        self, names: list[str],
+    ) -> tuple[list[int], list[str]] | None:
         indices: list[int] = []
+        kept_names: list[str] = []
         for name in names:
             if name.lower() in BASIC_LAND_NAMES:
                 continue
@@ -231,7 +244,21 @@ class _ExampleBuilder:
             if idx is None:
                 return None
             indices.append(idx)
-        return indices
+            kept_names.append(name)
+        return indices, kept_names
+
+    def _deck_stats_tensor(self, names: list[str]) -> torch.Tensor:
+        """Compute the deck-stats vector for a deck identified by card names."""
+        cards = []
+        for name in names:
+            text = self._locator.load_text(name)
+            if text is None:
+                continue
+            try:
+                cards.append(parse_converted_text(text))
+            except ValueError:
+                continue
+        return torch.from_numpy(compute_deck_stats(cards))
 
     def _intern(self, name: str) -> int | None:
         existing = self._name_to_idx.get(name)
@@ -272,4 +299,14 @@ def collate_training_examples(batch: list[MatchTrainingExample]) -> TrainingBatc
         winner_mask[i, :nw] = True
         loser_mask[i, :nl] = True
 
-    return TrainingBatch(winner_indices, loser_indices, winner_mask, loser_mask)
+    winner_deck_stats = torch.stack([ex.winner_deck_stats for ex in batch])
+    loser_deck_stats = torch.stack([ex.loser_deck_stats for ex in batch])
+
+    return TrainingBatch(
+        winner_indices=winner_indices,
+        loser_indices=loser_indices,
+        winner_mask=winner_mask,
+        loser_mask=loser_mask,
+        winner_deck_stats=winner_deck_stats,
+        loser_deck_stats=loser_deck_stats,
+    )
