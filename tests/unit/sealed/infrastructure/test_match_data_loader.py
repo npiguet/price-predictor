@@ -9,7 +9,6 @@ import pytest
 import torch
 
 from sealed.domain.card_embedding_layout import total_dim
-from sealed.domain.deck_stats import DECK_STATS_DIM
 from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
@@ -22,10 +21,6 @@ from sealed.infrastructure.match_data_loader import (
 )
 
 D_MODEL = total_dim(256)
-
-
-def _zero_deck_stats() -> torch.Tensor:
-    return torch.zeros(DECK_STATS_DIM, dtype=torch.float32)
 
 SAMPLE_LINE = (
     "2026-04-22T14:30:05Z;run-xyz;RVR;forge-best;gen-2;"
@@ -279,14 +274,10 @@ class TestCollateFunction:
         ex1 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(3, dtype=torch.long),
-            winner_deck_stats=_zero_deck_stats(),
-            loser_deck_stats=_zero_deck_stats(),
         )
         ex2 = MatchTrainingExample(
             winner_indices=torch.arange(8, dtype=torch.long),
             loser_indices=torch.arange(6, dtype=torch.long),
-            winner_deck_stats=_zero_deck_stats(),
-            loser_deck_stats=_zero_deck_stats(),
         )
 
         batch = collate_training_examples([ex1, ex2])
@@ -294,43 +285,18 @@ class TestCollateFunction:
         assert batch.loser_indices.shape == (2, 6)
         assert batch.winner_mask.shape == (2, 8)
         assert batch.loser_mask.shape == (2, 6)
-        assert batch.winner_deck_stats.shape == (2, DECK_STATS_DIM)
-        assert batch.loser_deck_stats.shape == (2, DECK_STATS_DIM)
 
     def test_mask_marks_real_cards_true(self):
         ex1 = MatchTrainingExample(
             winner_indices=torch.arange(3, dtype=torch.long),
             loser_indices=torch.arange(2, dtype=torch.long),
-            winner_deck_stats=_zero_deck_stats(),
-            loser_deck_stats=_zero_deck_stats(),
         )
         ex2 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(4, dtype=torch.long),
-            winner_deck_stats=_zero_deck_stats(),
-            loser_deck_stats=_zero_deck_stats(),
         )
 
         batch = collate_training_examples([ex1, ex2])
         assert batch.winner_mask[0, :3].all()
         assert not batch.winner_mask[0, 3:].any()
         assert batch.winner_mask[1, :5].all()
-
-    def test_deck_stats_stacked_per_example(self):
-        ex1 = MatchTrainingExample(
-            winner_indices=torch.tensor([0], dtype=torch.long),
-            loser_indices=torch.tensor([1], dtype=torch.long),
-            winner_deck_stats=torch.full((DECK_STATS_DIM,), 0.5),
-            loser_deck_stats=torch.full((DECK_STATS_DIM,), 0.25),
-        )
-        ex2 = MatchTrainingExample(
-            winner_indices=torch.tensor([0], dtype=torch.long),
-            loser_indices=torch.tensor([1], dtype=torch.long),
-            winner_deck_stats=torch.full((DECK_STATS_DIM,), 0.75),
-            loser_deck_stats=torch.full((DECK_STATS_DIM,), 0.1),
-        )
-        batch = collate_training_examples([ex1, ex2])
-        assert batch.winner_deck_stats[0, 0].item() == pytest.approx(0.5)
-        assert batch.winner_deck_stats[1, 0].item() == pytest.approx(0.75)
-        assert batch.loser_deck_stats[0, 0].item() == pytest.approx(0.25)
-        assert batch.loser_deck_stats[1, 0].item() == pytest.approx(0.1)

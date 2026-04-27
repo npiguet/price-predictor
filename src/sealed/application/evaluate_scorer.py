@@ -11,8 +11,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from price_predictor.infrastructure.converted_card_parser import parse_converted_text
-from sealed.domain.deck_stats import compute_deck_stats
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
@@ -67,31 +65,9 @@ def score_decks(
     lengths_t = torch.tensor(lengths, device=device)
     mask_t = torch.arange(cards_t.size(1), device=device)[None, :] < lengths_t[:, None]
 
-    deck_stats_t = torch.stack(
-        [_deck_stats_for_deck(deck, locator) for deck in decks],
-    ).to(device)
-
     with torch.no_grad():
-        out = model(cards_t, mask_t, deck_stats_t).squeeze(-1)
+        out = model(cards_t, mask_t).squeeze(-1)
     return out.cpu().tolist()
-
-
-def _deck_stats_for_deck(
-    deck: list[str], locator: ConvertedCardLocator,
-) -> torch.Tensor:
-    """Parse a deck's nonland card text and return its deck-stats tensor."""
-    cards = []
-    for name in deck:
-        if name.lower() in BASIC_LAND_NAMES:
-            continue
-        text = locator.load_text(name)
-        if text is None:
-            continue
-        try:
-            cards.append(parse_converted_text(text))
-        except ValueError:
-            continue
-    return torch.from_numpy(compute_deck_stats(cards))
 
 
 def _load_nonland_embeddings(
@@ -273,25 +249,17 @@ def _build_a_decks(
     a_decks = []
     for pool_names in pools:
         pool_embeddings: dict[str, np.ndarray] = {}
-        pool_cards: dict = {}
         valid_names = []
         for name in pool_names:
             emb = locator.load_embedding(name)
-            text = locator.load_text(name)
-            if emb is not None and text is not None:
-                try:
-                    pool_cards[name] = parse_converted_text(text)
-                except ValueError:
-                    continue
+            if emb is not None:
                 pool_embeddings[name] = emb
                 valid_names.append(name)
 
         if len(valid_names) < NONLAND_DECK_SIZE:
             continue
 
-        nonland_deck = GreedyDeckBuilder(
-            model, pool_embeddings, pool_cards=pool_cards,
-        ).build(valid_names)
+        nonland_deck = GreedyDeckBuilder(model, pool_embeddings).build(valid_names)
         nonland_texts = [
             text for n in nonland_deck if (text := locator.load_text(n)) is not None
         ]

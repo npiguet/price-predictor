@@ -344,16 +344,10 @@ The scorer uses a Set Transformer — a transformer variant designed for unorder
 Key differences from a standard transformer:
 - **No positional encodings.** A deck is a set: {A, B, C} is identical to {C, A, B}. Dropping positional encodings
   makes the model inherently permutation-invariant.
-- **Multi-view deck pooling.** Instead of a single pooling operation, the deck representation concatenates three
-  complementary views of the per-card outputs: attention-based pooling (learned seed vectors over the cards), max
-  pooling (per-feature peak across cards), and mean pooling (per-feature average). Different categories of deck
-  information surface in different views — peaks for standout cards, averages for overall "texture", attention for
-  context-dependent aggregates that depend on what other cards are in the deck.
-- **Bypass path for hand-computed deck statistics.** A fixed-length vector of deterministically-computed
-  deck-wide quantities (mana curve histogram, color counts, pip totals, etc.) is concatenated to the pooled deck
-  representation before the scoring head. These statistics are computed directly from the raw 23 nonland cards,
-  bypassing the transformer entirely, because the transformer's repeated attention/feed-forward layers mangle the
-  per-card features past the point where simple counts can be cleanly recovered from pooled outputs alone.
+- **Attention-based pooling.** Instead of mean-pooling the output tokens, a small set of learned query vectors
+  ("inducing points" or "seed vectors") attend over all card representations. Different seed vectors can specialize
+  in different aspects of deck quality — one might focus on removal density, another on mana curve, another on synergy
+  clusters. Their outputs are concatenated into a fixed-size deck vector.
 
 ### Architecture Details
 
@@ -361,123 +355,22 @@ The model consists of:
 
 1. **Self-attention layers**: Cards attend to each other, learning interactions like "this removal spell is more
    valuable because the rest of the deck is slow" or "these three cards form a synergy package."
-2. **Multi-view deck pooling**: The card representations from the SAB stack are pooled three ways and concatenated:
-   - **Attention pooling (PMA)**: 4-8 learned seed vectors attend over the card representations, producing
-     `n_seeds × d_model` features. Different seeds can specialize in different aspects of deck quality — one might
-     focus on removal density, another on synergy clusters.
-   - **Max pooling**: Per-feature maximum across the deck (with padding positions masked to `-inf`). Surfaces peak
-     signals that single high-value cards (bombs, format-defining rares) produce — attention pooling normalizes
-     weights and dilutes single-card peaks; max preserves them.
-   - **Mean pooling**: Per-feature mean across the deck (with padding positions zeroed). Captures the deck's overall
-     "texture" with `O(1)` magnitudes that mix cleanly with the attention-pooled and max-pooled outputs. Note that
-     for a fixed deck size of 23 nonland cards, `mean = sum / 23` exactly — mean pooling and sum pooling carry
-     identical information, just at different scales. Mean is preferred only because its `O(1)` output magnitude
-     concatenates cleanly with the other pooled views; sum pooling would be `~23×` larger and would dominate the
-     MLP's first layer until the optimizer shrunk the corresponding weights down.
-3. **Hand-computed deck statistics**: A separate fixed-length vector computed deterministically from the raw 23
-   nonland cards, concatenated to the pooled deck representation before the scoring head. These complement the
-   pooled views by providing crisp, threshold-based, and bucketed information that the transformer's output
-   cannot easily express. The colorless handling mirrors the card-level features (see "Card color" and "Mana cost"
-   above): `{C}` pips are colorless mana sources/costs that need a colorless-producing land, while generic mana
-   is colorless cost that any land can pay. They are different things and the deck stats track them separately.
-
-   **Normalization.** All deck-stat features are scaled by a fixed analytical divisor before being concatenated to
-   the pooled deck representation, bringing them to `O(1)` magnitudes that mix cleanly with the LayerNorm'd outputs
-   of the transformer. The divisor for every feature is **23** (the deck size in nonland cards), with the sole
-   exception of color count, which is divided by **6** (the maximum number of color identities WUBRGC). This gives
-   intuitive per-card averages: a mana-curve-bucket value of `0.3` means 30% of the deck's nonlands fall in that
-   bucket, a total-pips-per-color value of `0.5` is half a pip per card on average, and so on. The scaling is
-   fixed at definition time rather than derived from corpus statistics — deck distributions shift across self-play
-   generations, and there are too many possible decks for corpus-derived stats to be meaningfully representative
-   anyway. The tables below give raw counts; divide by the scaling factor at the end.
-
-   #### Mana curve histogram [8 features]
-
-   Count of nonland cards at each mana value bucket. Bucketed counts require thresholding before counting,
-   which an MLP can learn in principle but does not derive cleanly from sum/mean-pooled MV averages.
-
-   | Feature | Rule                                             |
-   |---------|--------------------------------------------------|
-   | MV 0    | count of nonland cards with mana value 0         |
-   | MV 1    | count of nonland cards with mana value 1         |
-   | MV 2    | count of nonland cards with mana value 2         |
-   | MV 3    | count of nonland cards with mana value 3         |
-   | MV 4    | count of nonland cards with mana value 4         |
-   | MV 5    | count of nonland cards with mana value 5         |
-   | MV 6    | count of nonland cards with mana value 6         |
-   | MV 7+   | count of nonland cards with mana value 7 or more |
-
-   #### Color count [1 feature]
-
-   Scalar count of color identities the deck is committed to (`0`–`6`). Each of W/U/B/R/G/C contributes 1 to the
-   count if it is "active" in the deck. A `count(active_colors)` threshold-and-count operation, sharply defined
-   and central to sealed deckbuilding (mono / 2C / 3C / splash decisions).
-
-   | Color         | Active rule                                                                         |
-   |---------------|-------------------------------------------------------------------------------------|
-   | W, U, B, R, G | any nonland card has at least one pip of that color in its cost                     |
-   | C (colorless) | any nonland card requires a `{C}` pip in its cost — generic mana does **not** count |
-
-   #### Cards per color [6 features]
-
-   Count of nonland cards whose color identity includes each color. Carries magnitudes (e.g., 10 white cards vs
-   2 white cards) that color count throws away.
-
-   | Feature | Rule                                                                            |
-   |---------|---------------------------------------------------------------------------------|
-   | cards W | count of cards with at least one `{W}` pip and not devoid                       |
-   | cards U | count of cards with at least one `{U}` pip and not devoid                       |
-   | cards B | count of cards with at least one `{B}` pip and not devoid                       |
-   | cards R | count of cards with at least one `{R}` pip and not devoid                       |
-   | cards G | count of cards with at least one `{G}` pip and not devoid                       |
-   | cards C | count of cards that are colorless (no colored pips, or devoid, or no mana cost) |
-
-   Note the asymmetry with color count above: a card like `{2}{R}` contributes to "cards R" (it has an R pip)
-   but never to "cards C" (it has a colored pip and is not devoid). A pure artifact like `{3}` contributes only
-   to "cards C". A devoid Eldrazi like `{2}{R}` (devoid) contributes only to "cards C".
-
-   #### Total pips per color [6 features]
-
-   Sum of pip counts per color across all nonland cards. Color requirement intensity — drives manabase decisions
-   downstream and distinguishes "10 cards each needing one black pip" from "5 cards each needing two black pips".
-
-   | Feature | Rule                                                                                    |
-   |---------|-----------------------------------------------------------------------------------------|
-   | pips W  | sum of `{W}` pip counts across all nonland cards                                        |
-   | pips U  | sum of `{U}` pip counts across all nonland cards                                        |
-   | pips B  | sum of `{B}` pip counts across all nonland cards                                        |
-   | pips R  | sum of `{R}` pip counts across all nonland cards                                        |
-   | pips G  | sum of `{G}` pip counts across all nonland cards                                        |
-   | pips C  | sum of `{C}` pip counts across all nonland cards — generic mana does **not** contribute |
-
-   #### Creatures vs noncreatures [2 features]
-
-   Count of cards in each broad type bucket. Captures threat density, which is one of the more reliable
-   summary statistics for sealed deck quality.
-
-   | Feature           | Rule                                                                   |
-   |-------------------|------------------------------------------------------------------------|
-   | creature count    | count of nonland cards whose `types:` line contains `creature`         |
-   | noncreature count | count of nonland cards whose `types:` line does not contain `creature` |
-
-   Total: **23 features**, computed once per deck on the raw input before any transformer processing, and
-   concatenated to the pooled deck representation as a parallel input path to the scoring head.
-4. **Scoring head**: A small MLP (2 hidden layers of 256-512 dims with ReLU and dropout) mapping the concatenated
-   deck representation (pooled views + hand-computed statistics) to a single scalar score.
+2. **Pooling layer**: 4-8 learned seed vectors attend over the card representations, producing a fixed-size deck vector
+   (seed vectors x model dimension, e.g. 4 x 544 = 2176).
+3. **Scoring head**: A small MLP (2 hidden layers of 256-512 dims with ReLU) mapping the deck vector to a single
+   scalar score.
 
 ### Starting Hyperparameters
 
-- Layers: 4-6 (deeper stacks benefit from regularization but extract richer card-interaction signal once
-  overfitting is controlled with dropout)
+- Layers: 2-4 (start with 2; pairwise card interactions likely sufficient, try 4 if validation loss stalls)
 - Attention heads: 4-8 (each head can specialize in color alignment, curve distribution, synergy, removal density, etc.)
 - d_model: 544 (no input projection — the Q/K/V projections in each attention head already serve as
   per-head feature selection, letting different heads attend to different subspaces of the semantic
   and deterministic features)
 - d_ff: 1088-2176 (standard 2-4x model dimension heuristic)
-- Pooling seed vectors: 4-8 (PMA seeds; max and mean pooling have no tunable size — they always produce
-  one `d_model`-sized vector each)
-- Hand-computed deck stats: 23 features, fixed by the feature design (curve buckets, color counts, etc.)
-- Dropout: 0.1-0.3 (0.2 is a good default; raise toward 0.3 only if train_acc still climbs to ≥0.95 with 0.2)
+- Pooling seed vectors: 4-8
+- Dropout: 0.0-0.2 (no dropout by default; raise toward 0.2 if validation loss diverges
+  from training loss within the first 10 epochs)
 - Total parameters: roughly 5-15M
 
 Architecture details matter less than training data quality. A 2-layer, 4-head model with good data will outperform

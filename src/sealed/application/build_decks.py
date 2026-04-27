@@ -9,7 +9,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from price_predictor.infrastructure.converted_card_parser import parse_converted_text
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.manabase import compute_basic_lands
@@ -108,27 +107,18 @@ class BuildDecksUseCase:
         config: BuildDecksConfig,
     ) -> list[str] | None:
         pool_embeddings: dict[str, np.ndarray] = {}
-        pool_cards: dict = {}
         valid_names: list[str] = []
         for name in pool_names:
             emb = locator.load_embedding(name)
-            text = locator.load_text(name)
-            if emb is None or text is None:
-                continue
-            try:
-                card = parse_converted_text(text)
-            except ValueError:
-                continue
-            pool_embeddings[name] = emb
-            pool_cards[name] = card
-            valid_names.append(name)
+            if emb is not None:
+                pool_embeddings[name] = emb
+                valid_names.append(name)
 
         if len(valid_names) < NONLAND_DECK_SIZE:
             return None
 
         nonland_deck = GreedyDeckBuilder(
             model, pool_embeddings,
-            pool_cards=pool_cards,
             temperature=config.sa_temperature,
             cooling=config.sa_cooling,
             max_iterations=config.sa_max_iterations,
