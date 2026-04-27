@@ -369,13 +369,90 @@ We have **four independent interventions** that all converge at ~0.70 val_acc:
 | Multi-view pooling (PMA + max + mean)  | Same as PMA alone     |
 | Hand-computed deck stats (×1 to ×200)  | Same as no deck stats |
 
-When orthogonal architectural and regularization changes can't move val_acc, the
-ceiling is most likely **irreducible Bo7 noise** in the labels themselves. If the
-true win probability of deck A over deck B is, say, 65%, the better deck still
-loses a Bo7 about 20% of the time. No model — not even a perfect oracle — can
-predict every label correctly when the labels themselves carry that much
-randomness. A back-of-envelope estimate puts the irreducible ceiling somewhere in
-0.72–0.78 for typical sealed matchup distributions, and we're at 0.695.
+### Why "orthogonal interventions failing" implies a data ceiling
+
+The four interventions in the table above each attack a different potential failure
+mode of the model:
+
+| Intervention | Failure mode it would fix |
+|---|---|
+| More layers | Model too shallow to learn deep card interactions |
+| Dropout | Overfitting / co-adapted feature detectors |
+| Multi-view pooling | Information bottleneck at the pooling step (PMA missing peaks/averages) |
+| Hand-computed deck stats | Information the model can't derive (counts, thresholds) |
+
+If the val_acc ceiling were caused by *any* of these failure modes, the matching
+intervention would have moved val_acc. When all four leave it untouched, the bottleneck
+is most likely outside the model entirely — i.e. a property of the data itself.
+
+This is the classical "irreducible error" in bias–variance decomposition: the chunk of
+loss you can't remove no matter what model you fit, because the labels themselves
+carry randomness that no input feature can predict. For the sealed scorer, that
+randomness is the Bo7 outcome variance.
+
+### The Bo7 noise floor: where the math comes from
+
+Each match in `match-outcomes.txt` is a Bo7 (best of 7 games), and the label is
+*which deck won the match*, not anything about how decisive the win was. The model
+is trying to predict a single bit per match.
+
+But MTG games are individually noisy — even a clearly stronger deck loses some games
+to mulligan luck, draw variance, or specific matchup quirks. So the *match*
+outcome is a noisy summary of the underlying deck-strength gap. Concretely, if the
+better deck has a per-game win probability `p > 0.5` against the weaker deck, the
+better deck wins the Bo7 (= wins ≥4 of 7 games) with probability:
+
+```
+P(better deck wins Bo7) = sum_{k=4}^{7} C(7,k) · p^k · (1-p)^(7-k)
+```
+
+Plugging in some values:
+
+| per-game `p` | P(better deck wins Bo7) | "wrong" label rate |
+|---|---|---|
+| 0.55 | 0.608 | 39% |
+| 0.60 | 0.710 | 29% |
+| 0.65 | 0.800 | 20% |
+| 0.70 | 0.874 | 13% |
+| 0.75 | 0.929 | 7% |
+| 0.80 | 0.967 | 3% |
+
+So even at a fairly large per-game gap (`p=0.65` — one deck is meaningfully better),
+the better deck still *loses* the Bo7 ~20% of the time. The label is "wrong" in those
+cases — the worse deck is recorded as the winner — and there is no information any
+model could use to predict that flip from the cards alone, because the flip came from
+in-game randomness that lives entirely outside the card lists.
+
+### The oracle ceiling for this corpus
+
+A "perfect" model is one that knows the true per-game `p` for every matchup and
+always predicts the deck with `p > 0.5`. Its val_acc on a corpus is just the average
+of `P(better deck wins Bo7)` over the matchup distribution.
+
+The corpus we're training on contains a mix of matchup difficulties (see
+`scripts/analyze_winrates.py` output for the head-to-head Bo1 win rates):
+
+- forge-best vs random: per-game ≈ 82% → oracle Bo7 accuracy ≈ 97%
+- forge-best vs forge-3sub: per-game ≈ 61% → oracle ≈ 73%
+- gen1 vs forge-best: per-game ≈ 47% → oracle ≈ 47% (gen1 is slightly worse, so the
+  oracle's call is wrong as often as not on this matchup)
+- forge-best vs forge-best (mirror): per-game ≈ 50% → oracle ≈ 50% (no information
+  available — coin flip is the best anyone can do)
+
+Averaging across the corpus's empirical method weights (4:3:2:1:4 for
+forge-best : forge-3sub : forge-8sub : random : gen1) gives an oracle ceiling
+roughly in the **0.72–0.78** range. The exact number depends on the matchup mix
+and on which "true" `p` you assume for each pair (the head-to-head numbers are
+themselves noisy estimates from a few thousand matches each). I called it
+"back-of-envelope" because the bookkeeping is involved enough that I'm sure of
+the order of magnitude but not the second decimal.
+
+We're at 0.695. That's about 3–8 pp below the oracle ceiling. Some of that gap is
+the model not perfectly judging deck strength (the encoder is frozen, deck
+interactions are subtle, etc.) — that's the part more data or embedding unfreezing
+could plausibly close. But you can't push past ~0.78 no matter how good the scorer
+gets, unless you reduce the label noise itself by playing each matchup multiple
+times and using a majority-vote label.
 
 ## Decisions taken
 
@@ -388,6 +465,76 @@ randomness. A back-of-envelope estimate puts the irreducible ceiling somewhere i
 - **Stopped pursuing architectural complexity** as a path to higher val_acc on
   this dataset. Three different architectural categories (regularization, pooling,
   deterministic features) all hit the same wall.
+
+## Two stacked sources of remaining error
+
+The val_acc gap between us (0.695) and 100% is two distinct contributions stacked
+on top of each other:
+
+1. **Label noise** — even a perfect oracle-model can't predict labels that the
+   labels themselves can't determine. This is bounded by the Bo7 math from earlier:
+   at typical close-matchup probabilities (`p ≈ 0.55–0.65`) the recorded label is
+   "wrong" 20–40% of the time. The estimated oracle ceiling for this corpus is
+   ~0.72–0.78.
+2. **Model imperfection** — the model doesn't perfectly judge deck strength even
+   on labels that are unambiguous. This is what regularization, architecture, and
+   embedding unfreezing affect.
+
+Our current 0.695 eats both penalties. The estimated 3–8 pp gap to the oracle
+ceiling is the model-imperfection bucket — the part model-side improvements can
+still attack. Above the oracle ceiling, only label-side interventions help.
+
+This framing matters because it explains **why our four failed interventions don't
+predict the failure of unfreezing**. Each of the four (depth, dropout, multi-pool,
+deck stats) targets a subcomponent of the model's *aggregation* over per-card
+features. None of them changes the per-card features themselves. Unfreezing the
+encoder is a different lever entirely — it changes what the cards "look like" to
+the rest of the network.
+
+The price-predictor encoder was trained on "what makes this card cost €X" — only
+loosely correlated with "what makes this card good in a sealed deck". Examples
+where it likely fails:
+
+- **Synergy cards.** Cards whose value comes from being played alongside specific
+  others (tribal payoffs, lifegain enablers, "spells matter" cards). The price
+  predictor saw one card at a time and has no concept of synergy.
+- **Sealed-relevant role.** Removal vs interaction vs threats vs card draw — these
+  matter enormously in sealed but only loosely in card price.
+- **Format-relative value.** Some cards are expensive because they're great in
+  Modern or Commander but mediocre in sealed.
+
+Phase B (unfreezing at low learning rate) lets the encoder shift toward features
+that predict deck quality rather than price. That's a different bottleneck from the
+four already tested, with plausible room to move val_acc by a few pp before
+hitting the oracle ceiling.
+
+### "Bo7 didn't help much over Bo3" doesn't predict "unfreeze won't help much"
+
+A natural temptation is to reason: *"If Bo7 over Bo3 only buys ~3 pp of label
+informativeness at p=0.55, then the labels are already pretty informative, and any
+remaining gap must be model-side, which we just showed is hard to improve."*
+
+This conflates the two stacked sources of error. Bo3-vs-Bo7 changes only #1 (label
+noise). Unfreeze changes only #2 (model imperfection). The success or failure of one
+says nothing about the other. The fact that Bo7 already squeezes most of what's
+available out of 7-game samples doesn't constrain how much can be squeezed out of #2
+by addressing the model-side bottleneck.
+
+### What can actually push past the ~0.78 ceiling
+
+If the goal is val_acc above ~0.78, neither model improvements nor format extension
+to Bo7 will get you there — both attack the model-imperfection bucket only. You'd
+need to attack the *labels* themselves:
+
+- **Repeat each matchup 3× and majority-vote the label.** Replaces a single noisy
+  Bo7 label with a less-noisy "best of 3 Bo7s" label. At p=0.55, lifts per-match
+  label accuracy from 60.8% to ~67%; across the corpus this could lift the oracle
+  ceiling by 4–8 pp.
+- **Extend matches to Bo15 or Bo21.** Same idea — more games per match, lower per-
+  match variance.
+
+Both are ~3× more expensive in match-generation cost. They're the only levers that
+can push the noise ceiling itself higher.
 
 ## Recommendations for the next iteration
 
