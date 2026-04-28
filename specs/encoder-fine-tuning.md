@@ -57,10 +57,10 @@ group** (2 SAB layers + output projection + token embedding table) at
 
 ### `train-scorer` (Phase B-relevant flags)
 
-| Flag                   | Default                                        | Required | Meaning                                                                                                                                                                         |
-|------------------------|------------------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--embedding-lr`       | `0`                                            | no       | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                              |
-| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | no       | Source of encoder weights when bootstrapping a fresh Phase B run from a Phase A checkpoint. Ignored when resuming a Phase B checkpoint (which already carries encoder weights). |
+| Flag                   | Default                                        | Meaning                                                                                                                                                                         |
+|------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--embedding-lr`       | `0`                                            | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                              |
+| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when bootstrapping a fresh Phase B run from a Phase A checkpoint. Ignored when resuming a Phase B checkpoint (which already carries encoder weights). |
 
 The boolean `--unfreeze-embeddings` flag is **removed**; the on/off semantics
 are subsumed by `--embedding-lr` (`0` vs non-zero).
@@ -91,7 +91,7 @@ roughly 10× slower than Phase A; with it, 2–4×.
 |-------------------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `--lr`            | `1e-5`  | Unchanged from Phase A.                                                                                                                                                                                            |
 | `--embedding-lr`  | `0`     | Non-zero activates Phase B. Recommended starting value: `1e-7` (see Rationale § Why the embedding LR has to be unusually low).                                                                                     |
-| `--patience`      | `5`     | Stop training after this many epochs without a new peak `val_acc`. Applies to both phases. The peak epoch resets each time a new peak is observed; the best checkpoint to date is always preserved as `best_*.pt`. |
+| `--patience`      | `5`     | Stop training after this many epochs without a new peak `val_acc`. Applies to both phases. The best checkpoint to date is always preserved as `best_*.pt`.                                                          |
 | Gradient clipping | 1.0     | Max-norm, applied per parameter group. Caps peak per-step movement under unusual gradient spikes.                                                                                                                  |
 
 ## 5. Checkpoint Format
@@ -122,10 +122,8 @@ The two phases are **two separate `train-scorer` invocations** chained via
 python -m sealed train-scorer
 ```
 
-Run with `--embedding-lr 0` (the default). Training stops automatically when
-`val_acc` has not produced a new peak for `--patience` epochs (default 5);
-the best checkpoint is preserved at `models/sealed/scorer/best_*.pt`.
-Typical run length: 10–20 epochs.
+Run with `--embedding-lr 0` (the default). Early stopping fires per the
+`--patience` rule from § 4; typical run length 10–20 epochs.
 
 ### Step 2 — Phase B (encoder fine-tuning)
 
@@ -146,10 +144,9 @@ python -m sealed encode-cards \
     --clean
 ```
 
-Refreshes every `.npz` file under `output/cardsfolder/` to match the
-fine-tuned encoder. Cards present in `output/cardsfolder/` but absent from
-the match-outcomes corpus are re-encoded as well — they pick up the
-generalization of the fine-tuned encoder for free.
+Refreshes every `.npz` file under `output/cardsfolder/` using the fine-tuned
+encoder. Cards absent from the match-outcomes corpus are re-encoded too,
+inheriting whatever generalization the encoder learned during Phase B.
 
 ### Step 4 — Evaluate
 
@@ -167,16 +164,15 @@ Required metrics, logged every validation interval:
 
 | Metric                                                                                                                                                                                                       | Action threshold                                                                                                |
 |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
-| `val_acc`                                                                                                                                                                                                    | Drives `--patience`-based early stopping. The peak epoch is updated whenever a new peak is observed.            |
-| `embedding_drift` (existing `embedding_drifts` field on `TrainingMetrics`, redefined in Phase B as the mean L2 distance of post-encoder card vectors on a fixed reference batch from their step-0 values)    | Drift > 1.0 within first 3 epochs → lower `--embedding-lr` and restart from Phase A checkpoint.                 |
+| `val_acc`                                                                                                                                                                                                    | Drives `--patience`-based early stopping.                                                                       |
+| `embedding_drift` — mean L2 distance of post-encoder card vectors on a fixed reference batch from their step-0 values (reuses the `embedding_drifts` field on `TrainingMetrics`)                              | Drift > 1.0 within first 3 epochs → lower `--embedding-lr` and restart from Phase A checkpoint.                 |
 | Encoder gradient norm                                                                                                                                                                                        | Logged for diagnostic use.                                                                                      |
 
 ## 8. Out of Scope
 
-- **Label-noise reduction.** Phase B cannot move the label noise floor. If
-  the val_acc ceiling on this corpus is set by label noise rather than by
-  per-card feature expressiveness (see Rationale § Expected impact), Phase B
-  will not move it. Interventions that operate on labels themselves —
+- **Label-noise reduction.** Phase B operates on per-card features, not
+  labels, so it cannot move a label-noise-bound val_acc ceiling (see
+  Rationale § Expected impact). Interventions on labels themselves —
   repeated matchups, longer formats, fixed-opponent training — are out of
   scope.
 
@@ -187,12 +183,11 @@ guidance.
 
 ## Why fine-tune the encoder rather than the cached vectors
 
-The decoupled approach treats each card's embedding as an independent
-`d_model`-sized parameter row in a lookup table: ~26K unique cards × 544 dims =
-~14M parameters, but only ~1.24M card references in the corpus — ~47 gradient
-updates per row on average, heavily skewed toward format staples. The encoder
-has ~3M parameters total and is shared: every reference contributes gradient
-to the shared parameters via the forward pass.
+The decoupled approach gives each of ~26K cards an independent 544-dim row
+in a lookup table (~14M parameters), against ~1.24M card references in the
+corpus — ~47 updates per row on average, heavily skewed toward format
+staples. The encoder is ~3M shared parameters: every reference contributes
+gradient to that shared pool.
 
 | Property                     | Decoupled vectors                                                                                | Encoder fine-tuning                                                                                          |
 |------------------------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
@@ -236,12 +231,12 @@ is the practical range.
 
 ## Why a single `--embedding-lr` flag instead of a separate boolean
 
-`--embedding-lr 0` is exactly equivalent to "frozen", and any non-zero value
-to "unfrozen". The boolean `--unfreeze-embeddings` flag is removed entirely,
-which eliminates the surface area for incoherent combinations like
-`--unfreeze-embeddings --embedding-lr 0`.
+A separate boolean alongside `--embedding-lr` would have allowed incoherent
+combinations like `--unfreeze-embeddings --embedding-lr 0`. Collapsing the
+two into one numeric flag (`0` = frozen, non-zero = unfrozen) eliminates
+that surface area.
 
-## Why the encoder is loaded from the price-predictor checkpoint at fresh Phase B start
+## Why fresh Phase B runs load the encoder from the price-predictor checkpoint
 
 A fresh Phase B run resumes from a Phase A scorer checkpoint, which contains
 scorer weights only. The encoder weights have to come from somewhere
@@ -251,7 +246,7 @@ satisfies this consistency constraint by construction — it produced those
 `.npz` embeddings via `encode-cards`. For continuing Phase B runs, the
 encoder weights are already in the resumed checkpoint.
 
-## Why re-cache `.npz` files after Phase B instead of always using the encoder at inference
+## Why re-cache `.npz` files instead of running the encoder at inference
 
 The downstream tools (`build-decks`, `evaluate-scorer`, `match-outcomes`) all
 consume `.npz` card embeddings without running the encoder. This is a
@@ -264,10 +259,9 @@ replacement of the existing `.npz` files.
 ## Caching savings
 
 At `batch_size=64` and 46 cards per example, a naive Phase B implementation
-runs ~2,944 encoder calls per training step, but typically only 500–1,500
-unique cards appear in a batch (format staples appear in many decks).
-Caching by unique card collapses the redundant calls and is what brings the
-Phase B/Phase A epoch ratio down from ~10× to 2–4× on the current corpus.
+runs ~2,944 encoder calls per training step, but only ~500–1,500 unique
+cards typically appear in a batch — format staples appear in many decks.
+Caching by unique card collapses the redundant calls.
 
 ## Expected impact
 
