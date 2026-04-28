@@ -163,10 +163,15 @@ the same GPU used for Phase A.
 
 - **`--embedding-lr`**: defaults to `0` (encoder frozen, Phase A behavior). Any
   non-zero value triggers Phase B: the encoder is included in the training
-  graph at this learning rate. Recommended range when activated: 1e-5 to 1e-7,
-  i.e. 10–100× lower than `--lr`. Lower values are more conservative and
-  preserve more of the original encoder structure. Start at the higher end of
-  the range and lower it if embedding drift is too rapid.
+  graph at this learning rate. **Recommended starting point: 1e-7 to 1e-8.**
+  Lower values are more conservative and preserve more of the original encoder
+  structure.
+
+  This is much lower than the "10–100× below main LR" rule of thumb that
+  applies to typical fine-tuning, because of gradient accumulation across the
+  46 card encodings per example (see "Why the embedding LR has to be much
+  lower than expected" below). Tune empirically from this starting point based
+  on the embedding-drift trace.
 
   This single flag replaces the older two-flag scheme (`--unfreeze-embeddings`
   bool + `--embedding-lr` float) — the boolean was redundant since a learning
@@ -174,6 +179,48 @@ the same GPU used for Phase A.
   exactly equivalent to "unfrozen". The decoupled-vector behavior of the old
   `--unfreeze-embeddings` flag is removed entirely; there is no useful middle
   ground worth supporting.
+
+## Why the embedding LR has to be much lower than expected
+
+For each training example (one match), the encoder forward pass runs **46
+times** — 23 cards per deck × 2 decks. PyTorch's autograd treats each of those
+46 forward passes as a separate consumer of the encoder parameters and
+**accumulates gradients from all 46 paths** into each encoder parameter's
+`.grad` tensor during backprop. This is the correct behavior for parameter
+sharing — we want each card to contribute to learning the shared features —
+but it has a real implication for LR.
+
+After backward, the encoder's accumulated gradient is roughly:
+
+```
+encoder_param.grad ≈ 46 × (mean per-card gradient contribution)
+```
+
+The scorer's parameters (PMA seeds, scoring MLP, SAB layers) are mostly used
+*once* per example, so their accumulated gradient has no such 46× factor.
+Setting `embedding_lr = lr` would give the encoder ~46× larger per-step weight
+movement than the scorer, which would shred the pretrained encoder structure
+within the first few epochs.
+
+Concretely, with `--lr = 1e-5` and `--embedding-lr = 1e-6` (the naive "10×
+lower" choice):
+
+- Scorer per-step weight movement: `1e-5 × |grad_scorer|`
+- Encoder per-step weight movement: `1e-6 × 46 × |grad_per_card| ≈ 4.6e-5 × |grad_per_card|`
+
+If `|grad_per_card|` is comparable to `|grad_scorer|` (and it roughly is, since
+both are downstream of the same Bradley-Terry loss), the encoder moves ~5×
+*faster* than the scorer despite the nominally lower LR. To get the encoder
+moving ~10× *slower* than the scorer (the actual goal of "low LR fine-tuning"),
+you need `--embedding-lr ≈ lr / (10 × 46) ≈ 2e-8`.
+
+This is why the recommended starting point is 1e-7 to 1e-8, much lower than
+the typical "10–100× below main LR" rule of thumb for fine-tuning.
+
+A complementary mitigation: gradient clipping on the encoder's accumulated
+gradient with a small max-norm. This caps the peak step sizes when the
+gradient is unusually large for one batch, regardless of LR. Useful in
+combination with the lower LR, not as a replacement.
 - **Phase B start**: after Phase A's val_loss plateaus (typically 10–20 epochs
   on the current corpus). Resume from the best Phase A checkpoint with
   `--resume <path> --embedding-lr 1e-6`.
@@ -187,7 +234,9 @@ from their initial values across training. If they drift too far too fast
 (e.g., L2 > 1.0 within the first 3 epochs), lower `--embedding-lr`. If they
 barely move (L2 < 0.05 after 10 epochs), raise it.
 
-# Where the Fine-Tuned Encoder Lives
+# Where the Encoder Weights Live
+
+## Saving (during/after Phase B)
 
 The encoder is part of the scorer's training graph during Phase B (it has to be,
 for backprop to flow into it), so its weights are part of `model.state_dict()`
@@ -200,7 +249,48 @@ The original price-predictor checkpoint at
 `models/price-predictor/transformer/latest.pt` is **not modified**. That file
 is still the encoder for price prediction and for initial sealed-encoding (Phase
 A's `encode-cards` invocation, which runs before any Phase B training has
-happened).
+happened). It also remains the canonical source for bootstrapping a fresh
+Phase B run (see below).
+
+## Loading (at Phase B start)
+
+`train-scorer` needs to load encoder weights *into* the training graph at the
+start of every Phase B run. The source depends on whether this is a fresh
+Phase B run or a continuation of a previous one:
+
+- **Fresh Phase B (resuming a Phase A checkpoint).** The Phase A checkpoint
+  contains scorer weights only — no encoder. Load encoder weights from a
+  separate price-predictor checkpoint via a new
+  `--encoder-checkpoint <path>` flag, with default
+  `models/price-predictor/transformer/latest.pt`. This is the canonical
+  bootstrapping path: Phase B starts from the same encoder that produced the
+  cached `.npz` files Phase A trained against, ensuring the encoder + scorer
+  remain consistent across the Phase A → Phase B handoff.
+- **Continuing a Phase B run (resuming a Phase B-or-later checkpoint).** The
+  resumed checkpoint already contains encoder weights. Use those and ignore
+  `--encoder-checkpoint`. The trainer detects this automatically from whether
+  the loaded `state_dict` contains the expected encoder keys.
+
+## `encode-cards`: dual-source for the encoder
+
+`encode-cards` already loads encoder weights from a price-predictor checkpoint
+to produce `.npz` card embeddings. After Phase B, those embeddings are stale
+relative to the fine-tuned encoder; downstream tools need fresh `.npz` files.
+`encode-cards` accepts both source types:
+
+- `--encoder-checkpoint <path>` (existing behavior; default
+  `models/price-predictor/transformer/latest.pt`): load encoder from a
+  price-predictor checkpoint. Used for Phase A bootstrap and for any non-sealed
+  workflow.
+- `--scorer-checkpoint <path>` (new): load encoder from a sealed scorer
+  checkpoint. The encoder weights are extracted from the scorer's
+  `state_dict` by stripping the encoder-submodule prefix. Used after Phase B
+  to refresh `.npz` embeddings to match the fine-tuned encoder.
+
+The two flags are mutually exclusive; passing both is an error. Both modes
+produce identically-formatted `.npz` files so downstream tools
+(`build-decks`, `evaluate-scorer`, `match-outcomes` in self-play mode) don't
+need to know which encoder produced them.
 
 # End-of-Training Re-Cache
 
@@ -224,21 +314,52 @@ files that already exist).
 
 # Recommended Workflow
 
-1. **Confirm Phase A is plateaued.** Phase B is not useful until the scorer
-   has extracted what it can from the frozen embeddings. Inspect the Phase A
-   training logs; val_loss should be flat (or rising due to overfitting) for
-   the last 3–5 epochs.
-2. **Resume from the best Phase A checkpoint** with `--embedding-lr 1e-6` (a
-   safe starting point — non-zero is what activates Phase B).
-3. **Track val_loss and embedding drift.** A meaningful Phase B run should
+Phases A and B are **two separate `train-scorer` invocations**, not one
+continuous run with the learning-rate switching mid-training. The second
+invocation resumes from the first's best checkpoint via the existing
+`--resume` mechanism. This keeps the training-loop code unchanged, makes
+plateau detection a manual judgment call rather than an automatic threshold,
+and leaves the Phase A checkpoint cleanly available as a fallback if Phase B
+regresses.
+
+1. **Run Phase A** with the default `--embedding-lr 0` (encoder frozen):
+   ```bash
+   python -m sealed train-scorer
+   ```
+   Train until val_loss plateaus. Typical: 10–20 epochs on the current corpus.
+2. **Confirm Phase A is plateaued.** Inspect the training logs; val_loss
+   should be flat or rising (due to overfitting) for the last 3–5 epochs.
+   Phase B is not useful until the scorer has extracted what it can from the
+   frozen embeddings.
+3. **Run Phase B** as a separate invocation that resumes from the best Phase
+   A checkpoint, loads the encoder from the price-predictor checkpoint that
+   was used to produce the Phase A `.npz` embeddings, and activates encoder
+   fine-tuning by passing a non-zero embedding LR:
+   ```bash
+   python -m sealed train-scorer \
+       --resume models/sealed/scorer/best_<phaseA>.pt \
+       --encoder-checkpoint models/price-predictor/transformer/latest.pt \
+       --embedding-lr 1e-7
+   ```
+   The `--encoder-checkpoint` defaults to
+   `models/price-predictor/transformer/latest.pt`, so it can be omitted when
+   that's the right encoder to bootstrap from. `1e-7` is a safe starting
+   point given the 46× gradient accumulation discussed above. Train for 5–15
+   more epochs. If you later want to continue this Phase B run further,
+   resume from a Phase B checkpoint instead (which already contains encoder
+   weights, so `--encoder-checkpoint` is ignored).
+4. **Track val_loss and embedding drift.** A meaningful Phase B run should
    show val_loss continuing to drop for 5–10 more epochs, with embedding drift
    increasing smoothly (not in spikes). If val_loss starts rising immediately,
-   `--embedding-lr` is too high.
-4. **Re-cache embeddings** at the end via `encode-cards --scorer-checkpoint`.
-5. **Re-evaluate** with `evaluate-scorer` head-to-head against forge-best on a
-   fixed pool set. This is the deployment metric (per
-   `experiments/gen2-initial-training.md` recommendations) and the only one
-   that reliably reflects whether Phase B actually helped.
+   `--embedding-lr` is too high; lower it and re-resume from the Phase A
+   checkpoint.
+5. **Re-cache embeddings** at the end via `encode-cards --scorer-checkpoint`.
+6. **Re-evaluate** with `evaluate-scorer` head-to-head against forge-best on
+   a fixed pool set, ideally for both the Phase A and Phase B checkpoints so
+   the deployment-metric delta from Phase B is measurable. This is the
+   deployment metric (per `experiments/gen2-initial-training.md`
+   recommendations) and the only one that reliably reflects whether Phase B
+   actually helped.
 
 # Risks
 
