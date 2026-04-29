@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from unittest.mock import patch
 
 import numpy as np
+import torch
 
+from price_predictor.domain.entities import TransformerConfig
+from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from sealed.application.evaluate_scorer import (
     EvaluateScorerUseCase,
     write_round_robin_matches,
@@ -13,6 +17,7 @@ from sealed.application.evaluate_scorer import (
 from sealed.domain.card_embedding_layout import total_dim
 from sealed.domain.greedy_deck_builder import GreedyDeckBuilder
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
+from sealed.infrastructure.scorer_store import ScorerStore
 
 D_MODEL = total_dim(256)
 
@@ -142,3 +147,33 @@ class TestResolveSetCode:
                 assert "eligible" in str(e).lower()
             else:
                 raise AssertionError("Expected RuntimeError")
+
+
+class TestEvaluateScorerToleratesPhaseBCheckpoints:
+    """T040 (US3): the evaluate-scorer loader ignores Phase B-only keys
+    (`encoder_state_dict`, `encoder_config`, `train_config`) so the same code
+    path scores Phase A and Phase B checkpoints identically (SC-003)."""
+
+    def test_load_phase_b_checkpoint(self, tmp_path):
+        scorer_cfg = ScorerConfig(
+            n_layers=1, n_heads=4, n_seeds=4, d_ff=544, mlp_hidden=64,
+        )
+        model = SetTransformerScorer(scorer_cfg)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-5)
+        encoder_cfg = TransformerConfig(
+            d_model=16, n_layers=1, n_heads=2, ff_dim=32,
+            max_seq_len=8, vocab_size=32, dropout=0.0,
+        )
+        encoder = CardPriceTransformerModel(encoder_cfg)
+        path = tmp_path / "phase_b.pt"
+        ScorerStore().save_checkpoint(
+            model, optimizer, epoch=3, best_val_accuracy=0.7,
+            config=scorer_cfg, path=path,
+            encoder_state_dict=encoder.state_dict(),
+            encoder_config=asdict(encoder_cfg),
+            train_config={"lr": 1e-5, "embedding_lr": 1e-7},
+        )
+        loaded_model = EvaluateScorerUseCase()._load_model(path)
+        assert isinstance(loaded_model, SetTransformerScorer)
+        assert loaded_model.config.n_layers == 1
+        assert loaded_model.config.n_heads == 4

@@ -57,11 +57,12 @@ group** (2 SAB layers + output projection + token embedding table) at
 
 ### `train-scorer` (Phase B-relevant flags)
 
-| Flag                   | Default                                        | Meaning                                                                                                                                                                                                  |
-|------------------------|------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--embedding-lr`       | `0`                                            | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                                                       |
-| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when starting a fresh Phase B run via `--scorer-checkpoint`. Forbidden if explicitly passed when resuming a Phase B checkpoint (which already carries encoder weights).        |
-| `--scorer-checkpoint`  | _(none)_                                       | Bootstrap scorer weights from a Phase A checkpoint to start a fresh Phase B run. Loads scorer weights only — `optimizer.state_dict`, `epoch`, `best_val_accuracy`, and `encoder.state_dict` are ignored. |
+| Flag                    | Default                                        | Meaning                                                                                                                                                                                                                                  |
+|-------------------------|------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--embedding-lr`        | `0`                                            | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                                                                                       |
+| `--encoder-checkpoint`  | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when starting a fresh Phase B run via `--scorer-checkpoint`. Forbidden if explicitly passed when resuming a Phase B checkpoint (which already carries encoder weights).                                        |
+| `--scorer-checkpoint`   | _(none)_                                       | Bootstrap scorer weights from a Phase A checkpoint to start a fresh Phase B run. Loads scorer weights only — `optimizer.state_dict`, `epoch`, `best_val_accuracy`, and `encoder.state_dict` are ignored.                                 |
+| `--encoder-chunk-size`  | `128`                                          | Phase B only: chunk the encoder forward pass over each step's unique cards into pieces of this size, with gradient checkpointing per chunk so peak activation memory is bounded by one chunk. Lower it on tight GPUs; raise it on roomy ones. |
 
 The boolean `--unfreeze-embeddings` flag is **removed**; the on/off semantics
 are subsumed by `--embedding-lr` (`0` vs non-zero).
@@ -96,6 +97,16 @@ The cache is per-batch; it must be cleared between batches so the next step
 builds a fresh computation graph. Without this caching, a Phase B epoch is
 roughly 10× slower than Phase A; with it, 2–4×.
 
+The encoder forward pass over a step's unique cards is also **chunked** at
+`--encoder-chunk-size` (default 128) with `torch.utils.checkpoint` per
+chunk. A typical step at `--batch-size 64` sees ~1000–3000 unique cards;
+running them through a 6-layer transformer in a single forward overflows
+commodity GPUs. Chunking bounds peak activation memory at one chunk's
+worth, and gradient checkpointing recomputes the chunk's forward during
+backward instead of storing its activations. Cost: ~1.5× compute per
+backward pass. Lower the chunk size if Phase B still hits CUDA OOM; raise
+it for extra throughput when memory permits.
+
 ## 4. Hyperparameter Defaults
 
 | Hyperparameter    | Default | Notes                                                                                                                                                                                                              |
@@ -122,6 +133,23 @@ authoritative signal that it was produced by Phase B. `config` records the
 CLI flag values used to produce the checkpoint; on `--resume`, flags passed
 on the resuming invocation override the stored config for that run.
 
+### Checkpoint filenames
+
+Phase A and Phase B write to **distinct filenames** in the same
+`--checkpoint-dir`, so a Phase B run does not overwrite the Phase A
+checkpoint it bootstrapped from:
+
+| Phase   | Latest checkpoint   | Best checkpoint                                                          |
+|---------|---------------------|--------------------------------------------------------------------------|
+| Phase A | `latest.pt`         | `best_l<n>_h<n>_s<n>_ff<d>_mlp<d>_lr<f>.pt`                              |
+| Phase B | `latest_phaseB.pt`  | `best_phaseB_l<n>_h<n>_s<n>_ff<d>_mlp<d>_lr<f>_emblr<f>.pt`              |
+
+The Phase B `best_*.pt` filename encodes the active `--embedding-lr` because
+two Phase B runs that differ only in `--embedding-lr` would otherwise
+collide. Reverting Phase B in favor of Phase A is then a matter of pointing
+downstream tools back at the Phase A files, which survived the Phase B run
+intact.
+
 ## 6. Workflow
 
 The two phases are **two separate `train-scorer` invocations** chained via
@@ -146,16 +174,19 @@ python -m sealed train-scorer \
     --embedding-lr 1e-7
 ```
 
-Same `val_acc`-based early stopping as Phase A; typical run length 5–15
-epochs. To continue an interrupted Phase B run, re-invoke with
-`--resume models/sealed/scorer/best_<phaseB>.pt --embedding-lr 1e-7`
+Phase B writes its own `best_phaseB_*_emblr*.pt` and `latest_phaseB.pt`
+into the same `--checkpoint-dir` (§ 5); the Phase A files used to
+bootstrap the run are not modified. Same `val_acc`-based early stopping
+as Phase A; typical run length 5–15 epochs. To continue an interrupted
+Phase B run, re-invoke with
+`--resume models/sealed/scorer/best_phaseB_<...>.pt --embedding-lr 1e-7`
 (phase must match — see § 2).
 
 ### Step 3 — Re-cache embeddings
 
 ```bash
 python -m sealed encode-cards \
-    --scorer-checkpoint models/sealed/scorer/best_<phaseB>.pt \
+    --scorer-checkpoint models/sealed/scorer/best_phaseB_<...>.pt \
     --clean
 ```
 

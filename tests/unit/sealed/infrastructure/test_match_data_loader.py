@@ -249,23 +249,67 @@ class TestBuildMatchTrainingExamples:
 
 
 class TestEmbeddingTable:
-    def test_frozen_by_default(self):
-        table = EmbeddingTable(torch.randn(3, D_MODEL), {"a": 0, "b": 1, "c": 2})
-        assert table.is_frozen()
-        assert not table.embedding.weight.requires_grad
-
-    def test_unfreeze_flips_requires_grad(self):
-        table = EmbeddingTable(torch.randn(3, D_MODEL), {"a": 0, "b": 1, "c": 2})
-        table.unfreeze()
-        assert not table.is_frozen()
-        assert table.embedding.weight.requires_grad
-
     def test_lookup_returns_seeded_vectors(self):
         vecs = torch.randn(3, D_MODEL)
         table = EmbeddingTable(vecs, {"a": 0, "b": 1, "c": 2})
         out = table(torch.tensor([0, 2]))
         torch.testing.assert_close(out[0], vecs[0])
         torch.testing.assert_close(out[1], vecs[2])
+
+
+class TestSetTextVectors:
+    """``set_text_vectors`` splices encoder text vectors into the leading
+    ``2 * encoder_d_model`` columns while leaving the trailing
+    deterministic-feature slice untouched, and gradients flow back through
+    the source tensor (FR-007, T002, T012)."""
+
+    def _table(self):
+        encoder_d_model = 8
+        text_dim = 2 * encoder_d_model
+        d_model = text_dim + 32  # FEATURE_COUNT
+        baseline = torch.randn(4, d_model)
+        return baseline, EmbeddingTable(baseline, {"a": 0, "b": 1, "c": 2, "d": 3})
+
+    def test_text_columns_overwritten(self):
+        baseline, table = self._table()
+        encoder_d_model = 8
+        text_dim = 2 * encoder_d_model
+        indices = torch.tensor([1, 3], dtype=torch.long)
+        text_vectors = torch.zeros(2, text_dim)
+
+        table.set_text_vectors(indices, text_vectors)
+        out = table(indices)
+        torch.testing.assert_close(out[:, :text_dim], text_vectors)
+
+    def test_deterministic_slice_untouched(self):
+        baseline, table = self._table()
+        encoder_d_model = 8
+        text_dim = 2 * encoder_d_model
+        indices = torch.tensor([1, 3], dtype=torch.long)
+        text_vectors = torch.zeros(2, text_dim)
+
+        table.set_text_vectors(indices, text_vectors)
+        out = table(indices)
+        torch.testing.assert_close(out[:, text_dim:], baseline[indices, text_dim:])
+
+    def test_gradient_flows_back_through_text_vectors(self):
+        baseline, table = self._table()
+        encoder_d_model = 8
+        text_dim = 2 * encoder_d_model
+        indices = torch.tensor([1, 3], dtype=torch.long)
+        # ``text_vectors`` is a derived tensor with grad-tracked source so we
+        # can check that the source's grad gets populated through the splice.
+        source = torch.randn(2, text_dim, requires_grad=True)
+        text_vectors = source * 2.0
+
+        table.set_text_vectors(indices, text_vectors)
+        out = table(indices)
+        loss = out[:, :text_dim].sum()
+        loss.backward()
+
+        assert source.grad is not None
+        assert source.grad.shape == source.shape
+        assert source.grad.abs().sum().item() > 0
 
 
 class TestCollateFunction:

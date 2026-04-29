@@ -84,8 +84,15 @@ The subcommand writes:
 
 | Path | Phase A | Phase B |
 |---|---|---|
-| `<checkpoint-dir>/latest.pt` | overwritten each epoch | overwritten each epoch |
-| `<checkpoint-dir>/best_l<n>_h<n>_s<n>_ff<d>_mlp<d>_lr<f>.pt` | overwritten when `val_acc` improves | overwritten when `val_acc` improves |
+| `<checkpoint-dir>/latest.pt` | overwritten each epoch | — |
+| `<checkpoint-dir>/latest_phaseB.pt` | — | overwritten each epoch |
+| `<checkpoint-dir>/best_l<n>_h<n>_s<n>_ff<d>_mlp<d>_lr<f>.pt` | overwritten when `val_acc` improves | — |
+| `<checkpoint-dir>/best_phaseB_l<n>_h<n>_s<n>_ff<d>_mlp<d>_lr<f>_emblr<f>.pt` | — | overwritten when `val_acc` improves |
+
+Phase B uses distinct filenames (the `phaseB` prefix on `best_*.pt` and the
+`_phaseB` suffix on `latest`) so the Phase A checkpoints used to bootstrap
+the run survive intact in the same directory. A regression in Phase B can
+be reverted by simply switching back to the Phase A files (SC-003).
 
 Both files contain the keys defined in `data-model.md#phase-a-scorer-checkpoint`:
 `model_state_dict`, `optimizer_state_dict`, `epoch`, `best_val_accuracy`,

@@ -18,13 +18,22 @@ from sealed.domain.scorer_model import ScorerConfig
 
 @dataclass(frozen=True)
 class LoadedScorerCheckpoint:
-    """Typed record of everything a scorer .pt file stores."""
+    """Typed record of everything a scorer .pt file stores.
+
+    ``encoder_state_dict``, ``encoder_config``, and ``train_config`` are
+    populated for Phase B checkpoints (encoder fine-tuning); the first two
+    are absent for Phase A checkpoints — their presence is the authoritative
+    phase indicator.
+    """
 
     model_state_dict: dict[str, Any]
     optimizer_state_dict: dict[str, Any]
     epoch: int
     best_val_accuracy: float
     config: ScorerConfig
+    encoder_state_dict: dict[str, Any] | None = None
+    encoder_config: dict[str, Any] | None = None
+    train_config: dict[str, Any] | None = None
 
 
 class ScorerStore:
@@ -38,17 +47,24 @@ class ScorerStore:
         best_val_accuracy: float,
         config: ScorerConfig,
         path: Path,
+        *,
+        encoder_state_dict: dict[str, Any] | None = None,
+        encoder_config: dict[str, Any] | None = None,
+        train_config: dict[str, Any] | None = None,
     ) -> None:
-        save_checkpoint(
-            path,
-            {
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "epoch": epoch,
-                "best_val_accuracy": best_val_accuracy,
-            },
-            config,
-        )
+        payload: dict[str, Any] = {
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "epoch": epoch,
+            "best_val_accuracy": best_val_accuracy,
+        }
+        if encoder_state_dict is not None:
+            payload["encoder_state_dict"] = encoder_state_dict
+        if encoder_config is not None:
+            payload["encoder_config"] = encoder_config
+        if train_config is not None:
+            payload["train_config"] = train_config
+        save_checkpoint(path, payload, config)
 
     def load_checkpoint(self, path: Path) -> LoadedScorerCheckpoint:
         payload, config = load_checkpoint(
@@ -60,4 +76,7 @@ class ScorerStore:
             epoch=payload["epoch"],
             best_val_accuracy=payload.get("best_val_accuracy", -1.0),
             config=config,
+            encoder_state_dict=payload.get("encoder_state_dict"),
+            encoder_config=payload.get("encoder_config"),
+            train_config=payload.get("train_config"),
         )

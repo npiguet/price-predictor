@@ -44,9 +44,24 @@ def _build_encode_cards_parser(subparsers) -> None:
     )
     encode_parser.set_defaults(func=run_encode_cards)
     encode_parser.add_argument(
-        "--encoder-path",
-        default="models/price-predictor/transformer/latest.pt",
-        help="Path to the pretrained transformer model .pt file",
+        "--encoder-checkpoint",
+        default=None,
+        help=(
+            "Encoder weights source (default: "
+            "models/price-predictor/transformer/latest.pt). "
+            "Mutually exclusive with --scorer-checkpoint when both are "
+            "explicitly passed."
+        ),
+    )
+    encode_parser.add_argument(
+        "--scorer-checkpoint",
+        default=None,
+        help=(
+            "Extract encoder weights from a Phase B scorer checkpoint "
+            "(no default). Mutually exclusive with an explicit "
+            "--encoder-checkpoint. Rejected if the supplied checkpoint is "
+            "Phase A (no encoder_state_dict)."
+        ),
     )
     encode_parser.add_argument(
         "--vocab-path",
@@ -132,13 +147,19 @@ def _build_build_decks_parser(subparsers) -> None:
         "--sa-cooling",
         type=float,
         default=0.95,
-        help="Per-iteration temperature multiplier (default: 0.95). Ignored if --sa-temperature is 0.",
+        help=(
+            "Per-iteration temperature multiplier (default: 0.95). "
+            "Ignored if --sa-temperature is 0."
+        ),
     )
     build_parser.add_argument(
         "--sa-max-iterations",
         type=int,
         default=200,
-        help="Hard cap on swap iterations (default: 200). Pure greedy stops earlier on convergence.",
+        help=(
+            "Hard cap on swap iterations (default: 200). "
+            "Pure greedy stops earlier on convergence."
+        ),
     )
     build_parser.add_argument(
         "--print-decks",
@@ -151,79 +172,166 @@ def _build_build_decks_parser(subparsers) -> None:
     )
 
 
+_TRAIN_SCORER_ARCHITECTURE_FLAGS: tuple[str, ...] = (
+    "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
+)
+
+
 def _build_train_scorer_parser(subparsers) -> None:
     train_parser = subparsers.add_parser(
         "train-scorer",
         help="Train the deck scorer model on match outcome data",
     )
     train_parser.set_defaults(func=run_train_scorer)
+    # Every resumable training flag registers with default=None (sentinel) so
+    # `run_train_scorer` can apply resume-precedence resolution: explicit CLI
+    # > resumed `train_config` > dataclass default (FR-010,
+    # contracts/checkpoint-format.md §Resume Precedence).
     train_parser.add_argument(
         "--outcomes-path",
-        default="output/sealed/match-outcomes.txt",
-        help="Path to match outcomes file (default: output/sealed/match-outcomes.txt)",
+        default=None,
+        help=(
+            "Path to match outcomes file "
+            "(default: output/sealed/match-outcomes.txt). "
+            "Resumable: on --resume, falls back to the resumed checkpoint's "
+            "value when omitted."
+        ),
     )
-    _add_cards_path(train_parser)
+    train_parser.add_argument(
+        "--cards-path",
+        default=None,
+        help=(
+            "Directory with .npz card embeddings (default: output/cardsfolder/). "
+            "Resumable."
+        ),
+    )
     train_parser.add_argument(
         "--checkpoint-dir",
-        default="models/sealed/scorer/",
-        help="Directory for saving checkpoints (default: models/sealed/scorer/)",
+        default=None,
+        help=(
+            "Directory for saving checkpoints (default: models/sealed/scorer/). "
+            "Resumable."
+        ),
     )
     train_parser.add_argument(
         "--resume",
         default=None,
-        help="Path to checkpoint to resume training from (default: none)",
+        help=(
+            "Path to checkpoint to resume training from. Mutually exclusive with "
+            "--scorer-checkpoint. Phase-locked: a Phase A checkpoint may only "
+            "resume with --embedding-lr 0; a Phase B checkpoint requires a "
+            "non-zero --embedding-lr."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "epochs", "Number of training epochs",
+    train_parser.add_argument(
+        "--scorer-checkpoint",
+        default=None,
+        help=(
+            "Bootstrap scorer weights from a Phase A checkpoint to start a "
+            "fresh Phase B run (no default). Mutually exclusive with --resume "
+            "and with any architecture flag (architecture is inherited from "
+            "the checkpoint's stored config)."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "batch_size", "Training batch size",
+    train_parser.add_argument(
+        "--encoder-checkpoint",
+        default=None,
+        help=(
+            "Source of encoder weights when starting a fresh Phase B run via "
+            "--scorer-checkpoint (default: "
+            "models/price-predictor/transformer/latest.pt). "
+            "No effect on Phase A. Forbidden when explicitly passed alongside "
+            "a Phase B --resume (the resumed checkpoint already carries "
+            "fine-tuned encoder weights)."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "lr", "Learning rate", type_override=float,
+    train_parser.add_argument(
+        "--epochs", type=int, default=None,
+        help="Number of training epochs (default: 100). Resumable.",
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "n_layers",
-        "Number of Set Transformer SAB layers",
+    train_parser.add_argument(
+        "--batch-size", type=int, default=None,
+        help="Training batch size (default: 64). Resumable.",
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "n_heads", "Number of attention heads",
+    train_parser.add_argument(
+        "--lr", type=float, default=None,
+        help="Scorer learning rate (default: 1e-5). Resumable.",
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "n_seeds", "Number of PMA seed vectors",
+    train_parser.add_argument(
+        "--n-layers", type=int, default=None,
+        help=(
+            "Number of Set Transformer SAB layers (default: 6). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "d_ff",
-        "Feed-forward dimension in SAB layers",
+    train_parser.add_argument(
+        "--n-heads", type=int, default=None,
+        help=(
+            "Number of attention heads (default: 4). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "mlp_hidden",
-        "Hidden dimension of the scoring MLP head",
+    train_parser.add_argument(
+        "--n-seeds", type=int, default=None,
+        help=(
+            "Number of PMA seed vectors (default: 4). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "dropout",
-        "Dropout rate applied in SAB attention/FF, PMA attention, and scoring MLP",
-        type_override=float,
+    train_parser.add_argument(
+        "--d-ff", type=int, default=None,
+        help=(
+            "Feed-forward dimension in SAB layers (default: 1088). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "val_interval",
-        "Run validation every N epochs",
+    train_parser.add_argument(
+        "--mlp-hidden", type=int, default=None,
+        help=(
+            "Hidden dimension of the scoring MLP head (default: 256). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "unfreeze_embeddings",
-        help_text="Enable embedding fine-tuning (Phase B)",
+    train_parser.add_argument(
+        "--dropout", type=float, default=None,
+        help=(
+            "Dropout rate (default: 0.2). "
+            "Forbidden alongside --resume or --scorer-checkpoint."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "embedding_lr",
-        help_text="Learning rate for embedding fine-tuning", type_override=float,
+    train_parser.add_argument(
+        "--embedding-lr", type=float, default=None,
+        help=(
+            "Encoder parameter group's learning rate (default: 0.0). "
+            "0 = Phase A (encoder frozen, consumes the .npz cache). "
+            "Non-zero = Phase B (encoder fine-tuned alongside the scorer); "
+            "Phase B requires --scorer-checkpoint xor --resume."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "val_fraction",
-        help_text="Fraction of examples held out for validation", type_override=float,
+    train_parser.add_argument(
+        "--patience", type=int, default=None,
+        help=(
+            "Early-stop after this many consecutive epochs without a new "
+            "peak val_acc (default: 5). Resumable."
+        ),
     )
-    add_dataclass_arg(
-        train_parser, TrainScorerConfig, "random_seed",
-        help_text="RNG seed for the train/val split",
+    train_parser.add_argument(
+        "--val-fraction", type=float, default=None,
+        help="Fraction of examples held out for validation (default: 0.2). Resumable.",
+    )
+    train_parser.add_argument(
+        "--random-seed", type=int, default=None,
+        help="RNG seed for the deterministic train/val split (default: 42). Resumable.",
+    )
+    train_parser.add_argument(
+        "--encoder-chunk-size", type=int, default=None,
+        help=(
+            "Phase B only: run the encoder forward in chunks of this many "
+            "unique cards at a time, with gradient checkpointing per chunk "
+            "so activation memory is bounded (default: 128). Lower this if "
+            "you still hit CUDA OOM; raise it if you have headroom and want "
+            "the extra throughput. Resumable."
+        ),
     )
 
 
@@ -311,21 +419,59 @@ def _build_match_outcomes_parser(subparsers) -> None:
     )
 
 
+_ENCODE_CARDS_DEFAULT_ENCODER = "models/price-predictor/transformer/latest.pt"
+
+
 def run_encode_cards(args: argparse.Namespace) -> int:
     """Execute the encode-cards command."""
+    from price_predictor.domain.entities import TransformerConfig
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+    from price_predictor.infrastructure.transformer_model import (
+        CardPriceTransformerModel,
+    )
     from price_predictor.infrastructure.transformer_store import load_model
     from sealed.application.encode_cards import EncodeCardsUseCase
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
+    from sealed.infrastructure.scorer_store import ScorerStore
 
-    encoder_path = Path(args.encoder_path)
+    if args.encoder_checkpoint is not None and args.scorer_checkpoint is not None:
+        print(
+            "Error: --encoder-checkpoint and --scorer-checkpoint are mutually "
+            "exclusive: choose one source for the encoder weights.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.scorer_checkpoint is not None:
+        scorer_path = Path(args.scorer_checkpoint)
+        if not scorer_path.exists():
+            print(f"Error: Scorer checkpoint not found: {scorer_path}", file=sys.stderr)
+            return 2
+        loaded = ScorerStore().load_checkpoint(scorer_path)
+        if loaded.encoder_state_dict is None:
+            print(
+                f"Error: {scorer_path} is a Phase A scorer checkpoint and "
+                "contains no encoder weights. Use --encoder-checkpoint for "
+                "non-Phase-B sources.",
+                file=sys.stderr,
+            )
+            return 2
+        cfg = TransformerConfig(**loaded.encoder_config)
+        model = CardPriceTransformerModel(cfg)
+        model.load_state_dict(loaded.encoder_state_dict)
+        config = cfg
+    else:
+        encoder_path = Path(
+            args.encoder_checkpoint or _ENCODE_CARDS_DEFAULT_ENCODER,
+        )
+        if not encoder_path.exists():
+            print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
+            return 2
+        model, config = load_model(encoder_path)
+
     vocab_path = Path(args.vocab_path)
     cards_path = Path(args.cards_path)
-
-    if not encoder_path.exists():
-        print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
-        return 2
     if not vocab_path.exists():
         print(f"Error: Vocabulary file not found: {vocab_path}", file=sys.stderr)
         return 2
@@ -335,7 +481,6 @@ def run_encode_cards(args: argparse.Namespace) -> int:
 
     print(f"Encoding cards in {cards_path}")
 
-    model, config = load_model(encoder_path)
     model.eval()
     tokenizer = load_tokenizer(vocab_path)
 
@@ -431,29 +576,186 @@ def run_build_decks(args: argparse.Namespace) -> int:
     return 0
 
 
+_RESUMABLE_FLAG_NAMES: tuple[str, ...] = (
+    "outcomes_path", "cards_path", "checkpoint_dir",
+    "epochs", "batch_size", "lr",
+    "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
+    "embedding_lr", "patience", "val_fraction", "random_seed",
+    "encoder_chunk_size",
+)
+_PATH_FIELDS: frozenset[str] = frozenset({
+    "outcomes_path", "cards_path", "checkpoint_dir",
+    "encoder_checkpoint", "scorer_checkpoint", "resume",
+})
+# Fallback CLI defaults for fields that lack a dataclass default (required fields).
+# These mirror the help-text defaults registered in `_build_train_scorer_parser`.
+_REQUIRED_FIELD_CLI_DEFAULTS: dict[str, str] = {
+    "outcomes_path": "output/sealed/match-outcomes.txt",
+    "cards_path": "output/cardsfolder/",
+    "checkpoint_dir": "models/sealed/scorer/",
+}
+
+
+def _dataclass_default(field_name: str):
+    field = TrainScorerConfig.__dataclass_fields__[field_name]
+    import dataclasses
+    if field.default is not dataclasses.MISSING:
+        return field.default
+    if field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+        return field.default_factory()  # type: ignore[misc]
+    if field_name in _REQUIRED_FIELD_CLI_DEFAULTS:
+        return _REQUIRED_FIELD_CLI_DEFAULTS[field_name]
+    raise ValueError(f"No fallback default for required field {field_name!r}")
+
+
+def _coerce_path_value(field_name: str, value):
+    if value is None:
+        return None
+    return Path(value) if field_name in _PATH_FIELDS else value
+
+
 def run_train_scorer(args: argparse.Namespace) -> int:
     """Execute the train-scorer command."""
     from sealed.application.train_scorer import TrainScorerUseCase
+    from sealed.infrastructure.scorer_store import ScorerStore
 
+    if args.resume is not None and args.scorer_checkpoint is not None:
+        print(
+            "Error: --resume and --scorer-checkpoint are mutually exclusive: "
+            "--resume continues an existing run; --scorer-checkpoint bootstraps "
+            "a fresh Phase B run from a Phase A checkpoint.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.resume is not None or args.scorer_checkpoint is not None:
+        for flag in _TRAIN_SCORER_ARCHITECTURE_FLAGS:
+            if getattr(args, flag) is not None:
+                print(
+                    f"Error: architecture flag --{flag.replace('_', '-')} "
+                    "conflicts with --scorer-checkpoint; architecture is "
+                    "inherited from the checkpoint's stored config. "
+                    "Omit the flag.",
+                    file=sys.stderr,
+                )
+                return 2
+
+    resumed_train_config: dict | None = None
+    resumed_is_phase_b: bool | None = None
+    if args.resume is not None:
+        resume_path = Path(args.resume)
+        try:
+            resumed = ScorerStore().load_checkpoint(resume_path)
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        resumed_train_config = resumed.train_config
+        resumed_is_phase_b = resumed.encoder_state_dict is not None
+
+    if args.scorer_checkpoint is not None:
+        scorer_path = Path(args.scorer_checkpoint)
+        try:
+            ScorerStore().load_checkpoint(scorer_path)
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+
+    resolved: dict[str, object | None] = {}
+    for flag in _RESUMABLE_FLAG_NAMES:
+        cli_value = getattr(args, flag, None)
+        if cli_value is not None:
+            resolved[flag] = cli_value
+        elif resumed_train_config is not None and flag in resumed_train_config:
+            resolved[flag] = resumed_train_config[flag]
+        else:
+            default = _dataclass_default(flag)
+            resolved[flag] = default if not isinstance(default, Path) else str(default)
+
+    embedding_lr = float(resolved["embedding_lr"])
+    requested_phase_b = embedding_lr != 0
+    if requested_phase_b and (
+        args.scorer_checkpoint is None and args.resume is None
+    ):
+        print(
+            f"Error: --embedding-lr {embedding_lr} requires either "
+            "--scorer-checkpoint <phaseA>.pt (fresh Phase B kickoff) or "
+            "--resume <phaseB>.pt (continuing Phase B). Phase B against a "
+            "randomly-initialized scorer is not supported.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.scorer_checkpoint is not None and not requested_phase_b:
+        print(
+            "Error: --scorer-checkpoint is only valid when starting a Phase B "
+            "run; pass --embedding-lr <nonzero> alongside it. To continue a "
+            "Phase A run, use --resume instead.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if (
+        args.encoder_checkpoint is not None
+        and args.scorer_checkpoint is None
+        and args.resume is None
+        and not requested_phase_b
+    ):
+        print(
+            "Error: --encoder-checkpoint has no effect on a Phase A run "
+            "(encoder is not in the training graph). Drop the flag, or add "
+            "--scorer-checkpoint <phaseA>.pt and --embedding-lr <nonzero> to "
+            "kick off Phase B.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if resumed_is_phase_b is not None and resumed_is_phase_b != requested_phase_b:
+        ckpt_phase = "B" if resumed_is_phase_b else "A"
+        run_phase = "B" if requested_phase_b else "A"
+        eff_lr = embedding_lr if requested_phase_b else 0
+        print(
+            f"Error: --resume {args.resume} is a Phase {ckpt_phase} checkpoint "
+            f"but --embedding-lr {eff_lr} requests Phase {run_phase}. Use "
+            "--scorer-checkpoint to start a fresh Phase B run from a Phase A "
+            "checkpoint.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if (
+        args.encoder_checkpoint is not None
+        and args.resume is not None
+        and resumed_is_phase_b
+    ):
+        print(
+            "Error: --encoder-checkpoint conflicts with --resume on a Phase B "
+            "checkpoint, which already carries fine-tuned encoder weights. "
+            "Omit --encoder-checkpoint.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.encoder_checkpoint is not None:
+        encoder_checkpoint = Path(args.encoder_checkpoint)
+    elif (
+        resumed_train_config is not None
+        and resumed_train_config.get("encoder_checkpoint") is not None
+    ):
+        encoder_checkpoint = Path(resumed_train_config["encoder_checkpoint"])
+    else:
+        encoder_checkpoint = _dataclass_default("encoder_checkpoint")
+
+    config_kwargs = {
+        flag: _coerce_path_value(flag, resolved[flag])
+        for flag in _RESUMABLE_FLAG_NAMES
+    }
     config = TrainScorerConfig(
-        outcomes_path=Path(args.outcomes_path),
-        cards_path=Path(args.cards_path),
-        checkpoint_dir=Path(args.checkpoint_dir),
         resume=Path(args.resume) if args.resume else None,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        n_layers=args.n_layers,
-        n_heads=args.n_heads,
-        n_seeds=args.n_seeds,
-        d_ff=args.d_ff,
-        mlp_hidden=args.mlp_hidden,
-        dropout=args.dropout,
-        val_interval=args.val_interval,
-        unfreeze_embeddings=args.unfreeze_embeddings,
-        embedding_lr=args.embedding_lr,
-        val_fraction=args.val_fraction,
-        random_seed=args.random_seed,
+        scorer_checkpoint=(
+            Path(args.scorer_checkpoint) if args.scorer_checkpoint else None
+        ),
+        encoder_checkpoint=encoder_checkpoint,
+        **config_kwargs,
     )
 
     try:

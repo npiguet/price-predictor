@@ -45,3 +45,19 @@ class CardEncoder:
 
         det_feats = parse_deterministic_features(converted)
         return np.concatenate([text_vec, det_feats])
+
+    def encode_batch_text(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        *,
+        with_grad: bool,
+    ) -> torch.Tensor:
+        """Run the encoder on a pre-tokenized batch and return the
+        ``(B, 2 * d_model)`` text-vector slice (no deterministic-feature
+        concat). When ``with_grad=True``, gradients flow into the encoder
+        parameters — this is the Phase B hot path."""
+        if with_grad:
+            return self._model._encode_and_pool(input_ids, attention_mask)
+        with torch.no_grad():
+            return self._model._encode_and_pool(input_ids, attention_mask)

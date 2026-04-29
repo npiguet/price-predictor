@@ -80,7 +80,7 @@ class TestEncodeCardsFirstRun:
         encoder_path, vocab_path = encoder_artifacts
         result = subprocess.run(
             [sys.executable, "-m", "sealed", "encode-cards",
-             "--encoder-path", str(encoder_path),
+             "--encoder-checkpoint", str(encoder_path),
              "--vocab-path", str(vocab_path),
              "--cards-path", str(fixture_cards_dir)],
             capture_output=True, text=True,
@@ -93,7 +93,7 @@ class TestEncodeCardsFirstRun:
         encoder_path, vocab_path = encoder_artifacts
         subprocess.run(
             [sys.executable, "-m", "sealed", "encode-cards",
-             "--encoder-path", str(encoder_path),
+             "--encoder-checkpoint", str(encoder_path),
              "--vocab-path", str(vocab_path),
              "--cards-path", str(fixture_cards_dir)],
             capture_output=True, text=True,
@@ -110,7 +110,7 @@ class TestEncodeCardsIdempotency:
     def test_second_run_processes_zero_cards(self, fixture_cards_dir, encoder_artifacts):
         encoder_path, vocab_path = encoder_artifacts
         cmd = [sys.executable, "-m", "sealed", "encode-cards",
-               "--encoder-path", str(encoder_path),
+               "--encoder-checkpoint", str(encoder_path),
                "--vocab-path", str(vocab_path),
                "--cards-path", str(fixture_cards_dir)]
 
@@ -123,7 +123,7 @@ class TestEncodeCardsIdempotency:
     def test_second_run_skips_all_cards(self, fixture_cards_dir, encoder_artifacts):
         encoder_path, vocab_path = encoder_artifacts
         cmd = [sys.executable, "-m", "sealed", "encode-cards",
-               "--encoder-path", str(encoder_path),
+               "--encoder-checkpoint", str(encoder_path),
                "--vocab-path", str(vocab_path),
                "--cards-path", str(fixture_cards_dir)]
 
@@ -135,7 +135,7 @@ class TestEncodeCardsIdempotency:
     def test_npz_files_unchanged_after_second_run(self, fixture_cards_dir, encoder_artifacts):
         encoder_path, vocab_path = encoder_artifacts
         cmd = [sys.executable, "-m", "sealed", "encode-cards",
-               "--encoder-path", str(encoder_path),
+               "--encoder-checkpoint", str(encoder_path),
                "--vocab-path", str(vocab_path),
                "--cards-path", str(fixture_cards_dir)]
 
@@ -157,7 +157,7 @@ class TestIncrementalReEncoding:
     def test_deleted_cards_reprocessed_others_skipped(self, fixture_cards_dir, encoder_artifacts):
         encoder_path, vocab_path = encoder_artifacts
         cmd = [sys.executable, "-m", "sealed", "encode-cards",
-               "--encoder-path", str(encoder_path),
+               "--encoder-checkpoint", str(encoder_path),
                "--vocab-path", str(vocab_path),
                "--cards-path", str(fixture_cards_dir)]
 
@@ -195,7 +195,7 @@ class TestEncodeCardsPartialFolder:
     def test_partial_folder_processes_only_missing(self, fixture_cards_dir, encoder_artifacts):
         encoder_path, vocab_path = encoder_artifacts
         cmd = [sys.executable, "-m", "sealed", "encode-cards",
-               "--encoder-path", str(encoder_path),
+               "--encoder-checkpoint", str(encoder_path),
                "--vocab-path", str(vocab_path),
                "--cards-path", str(fixture_cards_dir)]
 

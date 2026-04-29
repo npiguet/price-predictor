@@ -24,6 +24,7 @@ class TestCheckpointRoundTrip:
         store.save_checkpoint(
             model, optimizer,
             epoch=5, best_val_accuracy=0.42, config=config, path=path,
+            train_config={"lr": 1e-3, "epochs": 5},
         )
 
         loaded = store.load_checkpoint(path)
@@ -32,6 +33,52 @@ class TestCheckpointRoundTrip:
         assert loaded.config == config
         assert loaded.model_state_dict
         assert loaded.optimizer_state_dict
+        assert loaded.train_config == {"lr": 1e-3, "epochs": 5}
+        assert loaded.encoder_state_dict is None
+        assert loaded.encoder_config is None
+
+    def test_phase_a_omits_encoder_keys(self, tmp_path):
+        """Phase A: encoder fields absent in ``LoadedScorerCheckpoint``."""
+        model = _make_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        store = ScorerStore()
+        path = tmp_path / "phase_a.pt"
+        store.save_checkpoint(
+            model, optimizer,
+            epoch=1, best_val_accuracy=0.5, config=ScorerConfig(), path=path,
+        )
+
+        loaded = store.load_checkpoint(path)
+        assert loaded.encoder_state_dict is None
+        assert loaded.encoder_config is None
+
+    def test_phase_b_round_trip(self, tmp_path):
+        """Phase B: encoder fields persist (T021)."""
+        model = _make_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        store = ScorerStore()
+        path = tmp_path / "phase_b.pt"
+
+        encoder_state_dict = {"layer.weight": torch.randn(3, 4)}
+        encoder_config = {"d_model": 256, "n_layers": 2}
+        train_config = {"lr": 1e-5, "embedding_lr": 1e-7, "patience": 5}
+
+        store.save_checkpoint(
+            model, optimizer,
+            epoch=2, best_val_accuracy=0.6, config=ScorerConfig(), path=path,
+            encoder_state_dict=encoder_state_dict,
+            encoder_config=encoder_config,
+            train_config=train_config,
+        )
+
+        loaded = store.load_checkpoint(path)
+        assert loaded.encoder_state_dict is not None
+        torch.testing.assert_close(
+            loaded.encoder_state_dict["layer.weight"],
+            encoder_state_dict["layer.weight"],
+        )
+        assert loaded.encoder_config == encoder_config
+        assert loaded.train_config == train_config
 
     def test_model_weights_survive_roundtrip(self, tmp_path):
         model = _make_model()

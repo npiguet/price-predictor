@@ -90,19 +90,24 @@ re-cache against the **pre-fine-tuned** encoder, undoing Phase B.
 
 ## Step 3 — Evaluate Phase B
 
+Phase B writes to a distinct filename (`best_phaseB_l<...>_emblr<...>.pt`)
+that does not collide with the Phase A `best_*.pt` in the same
+`--checkpoint-dir` (FR-009a). Both files exist side by side after a
+Phase B run.
+
 ```bash
 python -m sealed evaluate-scorer \
-    --checkpoint models/sealed/scorer/best_l6_h4_s4_ff1088_mlp256_lr1e-05.pt \
+    --checkpoint models/sealed/scorer/best_phaseB_l6_h4_s4_ff1088_mlp256_lr1e-05_emblr1e-07.pt \
     --set BLB
 ```
 
-Then evaluate Phase A using a separate copy of the cache. The pattern is:
+Then evaluate Phase A against the same pool set, switching back to the
+Phase A `.npz` cache first:
 
 ```bash
-# Save the Phase A checkpoint and a Phase A .npz cache somewhere first.
-# Then to evaluate Phase A, restore the Phase A .npz cache and run:
+# Restore the Phase A .npz cache (saved before Step 2's --clean), then:
 python -m sealed evaluate-scorer \
-    --checkpoint models/sealed/scorer/best_phaseA.pt \
+    --checkpoint models/sealed/scorer/best_l6_h4_s4_ff1088_mlp256_lr1e-05.pt \
     --set BLB
 ```
 

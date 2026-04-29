@@ -305,6 +305,14 @@ it. Without this signal, the user only finds out after eval-scorer.
   optimizer flags (`--lr`, `--embedding-lr`), data flags, and schedule
   flags (`--patience`, `--batch-size`, etc.) — so the checkpoint is
   self-describing for reproducibility.
+- **FR-009a**: Phase B `train-scorer` MUST write its `best_*.pt` and
+  `latest_*.pt` files under filenames distinct from Phase A's, so a Phase B
+  run does not overwrite the Phase A checkpoints in the same
+  `--checkpoint-dir`. The Phase B `best_*.pt` filename MUST encode the
+  active `--embedding-lr`, since two Phase B runs that differ only in
+  `--embedding-lr` would otherwise collide. Reverting Phase B in favor of
+  Phase A is then a matter of pointing downstream tools back at the Phase
+  A files, which survived the Phase B run intact.
 - **FR-010**: When resuming, CLI flags supplied on the resuming invocation
   MUST override the `config` dict stored in the resumed checkpoint for the
   current run.

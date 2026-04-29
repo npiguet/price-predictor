@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
@@ -78,8 +79,12 @@ class TrainingBatch:
 class EmbeddingTable(nn.Module):
     """Lookup table mapping card name → ``d_model``-dim card vector.
 
-    Frozen by default; ``unfreeze()`` flips ``requires_grad`` so the optimizer
-    can fine-tune card embeddings during the second phase of training.
+    The leading ``2 * encoder_d_model`` columns hold the encoder's text vector;
+    the trailing ``FEATURE_COUNT`` columns hold deterministic game features.
+    The table itself is never trained; in Phase B, ``set_text_vectors`` splices
+    fresh encoder outputs into the leading slice each batch step so the
+    scorer's forward pass sees live, gradient-tracking vectors that flow back
+    into the encoder parameters.
     """
 
     def __init__(self, vectors: torch.Tensor, name_to_idx: dict[str, int]) -> None:
@@ -90,21 +95,33 @@ class EmbeddingTable(nn.Module):
             self.embedding.weight.copy_(vectors)
         self.embedding.weight.requires_grad = False
         self.name_to_idx = dict(name_to_idx)
+        self._live_weight: torch.Tensor | None = None
 
     @property
     def num_cards(self) -> int:
         return self.embedding.num_embeddings
 
-    def freeze(self) -> None:
-        self.embedding.weight.requires_grad = False
+    def set_text_vectors(
+        self, indices: torch.Tensor, text_vectors: torch.Tensor,
+    ) -> None:
+        """Splice ``text_vectors`` into the leading ``2 * encoder_d_model`` columns
+        of the rows at ``indices``; trailing deterministic-feature columns
+        survive. The resulting weight tensor is non-leaf, so a downstream loss
+        backpropagates through ``text_vectors`` to its source (the encoder).
+        """
+        text_dim = self.embedding.embedding_dim - FEATURE_COUNT
+        baseline = self.embedding.weight.detach()
+        det_slice = baseline[indices, text_dim:]
+        new_rows = torch.cat([text_vectors, det_slice], dim=-1)
+        self._live_weight = baseline.clone().index_copy(0, indices, new_rows)
 
-    def unfreeze(self) -> None:
-        self.embedding.weight.requires_grad = True
-
-    def is_frozen(self) -> bool:
-        return not self.embedding.weight.requires_grad
+    def clear_live_weight(self) -> None:
+        """Drop the per-step live weight so the next forward uses the baseline."""
+        self._live_weight = None
 
     def forward(self, indices: torch.Tensor) -> torch.Tensor:
+        if self._live_weight is not None:
+            return F.embedding(indices, self._live_weight)
         return self.embedding(indices)
 
     def deterministic_feature_stats(

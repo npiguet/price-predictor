@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
+from price_predictor.domain.entities import TransformerConfig
+from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
     MatchTrainingExample,
@@ -36,26 +41,43 @@ class TrainScorerConfig:
     cards_path: Path
     checkpoint_dir: Path
     resume: Path | None = None
+    scorer_checkpoint: Path | None = None
+    encoder_checkpoint: Path = field(
+        default_factory=lambda: Path("models/price-predictor/transformer/latest.pt"),
+    )
     epochs: int = 100
     batch_size: int = 64
-    lr: float = 1e-3
+    lr: float = 1e-5
     n_layers: int = 6
     n_heads: int = 4
     n_seeds: int = 4
     d_ff: int = 1088
     mlp_hidden: int = 256
     dropout: float = 0.2
-    val_interval: int = 1
-    unfreeze_embeddings: bool = False
-    embedding_lr: float = 1e-5
+    embedding_lr: float = 0.0
+    patience: int = 5
     val_fraction: float = 0.2
     random_seed: int = 42
+    encoder_chunk_size: int = 128
+
+    @property
+    def phase(self) -> Literal["A", "B"]:
+        return "A" if self.embedding_lr == 0 else "B"
 
     def best_checkpoint_name(self) -> str:
+        if self.phase == "B":
+            return (
+                f"best_phaseB_l{self.n_layers}_h{self.n_heads}_s{self.n_seeds}"
+                f"_ff{self.d_ff}_mlp{self.mlp_hidden}"
+                f"_lr{self.lr}_emblr{self.embedding_lr}.pt"
+            )
         return (
             f"best_l{self.n_layers}_h{self.n_heads}_s{self.n_seeds}"
             f"_ff{self.d_ff}_mlp{self.mlp_hidden}_lr{self.lr}.pt"
         )
+
+    def latest_checkpoint_name(self) -> str:
+        return "latest_phaseB.pt" if self.phase == "B" else "latest.pt"
 
     def scorer_config(self) -> ScorerConfig:
         return ScorerConfig(
@@ -99,6 +121,9 @@ class ResumeState:
     start_epoch: int
     best_val_accuracy: float
     optimizer_state: dict | None
+    encoder_state_dict: dict | None = None
+    encoder_config: dict | None = None
+    phase: Literal["A", "B"] = "A"
 
 
 @dataclass
@@ -109,18 +134,37 @@ class TrainScorerResult:
 
 
 @dataclass
+class ReferenceBatch:
+    """The fixed set of unique cards from Phase B step 0 used for the
+    ``embedding_drift`` metric (Decision §5, FR-012)."""
+
+    card_indices: torch.Tensor
+    input_ids: torch.Tensor
+    attention_mask: torch.Tensor
+    step0_text_vectors: torch.Tensor
+
+
+@dataclass
 class _TrainingContext:
     model: SetTransformerScorer
     optimizer: torch.optim.Optimizer
     embedding_table: EmbeddingTable
     train_loader: DataLoader
     val_loader: DataLoader
-    initial_embeddings: torch.Tensor | None
     latest_path: Path
     best_path: Path
     start_epoch: int
     best_val_accuracy: float
     device: torch.device
+    train_config: dict[str, Any]
+    encoder: CardPriceTransformerModel | None = None
+    tokenizer: MtgTokenizer | None = None
+    card_token_cache: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None
+    locator: ConvertedCardLocator | None = None
+    idx_to_name: dict[int, str] | None = None
+    reference_batch: ReferenceBatch | None = None
+    max_seq_len: int | None = None
+    encoder_chunk_size: int = 128
 
 
 class _BatchStats:
@@ -173,29 +217,34 @@ class TrainScorerUseCase:
 
         metrics = TrainingMetrics()
         best_val_accuracy = ctx.best_val_accuracy
+        epochs_since_peak = 0
 
         _log(f"Starting training loop ({config.epochs} epochs)")
         for epoch in range(ctx.start_epoch, ctx.start_epoch + config.epochs):
-            train_stats = _train_one_epoch(
-                ctx.model, ctx.embedding_table, ctx.train_loader, ctx.optimizer,
-                ctx.device,
-            )
+            train_stats = _train_one_epoch(ctx)
             metrics.train_losses.append(train_stats.loss)
 
-            if (epoch - ctx.start_epoch + 1) % config.val_interval == 0:
-                val = _validate(
-                    ctx.model, ctx.embedding_table, ctx.val_loader, ctx.device,
-                )
-                metrics.val_losses.append(val.loss)
-                metrics.val_accuracies.append(val.accuracy)
-                if ctx.initial_embeddings is not None:
-                    metrics.embedding_drifts.append(
-                        _embedding_drift(ctx.embedding_table, ctx.initial_embeddings),
+            val = _validate(
+                ctx.model, ctx.embedding_table, ctx.val_loader, ctx.device,
+            )
+            metrics.val_losses.append(val.loss)
+            metrics.val_accuracies.append(val.accuracy)
+            if ctx.encoder is not None and ctx.reference_batch is not None:
+                metrics.embedding_drifts.append(_embedding_drift(ctx))
+            _print_epoch_report(epoch, train_stats, val, metrics)
+            new_best, best_val_accuracy = self._persist_checkpoint(
+                ctx, store, epoch, val.accuracy, best_val_accuracy,
+            )
+            if new_best:
+                epochs_since_peak = 0
+            else:
+                epochs_since_peak += 1
+                if epochs_since_peak >= config.patience:
+                    _log(
+                        f"Early stop: {epochs_since_peak} epochs without "
+                        f"new peak val_acc (--patience={config.patience})"
                     )
-                _print_epoch_report(epoch, train_stats, val, metrics)
-                best_val_accuracy = self._persist_checkpoint(
-                    ctx, store, epoch, val.accuracy, best_val_accuracy,
-                )
+                    break
 
         return TrainScorerResult(
             model=ctx.model,
@@ -214,13 +263,12 @@ class TrainScorerUseCase:
             f"examples, {embedding_table.num_cards} unique cards "
             f"({time.monotonic() - t0:.1f}s)",
         )
-        if config.unfreeze_embeddings:
-            embedding_table.unfreeze()
-            _log("Embedding table unfrozen for fine-tuning")
 
         resume = _resume_or_build_model(config, store)
         if config.resume is not None:
             _log(f"Resumed from checkpoint at epoch {resume.start_epoch}")
+        elif config.scorer_checkpoint is not None:
+            _log(f"Bootstrapped scorer from {config.scorer_checkpoint}")
         else:
             _log(f"Built fresh scorer model (n_layers={config.n_layers}, dropout={config.dropout})")
 
@@ -230,10 +278,28 @@ class TrainScorerUseCase:
         device = _select_device()
         resume.model.to(device)
         embedding_table.to(device)
+
+        encoder: CardPriceTransformerModel | None = None
+        tokenizer: MtgTokenizer | None = None
+        max_seq_len: int | None = None
+        locator: ConvertedCardLocator | None = None
+        idx_to_name: dict[int, str] | None = None
+        if config.phase == "B":
+            encoder, tokenizer, max_seq_len = _build_phase_b_encoder(config, resume)
+            encoder.to(device)
+            locator = ConvertedCardLocator(config.cards_path)
+            idx_to_name = {
+                idx: name for name, idx in embedding_table.name_to_idx.items()
+            }
+            _log(
+                f"Phase B encoder loaded (d_model={encoder.config.d_model}, "
+                f"max_seq_len={max_seq_len}); {len(idx_to_name)} cards available "
+                "for tokenization"
+            )
         _log(f"Model and embedding table moved to {device}")
 
-        optimizer = _build_optimizer(resume.model, embedding_table, config)
-        if resume.optimizer_state and not config.unfreeze_embeddings:
+        optimizer = _build_optimizer(resume.model, config, encoder=encoder)
+        if resume.optimizer_state:
             optimizer.load_state_dict(resume.optimizer_state)
             _move_optimizer_state(optimizer, device)
 
@@ -242,11 +308,7 @@ class TrainScorerUseCase:
         )
 
         config.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        initial_embeddings = (
-            embedding_table.embedding.weight.detach().clone()
-            if not embedding_table.is_frozen()
-            else None
-        )
+        train_config = _build_train_config(config)
         _log(
             f"Setup complete in {time.monotonic() - t0:.1f}s "
             f"(batch_size={config.batch_size}, "
@@ -259,12 +321,20 @@ class TrainScorerUseCase:
             embedding_table=embedding_table,
             train_loader=train_loader,
             val_loader=val_loader,
-            initial_embeddings=initial_embeddings,
-            latest_path=config.checkpoint_dir / "latest.pt",
+            latest_path=config.checkpoint_dir / config.latest_checkpoint_name(),
             best_path=config.checkpoint_dir / config.best_checkpoint_name(),
             start_epoch=resume.start_epoch,
             best_val_accuracy=resume.best_val_accuracy,
             device=device,
+            train_config=train_config,
+            encoder=encoder,
+            tokenizer=tokenizer,
+            card_token_cache={} if encoder is not None else None,
+            locator=locator,
+            idx_to_name=idx_to_name,
+            reference_batch=None,
+            max_seq_len=max_seq_len,
+            encoder_chunk_size=config.encoder_chunk_size,
         )
 
     def _persist_checkpoint(
@@ -274,18 +344,31 @@ class TrainScorerUseCase:
         epoch: int,
         val_accuracy: float,
         current_best: float,
-    ) -> float:
+    ) -> tuple[bool, float]:
+        encoder_state_dict = (
+            ctx.encoder.state_dict() if ctx.encoder is not None else None
+        )
+        encoder_config = (
+            asdict(ctx.encoder.config) if ctx.encoder is not None else None
+        )
         store.save_checkpoint(
             ctx.model, ctx.optimizer, epoch, current_best,
             ctx.model.config, ctx.latest_path,
+            train_config=ctx.train_config,
+            encoder_state_dict=encoder_state_dict,
+            encoder_config=encoder_config,
         )
-        if val_accuracy > current_best:
+        new_best = val_accuracy > current_best
+        if new_best:
             current_best = val_accuracy
             store.save_checkpoint(
                 ctx.model, ctx.optimizer, epoch, current_best,
                 ctx.model.config, ctx.best_path,
+                train_config=ctx.train_config,
+                encoder_state_dict=encoder_state_dict,
+                encoder_config=encoder_config,
             )
-        return current_best
+        return new_best, current_best
 
 
 def _load_dataset(
@@ -316,35 +399,106 @@ def _load_dataset(
 def _resume_or_build_model(
     config: TrainScorerConfig, store: ScorerStore,
 ) -> ResumeState:
-    if config.resume is None:
+    """Build the scorer model and decide what to seed it (and the encoder)
+    from. Cross-phase resume MUST raise per FR-004 (the CLI catches that
+    earlier; this is the second layer of defense)."""
+    requested_phase = config.phase
+
+    if config.resume is not None:
+        checkpoint = store.load_checkpoint(config.resume)
+        ckpt_phase: Literal["A", "B"] = (
+            "B" if checkpoint.encoder_state_dict is not None else "A"
+        )
+        if ckpt_phase != requested_phase:
+            raise ValueError(
+                f"--resume {config.resume} is a Phase {ckpt_phase} checkpoint "
+                f"but --embedding-lr {config.embedding_lr} requests Phase "
+                f"{requested_phase}. Use --scorer-checkpoint to start a fresh "
+                "Phase B run from a Phase A checkpoint."
+            )
+        model = SetTransformerScorer(checkpoint.config)
+        model.load_state_dict(checkpoint.model_state_dict)
         return ResumeState(
-            model=SetTransformerScorer(config.scorer_config()),
+            model=model,
+            start_epoch=checkpoint.epoch + 1,
+            best_val_accuracy=checkpoint.best_val_accuracy,
+            optimizer_state=checkpoint.optimizer_state_dict or None,
+            encoder_state_dict=checkpoint.encoder_state_dict,
+            encoder_config=checkpoint.encoder_config,
+            phase=ckpt_phase,
+        )
+
+    if config.scorer_checkpoint is not None:
+        checkpoint = store.load_checkpoint(config.scorer_checkpoint)
+        model = SetTransformerScorer(checkpoint.config)
+        model.load_state_dict(checkpoint.model_state_dict)
+        return ResumeState(
+            model=model,
             start_epoch=0,
             best_val_accuracy=-1.0,
-            optimizer_state=None,
+            optimizer_state=None,  # scorer-checkpoint bootstrap resets training-loop state
+            encoder_state_dict=None,  # encoder weights come from --encoder-checkpoint
+            encoder_config=None,
+            phase=requested_phase,
         )
-    checkpoint = store.load_checkpoint(config.resume)
-    model = SetTransformerScorer(checkpoint.config)
-    model.load_state_dict(checkpoint.model_state_dict)
+
     return ResumeState(
-        model=model,
-        start_epoch=checkpoint.epoch + 1,
-        best_val_accuracy=checkpoint.best_val_accuracy,
-        optimizer_state=checkpoint.optimizer_state_dict or None,
+        model=SetTransformerScorer(config.scorer_config()),
+        start_epoch=0,
+        best_val_accuracy=-1.0,
+        optimizer_state=None,
+        phase=requested_phase,
     )
+
+
+def _build_phase_b_encoder(
+    config: TrainScorerConfig, resume: ResumeState,
+) -> tuple[CardPriceTransformerModel, MtgTokenizer, int]:
+    """Construct the Phase B encoder + tokenizer + max-seq-len.
+
+    On `--resume <phaseB>.pt`, the resumed checkpoint is self-contained — the
+    encoder is rebuilt from `encoder_config` and weights from
+    `encoder_state_dict`, no dependency on the price-predictor `latest.pt`
+    being unchanged. Otherwise (`--scorer-checkpoint` bootstrap), encoder
+    weights come from `config.encoder_checkpoint`.
+    """
+    from price_predictor.infrastructure.tokenizer_store import load_tokenizer
+    from price_predictor.infrastructure.transformer_store import load_model
+
+    if resume.encoder_state_dict is not None and resume.encoder_config is not None:
+        cfg = TransformerConfig(**resume.encoder_config)
+        encoder = CardPriceTransformerModel(cfg)
+        encoder.load_state_dict(resume.encoder_state_dict)
+    else:
+        encoder, cfg = load_model(config.encoder_checkpoint)
+
+    vocab_path = config.encoder_checkpoint.parent / "vocab.txt"
+    tokenizer = load_tokenizer(vocab_path)
+    return encoder, tokenizer, cfg.max_seq_len
 
 
 def _build_optimizer(
     model: SetTransformerScorer,
-    embedding_table: EmbeddingTable,
     config: TrainScorerConfig,
+    encoder: torch.nn.Module | None = None,
 ) -> torch.optim.Optimizer:
-    if embedding_table.is_frozen():
-        return torch.optim.Adam(model.parameters(), lr=config.lr)
-    return torch.optim.Adam([
-        {"params": list(model.parameters()), "lr": config.lr},
-        {"params": list(embedding_table.parameters()), "lr": config.embedding_lr},
-    ])
+    """Build an AdamW optimizer.
+
+    Phase A: a single ``"scorer"`` parameter group at ``config.lr``.
+    Phase B (``encoder`` supplied): two groups — scorer at ``config.lr`` and
+    encoder at ``config.embedding_lr`` — for per-group clipping (FR-005a, FR-008).
+    The ``"name"`` key on each group is ignored by AdamW but read by
+    ``_train_one_epoch`` to label the per-group gradient norm.
+    """
+    groups: list[dict[str, Any]] = [
+        {"params": list(model.parameters()), "lr": config.lr, "name": "scorer"},
+    ]
+    if encoder is not None:
+        groups.append(
+            {"params": list(encoder.parameters()), "lr": config.embedding_lr,
+             "name": "encoder"},
+        )
+    return torch.optim.AdamW(groups)
 
 
 def _make_loaders(
@@ -392,25 +546,24 @@ def _batch_to_device(batch: TrainingBatch, device: torch.device) -> TrainingBatc
     )
 
 
-def _train_one_epoch(
-    model: SetTransformerScorer,
-    embedding_table: EmbeddingTable,
-    loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-) -> EpochStats:
-    model.train()
+def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
+    ctx.model.train()
+    if ctx.encoder is not None:
+        ctx.encoder.train()
     stats = _BatchStats()
     grad_norms: dict[str, float] = {}
 
-    for batch in loader:
-        batch = _batch_to_device(batch, device)
-        optimizer.zero_grad()
-        score_winner, score_loser = _score_batch(model, embedding_table, batch)
+    for batch in ctx.train_loader:
+        batch = _batch_to_device(batch, ctx.device)
+        ctx.optimizer.zero_grad()
+        if ctx.encoder is not None:
+            _phase_b_inject_encoder(ctx, batch)
+        score_winner, score_loser = _score_batch(ctx.model, ctx.embedding_table, batch)
         loss = _pairwise_bce(score_winner, score_loser)
         loss.backward()
-        grad_norms = _gradient_norms(model)
-        optimizer.step()
+        grad_norms = _clip_per_group(ctx.optimizer)
+        ctx.optimizer.step()
+        ctx.embedding_table.clear_live_weight()
         stats.add(loss, score_winner, score_loser)
 
     return EpochStats(
@@ -418,6 +571,138 @@ def _train_one_epoch(
         accuracy=stats.accuracy,
         grad_norms=grad_norms,
     )
+
+
+def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None:
+    """Run the encoder over the batch's unique cards and splice the resulting
+    text vectors into the embedding-table rows referenced by this batch
+    (FR-007, Decision §4). The encoder forward runs once per unique card; the
+    autograd graph released after ``optimizer.step()`` ensures the within-batch
+    cache does not survive between training steps."""
+    assert ctx.encoder is not None
+    assert ctx.tokenizer is not None
+    assert ctx.card_token_cache is not None
+    assert ctx.locator is not None
+    assert ctx.idx_to_name is not None
+    assert ctx.max_seq_len is not None
+
+    unique = torch.unique(
+        torch.cat([batch.winner_indices.flatten(), batch.loser_indices.flatten()]),
+    )
+    input_ids_list: list[torch.Tensor] = []
+    attention_mask_list: list[torch.Tensor] = []
+    for idx_t in unique:
+        idx = int(idx_t.item())
+        cached = ctx.card_token_cache.get(idx)
+        if cached is None:
+            cached = _tokenize_card(ctx, idx)
+            ctx.card_token_cache[idx] = cached
+        input_ids_list.append(cached[0])
+        attention_mask_list.append(cached[1])
+
+    input_ids = torch.stack(input_ids_list).to(ctx.device)
+    attention_mask = torch.stack(attention_mask_list).to(ctx.device)
+    text_vectors = _encode_chunked(
+        ctx.encoder, input_ids, attention_mask,
+        chunk_size=ctx.encoder_chunk_size, training=True,
+    )
+    ctx.embedding_table.set_text_vectors(unique.to(ctx.device), text_vectors)
+
+    if ctx.reference_batch is None:
+        # Capture step-0 vectors under the same eval-mode forward pass that
+        # `_embedding_drift` will use each epoch. Capturing the train-mode
+        # output (which has dropout active) would make every drift reading
+        # dominated by the train-vs-eval dropout delta — see FR-012.
+        was_training = ctx.encoder.training
+        ctx.encoder.eval()
+        try:
+            with torch.no_grad():
+                eval_text_vectors = _encode_chunked(
+                    ctx.encoder, input_ids, attention_mask,
+                    chunk_size=ctx.encoder_chunk_size, training=False,
+                )
+        finally:
+            if was_training:
+                ctx.encoder.train()
+        ctx.reference_batch = ReferenceBatch(
+            card_indices=unique.detach().clone().to(ctx.device),
+            input_ids=input_ids.detach().clone(),
+            attention_mask=attention_mask.detach().clone(),
+            step0_text_vectors=eval_text_vectors.detach().clone(),
+        )
+        _log(f"Reference batch captured: {unique.numel()} unique cards (Phase B step 0)")
+
+
+def _encode_chunked(
+    encoder: CardPriceTransformerModel,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    *,
+    chunk_size: int,
+    training: bool,
+) -> torch.Tensor:
+    """Run the encoder forward in fixed-size chunks, applying gradient
+    checkpointing per chunk during training so peak activation memory is
+    bounded by ``chunk_size`` cards instead of the full unique-card count.
+
+    A typical Phase B step sees ~1000–3000 unique cards in a single batch
+    (`batch_size * cards_per_deck * 2` minus duplicates). One forward pass at
+    that size on a 6-layer transformer overflows commodity GPUs; chunking
+    keeps each forward bounded by ``chunk_size``. Gradient checkpointing
+    drops activations after each chunk and recomputes them during backward,
+    trading ~1.5× compute for ~10× less memory.
+    """
+    n = input_ids.size(0)
+    if n <= chunk_size or not training:
+        return encoder._encode_and_pool(input_ids, attention_mask)
+    outputs: list[torch.Tensor] = []
+    for start in range(0, n, chunk_size):
+        end = start + chunk_size
+        chunk_ids = input_ids[start:end]
+        chunk_mask = attention_mask[start:end]
+        chunk_out = torch.utils.checkpoint.checkpoint(
+            encoder._encode_and_pool, chunk_ids, chunk_mask,
+            use_reentrant=False,
+        )
+        outputs.append(chunk_out)
+    return torch.cat(outputs, dim=0)
+
+
+def _tokenize_card(
+    ctx: _TrainingContext, idx: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    assert ctx.tokenizer is not None
+    assert ctx.locator is not None
+    assert ctx.idx_to_name is not None
+    assert ctx.max_seq_len is not None
+    name = ctx.idx_to_name[idx]
+    converted = ctx.locator.load_text(name)
+    if converted is None:
+        raise FileNotFoundError(
+            f"Phase B: no converted card .txt for {name!r} under "
+            f"{ctx.locator._cards_path}",
+        )
+    text = converted.without_name_line()
+    input_ids, attention_mask = ctx.tokenizer.encode(text, ctx.max_seq_len)
+    return (
+        torch.tensor(input_ids, dtype=torch.long),
+        torch.tensor(attention_mask, dtype=torch.long),
+    )
+
+
+def _clip_per_group(optimizer: torch.optim.Optimizer) -> dict[str, float]:
+    """Clip each parameter group at max-norm 1.0 and return the pre-clip norms.
+
+    ``clip_grad_norm_`` returns the combined L2 norm before clipping, so the
+    returned dict is a faithful diagnostic of the gradient signal each group
+    contributed (post-clip values would always be bounded by 1.0; FR-008, FR-012).
+    """
+    norms: dict[str, float] = {}
+    for group in optimizer.param_groups:
+        name = group.get("name", "group")
+        pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=1.0)
+        norms[name] = float(pre_clip)
+    return norms
 
 
 def _validate(
@@ -469,24 +754,6 @@ def _pairwise_bce(
     )
 
 
-def _gradient_norms(model: SetTransformerScorer) -> dict[str, float]:
-    """Compute L2 gradient norm for each named component of the model."""
-    norms: dict[str, float] = {}
-    for i, sab in enumerate(model.sab_layers):
-        norms[f"sab{i}"] = _component_grad_norm(sab)
-    norms["pma"] = _component_grad_norm(model.pma)
-    norms["mlp"] = _component_grad_norm(model.mlp)
-    return norms
-
-
-def _component_grad_norm(module: torch.nn.Module) -> float:
-    total = 0.0
-    for p in module.parameters():
-        if p.grad is not None:
-            total += p.grad.data.norm(2).item() ** 2
-    return total ** 0.5
-
-
 def _set_normalization_stats(
     model: SetTransformerScorer,
     examples: list[MatchTrainingExample],
@@ -504,10 +771,39 @@ def _set_normalization_stats(
     model.feat_std.copy_(std)
 
 
-def _embedding_drift(
-    embedding_table: EmbeddingTable, initial: torch.Tensor,
-) -> float:
-    return (embedding_table.embedding.weight.data - initial).norm(dim=1).mean().item()
+def _embedding_drift(ctx: _TrainingContext) -> float:
+    """Mean L2 distance between current encoder text vectors on the reference
+    batch and their step-0 values (Decision §5, FR-012). Computed under
+    ``model.eval()`` so dropout doesn't muddle the signal — the step-0
+    reference is captured the same way."""
+    assert ctx.encoder is not None
+    assert ctx.reference_batch is not None
+    was_training = ctx.encoder.training
+    ctx.encoder.eval()
+    try:
+        with torch.no_grad():
+            current = _encode_chunked(
+                ctx.encoder,
+                ctx.reference_batch.input_ids,
+                ctx.reference_batch.attention_mask,
+                chunk_size=ctx.encoder_chunk_size,
+                training=False,
+            )
+        diff = current - ctx.reference_batch.step0_text_vectors
+        return float(diff.norm(dim=-1).mean().item())
+    finally:
+        if was_training:
+            ctx.encoder.train()
+
+
+def _build_train_config(config: TrainScorerConfig) -> dict[str, Any]:
+    """Flatten ``TrainScorerConfig`` to a JSON-friendly dict for checkpoint persistence.
+
+    ``Path``-typed values become strings; ``None`` is preserved (FR-009,
+    Decision §1, contracts/checkpoint-format.md §train_config Schema).
+    """
+    raw = asdict(config)
+    return {k: str(v) if isinstance(v, Path) else v for k, v in raw.items()}
 
 
 def _print_epoch_report(
