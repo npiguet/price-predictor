@@ -32,7 +32,7 @@ The current run's phase is determined by `--embedding-lr`:
 | `--checkpoint-dir` | `models/sealed/scorer/` | Where `latest.pt` and `best_*.pt` are written. |
 | `--epochs` | `100` | Hard upper bound. |
 | `--batch-size` | `64` | Training batch size. |
-| `--lr` | `1e-5` | Scorer learning rate. (Spec § 4 default.) |
+| `--lr` | `1e-5` | Scorer learning rate. (Default updated from `1e-3` per `specs/encoder-fine-tuning.md` original brief.) |
 | `--n-layers`, `--n-heads`, `--n-seeds`, `--d-ff`, `--mlp-hidden`, `--dropout` | (existing) | Scorer architecture. **Forbidden when `--scorer-checkpoint` is supplied** — architecture is inherited from the loaded checkpoint's stored config. |
 | `--val-fraction` | `0.2` | Validation split fraction. |
 | `--random-seed` | `42` | Seed for the deterministic train/val split (FR-011a). |

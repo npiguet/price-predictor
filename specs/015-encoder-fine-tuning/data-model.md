@@ -29,7 +29,7 @@ ships.
 | `encoder_checkpoint` | `Path` | `models/price-predictor/transformer/latest.pt` | **NEW** (FR-003) | Source of encoder weights when starting a fresh Phase B run. The default value alone never triggers the FR-004 conflict; only an explicit pass on a Phase B `--resume` does. |
 | `epochs` | `int` | `100` | (existing) | Hard upper bound; `--patience` early-stops first. |
 | `batch_size` | `int` | `64` | (existing) | Unchanged. |
-| `lr` | `float` | `1e-3` → `1e-5` | (existing, default updated per spec § 4) | Scorer learning rate. |
+| `lr` | `float` | `1e-3` → `1e-5` | (existing, default updated per `specs/encoder-fine-tuning.md` original brief) | Scorer learning rate. |
 | `embedding_lr` | `float` | `1e-5` → `0` | (existing, **semantics + default change**, FR-001) | `0` = Phase A (encoder out of training graph). Non-zero = Phase B (encoder in training graph). |
 | `n_layers`, `n_heads`, `n_seeds`, `d_ff`, `mlp_hidden`, `dropout` | (existing) | unchanged defaults | (existing) | Architecture flags. **Forbidden when `scorer_checkpoint` is supplied** (FR-003a) — architecture is inherited from the loaded checkpoint's stored config. |
 | `patience` | `int` | `5` | **NEW** (FR-011) | Stop after this many consecutive epochs without a new peak `val_acc`. |
@@ -160,6 +160,7 @@ Location: `src/sealed/infrastructure/scorer_store.py:19`
 | `best_val_accuracy` | `float` | Existing. |
 | `config` | `ScorerConfig` | Existing — architecture only. |
 | `encoder_state_dict` | `dict[str, Any] \| None` | **NEW** (FR-009). `None` for Phase A checkpoints; populated for Phase B. Used by Phase B `--resume`, by Phase A → Phase B bootstrap (when *not* present, telling caller to load encoder from `--encoder-checkpoint` instead), and by `encode-cards --scorer-checkpoint`. |
+| `encoder_config` | `dict[str, Any] \| None` | **NEW** (FR-009). `asdict(TransformerConfig)` for the encoder that produced `encoder_state_dict`. `None` for Phase A checkpoints; populated for Phase B. Required so `train-scorer --resume <phaseB>` can construct a `CardPriceTransformerModel` whose architecture matches the saved weights without depending on the price-predictor `latest.pt` being stable across the run. |
 | `train_config` | `dict[str, Any] \| None` | **NEW**. The full training-flag dict (FR-009). `None` for legacy checkpoints; populated going forward. |
 
 ### `EmbeddingTable` (modified)
@@ -254,7 +255,7 @@ train-scorer --resume mid_phaseB.pt --embedding-lr 1e-7
         ├── reject if user explicitly passed --encoder-checkpoint  (FR-004 carve-out)
         ▼ build _TrainingContext:
         │  - scorer ← load_state_dict(mid_phaseB.model_state_dict)
-        │  - encoder ← CardPriceTransformerModel(saved config)
+        │  - encoder ← CardPriceTransformerModel(mid_phaseB.encoder_config)
         │              .load_state_dict(mid_phaseB.encoder_state_dict)
         │  - optimizer ← AdamW(...) ; load_state_dict(mid_phaseB.optimizer_state_dict)
         │  - epoch counter ← mid_phaseB.epoch + 1
@@ -274,7 +275,7 @@ encode-cards --scorer-checkpoint best_phaseB.pt --clean
         ├── reject if best_phaseB.encoder_state_dict is None    (FR-014)
         ├── reject if user also explicitly passed --encoder-checkpoint  (FR-013)
         ▼
-        encoder ← CardPriceTransformerModel(price-predictor TransformerConfig)
+        encoder ← CardPriceTransformerModel(best_phaseB.encoder_config)
                   .load_state_dict(best_phaseB.encoder_state_dict)
         │
         ▼ for each .txt under output/cardsfolder/:
@@ -296,8 +297,9 @@ encode-cards --scorer-checkpoint best_phaseB.pt --clean
 | AdamW used in both phases | FR-005a | `_build_optimizer` |
 | Per-group max-norm 1.0 clipping | FR-008 | `_train_one_epoch` |
 | `encoder_state_dict` saved in Phase B checkpoints, omitted in Phase A | FR-009 | `ScorerStore.save_checkpoint` |
+| `encoder_config` saved in Phase B checkpoints, omitted in Phase A | FR-009 | `ScorerStore.save_checkpoint` |
 | `train_config` saved in every checkpoint | FR-009 | `ScorerStore.save_checkpoint` |
-| Resume CLI overrides stored `train_config` | FR-010 | `run_train_scorer` (precedence in flag resolution) |
+| Resume precedence: explicit CLI > resumed `train_config` > argparse/dataclass default | FR-010 | `run_train_scorer` (sentinel-default + late-resolve per `contracts/checkpoint-format.md §Resume Precedence`) |
 | Validation once per epoch; `--patience` drives early stop | FR-011 | `TrainScorerUseCase.execute` |
 | Deterministic train/val split | FR-011a | `_load_dataset` (already correct) |
 | `embedding_drift` + encoder grad norm logged each epoch | FR-012 | `_print_epoch_report` |

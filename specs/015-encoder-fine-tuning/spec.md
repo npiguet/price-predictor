@@ -328,7 +328,9 @@ it. Without this signal, the user only finds out after eval-scorer.
   every subsequent drift computation in the run. The encoder gradient
   norm is a single combined L2 norm across the entire encoder parameter
   group (token embedding table + encoder SAB layers + output projection),
-  not split per sub-component.
+  **measured pre-clip** (the value returned by `clip_grad_norm_` before
+  it scales the gradients down to max-norm 1.0); post-clip would be
+  bounded at 1.0 by construction and carry no diagnostic signal.
 - **FR-013**: `encode-cards` MUST accept an `--encoder-checkpoint` flag
   (default `models/price-predictor/transformer/latest.pt`) and a
   `--scorer-checkpoint` flag (no default). The two flags MUST be mutually

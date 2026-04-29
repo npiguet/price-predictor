@@ -22,10 +22,12 @@ keys:
 | `config` | `dict` | required | required | `asdict(ScorerConfig)` — architecture only (fields: `d_model`, `n_layers`, `n_heads`, `n_seeds`, `d_ff`, `mlp_hidden`, `dropout`). |
 | `train_config` | `dict[str, Any]` | required | required | All `train-scorer` CLI flag values (FR-009). |
 | `encoder_state_dict` | `dict[str, Tensor]` | absent | required | `CardPriceTransformerModel.state_dict()` — token embedding table + position embedding + encoder stack + output dropout. (FR-009) |
+| `encoder_config` | `dict[str, Any]` | absent | required | `asdict(TransformerConfig)` for the encoder that produced `encoder_state_dict`. Required so resumes and `encode-cards --scorer-checkpoint` can reconstruct a `CardPriceTransformerModel` whose architecture matches the saved weights, without relying on the price-predictor `latest.pt` being stable. (FR-009) |
 
 The presence of the `encoder_state_dict` key is the **authoritative
 phase indicator** (FR-004). Code paths that need to know the phase MUST
-test for the key, not look at flag values.
+test for the key, not look at flag values. `encoder_config` MUST be
+present whenever `encoder_state_dict` is present.
 
 ## `train_config` Schema
 
@@ -66,14 +68,38 @@ launched. It is *not* re-loaded as the architecture source; that's still
 
 ## Resume Precedence (FR-010)
 
-When `train-scorer --resume <path> [other flags]` runs:
+When `train-scorer --resume <path> [other flags]` runs, each training
+flag's effective value for the current run is resolved by this priority
+order:
 
-1. Load `train_config` from the resumed checkpoint.
-2. Load CLI-supplied flag values (anything explicitly passed by the user *or* the argparse defaults — argparse cannot tell them apart, and the spec accepts that).
-3. The CLI values override the stored `train_config` for the current run; the merged result becomes the new `train_config` written to subsequent checkpoints.
+1. **Explicit CLI argument** wins. If the user passed the flag on the
+   command line, that value is used.
+2. Otherwise, **the resumed checkpoint's `train_config`** wins. The user's
+   prior choice survives the resume so that
+   `train-scorer --resume <ckpt>` with no other flags continues training
+   exactly as it was interrupted.
+3. Otherwise, **the argparse / dataclass default** wins. (Fallback for
+   pre-feature checkpoints with no `train_config` field, and for any
+   future flag added after the resumed checkpoint was saved.)
 
-This means a user can change `--lr` or `--patience` between resume
-invocations and the new value takes effect.
+The current run's resolved values become the new `train_config` written
+to subsequent checkpoints.
+
+Implementation detail: argparse cannot natively distinguish "user passed
+the flag with the default value" from "user omitted the flag". The
+implementation MUST register every resumable training flag with
+`default=None` (sentinel) and apply the precedence above in
+`run_train_scorer` *after* loading the resumed checkpoint, falling back
+to the dataclass default when `train_config` is absent or doesn't carry
+the field. This is the same late-resolve pattern used for
+`--encoder-checkpoint`'s mutual-exclusivity carve-out.
+
+Architecture flags (`--n-layers`, `--n-heads`, `--n-seeds`, `--d-ff`,
+`--mlp-hidden`, `--dropout`) are NOT subject to this precedence:
+architecture is loaded directly from the resumed checkpoint's `config`
+(scorer) and `encoder_config` (encoder) fields, and any explicit CLI
+architecture flag on `--resume` MUST be rejected (a mismatched
+architecture would fail `load_state_dict`).
 
 Architecture flags (`--n-layers`, `--n-heads`, `--n-seeds`, `--d-ff`,
 `--mlp-hidden`, `--dropout`) MUST NOT be changed on resume; the
@@ -103,20 +129,22 @@ When `encode-cards --scorer-checkpoint <phaseB>.pt` runs:
 | Field | Behavior |
 |---|---|
 | `encoder_state_dict` | Loaded into a fresh `CardPriceTransformerModel`. **Required** — absence = Phase A checkpoint = error per FR-014. |
+| `encoder_config` | Used to construct the `CardPriceTransformerModel` so its architecture matches the saved weights. **Required** alongside `encoder_state_dict`. |
 | All other fields | Ignored. |
 
 The `CardPriceTransformerModel` is constructed with the
-`TransformerConfig` carried by the price-predictor `latest.pt` file (the
-encoder architecture itself is determined by that file). `encode-cards`
-loads only the *weights* from the scorer checkpoint, not the
-architecture. This works because Phase B never changes the encoder
-architecture — only its weights.
+`TransformerConfig` reconstructed from the checkpoint's `encoder_config`
+field, and its weights are populated from `encoder_state_dict`. This
+makes the Phase B checkpoint self-contained: `encode-cards` no longer
+depends on the price-predictor `latest.pt` being unchanged since the
+Phase B run produced this checkpoint. Symmetric with `train-scorer
+--resume <phaseB>`, which loads the encoder the same way.
 
 ## Backwards-Compatibility
 
 | Pre-feature checkpoint state | Reader behavior |
 |---|---|
-| Lacks `encoder_state_dict`, lacks `train_config` | Treated as Phase A. `train_config` is reconstructed from the resumed CLI invocation (or left empty). |
+| Lacks `encoder_state_dict`, lacks `encoder_config`, lacks `train_config` | Treated as Phase A. `train_config` is reconstructed from the resumed CLI invocation (or left empty). |
 | Carries `Adam` optimizer state | **Not supported.** Spec § Assumptions: Phase A is retrained from scratch after this feature ships. |
 
 There is no checkpoint-format version field. The presence/absence of
