@@ -57,13 +57,21 @@ group** (2 SAB layers + output projection + token embedding table) at
 
 ### `train-scorer` (Phase B-relevant flags)
 
-| Flag                   | Default                                        | Meaning                                                                                                                                                                         |
-|------------------------|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `--embedding-lr`       | `0`                                            | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                              |
-| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when bootstrapping a fresh Phase B run from a Phase A checkpoint. Ignored when resuming a Phase B checkpoint (which already carries encoder weights). |
+| Flag                   | Default                                        | Meaning                                                                                                                                                                                                  |
+|------------------------|------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--embedding-lr`       | `0`                                            | Learning rate for the encoder parameter group. `0` keeps the encoder out of the training graph (Phase A). Any non-zero value puts it in (Phase B).                                                       |
+| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when starting a fresh Phase B run via `--scorer-checkpoint`. Forbidden if explicitly passed when resuming a Phase B checkpoint (which already carries encoder weights).        |
+| `--scorer-checkpoint`  | _(none)_                                       | Bootstrap scorer weights from a Phase A checkpoint to start a fresh Phase B run. Loads scorer weights only — `optimizer.state_dict`, `epoch`, `best_val_accuracy`, and `encoder.state_dict` are ignored. |
 
 The boolean `--unfreeze-embeddings` flag is **removed**; the on/off semantics
 are subsumed by `--embedding-lr` (`0` vs non-zero).
+
+`--resume` is **phase-locked**: the resumed checkpoint's phase (presence
+or absence of `encoder.state_dict`) must match the current run's phase
+(`--embedding-lr` zero or non-zero). Cross-phase resume is rejected with
+no override flag. `--resume` and `--scorer-checkpoint` are mutually
+exclusive — `--resume` continues an existing run within its phase;
+`--scorer-checkpoint` initializes a fresh run.
 
 ### `encode-cards`
 
@@ -72,8 +80,11 @@ are subsumed by `--embedding-lr` (`0` vs non-zero).
 | `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | Load encoder weights from a price-predictor checkpoint.                                          |
 | `--scorer-checkpoint`  | _(none)_                                       | Load encoder weights from a sealed scorer checkpoint (extracted from the scorer's `state_dict`). |
 
-The two flags are **mutually exclusive**; passing both is an error. Output
-`.npz` files have identical structure regardless of source.
+The two flags are **mutually exclusive**; passing both is an error.
+Passing a Phase A checkpoint (no `encoder.state_dict`) to
+`--scorer-checkpoint` is also an error — the user is directed to
+`--encoder-checkpoint` for non-Phase-B sources. Output `.npz` files have
+identical structure regardless of source.
 
 ## 3. Within-batch Encoder Caching
 
@@ -114,7 +125,8 @@ on the resuming invocation override the stored config for that run.
 ## 6. Workflow
 
 The two phases are **two separate `train-scorer` invocations** chained via
-`--resume`. Phase A and Phase B do not share a single training-loop call.
+`--scorer-checkpoint`. Phase A and Phase B do not share a single
+training-loop call.
 
 ### Step 1 — Phase A (frozen encoder)
 
@@ -129,12 +141,15 @@ Run with `--embedding-lr 0` (the default). Early stopping fires per the
 
 ```bash
 python -m sealed train-scorer \
-    --resume models/sealed/scorer/best_<phaseA>.pt \
+    --scorer-checkpoint models/sealed/scorer/best_<phaseA>.pt \
     --encoder-checkpoint models/price-predictor/transformer/latest.pt \
     --embedding-lr 1e-7
 ```
 
-Same `val_acc`-based early stopping as Phase A; typical run length 5–15 epochs.
+Same `val_acc`-based early stopping as Phase A; typical run length 5–15
+epochs. To continue an interrupted Phase B run, re-invoke with
+`--resume models/sealed/scorer/best_<phaseB>.pt --embedding-lr 1e-7`
+(phase must match — see § 2).
 
 ### Step 3 — Re-cache embeddings
 
@@ -160,13 +175,21 @@ metric for whether Phase B helped.
 
 ## 7. Monitoring
 
-Required metrics, logged every validation interval:
+Validation runs **once per epoch at end of epoch**; `--patience` counts
+epochs without a new peak `val_acc`. The following metrics are logged at
+the same cadence:
 
 | Metric                                                                                                                                                                                                       | Action threshold                                                                                                |
 |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
 | `val_acc`                                                                                                                                                                                                    | Drives `--patience`-based early stopping.                                                                       |
 | `embedding_drift` — mean L2 distance of post-encoder card vectors on a fixed reference batch from their step-0 values (reuses the `embedding_drifts` field on `TrainingMetrics`)                              | Drift > 1.0 within first 3 epochs → lower `--embedding-lr` and restart from Phase A checkpoint.                 |
 | Encoder gradient norm                                                                                                                                                                                        | Logged for diagnostic use.                                                                                      |
+
+The reference batch is the set of unique cards in the very first Phase B
+training batch, with their post-encoder vectors captured during that
+batch's forward pass before the first optimizer step. These vectors are
+the step-0 baseline reused for every subsequent drift computation in the
+run.
 
 ## 8. Out of Scope
 
@@ -238,13 +261,14 @@ that surface area.
 
 ## Why fresh Phase B runs load the encoder from the price-predictor checkpoint
 
-A fresh Phase B run resumes from a Phase A scorer checkpoint, which contains
-scorer weights only. The encoder weights have to come from somewhere
-compatible with the precomputed `.npz` embeddings the Phase A scorer was
-trained against. The price-predictor `latest.pt` is the only file that
-satisfies this consistency constraint by construction — it produced those
-`.npz` embeddings via `encode-cards`. For continuing Phase B runs, the
-encoder weights are already in the resumed checkpoint.
+A fresh Phase B run bootstraps scorer weights from a Phase A checkpoint via
+`--scorer-checkpoint`; that file contains scorer weights only. The encoder
+weights have to come from somewhere compatible with the precomputed `.npz`
+embeddings the Phase A scorer was trained against. The price-predictor
+`latest.pt` is the only file that satisfies this consistency constraint by
+construction — it produced those `.npz` embeddings via `encode-cards`. For
+continuing Phase B runs (`--resume <phaseB>.pt`), the encoder weights are
+already in the resumed checkpoint.
 
 ## Why re-cache `.npz` files instead of running the encoder at inference
 
