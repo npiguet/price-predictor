@@ -17,6 +17,8 @@ below). Color-indexed slots follow WUBRG order throughout.
 
 from __future__ import annotations
 
+from price_predictor.domain.value_objects import WUBRG
+
 FEATURE_COUNT = 32
 DET_FEATURE_DIM = FEATURE_COUNT  # legacy alias; kept so existing .npz files load unchanged
 
@@ -54,3 +56,19 @@ def is_land_embedding(embedding) -> bool:
     exactly 0.0 or 1.0 here).
     """
     return float(embedding[-FEATURE_COUNT + IS_LAND]) > 0.5
+
+
+def card_colors(embedding) -> frozenset[str]:
+    """Return the set of WUBRG colors flagged by ``COLOR_FLAGS``.
+
+    Empty for colorless and Devoid cards; ``COLOR_FLAGS`` is an approximation
+    of color identity derived from cast-cost pips with the Devoid override
+    zeroing the slots — see ``deterministic_features._fill_color_flags``.
+    Hybrid mana sets multiple flags. Rules-text-only colors are not captured.
+    """
+    block_start = -FEATURE_COUNT + COLOR_FLAGS.start
+    block_stop = -FEATURE_COUNT + COLOR_FLAGS.stop
+    flags = embedding[block_start:block_stop]
+    return frozenset(
+        color for color, flag in zip(WUBRG, flags) if float(flag) > 0.5
+    )

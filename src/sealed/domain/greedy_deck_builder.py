@@ -24,7 +24,7 @@ from enum import IntEnum
 import numpy as np
 import torch
 
-from sealed.domain.card_embedding_layout import is_land_embedding
+from sealed.domain.card_embedding_layout import card_colors, is_land_embedding
 from sealed.domain.scorer_model import SetTransformerScorer
 
 NONLAND_DECK_SIZE = 23
@@ -35,6 +35,21 @@ MAX_LANDS_IN_DECK = DECK_SIZE - NONLAND_DECK_SIZE  # 17 — basics shrink to 0 a
 # argmax for any realistic score scale, so we apply the greedy stop condition
 # instead of grinding through iterations that no longer change the deck.
 _EFFECTIVELY_GREEDY_TEMPERATURE = 1e-3
+
+# Sentinel value for the ``restarts`` parameter selecting color-pair seeded
+# init: one restart per MTG two-color pair, each restart's initial 23 spells
+# filtered to cards whose colors are a subset of the pair. The full pool
+# remains available as ``spells_remaining``/``lands_remaining``, so the
+# search is unconstrained after init.
+COLOR_PAIRS_STRATEGY = "color-pairs"
+
+COLOR_PAIRS: tuple[frozenset[str], ...] = (
+    frozenset({"W", "U"}), frozenset({"W", "B"}),
+    frozenset({"W", "R"}), frozenset({"W", "G"}),
+    frozenset({"U", "B"}), frozenset({"U", "R"}),
+    frozenset({"U", "G"}), frozenset({"B", "R"}),
+    frozenset({"B", "G"}), frozenset({"R", "G"}),
+)
 
 
 class MoveKind(IntEnum):
@@ -110,14 +125,25 @@ class GreedyDeckBuilder:
         temperature: float = 0.0,
         cooling: float = 0.95,
         max_iterations: int = 200,
-        restarts: int = 1,
+        restarts: int | str = 1,
     ) -> None:
         self._model = model
         self._pool_embeddings = pool_embeddings
         self._temperature = temperature
         self._cooling = cooling
         self._max_iterations = max_iterations
-        self._restarts = max(1, restarts)
+        self._restarts = self._validate_restarts(restarts)
+
+    @staticmethod
+    def _validate_restarts(restarts: int | str) -> int | str:
+        if isinstance(restarts, str):
+            if restarts != COLOR_PAIRS_STRATEGY:
+                raise ValueError(
+                    f"restarts string must be {COLOR_PAIRS_STRATEGY!r}, "
+                    f"got {restarts!r}"
+                )
+            return restarts
+        return max(1, restarts)
 
     def build(self, pool_names: list[str]) -> list[str]:
         if len(pool_names) < NONLAND_DECK_SIZE:
@@ -138,20 +164,39 @@ class GreedyDeckBuilder:
             # practice (sealed pools of ~80+ cards always have enough spells).
             return list(pool_names)
 
-        states = self._init_restart_states(spell_pool, land_pool)
+        states = self._init_restart_states(pool_names, spell_pool, land_pool)
         self._run_search(pool_arr, states)
 
         best = max(states, key=lambda s: s.best_score)
         return [pool_names[i] for i in best.best_spells + best.best_lands]
 
     def _init_restart_states(
-        self, spell_pool: list[int], land_pool: list[int],
+        self,
+        pool_names: list[str],
+        spell_pool: list[int],
+        land_pool: list[int],
     ) -> list[_RestartState]:
-        """Initialize one ``_RestartState`` per restart with an independent
-        random spell shuffle. Each restart's bootstrap score is filled in by
-        ``_run_search`` as part of the first batched forward pass."""
+        """Initialize one ``_RestartState`` per restart.
+
+        Two strategies, dispatched on ``self._restarts``:
+
+        - integer ``N`` → ``N`` random-shuffle inits (legacy behavior).
+        - ``COLOR_PAIRS_STRATEGY`` → one init per MTG two-color pair,
+          each restart's initial 23 spells filtered to on-color cards.
+          The full pool remains as ``spells_remaining``/``lands_remaining``,
+          so the search is unconstrained after init.
+        """
+        if self._restarts == COLOR_PAIRS_STRATEGY:
+            return self._color_pair_states(pool_names, spell_pool, land_pool)
+        assert isinstance(self._restarts, int)
+        return self._random_restart_states(spell_pool, land_pool, self._restarts)
+
+    @staticmethod
+    def _random_restart_states(
+        spell_pool: list[int], land_pool: list[int], count: int,
+    ) -> list[_RestartState]:
         states: list[_RestartState] = []
-        for _ in range(self._restarts):
+        for _ in range(count):
             shuffled = list(spell_pool)
             random.shuffle(shuffled)
             states.append(_RestartState(
@@ -160,6 +205,46 @@ class GreedyDeckBuilder:
                 spells_remaining=shuffled[NONLAND_DECK_SIZE:],
                 lands_remaining=list(land_pool),
             ))
+        return states
+
+    def _color_pair_states(
+        self,
+        pool_names: list[str],
+        spell_pool: list[int],
+        land_pool: list[int],
+    ) -> list[_RestartState]:
+        """Build up to 10 restart states, one per color pair.
+
+        For each pair, the initial 23 spells are drawn from cards whose
+        colors are a subset of the pair (colorless cards always qualify).
+        ``spells_remaining`` and ``lands_remaining`` are the full pool minus
+        the chosen 23 — the color filter applies only to the seed deck.
+
+        Pairs without 23 eligible on-color spells are skipped. If every pair
+        is skipped (degenerate pool), falls back to one random restart so
+        the build always returns a deck.
+        """
+        states: list[_RestartState] = []
+        for pair in COLOR_PAIRS:
+            on_color = [
+                i for i in spell_pool
+                if card_colors(self._pool_embeddings[pool_names[i]]).issubset(pair)
+            ]
+            if len(on_color) < NONLAND_DECK_SIZE:
+                continue
+            random.shuffle(on_color)
+            deck_spells = on_color[:NONLAND_DECK_SIZE]
+            chosen = set(deck_spells)
+            spells_remaining = [i for i in spell_pool if i not in chosen]
+            states.append(_RestartState(
+                deck_spells=deck_spells,
+                deck_lands=[],
+                spells_remaining=spells_remaining,
+                lands_remaining=list(land_pool),
+            ))
+
+        if not states:
+            return self._random_restart_states(spell_pool, land_pool, count=1)
         return states
 
     def _run_search(

@@ -10,6 +10,25 @@ from price_predictor.infrastructure.cli_helpers import add_dataclass_arg
 from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
+from sealed.domain.greedy_deck_builder import COLOR_PAIRS_STRATEGY
+
+
+def _parse_restarts(value: str) -> int | str:
+    """Parse --restarts: a positive integer, or the literal 'color-pairs'."""
+    if value == COLOR_PAIRS_STRATEGY:
+        return value
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"--restarts must be a positive integer or "
+            f"{COLOR_PAIRS_STRATEGY!r}, got: {value!r}"
+        ) from None
+    if n < 1:
+        raise argparse.ArgumentTypeError(
+            f"--restarts must be >= 1, got: {n}"
+        )
+    return n
 
 
 def _add_cards_path(parser: argparse.ArgumentParser) -> None:
@@ -165,14 +184,15 @@ def _build_build_decks_parser(subparsers) -> None:
     )
     build_parser.add_argument(
         "--restarts",
-        type=int,
+        type=_parse_restarts,
         default=1,
         help=(
-            "Run the greedy/SA search this many times per pool from "
-            "independent random inits, keeping the highest-scoring deck "
-            "across runs (default: 1). Cheap robustness against the "
-            "occasional bad-basin SA run; pairs well with non-zero "
-            "--sa-temperature where variance across inits is highest."
+            "Restart strategy. Either a positive integer N (run the greedy/SA "
+            "search N times per pool from independent random inits; default: 1) "
+            "or the literal 'color-pairs' (run one search per MTG two-color "
+            "pair, each seeded with an initial 23-spell deck filtered to "
+            "on-color cards; the search is unconstrained after init). The "
+            "highest-scoring deck across runs is kept."
         ),
     )
     build_parser.add_argument(

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.cli import (
+    _parse_restarts,
     run_encode_cards,
     run_match_outcomes,
     run_train_scorer,
@@ -361,3 +364,31 @@ class TestEncodeCardsPhaseARejected:
         err = capsys.readouterr().err
         assert "Phase A scorer checkpoint" in err
         assert "--encoder-checkpoint" in err
+
+
+class TestParseRestarts:
+    """``--restarts`` accepts a positive int or the literal 'color-pairs'."""
+
+    def test_positive_integer(self):
+        assert _parse_restarts("1") == 1
+        assert _parse_restarts("4") == 4
+        assert _parse_restarts("100") == 100
+
+    def test_color_pairs_literal(self):
+        assert _parse_restarts("color-pairs") == "color-pairs"
+
+    def test_zero_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match=">= 1"):
+            _parse_restarts("0")
+
+    def test_negative_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match=">= 1"):
+            _parse_restarts("-3")
+
+    def test_unknown_string_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="positive integer"):
+            _parse_restarts("foo")
+
+    def test_unknown_string_includes_value_in_message(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="'random-init'"):
+            _parse_restarts("random-init")

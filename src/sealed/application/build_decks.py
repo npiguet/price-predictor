@@ -36,7 +36,7 @@ class BuildDecksConfig:
     sa_temperature: float = 0.8
     sa_cooling: float = 0.85
     sa_max_iterations: int = 200
-    restarts: int = 1
+    restarts: int | str = 1
     print_decks: bool = False
 
 
@@ -64,10 +64,14 @@ class BuildDecksUseCase:
             _log(
                 f"Building decks for {total} pools with simulated annealing "
                 f"(T0={config.sa_temperature}, cooling={config.sa_cooling}, "
-                f"max_iter={config.sa_max_iterations})..."
+                f"max_iter={config.sa_max_iterations}, "
+                f"restarts={config.restarts})..."
             )
         else:
-            _log(f"Building decks for {total} pools (pure greedy)...")
+            _log(
+                f"Building decks for {total} pools (pure greedy, "
+                f"restarts={config.restarts})..."
+            )
         written = 0
         built_decks: list[list[str]] = []
         with open(config.output, "w", encoding="utf-8") as out:
