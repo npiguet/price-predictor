@@ -8,10 +8,11 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from sealed.application.build_decks import BuildDecksConfig, BuildDecksUseCase
-from sealed.domain.card_embedding_layout import total_dim
+from sealed.domain.card_embedding_layout import FEATURE_COUNT, IS_LAND, total_dim
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 
 D_MODEL = total_dim(256)
+_IS_LAND_OFFSET = D_MODEL - FEATURE_COUNT + IS_LAND
 
 
 def _make_model() -> SetTransformerScorer:
@@ -38,9 +39,11 @@ def _make_locator(known_cards: set[str]) -> MagicMock:
     """
     locator = MagicMock()
     rng = np.random.default_rng(7)
-    embeddings = {
-        n: rng.standard_normal(D_MODEL).astype(np.float32) for n in known_cards
-    }
+    embeddings: dict[str, np.ndarray] = {}
+    for n in known_cards:
+        emb = rng.standard_normal(D_MODEL).astype(np.float32)
+        emb[_IS_LAND_OFFSET] = 0.0  # synthetic spell — no land flag set
+        embeddings[n] = emb
 
     def load_embedding(name: str):
         return embeddings.get(name)

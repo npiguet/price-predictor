@@ -45,6 +45,8 @@ The current run's phase is determined by `--embedding-lr`:
 | `--scorer-checkpoint <path>` | (none) | Bootstrap scorer weights from a Phase A checkpoint to start a fresh Phase B run. Loads `model_state_dict` only; ignores `optimizer_state_dict`, `epoch`, `best_val_accuracy`, and (if present) `encoder_state_dict`. Inherits architecture from the loaded checkpoint's `config`. (FR-003a) |
 | `--encoder-checkpoint <path>` | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when starting a fresh Phase B run via `--scorer-checkpoint`. Has no effect on Phase A runs (encoder not in graph). Forbidden if explicitly passed on a Phase B `--resume`. (FR-003) |
 | `--patience <int>` | `5` | Early-stop training after this many consecutive epochs without a new peak `val_acc`. (FR-011) |
+| `--encoder-chunk-size <int>` | `128` | Phase B only: chunk the encoder forward pass over each step's unique cards into pieces of this size, with gradient checkpointing per chunk so peak activation memory is bounded by one chunk. |
+| `--max-grad-norm <float>` | `100.0` | Per-parameter-group L2 norm cap applied between backward and optimizer step. Loose by default so it acts as a NaN-spike guard rather than an effective LR throttle; the per-epoch report shows mean and max pre-clip norms so a too-low setting is visible. |
 
 ### Removed flags
 
@@ -105,9 +107,9 @@ Each epoch boundary the subcommand prints:
 
 - `train_loss`, `train_acc`, `val_loss`, `val_acc`
 - `embedding_drift` — Phase B only (FR-012)
-- `grad_norms`:
-  - Phase A: a single `scorer=<f>` entry.
-  - Phase B: two entries, `scorer=<f>` and `encoder=<f>` (single combined L2 norm across the encoder parameter group, FR-012).
+- `grad_norms`: per parameter group, formatted as `<name>=mean(<f>)/max(<f>)` where the values are the **pre-clip** L2 norms aggregated across the epoch's batches. Mean tells you the typical step's gradient magnitude; max tells you whether the step's clipping bound (`--max-grad-norm`) is being hit on any batch.
+  - Phase A: a single `scorer=mean(...)/max(...)` entry.
+  - Phase B: two entries, `scorer=mean(...)/max(...)` and `encoder=mean(...)/max(...)` (single combined L2 norm across each parameter group, FR-012).
 
 ## Exit Codes
 

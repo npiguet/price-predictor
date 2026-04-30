@@ -13,9 +13,18 @@ from price_predictor.domain.entities import TransformerConfig
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from price_predictor.infrastructure.transformer_store import save_model
-from sealed.domain.card_embedding_layout import total_dim
+from sealed.domain.card_embedding_layout import FEATURE_COUNT, IS_LAND, total_dim
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.scorer_store import ScorerStore
+
+
+def _zero_is_land(embedding: np.ndarray) -> np.ndarray:
+    """Force the IS_LAND deterministic-feature flag to 0 so the deckbuilder
+    treats the synthetic embedding as a spell, not a land. Without this,
+    random embeddings have nonzero IS_LAND values and confuse land-aware
+    code paths."""
+    embedding[-FEATURE_COUNT + IS_LAND] = 0.0
+    return embedding
 
 
 class FakeProcess:
@@ -55,7 +64,9 @@ def synthetic_cards_dir(tmp_path: Path) -> Path:
         letter_dir.mkdir(exist_ok=True)
         np.savez_compressed(
             letter_dir / f"{name}.npz",
-            embedding=rng.standard_normal(total_dim(256)).astype(np.float32),
+            embedding=_zero_is_land(
+                rng.standard_normal(total_dim(256)).astype(np.float32),
+            ),
         )
     return cards_dir
 
@@ -128,7 +139,9 @@ def phase_b_setup(tmp_path: Path):
         card_names.append(name)
         np.savez_compressed(
             letter_dir / f"{name}.npz",
-            embedding=rng.standard_normal(card_dim).astype(np.float32),
+            embedding=_zero_is_land(
+                rng.standard_normal(card_dim).astype(np.float32),
+            ),
         )
         (letter_dir / f"{name}.txt").write_text(
             f"name: {name}\ntypes: creature\nmana cost: none\n",

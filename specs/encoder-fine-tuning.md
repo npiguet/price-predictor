@@ -48,6 +48,14 @@ Non-differentiable components: the tokenizer (gradients stop at the token
 embedding lookup) and the deterministic feature parser (its outputs are
 constant).
 
+The encoder is run in **eval mode** during Phase B training so dropout
+does not add stochasticity. Cached `.npz` files were produced by
+`encode-cards` under `encoder.eval()`; running the encoder in train mode
+during Phase B would feed the scorer noisier vectors than it was Phase-A
+tuned to score, dragging early Phase B `val_acc` down regardless of any
+encoder weight movement. Eval mode no-ops dropout and BatchNorm; gradient
+flow is unaffected, so the encoder still trains.
+
 The optimizer is a single `AdamW` instance with two parameter groups: the
 **scorer group** (SAB stack + PMA + scoring MLP) at `--lr`, and the **encoder
 group** (2 SAB layers + output projection + token embedding table) at
@@ -63,6 +71,7 @@ group** (2 SAB layers + output projection + token embedding table) at
 | `--encoder-checkpoint`  | `models/price-predictor/transformer/latest.pt` | Source of encoder weights when starting a fresh Phase B run via `--scorer-checkpoint`. Forbidden if explicitly passed when resuming a Phase B checkpoint (which already carries encoder weights).                                        |
 | `--scorer-checkpoint`   | _(none)_                                       | Bootstrap scorer weights from a Phase A checkpoint to start a fresh Phase B run. Loads scorer weights only — `optimizer.state_dict`, `epoch`, `best_val_accuracy`, and `encoder.state_dict` are ignored.                                 |
 | `--encoder-chunk-size`  | `128`                                          | Phase B only: chunk the encoder forward pass over each step's unique cards into pieces of this size, with gradient checkpointing per chunk so peak activation memory is bounded by one chunk. Lower it on tight GPUs; raise it on roomy ones. |
+| `--max-grad-norm`       | `100.0`                                        | Per-parameter-group L2 norm cap applied between backward and optimizer step. Default is loose so clipping acts as a NaN-spike guard, not an effective LR throttle. The per-epoch report prints both mean and max pre-clip norm per group; if max stays well under the cap, clipping is rare and the configured LRs take effect as expected. |
 
 The boolean `--unfreeze-embeddings` flag is **removed**; the on/off semantics
 are subsumed by `--embedding-lr` (`0` vs non-zero).
@@ -114,7 +123,7 @@ it for extra throughput when memory permits.
 | `--lr`            | `1e-5`  | Unchanged from Phase A.                                                                                                                                                                                            |
 | `--embedding-lr`  | `0`     | Non-zero activates Phase B. Recommended starting value: `1e-7` (see Rationale § Why the embedding LR has to be unusually low).                                                                                     |
 | `--patience`      | `5`     | Stop training after this many epochs without a new peak `val_acc`. Applies to both phases. The best checkpoint to date is always preserved as `best_*.pt`.                                                          |
-| Gradient clipping | 1.0     | Max-norm, applied per parameter group. Caps peak per-step movement under unusual gradient spikes.                                                                                                                  |
+| `--max-grad-norm` | `100.0` | Per-parameter-group L2 norm cap. Loose enough to act as a NaN-spike guard rather than a throttle; the per-epoch report shows mean and max pre-clip norms so a too-low setting is visible.                          |
 
 ## 5. Checkpoint Format
 

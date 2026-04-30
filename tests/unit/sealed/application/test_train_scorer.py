@@ -355,17 +355,18 @@ class TestPhaseBTraining:
             max_seq_len=encoder_cfg.max_seq_len,
         )
 
-        # Step 0 makes two encoder forwards over the unique cards: one
-        # train-mode forward whose output flows into the scorer's loss, and
-        # one eval-mode forward that captures the reference batch for the
-        # drift metric. Steps 1+ make only the train-mode forward.
+        # The encoder runs in eval mode for the entire Phase B loop, so the
+        # forward we compute for the scorer's loss is identical to what the
+        # reference batch would capture — no extra forward needed at step 0.
+        # Every step makes exactly one encoder forward over the unique cards
+        # in the batch, regardless of duplicate references.
         forward_count = 0
         _phase_b_inject_encoder(ctx, batch)
-        assert forward_count == 2  # one train + one eval (step 0 only)
+        assert forward_count == 1
 
         forward_count = 0
         _phase_b_inject_encoder(ctx, batch)
-        assert forward_count == 1  # subsequent steps: train forward only
+        assert forward_count == 1
 
         # Confirm gradient accumulation: the live weight rows for card 0 must
         # backprop into the encoder's parameters from all three references.
@@ -428,11 +429,11 @@ class TestEncoderChunking:
 
 
 class TestPerGroupClipping:
-    """T041 (US4): with two parameter groups, each is clipped at max-norm 1.0
-    independently, and the logged norm is the **pre-clip** total (FR-008,
-    FR-012)."""
+    """T041 (US4): each parameter group is clipped independently at the
+    configured ``max_norm``; the returned values are the pre-clip totals
+    (FR-008, FR-012)."""
 
-    def test_each_group_clipped_at_max_norm_one(self):
+    def test_each_group_clipped_at_configured_max_norm(self):
         from sealed.application.train_scorer import _clip_per_group
 
         scorer = SetTransformerScorer(ScorerConfig())
@@ -442,7 +443,6 @@ class TestPerGroupClipping:
             {"params": list(encoder.parameters()), "lr": 1e-7, "name": "encoder"},
         ])
 
-        # Fabricate gradients with known pre-clip norms.
         for p in scorer.parameters():
             p.grad = torch.full_like(p, 0.5)
         for p in encoder.parameters():
@@ -451,18 +451,28 @@ class TestPerGroupClipping:
         scorer_pre = sum(p.grad.norm(2) ** 2 for p in scorer.parameters()) ** 0.5
         encoder_pre = sum(p.grad.norm(2) ** 2 for p in encoder.parameters()) ** 0.5
 
-        norms = _clip_per_group(optimizer)
-        # Pre-clip norms returned (logged value)
+        clip_at = 2.0
+        norms = _clip_per_group(optimizer, max_norm=clip_at)
         assert abs(norms["scorer"] - float(scorer_pre)) < 1e-3
         assert abs(norms["encoder"] - float(encoder_pre)) < 1e-3
 
-        # Post-clip: each group's combined L2 norm capped at 1.0.
         scorer_post = sum(p.grad.norm(2) ** 2 for p in scorer.parameters()) ** 0.5
         encoder_post = sum(p.grad.norm(2) ** 2 for p in encoder.parameters()) ** 0.5
-        if scorer_pre > 1.0:
-            assert float(scorer_post) <= 1.0 + 1e-2
-        if encoder_pre > 1.0:
-            assert float(encoder_post) <= 1.0 + 1e-2
+        if scorer_pre > clip_at:
+            assert float(scorer_post) <= clip_at + 1e-2
+        if encoder_pre > clip_at:
+            assert float(encoder_post) <= clip_at + 1e-2
+
+    def test_default_max_grad_norm_is_loose(self, tmp_path):
+        """The default cap (100.0) is meant to act as a NaN-spike guard, not
+        an effective LR throttle — typical pre-clip norms should fall well
+        under it (FR-008 update)."""
+        config = TrainScorerConfig(
+            outcomes_path=tmp_path / "o.txt",
+            cards_path=tmp_path / "c",
+            checkpoint_dir=tmp_path / "ckpt",
+        )
+        assert config.max_grad_norm == 100.0
 
 
 class TestEpochLoggingContract:

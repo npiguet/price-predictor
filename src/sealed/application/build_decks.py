@@ -36,6 +36,7 @@ class BuildDecksConfig:
     sa_temperature: float = 0.0
     sa_cooling: float = 0.95
     sa_max_iterations: int = 200
+    restarts: int = 1
     print_decks: bool = False
 
 
@@ -122,6 +123,7 @@ class BuildDecksUseCase:
             temperature=config.sa_temperature,
             cooling=config.sa_cooling,
             max_iterations=config.sa_max_iterations,
+            restarts=config.restarts,
         ).build(valid_names)
         nonland_texts = [
             text for n in nonland_deck if (text := locator.load_text(n)) is not None

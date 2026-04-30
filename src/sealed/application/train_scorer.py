@@ -59,6 +59,7 @@ class TrainScorerConfig:
     val_fraction: float = 0.2
     random_seed: int = 42
     encoder_chunk_size: int = 128
+    max_grad_norm: float = 100.0
 
     @property
     def phase(self) -> Literal["A", "B"]:
@@ -102,7 +103,8 @@ class TrainingMetrics:
 class EpochStats:
     loss: float
     accuracy: float
-    grad_norms: dict[str, float]
+    grad_norms_mean: dict[str, float]
+    grad_norms_max: dict[str, float]
 
 
 @dataclass
@@ -165,6 +167,7 @@ class _TrainingContext:
     reference_batch: ReferenceBatch | None = None
     max_seq_len: int | None = None
     encoder_chunk_size: int = 128
+    max_grad_norm: float = 100.0
 
 
 class _BatchStats:
@@ -335,6 +338,7 @@ class TrainScorerUseCase:
             reference_batch=None,
             max_seq_len=max_seq_len,
             encoder_chunk_size=config.encoder_chunk_size,
+            max_grad_norm=config.max_grad_norm,
         )
 
     def _persist_checkpoint(
@@ -549,9 +553,16 @@ def _batch_to_device(batch: TrainingBatch, device: torch.device) -> TrainingBatc
 def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
     ctx.model.train()
     if ctx.encoder is not None:
-        ctx.encoder.train()
+        # Phase B runs the encoder in eval mode so dropout doesn't add
+        # stochasticity. The cached `.npz` files the Phase A scorer was tuned
+        # against were produced under `encoder.eval()`; turning dropout on
+        # here would feed the scorer noisier vectors than it learned to
+        # score against, dragging early Phase B val_acc down independently
+        # of any encoder weight movement. `eval()` no-ops dropout/BatchNorm
+        # only — it does not disable autograd, so the encoder still trains.
+        ctx.encoder.eval()
     stats = _BatchStats()
-    grad_norms: dict[str, float] = {}
+    norms_per_batch: dict[str, list[float]] = {}
 
     for batch in ctx.train_loader:
         batch = _batch_to_device(batch, ctx.device)
@@ -561,15 +572,25 @@ def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
         score_winner, score_loser = _score_batch(ctx.model, ctx.embedding_table, batch)
         loss = _pairwise_bce(score_winner, score_loser)
         loss.backward()
-        grad_norms = _clip_per_group(ctx.optimizer)
+        per_batch = _clip_per_group(ctx.optimizer, max_norm=ctx.max_grad_norm)
+        for name, value in per_batch.items():
+            norms_per_batch.setdefault(name, []).append(value)
         ctx.optimizer.step()
         ctx.embedding_table.clear_live_weight()
         stats.add(loss, score_winner, score_loser)
 
+    grad_norms_mean = {
+        name: sum(values) / len(values) for name, values in norms_per_batch.items()
+    }
+    grad_norms_max = {
+        name: max(values) for name, values in norms_per_batch.items()
+    }
+
     return EpochStats(
         loss=stats.mean_loss,
         accuracy=stats.accuracy,
-        grad_norms=grad_norms,
+        grad_norms_mean=grad_norms_mean,
+        grad_norms_max=grad_norms_max,
     )
 
 
@@ -609,26 +630,16 @@ def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None
     ctx.embedding_table.set_text_vectors(unique.to(ctx.device), text_vectors)
 
     if ctx.reference_batch is None:
-        # Capture step-0 vectors under the same eval-mode forward pass that
-        # `_embedding_drift` will use each epoch. Capturing the train-mode
-        # output (which has dropout active) would make every drift reading
-        # dominated by the train-vs-eval dropout delta — see FR-012.
-        was_training = ctx.encoder.training
-        ctx.encoder.eval()
-        try:
-            with torch.no_grad():
-                eval_text_vectors = _encode_chunked(
-                    ctx.encoder, input_ids, attention_mask,
-                    chunk_size=ctx.encoder_chunk_size, training=False,
-                )
-        finally:
-            if was_training:
-                ctx.encoder.train()
+        # The encoder is already in eval mode for the entire Phase B training
+        # loop (no dropout), so the forward we just computed for the scorer's
+        # loss is identical to the forward `_embedding_drift` will run each
+        # epoch on the same inputs. Snapshot it directly — no extra forward
+        # needed.
         ctx.reference_batch = ReferenceBatch(
             card_indices=unique.detach().clone().to(ctx.device),
             input_ids=input_ids.detach().clone(),
             attention_mask=attention_mask.detach().clone(),
-            step0_text_vectors=eval_text_vectors.detach().clone(),
+            step0_text_vectors=text_vectors.detach().clone(),
         )
         _log(f"Reference batch captured: {unique.numel()} unique cards (Phase B step 0)")
 
@@ -690,17 +701,17 @@ def _tokenize_card(
     )
 
 
-def _clip_per_group(optimizer: torch.optim.Optimizer) -> dict[str, float]:
-    """Clip each parameter group at max-norm 1.0 and return the pre-clip norms.
-
-    ``clip_grad_norm_`` returns the combined L2 norm before clipping, so the
-    returned dict is a faithful diagnostic of the gradient signal each group
-    contributed (post-clip values would always be bounded by 1.0; FR-008, FR-012).
-    """
+def _clip_per_group(
+    optimizer: torch.optim.Optimizer, *, max_norm: float,
+) -> dict[str, float]:
+    """Clip each parameter group at ``max_norm`` and return the pre-clip
+    L2 norms. The returned values are the diagnostic signal — post-clip
+    norms are bounded by ``max_norm`` and carry no shape information per
+    FR-012."""
     norms: dict[str, float] = {}
     for group in optimizer.param_groups:
         name = group.get("name", "group")
-        pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=1.0)
+        pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=max_norm)
         norms[name] = float(pre_clip)
     return norms
 
@@ -815,7 +826,10 @@ def _print_epoch_report(
     drift_str = ""
     if metrics.embedding_drifts:
         drift_str = f"  embedding_drift={metrics.embedding_drifts[-1]:.6f}"
-    grad_str = "  ".join(f"{k}={v:.4f}" for k, v in train_stats.grad_norms.items())
+    grad_str = "  ".join(
+        f"{k}=mean({train_stats.grad_norms_mean[k]:.4f})/max({train_stats.grad_norms_max[k]:.4f})"
+        for k in train_stats.grad_norms_mean
+    )
     _log(
         f"Epoch {epoch + 1}: "
         f"train_loss={train_stats.loss:.4f}  "

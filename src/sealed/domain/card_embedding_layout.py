@@ -43,3 +43,14 @@ def text_dim(encoder_d_model: int) -> int:
 
 def total_dim(encoder_d_model: int) -> int:
     return text_dim(encoder_d_model) + FEATURE_COUNT
+
+
+def is_land_embedding(embedding) -> bool:
+    """Return True if the embedding's IS_LAND deterministic-feature flag is set.
+
+    Reads the leading slot of the trailing ``FEATURE_COUNT``-wide deterministic
+    block. Works for any embedding shape; uses a 0.5 threshold so float noise
+    on the boolean flag doesn't matter in practice (legit embeddings carry
+    exactly 0.0 or 1.0 here).
+    """
+    return float(embedding[-FEATURE_COUNT + IS_LAND]) > 0.5

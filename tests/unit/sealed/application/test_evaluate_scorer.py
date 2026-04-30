@@ -30,23 +30,33 @@ def _make_model():
     return model
 
 
-def _make_pool_embeddings(n_cards=60):
-    """Create synthetic card embeddings for a pool."""
+def _make_pool_embeddings(n_cards=60, n_lands=0):
+    """Create synthetic card embeddings for a pool.
+
+    The IS_LAND deterministic-feature flag is set explicitly: spells get 0,
+    lands get 1. ``n_lands`` of the ``n_cards`` total are marked as lands.
+    """
+    from sealed.domain.card_embedding_layout import FEATURE_COUNT, IS_LAND
+    is_land_offset = D_MODEL - FEATURE_COUNT + IS_LAND
     names = [f"card_{i}" for i in range(n_cards)]
-    embeddings = {name: np.random.randn(D_MODEL).astype(np.float32) for name in names}
+    embeddings: dict[str, np.ndarray] = {}
+    for i, name in enumerate(names):
+        emb = np.random.randn(D_MODEL).astype(np.float32)
+        emb[is_land_offset] = 1.0 if i < n_lands else 0.0
+        embeddings[name] = emb
     return names, embeddings
 
 
 class TestGreedyDeckBuilder:
-    def test_returns_23_nonland_cards(self):
+    def test_returns_23_spells_when_pool_is_all_spells(self):
         model = _make_model()
-        pool_names, pool_embeddings = _make_pool_embeddings(60)
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=0)
         deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         assert len(deck) == 23
 
     def test_deck_cards_are_from_pool(self):
         model = _make_model()
-        pool_names, pool_embeddings = _make_pool_embeddings(60)
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=0)
         deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         for card in deck:
             assert card in pool_names
@@ -54,9 +64,64 @@ class TestGreedyDeckBuilder:
     def test_stops_when_no_improvement(self):
         """Greedy search should converge (finite iterations)."""
         model = _make_model()
-        pool_names, pool_embeddings = _make_pool_embeddings(40)
+        pool_names, pool_embeddings = _make_pool_embeddings(40, n_lands=0)
         deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
         assert len(deck) == 23
+
+    def test_pool_with_lands_can_yield_more_than_23_picks(self):
+        """When the pool has lands, the greedy may pick some of them in
+        addition to 23 spells — total picks then exceed 23 by however many
+        lands the scorer included."""
+        model = _make_model()
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=5)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
+        # Strict invariant: at least 23 picks, no more than 23 + n_lands.
+        assert 23 <= len(deck) <= 23 + 5
+
+    def test_deck_holds_23_spell_invariant(self):
+        """With a mixed pool, the picked deck always contains exactly 23
+        non-land cards, regardless of how many lands were added."""
+        from sealed.domain.card_embedding_layout import is_land_embedding
+        model = _make_model()
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=5)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
+        spell_count = sum(
+            1 for name in deck if not is_land_embedding(pool_embeddings[name])
+        )
+        assert spell_count == 23
+
+    def test_falls_back_when_too_few_spells(self):
+        """If the pool can't supply 23 spells, the builder returns the whole
+        pool unchanged rather than crashing."""
+        model = _make_model()
+        # 30 cards, 25 of them lands → only 5 spells, far short of 23.
+        pool_names, pool_embeddings = _make_pool_embeddings(30, n_lands=25)
+        deck = GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
+        assert sorted(deck) == sorted(pool_names)
+
+    def test_restarts_runs_search_multiple_times_and_keeps_best(self):
+        """With restarts > 1, the builder runs the search N times from
+        independent random inits and returns the best-scoring deck across
+        runs. We verify N runs by counting the random shuffle calls."""
+        from unittest.mock import patch
+        model = _make_model()
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=0)
+
+        with patch("sealed.domain.greedy_deck_builder.random.shuffle") as mock_shuffle:
+            GreedyDeckBuilder(
+                model, pool_embeddings, restarts=4,
+            ).build(pool_names)
+        assert mock_shuffle.call_count == 4
+
+    def test_restarts_default_is_one(self):
+        """Backward-compat: default behavior is unchanged (single run)."""
+        from unittest.mock import patch
+        model = _make_model()
+        pool_names, pool_embeddings = _make_pool_embeddings(60, n_lands=0)
+
+        with patch("sealed.domain.greedy_deck_builder.random.shuffle") as mock_shuffle:
+            GreedyDeckBuilder(model, pool_embeddings).build(pool_names)
+        assert mock_shuffle.call_count == 1
 
 
 class TestWriteRoundRobinMatches:

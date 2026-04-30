@@ -18,7 +18,7 @@ from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from price_predictor.infrastructure.transformer_store import save_model
 from sealed.application.train_scorer import TrainScorerConfig, TrainScorerUseCase
-from sealed.domain.card_embedding_layout import total_dim
+from sealed.domain.card_embedding_layout import FEATURE_COUNT, IS_LAND, total_dim
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.scorer_store import ScorerStore
 
@@ -53,6 +53,7 @@ def test_phase_b_smoke(tmp_path):
         name = f"card_{i}"
         card_names.append(name)
         emb = rng.standard_normal(card_dim).astype(np.float32)
+        emb[-FEATURE_COUNT + IS_LAND] = 0.0  # mark as spell, not land
         initial_npz[name] = emb
         np.savez_compressed(letter / f"{name}.npz", embedding=emb)
         (letter / f"{name}.txt").write_text(

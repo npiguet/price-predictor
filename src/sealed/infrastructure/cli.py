@@ -162,6 +162,18 @@ def _build_build_decks_parser(subparsers) -> None:
         ),
     )
     build_parser.add_argument(
+        "--restarts",
+        type=int,
+        default=1,
+        help=(
+            "Run the greedy/SA search this many times per pool from "
+            "independent random inits, keeping the highest-scoring deck "
+            "across runs (default: 1). Cheap robustness against the "
+            "occasional bad-basin SA run; pairs well with non-zero "
+            "--sa-temperature where variance across inits is highest."
+        ),
+    )
+    build_parser.add_argument(
         "--print-decks",
         action="store_true",
         help=(
@@ -331,6 +343,17 @@ def _build_train_scorer_parser(subparsers) -> None:
             "so activation memory is bounded (default: 128). Lower this if "
             "you still hit CUDA OOM; raise it if you have headroom and want "
             "the extra throughput. Resumable."
+        ),
+    )
+    train_parser.add_argument(
+        "--max-grad-norm", type=float, default=None,
+        help=(
+            "Per-parameter-group L2 norm cap applied between backward and "
+            "optimizer step (default: 100.0). Set high enough that clipping "
+            "only fires on real spikes; too-low values silently throttle "
+            "the effective learning rate. The per-epoch report prints the "
+            "mean and max pre-clip norm per group so you can verify "
+            "clipping is rare. Resumable."
         ),
     )
 
@@ -559,6 +582,7 @@ def run_build_decks(args: argparse.Namespace) -> int:
         sa_temperature=args.sa_temperature,
         sa_cooling=args.sa_cooling,
         sa_max_iterations=args.sa_max_iterations,
+        restarts=args.restarts,
         print_decks=args.print_decks,
     )
 
@@ -581,7 +605,7 @@ _RESUMABLE_FLAG_NAMES: tuple[str, ...] = (
     "epochs", "batch_size", "lr",
     "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
     "embedding_lr", "patience", "val_fraction", "random_seed",
-    "encoder_chunk_size",
+    "encoder_chunk_size", "max_grad_norm",
 )
 _PATH_FIELDS: frozenset[str] = frozenset({
     "outcomes_path", "cards_path", "checkpoint_dir",
