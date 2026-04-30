@@ -33,8 +33,11 @@ through four params:
 - `temperature` (default `0.0` — pure greedy, behavior unchanged).
 - `cooling` (default `0.95`) — per-iteration temperature multiplier.
 - `max_iterations` (default `200`) — hard cap on iterations.
-- `restarts` (default `1`) — number of independent SA runs from
-  fresh random inits; the best deck across all restarts is returned.
+- `restarts` (default `1`) — either a positive integer N (run N
+  independent SA searches from fresh random inits) or the literal
+  `"color-pairs"` (one search per MTG two-color pair, each seeded with
+  an on-color initial 23-spell deck — see §Color-pair seeded init). The
+  best deck across all runs is returned.
 
 Implementation detail: at `T > 0`, instead of taking the argmax swap, the
 algorithm samples a swap from the full softmax-temperature distribution
@@ -184,7 +187,8 @@ single setting nearly matches the full ensemble.
 
   Slow cooling holds T high enough long enough that exploration overshoots
   good basins; the best-deck tracker can't always recover. Stick to
-  `cooling=0.95`.
+  `cooling ≤ 0.95`; for the chosen operating point see §Cooling sub-sweep
+  and §Recommendation.
 - **T=0.8 still beats T=0.5, but the margin is small.** F vs E is +0.013,
   mostly from pool 6 (+0.08 for F). Restarts narrow the T-gap considerably:
   the gap that justified T=0.8 in the gen-1 sweep was largely the cost of
@@ -202,16 +206,146 @@ single setting nearly matches the full ensemble.
   another argument for restarts: a recipe like "avoid T=0.5" doesn't
   generalize across checkpoints, but "do 4 restarts" does.
 
+## Cooling sub-sweep at fixed (T=0.8, restarts=4)
+
+The gen-2 sweep above tests `cooling ∈ {0.95, 0.98}`; a follow-up sub-sweep
+at faster cooling fills in the curve below 0.95. Same scorer, same 12 KTK
+pools, fixed `T=0.8` and `restarts=4`. Wall-clock is for the full 12-pool
+build.
+
+| `cooling` | min iters before T < 1e-3 | wall-clock | quality vs cooling=0.95 |
+|----------:|-------------------------:|-----------:|-------------------------|
+| 0.95      | 131                       | ~7m        | reference (highest mean) |
+| 0.93      | 92                        | (untested) | —                        |
+| 0.90      | 64                        | ~3m        | within noise on every pool (max Δ ≈ 0) |
+| 0.85      | 41                        | ~2m15s     | within noise on every pool (max Δ < 0.08) |
+| 0.80      | 30                        | ~1m40s     | one pool catastrophically worse (1.6 vs 2.1) |
+
+Three regimes:
+
+- **`cooling ≥ 0.95`**: long high-T window, full SA quality, expensive.
+- **`cooling ∈ [0.85, 0.93]`**: SA finds the same basins as `cooling=0.95`
+  on essentially every pool; the only thing the longer window buys is rare
+  ≥0.1 wins on the most volatile 1-2 pools. Wall-clock scales with the
+  exploration window (cooling=0.85 is ~⅓ the cost of 0.95).
+- **`cooling ≤ 0.80`**: exploration window is now too brief to find new
+  basins but long enough to *flee* good ones the random init started near.
+  Best-deck tracking limits the damage but doesn't eliminate it — one of
+  the 12 KTK pools drops by 0.5 under `cooling=0.80` because every restart
+  wandered out of the basin random init landed in. Below ~0.85, SA can be
+  strictly worse than greedy.
+
+Implication: `cooling=0.85` is the Pareto sweet spot for the gen-2 6-layer
+scorer.
+
+## Color-pair seeded init (gen-2 6-layer scorer, 12 KTK pools)
+
+Available as `--restarts color-pairs` on `build-decks`. Replaces random
+restart with one independent search per MTG two-color pair (10 total: WU,
+WB, WR, WG, UB, UR, UG, BR, BG, RG). Each restart's initial 23 spells are
+filtered to cards whose printed colors are a subset of the pair (colorless
+cards always qualify). The color filter applies only to the seed deck —
+the full pool remains as `spells_remaining`/`lands_remaining` and the
+search is unconstrained after init. Pairs without 23 eligible spells are
+skipped; if all 10 are skipped on a degenerate pool, the build falls back
+to one random restart.
+
+The hypothesis was that seeding the search inside a coherent 2-color basin
+would let the scorer optimize within commitment instead of forcing it to
+climb out of a 5-color random init via single-card moves (the structural
+problem flagged in §Background).
+
+### Outcome
+
+Run config: `T=0.8, cooling=0.85, max_iterations=200, restarts=color-pairs`.
+Same 12 gen-2 KTK pools as run F above (`T=0.8, cooling=0.95, restarts=4`).
+Raw deck dump: `models/sealed/scorer/gen-2/best_l6_full_training_decksF.txt`
+for run F; same checkpoint, identical pools file for color-pairs.
+
+| Pool | Run F  | color-pairs | Δ          |
+|------|-------:|------------:|-----------:|
+| 1    | 3.1603 | 3.1603      | 0          |
+| 2    | 3.1200 | 3.1200      | 0          |
+| 3    | 2.9348 | 2.9348      | 0          |
+| 4    | 2.9075 | 2.9075      | 0          |
+| 5    | 2.8686 | 2.8686      | 0          |
+| 6    | 2.8183 | 2.8183      | 0          |
+| 7    | 2.5293 | 2.5297      | +0.0004    |
+| 8    | 2.7448 | 2.7247      | −0.0201    |
+| 9    | 2.3637 | **2.4802**  | **+0.1165** |
+| 10   | 2.1472 | 2.1231      | −0.0241    |
+| 11   | 2.7210 | 2.7210      | 0          |
+| 12   | 2.9223 | 2.9209      | −0.0014    |
+| **mean** | 2.7698 | 2.7758  | +0.0060    |
+
+Seven of twelve pools produce byte-identical decks. One (pool 9) finds a
+meaningfully better basin (+0.12 — comparable in size to the largest gains
+SA-with-restarts shows elsewhere in this doc). The other four differ
+within noise.
+
+### Wall-clock regression
+
+The 12-pool color-pair run takes about 26 minutes. `--restarts 4` at the
+same cooling takes ~2m15s. Naively color-pair should be 2.5× longer (10
+restarts vs 4); the extra ~4× comes from each color-pair restart running
+all `--sa-max-iterations` iterations (default 200) instead of terminating
+at the post-cooling early-stop within ~10 iterations of `T < 1e-3`.
+
+The cause is structural. The post-cooling early-stop is
+
+```
+if effectively_greedy and candidate_score <= s.current_score:
+    s.finished = True
+```
+
+where `current_score` updates every iteration to whatever was just chosen.
+A color-pair-seeded restart lands inside one of the scorer's "fertile"
+regions where the search keeps applying moves that improve over the
+immediately-previous `current_score` (typically by ≈0.001) but don't
+advance `best_score`. Each new move trivially satisfies `candidate_score >
+current_score`, so the early-stop never fires. A random multi-color init
+lands on a flat plateau where no neighbor improves and the early-stop
+fires within a handful of iterations of the cooling threshold.
+
+### Implication
+
+The structural argument behind color-pair init — that random init starts
+maximally diverse and forces the search to climb out of a 5-color basin
+via single-card moves — turns out not to bind on the gen-2 6-layer
+scorer. Random init reaches the same basins color-pair init seeds, just
+via a different path. There is no meaningful mean-score improvement, and
+the wall-clock penalty makes color-pair init a Pareto regression at
+current settings.
+
+The 1/12 pool where color-pair finds a strictly better basin is real but
+rare — random restarts already buy similar improvements on a similar
+fraction of pools at much lower cost.
+
+A patience-based early-stop (terminate a restart when `best_score` hasn't
+improved over the last K iterations, rather than checking
+`candidate_score > current_score`) would let color-pair init terminate at
+the same point as random restart, eliminating the wall-clock penalty.
+With that fix the two strategies become roughly equal-cost; whether
+color-pair init then offers any quality edge over random restart is
+unmeasured.
+
 ## Recommendation
 
-**Default for `build-decks` going forward: `--sa-temperature 0.8
---sa-cooling 0.95 --restarts 4`.** Highest mean across the gen-2 sweep, no
-pool-level catastrophes, within 0.01 of the per-pool oracle (so further
-T-sweeping at fixed restarts likely won't help much).
+**Default for `build-decks`: `--sa-temperature 0.8 --sa-cooling 0.85
+--restarts 4`.**
 
-If runtime budget is tight, `--sa-temperature 0.5 --sa-cooling 0.95
---restarts 4` gives 99.5% of the mean score in the same wall-clock; the
-only meaningful loss is the most T-sensitive pool.
+- `T=0.8` gives the largest mean-score gain over greedy in the gen-2
+  sweep without the catastrophic-tail behavior at higher T from gen-1.
+- `cooling=0.85` captures essentially the same quality as `cooling=0.95`
+  (within ~0.08 score per pool on the 12 KTK pools) at roughly ⅓ the
+  wall-clock, by limiting the post-cooling drift window. Faster cooling
+  than 0.85 risks the regression from §Cooling sub-sweep where SA flees
+  good basins without finding new ones.
+- 4 random restarts kill the worst-tail variance per the gen-2 sweep.
+
+Color-pair seeded init (`--restarts color-pairs`) is implemented but not
+recommended at current settings — equivalent mean score to `--restarts 4`,
+~10× wall-clock. See §Color-pair seeded init.
 
 ### Score ≠ deck quality
 
@@ -226,21 +360,3 @@ The eval harness is not yet integrated with SA-built decks. Win-rate
 against Forge — and, more directly, an A-vs-F `match-outcomes` run —
 is needed to confirm the +0.04 mean-score gain reflects real strength
 and not deeper miscalibration exploitation.
-
-## Open questions
-
-1. **Does SA improve actual win rate?** Score is a proxy. The whole reason
-   for SA is that the user observed scorer-built decks losing to Forge —
-   a small `match-outcomes` run with `gen-2-SA` decks vs `gen-2-greedy`
-   decks (or pitting F-built decks against A-built decks) would tell us
-   whether SA's score gains translate to gameplay improvements or just
-   exploit miscalibration harder.
-2. **Color-pair seeded init.** Instead of random 23-card init, seed
-   each greedy/SA run with cards from a single color pair (10 runs per
-   pool, one per color combination). Directly addresses the "random init
-   contains all colors" structural problem; orthogonal to SA and probably
-   stackable with both temperature and restarts. This is essentially
-   "informed restarts" and may make the random `restarts=4` redundant.
-3. **Cooling below 0.95.** Faster cooling (0.92, 0.90) wasn't tested.
-   Given that 0.98 hurts and 0.95 wins, the curve may be monotonic or
-   peaked near 0.93-0.95. Cheap to sweep.
