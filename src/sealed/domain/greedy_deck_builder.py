@@ -29,6 +29,11 @@ NONLAND_DECK_SIZE = 23
 DECK_SIZE = 40
 MAX_LANDS_IN_DECK = DECK_SIZE - NONLAND_DECK_SIZE  # 17 — basics shrink to 0 at this cap
 
+# When the SA temperature has cooled below this, softmax sampling collapses to
+# argmax for any realistic score scale, so we apply the greedy stop condition
+# instead of grinding through iterations that no longer change the deck.
+_EFFECTIVELY_GREEDY_TEMPERATURE = 1e-3
+
 
 class GreedyDeckBuilder:
     """Build the best (23-spell + N-land) deck from a pool via single-card moves.
@@ -72,6 +77,9 @@ class GreedyDeckBuilder:
         pool_arr = torch.from_numpy(
             np.stack([self._pool_embeddings[c] for c in pool_names])
         ).to(device)
+        # Normalize once for the whole build; every per-iteration scoring call
+        # then uses forward_prenormalized and skips a (B, L, d_model) clone.
+        pool_arr = self._model.normalize_features(pool_arr)
 
         spell_pool, land_pool = self._partition_pool(pool_names)
         if len(spell_pool) < NONLAND_DECK_SIZE:
@@ -107,13 +115,16 @@ class GreedyDeckBuilder:
         deck_lands: list[int] = []
         lands_remaining = list(land_pool)
 
-        current_score = self._score_one(pool_arr, deck_spells + deck_lands)
+        current_score = float(
+            self._score_many(pool_arr, [deck_spells + deck_lands])[0].item()
+        )
         best_score = current_score
         best_spells = list(deck_spells)
         best_lands = list(deck_lands)
 
         for t in range(self._max_iterations):
             T = self._temperature * (self._cooling ** t) if self._temperature > 0 else 0.0
+            effectively_greedy = T < _EFFECTIVELY_GREEDY_TEMPERATURE
 
             decks, ops = self._enum_candidates(
                 deck_spells, deck_lands, spells_remaining, lands_remaining,
@@ -122,10 +133,9 @@ class GreedyDeckBuilder:
                 break
 
             scores = self._score_many(pool_arr, decks)
-            chosen_idx = self._select_swap(scores, T)
-            candidate_score = float(scores[chosen_idx].item())
+            chosen_idx, candidate_score = self._select_swap(scores, T)
 
-            if T == 0.0 and candidate_score <= current_score:
+            if effectively_greedy and candidate_score <= current_score:
                 break
 
             deck_spells, deck_lands, spells_remaining, lands_remaining = self._apply(
@@ -211,11 +221,11 @@ class GreedyDeckBuilder:
             _, i, new, old = op
             deck_lands = deck_lands.copy()
             deck_lands[i] = new
-            lands_remaining = [l for l in lands_remaining if l != new] + [old]
+            lands_remaining = [idx for idx in lands_remaining if idx != new] + [old]
         elif kind == "add_land":
             _, new = op
             deck_lands = deck_lands + [new]
-            lands_remaining = [l for l in lands_remaining if l != new]
+            lands_remaining = [idx for idx in lands_remaining if idx != new]
         elif kind == "remove_land":
             _, i, old = op
             deck_lands = deck_lands.copy()
@@ -233,45 +243,50 @@ class GreedyDeckBuilder:
         Decks have variable length (spell swaps keep the size, adds grow by
         one, removes shrink by one), so the batch is padded to the longest
         deck and the mask marks the real positions.
+
+        The (B, max_len) index and mask matrices are built on CPU as numpy
+        arrays and transferred to the device in a single copy. Building them
+        directly on-device with ``torch.tensor(d, device=cuda)`` inside the
+        per-candidate loop launches B small host->device copies and dominates
+        the per-iteration wall-clock at B≈1000.
         """
         device = pool_arr.device
         B = len(decks)
         max_len = max(len(d) for d in decks)
 
-        indices = torch.zeros(B, max_len, dtype=torch.long, device=device)
-        mask = torch.zeros(B, max_len, dtype=torch.bool, device=device)
+        indices_np = np.zeros((B, max_len), dtype=np.int64)
+        mask_np = np.zeros((B, max_len), dtype=bool)
         for i, d in enumerate(decks):
             n = len(d)
-            indices[i, :n] = torch.tensor(d, device=device, dtype=torch.long)
-            mask[i, :n] = True
+            indices_np[i, :n] = d
+            mask_np[i, :n] = True
+        indices = torch.from_numpy(indices_np).to(device, non_blocking=True)
+        mask = torch.from_numpy(mask_np).to(device, non_blocking=True)
 
         cards = pool_arr[indices]
         with torch.no_grad(), torch.autocast(
             device_type=device.type, dtype=torch.float16, enabled=(device.type == "cuda"),
         ):
-            return self._model(cards, mask).squeeze(-1)
+            # pool_arr was normalized once at build start; skip the per-forward clone.
+            return self._model.forward_prenormalized(cards, mask).squeeze(-1)
 
     @staticmethod
-    def _select_swap(scores: torch.Tensor, T: float) -> int:
-        """Return the index of the move to apply.
+    def _select_swap(scores: torch.Tensor, T: float) -> tuple[int, float]:
+        """Return ``(index of move to apply, its score)``.
 
         At ``T == 0`` returns argmax (pure greedy). At ``T > 0`` samples
         from a softmax distribution with temperature T (Boltzmann sampling).
+        Index and score are packed into a single host transfer to halve the
+        per-iteration GPU↔CPU sync count.
         """
         if T <= 0.0:
-            return int(scores.argmax().item())
-        logits = scores.float() / T
-        logits = logits - logits.max()
-        probs = torch.exp(logits)
-        probs = probs / probs.sum()
-        return int(torch.multinomial(probs, 1).item())
-
-    def _score_one(self, pool_arr: torch.Tensor, deck: list[int]) -> float:
-        device = pool_arr.device
-        idx = torch.tensor(deck, device=device, dtype=torch.long).unsqueeze(0)
-        mask = torch.ones(1, len(deck), dtype=torch.bool, device=device)
-        cards = pool_arr[idx]
-        with torch.no_grad(), torch.autocast(
-            device_type=device.type, dtype=torch.float16, enabled=(device.type == "cuda"),
-        ):
-            return self._model(cards, mask).item()
+            idx_t = scores.argmax()
+        else:
+            logits = scores.float() / T
+            logits = logits - logits.max()
+            probs = torch.exp(logits)
+            probs = probs / probs.sum()
+            idx_t = torch.multinomial(probs, 1).squeeze(0)
+        chosen = scores[idx_t]
+        idx_val, score_val = torch.stack([idx_t.float(), chosen.float()]).tolist()
+        return int(idx_val), float(score_val)

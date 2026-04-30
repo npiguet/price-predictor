@@ -22,7 +22,13 @@ class ScorerConfig:
 
 
 class SAB(nn.Module):
-    """Self-Attention Block: multihead self-attention + feedforward + LayerNorm."""
+    """Self-Attention Block: multihead self-attention + feedforward + LayerNorm.
+
+    The ``attn_padding_mask`` argument follows ``nn.MultiheadAttention``'s
+    convention (``True`` marks positions to ignore). The scorer's ``forward``
+    method inverts the user-facing "True = real card" mask once and passes the
+    same inverted tensor to every SAB and PMA layer.
+    """
 
     def __init__(self, d_model: int, n_heads: int, d_ff: int, dropout: float = 0.0) -> None:
         super().__init__()
@@ -38,18 +44,19 @@ class SAB(nn.Module):
         self.norm2 = nn.LayerNorm(d_model)
 
     def forward(
-        self, x: torch.Tensor, key_padding_mask: torch.Tensor | None = None,
+        self, x: torch.Tensor, attn_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        # nn.MultiheadAttention key_padding_mask: True = ignore
-        attn_mask = ~key_padding_mask if key_padding_mask is not None else None
-        attn_out, _ = self.attn(x, x, x, key_padding_mask=attn_mask)
+        attn_out, _ = self.attn(x, x, x, key_padding_mask=attn_padding_mask)
         x = self.norm1(x + self.attn_dropout(attn_out))
         x = self.norm2(x + self.ff_dropout(self.ff(x)))
         return x
 
 
 class PMA(nn.Module):
-    """Pooling by Multihead Attention: learned seed vectors attend over set elements."""
+    """Pooling by Multihead Attention: learned seed vectors attend over set elements.
+
+    See ``SAB`` for the ``attn_padding_mask`` convention.
+    """
 
     def __init__(self, d_model: int, n_heads: int, n_seeds: int, dropout: float = 0.0) -> None:
         super().__init__()
@@ -59,11 +66,10 @@ class PMA(nn.Module):
         self.norm = nn.LayerNorm(d_model)
 
     def forward(
-        self, x: torch.Tensor, key_padding_mask: torch.Tensor | None = None,
+        self, x: torch.Tensor, attn_padding_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         seeds = self.seeds.expand(x.size(0), -1, -1)
-        attn_mask = ~key_padding_mask if key_padding_mask is not None else None
-        attn_out, _ = self.attn(seeds, x, x, key_padding_mask=attn_mask)
+        attn_out, _ = self.attn(seeds, x, x, key_padding_mask=attn_padding_mask)
         return self.norm(seeds + self.attn_dropout(attn_out))
 
 
@@ -103,12 +109,39 @@ class SetTransformerScorer(nn.Module):
             nn.Linear(config.mlp_hidden, 1),
         )
 
-    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize the trailing deterministic-feature slice using stored stats."""
-        x = x.clone()
+    def normalize_features(self, cards: torch.Tensor) -> torch.Tensor:
+        """Normalize the trailing deterministic-feature slice using stored stats.
+
+        Returns a fresh tensor; never mutates the input. Works on any tensor
+        whose last dimension is ``d_model`` — typically ``(B, L, d_model)``
+        for a deck batch or ``(P, d_model)`` for a flat pool array.
+        """
+        out = cards.clone()
         offset = self.det_feature_offset
-        x[:, :, offset:] = (x[:, :, offset:] - self.feat_mean) / self.feat_std
-        return x
+        out[..., offset:] = (out[..., offset:] - self.feat_mean) / self.feat_std
+        return out
+
+    def _normalize(self, x: torch.Tensor) -> torch.Tensor:
+        return self.normalize_features(x)
+
+    def forward_prenormalized(
+        self, cards: torch.Tensor, mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """Like ``forward``, but assumes ``cards`` are already normalized.
+
+        Used by callers that batch many forward passes over the same card pool
+        — they pre-normalize the pool once and skip the per-forward
+        ``.clone()`` in ``normalize_features``.
+        """
+        # nn.MultiheadAttention's key_padding_mask: True = ignore.
+        attn_padding_mask = ~mask
+        x = cards
+        for sab in self.sab_layers:
+            x = sab(x, attn_padding_mask=attn_padding_mask)
+
+        pooled = self.pma(x, attn_padding_mask=attn_padding_mask)  # (batch, n_seeds, d_model)
+        flat = pooled.flatten(start_dim=1)  # (batch, n_seeds * d_model)
+        return self.mlp(flat)
 
     def forward(self, cards: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Score a batch of decks.
@@ -120,11 +153,4 @@ class SetTransformerScorer(nn.Module):
         Returns:
             ``(batch, 1)`` scalar score per deck.
         """
-        x = self._normalize(cards)
-
-        for sab in self.sab_layers:
-            x = sab(x, key_padding_mask=mask)
-
-        pooled = self.pma(x, key_padding_mask=mask)  # (batch, n_seeds, d_model)
-        flat = pooled.flatten(start_dim=1)  # (batch, n_seeds * d_model)
-        return self.mlp(flat)
+        return self.forward_prenormalized(self.normalize_features(cards), mask)
