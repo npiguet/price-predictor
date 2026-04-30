@@ -136,20 +136,22 @@ def _build_build_decks_parser(subparsers) -> None:
     build_parser.add_argument(
         "--sa-temperature",
         type=float,
-        default=0.0,
+        default=0.8,
         help=(
-            "Initial temperature for simulated annealing. 0 = pure greedy "
-            "(default). Try 0.1-1.0 for SA; reasonable values depend on "
-            "the magnitude of typical score differences for the model."
+            "Initial temperature for simulated annealing (default: 0.8). "
+            "Set to 0 for pure greedy. Try 0.1-1.0 for SA; reasonable values "
+            "depend on the magnitude of typical score differences for the model."
         ),
     )
     build_parser.add_argument(
         "--sa-cooling",
         type=float,
-        default=0.95,
+        default=0.85,
         help=(
-            "Per-iteration temperature multiplier (default: 0.95). "
-            "Ignored if --sa-temperature is 0."
+            "Per-iteration temperature multiplier (default: 0.85). "
+            "Ignored if --sa-temperature is 0. Lower cooling = faster decay = "
+            "shorter exploration window. Below ~0.85 SA may flee good basins "
+            "without finding new ones, which can produce worse decks than greedy."
         ),
     )
     build_parser.add_argument(

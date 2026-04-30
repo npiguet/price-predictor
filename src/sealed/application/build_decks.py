@@ -33,8 +33,8 @@ class BuildDecksConfig:
     output: Path = field(
         default_factory=lambda: Path("output/sealed/generated-decks.txt"),
     )
-    sa_temperature: float = 0.0
-    sa_cooling: float = 0.95
+    sa_temperature: float = 0.8
+    sa_cooling: float = 0.85
     sa_max_iterations: int = 200
     restarts: int = 1
     print_decks: bool = False
