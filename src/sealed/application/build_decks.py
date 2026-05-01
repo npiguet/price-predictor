@@ -57,8 +57,6 @@ class BuildDecksUseCase:
     with fewer than 23 embeddable cards are skipped.
     """
 
-    PROGRESS_INTERVAL = 100
-
     def execute(self, config: BuildDecksConfig) -> int:
         pools = parse_pools(config.pools_path)
         model = self._load_model(config.checkpoint)
@@ -82,6 +80,10 @@ class BuildDecksUseCase:
             )
         written = 0
         built_decks: list[list[str]] = []
+        # Log progress at each ~1% of total (so a 1500-pool run prints ~100
+        # lines of progress, ~15 pools apart). Floor to 1 so smaller runs
+        # still log every pool rather than only at the end.
+        progress_interval = max(1, total // 100)
         # buffering=1 is line buffering: every "\n" forces a flush to disk so
         # an interrupted run keeps the decks built so far, and `tail -f` on
         # the output file stays current with the loop.
@@ -98,7 +100,7 @@ class BuildDecksUseCase:
                     written += 1
                     if config.print_decks:
                         built_decks.append(deck)
-                if i % self.PROGRESS_INTERVAL == 0 or i == total:
+                if i % progress_interval == 0 or i == total:
                     _log(f"  {i}/{total} pools processed ({written} decks written)")
         _log(f"Done: {written} decks written to {config.output}")
 
