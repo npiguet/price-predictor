@@ -23,6 +23,30 @@ def _log(message: str) -> None:
     print(f"[{timestamp}] {message}", flush=True)
 
 
+def _count_complete_lines_and_truncate_partial(path: Path) -> int:
+    """Count newline-terminated lines in ``path`` and prepare it for append.
+
+    A "complete line" is one that ends with ``\\n``. If the file ends in a
+    partial line (process killed between two of the per-deck ``out.write``
+    calls), it is truncated back to the last newline so a subsequent append
+    starts on a clean line. Returns the count of surviving complete lines
+    (0 if the file is missing or empty).
+    """
+    if not path.exists():
+        return 0
+    content = path.read_bytes()
+    if not content:
+        return 0
+    count = content.count(b"\n")
+    if not content.endswith(b"\n"):
+        last_nl = content.rfind(b"\n")
+        if last_nl == -1:
+            path.write_bytes(b"")
+            return 0
+        path.write_bytes(content[:last_nl + 1])
+    return count
+
+
 @dataclass
 class BuildDecksConfig:
     pools_path: Path
@@ -45,6 +69,12 @@ class BuildDecksConfig:
     sa_max_iterations: int = 200
     restarts: int | str = 1
     print_decks: bool = False
+    resume: bool = False
+    """When True, count complete lines already in ``output``, skip that many
+    pools from the front of the input pools file, and append remaining decks
+    to the existing file instead of truncating it. Lets a long run recover
+    from an interruption without redoing pools that already produced a
+    deck. With this flag off (the default), ``output`` is overwritten."""
 
 
 class BuildDecksUseCase:
@@ -65,6 +95,18 @@ class BuildDecksUseCase:
         config.output.parent.mkdir(parents=True, exist_ok=True)
 
         total = len(pools)
+        if config.resume:
+            skip = _count_complete_lines_and_truncate_partial(config.output)
+            open_mode = "a"
+            if skip > 0:
+                _log(
+                    f"Resume: {skip} decks already in {config.output}, "
+                    f"skipping pools 1..{skip}."
+                )
+                pools = pools[skip:]
+        else:
+            skip = 0
+            open_mode = "w"
         if config.sa_temperature > 0:
             _log(
                 f"Building decks for {total} pools with simulated annealing "
@@ -82,13 +124,15 @@ class BuildDecksUseCase:
         built_decks: list[list[str]] = []
         # Log progress at each ~1% of total (so a 1500-pool run prints ~100
         # lines of progress, ~15 pools apart). Floor to 1 so smaller runs
-        # still log every pool rather than only at the end.
+        # still log every pool rather than only at the end. ``total`` is the
+        # original full pool count so the progress milestones (135, 150, …)
+        # match what a fresh run would have logged.
         progress_interval = max(1, total // 100)
         # buffering=1 is line buffering: every "\n" forces a flush to disk so
         # an interrupted run keeps the decks built so far, and `tail -f` on
         # the output file stays current with the loop.
-        with open(config.output, "w", buffering=1, encoding="utf-8") as out:
-            for i, (set_code, pool_names) in enumerate(pools, start=1):
+        with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
+            for i, (set_code, pool_names) in enumerate(pools, start=skip + 1):
                 deck = self._build_one_deck(model, pool_names, locator, config)
                 if deck is not None:
                     out.write(config.label)

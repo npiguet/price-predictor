@@ -232,6 +232,16 @@ def _build_build_decks_parser(subparsers) -> None:
             "header + one card per line with mana cost)."
         ),
     )
+    build_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume from a partial run. Counts complete lines already in "
+            "--output, skips that many pools from the front of --pools-path, "
+            "and appends remaining decks to the existing file. Without this "
+            "flag the output file is truncated."
+        ),
+    )
 
 
 _TRAIN_SCORER_ARCHITECTURE_FLAGS: tuple[str, ...] = (
@@ -626,6 +636,7 @@ def run_build_decks(args: argparse.Namespace) -> int:
         sa_max_iterations=args.sa_max_iterations,
         restarts=args.restarts,
         print_decks=args.print_decks,
+        resume=args.resume,
     )
 
     try:

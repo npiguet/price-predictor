@@ -636,8 +636,11 @@ python -m sealed build-decks \
 | `--sa-max-iterations` | `200` | Hard cap on iterations per restart |
 | `--restarts` | `1` | Either a positive integer N (run N searches from random 23-spell inits and keep the best deck) or the literal `color-pairs` (run one search per MTG two-color pair — WU, WB, WR, WG, UB, UR, UG, BR, BG, RG — with each search seeded by an on-color initial 23-spell deck; the color filter applies only to the seed deck, the search itself is unconstrained). |
 | `--print-decks` | `False` | After building, dump every deck to stdout in the human-readable format used by `evaluate-scorer` (sorted by mana value, lands at bottom). Labels are not included in the printed output. |
+| `--resume` | `False` | Resume from a partial run: count complete lines already in `--output`, skip that many pools from the front of `--pools-path`, and append remaining decks to the existing file. Without this flag the output file is truncated at the start of the run. |
 
 **Output**: `output/sealed/generated-decks.txt` (or `--output`) — one line per pool that produced a viable deck, in `LABEL;SET_CODE;Card1|Card2|...|Card40` format. Pools with fewer than 23 embeddable cards are skipped silently. Concatenating multiple generated-decks files with different `--label` values is supported: `match-outcomes` reads the per-deck label out of the first column.
+
+**Resuming an interrupted run**: `--resume` is the safe way to recover from a crash mid-run. The output file is line-buffered (every newline flushes to disk), so an interrupted run leaves a clean per-deck checkpoint; pass `--resume` on the next invocation to continue from where it stopped. Caveat: the line-count heuristic assumes every input pool produced a deck on the prior run. If a pool was skipped (fewer than 23 embeddable cards — vanishingly rare for real 6-booster pools), resume will be off by however many pools were skipped.
 
 See [`experiments/sa-deck-builder-tuning.md`](experiments/sa-deck-builder-tuning.md) for empirical guidance on `--sa-temperature`, `--sa-cooling`, and the restart strategy.
 
