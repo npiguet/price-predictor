@@ -11,6 +11,7 @@ from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
 from sealed.domain.greedy_deck_builder import COLOR_PAIRS_STRATEGY
+from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 
 
 def _parse_restarts(value: str) -> int | str:
@@ -471,15 +472,41 @@ def _build_match_outcomes_parser(subparsers) -> None:
         help="Number of parallel Java worker processes to spawn (default: 12)",
     )
     match_parser.add_argument(
-        "--generated-decks-path",
+        "--side-a-decks",
         default=None,
         help=(
-            "Optional path to a generated-decks.txt file. When given, workers run"
-            " in self-play mode: deck A is sampled from this file each match and"
-            " deck B is built by one of 5 weighted methods (4:3:2:1:4) with"
-            " same-set pairing. The method tag for scorer-built decks is read"
-            " from the deck file's first column (set by build-decks --label)."
-            " When omitted, Phase 0 random-pool behavior is unchanged."
+            "Optional path to a generated-decks file (built by build-decks)."
+            " When given, deck A in every match is sampled from this file"
+            " and the 4 Forge methods are NOT used to produce side A. When"
+            " omitted, side A is built by the 4 Forge methods (weights"
+            " 4:3:2:1) on a freshly-generated pool from a random sealed-legal"
+            " set, like Phase 0."
+        ),
+    )
+    match_parser.add_argument(
+        "--side-b-decks",
+        default=None,
+        help=(
+            "Optional path to a generated-decks file. When given, deck B is"
+            " produced by the 4 Forge methods (weights 4:3:2:1) PLUS sampling"
+            " from this file (weight --side-b-decks-weight). When omitted,"
+            " deck B is produced by the 4 Forge methods only. The Forge"
+            " methods always run, regardless of this flag — same-set pairing"
+            " on deck A's set code is preserved."
+        ),
+    )
+    match_parser.add_argument(
+        "--side-b-decks-weight",
+        type=int,
+        default=argparse.SUPPRESS,
+        help=(
+            "Weight of the file-sampled side-B method relative to the 4 Forge"
+            f" methods (which carry weights 4:3:2:1, total 10). Default:"
+            f" {DEFAULT_SIDE_B_DECKS_WEIGHT}. Set higher to oversample"
+            " scorer-built decks against Forge methods (e.g. 8 for a gen3 run"
+            " that needs strong gen1+gen2 representation on side B). Only"
+            " meaningful when --side-b-decks is given; supplying it without"
+            " --side-b-decks is an error."
         ),
     )
     match_parser.add_argument(
@@ -889,16 +916,34 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         )
         return 2
 
+    # --side-b-decks-weight uses argparse.SUPPRESS so the attribute is absent
+    # from `args` when the user doesn't pass the flag. This lets us reject
+    # "weight without --side-b-decks" while still supplying the runtime
+    # default (DEFAULT_SIDE_B_DECKS_WEIGHT) when only --side-b-decks is set.
+    explicit_side_b_weight = getattr(args, "side_b_decks_weight", None)
+    if args.side_b_decks is None and explicit_side_b_weight is not None:
+        print(
+            "Error: --side-b-decks-weight is only valid with --side-b-decks",
+            file=sys.stderr,
+        )
+        return 2
+
     output_path = Path("output") / "sealed" / "match-outcomes.txt"
-    generated_decks_path = (
-        Path(args.generated_decks_path) if args.generated_decks_path else None
+    side_a_decks = Path(args.side_a_decks) if args.side_a_decks else None
+    side_b_decks = Path(args.side_b_decks) if args.side_b_decks else None
+    side_b_decks_weight = (
+        explicit_side_b_weight
+        if explicit_side_b_weight is not None
+        else DEFAULT_SIDE_B_DECKS_WEIGHT
     )
 
     supervisor = MatchOutcomeSupervisor(
         worker_count=args.workers,
         output_path=output_path,
         best_of=args.best_of,
-        generated_decks_path=generated_decks_path,
+        side_a_decks_path=side_a_decks,
+        side_b_decks_path=side_b_decks,
+        side_b_decks_weight=side_b_decks_weight,
     )
 
     try:

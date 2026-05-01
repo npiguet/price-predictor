@@ -124,14 +124,15 @@ class GeneratedDecksIndexTest {
         Random rng = new Random(42);
 
         for (int i = 0; i < 100; i++) {
-            GeneratedDecksIndex.GeneratedDeck pick = index.randomDeckFromSet("MH3", null, rng);
+            GeneratedDecksIndex.GeneratedDeck pick = index.randomDeckFromSet(
+                    "MH3", List.of(), rng);
             assertNotNull(pick);
             assertEquals("MH3", pick.setCode());
         }
     }
 
     @Test
-    void randomDeckFromSetExcludesGivenDeck(@TempDir Path tmp) throws IOException {
+    void randomDeckFromSetExcludesByContent(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
                 deckLine("gen-2", "MH3", "mh3a", 40),
                 deckLine("gen-2", "MH3", "mh3b", 40)
@@ -143,10 +144,41 @@ class GeneratedDecksIndexTest {
         GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(rng);
 
         for (int i = 0; i < 50; i++) {
-            GeneratedDecksIndex.GeneratedDeck b = index.randomDeckFromSet("MH3", a, rng);
+            GeneratedDecksIndex.GeneratedDeck b = index.randomDeckFromSet(
+                    "MH3", a.cardNames(), rng);
             assertNotNull(b);
-            assertNotSame(a, b, "exclude target must never be returned");
+            assertNotEquals(a.cardNames(), b.cardNames(),
+                    "Exclude target must never be returned (content equality)");
         }
+    }
+
+    @Test
+    void randomDeckFromSetExcludesContentEvenAcrossDifferentDeckObjects(
+            @TempDir Path tmp) throws IOException {
+        // Two physically distinct deck objects with identical card content —
+        // simulates the case where --side-a-decks and --side-b-decks point at
+        // overlapping files. Reference equality wouldn't catch this; multiset
+        // equality on sorted card names does.
+        String shared = deckLine("gen-2", "MH3", "shared", 40);
+        Path file = writeDecks(tmp, List.of(shared, shared));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+        assertEquals(2, index.size());
+
+        // Pick any deck and confirm asking for a non-mirror returns null.
+        GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(new Random(0));
+        assertNull(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)));
+    }
+
+    @Test
+    void randomDeckFromSetIgnoresCardOrderInExclude(@TempDir Path tmp) throws IOException {
+        // The exclude list and the candidate's card list are identical
+        // multisets but in different orders → still a mirror, must be excluded.
+        Path file = writeDecks(tmp, List.of("gen-2;MH3;A|B|C"));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+        // Different order, same multiset.
+        assertNull(index.randomDeckFromSet("MH3", List.of("C", "B", "A"), new Random(0)));
     }
 
     @Test
@@ -155,7 +187,7 @@ class GeneratedDecksIndexTest {
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
-        assertNull(index.randomDeckFromSet("XYZ", null, new Random(0)));
+        assertNull(index.randomDeckFromSet("XYZ", List.of(), new Random(0)));
     }
 
     @Test
@@ -165,6 +197,6 @@ class GeneratedDecksIndexTest {
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         GeneratedDecksIndex.GeneratedDeck only = index.randomDeck(new Random(0));
 
-        assertNull(index.randomDeckFromSet("MH3", only, new Random(0)));
+        assertNull(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)));
     }
 }

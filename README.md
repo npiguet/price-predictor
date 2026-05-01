@@ -506,21 +506,42 @@ Giant Growth;Serra Angel;Wrath of God;...
 
 ### match-outcomes
 
-Generates a large dataset of sealed-format match outcomes for training a deck scorer. Spawns a configurable number of Java worker processes that each independently pick a random sealed-legal set, generate two 6-booster pools, construct decks, play a best-of-3 match via Forge AI, and append the result to a shared flat file. The supervisor monitors workers and restarts any that crash.
+Generates a large dataset of sealed-format match outcomes for training a deck scorer. Spawns a configurable number of Java worker processes that each independently pick a random sealed-legal set, generate two 6-booster pools, construct decks, play a best-of-N match via Forge AI, and append the result to a shared flat file. The supervisor monitors workers and restarts any that crash.
+
+The deck source for each side is controlled by the optional `--side-a-decks` / `--side-b-decks` flags. When both are absent, the run is Phase 0 (the 4 Forge methods on both sides). When one or both point at a generated-decks file (output of `build-decks`), decks for that side are sampled from the file. See the table below.
 
 **Prerequisites**: Java 17+, Forge built (`cd ../forge && mvn install -DskipTests`), forge-connector fat JAR built (`cd forge-connector && mvn package -DskipTests`).
 
 ```bash
-# Start 12 workers (default)
+# Phase 0: 12 workers, both decks built by the 4 Forge methods on both sides
 python -m sealed match-outcomes
 
 # Use fewer workers (e.g. on a machine with limited RAM)
 python -m sealed match-outcomes --workers 4
+
+# Self-play: side A is always sampled from a scorer-built deck file; side B
+# is the 4 Forge methods (weights 4:3:2:1).
+python -m sealed match-outcomes \
+    --side-a-decks output/sealed/generated-decks-gen2.txt
+
+# Cross-generation: side A is gen2-only; side B is the 4 Forge methods PLUS
+# decks sampled from a concat of all prior generations (gen1+gen2). Boost
+# the file-sampled side-B weight to 8 to oversample scorer-built opponents.
+python -m sealed match-outcomes \
+    --side-a-decks output/sealed/generated-decks-gen2.txt \
+    --side-b-decks output/sealed/generated-decks-prior.txt \
+    --side-b-decks-weight 8
 ```
 
 | Argument | Default | Description |
 |---|---|---|
 | `--workers` | `12` | Number of parallel Java worker processes |
+| `--side-a-decks` | _(none)_ | Optional path to a generated-decks file. When given, deck A is sampled from this file every match and the 4 Forge methods are not used for side A. The deck's `LABEL` (set by `build-decks --label`) becomes the `method_A` value. |
+| `--side-b-decks` | _(none)_ | Optional path to a generated-decks file. When given, deck B is rolled between the 4 Forge methods (weights 4:3:2:1) and sampling from this file (weight `--side-b-decks-weight`). When omitted, side B uses the 4 Forge methods only. |
+| `--side-b-decks-weight` | `4` | Weight of the file-sampled side-B method relative to the 4 Forge methods (which carry total weight 10). Only meaningful with `--side-b-decks`; supplying it without `--side-b-decks` is an error. |
+| `--best-of` | `7` | Games per match; positive odd integer. |
+
+Same-set constraint: deck A's set code drives everything. Forge-built side-B decks are pool-generated in deck A's set; file-sampled side-B decks are filtered to deck A's set code. If no non-mirror file deck exists for that set, the file roll falls back to Forge methods. Mirror matches are excluded by content equality (sorted card-name multiset), so a deck with identical content on both sides is never played.
 
 **Stop**: Press **Ctrl+C** to terminate all workers and exit cleanly.
 
@@ -599,7 +620,7 @@ python -m sealed train-scorer \
 
 ### build-decks
 
-Builds one 40-card deck per pool using a trained scorer plus greedy or simulated-annealing search. Writes a `generated-decks.txt` file consumed by `match-outcomes --generated-decks-path` for self-play.
+Builds one 40-card deck per pool using a trained scorer plus greedy or simulated-annealing search. Writes a `generated-decks.txt` file consumed by `match-outcomes --side-a-decks` / `--side-b-decks` for self-play.
 
 **Prerequisites**: card embeddings have been written by `encode-cards`; a trained scorer checkpoint exists; a pools file exists at the path passed to `--pools-path`.
 

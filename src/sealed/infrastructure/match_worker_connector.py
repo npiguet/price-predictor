@@ -11,6 +11,12 @@ from price_predictor.infrastructure.forge_jvm import (
     build_jvm_command,
 )
 
+# Default weight of the file-sampled side-B method relative to the 4 Forge
+# methods (combined weight 10). Single source of truth: the supervisor
+# default, the connector default, the CLI fallback, and the CLI help text
+# all reference this value.
+DEFAULT_SIDE_B_DECKS_WEIGHT = 4
+
 
 class MatchWorkerConnector:
     """Spawns a single Java MatchWorkerMain process.
@@ -24,7 +30,9 @@ class MatchWorkerConnector:
         run_id: str,
         best_of: int,
         log_file: IO[bytes] | None = None,
-        generated_decks_path: Path | None = None,
+        side_a_decks_path: Path | None = None,
+        side_b_decks_path: Path | None = None,
+        side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -36,11 +44,18 @@ class MatchWorkerConnector:
                 positive odd integer. Passed as ``-Dmatch.best.of``.
             log_file: Open binary file handle for the worker's stdout/stderr.
                 When None, output is discarded.
-            generated_decks_path: When provided, passed to the Java worker as
-                ``-Dgenerated.decks.file=<path>`` so it runs in self-play mode
-                instead of the Phase 0 random-pool flow. The method tag for
-                each scorer-built deck is read from the deck file's first
-                column (``LABEL`` field, written by ``build-decks --label``).
+            side_a_decks_path: When provided, the Java worker samples deck A
+                from this generated-decks file instead of using the 4 Forge
+                methods on side A. Passed as ``-Dside.a.decks.file=<path>``.
+            side_b_decks_path: When provided, the Java worker rolls deck B
+                between the 4 Forge methods (weights 4:3:2:1) and sampling
+                from this file (weight ``side_b_decks_weight``). When omitted,
+                deck B uses Forge methods only. Passed as
+                ``-Dside.b.decks.file=<path>``.
+            side_b_decks_weight: Weight of the file-sampled side-B method
+                relative to the Forge methods. Ignored when
+                ``side_b_decks_path`` is None. Passed as
+                ``-Dside.b.decks.weight=<int>``.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -59,8 +74,11 @@ class MatchWorkerConnector:
             "match.run.id": run_id,
             "match.best.of": str(best_of),
         }
-        if generated_decks_path is not None:
-            system_properties["generated.decks.file"] = str(generated_decks_path)
+        if side_a_decks_path is not None:
+            system_properties["side.a.decks.file"] = str(side_a_decks_path)
+        if side_b_decks_path is not None:
+            system_properties["side.b.decks.file"] = str(side_b_decks_path)
+            system_properties["side.b.decks.weight"] = str(side_b_decks_weight)
 
         cmd = build_jvm_command(
             main_class="com.pricepredictor.connector.MatchWorkerMain",

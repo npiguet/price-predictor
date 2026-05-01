@@ -98,45 +98,77 @@ class TestMatchWorkerConnectorCommandConstruction:
                 connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
 
 
-class TestMatchWorkerConnectorGeneratedDecksPath:
-    """US3: --generated-decks-path triggers self-play mode in the Java worker."""
+class TestMatchWorkerConnectorSideDecks:
+    """``side_a_decks_path`` / ``side_b_decks_path`` / ``side_b_decks_weight``
+    propagate to the Java worker as ``-Dside.a.decks.file`` /
+    ``-Dside.b.decks.file`` / ``-Dside.b.decks.weight`` system properties."""
 
-    def test_generated_decks_path_added_as_system_property(
+    def test_side_a_path_added_as_system_property(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        side_a = tmp_path / "side-a.txt"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt",
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                side_a_decks_path=side_a,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert f"-Dside.a.decks.file={side_a}" in cmd
+        assert not any(arg.startswith("-Dside.b.decks.file=") for arg in cmd)
+        # Without --side-b-decks the weight property is also omitted.
+        assert not any(arg.startswith("-Dside.b.decks.weight=") for arg in cmd)
+
+    def test_side_b_path_and_weight_added_as_system_properties(
         self, tmp_path, stub_classpath,
     ):
         connector = MatchWorkerConnector()
-        gen_decks = tmp_path / "generated-decks.txt"
+        side_b = tmp_path / "side-b.txt"
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
             connector.start(
                 tmp_path / "outcomes.txt",
                 run_id=RUN_ID,
                 best_of=BEST_OF,
-                generated_decks_path=gen_decks,
+                side_b_decks_path=side_b,
+                side_b_decks_weight=8,
             )
         cmd = mock_popen.call_args[0][0]
-        assert f"-Dgenerated.decks.file={gen_decks}" in cmd
+        assert f"-Dside.b.decks.file={side_b}" in cmd
+        assert "-Dside.b.decks.weight=8" in cmd
 
-    def test_generated_decks_path_omitted_when_none(self, tmp_path, stub_classpath):
-        connector = MatchWorkerConnector()
-        with patch("subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
-            connector.start(
-                tmp_path / "outcomes.txt",
-                run_id=RUN_ID,
-                best_of=BEST_OF,
-                generated_decks_path=None,
-            )
-        cmd = mock_popen.call_args[0][0]
-        assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)
-
-    def test_generated_decks_path_default_is_none(self, tmp_path, stub_classpath):
+    def test_side_paths_omitted_when_none(self, tmp_path, stub_classpath):
         connector = MatchWorkerConnector()
         with patch("subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
             connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dside.a.decks.file=") for arg in cmd)
+        assert not any(arg.startswith("-Dside.b.decks.file=") for arg in cmd)
+        assert not any(arg.startswith("-Dside.b.decks.weight=") for arg in cmd)
+
+    def test_obsolete_generated_decks_property_never_emitted(
+        self, tmp_path, stub_classpath,
+    ):
+        """Regression guard: the old -Dgenerated.decks.file / -Dself.play.label
+        properties have been removed from the connector. They must not appear
+        in the command line under any flag combination."""
+        connector = MatchWorkerConnector()
+        side_a = tmp_path / "side-a.txt"
+        side_b = tmp_path / "side-b.txt"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt",
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                side_a_decks_path=side_a,
+                side_b_decks_path=side_b,
+            )
+        cmd = mock_popen.call_args[0][0]
         assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)
+        assert not any(arg.startswith("-Dself.play.label=") for arg in cmd)
 
 
 class TestMatchWorkerConnectorRunId:
@@ -149,20 +181,6 @@ class TestMatchWorkerConnectorRunId:
             connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert f"-Dmatch.run.id={RUN_ID}" in cmd
-
-    def test_no_self_play_label_system_property_ever_set(self, tmp_path, stub_classpath):
-        connector = MatchWorkerConnector()
-        gen_decks = tmp_path / "generated-decks.txt"
-        with patch("subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
-            connector.start(
-                tmp_path / "outcomes.txt",
-                run_id=RUN_ID,
-                best_of=BEST_OF,
-                generated_decks_path=gen_decks,
-            )
-        cmd = mock_popen.call_args[0][0]
-        assert not any(arg.startswith("-Dself.play.label=") for arg in cmd)
 
 
 class TestMatchWorkerConnectorBestOf:

@@ -18,24 +18,34 @@ from sealed.infrastructure.cli import (
     run_match_outcomes,
     run_train_scorer,
 )
+from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 from sealed.infrastructure.scorer_store import ScorerStore
 
 
 def _args(**overrides) -> Namespace:
-    """Build a minimal argparse Namespace for run_match_outcomes."""
+    """Build a minimal argparse Namespace for run_match_outcomes.
+
+    ``side_b_decks_weight`` is intentionally absent from defaults: the CLI
+    uses ``argparse.SUPPRESS`` so the attribute is missing from ``args``
+    when the user didn't pass the flag. Test cases that exercise an
+    explicit weight pass ``side_b_decks_weight=N`` as an override.
+    """
     defaults = {
         "workers": 1,
-        "generated_decks_path": None,
+        "side_a_decks": None,
+        "side_b_decks": None,
         "best_of": 7,
     }
     defaults.update(overrides)
     return Namespace(**defaults)
 
 
-class TestMatchOutcomesGeneratedDecksPath:
-    """``--generated-decks-path`` is optional; supervisor receives it as-is."""
+class TestMatchOutcomesSideDecks:
+    """``--side-a-decks`` / ``--side-b-decks`` / ``--side-b-decks-weight``
+    are all optional; supervisor receives them as-is. Weight without
+    ``--side-b-decks`` is rejected at argparse-validation time."""
 
-    def test_no_path_is_phase_0(self, tmp_path):
+    def test_no_paths_is_phase_0(self, tmp_path):
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
@@ -43,19 +53,48 @@ class TestMatchOutcomesGeneratedDecksPath:
             rc = run_match_outcomes(_args())
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["generated_decks_path"] is None
+        assert kwargs["side_a_decks_path"] is None
+        assert kwargs["side_b_decks_path"] is None
+        assert kwargs["side_b_decks_weight"] == DEFAULT_SIDE_B_DECKS_WEIGHT
 
-    def test_explicit_path_forwarded(self, tmp_path):
-        gen = tmp_path / "generated-decks.txt"
-        gen.touch()
+    def test_side_a_path_forwarded(self, tmp_path):
+        side_a = tmp_path / "side-a.txt"
+        side_a.touch()
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
-            rc = run_match_outcomes(_args(generated_decks_path=str(gen)))
+            rc = run_match_outcomes(_args(side_a_decks=str(side_a)))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["generated_decks_path"] == gen
+        assert kwargs["side_a_decks_path"] == side_a
+        assert kwargs["side_b_decks_path"] is None
+
+    def test_side_b_path_and_weight_forwarded(self, tmp_path):
+        side_b = tmp_path / "side-b.txt"
+        side_b.touch()
+        with patch(
+            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
+        ) as mock_sup:
+            mock_sup.return_value.run.return_value = None
+            rc = run_match_outcomes(_args(
+                side_b_decks=str(side_b), side_b_decks_weight=8,
+            ))
+        assert rc == 0
+        kwargs = mock_sup.call_args.kwargs
+        assert kwargs["side_b_decks_path"] == side_b
+        assert kwargs["side_b_decks_weight"] == 8
+
+    def test_weight_without_side_b_rejected(self, capsys):
+        with patch(
+            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
+        ) as mock_sup:
+            rc = run_match_outcomes(_args(side_b_decks_weight=8))
+        assert rc == 2
+        mock_sup.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--side-b-decks-weight" in err
+        assert "--side-b-decks" in err
 
 
 class TestMatchOutcomesBestOf:

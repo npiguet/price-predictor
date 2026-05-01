@@ -565,44 +565,61 @@ python -m sealed build-decks \
 
 ## Self-Play Match Generation
 
-Self-play match generation is triggered by passing `--generated-decks-path` to `match-outcomes`. When this argument
-is absent, `match-outcomes` uses the unchanged Phase 0 behavior.
+`match-outcomes` composes each match by independently choosing the source for deck A and deck B. Two optional
+flags drive that choice; when both are absent the run is Phase 0 (the 4 Forge methods on both sides).
 
-When `--generated-decks-path` is present, each match works as follows:
+- `--side-a-decks <path>`: when given, deck A is sampled uniformly from this generated-decks file every match,
+  and the 4 Forge methods are *not* used for side A. The deck's `LABEL` field becomes `method_A`. When omitted,
+  deck A is built by rolling among the 4 Forge methods (weights 4:3:2:1) on a freshly-generated pool from a
+  random eligible set.
+- `--side-b-decks <path>` + `--side-b-decks-weight <N>` (default 4): when given, deck B is rolled between the
+  4 Forge methods (weights 4:3:2:1, total 10) and sampling from this file (weight `N`). When omitted, deck B
+  uses the 4 Forge methods only. `--side-b-decks-weight` requires `--side-b-decks`; supplying it alone is an
+  error.
 
-1. **Pick deck A**: select a random line from the generated-decks file. This gives a scorer-built 40-card deck and
-   its set code.
-2. **Roll for deck B's method**: choose one of 5 methods. Method 5 has the same relative weight as method 1 (the
-   Forge standard builder):
+Each match then executes:
+
+1. **Pick deck A.** From `--side-a-decks` if given, else roll one of methods 1–4 below on a fresh pool from a
+   random eligible set. The chosen deck's set code drives everything downstream.
+2. **Roll deck B.** Choose one of the methods below; methods 1–4 build a fresh pool of deck A's set, method 5
+   (only available when `--side-b-decks` is given) samples a deck from the file filtered to deck A's set code.
 
    | Method | Weight | Description |
    |--------|--------|-------------|
-   | 1      | 4      | Forge SealedDeckBuilder (standard) |
-   | 2      | 3      | Forge builder + 3 type-matched swaps + land rebalance |
-   | 3      | 2      | Forge builder + 8 type-matched swaps + land rebalance |
-   | 4      | 1      | 23 random spells + land rebalance |
-   | 5      | 4      | Random scorer-built deck from the generated-decks file |
+   | 1 | 4 | Forge `SealedDeckBuilder` (standard). `method` tag: `forge-best`. |
+   | 2 | 3 | Forge builder + 3 type-matched swaps + land rebalance. `method` tag: `forge-3sub`. |
+   | 3 | 2 | Forge builder + 8 type-matched swaps + land rebalance. `method` tag: `forge-8sub`. |
+   | 4 | 1 | 23 random spells + land rebalance. `method` tag: `random`. |
+   | 5 | `--side-b-decks-weight` (default 4) | Random deck from `--side-b-decks` matching deck A's set, mirror-excluded by content equality. `method` tag: the deck's `LABEL` from the file. Only present when `--side-b-decks` is given. |
 
-3. **Build deck B**:
-   - **Methods 1–4**: Generate a fresh pool from **deck A's set code**, then build deck B from that pool using the
-     selected method. This ensures both decks come from the same set, matching Phase 0's same-set design.
-   - **Method 5**: Pick a random line from the generated-decks file with the **same set code** as deck A.
-4. **Play and record**: Play a best-of-N match (per `--best-of`, default 7) and append the result to
-   `match-outcomes.txt` in the standard format (see Phase 0 Step 4). Deck A's method is the `LABEL` field
-   read from the deck's line in the generated-decks file (set by `build-decks --label`). Deck B's method is
-   whichever of `forge-best` / `forge-3sub` / `forge-8sub` / `random` was rolled, or — for method 5 — the
-   `LABEL` of the second scorer deck sampled from the file.
+   If method 5 is rolled but no non-mirror deck exists in `--side-b-decks` for deck A's set, the roll falls
+   back to methods 1–4 with their original weights.
+
+3. **Play and record** a best-of-N match (per `--best-of`, default 7) and append the result to
+   `match-outcomes.txt` in the standard format (see Phase 0 Step 4). `method_A` is the file's `LABEL` when
+   `--side-a-decks` was given, otherwise the rolled forge-method tag. `method_B` follows the table above.
 
 The same-set constraint is critical: without it, set-level power differences (e.g. Modern Horizons vs a core set)
-would dominate the training signal, drowning out the deck-building quality signal.
+would dominate the training signal, drowning out the deck-building quality signal. Mirror matches are excluded by
+content equality (sorted card-name multiset), so a deck identical to deck A on both sides is never played.
 
 Because the label travels per-line inside the generated-decks file, multiple `build-decks` runs (e.g. one per
 scorer generation, or per search configuration) can be concatenated into a single self-play file without losing
-provenance: each match-outcomes line records the exact label of the deck it played.
+provenance: each match-outcomes line records the exact label of the deck it played. A common gen-N training
+recipe is to point `--side-a-decks` at gen-N decks only and `--side-b-decks` at a concat of gen-1 through gen-N
+so side B mixes prior generations against the new one.
 
 ```bash
+# Self-play, gen-2 vs gen-2 + Forge methods on side B
 python -m sealed match-outcomes \
-    --generated-decks-path output/sealed/generated-decks.txt
+    --side-a-decks output/sealed/generated-decks-gen2.txt
+
+# gen-3 training: gen-3 on side A; side B mixes gen-1, gen-2, gen-3, and
+# the 4 Forge methods, with the file-sampled weight bumped to 8.
+python -m sealed match-outcomes \
+    --side-a-decks output/sealed/generated-decks-gen3.txt \
+    --side-b-decks output/sealed/generated-decks-prior.txt \
+    --side-b-decks-weight 8
 ```
 
 ## Self-Play Refinement Loop
@@ -610,7 +627,7 @@ python -m sealed match-outcomes \
 Each iteration of the self-play loop:
 
 1. Pre-build scorer decks (see Generated Decks Preparation above)
-2. Generate self-play training data using `match-outcomes --generated-decks-path` — runs indefinitely, Ctrl-C to stop
+2. Generate self-play training data using `match-outcomes --side-a-decks` (and optionally `--side-b-decks`) — runs indefinitely, Ctrl-C to stop
 3. Retrain the scorer from scratch on the full corpus (Phase 0 data + self-play data, all in `match-outcomes.txt`)
 4. Run the external baseline evaluation (see below)
 5. Inspect: Are scorer decks improving? Do they beat Forge? Do they look strategically coherent?

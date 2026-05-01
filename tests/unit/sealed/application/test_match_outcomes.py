@@ -220,48 +220,60 @@ class TestSupervisorStatusReporting:
         assert output_file.parent.exists(), "Output directory must be created"
 
 
-class TestSupervisorGeneratedDecksPath:
-    """US3: generated_decks_path is forwarded to MatchWorkerConnector.start()."""
+class TestSupervisorSideDecks:
+    """side_a_decks_path / side_b_decks_path / side_b_decks_weight are
+    stored on the supervisor and forwarded to MatchWorkerConnector.start()."""
 
-    def test_default_generated_decks_path_is_none(self, tmp_path):
+    def test_defaults_are_none_and_four(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
-        assert supervisor._generated_decks_path is None
+        assert supervisor._side_a_decks_path is None
+        assert supervisor._side_b_decks_path is None
+        assert supervisor._side_b_decks_weight == 4
 
-    def test_explicit_generated_decks_path_stored(self, tmp_path):
+    def test_explicit_side_paths_stored(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        gen = tmp_path / "generated-decks.txt"
+        side_a = tmp_path / "side-a.txt"
+        side_b = tmp_path / "side-b.txt"
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
             best_of=3,
-            generated_decks_path=gen,
+            side_a_decks_path=side_a,
+            side_b_decks_path=side_b,
+            side_b_decks_weight=8,
         )
-        assert supervisor._generated_decks_path == gen
+        assert supervisor._side_a_decks_path == side_a
+        assert supervisor._side_b_decks_path == side_b
+        assert supervisor._side_b_decks_weight == 8
 
-    def test_generated_decks_path_forwarded_to_connector(self, tmp_path):
+    def test_side_paths_forwarded_to_connector(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        gen = tmp_path / "generated-decks.txt"
+        side_a = tmp_path / "side-a.txt"
+        side_b = tmp_path / "side-b.txt"
 
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
             best_of=3,
-            generated_decks_path=gen,
+            side_a_decks_path=side_a,
+            side_b_decks_path=side_b,
+            side_b_decks_weight=6,
         )
 
         fake_connector = MagicMock()
         fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
         supervisor._connector = fake_connector
 
-        # Drive _start_worker once and immediately stop the supervisor.
         proc = supervisor._start_worker(0)
 
         kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("generated_decks_path") == gen
+        assert kwargs.get("side_a_decks_path") == side_a
+        assert kwargs.get("side_b_decks_path") == side_b
+        assert kwargs.get("side_b_decks_weight") == 6
         assert proc.returncode == 0
 
-    def test_no_generated_decks_path_passes_none(self, tmp_path):
+    def test_no_side_paths_passes_none(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
         supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
 
@@ -272,7 +284,8 @@ class TestSupervisorGeneratedDecksPath:
         supervisor._start_worker(0)
 
         kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("generated_decks_path") is None
+        assert kwargs.get("side_a_decks_path") is None
+        assert kwargs.get("side_b_decks_path") is None
 
 
 class TestSupervisorRunId:
@@ -308,15 +321,15 @@ class TestSupervisorRunId:
         s2 = MatchOutcomeSupervisor(worker_count=1, output_path=out2, best_of=3)
         assert s1.run_id != s2.run_id
 
-    def test_generated_decks_path_forwarded_to_connector(self, tmp_path):
+    def test_run_id_forwarded_alongside_side_paths(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
-        gen = tmp_path / "generated-decks.txt"
+        side_a = tmp_path / "side-a.txt"
 
         supervisor = MatchOutcomeSupervisor(
             worker_count=1,
             output_path=output_file,
             best_of=3,
-            generated_decks_path=gen,
+            side_a_decks_path=side_a,
         )
 
         fake_connector = MagicMock()
@@ -326,7 +339,7 @@ class TestSupervisorRunId:
         supervisor._start_worker(0)
 
         kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("generated_decks_path") == gen
+        assert kwargs.get("side_a_decks_path") == side_a
         assert kwargs.get("run_id") == supervisor.run_id
 
 

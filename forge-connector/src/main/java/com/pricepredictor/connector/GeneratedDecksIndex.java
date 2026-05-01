@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,11 +16,13 @@ import java.util.Random;
  * <p>File format: one deck per line, {@code LABEL;SET_CODE;Card1|Card2|...|Card40}.
  * The {@code LABEL} field is the generation-method tag set by
  * {@code build-decks --label} and used as the {@code method_A} / {@code method_B}
- * value when this deck is sampled into a self-play match.
+ * value when this deck is sampled into a match.
  *
- * <p>Used by {@link SelfPlayMatchGenerator} to pick a random scorer-built deck A
- * each match, and to satisfy method 5 (pick another scorer-built deck B from the
- * same set as A, excluding A itself).
+ * <p>Used by {@link MatchGenerator}'s side-A / side-B sampling paths: an index
+ * supplied via {@code -Dside.a.decks.file} drives {@link #randomDeck} (deck A);
+ * an index supplied via {@code -Dside.b.decks.file} drives
+ * {@link #randomDeckFromSet} (deck B, filtered to deck A's set code with
+ * mirror-match exclusion).
  */
 public class GeneratedDecksIndex {
 
@@ -34,14 +37,26 @@ public class GeneratedDecksIndex {
 
     private final List<GeneratedDeck> allDecks;
     private final Map<String, List<GeneratedDeck>> decksBySet;
+    /**
+     * Per-deck sorted card-name list, indexed by the deck's identity in
+     * {@link #allDecks}. Pre-computed at load time so the same-content
+     * mirror-match check in {@link #randomDeckFromSet(String, List, Random)}
+     * is O(40) per candidate instead of O(40 log 40).
+     */
+    private final Map<GeneratedDeck, List<String>> sortedCardsByDeck;
 
     GeneratedDecksIndex(List<GeneratedDeck> decks) {
         this.allDecks = List.copyOf(decks);
         Map<String, List<GeneratedDeck>> grouped = new HashMap<>();
+        Map<GeneratedDeck, List<String>> sorted = new HashMap<>();
         for (GeneratedDeck deck : decks) {
             grouped.computeIfAbsent(deck.setCode(), k -> new ArrayList<>()).add(deck);
+            List<String> sortedCards = new ArrayList<>(deck.cardNames());
+            Collections.sort(sortedCards);
+            sorted.put(deck, List.copyOf(sortedCards));
         }
         this.decksBySet = grouped;
+        this.sortedCardsByDeck = sorted;
     }
 
     /** Load and parse a generated-decks file. */
@@ -76,25 +91,40 @@ public class GeneratedDecksIndex {
     }
 
     /**
-     * Pick a random deck from the same set as {@code exclude}, but never returning
-     * {@code exclude} itself. Returns {@code null} if no other deck with this set
-     * code exists in the index.
+     * Pick a random deck from the given set whose card list is not a
+     * permutation of {@code excludeCards}. Returns {@code null} if no
+     * matching deck exists. The exclusion uses content equality (multiset
+     * over card names) rather than reference equality, so a deck loaded
+     * from this index is treated as a mirror of {@code excludeCards} even
+     * if it was sampled from a different index instance with the same
+     * content — this is the case when {@code --side-a-decks} and
+     * {@code --side-b-decks} point at overlapping files.
+     *
+     * @param setCode      MTG set code to filter on
+     * @param excludeCards Card-name list to exclude (e.g. deck A's cards);
+     *                     order-insensitive
+     * @param random       Source of randomness
      */
-    public GeneratedDeck randomDeckFromSet(String setCode, GeneratedDeck exclude, Random random) {
+    public GeneratedDeck randomDeckFromSet(
+            String setCode, List<String> excludeCards, Random random) {
         List<GeneratedDeck> candidates = decksBySet.get(setCode);
         if (candidates == null || candidates.isEmpty()) {
             return null;
         }
-        if (candidates.size() == 1 && candidates.get(0) == exclude) {
-            return null;
-        }
-        // Re-roll until we get a deck that is not the exclude reference.
-        // Bounded by candidate count since at least one non-exclude exists.
-        while (true) {
-            GeneratedDeck pick = candidates.get(random.nextInt(candidates.size()));
-            if (pick != exclude) {
-                return pick;
+        List<String> excludeSorted = new ArrayList<>(excludeCards);
+        Collections.sort(excludeSorted);
+        // Filter to non-mirror candidates first, then sample uniformly. This
+        // keeps the sample distribution flat when there are many mirrors,
+        // unlike rejection sampling.
+        List<GeneratedDeck> nonMirror = new ArrayList<>(candidates.size());
+        for (GeneratedDeck c : candidates) {
+            if (!sortedCardsByDeck.get(c).equals(excludeSorted)) {
+                nonMirror.add(c);
             }
         }
+        if (nonMirror.isEmpty()) {
+            return null;
+        }
+        return nonMirror.get(random.nextInt(nonMirror.size()));
     }
 }
