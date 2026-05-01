@@ -82,7 +82,10 @@ class BuildDecksUseCase:
             )
         written = 0
         built_decks: list[list[str]] = []
-        with open(config.output, "w", encoding="utf-8") as out:
+        # buffering=1 is line buffering: every "\n" forces a flush to disk so
+        # an interrupted run keeps the decks built so far, and `tail -f` on
+        # the output file stays current with the loop.
+        with open(config.output, "w", buffering=1, encoding="utf-8") as out:
             for i, (set_code, pool_names) in enumerate(pools, start=1):
                 deck = self._build_one_deck(model, pool_names, locator, config)
                 if deck is not None:
