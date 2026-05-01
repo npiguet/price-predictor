@@ -508,8 +508,18 @@ search strategy since it evaluates complete decks.
 `GreedyDeckBuilder` exposes simulated annealing via `--sa-temperature`, `--sa-cooling`, and `--sa-max-iterations`
 flags on `build-decks`. With `temperature == 0` the algorithm is pure greedy; with `temperature > 0` swaps are
 sampled from a softmax-temperature distribution over all candidates each iteration, and the best deck seen across
-all iterations is returned. See [`experiments/sa-deck-builder-tuning.md`](../experiments/sa-deck-builder-tuning.md)
-for empirical guidance on choosing `temperature`.
+all iterations is returned.
+
+`--restarts` controls how many independent searches run per pool. It accepts either a positive integer N (run N
+searches from independent random 23-spell inits and keep the best deck across runs) or the literal `color-pairs`
+(run one search per MTG two-color pair — WU, WB, WR, WG, UB, UR, UG, BR, BG, RG — with each search's initial
+23 spells filtered to cards whose printed colors are a subset of the pair). The color filter under `color-pairs`
+applies only to the seed deck; `spells_remaining` and `lands_remaining` are the unfiltered pool, so the search
+is unconstrained after init. Pairs without 23 eligible on-color spells are skipped; if every pair is skipped on
+a degenerate pool, the build falls back to one random restart so it always returns a deck.
+
+See [`experiments/sa-deck-builder-tuning.md`](../experiments/sa-deck-builder-tuning.md) for empirical guidance
+on choosing `temperature`, `cooling`, and the restart strategy.
 
 # Phase 3 — Self-Play Refinement
 
