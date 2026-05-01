@@ -26,6 +26,13 @@ def _log(message: str) -> None:
 @dataclass
 class BuildDecksConfig:
     pools_path: Path
+    label: str
+    """Generation-method tag written as the first column of every output line.
+
+    Identifies which build-decks invocation (e.g. ``"gen-3"``) produced each
+    deck. Consumed by ``match-outcomes`` self-play as the ``method_A`` /
+    ``method_B`` value when a deck sampled from this file is played.
+    """
     checkpoint: Path = field(
         default_factory=lambda: Path("models/sealed/scorer/latest.pt"),
     )
@@ -63,14 +70,15 @@ class BuildDecksUseCase:
         if config.sa_temperature > 0:
             _log(
                 f"Building decks for {total} pools with simulated annealing "
-                f"(T0={config.sa_temperature}, cooling={config.sa_cooling}, "
+                f"(label={config.label}, T0={config.sa_temperature}, "
+                f"cooling={config.sa_cooling}, "
                 f"max_iter={config.sa_max_iterations}, "
                 f"restarts={config.restarts})..."
             )
         else:
             _log(
-                f"Building decks for {total} pools (pure greedy, "
-                f"restarts={config.restarts})..."
+                f"Building decks for {total} pools (label={config.label}, "
+                f"pure greedy, restarts={config.restarts})..."
             )
         written = 0
         built_decks: list[list[str]] = []
@@ -78,6 +86,8 @@ class BuildDecksUseCase:
             for i, (set_code, pool_names) in enumerate(pools, start=1):
                 deck = self._build_one_deck(model, pool_names, locator, config)
                 if deck is not None:
+                    out.write(config.label)
+                    out.write(";")
                     out.write(set_code)
                     out.write(";")
                     out.write("|".join(deck))

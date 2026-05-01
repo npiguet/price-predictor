@@ -275,7 +275,7 @@ class TestSupervisorGeneratedDecksPath:
         assert kwargs.get("generated_decks_path") is None
 
 
-class TestSupervisorRunIdAndLabel:
+class TestSupervisorRunId:
     """Supervisor generates a UUID run_id at construction and forwards the label."""
 
     def test_run_id_is_generated_at_construction(self, tmp_path):
@@ -308,24 +308,7 @@ class TestSupervisorRunIdAndLabel:
         s2 = MatchOutcomeSupervisor(worker_count=1, output_path=out2, best_of=3)
         assert s1.run_id != s2.run_id
 
-    def test_default_self_play_label_is_none(self, tmp_path):
-        output_file = tmp_path / "match-outcomes.txt"
-        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
-        assert supervisor._self_play_label is None
-
-    def test_explicit_self_play_label_stored(self, tmp_path):
-        output_file = tmp_path / "match-outcomes.txt"
-        gen = tmp_path / "generated-decks.txt"
-        supervisor = MatchOutcomeSupervisor(
-            worker_count=1,
-            output_path=output_file,
-            best_of=3,
-            generated_decks_path=gen,
-            self_play_label="gen-2",
-        )
-        assert supervisor._self_play_label == "gen-2"
-
-    def test_self_play_label_forwarded_to_connector(self, tmp_path):
+    def test_generated_decks_path_forwarded_to_connector(self, tmp_path):
         output_file = tmp_path / "match-outcomes.txt"
         gen = tmp_path / "generated-decks.txt"
 
@@ -334,7 +317,6 @@ class TestSupervisorRunIdAndLabel:
             output_path=output_file,
             best_of=3,
             generated_decks_path=gen,
-            self_play_label="gen-2",
         )
 
         fake_connector = MagicMock()
@@ -344,7 +326,7 @@ class TestSupervisorRunIdAndLabel:
         supervisor._start_worker(0)
 
         kwargs = fake_connector.start.call_args.kwargs
-        assert kwargs.get("self_play_label") == "gen-2"
+        assert kwargs.get("generated_decks_path") == gen
         assert kwargs.get("run_id") == supervisor.run_id
 
 

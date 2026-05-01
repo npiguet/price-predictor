@@ -82,6 +82,7 @@ class TestBuildDecksUseCase:
 
         config = BuildDecksConfig(
             pools_path=pools_path,
+            label="gen-test",
             checkpoint=tmp_path / "fake.pt",
             cards_path=tmp_path / "cards",
             output=tmp_path / "decks.txt",
@@ -93,8 +94,8 @@ class TestBuildDecksUseCase:
         assert written == 2
         lines = config.output.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 2
-        assert lines[0].startswith("MH3;")
-        assert lines[1].startswith("BLB;")
+        assert lines[0].startswith("gen-test;MH3;")
+        assert lines[1].startswith("gen-test;BLB;")
 
     def test_each_deck_has_40_cards(self, tmp_path):
         pool_names = [f"card_{i}" for i in range(30)]
@@ -107,6 +108,7 @@ class TestBuildDecksUseCase:
 
         config = BuildDecksConfig(
             pools_path=pools_path,
+            label="gen-test",
             checkpoint=tmp_path / "fake.pt",
             cards_path=tmp_path / "cards",
             output=tmp_path / "decks.txt",
@@ -116,7 +118,9 @@ class TestBuildDecksUseCase:
             use_case.execute(config)
 
         line = config.output.read_text(encoding="utf-8").strip()
-        _, _, names_field = line.partition(";")
+        label, set_code, names_field = line.split(";", 2)
+        assert label == "gen-test"
+        assert set_code == "MH3"
         assert len(names_field.split("|")) == 40
 
     def test_pool_with_too_few_embeddable_cards_is_skipped(self, tmp_path):
@@ -131,6 +135,7 @@ class TestBuildDecksUseCase:
 
         config = BuildDecksConfig(
             pools_path=pools_path,
+            label="gen-test",
             checkpoint=tmp_path / "fake.pt",
             cards_path=tmp_path / "cards",
             output=tmp_path / "decks.txt",
@@ -142,7 +147,7 @@ class TestBuildDecksUseCase:
         assert written == 1
         lines = config.output.read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 1
-        assert lines[0].startswith("BLB;")
+        assert lines[0].startswith("gen-test;BLB;")
 
     def test_pool_with_only_unknown_cards_is_skipped(self, tmp_path):
         """Cards not present in the locator are filtered out."""
@@ -156,6 +161,7 @@ class TestBuildDecksUseCase:
 
         config = BuildDecksConfig(
             pools_path=pools_path,
+            label="gen-test",
             checkpoint=tmp_path / "fake.pt",
             cards_path=tmp_path / "cards",
             output=tmp_path / "decks.txt",
@@ -166,6 +172,29 @@ class TestBuildDecksUseCase:
 
         assert written == 0
         assert config.output.read_text(encoding="utf-8") == ""
+
+    def test_label_appears_as_first_column_for_every_deck(self, tmp_path):
+        pool_names = [f"card_{i}" for i in range(30)]
+        pools_path = tmp_path / "pools.txt"
+        _write_pools(pools_path, [("MH3", pool_names), ("BLB", pool_names)])
+
+        model = _make_model()
+        locator = _make_locator(set(pool_names))
+        use_case, locator_patch = _patch_use_case(model, locator)
+
+        config = BuildDecksConfig(
+            pools_path=pools_path,
+            label="gen-3-experimental",
+            checkpoint=tmp_path / "fake.pt",
+            cards_path=tmp_path / "cards",
+            output=tmp_path / "decks.txt",
+        )
+
+        with locator_patch:
+            use_case.execute(config)
+
+        for line in config.output.read_text(encoding="utf-8").strip().splitlines():
+            assert line.split(";", 1)[0] == "gen-3-experimental"
 
     def test_creates_output_parent_directory(self, tmp_path):
         pool_names = [f"card_{i}" for i in range(30)]
@@ -178,6 +207,7 @@ class TestBuildDecksUseCase:
 
         config = BuildDecksConfig(
             pools_path=pools_path,
+            label="gen-test",
             checkpoint=tmp_path / "fake.pt",
             cards_path=tmp_path / "cards",
             output=tmp_path / "nested" / "out" / "decks.txt",
@@ -193,10 +223,11 @@ class TestGeneratedDecksFixture:
     """Verify the shared fixture round-trips correctly through parsing."""
 
     def test_fixture_yields_three_decks(self, synthetic_generated_decks_file):
-        from sealed.infrastructure.pool_file_reader import parse_pools
+        from sealed.infrastructure.pool_file_reader import parse_generated_decks
 
-        rows = parse_pools(synthetic_generated_decks_file)
-        assert len(rows) == 3
-        for set_code, deck in rows:
-            assert set_code in {"MH3", "BLB"}
-            assert len(deck) == 40
+        decks = parse_generated_decks(synthetic_generated_decks_file)
+        assert len(decks) == 3
+        for deck in decks:
+            assert deck.label == "gen-test"
+            assert deck.set_code in {"MH3", "BLB"}
+            assert len(deck.cards) == 40

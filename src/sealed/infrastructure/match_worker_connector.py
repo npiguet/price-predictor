@@ -25,7 +25,6 @@ class MatchWorkerConnector:
         best_of: int,
         log_file: IO[bytes] | None = None,
         generated_decks_path: Path | None = None,
-        self_play_label: str | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -39,31 +38,20 @@ class MatchWorkerConnector:
                 When None, output is discarded.
             generated_decks_path: When provided, passed to the Java worker as
                 ``-Dgenerated.decks.file=<path>`` so it runs in self-play mode
-                instead of the Phase 0 random-pool flow.
-            self_play_label: Method tag written on scorer-built decks in self-play
-                mode. Required iff ``generated_decks_path`` is provided; must be
-                absent otherwise. Passed as ``-Dself.play.label``.
+                instead of the Phase 0 random-pool flow. The method tag for
+                each scorer-built deck is read from the deck file's first
+                column (``LABEL`` field, written by ``build-decks --label``).
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
 
         Raises:
-            ValueError: If ``best_of`` is not a positive odd integer, or if the
-                self_play_label / generated_decks_path XOR rule is violated (the
-                Java worker also enforces both as defense in depth).
+            ValueError: If ``best_of`` is not a positive odd integer.
             FileNotFoundError: If the JAR is not found or java is not on PATH.
         """
         if best_of < 1 or best_of % 2 == 0:
             raise ValueError(
                 f"best_of must be a positive odd integer, got: {best_of}"
-            )
-        if generated_decks_path is not None and not self_play_label:
-            raise ValueError(
-                "self_play_label is required when generated_decks_path is provided"
-            )
-        if generated_decks_path is None and self_play_label is not None:
-            raise ValueError(
-                "self_play_label is forbidden when generated_decks_path is not provided"
             )
 
         system_properties: dict[str, str] = {
@@ -73,7 +61,6 @@ class MatchWorkerConnector:
         }
         if generated_decks_path is not None:
             system_properties["generated.decks.file"] = str(generated_decks_path)
-            system_properties["self.play.label"] = self_play_label  # type: ignore[assignment]
 
         cmd = build_jvm_command(
             main_class="com.pricepredictor.connector.MatchWorkerMain",

@@ -113,7 +113,6 @@ class TestMatchWorkerConnectorGeneratedDecksPath:
                 run_id=RUN_ID,
                 best_of=BEST_OF,
                 generated_decks_path=gen_decks,
-                self_play_label="gen-2",
             )
         cmd = mock_popen.call_args[0][0]
         assert f"-Dgenerated.decks.file={gen_decks}" in cmd
@@ -140,8 +139,8 @@ class TestMatchWorkerConnectorGeneratedDecksPath:
         assert not any(arg.startswith("-Dgenerated.decks.file=") for arg in cmd)
 
 
-class TestMatchWorkerConnectorRunIdAndLabel:
-    """run_id is required; self_play_label is required iff generated_decks_path is set."""
+class TestMatchWorkerConnectorRunId:
+    """run_id is required and propagates to the worker as a system property."""
 
     def test_run_id_passed_as_system_property(self, tmp_path, stub_classpath):
         connector = MatchWorkerConnector()
@@ -151,9 +150,7 @@ class TestMatchWorkerConnectorRunIdAndLabel:
         cmd = mock_popen.call_args[0][0]
         assert f"-Dmatch.run.id={RUN_ID}" in cmd
 
-    def test_self_play_label_passed_as_system_property_with_gendecks(
-        self, tmp_path, stub_classpath,
-    ):
+    def test_no_self_play_label_system_property_ever_set(self, tmp_path, stub_classpath):
         connector = MatchWorkerConnector()
         gen_decks = tmp_path / "generated-decks.txt"
         with patch("subprocess.Popen") as mock_popen:
@@ -163,39 +160,9 @@ class TestMatchWorkerConnectorRunIdAndLabel:
                 run_id=RUN_ID,
                 best_of=BEST_OF,
                 generated_decks_path=gen_decks,
-                self_play_label="gen-2",
             )
-        cmd = mock_popen.call_args[0][0]
-        assert "-Dself.play.label=gen-2" in cmd
-
-    def test_self_play_label_absent_without_gendecks(self, tmp_path, stub_classpath):
-        connector = MatchWorkerConnector()
-        with patch("subprocess.Popen") as mock_popen:
-            mock_popen.return_value = MagicMock()
-            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
         cmd = mock_popen.call_args[0][0]
         assert not any(arg.startswith("-Dself.play.label=") for arg in cmd)
-
-    def test_label_without_gendecks_raises(self, tmp_path, stub_classpath):
-        connector = MatchWorkerConnector()
-        with pytest.raises(ValueError, match="forbidden"):
-            connector.start(
-                tmp_path / "outcomes.txt",
-                run_id=RUN_ID,
-                best_of=BEST_OF,
-                self_play_label="gen-2",
-            )
-
-    def test_gendecks_without_label_raises(self, tmp_path, stub_classpath):
-        connector = MatchWorkerConnector()
-        gen_decks = tmp_path / "generated-decks.txt"
-        with pytest.raises(ValueError, match="required"):
-            connector.start(
-                tmp_path / "outcomes.txt",
-                run_id=RUN_ID,
-                best_of=BEST_OF,
-                generated_decks_path=gen_decks,
-            )
 
 
 class TestMatchWorkerConnectorBestOf:

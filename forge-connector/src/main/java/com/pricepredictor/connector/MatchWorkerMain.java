@@ -27,9 +27,9 @@ import java.util.List;
  *
  * <p>Optional system properties:
  * <ul>
- *   <li>{@code -Dgenerated.decks.file=<path>} — enables self-play mode.</li>
- *   <li>{@code -Dself.play.label=<label>} — required <b>iff</b> {@code generated.decks.file}
- *       is set; forbidden otherwise. Recorded as the method tag for scorer-built decks.</li>
+ *   <li>{@code -Dgenerated.decks.file=<path>} — enables self-play mode. The method tag
+ *       for each scorer-built deck is read from the deck file's first column
+ *       ({@code LABEL} field set by {@code build-decks --label}).</li>
  *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
  *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
  * </ul>
@@ -71,18 +71,6 @@ public class MatchWorkerMain {
         }
 
         String generatedDecksProp = System.getProperty("generated.decks.file");
-        String selfPlayLabel = System.getProperty("self.play.label");
-
-        if (generatedDecksProp != null && (selfPlayLabel == null || selfPlayLabel.isBlank())) {
-            System.err.println(
-                    "Error: -Dself.play.label is required when -Dgenerated.decks.file is set");
-            System.exit(2);
-        }
-        if (generatedDecksProp == null && selfPlayLabel != null) {
-            System.err.println(
-                    "Error: -Dself.play.label is forbidden when -Dgenerated.decks.file is not set");
-            System.exit(2);
-        }
 
         Path outputFile = Path.of(outputFileProp);
 
@@ -104,7 +92,6 @@ public class MatchWorkerMain {
         } else {
             Path generatedDecks = Path.of(generatedDecksProp);
             System.out.println("Self-play mode: loading generated decks from " + generatedDecks);
-            System.out.println("Self-play label: " + selfPlayLabel);
             GeneratedDecksIndex index;
             try {
                 index = GeneratedDecksIndex.load(generatedDecks);
@@ -116,7 +103,7 @@ public class MatchWorkerMain {
             System.out.println("Loaded " + index.size() + " generated decks.");
             SelfPlayMatchGenerator selfPlay = new SelfPlayMatchGenerator(
                     index, new DeckBuilder(), new PoolGenerator(),
-                    new GamePlayer(bestOf), eligibleSets, runId, selfPlayLabel);
+                    new GamePlayer(bestOf), eligibleSets, runId);
             source = selfPlay::generateMatch;
         }
 

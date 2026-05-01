@@ -278,11 +278,10 @@ where:
    - `forge-8sub` — method 3 (Forge + 8 swaps)
    - `random` — method 4 (23 random spells)
    - a user-supplied label — method 5 (scorer-built deck from the generated-decks file); only
-     present in self-play matches (see Phase 3). The label is supplied via the mandatory
-     `--self-play-label LABEL` CLI argument (e.g. `gen-2`). It is required whenever
-     `--generated-decks-path` is passed, so that matches from different self-play generations
-     can be distinguished without risk of accidental collision (e.g. two different generations
-     both getting labelled `scorer`).
+     present in self-play matches (see Phase 3). The label is read out of the deck file's
+     first column (set per-deck by `build-decks --label`, e.g. `gen-2`), so matches from
+     different self-play generations can be distinguished — and a single generated-decks file
+     can hold decks from multiple generations without collision.
  - **method_B**: same scheme as `method_A`, describing how deck B was built.
  - **deck_A_card_names**: a pipe-separated list of the names of the cards in deck A
  - **deck_B_card_names**: same, but for deck B
@@ -545,9 +544,12 @@ Before running self-play match generation, the Python side pre-builds a corpus o
 2. **Build scorer decks.** For each pool, build a deck using the scorer-guided greedy search (Phase 2), including
    deterministic basic land assignment. Write the results to a generated-decks file: one line per deck, formatted as:
 
-       SET_CODE;Card1|Card2|...|Card40
+       LABEL;SET_CODE;Card1|Card2|...|Card40
 
-   Each line is a complete 40-card deck (spells + non-basic lands + basic lands) with its source set code.
+   Each line is a complete 40-card deck (spells + non-basic lands + basic lands), prefixed with the
+   generation-method tag passed to `build-decks --label` (e.g. `gen-2`) and the source set code. The label
+   identifies which scorer / search configuration produced this particular deck and is later used by
+   `match-outcomes` as the `method_A` / `method_B` value when this deck is played.
 
 ```bash
 # Step 1: Generate pools from random sets
@@ -557,6 +559,7 @@ python -m sealed generate-pools --size 10000
 python -m sealed build-decks \
     --checkpoint models/sealed/scorer/best_*.pt \
     --pools-path output/sealed/pools/pools.txt \
+    --label gen-2 \
     --output output/sealed/generated-decks.txt
 ```
 
@@ -585,23 +588,21 @@ When `--generated-decks-path` is present, each match works as follows:
      selected method. This ensures both decks come from the same set, matching Phase 0's same-set design.
    - **Method 5**: Pick a random line from the generated-decks file with the **same set code** as deck A.
 4. **Play and record**: Play a best-of-N match (per `--best-of`, default 7) and append the result to
-   `match-outcomes.txt` in the standard format (see Phase 0 Step 4). Deck A's method is recorded as the
-   value of the mandatory `--self-play-label` argument (e.g. `gen-2`). Deck B's method is whichever of
-   `forge-best` / `forge-3sub` / `forge-8sub` / `random` /
-   `<self-play-label>` was rolled.
+   `match-outcomes.txt` in the standard format (see Phase 0 Step 4). Deck A's method is the `LABEL` field
+   read from the deck's line in the generated-decks file (set by `build-decks --label`). Deck B's method is
+   whichever of `forge-best` / `forge-3sub` / `forge-8sub` / `random` was rolled, or — for method 5 — the
+   `LABEL` of the second scorer deck sampled from the file.
 
 The same-set constraint is critical: without it, set-level power differences (e.g. Modern Horizons vs a core set)
 would dominate the training signal, drowning out the deck-building quality signal.
 
-`--self-play-label` is mandatory whenever `--generated-decks-path` is supplied. The CLI rejects the invocation
-if it is missing. This prevents accidental collisions between generations (e.g. two separate runs both emitting
-matches labelled `scorer`, which would be indistinguishable in the training corpus). Conversely, `--self-play-label`
-must **not** be supplied in Phase 0 mode (no `--generated-decks-path`), as it would have no scorer decks to apply to.
+Because the label travels per-line inside the generated-decks file, multiple `build-decks` runs (e.g. one per
+scorer generation, or per search configuration) can be concatenated into a single self-play file without losing
+provenance: each match-outcomes line records the exact label of the deck it played.
 
 ```bash
 python -m sealed match-outcomes \
-    --generated-decks-path output/sealed/generated-decks.txt \
-    --self-play-label gen-2
+    --generated-decks-path output/sealed/generated-decks.txt
 ```
 
 ## Self-Play Refinement Loop

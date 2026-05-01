@@ -12,7 +12,10 @@ import java.util.Random;
 /**
  * In-memory index of a generated-decks file for self-play match generation.
  *
- * <p>File format: one deck per line, {@code SET_CODE;Card1|Card2|...|Card40}.
+ * <p>File format: one deck per line, {@code LABEL;SET_CODE;Card1|Card2|...|Card40}.
+ * The {@code LABEL} field is the generation-method tag set by
+ * {@code build-decks --label} and used as the {@code method_A} / {@code method_B}
+ * value when this deck is sampled into a self-play match.
  *
  * <p>Used by {@link SelfPlayMatchGenerator} to pick a random scorer-built deck A
  * each match, and to satisfy method 5 (pick another scorer-built deck B from the
@@ -23,10 +26,11 @@ public class GeneratedDecksIndex {
     /**
      * One parsed deck line.
      *
-     * @param setCode   MTG set code (the line's prefix before {@code ';'})
+     * @param label     Generation-method tag (the line's first {@code ';'}-delimited field)
+     * @param setCode   MTG set code (the second {@code ';'}-delimited field)
      * @param cardNames 40 card names (the pipe-separated tail)
      */
-    public record GeneratedDeck(String setCode, List<String> cardNames) {}
+    public record GeneratedDeck(String label, String setCode, List<String> cardNames) {}
 
     private final List<GeneratedDeck> allDecks;
     private final Map<String, List<GeneratedDeck>> decksBySet;
@@ -45,13 +49,16 @@ public class GeneratedDecksIndex {
         List<GeneratedDeck> decks = new ArrayList<>();
         for (String line : Files.readAllLines(file)) {
             if (line.isBlank()) continue;
-            int sep = line.indexOf(';');
-            if (sep < 0) {
-                throw new IOException("Malformed generated-decks line (missing ';'): " + line);
+            int firstSep = line.indexOf(';');
+            int secondSep = firstSep < 0 ? -1 : line.indexOf(';', firstSep + 1);
+            if (firstSep < 0 || secondSep < 0) {
+                throw new IOException(
+                        "Malformed generated-decks line (need 'LABEL;SET_CODE;Cards'): " + line);
             }
-            String setCode = line.substring(0, sep);
-            String[] names = line.substring(sep + 1).split("\\|", -1);
-            decks.add(new GeneratedDeck(setCode, List.of(names)));
+            String label = line.substring(0, firstSep);
+            String setCode = line.substring(firstSep + 1, secondSep);
+            String[] names = line.substring(secondSep + 1).split("\\|", -1);
+            decks.add(new GeneratedDeck(label, setCode, List.of(names)));
         }
         if (decks.isEmpty()) {
             throw new IOException("Generated-decks file is empty: " + file);

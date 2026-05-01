@@ -27,12 +27,16 @@ import static org.junit.jupiter.api.Assertions.*;
 class SelfPlayMatchGeneratorTest {
 
     private static GeneratedDeck deck(String setCode, String prefix) {
+        return deck("test-label", setCode, prefix);
+    }
+
+    private static GeneratedDeck deck(String label, String setCode, String prefix) {
         // 40 fake card names — content doesn't matter for routing tests.
         String[] names = new String[40];
         for (int i = 0; i < 40; i++) {
             names[i] = prefix + "_" + i;
         }
-        return new GeneratedDeck(setCode, List.of(names));
+        return new GeneratedDeck(label, setCode, List.of(names));
     }
 
     private static GeneratedDecksIndex indexOf(GeneratedDeck... decks) {
@@ -48,7 +52,6 @@ class SelfPlayMatchGeneratorTest {
                 new GamePlayer(),
                 List.of("MH3", "BLB", "RVR"),
                 "test-run-id",
-                "test-label",
                 random
         );
     }
@@ -60,21 +63,10 @@ class SelfPlayMatchGeneratorTest {
         GeneratedDecksIndex index = indexOf(deck("MH3", "a"));
         assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
                 index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
-                List.of("MH3"), "", "label", new Random(0)));
+                List.of("MH3"), "", new Random(0)));
         assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
                 index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
-                List.of("MH3"), null, "label", new Random(0)));
-    }
-
-    @Test
-    void selfPlayLabelMustBeNonBlank() {
-        GeneratedDecksIndex index = indexOf(deck("MH3", "a"));
-        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
-                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
-                List.of("MH3"), "run-id", "", new Random(0)));
-        assertThrows(IllegalArgumentException.class, () -> new SelfPlayMatchGenerator(
-                index, new DeckBuilder(), new PoolGenerator(), new GamePlayer(),
-                List.of("MH3"), "run-id", null, new Random(0)));
+                List.of("MH3"), null, new Random(0)));
     }
 
     // ── rollIsMethod5 distribution ────────────────────────────────────────────

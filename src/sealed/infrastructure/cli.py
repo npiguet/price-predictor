@@ -31,6 +31,23 @@ def _parse_restarts(value: str) -> int | str:
     return n
 
 
+def _parse_label(value: str) -> str:
+    """Parse --label: a non-empty string with no ';', '|', or whitespace."""
+    if not value:
+        raise argparse.ArgumentTypeError("--label must be a non-empty string")
+    forbidden = {";", "|"}
+    if any(ch in forbidden for ch in value):
+        raise argparse.ArgumentTypeError(
+            f"--label must not contain ';' or '|' (file-format separators), "
+            f"got: {value!r}"
+        )
+    if any(ch.isspace() for ch in value):
+        raise argparse.ArgumentTypeError(
+            f"--label must not contain whitespace, got: {value!r}"
+        )
+    return value
+
+
 def _add_cards_path(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--cards-path",
@@ -140,6 +157,17 @@ def _build_build_decks_parser(subparsers) -> None:
         "--pools-path",
         required=True,
         help="Input pools file (with SET_CODE; prefixes)",
+    )
+    build_parser.add_argument(
+        "--label",
+        type=_parse_label,
+        required=True,
+        help=(
+            "Generation-method tag written as the first column of every output "
+            "line (e.g. 'gen-3'). Recorded by match-outcomes self-play as the "
+            "method tag for any match where this deck is sampled. Must be a "
+            "non-empty string without ';', '|', or whitespace."
+        ),
     )
     build_parser.add_argument(
         "--checkpoint",
@@ -439,18 +467,9 @@ def _build_match_outcomes_parser(subparsers) -> None:
             "Optional path to a generated-decks.txt file. When given, workers run"
             " in self-play mode: deck A is sampled from this file each match and"
             " deck B is built by one of 5 weighted methods (4:3:2:1:4) with"
-            " same-set pairing. When omitted, Phase 0 random-pool behavior is"
-            " unchanged."
-        ),
-    )
-    match_parser.add_argument(
-        "--self-play-label",
-        default=None,
-        help=(
-            "Label recorded as the method tag for scorer-built decks in self-play"
-            " mode (e.g. 'gen-2'). Required iff --generated-decks-path is given;"
-            " forbidden otherwise. Enables distinguishing self-play matches from"
-            " different scorer generations in the combined training corpus."
+            " same-set pairing. The method tag for scorer-built decks is read"
+            " from the deck file's first column (set by build-decks --label)."
+            " When omitted, Phase 0 random-pool behavior is unchanged."
         ),
     )
     match_parser.add_argument(
@@ -598,6 +617,7 @@ def run_build_decks(args: argparse.Namespace) -> int:
 
     config = BuildDecksConfig(
         pools_path=Path(args.pools_path),
+        label=args.label,
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
         output=Path(args.output),
@@ -858,20 +878,6 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # XOR check: --self-play-label is required iff --generated-decks-path is given.
-    if args.generated_decks_path and not args.self_play_label:
-        print(
-            "Error: --self-play-label is required when --generated-decks-path is given",
-            file=sys.stderr,
-        )
-        return 2
-    if not args.generated_decks_path and args.self_play_label:
-        print(
-            "Error: --self-play-label is only valid with --generated-decks-path",
-            file=sys.stderr,
-        )
-        return 2
-
     output_path = Path("output") / "sealed" / "match-outcomes.txt"
     generated_decks_path = (
         Path(args.generated_decks_path) if args.generated_decks_path else None
@@ -882,7 +888,6 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         output_path=output_path,
         best_of=args.best_of,
         generated_decks_path=generated_decks_path,
-        self_play_label=args.self_play_label,
     )
 
     try:

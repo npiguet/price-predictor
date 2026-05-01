@@ -12,6 +12,7 @@ import torch
 
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.cli import (
+    _parse_label,
     _parse_restarts,
     run_encode_cards,
     run_match_outcomes,
@@ -25,64 +26,36 @@ def _args(**overrides) -> Namespace:
     defaults = {
         "workers": 1,
         "generated_decks_path": None,
-        "self_play_label": None,
         "best_of": 7,
     }
     defaults.update(overrides)
     return Namespace(**defaults)
 
 
-class TestMatchOutcomesSelfPlayLabelXor:
-    """--self-play-label is required iff --generated-decks-path is given."""
+class TestMatchOutcomesGeneratedDecksPath:
+    """``--generated-decks-path`` is optional; supervisor receives it as-is."""
 
-    def test_neither_is_valid(self, tmp_path):
-        """Phase-0 mode: no self-play, no label. Should start supervisor."""
+    def test_no_path_is_phase_0(self, tmp_path):
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
             rc = run_match_outcomes(_args())
         assert rc == 0
-        mock_sup.assert_called_once()
+        kwargs = mock_sup.call_args.kwargs
+        assert kwargs["generated_decks_path"] is None
 
-    def test_both_is_valid(self, tmp_path):
-        """Self-play mode: both given. Should start supervisor with label."""
+    def test_explicit_path_forwarded(self, tmp_path):
         gen = tmp_path / "generated-decks.txt"
         gen.touch()
         with patch(
             "sealed.application.match_outcomes.MatchOutcomeSupervisor"
         ) as mock_sup:
             mock_sup.return_value.run.return_value = None
-            rc = run_match_outcomes(_args(
-                generated_decks_path=str(gen),
-                self_play_label="gen-2",
-            ))
+            rc = run_match_outcomes(_args(generated_decks_path=str(gen)))
         assert rc == 0
         kwargs = mock_sup.call_args.kwargs
-        assert kwargs["self_play_label"] == "gen-2"
         assert kwargs["generated_decks_path"] == gen
-
-    def test_gendecks_without_label_rejected(self, tmp_path, capsys):
-        gen = tmp_path / "generated-decks.txt"
-        gen.touch()
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(generated_decks_path=str(gen)))
-        assert rc == 2
-        mock_sup.assert_not_called()
-        err = capsys.readouterr().err
-        assert "--self-play-label is required" in err
-
-    def test_label_without_gendecks_rejected(self, capsys):
-        with patch(
-            "sealed.application.match_outcomes.MatchOutcomeSupervisor"
-        ) as mock_sup:
-            rc = run_match_outcomes(_args(self_play_label="gen-2"))
-        assert rc == 2
-        mock_sup.assert_not_called()
-        err = capsys.readouterr().err
-        assert "--self-play-label is only valid" in err
 
 
 class TestMatchOutcomesBestOf:
@@ -392,3 +365,33 @@ class TestParseRestarts:
     def test_unknown_string_includes_value_in_message(self):
         with pytest.raises(argparse.ArgumentTypeError, match="'random-init'"):
             _parse_restarts("random-init")
+
+
+class TestParseLabel:
+    """``--label`` is a non-empty string with no ';', '|', or whitespace."""
+
+    def test_alphanum_hyphen_accepted(self):
+        assert _parse_label("gen-2") == "gen-2"
+        assert _parse_label("gen-3-experimental") == "gen-3-experimental"
+        assert _parse_label("forge-best") == "forge-best"
+        assert _parse_label("a") == "a"
+
+    def test_empty_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="non-empty"):
+            _parse_label("")
+
+    def test_semicolon_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="';' or '\\|'"):
+            _parse_label("has;semi")
+
+    def test_pipe_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="';' or '\\|'"):
+            _parse_label("has|pipe")
+
+    def test_whitespace_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="whitespace"):
+            _parse_label("has space")
+
+    def test_tab_rejected(self):
+        with pytest.raises(argparse.ArgumentTypeError, match="whitespace"):
+            _parse_label("has\ttab")

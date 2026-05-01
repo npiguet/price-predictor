@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Pure unit tests for {@link GeneratedDecksIndex} — no Forge dependency.
  *
- * <p>File format under test: {@code SET_CODE;Card1|Card2|...|CardN}.
+ * <p>File format under test: {@code LABEL;SET_CODE;Card1|Card2|...|CardN}.
  */
 class GeneratedDecksIndexTest {
 
@@ -26,8 +26,8 @@ class GeneratedDecksIndexTest {
         return file;
     }
 
-    private static String deckLine(String setCode, String prefix, int n) {
-        StringBuilder sb = new StringBuilder(setCode).append(';');
+    private static String deckLine(String label, String setCode, String prefix, int n) {
+        StringBuilder sb = new StringBuilder(label).append(';').append(setCode).append(';');
         for (int i = 0; i < n; i++) {
             if (i > 0) sb.append('|');
             sb.append(prefix).append('_').append(i);
@@ -36,31 +36,33 @@ class GeneratedDecksIndexTest {
     }
 
     @Test
-    void loadParsesSetCodeAndCardNames(@TempDir Path tmp) throws IOException {
+    void loadParsesLabelSetCodeAndCardNames(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
-                "MH3;A|B|C",
-                "BLB;X|Y|Z|W"
+                "gen-2;MH3;A|B|C",
+                "gen-3;BLB;X|Y|Z|W"
         ));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
         assertEquals(2, index.size());
-        // Round-trip via randomDeck with a tiny seed range; we just want to ensure
-        // both entries exist and are well-formed.
         Set<String> seenSets = new HashSet<>();
+        Set<String> seenLabels = new HashSet<>();
         Random rng = new Random(0);
         for (int i = 0; i < 50; i++) {
-            seenSets.add(index.randomDeck(rng).setCode());
+            GeneratedDecksIndex.GeneratedDeck pick = index.randomDeck(rng);
+            seenSets.add(pick.setCode());
+            seenLabels.add(pick.label());
         }
         assertEquals(Set.of("MH3", "BLB"), seenSets);
+        assertEquals(Set.of("gen-2", "gen-3"), seenLabels);
     }
 
     @Test
     void loadIgnoresBlankLines(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
-                "MH3;A|B",
+                "gen-2;MH3;A|B",
                 "",
-                "MH3;C|D",
+                "gen-2;MH3;C|D",
                 "   "
         ));
 
@@ -78,7 +80,14 @@ class GeneratedDecksIndexTest {
     }
 
     @Test
-    void loadMalformedLineThrows(@TempDir Path tmp) throws IOException {
+    void loadMissingSecondSeparatorThrows(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of("gen-2;onlyOneSemicolon"));
+
+        assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
+    }
+
+    @Test
+    void loadMissingAnySeparatorThrows(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of("no-semicolon-here"));
 
         assertThrows(IOException.class, () -> GeneratedDecksIndex.load(file));
@@ -87,9 +96,9 @@ class GeneratedDecksIndexTest {
     @Test
     void randomDeckPicksFromAllDecks(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
-                deckLine("MH3", "mh3", 40),
-                deckLine("BLB", "blb", 40),
-                deckLine("RVR", "rvr", 40)
+                deckLine("gen-2", "MH3", "mh3", 40),
+                deckLine("gen-2", "BLB", "blb", 40),
+                deckLine("gen-2", "RVR", "rvr", 40)
         ));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
@@ -106,9 +115,9 @@ class GeneratedDecksIndexTest {
     @Test
     void randomDeckFromSetReturnsOnlyMatchingSet(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
-                deckLine("MH3", "mh3a", 40),
-                deckLine("MH3", "mh3b", 40),
-                deckLine("BLB", "blb", 40)
+                deckLine("gen-2", "MH3", "mh3a", 40),
+                deckLine("gen-2", "MH3", "mh3b", 40),
+                deckLine("gen-2", "BLB", "blb", 40)
         ));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
@@ -124,14 +133,13 @@ class GeneratedDecksIndexTest {
     @Test
     void randomDeckFromSetExcludesGivenDeck(@TempDir Path tmp) throws IOException {
         Path file = writeDecks(tmp, List.of(
-                deckLine("MH3", "mh3a", 40),
-                deckLine("MH3", "mh3b", 40)
+                deckLine("gen-2", "MH3", "mh3a", 40),
+                deckLine("gen-2", "MH3", "mh3b", 40)
         ));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         Random rng = new Random(7);
 
-        // Find one of the two MH3 decks via randomDeck and ensure exclude works.
         GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(rng);
 
         for (int i = 0; i < 50; i++) {
@@ -143,7 +151,7 @@ class GeneratedDecksIndexTest {
 
     @Test
     void randomDeckFromSetReturnsNullWhenSetAbsent(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(deckLine("MH3", "mh3", 40)));
+        Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
 
@@ -152,7 +160,7 @@ class GeneratedDecksIndexTest {
 
     @Test
     void randomDeckFromSetReturnsNullWhenOnlyExcludeMatches(@TempDir Path tmp) throws IOException {
-        Path file = writeDecks(tmp, List.of(deckLine("MH3", "only", 40)));
+        Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "only", 40)));
 
         GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
         GeneratedDecksIndex.GeneratedDeck only = index.randomDeck(new Random(0));

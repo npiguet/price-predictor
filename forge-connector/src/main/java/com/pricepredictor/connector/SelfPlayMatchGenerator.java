@@ -48,7 +48,6 @@ public class SelfPlayMatchGenerator {
     private final GamePlayer gamePlayer;
     private final List<String> eligibleSets;
     private final String runId;
-    private final String selfPlayLabel;
     private final Random random;
 
     public SelfPlayMatchGenerator(
@@ -57,10 +56,9 @@ public class SelfPlayMatchGenerator {
             PoolGenerator poolGenerator,
             GamePlayer gamePlayer,
             List<String> eligibleSets,
-            String runId,
-            String selfPlayLabel) {
+            String runId) {
         this(index, deckBuilder, poolGenerator, gamePlayer, eligibleSets,
-                runId, selfPlayLabel, MyRandom.getRandom());
+                runId, MyRandom.getRandom());
     }
 
     SelfPlayMatchGenerator(
@@ -70,13 +68,9 @@ public class SelfPlayMatchGenerator {
             GamePlayer gamePlayer,
             List<String> eligibleSets,
             String runId,
-            String selfPlayLabel,
             Random random) {
         if (runId == null || runId.isBlank()) {
             throw new IllegalArgumentException("runId must be non-empty");
-        }
-        if (selfPlayLabel == null || selfPlayLabel.isBlank()) {
-            throw new IllegalArgumentException("selfPlayLabel must be non-empty");
         }
         this.index = index;
         this.deckBuilder = deckBuilder;
@@ -84,7 +78,6 @@ public class SelfPlayMatchGenerator {
         this.gamePlayer = gamePlayer;
         this.eligibleSets = List.copyOf(eligibleSets);
         this.runId = runId;
-        this.selfPlayLabel = selfPlayLabel;
         this.random = random;
     }
 
@@ -140,7 +133,7 @@ public class SelfPlayMatchGenerator {
             } else {
                 deckBNames = deckBFromIndex.cardNames();
                 deckBForge = materializeDeck(deckBNames);
-                methodB = selfPlayLabel;
+                methodB = deckBFromIndex.label();
             }
         } else {
             List<PaperCard> pool = poolGenerator.generatePool(deckA.setCode());
@@ -165,7 +158,7 @@ public class SelfPlayMatchGenerator {
                 Instant.now(),
                 runId,
                 deckA.setCode(),
-                selfPlayLabel,
+                deckA.label(),
                 methodB,
                 deckA.cardNames(),
                 deckBNames,

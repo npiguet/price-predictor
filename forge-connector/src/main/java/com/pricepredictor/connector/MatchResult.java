@@ -11,8 +11,8 @@ import java.util.List;
  * @param timestamp        When the match finished (UTC).
  * @param runId            UUID identifying the supervisor invocation that produced this match.
  * @param setCode          MTG set code both decks were drawn from.
- * @param methodA          How deck A was built (see {@link DeckBuilder} method tags, or a
- *                         self-play label when deck A came from a generated-decks file).
+ * @param methodA          How deck A was built (see {@link DeckBuilder} method tags, or the
+ *                         per-deck {@code LABEL} field when deck A came from a generated-decks file).
  * @param methodB          How deck B was built (same enum as {@code methodA}).
  * @param deckA            All 40 cards in deck A (including basic lands, duplicates repeat).
  * @param deckB            All 40 cards in deck B.

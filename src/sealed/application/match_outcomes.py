@@ -29,13 +29,11 @@ class MatchOutcomeSupervisor:
         output_path: Path,
         best_of: int,
         generated_decks_path: Path | None = None,
-        self_play_label: str | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
         self._best_of = best_of
         self._generated_decks_path = generated_decks_path
-        self._self_play_label = self_play_label
         self._run_id = str(uuid.uuid4())
         self._shutdown_event = threading.Event()
         self._processes: list[subprocess.Popen] = []
@@ -106,7 +104,6 @@ class MatchOutcomeSupervisor:
             run_id=self._run_id,
             best_of=self._best_of,
             generated_decks_path=self._generated_decks_path,
-            self_play_label=self._self_play_label,
         )
         print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc

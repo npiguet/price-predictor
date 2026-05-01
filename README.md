@@ -599,17 +599,20 @@ python -m sealed train-scorer \
 
 ### build-decks
 
-Builds one 40-card deck per pool using a trained scorer plus greedy or simulated-annealing search. Writes a `generated-decks.txt` file in the same `SET_CODE;Card1|Card2|...|Card40` format used elsewhere in the pipeline; the file is consumed by `match-outcomes --generated-decks-path` for self-play.
+Builds one 40-card deck per pool using a trained scorer plus greedy or simulated-annealing search. Writes a `generated-decks.txt` file consumed by `match-outcomes --generated-decks-path` for self-play.
 
 **Prerequisites**: card embeddings have been written by `encode-cards`; a trained scorer checkpoint exists; a pools file exists at the path passed to `--pools-path`.
 
 ```bash
 # Build decks at default search settings (T=0.8, cooling=0.85, restarts=1)
-python -m sealed build-decks --pools-path output/sealed/pools/RVR/pools.txt
+python -m sealed build-decks \
+    --pools-path output/sealed/pools/RVR/pools.txt \
+    --label gen-3
 
 # Pure greedy with an explicit checkpoint and output path
 python -m sealed build-decks \
     --pools-path output/sealed/pools/MH3/pools.txt \
+    --label gen-3-greedy \
     --checkpoint models/sealed/scorer/best_l6_full_training.pt \
     --sa-temperature 0 \
     --output output/sealed/generated-decks-greedy.txt
@@ -617,12 +620,14 @@ python -m sealed build-decks \
 # Color-pair seeded init: one search per MTG two-color pair
 python -m sealed build-decks \
     --pools-path output/sealed/pools/RVR/pools.txt \
+    --label gen-3-cp \
     --restarts color-pairs
 ```
 
 | Argument | Default | Description |
 |---|---|---|
 | `--pools-path` | _(required)_ | Input pools file (`SET_CODE;Card1\|...` format) |
+| `--label` | _(required)_ | Generation-method tag written as the first column of every output line (e.g. `gen-3`). Recorded by `match-outcomes` self-play as the `method_A` / `method_B` value when this deck is sampled into a match. Must be a non-empty string without `;`, `\|`, or whitespace. |
 | `--checkpoint` | `models/sealed/scorer/latest.pt` | Trained scorer checkpoint |
 | `--cards-path` | `output/cardsfolder/` | Card-embedding directory (one `.npz` per card) |
 | `--output` | `output/sealed/generated-decks.txt` | Output path for generated decks |
@@ -630,9 +635,9 @@ python -m sealed build-decks \
 | `--sa-cooling` | `0.85` | Per-iteration temperature multiplier (ignored when `--sa-temperature 0`) |
 | `--sa-max-iterations` | `200` | Hard cap on iterations per restart |
 | `--restarts` | `1` | Either a positive integer N (run N searches from random 23-spell inits and keep the best deck) or the literal `color-pairs` (run one search per MTG two-color pair — WU, WB, WR, WG, UB, UR, UG, BR, BG, RG — with each search seeded by an on-color initial 23-spell deck; the color filter applies only to the seed deck, the search itself is unconstrained). |
-| `--print-decks` | `False` | After building, dump every deck to stdout in the human-readable format used by `evaluate-scorer` (sorted by mana value, lands at bottom) |
+| `--print-decks` | `False` | After building, dump every deck to stdout in the human-readable format used by `evaluate-scorer` (sorted by mana value, lands at bottom). Labels are not included in the printed output. |
 
-**Output**: `output/sealed/generated-decks.txt` (or `--output`) — one line per pool that produced a viable deck, in `SET_CODE;Card1|Card2|...|Card40` format. Pools with fewer than 23 embeddable cards are skipped silently.
+**Output**: `output/sealed/generated-decks.txt` (or `--output`) — one line per pool that produced a viable deck, in `LABEL;SET_CODE;Card1|Card2|...|Card40` format. Pools with fewer than 23 embeddable cards are skipped silently. Concatenating multiple generated-decks files with different `--label` values is supported: `match-outcomes` reads the per-deck label out of the first column.
 
 See [`experiments/sa-deck-builder-tuning.md`](experiments/sa-deck-builder-tuning.md) for empirical guidance on `--sa-temperature`, `--sa-cooling`, and the restart strategy.
 
