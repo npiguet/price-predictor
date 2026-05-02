@@ -25,6 +25,11 @@ DEFAULT_CARDS_PATH = Path("output/cardsfolder")
 BEST_OFS = [1, 3, 5, 7]  # match-length variants to simulate
 COLOR_BUCKETS = (1, 2, 3, 4, 5)
 WUBRG = ("W", "U", "B", "R", "G")
+CREATURE_BUCKETS = ("<=13", "14", "15", "16", "17", "18", "19", ">=20")
+MV_BUCKETS = (
+    "<2.5", "2.5-2.8", "2.8-3.1", "3.1-3.4",
+    "3.4-3.7", "3.7-4.0", ">=4.0",
+)
 
 
 def winner_at_threshold(games: str, threshold: int) -> str:
@@ -75,6 +80,69 @@ def deck_colors(
     return frozenset(colors)
 
 
+def deck_creature_count(
+    card_names: list[str],
+    card_cache: dict[str, Card | None],
+    locator: ConvertedCardLocator,
+) -> int:
+    """Number of cards whose primary types include 'Creature'."""
+    count = 0
+    for name in card_names:
+        if name not in card_cache:
+            path = locator.text_path(name)
+            card_cache[name] = parse_converted_file(path) if path else None
+        card = card_cache[name]
+        if card is None:
+            continue
+        if "Creature" in card.types:
+            count += 1
+    return count
+
+
+def creature_bucket(count: int) -> str:
+    if count <= 13:
+        return "<=13"
+    if count >= 20:
+        return ">=20"
+    return str(count)
+
+
+def deck_avg_mv(
+    card_names: list[str],
+    card_cache: dict[str, Card | None],
+    locator: ConvertedCardLocator,
+) -> float | None:
+    """Average mana value across nonland cards. None if no scorable nonlands."""
+    total = 0.0
+    n = 0
+    for name in card_names:
+        if name not in card_cache:
+            path = locator.text_path(name)
+            card_cache[name] = parse_converted_file(path) if path else None
+        card = card_cache[name]
+        if card is None or card.is_land() or card.mana_cost is None:
+            continue
+        total += card.mana_cost.total_mana_value
+        n += 1
+    return total / n if n else None
+
+
+def mv_bucket(avg_mv: float) -> str:
+    if avg_mv < 2.5:
+        return "<2.5"
+    if avg_mv < 2.8:
+        return "2.5-2.8"
+    if avg_mv < 3.1:
+        return "2.8-3.1"
+    if avg_mv < 3.4:
+        return "3.1-3.4"
+    if avg_mv < 3.7:
+        return "3.4-3.7"
+    if avg_mv <= 4.0:
+        return "3.7-4.0"
+    return ">=4.0"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -109,6 +177,14 @@ def main() -> None:
     )
     # (method, color_letter) -> {matches, wins}
     color_presence_stats: dict[tuple[str, str], dict[str, int]] = defaultdict(
+        lambda: {"matches": 0, "wins": 0}
+    )
+    # (method, creature_bucket) -> {matches, wins}
+    creature_stats: dict[tuple[str, str], dict[str, int]] = defaultdict(
+        lambda: {"matches": 0, "wins": 0}
+    )
+    # (method, mv_bucket) -> {matches, wins}
+    mv_stats: dict[tuple[str, str], dict[str, int]] = defaultdict(
         lambda: {"matches": 0, "wins": 0}
     )
 
@@ -189,6 +265,26 @@ def main() -> None:
                     color_presence_stats[(method_b, c)]["matches"] += 1
                     if bo7_winner == "B":
                         color_presence_stats[(method_b, c)]["wins"] += 1
+                ba = creature_bucket(deck_creature_count(deck_a, card_cache, locator))
+                bb = creature_bucket(deck_creature_count(deck_b, card_cache, locator))
+                creature_stats[(method_a, ba)]["matches"] += 1
+                if bo7_winner == "A":
+                    creature_stats[(method_a, ba)]["wins"] += 1
+                creature_stats[(method_b, bb)]["matches"] += 1
+                if bo7_winner == "B":
+                    creature_stats[(method_b, bb)]["wins"] += 1
+                mv_a = deck_avg_mv(deck_a, card_cache, locator)
+                mv_b = deck_avg_mv(deck_b, card_cache, locator)
+                if mv_a is not None:
+                    bk = mv_bucket(mv_a)
+                    mv_stats[(method_a, bk)]["matches"] += 1
+                    if bo7_winner == "A":
+                        mv_stats[(method_a, bk)]["wins"] += 1
+                if mv_b is not None:
+                    bk = mv_bucket(mv_b)
+                    mv_stats[(method_b, bk)]["matches"] += 1
+                    if bo7_winner == "B":
+                        mv_stats[(method_b, bk)]["wins"] += 1
 
     print(f"Total matches parsed: {n}")
     print()
@@ -305,6 +401,60 @@ def main() -> None:
         for c in WUBRG:
             tot_m = sum(color_presence_stats.get((m, c), {}).get("matches", 0) for m in methods)
             tot_w = sum(color_presence_stats.get((m, c), {}).get("wins", 0) for m in methods)
+            if tot_m == 0:
+                cells.append(f"{'-':>17}")
+                continue
+            wr = 100 * tot_w / tot_m
+            cells.append(f"{wr:>6.1f}% (n={tot_m:>5})")
+        print("".join(cells))
+        print()
+
+    if color_table_enabled and creature_stats:
+        print("=== Win rate by method by creature count (Bo7) ===")
+        print(f"{'method':<14}" + "".join(f"{b:>17}" for b in CREATURE_BUCKETS))
+        print("-" * (14 + 17 * len(CREATURE_BUCKETS)))
+        for method in methods:
+            cells = [f"{method:<14}"]
+            for b in CREATURE_BUCKETS:
+                s = creature_stats.get((method, b))
+                if s is None or s["matches"] == 0:
+                    cells.append(f"{'-':>17}")
+                    continue
+                wr = 100 * s["wins"] / s["matches"]
+                cells.append(f"{wr:>6.1f}% (n={s['matches']:>5})")
+            print("".join(cells))
+        print("-" * (14 + 17 * len(CREATURE_BUCKETS)))
+        cells = [f"{'Overall':<14}"]
+        for b in CREATURE_BUCKETS:
+            tot_m = sum(creature_stats.get((m, b), {}).get("matches", 0) for m in methods)
+            tot_w = sum(creature_stats.get((m, b), {}).get("wins", 0) for m in methods)
+            if tot_m == 0:
+                cells.append(f"{'-':>17}")
+                continue
+            wr = 100 * tot_w / tot_m
+            cells.append(f"{wr:>6.1f}% (n={tot_m:>5})")
+        print("".join(cells))
+        print()
+
+    if color_table_enabled and mv_stats:
+        print("=== Win rate by method by avg nonland mana value (Bo7) ===")
+        print(f"{'method':<14}" + "".join(f"{b:>17}" for b in MV_BUCKETS))
+        print("-" * (14 + 17 * len(MV_BUCKETS)))
+        for method in methods:
+            cells = [f"{method:<14}"]
+            for b in MV_BUCKETS:
+                s = mv_stats.get((method, b))
+                if s is None or s["matches"] == 0:
+                    cells.append(f"{'-':>17}")
+                    continue
+                wr = 100 * s["wins"] / s["matches"]
+                cells.append(f"{wr:>6.1f}% (n={s['matches']:>5})")
+            print("".join(cells))
+        print("-" * (14 + 17 * len(MV_BUCKETS)))
+        cells = [f"{'Overall':<14}"]
+        for b in MV_BUCKETS:
+            tot_m = sum(mv_stats.get((m, b), {}).get("matches", 0) for m in methods)
+            tot_w = sum(mv_stats.get((m, b), {}).get("wins", 0) for m in methods)
             if tot_m == 0:
                 cells.append(f"{'-':>17}")
                 continue
