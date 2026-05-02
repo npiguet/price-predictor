@@ -120,6 +120,99 @@ Likely target: gen-3 model. By then we'll have more data
 per-pair margin weighting captures larger absolute information gains
 per match.
 
+## Color-restricted deck builder personalities
+
+### Idea
+
+Two new `build-decks` modes that lock the SA search inside a fixed
+set of 2 or 3 colors. Intended as gen-3 personalities for self-play
+shape diversity, and as a diagnostic for the gen-2 4-5-color drift.
+
+Flag shape (sketch):
+
+- `--restrict-spell-colors`, valid only with `--restarts color-pairs`
+  or the new `--restarts color-slices`. Filters `spells_remaining` (and
+  the SA swap candidates by extension) to cards whose nonland mana cost
+  is a subset of the restart's color set, plus *truly* colorless spells.
+  **Devoid cards do not count as colorless** — they have colored mana
+  symbols in their cost even though devoid suppresses color elsewhere.
+  Today `--restarts color-pairs` only filters the *initial* 23 spells;
+  the SA can drift outside the pair via swaps. This flag closes that
+  drift.
+
+- `--restarts color-slices`: new restart strategy enumerating all
+  C(5,3) = 10 three-color combinations (5 shards + 5 wedges). Same
+  per-restart flow as `color-pairs` (initial 23 filtered to subset
+  cards), with `--restrict-spell-colors` locking the search inside
+  the slice for the duration. "Two colors + splash" is a well-known
+  sealed archetype and a natural separate personality.
+
+Two gen-3 personalities fall out: `gen3-pair` (2 colors) and
+`gen3-slice` (3 colors). Shipped alongside the unconstrained
+gen-3 model, giving self-play three deck-shape variants from
+the same scorer.
+
+### Why it might help
+
+Diagnostic + diversity, not direct strength.
+
+1. **Disambiguates scorer-vs-search responsibility for the color drift.**
+   gen2a's training data showed 2-color decks winning 35pp more than
+   5-color (`Win rate by method by deck color count` table). gen2a still
+   built 4-5 colors 44% of the time. Two competing explanations: the
+   scorer genuinely thinks 4-color is the best deck for the pool (it's
+   right or wrong, but the search is faithful to it), or the scorer
+   knows 2-color is better but the SA landscape has 4-color local
+   optima the search settles into. A constrained 2-color deck plays
+   forge-best — if win rate jumps up, the search was the problem; if
+   it stays flat or drops, the scorer was calibrated and we need to
+   look at the training distribution instead.
+
+2. **Self-play deck-shape diversity.** The gen-2 family produced
+   multiple training variants (gen2a, gen2b1, gen2ba) that all built
+   similar shapes (~45% 3-color, ~36% 4-color). Forcing the next gen's
+   self-play matches to include `gen3-pair` and `gen3-slice` decks
+   gives the next scorer deck shapes the family has under-represented
+   in its training corpus.
+
+### Estimated magnitude
+
+**Likely negative on the scorer's reported deck score** — the
+constrained search space is a subset of the unconstrained one, so the
+unconstrained search's chosen deck always scores ≥ the constrained
+one's by definition. The user's standing prior (from running the
+existing `--restarts color-pairs`): unconstrained outputs are often
+identical or near-identical to color-pair-init decks, suggesting the
+search drifts away from 2-color almost immediately when allowed to.
+
+The interesting metric is *win rate vs forge-best*, not the score:
+
+- Win rate up while score is down → scorer miscalibrated; SA stuck in
+  4-color local optima despite better deck existing nearby.
+- Win rate down with score down → scorer is calibrated to the pools;
+  4-color is genuinely the right play and the 2-color training signal
+  comes from a confound (forge-best dominates 2-color cells, n=14988
+  of 18166 in `match-outcomes-all.txt`).
+- Win rate flat → underpowered; either the constrained deck is roughly
+  as good in expectation or n is too small to tell.
+
+### Cost
+
+Low. `--restarts color-pairs` already builds the on-color spell list
+at init; reusing that mask in `spells_remaining` is ~15 lines + the
+CLI flag. The slice variant clones the pair logic with a 10-triple
+enumeration. The "devoid doesn't count as colorless" rule is one extra
+predicate (`mana_cost.color_count == 0` instead of `Card.is_colorless()`,
+which currently treats devoid as colorless).
+
+### Dependencies / when to revisit
+
+Schedule for gen-3 training. Independent of the data-side levers from
+`gen2-unfrozen-embeddings.md` and stackable with margin-weighted loss
+(above). Worth doing even if gen-3 ends up matching gen-2 in raw win
+rate — the diagnostic answer (scorer vs search) is high-value
+regardless of whether the personalities are competitive.
+
 ## See also (deferred items already documented elsewhere)
 
 - **Multi-restart + multi-temperature ensemble for deck building** —

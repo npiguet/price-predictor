@@ -269,6 +269,40 @@ def _print_report(
         _print_bar(label, c, n)
     print()
 
+    print("=== Pip share by rank (avg %, grouped by deck color count) ===")
+    print("  (within each deck, colors are sorted by pip count desc;")
+    print("   cells show the avg share held by the Nth-ranked color)")
+    rank_groups: dict[int, list[list[float]]] = {c: [] for c in range(1, 6)}
+    for s in stats:
+        pips = sorted(
+            (v for v in s.pip_counts.values() if v > 0), reverse=True
+        )
+        total = sum(pips)
+        if not pips or total == 0:
+            continue
+        cc = len(pips)
+        if cc in rank_groups:
+            rank_groups[cc].append([p / total for p in pips])
+    cols = list(range(1, 6))
+    pad = " " * 12
+    print(f"  {pad} | " + " | ".join(f"{c}-color".rjust(7) for c in cols))
+    print(
+        f"  {'decks'.ljust(12)} | "
+        + " | ".join(f"{len(rank_groups[c])}".rjust(7) for c in cols)
+    )
+    ordinals = ("1st", "2nd", "3rd", "4th", "5th")
+    for rank in range(5):
+        row_label = f"{ordinals[rank]} color".ljust(12)
+        cells = []
+        for cc in cols:
+            if rank < cc and rank_groups[cc]:
+                avg = mean(p[rank] for p in rank_groups[cc]) * 100
+                cells.append(f"{avg:6.1f}%".rjust(7))
+            else:
+                cells.append("-".rjust(7))
+        print(f"  {row_label} | " + " | ".join(cells))
+    print()
+
     total_nonland_mv = sum(s.nonland_mv_sum for s in stats)
     total_nonland = sum(s.nonland_count for s in stats)
     avg_mv = total_nonland_mv / total_nonland if total_nonland else 0.0

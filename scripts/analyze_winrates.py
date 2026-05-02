@@ -8,12 +8,23 @@ number of wins. Bo7 is the actual recorded outcome.
 
 from __future__ import annotations
 
+import argparse
+import sys
 from collections import defaultdict
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-PATH = Path("output/sealed/match-outcomes.txt")
+from price_predictor.domain.entities import Card
+from price_predictor.infrastructure.converted_card_parser import parse_converted_file
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+
+
+DEFAULT_PATH = Path("output/sealed/match-outcomes.txt")
+DEFAULT_CARDS_PATH = Path("output/cardsfolder")
 BEST_OFS = [1, 3, 5, 7]  # match-length variants to simulate
+COLOR_BUCKETS = (1, 2, 3, 4, 5)
+WUBRG = ("W", "U", "B", "R", "G")
 
 
 def winner_at_threshold(games: str, threshold: int) -> str:
@@ -36,10 +47,70 @@ def winner_at_threshold(games: str, threshold: int) -> str:
     return "A" if a > b else "B"  # fallback for malformed data
 
 
+def deck_colors(
+    card_names: list[str],
+    card_cache: dict[str, Card | None],
+    locator: ConvertedCardLocator,
+) -> frozenset[str]:
+    """Set of distinct WUBRG colors across nonland mana costs in the deck."""
+    colors: set[str] = set()
+    for name in card_names:
+        if name not in card_cache:
+            path = locator.text_path(name)
+            card_cache[name] = parse_converted_file(path) if path else None
+        card = card_cache[name]
+        if card is None or card.mana_cost is None:
+            continue
+        mc = card.mana_cost
+        if mc.w > 0:
+            colors.add("W")
+        if mc.u > 0:
+            colors.add("U")
+        if mc.b > 0:
+            colors.add("B")
+        if mc.r > 0:
+            colors.add("R")
+        if mc.g > 0:
+            colors.add("G")
+    return frozenset(colors)
+
+
 def main() -> None:
-    if not PATH.exists():
-        print(f"Not found: {PATH}")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "path",
+        nargs="?",
+        type=Path,
+        default=DEFAULT_PATH,
+        help=f"Path to match-outcomes file (default: {DEFAULT_PATH})",
+    )
+    parser.add_argument(
+        "--cards-path",
+        type=Path,
+        default=DEFAULT_CARDS_PATH,
+        help=(
+            "Path to converted cardsfolder, used for the per-color-count "
+            f"win-rate table (default: {DEFAULT_CARDS_PATH})"
+        ),
+    )
+    args = parser.parse_args()
+    path: Path = args.path
+
+    if not path.exists():
+        print(f"Not found: {path}")
         return
+
+    color_table_enabled = args.cards_path.exists()
+    locator = ConvertedCardLocator(args.cards_path) if color_table_enabled else None
+    card_cache: dict[str, Card | None] = {}
+    # (method, n_colors) -> {matches, wins}
+    color_stats: dict[tuple[str, int], dict[str, int]] = defaultdict(
+        lambda: {"matches": 0, "wins": 0}
+    )
+    # (method, color_letter) -> {matches, wins}
+    color_presence_stats: dict[tuple[str, str], dict[str, int]] = defaultdict(
+        lambda: {"matches": 0, "wins": 0}
+    )
 
     # method -> {best_of -> {matches, match_wins}}
     method_stats: dict[str, dict[int, dict[str, int]]] = defaultdict(
@@ -54,7 +125,7 @@ def main() -> None:
     games_length_counts: dict[int, int] = defaultdict(int)
     n = 0
 
-    with open(PATH, encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -99,6 +170,26 @@ def main() -> None:
                     if won_by_first:
                         h2h[bo][h2h_key]["wins_for_first"] += 1
 
+            if color_table_enabled and locator is not None:
+                deck_a = parts[5].split("|") if parts[5] else []
+                deck_b = parts[6].split("|") if parts[6] else []
+                colors_a = deck_colors(deck_a, card_cache, locator)
+                colors_b = deck_colors(deck_b, card_cache, locator)
+                color_stats[(method_a, len(colors_a))]["matches"] += 1
+                if bo7_winner == "A":
+                    color_stats[(method_a, len(colors_a))]["wins"] += 1
+                color_stats[(method_b, len(colors_b))]["matches"] += 1
+                if bo7_winner == "B":
+                    color_stats[(method_b, len(colors_b))]["wins"] += 1
+                for c in colors_a:
+                    color_presence_stats[(method_a, c)]["matches"] += 1
+                    if bo7_winner == "A":
+                        color_presence_stats[(method_a, c)]["wins"] += 1
+                for c in colors_b:
+                    color_presence_stats[(method_b, c)]["matches"] += 1
+                    if bo7_winner == "B":
+                        color_presence_stats[(method_b, c)]["wins"] += 1
+
     print(f"Total matches parsed: {n}")
     print()
 
@@ -139,27 +230,87 @@ def main() -> None:
     print()
 
     methods = sorted(method_stats.keys())
-    for bo in BEST_OFS:
-        print(f"=== Head-to-head match win rate (Bo{bo}, row beats column) ===")
-        print(f"{'row \\ col':<14}" + "".join(f"{m:>16}" for m in methods))
-        print("-" * (14 + 16 * len(methods)))
-        bo_h2h = h2h[bo]
-        for row in methods:
-            cells = [f"{row:<14}"]
-            for col in methods:
-                first, second = sorted([row, col])
-                key = (first, second)
-                s = bo_h2h.get(key)
+    print("=== Head-to-head match win rate (Bo7, row beats column) ===")
+    print(f"{'row \\ col':<14}" + "".join(f"{m:>17}" for m in methods))
+    print("-" * (14 + 17 * len(methods)))
+    bo_h2h = h2h[7]
+    for row in methods:
+        cells = [f"{row:<14}"]
+        for col in methods:
+            first, second = sorted([row, col])
+            key = (first, second)
+            s = bo_h2h.get(key)
+            if s is None or s["matches"] == 0:
+                cells.append(f"{'-':>17}")
+                continue
+            wins_for_row = (
+                s["wins_for_first"] if first == row
+                else s["matches"] - s["wins_for_first"]
+            )
+            wr = 100 * wins_for_row / s["matches"]
+            cells.append(f"{wr:>6.1f}% (n={s['matches']:>5})")
+        print("".join(cells))
+    print()
+
+    if color_table_enabled and color_stats:
+        print("=== Win rate by method by deck color count (Bo7) ===")
+        print(
+            f"{'method':<14}"
+            + "".join(f"{f'{c}-color':>17}" for c in COLOR_BUCKETS)
+        )
+        print("-" * (14 + 17 * len(COLOR_BUCKETS)))
+        for method in methods:
+            cells = [f"{method:<14}"]
+            for c in COLOR_BUCKETS:
+                s = color_stats.get((method, c))
                 if s is None or s["matches"] == 0:
-                    cells.append(f"{'-':>16}")
+                    cells.append(f"{'-':>17}")
                     continue
-                wins_for_row = (
-                    s["wins_for_first"] if first == row
-                    else s["matches"] - s["wins_for_first"]
-                )
-                wr = 100 * wins_for_row / s["matches"]
-                cells.append(f"{wr:>6.1f}% (n={s['matches']:>4})")
+                wr = 100 * s["wins"] / s["matches"]
+                cells.append(f"{wr:>6.1f}% (n={s['matches']:>5})")
             print("".join(cells))
+        print("-" * (14 + 17 * len(COLOR_BUCKETS)))
+        cells = [f"{'Overall':<14}"]
+        for c in COLOR_BUCKETS:
+            tot_m = sum(color_stats.get((m, c), {}).get("matches", 0) for m in methods)
+            tot_w = sum(color_stats.get((m, c), {}).get("wins", 0) for m in methods)
+            if tot_m == 0:
+                cells.append(f"{'-':>17}")
+                continue
+            wr = 100 * tot_w / tot_m
+            cells.append(f"{wr:>6.1f}% (n={tot_m:>5})")
+        print("".join(cells))
+        print()
+
+    if color_table_enabled and color_presence_stats:
+        print("=== Win rate by method by color presence (Bo7) ===")
+        print(
+            "  (each cell counts every match where the deck contained that "
+            "color; rows can sum to >100% of matches)"
+        )
+        print(f"{'method':<14}" + "".join(f"{c:>17}" for c in WUBRG))
+        print("-" * (14 + 17 * len(WUBRG)))
+        for method in methods:
+            cells = [f"{method:<14}"]
+            for c in WUBRG:
+                s = color_presence_stats.get((method, c))
+                if s is None or s["matches"] == 0:
+                    cells.append(f"{'-':>17}")
+                    continue
+                wr = 100 * s["wins"] / s["matches"]
+                cells.append(f"{wr:>6.1f}% (n={s['matches']:>5})")
+            print("".join(cells))
+        print("-" * (14 + 17 * len(WUBRG)))
+        cells = [f"{'Overall':<14}"]
+        for c in WUBRG:
+            tot_m = sum(color_presence_stats.get((m, c), {}).get("matches", 0) for m in methods)
+            tot_w = sum(color_presence_stats.get((m, c), {}).get("wins", 0) for m in methods)
+            if tot_m == 0:
+                cells.append(f"{'-':>17}")
+                continue
+            wr = 100 * tot_w / tot_m
+            cells.append(f"{wr:>6.1f}% (n={tot_m:>5})")
+        print("".join(cells))
         print()
 
 
