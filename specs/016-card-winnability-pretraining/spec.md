@@ -5,6 +5,18 @@
 **Status**: Draft
 **Input**: User description: "Create a new feature from the descriptions in .\specs\card-winnability-pretraining.md"
 
+## Clarifications
+
+### Session 2026-05-03
+
+- Q: With `--n-pool-queries K = 4` and `d_token = 256`, FR-015's "attention-pool output dims = K * d_token" and "card vector dimension = 2 * d_token" cannot both hold. What is the attention-pool half's actual output dimension? → A: Each of the K queries outputs `d_token / K` dims; K outputs concatenated = `d_token`; combined with the max-pool's `d_token` gives `d_card = 2 * d_token = 512`, independent of K. K controls per-query capacity, not `d_card`.
+- Q: How are basic lands (Plains, Island, Swamp, Mountain, Forest, Wastes, snow basics) handled in `cards-played.txt` and label aggregation? → A: Excluded entirely. The Java worker filters basic lands at write time, so they appear in neither `cards_played_X` nor `cards_not_played_X`, and the label map never contains a basic-land entry.
+- Q: What does `train-encoder` do when a card name in `cards-played.txt` has no corresponding text file in `output/cardsfolder/`? → A: Fail at train start with a clear error naming the missing cards and pointing the user at `python -m price_predictor convert` to rebuild the corpus. No training runs while any referenced card is missing.
+- Q: Should `cards-played.txt` lines be joinable to `match-outcomes.txt` by an explicit key, or rely on positional alignment? → A: Prepend `timestamp;run_id;` to every line, mirroring `match-outcomes.txt`. Eleven fields total. `run_id` matches the parent match's `run_id`; positional offset within a single `(run_id, set_code, method_A, method_B)` group identifies which match the game belongs to.
+- Q: Should `train-encoder` validate that `vocab.txt` covers the current corpus, or accept silent UNK fallback for tokens introduced after the last `build-vocab` run? → A: No check. UNK fallback is silent. Keeping vocab in sync with the corpus is the user's responsibility — re-run `build-vocab` after material corpus changes.
+- Q: Does `train-encoder` strip the `name:` line from each converted card before tokenizing, matching `encode-cards`'s inference behavior? → A: Yes. The `name:` line MUST be stripped at training time, identical to `encode-cards`. This keeps train and inference inputs identically shaped and prevents the encoder from shortcutting on `name → label` (which would otherwise generalize poorly given the card-level train/val split).
+- Q: How does the user inspect the per-card winnability label map to verify SC-005 (shrinkage effect)? → A: At train start, `train-encoder` writes the entire label map to `output/sealed/cards-win-rates.txt`, ordered by raw ratio descending. No flag, always emitted. The file is overwritten each run.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Per-game card-play data accumulates during self-play (Priority: P1)
@@ -31,9 +43,11 @@ given match appear contiguously and in game order.
 
 1. **Given** a fresh sealed run with no `cards-played.txt`, **When**
    `match-outcomes` plays a Bo7 match that ends 4-0, **Then** four
-   contiguous lines are appended to `cards-played.txt`, each with the same
-   `set_code`, `method_A`, and `method_B` as the corresponding
-   `match-outcomes.txt` row.
+   contiguous lines are appended to `cards-played.txt`, each carrying the
+   same `run_id`, `set_code`, `method_A`, and `method_B` as the
+   corresponding `match-outcomes.txt` row, and each line's `timestamp`
+   falls between the parent match line's `timestamp` and the next match
+   line's `timestamp` (or the end of the file for the final match).
 2. **Given** an in-progress `match-outcomes` supervisor, **When** one of its
    workers crashes mid-game, **Then** no partial line is written for the
    crashed game and the supervisor's restarted worker resumes appending
@@ -212,6 +226,11 @@ but are nearly identical for cards with many.
 - **`train-encoder` runs before any `cards-played.txt` exists**: training
   fails with a clear error pointing the user at `python -m sealed
   match-outcomes`.
+- **`cards-played.txt` references cards absent from `output/cardsfolder/`**
+  (e.g., new sets played by Forge after the last `convert` run): training
+  fails at start with a clear error naming the missing cards and pointing
+  the user at `python -m price_predictor convert`. Training does not
+  proceed by silently dropping the missing cards.
 - **Downstream pipeline runs before the sealed encoder exists**:
   `train-scorer` and `encode-cards` default
   `--encoder-checkpoint` to the sealed encoder; if that file is absent
@@ -242,22 +261,35 @@ but are nearly identical for cards with many.
 - **FR-001**: The Java match worker MUST append one line per played game to
   `output/sealed/cards-played.txt`. Writes MUST be line-buffered so a
   worker crash mid-write does not produce a partial line.
-- **FR-002**: The line format MUST be exactly nine semicolon-separated
-  fields in order: `set_code`, `method_A`, `method_B`, `cards_played_A`,
-  `cards_played_B`, `cards_not_played_A`, `cards_not_played_B`, `winner`,
-  `starter`. The four card-list columns MUST be pipe-separated card names.
+- **FR-002**: The line format MUST be exactly eleven semicolon-separated
+  fields in order: `timestamp`, `run_id`, `set_code`, `method_A`,
+  `method_B`, `cards_played_A`, `cards_played_B`, `cards_not_played_A`,
+  `cards_not_played_B`, `winner`, `starter`. `timestamp` MUST be ISO 8601
+  UTC matching the format used by `match-outcomes.txt`. `run_id` MUST be
+  the same UUID as the parent match's `run_id` in `match-outcomes.txt`.
+  The four card-list columns MUST be pipe-separated card names.
 - **FR-003**: A card MUST be considered "played" iff it enters the
   battlefield or the stack at least once during the game, controlled by the
   side that owns it. Cards that remain in the library, hand, sideboard, or
   exile (without ever having been on the battlefield or stack) MUST NOT
   appear in `cards_played_X`.
 - **FR-004**: For each game line, the union of `cards_played_X` and
-  `cards_not_played_X` MUST equal the full deck of side X for that game,
-  with multiplicities preserved.
+  `cards_not_played_X` MUST equal the full deck of side X for that game
+  *after excluding basic lands* (see FR-004a), with multiplicities of
+  non-basic cards preserved.
+- **FR-004a**: Basic lands MUST be excluded from both `cards_played_X` and
+  `cards_not_played_X`. The Java match worker filters them out at write
+  time, so basic lands never appear in `cards-played.txt` and never enter
+  the per-card winnability map. "Basic land" means any card whose type line
+  contains the supertype `Basic` (covers Plains, Island, Swamp, Mountain,
+  Forest, Wastes, and snow-covered variants, plus any future basic
+  printings).
 - **FR-005**: The sequence of game lines for a single match MUST appear
-  contiguously in `cards-played.txt`, in game order, and in the same
-  relative position as the corresponding line in `match-outcomes.txt` (so
-  the i-th match line corresponds to the i-th contiguous game block).
+  contiguously in `cards-played.txt`, in game order, and MUST share the
+  parent match's `run_id`. Within a single `(run_id, set_code, method_A,
+  method_B)` group, the i-th contiguous game block corresponds to the i-th
+  matching line in `match-outcomes.txt`. Concurrent supervisors writing
+  with distinct `run_id`s are joinable independently and never conflict.
 - **FR-006**: Per-game logging MUST be unconditional during
   `match-outcomes` runs. There is no opt-in flag.
 
@@ -291,8 +323,21 @@ but are nearly identical for cards with many.
   shrunk label of 0.5 but MUST also be excluded, since their shrunk label
   carries no signal.
 - **FR-013**: Aggregation MUST run inline at train start. The system MUST
-  NOT persist the per-card label map to disk and MUST NOT expose a separate
-  aggregation subcommand.
+  NOT expose a separate aggregation subcommand. The per-card label map is
+  not cached for cross-run reuse, but a human-readable inspection file is
+  emitted (see FR-013a).
+- **FR-013a**: After aggregation completes (and before training begins),
+  `train-encoder` MUST write the entire per-card label map to
+  `output/sealed/cards-win-rates.txt`, with one row per card included in
+  the training label map (i.e., excluding cards filtered out per FR-012),
+  sorted by raw ratio descending. Each row MUST contain, in order: card
+  name, `wins_when_played`, `wins_when_in_deck`, raw ratio
+  (`wins_when_played / wins_when_in_deck`), and shrunk label (per
+  FR-011). The file MUST be semicolon-separated to match the project's
+  existing data-file convention. The file MUST be overwritten on every
+  `train-encoder` run. The path is fixed and not configurable via a
+  flag — its purpose is consistent debuggability of SC-005, not
+  user-driven dataset export.
 
 #### Encoder training
 
@@ -302,14 +347,26 @@ but are nearly identical for cards with many.
   stack of `--n-layers` transformer encoder blocks with self-attention and
   FFN, followed by a single pool layer), and (c) a regression head (linear
   projection to a scalar, followed by sigmoid).
+- **FR-014a**: Before tokenizing, `train-encoder` MUST strip the `name:`
+  line from each converted card file, matching the input transformation
+  applied by `python -m sealed encode-cards` at inference time. This
+  guarantees that the encoder is trained on the same input shape it sees
+  at inference and prevents the model from shortcutting on
+  `name → label` (which would generalize poorly across the card-level
+  train/val split). Card-name identity is still required during
+  aggregation to map labels to cards, but it MUST NOT enter the
+  tokenized input.
 - **FR-015**: The pool layer MUST produce the card vector by concatenating
   the output of two parallel operations over the contextualized token
-  sequence: a multi-query attention pool with `--n-pool-queries` learned
-  queries cross-attending to the tokens (output dims = `K * d_token`), and
-  an element-wise max pool across the token sequence (output dims =
-  `d_token`). The attention-pool half MUST be sized so the concatenated
-  card vector has dimension `2 * d_token` to mirror the price-predictor's
-  split (`d_token = 256`, `d_card = 512`).
+  sequence: a multi-query attention pool with `--n-pool-queries = K`
+  learned queries cross-attending to the tokens, where each query outputs
+  `d_token / K` dimensions and the K query outputs are concatenated to a
+  single `d_token`-dim vector; and an element-wise max pool across the
+  token sequence (output dims = `d_token`). The two halves are concatenated
+  to produce a card vector of dimension `d_card = 2 * d_token` (with
+  `d_token = 256`, `d_card = 512`). `d_card` is independent of `K`; `K`
+  controls per-query capacity, not the card-vector size. `d_token` MUST be
+  divisible by `K`.
 - **FR-016**: The encoder and regression head MUST be trained jointly from
   random initialization. The system MUST NOT initialize any component from
   the price-predictor transformer, since the goal is an encoder shaped
@@ -345,8 +402,14 @@ but are nearly identical for cards with many.
 - **FR-023**: `train-encoder` MUST fail with a clear error message
   pointing the user at the corrective command if (a) the vocabulary file
   is missing (point at `build-vocab`), (b) `cards-played.txt` is missing
-  or empty (point at `match-outcomes`), or (c) the corpus folder is empty
-  (point at `convert`).
+  or empty (point at `match-outcomes`), (c) the corpus folder is empty
+  (point at `convert`), or (d) any card name referenced in
+  `cards-played.txt` has no corresponding `.txt` file under the corpus
+  folder (point at `python -m price_predictor convert`). The corpus
+  consistency check (d) MUST run after aggregation so the error message
+  can name the offending cards (capped at a reasonable display count, with
+  the total count reported); training MUST NOT proceed by silently
+  dropping the missing cards.
 
 #### Downstream integration
 
@@ -372,13 +435,21 @@ but are nearly identical for cards with many.
 
 - **`cards-played.txt`**: Append-only, line-buffered log of per-game
   card-play data, written automatically by every `match-outcomes` run.
-  Lives at `output/sealed/cards-played.txt`. Rows align contiguously
-  with `match-outcomes.txt` so a match's game lines appear in game order
-  in the same position as the parent match line.
+  Lives at `output/sealed/cards-played.txt`. Each line carries the parent
+  match's `timestamp` and `run_id`, so a single supervisor's lines are
+  joinable to `match-outcomes.txt` by `run_id`, and a match's game lines
+  appear contiguously in game order within its `run_id` group.
 - **Per-card winnability map**: An in-memory dict from card name to
   `[0, 1]` shrunk-label, built at train start by a single pass over
   `cards-played.txt`. Cards with zero `wins_when_in_deck` are absent from
-  the map. Not persisted to disk.
+  the map. Not cached across runs.
+- **`cards-win-rates.txt`**: Human-readable snapshot of the per-card
+  label map, written at train start to `output/sealed/cards-win-rates.txt`.
+  One row per card included in training, sorted by raw ratio descending,
+  semicolon-separated columns: `card_name`, `wins_when_played`,
+  `wins_when_in_deck`, `raw_ratio`, `shrunk_label`. Overwritten on every
+  `train-encoder` run. Lets the user verify SC-005 by diffing two runs
+  with different `--shrinkage-k` values.
 - **Sealed vocabulary**: A token list at
   `models/sealed/encoder/vocab.txt`, one token per line. Built from the
   converted card corpus by `python -m sealed build-vocab`. Independent
@@ -424,10 +495,12 @@ but are nearly identical for cards with many.
   set, the comparison can be performed and reported using only
   documented CLI flags.
 - **SC-005**: The `--shrinkage-k` flag changes the per-card label map in
-  a way the user can verify by inspecting the labels of low-observation
-  cards (e.g., a card with two in-deck games shifts visibly when `k`
-  changes between 0 and 20) while leaving high-observation cards
-  effectively unchanged.
+  a way the user can verify by inspecting `output/sealed/cards-win-rates.txt`
+  produced at the start of two `train-encoder` runs differing only in
+  `--shrinkage-k` (e.g., `0` vs `20`): low-observation cards (e.g., a
+  card with two in-deck games) shift visibly between runs while
+  high-observation cards' shrunk labels remain within a few thousandths
+  of the raw ratio.
 - **SC-006**: Reverting to the price-predictor encoder for the sealed
   scoring pipeline is achievable in one step (passing
   `--encoder-checkpoint models/price-predictor/transformer/latest.pt`
@@ -458,6 +531,11 @@ but are nearly identical for cards with many.
   resume capability for `train-encoder`; an interrupted run is restarted
   from scratch. (A `--resume` flag is a future extension if training
   durations grow long enough to justify it.)
+- Vocab freshness is the user's responsibility. `train-encoder` does not
+  validate that `vocab.txt` covers the current corpus or
+  `cards-played.txt`; tokens introduced after the last `build-vocab` run
+  fall back to UNK silently. Rerun `python -m sealed build-vocab` after
+  any material corpus change.
 - Training durations are expected to be short relative to the
   match-outcomes data-collection cost, so re-training the encoder from
   scratch whenever the corpus grows materially is acceptable.

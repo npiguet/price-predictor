@@ -59,20 +59,36 @@ The Java match worker writes per-game records to
 ## Format
 
 ```
-set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter
+timestamp;run_id;set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter
 ```
 
-| Column                 | Type                 | Description                                                                                              |
-|------------------------|----------------------|----------------------------------------------------------------------------------------------------------|
-| `set_code`             | string               | MTG set code; matches the per-match value.                                                               |
-| `method_A`, `method_B` | string               | Generation-method tags.                                                                                  |
-| `cards_played_X`       | pipe-separated names | Cards from side X's deck that entered the battlefield or stack during this game.                         |
-| `cards_not_played_X`   | pipe-separated names | Remaining cards in side X's deck. `cards_played_X ∪ cards_not_played_X` reconstructs side X's full deck. |
-| `winner`               | `A` or `B`           | Game winner.                                                                                             |
-| `starter`              | `A` or `B`           | First-turn side.                                                                                         |
+| Column                 | Type                 | Description                                                                                                                                                |
+|------------------------|----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `timestamp`            | ISO 8601 UTC         | Game completion time. Same format used by `match-outcomes.txt`.                                                                                            |
+| `run_id`               | UUID                 | Identifies the supervisor invocation. Matches the parent match's `run_id` in `match-outcomes.txt`, so the two files are joinable on `run_id`.              |
+| `set_code`             | string               | MTG set code; matches the per-match value.                                                                                                                 |
+| `method_A`, `method_B` | string               | Generation-method tags.                                                                                                                                    |
+| `cards_played_X`       | pipe-separated names | Non-basic cards from side X's deck that entered the battlefield or stack during this game.                                                                 |
+| `cards_not_played_X`   | pipe-separated names | Remaining non-basic cards in side X's deck. `cards_played_X ∪ cards_not_played_X` reconstructs side X's full deck *minus basic lands*.                     |
+| `winner`               | `A` or `B`           | Game winner.                                                                                                                                               |
+| `starter`              | `A` or `B`           | First-turn side.                                                                                                                                           |
 
 A card "is played" iff it enters the battlefield or the stack during the
 game, controlled by the side that owns it.
+
+Basic lands (any card whose type line contains the supertype `Basic` —
+Plains, Island, Swamp, Mountain, Forest, Wastes, snow-covered variants,
+and any future basic printings) are excluded by the Java worker at write
+time. They never appear in `cards_played_X` or `cards_not_played_X` and
+never enter the per-card winnability map. Their labels would be
+near-deterministic (every winning deck taps lands every game) and would
+dominate the label distribution without contributing any card-quality
+signal.
+
+Within a single `(run_id, set_code, method_A, method_B)` group, the i-th
+contiguous block of game lines corresponds to the i-th matching line in
+`match-outcomes.txt`. Concurrent supervisors writing with distinct
+`run_id`s are joinable independently and never conflict.
 
 # Aggregation
 
@@ -90,6 +106,22 @@ for each line:
 
 `label[c] = wins_when_played[c] / wins_when_in_deck[c]`. Cards with
 `wins_when_in_deck == 0` are excluded from training.
+
+After aggregation, and before training begins, `train-encoder` writes
+the entire per-card label map to `output/sealed/cards-win-rates.txt`,
+sorted by raw ratio descending. One row per card included in training,
+semicolon-separated, columns:
+
+```
+card_name;wins_when_played;wins_when_in_deck;raw_ratio;shrunk_label
+```
+
+The file is overwritten on every run. Its purpose is to make the
+shrinkage effect (and the label distribution generally) human-readable
+without persisting the label map itself for cross-run reuse — diffing
+two runs with different `--shrinkage-k` values is the supported way to
+verify that low-observation cards shift while high-observation cards
+stay close to their raw ratio. The path is fixed and not configurable.
 
 # Low-n regularization
 
@@ -145,6 +177,14 @@ mixing happens here — each token's output is a function of its own ID and
 position only. The vocabulary is the existing MTG tokenizer (~5k tokens;
 see spec 010).
 
+Before tokenizing, the card's `name:` line is stripped — exactly the same
+transformation `python -m sealed encode-cards` applies at inference time.
+This serves two purposes: it keeps the encoder's training and inference
+inputs identically shaped (no train/inference mismatch), and it prevents
+the encoder from shortcutting on `name → label` during training. Card
+names are still required during aggregation to map labels to cards, but
+they never reach the model.
+
 Output shape: `(T, d_token)`, where `T` is the number of tokens in the
 card's text.
 
@@ -176,14 +216,16 @@ reflects context from the entire card, not just the token itself.
 vectors into a single fixed-size card vector via two parallel operations
 whose outputs are concatenated:
 
-| Operation                  | Description                                                                                                                          |
-|----------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| Multi-query attention pool | `K` learned query vectors cross-attend to the token sequence; the `K` outputs are concatenated. `K` typically 4.                     |
-| Max pool                   | Element-wise max across the token sequence.                                                                                          |
+| Operation                  | Description                                                                                                                                              |
+|----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Multi-query attention pool | `K` learned query vectors cross-attend to the token sequence; each query outputs `d_token / K` dims; the `K` outputs are concatenated to `d_token` dims. |
+| Max pool                   | Element-wise max across the token sequence (output dims = `d_token`).                                                                                    |
 
-`d_card = (multi-query attention output dims) + (max-pool output dims)`.
-A natural default mirroring the price-predictor's split is `d_token = 256`
-for both halves, giving `d_card = 512`.
+The two halves are concatenated to give `d_card = 2 * d_token`. With
+`d_token = 256` (mirroring the price-predictor), `d_card = 512`. `d_card`
+is independent of `K`; `K` controls per-query capacity, not the
+card-vector size. `d_token` must be divisible by `K` (default `K = 4`,
+giving 64 dims per query).
 
 **Why multi-query attention rather than stacked pool layers.** The
 "linking abilities to costs and effects" intent is what motivates richer
@@ -222,6 +264,22 @@ initialization on the per-card `(card_text, winnability_score)` map
 produced by the aggregation step. Loss is MSE against the shrunk label.
 The encoder is the only artifact preserved after training; the regression
 head is discarded.
+
+`train-encoder` performs a corpus consistency check at start: every card
+name referenced in `cards-played.txt` must have a corresponding `.txt`
+file in the corpus folder. If any card is missing, training fails
+immediately with an error naming the missing cards (capped at a
+reasonable display count, with the total reported) and points the user
+at `python -m price_predictor convert` to rebuild the corpus. Training
+does not proceed by silently dropping the missing cards — the user must
+either rebuild the corpus or delete the offending `cards-played.txt`
+lines.
+
+Vocabulary freshness is *not* validated. Tokens introduced after the
+last `build-vocab` run fall back to UNK silently. Keeping
+`models/sealed/encoder/vocab.txt` in sync with the corpus is the user's
+responsibility — re-run `python -m sealed build-vocab` after any
+material corpus change.
 
 The train/val split is at the *card* level (held-out cards, never shared
 with the train set) and stratified by winnability quartile so each split
