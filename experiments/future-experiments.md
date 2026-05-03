@@ -213,6 +213,176 @@ Schedule for gen-3 training. Independent of the data-side levers from
 rate — the diagnostic answer (scorer vs search) is high-value
 regardless of whether the personalities are competitive.
 
+## Per-card winnability as encoder pretraining target
+
+### Idea
+
+Replace (or augment) the price-prediction pretraining with a per-card
+"winnability" target derived from per-game cards-played records. The
+label is a *credit-assignment* score: of the games the card's deck
+won, how often did the card actually contribute (= get played)?
+
+For each card, label = `wins-when-played / wins-when-in-deck` where:
+
+- the **numerator** is the number of games where this card was
+  played by the winning side (entered the battlefield or stack);
+- the **denominator** is the number of games where this card was in
+  the winning side's deck — whether or not it was played that game.
+
+Equivalently: among games the deck won while this card was in it,
+what fraction of those wins did this card show up for? A card that's
+always cast in the winning games scores ~1.0; a 7-mana bomb the deck
+never gets to mana for scores low; a card that's stuck in losing decks
+doesn't drag its own score down because losing games don't enter the
+denominator.
+
+The denominator choice matters; two alternatives we explicitly reject:
+
+- **`wins-when-played / games-when-played`.** Biases toward late-game
+  splash bombs that win when they finally hit but rarely get cast at
+  all (denominator only counts the rare games where the bomb
+  resolves). The card looks great by win rate but contributes to few
+  actual games.
+
+- **`wins-when-played / in-deck-games`** (every game the card was in
+  someone's deck, won or lost). Penalizes cards for being randomly
+  included in losing decks — losses where the card was a non-factor
+  still drag the ratio down. We want a *credit-assignment* signal
+  within winning decks, not an attribution-of-blame across both.
+
+The chosen `wins-when-played / wins-when-in-deck` ratio answers
+"when this card was in a winning deck, did it contribute to the win?"
+Combined with appearance-count weighting (below) it produces a
+defensible per-card quality score without forcing each card to also
+explain its losses.
+
+### Why it might help
+
+Direct response to the deterministic-feature-reliance hypothesis
+(`deterministic-feature-reliance.md`). If that diagnostic confirms the
+scorer leans on the 32 hand-features and ignores the 512 transformer
+dims, the question is "what would actually load card-quality
+information into the transformer dims?" Match-outcome gradients can't
+do it through the noisy Bo7 path. A per-card auxiliary loss with a
+label that *is* card quality, scaled across thousands of games, can.
+
+The mechanism is straightforward: a regression head predicting
+winnability forces the encoder to allocate dimensions to "what makes
+this card good" — abilities, P/T-vs-cost ratios, evasion, removal
+modes. Because the label is dense (one number per card, not pairwise),
+the gradient signal per epoch is much higher than match outcomes can
+provide.
+
+Also addresses the "Forge has a card rating but won't share its
+methodology" branch of the embedding investigation: this *is* a
+methodology, it produces a defensible per-card rating, and it doesn't
+depend on Forge's hand-curated draft values.
+
+### Acquiring labels
+
+The numerator requires per-game cards-played data, which the existing
+`match-outcomes.txt` doesn't contain (it only records deck composition
+at the match level). We need a new sidecar file written by the Java
+worker.
+
+**File**: `output/sealed/cards-played.txt` by default. Collected
+automatically during any `python -m sealed match-outcomes` run — no
+opt-in flag, this becomes a standard output of self-play. One line is
+appended after every *game* (versus once per *match* for
+`match-outcomes.txt`, so a Bo7 produces 4-7 lines here for every 1
+line in `match-outcomes.txt`). Line buffering and append semantics
+match `match-outcomes.txt` so an interrupted run keeps everything
+written so far.
+
+**Columns**:
+
+```
+set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter
+```
+
+- `cards_played_X` / `cards_not_played_X` — pipe-separated card-name
+  lists that together reconstruct side X's full deck for that game.
+  Splitting the deck this way per game lets the aggregator compute
+  both halves of the metric in one pass without joining.
+- `winner` — `A` or `B`.
+- `starter` — which side started this game (derivable from the
+  existing `play` field in `match-outcomes.txt`, but cleaner to write
+  per-line for joinless aggregation).
+
+This requires Java-side instrumentation in `MatchWorkerMain` (or
+wherever Forge surfaces "card entered battlefield / stack" events
+during AI-vs-AI play) plus a Python supervisor change to wire the
+output file alongside the existing `match-outcomes.txt` append. The
+two files share a row ordering by match (a Bo7 produces 4-7 game
+lines in `cards-played.txt` per 1 line in `match-outcomes.txt`), so
+they can be joined when needed.
+
+Aggregator pseudocode, per game line:
+
+```
+if winner == A:
+    for c in cards_played_A:     wins_when_played[c] += 1
+    for c in cards_played_A + cards_not_played_A: wins_when_in_deck[c] += 1
+if winner == B:
+    for c in cards_played_B:     wins_when_played[c] += 1
+    for c in cards_played_B + cards_not_played_B: wins_when_in_deck[c] += 1
+```
+
+Losing-side cards contribute nothing — that's the whole point of the
+denominator choice. After processing the corpus,
+`label[c] = wins_when_played[c] / wins_when_in_deck[c]` per card.
+
+Low-n shrinkage handles the inevitable long tail of cards seen only a
+handful of times: Bayesian shrinkage toward 0.5 with a prior weight
+`k`, so `label = (wins_when_played + k/2) / (wins_when_in_deck + k)`,
+typical `k = 10-30`. Or sample-weight the regression loss by
+`wins_when_in_deck / (wins_when_in_deck + k)` so high-n cards
+contribute more gradient than low-n ones. Either is a one-liner; pick
+after looking at the per-card win-appearance distribution from the
+first few thousand games.
+
+### Estimated magnitude
+
+Conditional on the deterministic-feature-reliance diagnostic
+confirming the hypothesis: this is the most plausible candidate for
+moving the within-bucket win rate against forge-best, since it's the
+only intervention that directly trains card-quality knowledge into the
+encoder.
+
+If that hypothesis is wrong (transformer dims already carry useful
+signal): smaller upside, but still likely positive — the encoder gets
+a denser, less noisy label than match outcomes provide, similar
+magnitude to the multi-task pretraining bullet in "See also" below.
+
+Estimated effect on win rate against forge-best: **+3 to +10 pp** if
+the hypothesis is right; +0 to +3 pp otherwise. Wide range because
+this depends entirely on whether the encoder is the binding constraint.
+
+### Cost
+
+Medium. ~100-200 lines of Java in `MatchWorkerMain` (plus whatever
+Forge-side hooks expose card-entered-battlefield events per game) to
+write the new per-game sidecar file, ~30-50 lines of Python for the
+aggregator, ~50 lines for the regression head. Plus the cost of
+regenerating the corpus with instrumentation on — though existing
+matches are not lost, only matches played going forward will have
+the per-game data. After ~50-100k instrumented matches every
+sealed-legal playable should have enough sample to produce a usable
+label.
+
+Roughly 1-2 weeks of implementation + days to weeks of compute.
+
+The training-time cost of adding the auxiliary loss to the encoder
+itself is modest — one extra forward + one extra loss term per batch.
+
+### Dependencies / when to revisit
+
+Run after `deterministic-feature-reliance.md` Test 1a/1b. If those
+confirm the encoder is underused, this is the most concrete next step.
+If they show the encoder is already pulling its weight, revisit only
+once the data-side label-noise levers in `gen2-unfrozen-embeddings.md`
+have been pulled and the model-imperfection bucket reopens.
+
 ## See also (deferred items already documented elsewhere)
 
 - **Multi-restart + multi-temperature ensemble for deck building** —
@@ -233,6 +403,8 @@ regardless of whether the personalities are competitive.
   contamination that the gen-2 Phase B runs revealed. High implementation
   cost — each is a substantial new pipeline. Worth revisiting only if
   Phase B becomes interesting again under a new label-noise regime.
+  See also the per-card-winnability section above for one specific
+  auxiliary target.
 - **Iterative feature distillation** (Phase B encoder → re-cache .npz
   → fresh Phase A scorer → repeat). Surfaced during gen-2 Phase B as a
   test of "are Phase B's gains real or co-adaptation?". Premature until

@@ -92,23 +92,59 @@ consistent with the scorer leaning almost entirely on those.
 
 Three tests, cheapest first.
 
-### 1. Zero-ablation of transformer dims
+### 1. Zero-ablation of transformer dims (two-stage)
 
-In `forward_prenormalized` (or upstream of the scorer call), replace
-indices 0-511 of every card embedding with zeros. Run `evaluate-scorer`
-or play ~100 matches against forge-best. Compare win rate to baseline.
+Two ablation runs answer different questions about the transformer dims.
+The cheaper one runs first and may obviate the second.
 
-- If win rate is unchanged: transformer dims contribute nothing measurable.
-  The hypothesis is confirmed; the scorer is a 32-dim feature model in
-  practice.
-- If win rate drops materially: transformer dims are doing real work.
-  Magnitude tells us how much.
-- Mirror-image ablation: zero indices 512-543 instead. Tells us how
-  much the deterministic features contribute. Sum of both ablation
-  drops, compared to baseline, indicates redundancy / synergy between
-  the two blocks.
+**1a. Inference-only zero-ablation.** Mask indices 0-511 of every
+per-card embedding to zero at the scorer's input (in `match_data_loader`
+when loading `.npz` files, so eval and any later retrain go through the
+same code path). Reload an unchanged gen2a Phase A checkpoint and run
+`evaluate-scorer` / play ~100 matches against forge-best. Compare win
+rate to baseline.
 
-Cost: 30-line forward-pass mod + one `evaluate-scorer` run. ~1 hour.
+- Win rate unchanged → current model already ignores those dims.
+  Hypothesis confirmed without retraining; stop here.
+- Win rate drops → current model uses those dims. Run 1b.
+
+Mirror-image ablation in the same run (zero indices 512-543 instead of
+0-511) tells us how much the deterministic features contribute to the
+current model.
+
+Cost: ~30-line mask in the data loader + one `evaluate-scorer` run.
+~1 hour.
+
+**1b. Retrained zero-ablation** (only if 1a shows the current model
+relies on transformer dims). Train a fresh Phase A scorer on
+`match-outcomes-all.txt` with the same 512-dim mask in place from the
+first epoch onward. The architecture is unchanged; the model just never
+sees nonzero values in those dims. Compare peak val_acc and forge-best
+win rate to the gen2a baseline.
+
+- Retrained model matches baseline → transformer dims are *redundant*
+  with the deterministic features. The current model leans on them but
+  a fresh model substitutes deterministic-feature signal and recovers.
+  Same actionable conclusion as the 1a-confirmed case: in their current
+  form the embeddings don't pay rent.
+- Retrained model drops materially → transformer dims contribute unique
+  signal that deterministic features can't replicate. Hypothesis
+  falsified. The within-bucket gap to forge-best is then explained by
+  something other than scorer feature reliance — most likely the Bo7
+  label-noise floor binding before the scorer can extract per-card
+  quality cleanly.
+
+The retrained variant directly tests "even if the embeddings are used,
+are they useful in their current form?" — which the inference-only
+ablation can't answer because the current model might be using them as
+a crutch that a fresh model could replace.
+
+A side benefit: 1b's val_acc is the upper bound an "all-deterministic-
+features" scorer can reach on this corpus, useful regardless of which
+way the hypothesis lands.
+
+Cost: one full Phase A run on `match-outcomes-all.txt` (~25s/epoch,
+~30-50 epochs to converge with patience). A few hours of GPU time.
 
 ### 2. Within-deck transformer-dim permutation
 
