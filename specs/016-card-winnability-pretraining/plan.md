@@ -228,7 +228,7 @@ tests/
 forge-connector/src/test/java/com/pricepredictor/connector/
 ├── CardsPlayedRowTest.java           NEW (formatting, basic-land filter)
 ├── CardsPlayedWriterTest.java        NEW (line-buffered round-trip)
-└── PerGameCardObserverTest.java      NEW (zone-change classification, controller bucketing)
+└── PlayedCardCollectorTest.java      NEW (zone-change classification, controller bucketing)
 ```
 
 **Structure Decision**: Single repository, two Python packages
