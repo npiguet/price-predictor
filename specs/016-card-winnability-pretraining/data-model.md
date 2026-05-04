@@ -18,9 +18,9 @@ Written by the Java match worker, one line per played game.
 | `set_code`           | uppercase ASCII       | E.g. `BLB`, `RVR`. The set both decks were drawn from.                                      |
 | `method_A`           | string token          | Deck A build method (`forge-best`, `forge-3sub`, `forge-8sub`, `random`, or a `LABEL`).     |
 | `method_B`           | string token          | Same enum/free-form rules as `method_A`.                                                    |
-| `cards_played_A`     | `\|`-separated names  | Non-basic cards in deck A whose name entered the battlefield or stack at least once.        |
+| `cards_played_A`     | `\|`-separated names  | Distinct non-basic card names in deck A whose name entered the battlefield or stack at least once. |
 | `cards_played_B`     | `\|`-separated names  | Same for deck B.                                                                            |
-| `cards_not_played_A` | `\|`-separated names  | Non-basic cards in deck A that were not played in this game.                                |
+| `cards_not_played_A` | `\|`-separated names  | Distinct non-basic card names in deck A that were not played in this game.                  |
 | `cards_not_played_B` | `\|`-separated names  | Same for deck B.                                                                            |
 | `winner`             | `A` or `B`            | Which side won this game.                                                                   |
 | `starter`            | `A` or `B`            | Which side was on the play.                                                                 |
@@ -30,10 +30,15 @@ Validation rules:
 - 11 fields, semicolon-separated, no trailing semicolon.
 - The four card-list columns may be empty (no cards). Empty lists
   are encoded as the empty string between two `;` separators.
-- `cards_played_X ∪ cards_not_played_X` MUST equal deck X's full
-  card list minus basic lands, with multiplicities preserved (FR-004,
-  FR-004a). When a card name has multiple copies and at least one
-  copy was played, *all* copies appear in `cards_played_X`.
+- Each card-list column is a *set* of distinct card names (no
+  duplicates within a column).
+- `cards_played_X ∪ cards_not_played_X` MUST equal the set of
+  distinct non-basic card names in deck X (FR-004, FR-004a).
+- `cards_played_X ∩ cards_not_played_X = ∅`: a name appears in at
+  most one of the two columns. If a deck has multiple copies of a
+  card and at least one was played, the name goes only into
+  `cards_played_X`; the unplayed copies do *not* re-appear in
+  `cards_not_played_X`.
 - Lines for a given match appear contiguously and in game order
   (FR-005).
 - Line-buffered: opens-writes-closes per line so concurrent workers

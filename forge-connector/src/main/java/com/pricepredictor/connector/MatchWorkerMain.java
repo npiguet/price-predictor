@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.function.IntPredicate;
 
@@ -145,6 +146,8 @@ public class MatchWorkerMain {
         GeneratedDecksIndex sideBIndex = loadIndex(config.sideBDecksFile(), "side-B");
 
         MatchResultWriter writer = new MatchResultWriter(config.outputFile());
+        CardsPlayedWriter cardsPlayedWriter = new CardsPlayedWriter(
+                cardsPlayedPath(config.outputFile()));
         MatchGenerator generator = new MatchGenerator(
                 eligibleSets, new DeckBuilder(), new GamePlayer(config.bestOf()), config.runId(),
                 sideAIndex, sideBIndex, config.sideBWeight());
@@ -152,8 +155,11 @@ public class MatchWorkerMain {
         long count = 0;
         while (true) {
             try {
-                MatchResult result = generator.generateMatch();
-                writer.write(result);
+                MatchGenerationResult result = generator.generateMatch();
+                writer.write(result.matchResult());
+                for (CardsPlayedRow row : result.cardsPlayedRows()) {
+                    cardsPlayedWriter.write(row);
+                }
                 count++;
                 if (count % 10 == 0) {
                     System.out.println("Worker: " + count + " matches generated");
@@ -165,6 +171,19 @@ public class MatchWorkerMain {
                 // Continue on non-fatal errors; fatal errors (OOM, etc.) will propagate
             }
         }
+    }
+
+    /**
+     * Resolve the cards-played output path next to the match-outcomes file.
+     * Both files share the {@code output/sealed/} directory by spec
+     * (files.md), so we only need to swap the filename.
+     */
+    static Path cardsPlayedPath(Path matchOutcomesFile) {
+        Path parent = matchOutcomesFile.getParent();
+        if (parent == null) {
+            return Paths.get("cards-played.txt");
+        }
+        return parent.resolve("cards-played.txt");
     }
 
     private static GeneratedDecksIndex loadIndex(String pathProp, String label) {

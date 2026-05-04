@@ -242,10 +242,11 @@ but are nearly identical for cards with many.
   by rounding up the longest card to a multiple of 8, so no card overflows
   in normal operation.
 - **The same card name appears more than once in a deck list**: the
-  cards-played columns store each occurrence (multiplicity preserved in the
-  file format), but a card "is played" in a game iff it entered the
-  battlefield or stack at least once, so for label purposes it is counted
-  once per game per side.
+  cards-played columns are sets of distinct names, not multisets. If at
+  least one copy entered the battlefield or stack, the name appears once
+  in `cards_played_X` and not at all in `cards_not_played_X`. If no copy
+  was played, the name appears once in `cards_not_played_X` and not at
+  all in `cards_played_X`.
 - **Stratification on a degenerate winnability distribution**: if all
   cards happen to fall in fewer than four distinct quartiles (small corpus
   or extreme distribution), stratification falls back to as many strata as
@@ -274,9 +275,13 @@ but are nearly identical for cards with many.
   exile (without ever having been on the battlefield or stack) MUST NOT
   appear in `cards_played_X`.
 - **FR-004**: For each game line, the union of `cards_played_X` and
-  `cards_not_played_X` MUST equal the full deck of side X for that game
-  *after excluding basic lands* (see FR-004a), with multiplicities of
-  non-basic cards preserved.
+  `cards_not_played_X` MUST equal the set of distinct non-basic card
+  names in side X's deck for that game (basic lands excluded per
+  FR-004a). Each name appears in **at most one** of the two columns:
+  `cards_played_X` lists names where at least one copy entered the
+  battlefield or stack; `cards_not_played_X` lists names where no copy
+  was played. Neither column ever contains duplicates, and a name in
+  `cards_played_X` never also appears in `cards_not_played_X`.
 - **FR-004a**: Basic lands MUST be excluded from both `cards_played_X` and
   `cards_not_played_X`. The Java match worker filters them out at write
   time, so basic lands never appear in `cards-played.txt` and never enter

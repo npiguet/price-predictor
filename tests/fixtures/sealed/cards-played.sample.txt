@@ -1,0 +1,12 @@
+2026-05-03T14:22:01Z;run-aaaa-0001;BLB;forge-best;forge-3sub;Lightning Bolt|Grizzly Bears;Sol Ring|Serra Angel;Fire|Delver of Secrets;Jace, the Mind Sculptor;A;A
+2026-05-03T14:22:30Z;run-aaaa-0001;BLB;forge-best;forge-3sub;Lightning Bolt|Grizzly Bears|Serra Angel;Sol Ring;Fire;Delver of Secrets|Jace, the Mind Sculptor;A;B
+2026-05-03T14:22:59Z;run-aaaa-0001;BLB;forge-best;forge-3sub;Lightning Bolt|Grizzly Bears;Delver of Secrets|Sol Ring;Fire|Serra Angel;Jace, the Mind Sculptor;A;A
+2026-05-03T14:23:30Z;run-aaaa-0002;BLB;forge-3sub;forge-best;Sol Ring|Serra Angel;Lightning Bolt|Grizzly Bears;Jace, the Mind Sculptor;Fire|Delver of Secrets;B;B
+2026-05-03T14:24:00Z;run-aaaa-0002;BLB;forge-3sub;forge-best;Sol Ring;Lightning Bolt|Grizzly Bears;Serra Angel|Jace, the Mind Sculptor;Fire|Delver of Secrets;B;A
+2026-05-03T14:24:35Z;run-aaaa-0003;RVR;forge-best;random;Ragavan, Nimble Pilferer|Lightning Bolt;Matter Reshaper|Sol Ring;Grizzly Bears|Serra Angel;Fire|Delver of Secrets|Jace, the Mind Sculptor;A;A
+2026-05-03T14:25:10Z;run-aaaa-0003;RVR;forge-best;random;Lightning Bolt|Grizzly Bears;Sol Ring;Ragavan, Nimble Pilferer|Serra Angel;Fire|Matter Reshaper|Delver of Secrets|Jace, the Mind Sculptor;A;B
+2026-05-03T14:25:50Z;run-aaaa-0004;RVR;forge-best;random;Lightning Bolt|Ragavan, Nimble Pilferer;Sol Ring|Matter Reshaper|Fire;Grizzly Bears|Serra Angel;Delver of Secrets|Jace, the Mind Sculptor;B;B
+2026-05-03T14:26:30Z;run-aaaa-0004;RVR;forge-best;random;Ragavan, Nimble Pilferer|Lightning Bolt|Grizzly Bears;Fire|Sol Ring|Matter Reshaper;Serra Angel;Delver of Secrets|Jace, the Mind Sculptor;A;A
+2026-05-03T14:27:05Z;run-aaaa-0005;BLB;forge-best;forge-3sub;Grizzly Bears|Lightning Bolt|Sol Ring;Serra Angel|Delver of Secrets;Fire|Ragavan, Nimble Pilferer;Jace, the Mind Sculptor;A;A
+2026-05-03T14:27:50Z;run-aaaa-0005;BLB;forge-best;forge-3sub;Grizzly Bears|Lightning Bolt;Serra Angel;Sol Ring|Fire|Ragavan, Nimble Pilferer;Delver of Secrets|Jace, the Mind Sculptor;A;B
+2026-05-03T14:28:30Z;run-aaaa-0006;BLB;forge-3sub;forge-best;Sol Ring|Delver of Secrets;Lightning Bolt|Grizzly Bears|Serra Angel;Fire|Matter Reshaper;Jace, the Mind Sculptor|Ragavan, Nimble Pilferer;B;A

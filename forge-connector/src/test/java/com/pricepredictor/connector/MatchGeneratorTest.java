@@ -24,7 +24,7 @@ class MatchGeneratorTest {
     void generateMatchReturnsValidResult() {
         MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
 
-        MatchResult result = generator.generateMatch();
+        MatchResult result = generator.generateMatch().matchResult();
 
         assertNotNull(result);
         assertEquals(40, result.deckA().size(), "deckA must be exactly 40 cards");
@@ -39,7 +39,7 @@ class MatchGeneratorTest {
     void generateMatchPopulatesMetadata() {
         MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
 
-        MatchResult result = generator.generateMatch();
+        MatchResult result = generator.generateMatch().matchResult();
 
         assertEquals(TEST_RUN_ID, result.runId());
         assertNotNull(result.timestamp(), "timestamp must be populated");
@@ -54,7 +54,7 @@ class MatchGeneratorTest {
     void methodTagsComeFromDeckBuilder() {
         MatchGenerator generator = MatchGenerator.withDefaultBuilders(TEST_RUN_ID);
 
-        MatchResult result = generator.generateMatch();
+        MatchResult result = generator.generateMatch().matchResult();
 
         List<String> allowed = List.of(
                 DeckBuilder.METHOD_FORGE_BEST,

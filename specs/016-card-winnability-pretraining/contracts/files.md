@@ -28,12 +28,13 @@ Field-by-field:
    generated-decks file. Must match the value in the parent match.
 5. **`method_B`** — deck-B build-method tag (same enum/free-form
    rules as `method_A`).
-6. **`cards_played_A`** — `|`-separated card names (multiplicities
-   preserved per FR-004). Empty string if no non-basic cards were
+6. **`cards_played_A`** — `|`-separated **distinct** card names. Each
+   name appears at most once. Empty string if no non-basic cards were
    played by side A in this game.
 7. **`cards_played_B`** — same for side B.
-8. **`cards_not_played_A`** — `|`-separated card names of deck A's
-   non-basic cards that did not enter the battlefield or stack.
+8. **`cards_not_played_A`** — `|`-separated **distinct** card names of
+   deck A's non-basic cards that did not enter the battlefield or stack.
+   Disjoint from `cards_played_A` (FR-004).
 9. **`cards_not_played_B`** — same for side B.
 10. **`winner`** — `A` or `B`, matching the corresponding character
     in the parent match's `games` field.
@@ -42,10 +43,14 @@ Field-by-field:
 
 ### Invariants
 
-- `cards_played_X ∪ cards_not_played_X == deck_X minus basic_lands`
-  (FR-004, FR-004a). Multiplicities preserved.
+- `cards_played_X ∪ cards_not_played_X == set(distinct non-basic card
+  names in deck X)` (FR-004, FR-004a). Both columns are sets — no
+  duplicates within a column, and no name in both columns at the same
+  time.
 - A name appears in `cards_played_X` iff at least one copy entered
   the battlefield or the stack while controlled by side X (FR-003).
+  A name with multiple copies in the deck appears at most once in
+  `cards_played_X` and never also in `cards_not_played_X`.
 - Game lines for one match appear contiguously and in game order
   (FR-005).
 - Concurrent worker writes do not interleave: each write is

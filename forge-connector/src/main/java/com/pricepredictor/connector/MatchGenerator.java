@@ -163,8 +163,12 @@ public class MatchGenerator {
 
     /**
      * Generate one complete match outcome.
+     *
+     * <p>Returns both the per-match {@link MatchResult} (written to
+     * {@code match-outcomes.txt}) and one {@link CardsPlayedRow} per played
+     * game (written to {@code cards-played.txt}).
      */
-    public MatchResult generateMatch() {
+    public MatchGenerationResult generateMatch() {
         DeckSelection a = pickDeckA();
         DeckSelection b = pickDeckB(a.setCode, a.cardNames);
 
@@ -177,8 +181,9 @@ public class MatchGenerator {
             play.append(g.playFirst());
         }
 
-        return new MatchResult(
-                Instant.now(),
+        Instant timestamp = Instant.now();
+        MatchResult matchResult = new MatchResult(
+                timestamp,
                 runId,
                 a.setCode,
                 a.method,
@@ -189,7 +194,73 @@ public class MatchGenerator {
                 play.toString(),
                 played.durationSeconds()
         );
+
+        java.util.LinkedHashSet<String> deckASet = distinctNonBasic(a.cardNames);
+        java.util.LinkedHashSet<String> deckBSet = distinctNonBasic(b.cardNames);
+
+        List<CardsPlayedRow> rows = new ArrayList<>(played.games().size());
+        for (GamePlayer.GameOutcome g : played.games()) {
+            rows.add(buildRow(timestamp, matchResult, g, deckASet, deckBSet));
+        }
+        return new MatchGenerationResult(matchResult, rows);
     }
+
+    private CardsPlayedRow buildRow(
+            Instant timestamp,
+            MatchResult parent,
+            GamePlayer.GameOutcome g,
+            java.util.LinkedHashSet<String> deckASet,
+            java.util.LinkedHashSet<String> deckBSet) {
+        List<String> playedA = distinct(g.cardsPlayedA());
+        List<String> playedB = distinct(g.cardsPlayedB());
+        return new CardsPlayedRow(
+                timestamp,
+                parent.runId(),
+                parent.setCode(),
+                parent.methodA(),
+                parent.methodB(),
+                playedA,
+                playedB,
+                deckMinusPlayed(deckASet, playedA),
+                deckMinusPlayed(deckBSet, playedB),
+                g.winner().charAt(0),
+                g.playFirst().charAt(0));
+    }
+
+    private static java.util.LinkedHashSet<String> distinctNonBasic(List<String> deck) {
+        java.util.LinkedHashSet<String> distinct = new java.util.LinkedHashSet<>();
+        for (String name : deck) {
+            if (BASIC_LAND_NAMES.contains(name)) {
+                continue;
+            }
+            distinct.add(name);
+        }
+        return distinct;
+    }
+
+    private static List<String> distinct(List<String> names) {
+        java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>(names);
+        return new ArrayList<>(seen);
+    }
+
+    private static List<String> deckMinusPlayed(
+            java.util.LinkedHashSet<String> deckSet, List<String> playedNames) {
+        java.util.LinkedHashSet<String> playedSet = new java.util.LinkedHashSet<>(playedNames);
+        List<String> remaining = new ArrayList<>();
+        for (String name : deckSet) {
+            if (!playedSet.contains(name)) {
+                remaining.add(name);
+            }
+        }
+        return remaining;
+    }
+
+    /** Card names whose printed type is "Basic Land — X" or Wastes / snow basics. */
+    private static final java.util.Set<String> BASIC_LAND_NAMES = java.util.Set.of(
+            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
+            "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
+            "Snow-Covered Mountain", "Snow-Covered Forest", "Snow-Covered Wastes"
+    );
 
     /**
      * Pick deck A. When {@code sideAIndex} is null, roll the 4 Forge methods

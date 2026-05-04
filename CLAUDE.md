@@ -69,10 +69,12 @@ Prices are trained on `log(price + offset)` and exp-transformed back on inferenc
 
 ### `sealed` — sealed-format ML pipeline
 
-Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). Depends on the price-predictor transformer as a frozen card encoder.
+Entry point: `python -m sealed <subcommand>` (see `src/sealed/infrastructure/cli.py`). The sealed pipeline is built around a sealed-trained card encoder; the price-predictor transformer is a valid alternate encoder source via `--encoder-checkpoint`.
 
 Subcommands:
-- **`encode-cards`** — strips the `name:` line from each card and writes a `.npz` file next to every `.txt` in `output/cardsfolder/`. Each `.npz` stores a `float32` array of shape `(2 * d_model + FEATURE_COUNT,)` under key `"embedding"`, produced by `cat([max_pool, mean_pool])` over the encoder's token outputs (padding masked) plus deterministic game features. Encoder weights default to `models/price-predictor/transformer/latest.pt` via `--encoder-checkpoint`; pass `--scorer-checkpoint <phaseB>.pt` instead to extract encoder weights from a Phase B sealed scorer checkpoint (the two flags are mutually exclusive when both are explicitly passed). Re-running is idempotent; `--clean` forces a full re-encode.
+- **`build-vocab`** — scans the converted card corpus (default `output/cardsfolder/`) and writes a sealed-side tokenizer vocab to `models/sealed/encoder/vocab.txt`. Wraps `price_predictor.application.build_vocabulary`; `--target-size` (default 5000) post-truncates the corpus-frequency vocab while preserving seeded specials and domain tokens. Independent from the price-side `vocab.txt` — building one does not modify the other.
+- **`train-encoder`** — reads `output/sealed/cards-played.txt`, aggregates per-card winnability inline (`(wins_when_played + k/2) / (wins_when_in_deck + k)` with `--shrinkage-k`, default 20), splits cards stratified by winnability quartile (20% val, card-disjoint), and trains a token encoder + card encoder + sigmoid regression head from random init on MSE. Saves only the encoder weights to `models/sealed/encoder/{timestamp}.pt` plus `latest.pt`; the regression head is filtered out at save time. Writes the per-card label snapshot to `output/sealed/cards-win-rates.txt` (sorted by raw ratio desc) for SC-005 inspection. Hardcoded constants: `d_model=256`, `ff_dim=1024`, `loss=MSE`, `val_fraction=0.2`, `random_seed=42`; `max_seq_len` is computed from the corpus.
+- **`encode-cards`** — strips the `name:` line from each card and writes a `.npz` file next to every `.txt` in `output/cardsfolder/`. Each `.npz` stores a `float32` array of shape `(2 * d_model + FEATURE_COUNT,)` under key `"embedding"`, produced by `cat([attn_pool, max_pool])` (sealed encoder) or `cat([max_pool, mean_pool])` (price encoder) over the encoder's token outputs (padding masked) plus deterministic game features. Encoder weights default to `models/sealed/encoder/latest.pt` via `--encoder-checkpoint`; pass `--scorer-checkpoint <phaseB>.pt` instead to extract encoder weights from a Phase B sealed scorer checkpoint (the two flags are mutually exclusive when both are explicitly passed). The `--vocab-path` default is `models/sealed/encoder/vocab.txt`. Re-running is idempotent; `--clean` forces a full re-encode.
 - **`generate-pools`** — invokes the forge-connector JAR (`PoolMain`) to generate N sealed pools (6 boosters each); writes `pools.txt` (one pool per line in `SET_CODE;Card1|Card2|...|CardN` format, basics excluded). With `--set RVR` all pools come from the given set and are written to `output/sealed/pools/{set}/`; without `--set`, each pool uses an independently-selected random sealed-legal set and output defaults to `output/sealed/pools/`.
 - **`build-decks`** — reads a pools file (`SET_CODE;Card1|...` format), loads a trained scorer checkpoint, and greedily builds one 40-card deck per pool (23 nonlands chosen by the scorer + basic lands from the manabase heuristic). Writes `generated-decks.txt` (one deck per line in `LABEL;SET_CODE;Card1|...|Card40` format) to `output/sealed/` by default. `--label` is **required** and identifies the generation method (e.g. `gen-2`); it is later read back by `match-outcomes` as the `method_A` / `method_B` tag for self-play matches that play this deck. Consumed by `match-outcomes --side-a-decks` / `--side-b-decks` for self-play.
 - **`match-outcomes`** — long-running supervisor that spawns Java `MatchWorkerMain` workers. Each match independently chooses how to produce deck A and deck B:
@@ -81,20 +83,24 @@ Subcommands:
 
   Phase 0 (both flags absent) reproduces the original "4 Forge methods on both sides, random eligible set" behavior. `--best-of` (default 7) controls games per match; must be a positive odd integer.
 
-  Outcomes are appended to `output/sealed/match-outcomes.txt`. The supervisor restarts crashed workers — long Forge AI games can crash the JVM and that's expected. Ctrl-C to stop.
-- **`train-scorer`** — trains a Set Transformer deck scorer on `match-outcomes.txt` using AdamW with per-parameter-group max-norm 1.0 gradient clipping and `--patience`-driven early stopping (default 5). Architecture flags (`--n-layers/--n-heads/--n-seeds/--d-ff/--mlp-hidden/--dropout`) configure a fresh run; on `--resume` or `--scorer-checkpoint` they are forbidden (architecture inherits from the loaded checkpoint). Two phases: **Phase A** (default, `--embedding-lr 0`) consumes the `.npz` cache with the encoder frozen; **Phase B** (`--embedding-lr <nonzero>`) jointly fine-tunes the encoder alongside the scorer, requiring either `--scorer-checkpoint <phaseA>.pt` (fresh kickoff, encoder weights from `--encoder-checkpoint` defaulting to `models/price-predictor/transformer/latest.pt`) or `--resume <phaseB>.pt` (continuation, encoder weights from the resumed checkpoint). Checkpoints saved to `models/sealed/scorer/`; Phase B checkpoints carry an additional `encoder_state_dict` + `encoder_config` so the saved file is self-contained. Best checkpoint selected by validation accuracy.
+  Match-level outcomes are appended to `output/sealed/match-outcomes.txt`; per-game card-play data (one line per played game) is appended to `output/sealed/cards-played.txt` by the same worker. The supervisor restarts crashed workers — long Forge AI games can crash the JVM and that's expected. Ctrl-C to stop.
+- **`train-scorer`** — trains a Set Transformer deck scorer on `match-outcomes.txt` using AdamW with per-parameter-group max-norm 1.0 gradient clipping and `--patience`-driven early stopping (default 5). Architecture flags (`--n-layers/--n-heads/--n-seeds/--d-ff/--mlp-hidden/--dropout`) configure a fresh run; on `--resume` or `--scorer-checkpoint` they are forbidden (architecture inherits from the loaded checkpoint). Two phases: **Phase A** (default, `--embedding-lr 0`) consumes the `.npz` cache with the encoder frozen; **Phase B** (`--embedding-lr <nonzero>`) jointly fine-tunes the encoder alongside the scorer, requiring either `--scorer-checkpoint <phaseA>.pt` (fresh kickoff, encoder weights from `--encoder-checkpoint` defaulting to `models/sealed/encoder/latest.pt`) or `--resume <phaseB>.pt` (continuation, encoder weights from the resumed checkpoint). When the default sealed encoder is missing on a Phase B fresh kickoff, the run errors out and points the user at `train-encoder` (or at passing `--encoder-checkpoint <path>` explicitly). Checkpoints saved to `models/sealed/scorer/`; Phase B checkpoints carry an additional `encoder_state_dict` + `encoder_config` so the saved file is self-contained. Best checkpoint selected by validation accuracy.
 - **`evaluate-scorer`** — generates fresh sealed pools, has the scorer greedily build a deck from each, and has Forge AI play matches between the scorer's deck and Forge's own optimal builder. Outputs win/loss stats. Spawns Java workers via `evaluation_connector.py`. With `--set BLB` all pools are from the given set; without `--set`, a random sealed-legal set is selected.
 
 Match-outcome file format (`output/sealed/match-outcomes.txt`): one line per match, ten semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;deck_A;deck_B;games;play;duration_s`. `timestamp` is ISO 8601 UTC, `run_id` is a UUID identifying the supervisor invocation, `set_code` is the MTG set both pools were drawn from, `method_A`/`method_B` are build-method tags (`forge-best`, `forge-3sub`, `forge-8sub`, `random`, or the per-deck label set by `build-decks --label` when the deck came from a generated-decks file), `deck_A`/`deck_B` are pipe-separated lists of 40 Forge canonical card names (duplicates repeat), `games` is the per-game winner sequence (`AA`, `ABA`, `ABABABA`, etc. — length depends on `--best-of`, between `ceil(N/2)` and `N` chars), `play` is the per-game play-first sequence (same length), and `duration_s` is the match wall-clock duration in whole seconds. See `specs/sealed-deck-picker.md` §Phase 0 Step 4 for full details.
+
+Cards-played file format (`output/sealed/cards-played.txt`): one line per played game, eleven semicolon-separated fields `timestamp;run_id;set_code;method_A;method_B;cards_played_A;cards_played_B;cards_not_played_A;cards_not_played_B;winner;starter`. `timestamp`/`run_id`/`set_code`/`method_A`/`method_B` mirror the parent match's row (joinable by `run_id` plus positional offset within a `(run_id, set_code, method_A, method_B)` group). The four card-list columns are pipe-separated **sets** of distinct card names (no duplicates within a column; basic lands excluded by the writer). For a side X, `cards_played_X` and `cards_not_played_X` are disjoint — if any copy of a card was played, the name appears only in `cards_played_X`. `winner` and `starter` are single chars `A`/`B` matching the corresponding chars of the parent's `games`/`play` strings. Trailing partial lines are tolerated by readers (JVM-crash-mid-write recovery).
+
+Cards-win-rates file format (`output/sealed/cards-win-rates.txt`): overwritten by every `train-encoder` run; one header row + N data rows, semicolon-separated, sorted by raw ratio descending: `card_name;wins_when_played;wins_when_in_deck;raw_ratio;shrunk_label`. Ratios formatted to five decimals. Cards with `wins_when_in_deck == 0` are excluded.
 
 Pool file format (`output/sealed/pools/*/pools.txt`): one pool per line, `SET_CODE;Card1|Card2|...|CardN`. The set-code prefix lets downstream tools (`build-decks`, self-play `match-outcomes`) honor same-set constraints.
 
 Generated-decks file format (`output/sealed/generated-decks.txt`): one finished 40-card deck per line, `LABEL;SET_CODE;Card1|Card2|...|Card40`. `LABEL` is the value passed to `build-decks --label` and is recorded as the `method_A` / `method_B` tag whenever this deck is sampled into a self-play match. Concatenating multiple generated-decks files with different labels into one self-play corpus is supported.
 
 Key modules inside `sealed`:
-- `domain/` — `card_encoder.py` (wraps the transformer for inference), `scorer_model.py` (Set Transformer architecture), `deterministic_features.py`.
-- `application/` — `encode_cards.py`, `generate_pools.py`, `build_decks.py`, `match_outcomes.py`, `train_scorer.py`, `evaluate_scorer.py`.
-- `infrastructure/` — `cli.py`, `embedding_store.py`, `pool_connector.py`, `match_worker_connector.py`, `evaluation_connector.py`, `match_data_loader.py`, `scorer_store.py`, `card_name_corrections.py`.
+- `domain/` — `card_encoder.py` (wraps the encoder for inference), `encoder_model.py` (sealed transformer + multi-query attention pool), `scorer_model.py` (Set Transformer architecture), `deterministic_features.py`.
+- `application/` — `build_vocab.py`, `train_encoder.py`, `encode_cards.py`, `generate_pools.py`, `build_decks.py`, `match_outcomes.py`, `train_scorer.py`, `evaluate_scorer.py`.
+- `infrastructure/` — `cli.py`, `cards_played_reader.py`, `encoder_store.py`, `embedding_store.py`, `pool_connector.py`, `match_worker_connector.py`, `evaluation_connector.py`, `match_data_loader.py`, `scorer_store.py`, `card_name_corrections.py`.
 
 ### `forge-connector` — Java Maven module
 
@@ -112,7 +118,7 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 
 ### Cross-package dependencies
 
-`sealed` **imports from** `price_predictor` (tokenizer, transformer model/store) — the price-predictor transformer is a frozen feature extractor for the sealed pipeline. Don't create the reverse dependency.
+`sealed` **imports from** `price_predictor` (tokenizer, vocabulary builder, transformer model/store) — `price_predictor` provides the shared MTG tokenizer, vocab-build utility, and the alternate price-trained encoder available via `--encoder-checkpoint`. Don't create the reverse dependency.
 
 ## Tests
 
@@ -129,6 +135,7 @@ models/
     sklearn/        {timestamp}.joblib, latest.joblib
     transformer/    {timestamp}.pt, latest.pt, vocab.txt
   sealed/
+    encoder/        {timestamp}.pt, latest.pt, vocab.txt
     scorer/         checkpoints (best_* selected by val accuracy)
 ```
 
@@ -139,6 +146,7 @@ Inputs the code expects to find on disk:
 - `output/sealed/pools/{set}/pools.txt` or `output/sealed/pools/pools.txt` — generated sealed pools (`SET_CODE;Card1|...` per line).
 - `output/sealed/generated-decks.txt` — scorer-built 40-card decks from `build-decks` (`LABEL;SET_CODE;Card1|...|Card40` per line); input to `match-outcomes --side-a-decks` / `--side-b-decks`.
 - `output/sealed/match-outcomes.txt` — append-only training data for the scorer.
+- `output/sealed/cards-played.txt` — append-only per-game card-play log; the input to `train-encoder` after label aggregation.
 
 ## Specs
 

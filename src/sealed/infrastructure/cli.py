@@ -70,8 +70,102 @@ def build_parser() -> argparse.ArgumentParser:
     _build_train_scorer_parser(subparsers)
     _build_evaluate_scorer_parser(subparsers)
     _build_match_outcomes_parser(subparsers)
+    _build_train_encoder_parser(subparsers)
+    _build_build_vocab_parser(subparsers)
 
     return parser
+
+
+def _build_build_vocab_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "build-vocab",
+        help=(
+            "Build the sealed-side tokenizer vocabulary "
+            "(models/sealed/encoder/vocab.txt) from the converted corpus"
+        ),
+    )
+    parser.set_defaults(func=run_build_vocab)
+    parser.add_argument(
+        "--cards-folder", default="output/cardsfolder/",
+        help="Directory of converted .txt files (default: output/cardsfolder/)",
+    )
+    parser.add_argument(
+        "--vocab-path", default="models/sealed/encoder/vocab.txt",
+        help="Output vocab file (default: models/sealed/encoder/vocab.txt)",
+    )
+    parser.add_argument(
+        "--target-size", type=int, default=5000,
+        help="Approximate vocab size (default: 5000). Seeded tokens preserved.",
+    )
+
+
+def _build_train_encoder_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "train-encoder",
+        help=(
+            "Train the sealed encoder + regression head on per-card "
+            "winnability and save only encoder weights"
+        ),
+    )
+    parser.set_defaults(func=run_train_encoder)
+    parser.add_argument(
+        "--cards-played-path", default="output/sealed/cards-played.txt",
+        help="Path to cards-played.txt (default: output/sealed/cards-played.txt)",
+    )
+    parser.add_argument(
+        "--cards-folder", default="output/cardsfolder/",
+        help="Directory of converted card .txt files (default: output/cardsfolder/)",
+    )
+    parser.add_argument(
+        "--vocab-path", default="models/sealed/encoder/vocab.txt",
+        help="Tokenizer vocab file (default: models/sealed/encoder/vocab.txt)",
+    )
+    parser.add_argument(
+        "--model-output", default="models/sealed/encoder/",
+        help="Output directory for {timestamp}.pt + latest.pt (default: models/sealed/encoder/)",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=64,
+        help="Training batch size (default: 64)",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=100,
+        help="Maximum number of epochs (default: 100)",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=1e-4,
+        help="Learning rate (default: 1e-4)",
+    )
+    parser.add_argument(
+        "--patience", type=int, default=20,
+        help="Early-stop after this many epochs without improvement (default: 20)",
+    )
+    parser.add_argument(
+        "--dropout", type=float, default=0.1,
+        help="Dropout rate (default: 0.1)",
+    )
+    parser.add_argument(
+        "--n-layers", type=int, default=6,
+        help="Number of transformer encoder layers (default: 6)",
+    )
+    parser.add_argument(
+        "--n-heads", type=int, default=4,
+        help="Number of attention heads (default: 4)",
+    )
+    parser.add_argument(
+        "--n-pool-queries", type=int, default=4,
+        help=(
+            "Number of multi-query attention pool queries (default: 4). "
+            "Must divide d_model (256)."
+        ),
+    )
+    parser.add_argument(
+        "--shrinkage-k", type=float, default=20.0,
+        help=(
+            "Bayesian shrinkage strength toward 0.5 (default: 20). "
+            "0 = raw ratios; higher = more aggressive shrinkage on low-n cards."
+        ),
+    )
 
 
 def _build_encode_cards_parser(subparsers) -> None:
@@ -102,8 +196,12 @@ def _build_encode_cards_parser(subparsers) -> None:
     )
     encode_parser.add_argument(
         "--vocab-path",
-        default="models/price-predictor/transformer/vocab.txt",
-        help="Path to the tokenizer vocabulary file",
+        default="models/sealed/encoder/vocab.txt",
+        help=(
+            "Path to the tokenizer vocabulary file "
+            "(default: models/sealed/encoder/vocab.txt — paired with the "
+            "default sealed encoder checkpoint)"
+        ),
     )
     encode_parser.add_argument(
         "--cards-path",
@@ -520,7 +618,34 @@ def _build_match_outcomes_parser(subparsers) -> None:
     )
 
 
-_ENCODE_CARDS_DEFAULT_ENCODER = "models/price-predictor/transformer/latest.pt"
+_ENCODE_CARDS_DEFAULT_ENCODER = "models/sealed/encoder/latest.pt"
+
+
+def _missing_sealed_encoder_message(path: Path) -> str:
+    return (
+        f"Sealed encoder not found at {path}.\n"
+        "Run python -m sealed train-encoder, or pass --encoder-checkpoint <path> "
+        "explicitly."
+    )
+
+
+def _load_encoder_for_encode_cards(encoder_path: Path):
+    """Dispatch encoder loading by checkpoint shape.
+
+    Sealed encoders carry ``n_pool_queries`` in their stored config; the
+    price-predictor encoder does not. Picking by config schema lets the
+    same ``encode-cards`` command consume both checkpoint families
+    without a separate flag (FR-027).
+    """
+    import torch
+
+    raw = torch.load(encoder_path, map_location="cpu", weights_only=False)
+    config_dict = raw.get("config")
+    if isinstance(config_dict, dict) and "n_pool_queries" in config_dict:
+        from sealed.infrastructure.encoder_store import SealedEncoderStore
+        return SealedEncoderStore().load_encoder(encoder_path)
+    from price_predictor.infrastructure.transformer_store import load_model
+    return load_model(encoder_path)
 
 
 def run_encode_cards(args: argparse.Namespace) -> int:
@@ -530,7 +655,6 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     from price_predictor.infrastructure.transformer_model import (
         CardPriceTransformerModel,
     )
-    from price_predictor.infrastructure.transformer_store import load_model
     from sealed.application.encode_cards import EncodeCardsUseCase
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
@@ -563,13 +687,20 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         model.load_state_dict(loaded.encoder_state_dict)
         config = cfg
     else:
+        explicit_encoder = args.encoder_checkpoint is not None
         encoder_path = Path(
             args.encoder_checkpoint or _ENCODE_CARDS_DEFAULT_ENCODER,
         )
         if not encoder_path.exists():
-            print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
+            if not explicit_encoder:
+                print(
+                    f"Error: {_missing_sealed_encoder_message(encoder_path)}",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"Error: Encoder model not found: {encoder_path}", file=sys.stderr)
             return 2
-        model, config = load_model(encoder_path)
+        model, config = _load_encoder_for_encode_cards(encoder_path)
 
     vocab_path = Path(args.vocab_path)
     cards_path = Path(args.cards_path)
@@ -849,6 +980,26 @@ def run_train_scorer(args: argparse.Namespace) -> int:
     else:
         encoder_checkpoint = _dataclass_default("encoder_checkpoint")
 
+    # Missing-default-file guard (FR-026 / cli.md "New error condition").
+    # Only fires on Phase B fresh kickoffs where the encoder is actually
+    # loaded from `--encoder-checkpoint`; Phase A skips the encoder load
+    # path entirely, and Phase B resumes pull encoder weights from the
+    # resumed checkpoint.
+    is_phase_b_fresh_kickoff = (
+        requested_phase_b
+        and args.resume is None
+    )
+    if (
+        is_phase_b_fresh_kickoff
+        and args.encoder_checkpoint is None
+        and not Path(encoder_checkpoint).exists()
+    ):
+        print(
+            f"Error: {_missing_sealed_encoder_message(Path(encoder_checkpoint))}",
+            file=sys.stderr,
+        )
+        return 2
+
     config_kwargs = {
         flag: _coerce_path_value(flag, resolved[flag])
         for flag in _RESUMABLE_FLAG_NAMES
@@ -902,6 +1053,76 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    return 0
+
+
+def run_build_vocab(args: argparse.Namespace) -> int:
+    """Execute the build-vocab command."""
+    from sealed.application.build_vocab import (
+        BuildVocabConfig,
+        EmptyCardsFolderError,
+    )
+    from sealed.application.build_vocab import (
+        run as run_build_vocab_pipeline,
+    )
+
+    config = BuildVocabConfig(
+        cards_folder=Path(args.cards_folder),
+        vocab_path=Path(args.vocab_path),
+        target_size=args.target_size,
+    )
+    try:
+        run_build_vocab_pipeline(config)
+    except EmptyCardsFolderError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def run_train_encoder(args: argparse.Namespace) -> int:
+    """Execute the train-encoder command."""
+    from sealed.application.train_encoder import (
+        CorpusInconsistencyError,
+        TrainEncoderConfig,
+        _PreFlightError,
+    )
+    from sealed.application.train_encoder import (
+        run as run_train_encoder_pipeline,
+    )
+
+    config = TrainEncoderConfig(
+        cards_played_path=Path(args.cards_played_path),
+        cards_folder=Path(args.cards_folder),
+        vocab_path=Path(args.vocab_path),
+        model_output_dir=Path(args.model_output),
+        batch_size=args.batch_size,
+        epochs=args.epochs,
+        lr=args.lr,
+        patience=args.patience,
+        dropout=args.dropout,
+        n_layers=args.n_layers,
+        n_heads=args.n_heads,
+        n_pool_queries=args.n_pool_queries,
+        shrinkage_k=args.shrinkage_k,
+    )
+    try:
+        run_train_encoder_pipeline(config)
+    except _PreFlightError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return exc.exit_code
+    except CorpusInconsistencyError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 5
+    except ValueError as exc:
+        # SealedEncoderConfig validation (n_heads / d_model, etc.)
+        print(f"Error: {exc}", file=sys.stderr)
+        return 6
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 130
     return 0
 
 

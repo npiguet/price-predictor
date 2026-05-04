@@ -43,7 +43,7 @@ class TrainScorerConfig:
     resume: Path | None = None
     scorer_checkpoint: Path | None = None
     encoder_checkpoint: Path = field(
-        default_factory=lambda: Path("models/price-predictor/transformer/latest.pt"),
+        default_factory=lambda: Path("models/sealed/encoder/latest.pt"),
     )
     epochs: int = 100
     batch_size: int = 64
@@ -159,7 +159,7 @@ class _TrainingContext:
     best_val_accuracy: float
     device: torch.device
     train_config: dict[str, Any]
-    encoder: CardPriceTransformerModel | None = None
+    encoder: torch.nn.Module | None = None
     tokenizer: MtgTokenizer | None = None
     card_token_cache: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None
     locator: ConvertedCardLocator | None = None
@@ -282,7 +282,7 @@ class TrainScorerUseCase:
         resume.model.to(device)
         embedding_table.to(device)
 
-        encoder: CardPriceTransformerModel | None = None
+        encoder: torch.nn.Module | None = None
         tokenizer: MtgTokenizer | None = None
         max_seq_len: int | None = None
         locator: ConvertedCardLocator | None = None
@@ -295,7 +295,7 @@ class TrainScorerUseCase:
                 idx: name for name, idx in embedding_table.name_to_idx.items()
             }
             _log(
-                f"Phase B encoder loaded (d_model={encoder.config.d_model}, "
+                f"Phase B encoder loaded (d_model={encoder.config.d_model}, "  # type: ignore[attr-defined]
                 f"max_seq_len={max_seq_len}); {len(idx_to_name)} cards available "
                 "for tokenization"
             )
@@ -457,28 +457,63 @@ def _resume_or_build_model(
 
 def _build_phase_b_encoder(
     config: TrainScorerConfig, resume: ResumeState,
-) -> tuple[CardPriceTransformerModel, MtgTokenizer, int]:
+) -> tuple[torch.nn.Module, MtgTokenizer, int]:
     """Construct the Phase B encoder + tokenizer + max-seq-len.
 
     On `--resume <phaseB>.pt`, the resumed checkpoint is self-contained — the
     encoder is rebuilt from `encoder_config` and weights from
-    `encoder_state_dict`, no dependency on the price-predictor `latest.pt`
-    being unchanged. Otherwise (`--scorer-checkpoint` bootstrap), encoder
-    weights come from `config.encoder_checkpoint`.
+    `encoder_state_dict`, no dependency on the encoder file at
+    `config.encoder_checkpoint` being unchanged. Otherwise (`--scorer-checkpoint`
+    bootstrap), encoder weights come from `config.encoder_checkpoint`.
+
+    Dispatches between the sealed encoder and the price-predictor encoder by
+    inspecting the saved config dict — sealed encoder configs carry
+    ``n_pool_queries``, price-predictor configs do not.
     """
     from price_predictor.infrastructure.tokenizer_store import load_tokenizer
-    from price_predictor.infrastructure.transformer_store import load_model
 
     if resume.encoder_state_dict is not None and resume.encoder_config is not None:
-        cfg = TransformerConfig(**resume.encoder_config)
-        encoder = CardPriceTransformerModel(cfg)
-        encoder.load_state_dict(resume.encoder_state_dict)
+        encoder, max_seq_len = _build_encoder_from_config(
+            resume.encoder_config, resume.encoder_state_dict,
+        )
     else:
-        encoder, cfg = load_model(config.encoder_checkpoint)
+        encoder, max_seq_len = _load_encoder_dispatch(config.encoder_checkpoint)
 
     vocab_path = config.encoder_checkpoint.parent / "vocab.txt"
     tokenizer = load_tokenizer(vocab_path)
-    return encoder, tokenizer, cfg.max_seq_len
+    return encoder, tokenizer, max_seq_len
+
+
+def _build_encoder_from_config(
+    config_dict: dict[str, Any], state_dict: dict[str, Any],
+) -> tuple[torch.nn.Module, int]:
+    """Construct a fresh encoder + load weights, dispatching by config shape."""
+    if "n_pool_queries" in config_dict:
+        from sealed.domain.encoder_model import (
+            SealedEncoderConfig,
+            SealedEncoderModel,
+        )
+        cfg = SealedEncoderConfig(**config_dict)
+        encoder: torch.nn.Module = SealedEncoderModel(cfg)
+        encoder.load_state_dict(state_dict)
+        return encoder, cfg.max_seq_len
+    cfg_t = TransformerConfig(**config_dict)
+    encoder = CardPriceTransformerModel(cfg_t)
+    encoder.load_state_dict(state_dict)
+    return encoder, cfg_t.max_seq_len
+
+
+def _load_encoder_dispatch(encoder_path: Path) -> tuple[torch.nn.Module, int]:
+    """Load an encoder checkpoint, dispatching between sealed and price formats."""
+    raw = torch.load(encoder_path, map_location="cpu", weights_only=False)
+    config_dict = raw["config"]
+    if "n_pool_queries" in config_dict:
+        from sealed.infrastructure.encoder_store import SealedEncoderStore
+        encoder, sealed_cfg = SealedEncoderStore().load_encoder(encoder_path)
+        return encoder, sealed_cfg.max_seq_len
+    from price_predictor.infrastructure.transformer_store import load_model
+    encoder, price_cfg = load_model(encoder_path)
+    return encoder, price_cfg.max_seq_len
 
 
 def _build_optimizer(

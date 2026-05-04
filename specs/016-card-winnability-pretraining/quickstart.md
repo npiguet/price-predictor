@@ -17,6 +17,11 @@ verification path for SC-002 ("three commands end-to-end").
 - Converted card corpus exists at `output/cardsfolder/` (run
   `python -m price_predictor convert` first if not).
 
+The output directories `output/sealed/` and `models/sealed/encoder/`
+are created automatically by their writers (`CardsPlayedWriter`,
+`SealedEncoderStore`, `tokenizer_store.save_vocabulary`); no
+checked-in scaffolding is required.
+
 ## Step 1 — Collect per-game card-play data
 
 Run the supervisor for as long as you want to accumulate data.

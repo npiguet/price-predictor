@@ -47,6 +47,8 @@ target/
 *.jar
 *.war
 dependency-reduced-pom.xml
+hs_err_pid*.log
+replay_pid*.log
 
 # Conversion output
 output/

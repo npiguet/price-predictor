@@ -17,13 +17,22 @@ import java.util.List;
  */
 public class GamePlayer {
 
-    private static final String LOBBY_NAME_A = "p1";
-    private static final String LOBBY_NAME_B = "p2";
+    static final String LOBBY_NAME_A = "p1";
+    static final String LOBBY_NAME_B = "p2";
 
     private final int gamesPerMatch;
 
-    /** Per-game outcome: which side won and which side was on the play. */
-    public record GameOutcome(String winner, String playFirst) {
+    /**
+     * Per-game outcome: which side won, which side was on the play, and the
+     * non-basic, non-token card names that each side played during that game
+     * (controlled by the side that owns them, paperCard names, multiplicities
+     * preserved).
+     */
+    public record GameOutcome(
+            String winner,
+            String playFirst,
+            List<String> cardsPlayedA,
+            List<String> cardsPlayedB) {
         public GameOutcome {
             if (!"A".equals(winner) && !"B".equals(winner)) {
                 throw new IllegalArgumentException("winner must be 'A' or 'B', got " + winner);
@@ -31,6 +40,8 @@ public class GamePlayer {
             if (!"A".equals(playFirst) && !"B".equals(playFirst)) {
                 throw new IllegalArgumentException("playFirst must be 'A' or 'B', got " + playFirst);
             }
+            cardsPlayedA = List.copyOf(cardsPlayedA);
+            cardsPlayedB = List.copyOf(cardsPlayedB);
         }
     }
 
@@ -51,6 +62,10 @@ public class GamePlayer {
      * Play a match and return per-game detail plus wall-clock duration in seconds.
      * Games in which {@code game.getOutcome().getWinningLobbyPlayer()} is null (draws
      * or aborted games) are skipped and do not appear in the returned list.
+     *
+     * <p>A fresh {@link PlayedCardCollector} is registered as an event-bus
+     * visitor on every game so the per-game card play is captured for
+     * {@code cards-played.txt}.
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB) {
         var players = List.of(
@@ -68,6 +83,8 @@ public class GamePlayer {
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
+            var collector = new PlayedCardCollector();
+            game.subscribeToEvents(collector);
             match.startGame(game); // blocks until game is finished
 
             var winningLobby = game.getOutcome().getWinningLobbyPlayer();
@@ -81,7 +98,9 @@ public class GamePlayer {
                     && LOBBY_NAME_A.equals(startingPlayer.getLobbyPlayer().getName()))
                     ? "A" : "B";
 
-            outcomes.add(new GameOutcome(winner, playFirst));
+            outcomes.add(new GameOutcome(
+                    winner, playFirst,
+                    collector.getCards('A'), collector.getCards('B')));
         }
 
         int durationSeconds = (int) ((System.currentTimeMillis() - startMillis) / 1000);
