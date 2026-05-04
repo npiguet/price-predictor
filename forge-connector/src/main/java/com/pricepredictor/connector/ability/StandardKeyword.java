@@ -133,10 +133,11 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
      * Extract cost-reduction description from a keyword's original string, or null if absent.
      *
      * Pattern A (Equip): "Equip:cost:::ReduceCost$ SVar:full sentence"
-     * Pattern B (Adapt/Monstrosity): "Keyword:N:cost:SVar:for-each-description"
-     *   → synthesizes "This ability costs {1} less to activate for each [description]."
-     * Pattern C (Specialize): "Specialize:cost::full sentence.:ReduceCost$ SVar"
+     * Pattern B (Specialize): "Specialize:cost::full sentence.:ReduceCost$ SVar"
      *   → uses the full sentence from parts[3] directly
+     *
+     * (Adapt and Monstrosity were removed from the {@link Keyword} enum in
+     * recent Forge revisions, so their pattern is no longer reachable.)
      */
     private static String extractReduceCostDescription(Keyword kw, String original) {
         if (original == null) return null;
@@ -152,15 +153,7 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
             }
         }
 
-        // Pattern B: Adapt / Monstrosity — 5-field format with "for each" description
-        if (kw == Keyword.ADAPT || kw == Keyword.MONSTROSITY) {
-            String[] parts = original.split(":", 5);
-            if (parts.length >= 5 && !parts[4].isEmpty()) {
-                return "This ability costs {1} less to activate for each " + parts[4] + ".";
-            }
-        }
-
-        // Pattern C: Specialize — full description is in parts[3], ReduceCost$ marker in parts[4]
+        // Pattern B: Specialize — full description is in parts[3], ReduceCost$ marker in parts[4]
         if (kw == Keyword.SPECIALIZE) {
             String[] parts = original.split(":", 5);
             if (parts.length >= 5 && original.contains("ReduceCost$") && !parts[3].isEmpty()) {

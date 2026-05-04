@@ -34,6 +34,7 @@ public class GuiHeadless implements IGuiBase {
 
     @Override public boolean isRunningOnDesktop() { return false; }
     @Override public boolean isLibgdxPort() { return false; }
+    @Override public boolean hasNetGame() { return false; }
     @Override public String getCurrentVersion() { return ""; }
     @Override public String getAssetsDir() { return assetsDir; }
     @Override public ImageFetcher getImageFetcher() { return null; }

@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 
 CONNECTOR_JAR_NAME = "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
-FORGE_VERSION = "2.0.10-SNAPSHOT"
+FORGE_VERSION = "2.0.13-SNAPSHOT"
 
 
 def project_root() -> Path:

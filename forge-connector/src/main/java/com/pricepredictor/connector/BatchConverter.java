@@ -52,9 +52,12 @@ public class BatchConverter {
                 Files.createDirectories(outputFile.getParent());
                 Files.writeString(outputFile, output);
                 succeeded++;
-            } catch (Exception e) {
+            } catch (Throwable t) {
+                // Forge's card-rules parser raises AssertionError on
+                // malformed scripts as well as IOException/RuntimeException;
+                // catch Throwable so one bad fixture can't abort the batch.
                 String cardName = scriptFile.getFileName().toString().replace(".txt", "");
-                String warning = "[" + cardName + "] " + e.getMessage();
+                String warning = "[" + cardName + "] " + t.getMessage();
                 warnings.add(warning);
                 Log.warn("BatchConverter", warning);
             }
