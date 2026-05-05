@@ -16,7 +16,8 @@ class PlayedCardCollectorTest {
         assertTrue(PlayedCardCollector.shouldRecord(
                 /*controllerEqualsOwner*/ true,
                 /*isToken*/ false,
-                /*isBasicLand*/ false));
+                /*isBasicLand*/ false,
+                /*isRealDeckCard*/ true));
     }
 
     @Test
@@ -25,7 +26,8 @@ class PlayedCardCollectorTest {
         assertFalse(PlayedCardCollector.shouldRecord(
                 /*controllerEqualsOwner*/ false,
                 /*isToken*/ false,
-                /*isBasicLand*/ false));
+                /*isBasicLand*/ false,
+                /*isRealDeckCard*/ true));
     }
 
     @Test
@@ -34,7 +36,8 @@ class PlayedCardCollectorTest {
         assertFalse(PlayedCardCollector.shouldRecord(
                 /*controllerEqualsOwner*/ true,
                 /*isToken*/ true,
-                /*isBasicLand*/ false));
+                /*isBasicLand*/ false,
+                /*isRealDeckCard*/ true));
     }
 
     @Test
@@ -43,7 +46,20 @@ class PlayedCardCollectorTest {
         assertFalse(PlayedCardCollector.shouldRecord(
                 /*controllerEqualsOwner*/ true,
                 /*isToken*/ false,
-                /*isBasicLand*/ true));
+                /*isBasicLand*/ true,
+                /*isRealDeckCard*/ true));
+    }
+
+    @Test
+    void dropsNonDeckGamePieces() {
+        // Emblems / "X's effect" trackers (The Ring, Monarch), dungeons,
+        // copied spells, schemes, planes, etc. all have a GamePieceType
+        // other than CARD and must not enter the played-cards log.
+        assertFalse(PlayedCardCollector.shouldRecord(
+                /*controllerEqualsOwner*/ true,
+                /*isToken*/ false,
+                /*isBasicLand*/ false,
+                /*isRealDeckCard*/ false));
     }
 
     @Test

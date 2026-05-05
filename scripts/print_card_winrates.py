@@ -6,7 +6,7 @@ For every card name observed in the cards-played log, count:
   * losses_when_played — losing side played at least one copy
   * losses_when_in_deck — card was in the losing side's deck
 
-The per-card score is
+The per-card raw score is
 
     (wins_played - losses_played) / (wins_in_deck + losses_in_deck)
 
@@ -14,7 +14,22 @@ bounded between -1 and +1. The numerator captures whether playing the
 card tends to coincide with winning or losing (positive vs negative
 influence); the denominator down-weights cards that are rarely actually
 played, so a card's magnitude reflects both its effect and how often it
-shows up. Output is sorted by score descending.
+shows up.
+
+The adjusted score applies Bayesian shrinkage with a pseudocount ``k``:
+
+    adj = (wins_played - losses_played) / (wins_in_deck + losses_in_deck + k)
+
+Low-n cards get pulled toward 0; cards with many observations stay
+nearly identical to their raw score. ``k`` is configurable via
+``--shrinkage-k`` (default 20).
+
+The quantile column reports each card's rank-quantile of the adjusted
+score, with 100.0% = best, 0.0% = worst. Tied cards share the average
+rank, so the column is suitable as a regression target.
+
+Output is sorted by adjusted score descending, with raw wins-played
+desc and losses-played asc as tiebreakers.
 """
 
 from __future__ import annotations
@@ -57,10 +72,16 @@ class _Counts:
     def score_display(self) -> str:
         return f"{self.score:+.4f}"
 
-    def sort_key(self) -> tuple[float, int, int]:
-        # score desc, wins_played desc, losses_played asc — encoded as an
-        # ascending tuple so callers can sort with a single key function.
-        return (-self.score, -self.wins_when_played, self.losses_when_played)
+    def adjusted_score(self, k: float) -> float:
+        """Shrunk score with pseudocount ``k`` in the denominator.
+
+        Low-observation cards are pulled toward 0; high-observation cards
+        are nearly unchanged.
+        """
+        denom = self.wins_when_in_deck + self.losses_when_in_deck + k
+        if denom == 0:
+            return 0.0
+        return (self.wins_when_played - self.losses_when_played) / denom
 
 
 def _aggregate(cards_played_path: Path) -> dict[str, _Counts]:
@@ -134,8 +155,50 @@ def _attach_mana_costs(
     return missing
 
 
-def _format_table(counts: dict[str, _Counts]) -> str:
-    sorted_items = sorted(counts.items(), key=lambda kv: kv[1].sort_key())
+def _average_rank_quantiles(values: list[float]) -> list[float]:
+    """Return rank-quantiles in ``[0, 1]`` matching the input order.
+
+    Highest input value gets ``1.0``, lowest gets ``0.0``. Tied values
+    share the average rank's quantile — necessary for using the quantile
+    as a regression target where ties shouldn't be split arbitrarily.
+    """
+    n = len(values)
+    if n == 0:
+        return []
+    if n == 1:
+        return [1.0]
+    sorted_idx = sorted(range(n), key=lambda i: values[i])
+    quantiles = [0.0] * n
+    i = 0
+    while i < n:
+        j = i
+        while (
+            j + 1 < n
+            and values[sorted_idx[j + 1]] == values[sorted_idx[i]]
+        ):
+            j += 1
+        avg_rank = (i + j) / 2.0
+        q = avg_rank / (n - 1)
+        for pos in range(i, j + 1):
+            quantiles[sorted_idx[pos]] = q
+        i = j + 1
+    return quantiles
+
+
+def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
+    names = list(counts.keys())
+    adj_scores = {name: counts[name].adjusted_score(shrinkage_k) for name in names}
+    quantiles = dict(zip(
+        names,
+        _average_rank_quantiles([adj_scores[n] for n in names]),
+    ))
+
+    def sort_key(item: tuple[str, _Counts]) -> tuple[float, int, int]:
+        name, c = item
+        # adj score desc, wins_played desc, losses_played asc.
+        return (-adj_scores[name], -c.wins_when_played, c.losses_when_played)
+
+    sorted_items = sorted(counts.items(), key=sort_key)
     data_rows = [
         (
             name,
@@ -145,6 +208,8 @@ def _format_table(counts: dict[str, _Counts]) -> str:
             str(c.losses_when_played),
             str(c.losses_when_in_deck),
             c.score_display,
+            f"{adj_scores[name]:+.4f}",
+            f"{quantiles[name] * 100:.1f}%",
         )
         for name, c in sorted_items
     ]
@@ -157,6 +222,8 @@ def _format_table(counts: dict[str, _Counts]) -> str:
         "Losses Played",
         "Losses In Deck",
         "Score",
+        f"Adj Score (k={shrinkage_k:g})",
+        "Quantile",
     )
     widths = [len(h) for h in headers]
     for row in data_rows:
@@ -174,11 +241,19 @@ def _format_table(counts: dict[str, _Counts]) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Force UTF-8 on stdout/stderr so card names with macrons, accents,
+    # and other non-Latin-1 characters round-trip when redirected on
+    # Windows (where the default codec is cp1252).
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         description=(
-            "Print a per-card score table from cards-played.txt, sorted by "
-            "(wins_played - losses_played) / (wins_in_deck + losses_in_deck) "
-            "descending."
+            "Print a per-card score table from cards-played.txt. Sorted by "
+            "the Bayesian-shrunk adjusted score descending; also reports the "
+            "raw score and the rank quantile of the adjusted score."
         ),
     )
     parser.add_argument(
@@ -190,6 +265,14 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Converted card corpus root for mana-cost lookup "
             f"(default: {DEFAULT_CARDS_FOLDER})"
+        ),
+    )
+    parser.add_argument(
+        "--shrinkage-k", type=float, default=20.0,
+        help=(
+            "Pseudocount added to the adjusted-score denominator "
+            "(default: 20). Higher values pull low-observation cards "
+            "more aggressively toward 0."
         ),
     )
     args = parser.parse_args(argv)
@@ -212,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    print(_format_table(counts))
+    print(_format_table(counts, args.shrinkage_k))
     return 0
 
 

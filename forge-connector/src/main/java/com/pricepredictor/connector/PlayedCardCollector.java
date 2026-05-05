@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.google.common.eventbus.Subscribe;
+import forge.card.GamePieceType;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventSpellAbilityCast;
@@ -32,6 +33,10 @@ import java.util.Map;
  *   <li>{@code controller == owner} (drops stolen cards).</li>
  *   <li>{@code !isToken()}.</li>
  *   <li>{@code !isBasicLand()} on the current state (FR-004a).</li>
+ *   <li>{@code gamePieceType == CARD} — drops emblems / "X's effect"
+ *       trackers (e.g. The Ring, Monarch), dungeons (e.g. Undercity),
+ *       copied spells, schemes, planes, and any other non-deck game
+ *       object Forge models as a Card.</li>
  *   <li>The recorded name comes from {@code getBackup()} when available so
  *       copy/clone effects credit the cast card, not the copied permanent.</li>
  * </ul>
@@ -58,7 +63,26 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         if (event.to() == null || event.to().zoneType() != ZoneType.Battlefield) {
             return super.visit(event);
         }
-        recordIfEligible(event.card());
+        // Skip face-down entries to the battlefield. Self-induced face-down
+        // play (Morph / Disguise) still gets counted via the cast-event
+        // branch below, since casting for a morph cost fires
+        // GameEventSpellAbilityCast with the morph card as host. Externally
+        // forced face-down play (Manifest / Cloak / Manifest Dread) has no
+        // such cast event, so it stays unrecorded — matching the rule that
+        // a card "is played" only when its identity actually shows up.
+        //
+        // TODO (face-up reveal): when an externally-manifested card later
+        // turns face-up, no event we currently subscribe to fires for the
+        // affected card with its real identity. To capture that the card
+        // was eventually played we'd need to subscribe to
+        // GameEventCardStatsChanged and detect the face-down -> face-up
+        // transition. Skipped for now — most manifested 2/2s die face-down,
+        // so the missed-signal volume should be small.
+        CardView card = event.card();
+        if (card != null && card.isFaceDown()) {
+            return super.visit(event);
+        }
+        recordIfEligible(card);
         return super.visit(event);
     }
 
@@ -85,7 +109,8 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
         boolean isBasicLand = card.getCurrentState() != null
                 && card.getCurrentState().getType() != null
                 && card.getCurrentState().getType().isBasicLand();
-        if (!shouldRecord(controllerEqualsOwner, isToken, isBasicLand)) {
+        boolean isRealDeckCard = card.getGamePieceType() == GamePieceType.CARD;
+        if (!shouldRecord(controllerEqualsOwner, isToken, isBasicLand, isRealDeckCard)) {
             return;
         }
         String name = resolveRecordedName(card);
@@ -121,8 +146,12 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
     }
 
     /** Static filter: returns {@code true} iff the card should be recorded. */
-    static boolean shouldRecord(boolean controllerEqualsOwner, boolean isToken, boolean isBasicLand) {
-        return controllerEqualsOwner && !isToken && !isBasicLand;
+    static boolean shouldRecord(
+            boolean controllerEqualsOwner,
+            boolean isToken,
+            boolean isBasicLand,
+            boolean isRealDeckCard) {
+        return controllerEqualsOwner && !isToken && !isBasicLand && isRealDeckCard;
     }
 
     /**
