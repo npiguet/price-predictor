@@ -124,6 +124,12 @@ RUN mkdir -p /opt/java \
 ENV JAVA_HOME=/opt/java
 ENV PATH=/opt/java/bin:$PATH
 
+# Disable Python stdout/stderr buffering so `print()` calls surface in
+# `docker logs` immediately. Without this, Python fully-buffers stdout when
+# it isn't a TTY — and the match-outcomes supervisor can run for hours, so
+# nothing would ever flush.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Layers below are ordered from least-volatile to most-volatile so that a
