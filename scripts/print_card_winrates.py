@@ -29,7 +29,11 @@ score, with 100.0% = best, 0.0% = worst. Tied cards share the average
 rank, so the column is suitable as a regression target.
 
 Output is sorted by adjusted score descending, with raw wins-played
-desc and losses-played asc as tiebreakers.
+desc, losses-played asc, and unplayed count asc as tiebreakers. The
+final tiebreaker surfaces cards that were drafted into decks but never
+actually played (e.g. ``Shackles`` had 637 in-deck observations and 0
+plays) — within the score=0 tier they sort to the bottom, separating
+them from score=0 cards that do see occasional play.
 """
 
 from __future__ import annotations
@@ -71,6 +75,19 @@ class _Counts:
     @property
     def score_display(self) -> str:
         return f"{self.score:+.4f}"
+
+    @property
+    def unplayed_count(self) -> int:
+        """Times the card was in *some* deck but never played in the game.
+
+        ``(wins_in_deck + losses_in_deck) - (wins_played + losses_played)``.
+        Useful for surfacing dead cards: a card with high in-deck count
+        and zero plays is one the AI consistently chooses to draft but
+        never to cast.
+        """
+        in_deck = self.wins_when_in_deck + self.losses_when_in_deck
+        played = self.wins_when_played + self.losses_when_played
+        return in_deck - played
 
     def adjusted_score(self, k: float) -> float:
         """Shrunk score with pseudocount ``k`` in the denominator.
@@ -193,10 +210,15 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
         _average_rank_quantiles([adj_scores[n] for n in names]),
     ))
 
-    def sort_key(item: tuple[str, _Counts]) -> tuple[float, int, int]:
+    def sort_key(item: tuple[str, _Counts]) -> tuple[float, int, int, int]:
         name, c = item
-        # adj score desc, wins_played desc, losses_played asc.
-        return (-adj_scores[name], -c.wins_when_played, c.losses_when_played)
+        # adj score desc, wins_played desc, losses_played asc, unplayed asc.
+        return (
+            -adj_scores[name],
+            -c.wins_when_played,
+            c.losses_when_played,
+            c.unplayed_count,
+        )
 
     sorted_items = sorted(counts.items(), key=sort_key)
     data_rows = [
@@ -207,6 +229,7 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
             str(c.wins_when_in_deck),
             str(c.losses_when_played),
             str(c.losses_when_in_deck),
+            str(c.unplayed_count),
             c.score_display,
             f"{adj_scores[name]:+.4f}",
             f"{quantiles[name] * 100:.1f}%",
@@ -221,6 +244,7 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
         "Wins In Deck",
         "Losses Played",
         "Losses In Deck",
+        "Unplayed",
         "Score",
         f"Adj Score (k={shrinkage_k:g})",
         "Quantile",
