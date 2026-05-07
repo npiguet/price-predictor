@@ -222,6 +222,288 @@ confirms the encoder is underused; the spec defines the
 `wins_when_played / wins_when_in_deck` label, low-n regularization,
 and the auxiliary regression-head training integration.
 
+## Masked-token auxiliary loss for the sealed encoder
+
+### Idea
+
+The card-winnability spec trains the sealed encoder against two
+regression heads: net winning influence and played rate, both per-card
+scalars derived from per-game play counts. The proposal: add a third
+training-only head that performs masked-token reconstruction over each
+card's tokenized text — the BERT-style MLM objective, run jointly with
+the two regression heads on the same encoder.
+
+Randomly mask ~15% of input tokens (replace with a `[MASK]` token), feed
+the corrupted sequence through the same token + card encoder used by the
+regression heads, and project the contextualized token outputs back to
+vocab logits at each masked position. Cross-entropy against the original
+token, summed (with a small weight) into the existing two-MSE loss:
+
+```
+loss = MSE(score) + MSE(played_rate) + w * CE(masked_token, true_token)
+```
+
+The MLM head is discarded after training, like the regression heads.
+The encoder artifact is unchanged in shape.
+
+### Why it might help
+
+The two regression heads deliver gradient only through per-card
+aggregate labels. A card with few in-deck observations contributes one
+noisy scalar per head, and the shrinkage prior pulls it aggressively
+toward neutral — the encoder learns very little about that card's text.
+Most of the corpus is in the long tail.
+
+MLM gives every card dense, per-token training signal regardless of
+play-count. The encoder is forced to encode each token so neighbors are
+predictable from context, which is exactly the contextual understanding
+the regression heads need downstream to read card text into a "good
+card" signal. Tail cards that the regression loss can't usefully train
+the encoder on still contribute meaningful gradient through MLM.
+
+It's also a regularizer against the encoder collapsing onto a few
+regression-label-specific dimensions — those dimensions still need to
+support token reconstruction across the full corpus.
+
+Distinct from the "pre-train then fine-tune" framing in the See-also
+bullet below: MLM here is a *joint* auxiliary loss during the
+winnability training run, not a separate pretraining stage. Joint
+training avoids the catastrophic-forgetting risk of fine-tuning, at the
+cost of one extra hyperparameter (`w`).
+
+### Estimated magnitude
+
+Hard to ballpark without running it. The size of the win depends on
+whether the encoder's binding constraint is *tail-card under-training*
+(MLM helps a lot) or *the regression labels themselves are too noisy
+even on high-observation cards* (MLM doesn't help; the regression heads
+are at their floor). Diagnostics from the winnability run — val loss
+broken down by per-card observation count — would say which.
+
+### Cost
+
+Moderate. New head (linear projection from token-level encoder outputs
+back to vocab size), masking augmentation in the dataset, one new
+loss-weight CLI flag. No new data, no inference-time cost.
+
+### Dependencies / when to revisit
+
+Conditional on the per-card winnability encoder
+(`specs/card-winnability-pretraining.md`) being implemented and
+producing diagnostics that point at tail-card underfitting. Stackable
+with margin-weighted scorer loss and color-restricted personalities —
+operates entirely inside encoder training, not the scorer. Most natural
+addition once the basic two-head encoder is in service and the
+long-tail-card signal becomes the binding constraint.
+
+## Play/draw split of the winning-influence head
+
+### Idea
+
+The card-winnability spec's head 1 (net winning influence) sums over all
+games regardless of whether the card's owner started first. Sealed has a
+real and well-understood structural asymmetry between the play and the
+draw — tempo cards (one-drops, hasty creatures, curve plays) gain value
+on the play; reactive cards (sweepers, expensive removal, card draw)
+gain value on the draw. The current head averages these into one
+scalar, so a card that is +0.30 on the play and -0.10 on the draw and a
+card that is +0.10 on both both land at head 1 ≈ +0.10. The encoder
+sees identical labels for two MTG-distinct phenotypes.
+
+The proposal: replace head 1 with two parallel scalar heads, each a
+single linear projection + tanh on the shared encoder.
+
+```
+head_1_play = (W_played@play - L_played@play) / (in_deck@play)
+head_1_draw = (W_played@draw - L_played@draw) / (in_deck@draw)
+```
+
+`starter` is already a column in `cards-played.txt`. Aggregation
+becomes "increment one of 8 counters per card per game instead of 4."
+Bayesian shrinkage applies independently to each half. Played rate
+(head 2) stays unsplit — whether a card gets cast is dominated by mana
+cost and draws, both ≈ insensitive to play/draw, so a head-2 split
+mostly buys √2 noise for negligible signal.
+
+### Why it might help
+
+The encoder is forced to encode the tempo↔reactivity axis explicitly.
+Today the gradient on `(+0.30, -0.10)` and `(+0.10, +0.10)` is
+identical and tells the encoder nothing about the difference; with the
+split, the gradients are `(+0.30, -0.10)` and `(+0.10, +0.10)` —
+opposite *vectors*, very different positions in embedding space. The
+downstream scorer can then balance tempo and reactive cards in a deck
+intelligently (sealed decks deliberately mix both because game-1
+play/draw is unknown).
+
+### Drop the original head 1, don't keep it alongside
+
+`head_1 = (n_play/n_total) * head_1_play + (n_draw/n_total) * head_1_draw`
+with `n_play ≈ n_draw` for every card (starter assignment is
+approximately uniform across games). So head 1 carries no information
+the two split heads don't already carry. Supervising on all three would
+add no signal *and* triple the gradient pressure on winning-influence
+relative to played rate, breaking the loss balance the spec's "Why two
+heads" section relies on.
+
+### Estimated magnitude
+
+Hard to ballpark in isolation. Effect size depends on how much of head
+1's variance across cards is currently driven by the play/draw axis
+versus other factors (raw card power, color, curve position). Ballpark
+intuition: probably a small-to-moderate gain on its own, larger when
+stacked with the MLM auxiliary loss because tail cards with limited
+data on each split half lean harder on encoder priors.
+
+### Cost
+
+Very low. ~30 lines: 4 extra counters in aggregation, two heads
+instead of one, two extra columns in `cards-win-rates.txt`. No new
+data, no inference-time cost, no new CLI flags strictly required.
+
+The √2 per-cell noise increase from halving the data per label is
+absorbed by the existing shrinkage prior.
+
+### Bonus diagnostic
+
+`cards-win-rates.txt` gains two columns instead of one. Scrolling it
+becomes directly human-readable: which cards in a set are
+tempo-positive, which are catch-up-positive. A sealed-format-experienced
+reader can sanity-check that the labels are picking up real MTG
+structure rather than artifacts of the sampling distribution.
+
+### Dependencies / when to revisit
+
+Conditional on the per-card winnability encoder being implemented.
+Stackable with the MLM auxiliary loss (above) and complementary to it —
+play/draw split sharpens the regression signal, MLM densifies the
+gradient on tail cards. Most natural addition once the basic two-head
+encoder is in service and a first round of training has confirmed head
+1 is doing meaningful work to begin with.
+
+## Cast-lift as a third regression head
+
+### Idea
+
+The card-winnability spec's head 1 (net winning influence) sums over
+all in-deck observations regardless of whether the card was actually
+cast that game. This folds two distinct effects together: (a) "does
+casting this card change the outcome?" and (b) "does this card tend to
+land in winning decks?". A card that's just along for the ride in
+strong decks and a card that genuinely swings games when cast can
+arrive at the same head 1 value.
+
+The proposal: add a third regression head supervised against
+**cast-lift**:
+
+```
+p_play  = W_played      / (W_played      + L_played)        # winrate when cast
+p_dead  = W_not_played  / (W_not_played  + L_not_played)    # winrate when in deck but not cast
+lift    = p_play - p_dead                                   ∈ [-1, +1]
+```
+
+The four counters are already computable from `cards-played.txt` —
+each side of each game contributes `(played | not_played) ×
+(winner | loser)` to one of four buckets per card. No new data
+collection; aggregation pass extends to populate four counters per
+card instead of two.
+
+Architecturally, head 3 is a single linear projection + tanh on the
+shared encoder, mirroring head 1.
+
+```
+loss = MSE(score) + MSE(played_rate) + MSE(lift)
+```
+
+### Why it might help
+
+Three example cards, all 100 in-deck observations, cleanly distinct on
+the lift axis but partially confused on (head 1, head 2):
+
+| Case | n_cast | p_play | p_dead | head 1 | head 2 | lift |
+|------|-------:|-------:|-------:|-------:|-------:|-----:|
+| Workhorse 2-drop  | 80 | 0.60 | 0.50 | +0.16 | 0.80 | +0.10 |
+| 6-drop bomb       | 30 | 0.70 | 0.50 | +0.12 | 0.30 | +0.20 |
+| Auto-include drag | 60 | 0.55 | 0.55 | +0.10 | 0.60 | 0.00  |
+
+The third row is the interesting one: head 1 looks like a useful card
+(+0.10), but the deck wins 55% whether or not the card hits the table.
+The card isn't doing anything — it's systematically landing in
+slightly-better-than-random decks (build-method × card-strength
+interaction: forge-best favors it over `random`). Head 1 attributes
+that lift to the card. The lift metric correctly says zero.
+
+The 6-drop bomb is the symmetric case: its head 1 is *attenuated*
+(+0.12) because two-thirds of its in-deck appearances are dead games,
+even though every individual cast swings the outcome by 20pp.
+
+### Why all three heads, not two
+
+Heads 1, 2, and lift correspond to three genuinely independent
+quantities. The four raw counters have three degrees of freedom after
+factoring out total scale, so three independent labels are needed for
+full coverage. Algebraically:
+
+```
+head_2 = played_rate
+head_1 = head_2 * (2 * p_play - 1)
+lift   = p_play - p_dead
+```
+
+From `(head_1, head_2)` you recover `p_play` but not `p_dead`. From
+`(head_2, lift)` you recover the gap but not the absolute level. All
+three are needed; none is a linear combination of the other two.
+
+This is the opposite of the play/draw split's situation, where the
+original head 1 *was* a linear combination of the two split heads and
+got dropped.
+
+### Downforce is not a separate head
+
+Defining `downforce = p_play_lose − p_dead_lose` (the loss-side
+analogue) gives `−lift` exactly. The signed lift metric already
+covers both directions: a positive value means casting helps,
+negative means casting hurts (a "trap card" — looks fine but
+backfires more often than it helps when resolved).
+
+### Estimated magnitude
+
+Hard to ballpark without running it. The size of the gain depends on
+how many cards in the corpus are "auto-include drag" cases versus
+"6-drop bombs" — i.e., how often head 1 misattributes deck winrate to
+card contribution. The user's earlier point about random pools largely
+de-confounding teammate quality applies here too: the lift metric's
+biggest absolute wins come from the build-method-induced confound,
+which is real but bounded.
+
+### Cost
+
+Low. Aggregation pass goes from 4 counters per card to 4 (same number,
+different bucketing — wins/losses split by played/not-played instead
+of just summed). One extra regression head, one extra column in
+`cards-win-rates.txt`. Same shrinkage logic, applied to the new label.
+~30-50 lines.
+
+### Caveat
+
+Lift labels degenerate for cards with extreme played rates. A card
+that's cast nearly every time it's drawn (head 2 ≈ 1) has almost no
+`not_played` observations, so `p_dead` becomes too noisy to estimate.
+Bayesian shrinkage with the same `--shrinkage-k` knob handles this
+correctly — the prior pulls those cases toward 0 lift — but the
+encoder gets little usable gradient on those cards from this head.
+Symmetric problem at head 2 ≈ 0. The middle of the head-2 range is
+where lift carries the most signal.
+
+### Dependencies / when to revisit
+
+Conditional on the per-card winnability encoder being implemented.
+Stackable with the play/draw split (above), the MLM auxiliary loss
+(above), and margin-weighted scorer loss — orthogonal to all three.
+Most natural addition once the basic encoder is in service and a first
+training round confirms head 1 is the primary signal but is suspected
+of conflating ride-along effects with casting effects.
+
 ## See also (deferred items already documented elsewhere)
 
 - **Multi-restart + multi-temperature ensemble for deck building** —
