@@ -41,7 +41,7 @@ from __future__ import annotations
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -54,6 +54,23 @@ DEFAULT_CARDS_PLAYED = Path("output/sealed/cards-played.txt")
 DEFAULT_CARDS_FOLDER = Path("output/cardsfolder")
 _MANA_COST_PREFIX = "mana cost:"
 _MANA_COST_LOOKUP_WORKERS = 32
+COLORS = ("W", "U", "B", "R", "G")
+
+
+def _empty_color_counts() -> dict[str, int]:
+    return {c: 0 for c in COLORS}
+
+
+def _colors_from_mana_cost(mana_cost: Optional[str]) -> set[str]:
+    """Single-letter colors found in a converted ``mana cost:`` string.
+
+    Hybrid (``{W/U}``) and Phyrexian (``{W/P}``) costs both contribute
+    each WUBRG letter they contain. Generic, colorless and X costs
+    contribute nothing.
+    """
+    if not mana_cost:
+        return set()
+    return {c for c in mana_cost.upper() if c in "WUBRG"}
 
 
 @dataclass
@@ -62,6 +79,21 @@ class _Counts:
     wins_when_in_deck: int = 0
     losses_when_played: int = 0
     losses_when_in_deck: int = 0
+    # Subsets of the four counters above, restricted to games where the
+    # card's owner was on the play (i.e. starter). The on-the-draw
+    # counterparts are derived by subtraction.
+    wins_when_played_on_play: int = 0
+    wins_when_in_deck_on_play: int = 0
+    losses_when_played_on_play: int = 0
+    losses_when_in_deck_on_play: int = 0
+    # Subsets of the four primary counters, sliced by the colors present
+    # in the card's owner's deck. A deck is tagged with color X when at
+    # least one card in it has X in its mana cost; multi-color decks
+    # contribute to multiple slices, so these are not disjoint.
+    wins_when_played_by_color: dict[str, int] = field(default_factory=_empty_color_counts)
+    wins_when_in_deck_by_color: dict[str, int] = field(default_factory=_empty_color_counts)
+    losses_when_played_by_color: dict[str, int] = field(default_factory=_empty_color_counts)
+    losses_when_in_deck_by_color: dict[str, int] = field(default_factory=_empty_color_counts)
     mana_cost: Optional[str] = None
 
     @property
@@ -123,10 +155,62 @@ class _Counts:
             return 0.0
         return (self.wins_when_played - self.losses_when_played) / denom
 
+    def adjusted_score_on_play(self, k: float) -> float:
+        """Shrunk net-influence restricted to games where the card's owner
+        was on the play. See ``Play/draw split`` in
+        ``experiments/future-experiments.md``.
+        """
+        denom = (
+            self.wins_when_in_deck_on_play
+            + self.losses_when_in_deck_on_play
+            + k
+        )
+        if denom == 0:
+            return 0.0
+        return (
+            self.wins_when_played_on_play - self.losses_when_played_on_play
+        ) / denom
+
+    def adjusted_score_on_draw(self, k: float) -> float:
+        """Shrunk net-influence restricted to games where the card's owner
+        was on the draw."""
+        wins_in_deck_draw = (
+            self.wins_when_in_deck - self.wins_when_in_deck_on_play
+        )
+        losses_in_deck_draw = (
+            self.losses_when_in_deck - self.losses_when_in_deck_on_play
+        )
+        wins_played_draw = (
+            self.wins_when_played - self.wins_when_played_on_play
+        )
+        losses_played_draw = (
+            self.losses_when_played - self.losses_when_played_on_play
+        )
+        denom = wins_in_deck_draw + losses_in_deck_draw + k
+        if denom == 0:
+            return 0.0
+        return (wins_played_draw - losses_played_draw) / denom
+
+    def adjusted_score_by_color(self, color: str, k: float) -> float:
+        """Shrunk net-influence restricted to games where the card's owner
+        ran at least one card containing ``color`` in its mana cost."""
+        denom = (
+            self.wins_when_in_deck_by_color[color]
+            + self.losses_when_in_deck_by_color[color]
+            + k
+        )
+        if denom == 0:
+            return 0.0
+        return (
+            self.wins_when_played_by_color[color]
+            - self.losses_when_played_by_color[color]
+        ) / denom
+
 
 def _aggregate(cards_played_path: Path) -> dict[str, _Counts]:
     counts: dict[str, _Counts] = {}
     for row in iter_rows(cards_played_path):
+        winner_was_starter = row.winner == row.starter
         if row.winner == "A":
             winner_played, winner_deck = row.cards_played_a, row.cards_not_played_a
             loser_played, loser_deck = row.cards_played_b, row.cards_not_played_b
@@ -142,15 +226,67 @@ def _aggregate(cards_played_path: Path) -> dict[str, _Counts]:
         for name in winner_in_deck_set:
             entry = counts.setdefault(name, _Counts())
             entry.wins_when_in_deck += 1
-            if name in winner_played_set:
+            played = name in winner_played_set
+            if played:
                 entry.wins_when_played += 1
+            if winner_was_starter:
+                entry.wins_when_in_deck_on_play += 1
+                if played:
+                    entry.wins_when_played_on_play += 1
         for name in loser_in_deck_set:
             entry = counts.setdefault(name, _Counts())
             entry.losses_when_in_deck += 1
-            if name in loser_played_set:
+            played = name in loser_played_set
+            if played:
                 entry.losses_when_played += 1
+            if not winner_was_starter:
+                entry.losses_when_in_deck_on_play += 1
+                if played:
+                    entry.losses_when_played_on_play += 1
 
     return counts
+
+
+def _aggregate_color_counters(
+    cards_played_path: Path,
+    counts: dict[str, _Counts],
+    card_colors: dict[str, set[str]],
+) -> None:
+    """Second pass: fill in the per-color slices of ``counts`` once each
+    card's color identity is known."""
+    for row in iter_rows(cards_played_path):
+        if row.winner == "A":
+            winner_played_set = set(row.cards_played_a)
+            winner_in_deck_set = winner_played_set | set(row.cards_not_played_a)
+            loser_played_set = set(row.cards_played_b)
+            loser_in_deck_set = loser_played_set | set(row.cards_not_played_b)
+        else:
+            winner_played_set = set(row.cards_played_b)
+            winner_in_deck_set = winner_played_set | set(row.cards_not_played_b)
+            loser_played_set = set(row.cards_played_a)
+            loser_in_deck_set = loser_played_set | set(row.cards_not_played_a)
+
+        winner_colors: set[str] = set()
+        for name in winner_in_deck_set:
+            winner_colors |= card_colors.get(name, set())
+        loser_colors: set[str] = set()
+        for name in loser_in_deck_set:
+            loser_colors |= card_colors.get(name, set())
+
+        for name in winner_in_deck_set:
+            entry = counts[name]
+            played = name in winner_played_set
+            for color in winner_colors:
+                entry.wins_when_in_deck_by_color[color] += 1
+                if played:
+                    entry.wins_when_played_by_color[color] += 1
+        for name in loser_in_deck_set:
+            entry = counts[name]
+            played = name in loser_played_set
+            for color in loser_colors:
+                entry.losses_when_in_deck_by_color[color] += 1
+                if played:
+                    entry.losses_when_played_by_color[color] += 1
 
 
 def _read_mana_cost(path: Path) -> Optional[str]:
@@ -228,6 +364,30 @@ def _average_rank_quantiles(values: list[float]) -> list[float]:
 def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
     names = list(counts.keys())
     adj_scores = {name: counts[name].adjusted_score(shrinkage_k) for name in names}
+    adj_play = {
+        name: counts[name].adjusted_score_on_play(shrinkage_k) for name in names
+    }
+    adj_draw = {
+        name: counts[name].adjusted_score_on_draw(shrinkage_k) for name in names
+    }
+    adj_by_color = {
+        color: {
+            name: counts[name].adjusted_score_by_color(color, shrinkage_k)
+            for name in names
+        }
+        for color in COLORS
+    }
+    # Per-color lift: how much the in-color-deck adjusted score deviates
+    # from the card's overall adjusted score. The card's own color always
+    # comes out to 0 (its color is mechanically present in any deck
+    # containing it), so the signal lives in the off-diagonal cells.
+    color_lifts = {
+        color: {
+            name: adj_by_color[color][name] - adj_scores[name]
+            for name in names
+        }
+        for color in COLORS
+    }
     lifts = {name: counts[name].lift(shrinkage_k) for name in names}
     quantiles = dict(zip(
         names,
@@ -256,6 +416,9 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
             str(c.unplayed_count),
             c.score_display,
             f"{adj_scores[name]:+.4f}",
+            f"{adj_play[name] * 100:+.2f}%",
+            f"{adj_draw[name] * 100:+.2f}%",
+            *(f"{color_lifts[color][name] * 100:+.2f}%" for color in COLORS),
             f"{quantiles[name] * 100:.1f}%",
             f"{lifts[name] * 100:+.2f}%" if lifts[name] is not None else "",
         )
@@ -272,6 +435,9 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
         "Unplayed",
         "Score",
         f"Adj Score (k={shrinkage_k:g})",
+        "Adj Play",
+        "Adj Draw",
+        *(f"Lift {color}" for color in COLORS),
         "Quantile",
         "Lift",
     )
@@ -344,6 +510,11 @@ def main(argv: list[str] | None = None) -> int:
             f"under {args.cards_folder}; mana cost left blank for those.",
             file=sys.stderr,
         )
+
+    card_colors = {
+        name: _colors_from_mana_cost(c.mana_cost) for name, c in counts.items()
+    }
+    _aggregate_color_counters(args.cards_played, counts, card_colors)
 
     print(_format_table(counts, args.shrinkage_k))
     return 0
