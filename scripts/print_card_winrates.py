@@ -89,6 +89,29 @@ class _Counts:
         played = self.wins_when_played + self.losses_when_played
         return in_deck - played
 
+    def lift(self, k: float) -> float | None:
+        """Shrunk winrate-when-played minus winrate-when-not-played.
+
+        Adds ``k/2`` pseudo-wins and ``k/2`` pseudo-losses to each bucket
+        (Beta prior pulling both rates toward 50%), so the lift shrinks
+        toward 0 for low-observation cards.
+
+        Returns ``None`` when either raw denominator is zero.
+        """
+        played_total = self.wins_when_played + self.losses_when_played
+        if played_total == 0:
+            return None
+        not_played_wins = self.wins_when_in_deck - self.wins_when_played
+        not_played_losses = self.losses_when_in_deck - self.losses_when_played
+        not_played_total = not_played_wins + not_played_losses
+        if not_played_total == 0:
+            return None
+        half_k = k / 2.0
+        return (
+            (self.wins_when_played + half_k) / (played_total + k)
+            - (not_played_wins + half_k) / (not_played_total + k)
+        )
+
     def adjusted_score(self, k: float) -> float:
         """Shrunk score with pseudocount ``k`` in the denominator.
 
@@ -205,6 +228,7 @@ def _average_rank_quantiles(values: list[float]) -> list[float]:
 def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
     names = list(counts.keys())
     adj_scores = {name: counts[name].adjusted_score(shrinkage_k) for name in names}
+    lifts = {name: counts[name].lift(shrinkage_k) for name in names}
     quantiles = dict(zip(
         names,
         _average_rank_quantiles([adj_scores[n] for n in names]),
@@ -233,6 +257,7 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
             c.score_display,
             f"{adj_scores[name]:+.4f}",
             f"{quantiles[name] * 100:.1f}%",
+            f"{lifts[name] * 100:+.2f}%" if lifts[name] is not None else "",
         )
         for name, c in sorted_items
     ]
@@ -248,6 +273,7 @@ def _format_table(counts: dict[str, _Counts], shrinkage_k: float) -> str:
         "Score",
         f"Adj Score (k={shrinkage_k:g})",
         "Quantile",
+        "Lift",
     )
     widths = [len(h) for h in headers]
     for row in data_rows:
