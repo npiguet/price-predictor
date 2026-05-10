@@ -7,6 +7,14 @@
 
 ## Clarifications
 
+### Session 2026-05-10
+
+- Q: What optimizer and gradient clipping strategy does `train-encoder` use? → A: AdamW with per-parameter-group max-norm 1.0 gradient clipping, matching the existing train-scorer convention in spec 015.
+- Q: Is the "validation loss" used for best-checkpoint selection and `--patience` early stopping the regression-only loss (`L_reg`) or the full loss (`L_reg + mlm_weight · L_mlm`)? → A: Full validation loss (`L_reg + mlm_weight · L_mlm`) for both best-checkpoint selection and `--patience` early stopping.
+- Q: How are FR-017a per-head sample weights normalized when accumulating the batch loss? → A: Per-head, per-batch sum-to-1 normalization (weighted average): each head's per-card MSE contributions are divided by that head's total sample weight in the batch, so loss magnitude is decoupled from how many high-weight cards land in a batch.
+- Q: What learning-rate schedule does `train-encoder` use? → A: Linear warmup over the first 5% of total scheduled steps (`--epochs × batches_per_epoch`), then constant `--lr` for the remainder. No decay. Early stopping may end the run before the constant phase completes.
+- Q: Does `cards-win-rates.txt` include a header row? → A: Yes, one header row with column names matching the FR-013a schema, followed by N data rows.
+
 ### Session 2026-05-03
 
 - Q: With `--n-pool-queries K = 4` and `d_token = 256`, FR-015's "attention-pool output dims = K * d_token" and "card vector dimension = 2 * d_token" cannot both hold. What is the attention-pool half's actual output dimension? → A: Each of the K queries outputs `d_token / K` dims; K outputs concatenated = `d_token`; combined with the max-pool's `d_token` gives `d_card = 2 * d_token = 512`, independent of K. K controls per-query capacity, not `d_card`.
@@ -412,10 +420,12 @@ observations but is nearly identical for cards with many.
   inspection file is emitted (see FR-013a).
 - **FR-013a**: After aggregation completes (and before training
   begins), `train-encoder` MUST write the entire per-card label map
-  to `output/sealed/cards-win-rates.txt`, with one row per card
-  included in the training label map (i.e., excluding cards filtered
-  out per FR-012), sorted by `shrunk_score_play` descending. The file
-  MUST be semicolon-separated, with no trailing `;`. Each row MUST
+  to `output/sealed/cards-win-rates.txt`. The file MUST start with
+  one header row naming each column in the order given below,
+  followed by one data row per card included in the training label
+  map (i.e., excluding cards filtered out per FR-012), sorted by
+  `shrunk_score_play` descending. The file MUST be semicolon-separated,
+  with no trailing `;`. The header row and each data row MUST
   contain, in this order:
 
   ```
@@ -503,7 +513,16 @@ observations but is nearly identical for cards with many.
 
   Per-card MSE terms MUST be sample-weighted by the per-head weights
   defined in FR-017a; cells where the slice denominator is zero MUST
-  contribute zero loss.
+  contribute zero loss. Within each training batch, each head's
+  per-card weighted MSE contributions MUST be normalized to sum to
+  one (i.e., divided by that head's total sample weight in the batch
+  before being summed into `L_reg`), producing a weighted average per
+  head. This decouples loss magnitude from how many high-weight
+  cards happen to land in a given batch and keeps `--lr` and
+  `--mlm-weight` stable across batches with varying weight totals.
+  If a head's total sample weight in a batch is zero (no card
+  contributes to that head), that head's term in `L_reg` is zero
+  for that batch.
 - **FR-017a**: Per-head sample weights MUST be:
 
   - `weight_score_play  = n_in_deck@play / (n_in_deck@play + k)`
@@ -523,9 +542,13 @@ observations but is nearly identical for cards with many.
   assigned to a stratum based on whichever non-empty signed-head cell
   the card carries, falling back to a single catch-all stratum if
   none.
-- **FR-019**: The best checkpoint MUST be selected by validation
-  loss. Early stopping MUST trigger after `--patience` consecutive
-  epochs without a new best validation loss.
+- **FR-019**: The best checkpoint MUST be selected by full
+  validation loss (`L_reg + (--mlm-weight) · L_mlm`, evaluated on the
+  held-out card-level val set per FR-017). Early stopping MUST
+  trigger after `--patience` consecutive epochs without a new best
+  full validation loss. The MLM term is included in both signals;
+  the auxiliary objective is treated as part of the encoder's
+  optimization target, not as a discardable regularizer.
 - **FR-020**: After training completes, the system MUST save the
   token-encoder and card-encoder weights to
   `models/sealed/encoder/{timestamp}.pt` and update
@@ -544,9 +567,13 @@ observations but is nearly identical for cards with many.
 - **FR-022**: The following knobs MUST be hardcoded constants in
   `train-encoder`: `d_model = 256`, `ff_dim = 1024`, loss formula =
   weighted sum per FR-017, `val_split = 0.2`, stratification =
-  `score_play` quartiles, seed = 42. `max_seq_len` MUST be computed
-  from the corpus at train start (longest card length rounded up to a
-  multiple of 8).
+  `score_play` quartiles, seed = 42, optimizer = AdamW with
+  per-parameter-group max-norm 1.0 gradient clipping (matching the
+  train-scorer convention in spec 015), learning-rate schedule =
+  linear warmup over the first 5% of `--epochs × batches_per_epoch`
+  scheduled steps followed by constant `--lr` for the remainder (no
+  decay). `max_seq_len` MUST be computed from the corpus at train
+  start (longest card length rounded up to a multiple of 8).
 - **FR-023**: `train-encoder` MUST fail with a clear error message
   pointing the user at the corrective command if (a) the vocabulary
   file is missing or does not contain a reserved `[MASK]` token
@@ -597,13 +624,14 @@ observations but is nearly identical for cards with many.
   during training. Not cached across runs.
 - **`cards-win-rates.txt`**: Human-readable snapshot of the per-card
   label map, written at train start to
-  `output/sealed/cards-win-rates.txt`. One row per card included in
-  training, sorted by `shrunk_score_play` descending. Semicolon-separated;
-  per-card columns are `card_name`, the four primary counters, and
-  raw + shrunk pairs for each of the nine regression labels (see
-  FR-013a for the full schema). Overwritten on every `train-encoder`
-  run. Lets the user verify SC-005 by diffing two runs with different
-  `--shrinkage-k` values.
+  `output/sealed/cards-win-rates.txt`. Begins with one header row
+  naming each column, followed by one data row per card included in
+  training, sorted by `shrunk_score_play` descending.
+  Semicolon-separated; per-card columns are `card_name`, the four
+  primary counters, and raw + shrunk pairs for each of the nine
+  regression labels (see FR-013a for the full schema). Overwritten
+  on every `train-encoder` run. Lets the user verify SC-005 by
+  diffing two runs with different `--shrinkage-k` values.
 - **Sealed vocabulary**: A token list at
   `models/sealed/encoder/vocab.txt`, one token per line, including a
   reserved `[MASK]` token used by the MLM auxiliary loss. Built from
