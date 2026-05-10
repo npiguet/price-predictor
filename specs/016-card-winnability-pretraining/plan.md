@@ -1,147 +1,73 @@
 # Implementation Plan: Card Winnability Pretraining for Sealed Encoder
 
-**Branch**: `016-card-winnability-pretraining` | **Date**: 2026-05-03 | **Spec**: [spec.md](./spec.md)
+**Branch**: `016-card-winnability-pretraining` | **Date**: 2026-05-10 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/016-card-winnability-pretraining/spec.md`
 
 ## Summary
 
-Replace the price-predictor transformer with a sealed-specific
-encoder trained from scratch on per-card winnability — a `[0, 1]`
-target derived from "did the winning side play this card during
-the game?" aggregated across self-play matches. The feature has
-four pieces: (1) a per-game card-play log written by the Java
-match worker (`output/sealed/cards-played.txt`), (2) a sealed-side
-vocabulary builder wrapping the existing price-side utility, (3) a
-new `train-encoder` subcommand that aggregates labels inline,
-trains a token+card encoder with multi-query attention pool plus
-max pool against MSE on a Bayesian-shrunk target, and saves only
-encoder weights, and (4) a default-flip in `encode-cards` and
-`train-scorer` so the sealed pipeline picks up the new encoder
-automatically. The price-predictor product itself remains live and
-unaffected.
+Replace the current single-`shrunk_label` sealed encoder pretraining target with a
+9-head per-card winnability target plus an MLM auxiliary objective. Each card now
+contributes (a) `score_play` and `score_draw` (per-side winning influence), (b)
+`played_rate` (cast probability conditioned on being in deck), (c) `cast_lift`
+(win-rate delta when actually played vs. dead in hand), and (d) `color_lift_X`
+for each WUBRG color (color-conditioned winning influence) — totalling nine
+regression cells driven by two passes over `cards-played.txt` (primary counters,
+then per-color slices keyed off each card's `mana cost:` line). A masked-language
+modeling head reads the contextualized token sequence and reconstructs masked
+non-special tokens to act as a regularizer. Spec § Clarifications fixes optimizer
+(AdamW + per-parameter-group max-norm 1.0 gradient clipping), LR schedule (linear
+warmup over the first 5% of `--epochs × batches_per_epoch`, then constant),
+best-checkpoint selection (full validation loss `L_reg + (--mlm-weight) · L_mlm`),
+per-head per-batch sum-to-1 weight normalization, and a header row in
+`cards-win-rates.txt`. The feature ships entirely inside the existing
+`src/sealed/` package — no new modules — and the Java side already filters basic
+lands at `cards-played.txt` write time (FR-004a, satisfied by
+`PlayedCardCollector`/`MatchGenerator`), so this plan touches only Python.
 
 ## Technical Context
 
-**Language/Version**: Python 3.14 (project requirement); Java 17+
-for the `forge-connector` Maven module.
-**Primary Dependencies**: `torch` (with CUDA 12.6 wheels),
-`numpy`, `scikit-learn` (for stratified split), existing
-`price_predictor.application.build_vocabulary` and
-`price_predictor.domain.tokenizer.MtgTokenizer` reuse. Java side
-depends on `forge-game` / `forge-core` already pulled in by the
-existing Forge connector.
-**Storage**: filesystem only — no database. New artifacts:
-`output/sealed/cards-played.txt`,
-`output/sealed/cards-win-rates.txt`,
-`models/sealed/encoder/{timestamp}.pt`,
-`models/sealed/encoder/latest.pt`,
-`models/sealed/encoder/vocab.txt`.
-**Testing**: `pytest` for Python (`tests/unit/sealed/...`,
-`tests/integration/...` for end-to-end flows); JUnit 5 for the
-Java connector (`forge-connector/src/test/java/...`). Forge-
-dependent Java tests carry the `@Tag("integration")` marker.
-**Target Platform**: developer workstations (Windows 11 primary,
-Linux secondary); CUDA-enabled GPUs accelerate
-`train-encoder` but CPU fallback is acceptable for small corpora.
-**Project Type**: CLI tool stack (single repository) — sealed
-package on top of price-predictor, both within the `src/` tree.
-The Java connector is a sibling Maven module.
-**Performance Goals**: training is expected to fit in single-
-digit hours on a typical sealed corpus (≤ 10⁵ games); the
-aggregation pass is a single linear scan of `cards-played.txt`
-and is O(games × deck_size).
-**Constraints**: aggregation MUST run inline at train start
-(FR-013, no separate command); `latest.pt` MUST contain only
-encoder weights, no regression head (FR-020); train/val split
-MUST be card-level disjoint (FR-018); per-game write in Java
-MUST be line-buffered so a worker crash never produces a partial
-line (FR-001).
-**Scale/Scope**: ~10⁴–10⁵ games per `cards-played.txt` over a
-typical data-collection campaign; ~3 × 10⁴ unique cards in the
-converted corpus; vocabulary ~5000 tokens. `d_model = 256`,
-`d_card = 512`, `n_layers = 6`, `n_heads = 4`,
-`n_pool_queries = 4` by default.
+**Language/Version**: Python 3.14+ (`sealed` and `price_predictor` packages); Java 17+ for the unrelated `forge-connector` module — not touched by this feature (its `PlayedCardCollector` already implements FR-004a).
+**Primary Dependencies**: `torch` (PyTorch with CUDA 12.6 wheels), `numpy`. No new dependencies. The `MtgTokenizer` and the price-side `build_vocabulary` utility are reused; the latter gains a `[MASK]` token in its seeded specials.
+**Storage**: PyTorch `.pt` checkpoints under `models/sealed/encoder/` (extended `config` payload — `d_token`, `n_pool_queries`, plus the new auxiliary-loss config); flat-text `cards-played.txt` (already produced unchanged); new flat-text `cards-win-rates.txt` (overwritten per run, header + 24 columns); `models/sealed/encoder/vocab.txt` (extended with reserved `[MASK]` token, FR-009a).
+**Testing**: `pytest` for Python; new unit tests under `tests/unit/sealed/application/test_train_encoder.py` cover aggregation passes, label arithmetic, per-batch sum-to-1 weight normalization, MLM masking shape/positions, stratification fallback (FR-018), and corpus-consistency error path. `tests/unit/sealed/application/test_build_vocab.py` is extended with a `[MASK]` presence assertion. Existing slow `tests/integration/sealed/test_train_encoder_smoke.py` is updated to assert (a) `latest.pt` carries no head/MLM keys, (b) the new `cards-win-rates.txt` header, and (c) full validation loss is reported per epoch.
+**Target Platform**: Local development (Windows 11) and any OS with Python 3.14 + an optional CUDA-capable GPU. Training is CPU-feasible at small `--epochs` budgets and ~5–20× faster on a commodity GPU.
+**Project Type**: CLI tool. Two existing subcommands — `python -m sealed train-encoder` and `python -m sealed build-vocab` — gain new flags / behaviors. No new top-level commands.
+**Performance Goals**: With the default flags (`--n-layers 6`, `--n-heads 4`, `--batch-size 64`) and the current ~25K-card corpus, one training epoch should complete in well under a minute on CPU and a few seconds on a CUDA GPU; `--patience 20` typically caps a full run at <2 hours wall-clock. The MLM head adds one `Linear(d_token, vocab_size)` per token position; with `vocab_size ≈ 5000` and `max_seq_len ≈ 256` the extra cost is negligible compared to the transformer stack.
+**Constraints**: `d_model` MUST be divisible by `--n-pool-queries` (existing `SealedEncoderConfig.__post_init__` invariant, FR-015). The vocabulary file MUST contain a reserved `[MASK]` token (FR-009a, FR-023a) — added by `build-vocab`. `train-encoder` MUST fail loud (with the exit codes already wired in `cli.run_train_encoder`) on every missing-prerequisite path enumerated in FR-023.
+**Scale/Scope**: ~25K cards under `output/cardsfolder/`, vocab ~5K tokens, ~10⁵–10⁷ game lines in `cards-played.txt` after sustained self-play, 9 regression cells × N cards in the per-card label map (cards filtered out by FR-012 absent from the map; cells with zero slice denominator present-but-empty per FR-012). Per-batch loss involves one forward pass per card (no per-head architectural duplication; the heads are five tiny linear projections off the same pooled vector plus one linear projection off the contextualized token sequence).
 
 ## Constitution Check
 
-*GATE: Pass before Phase 0 research; re-check after Phase 1 design.*
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+| Principle | Status | Notes |
+|---|---|---|
+| I. Fast Automated Tests | **PASS** | New unit tests cover the two-pass aggregator (primary + per-color), the FR-011 label arithmetic in raw and shrunk form, FR-012 zero-denominator handling, FR-013a header + 24-column row format, FR-014b masking (probability + non-special-token-only), FR-015a MLM head shape, FR-017 per-batch sum-to-1 weight normalization, and FR-018 stratification fallback. The slow integration smoke is upgraded but stays marked `@pytest.mark.integration` so the fast suite remains fast. |
+| II. Simplicity First | **PASS** | No new packages, no new modules, no new domain entities outside the existing `train_encoder.py` private dataclasses. The five regression-head families are realized as a single `nn.ModuleDict` of small linear projections off the shared pooled vector — no per-head encoder stack. The MLM head is one `nn.Linear`. The two-pass aggregator stays in `train_encoder.py` (single-file responsibility). The shared encoder `_BestCheckpoint` helper that already lives in `train_encoder.py` (mirroring `train_transformer.py`) is reused as-is — no premature extraction. |
+| III. Data Integrity | **PASS** | The aggregator validates input via the existing `iter_rows` parser (rejects malformed lines mid-file, tolerates a final partial line for JVM-crash recovery). The corpus-consistency check (FR-023d) runs after pass 1 so the failure message can name the offending cards. The encoder checkpoint excludes regression and MLM heads at save time via the existing `_ENCODER_PREFIXES` filter on `SealedEncoderStore` — newly-added head modules use prefixes outside that set so no leakage is possible. Random seed is fixed at 42 (FR-022); aggregation is deterministic given a fixed input file. |
+| IV. Domain-Driven Design | **PASS** | Layering preserved: `domain/encoder_model.py` extends architecture only; `application/train_encoder.py` owns the use case (aggregation, label map, train/val split, training loop); `infrastructure/encoder_store.py` and `cli.py` are extended for new payload fields and CLI flags. Aggregation never reaches into `infrastructure/`; corpus reads go through the existing `ConvertedCardLocator` adapter. The dependency graph stays inward-only (infra → app → domain). |
+| V. MTG Forge Interoperability | **PASS** | No Forge-facing or remote-API changes. The Java `forge-connector` module is untouched; its existing `PlayedCardCollector.shouldRecord()` and `MatchGenerator.BASIC_LAND_NAMES` already implement FR-004a (basic-land filtering). The `cards-played.txt` schema documented by spec 014 is unchanged. |
+| VI. Documentation | **PASS** | Three contract files (`contracts/cli.md`, `contracts/cards-win-rates.md`, `contracts/encoder-checkpoint.md`) describe the user-visible artifacts. `quickstart.md` walks the build-vocab → match-outcomes → train-encoder → train-scorer pipeline end-to-end. CLAUDE.md already describes `train-encoder` and `build-vocab`; entries will be updated alongside implementation to mention the new heads, MLM head, and the new `cards-win-rates.txt` schema. |
+| VII. Codebase-Aware Planning | **PASS** | Survey complete; outcome below. |
 
 ### Codebase Survey (Principle VII — required)
 
-Findings recorded in [research.md § Codebase Survey](./research.md#codebase-survey).
+Full survey: [research.md#codebase-survey](research.md#codebase-survey).
 
-- **Overlapping vocabulary**: 4 concepts reused
-  (`MtgTokenizer`, `tokenizer_store.save_vocabulary`,
-  `ConvertedCardLocator`, `card_name_corrections`); 2 parallel
-  concepts introduced with explicit justification
-  (`SealedEncoderConfig` parallel to `TransformerConfig`,
-  `SealedEncoderModel` parallel to `CardPriceTransformerModel`)
-  because the architectures and config shapes diverge by spec
-  (FR-014, FR-015, FR-022). Both parallels reuse the masking and
-  positional-encoding code via copy, not inheritance, since a
-  shared base class would be a Principle II ("three concrete use
-  cases") violation today; a follow-up extraction is queued for
-  the next training entry point.
-- **Adjacent prior art**: 6 utilities reused
-  (`build_vocabulary`, `MtgTokenizer.encode`,
-  `MatchResultWriter` pattern, `_BestCheckpoint` pattern,
-  `ScorerStore` save pattern, `CardEncoder`); 2 new sibling
-  classes in Java (`CardsPlayedRow` record + `CardsPlayedWriter`)
-  follow the existing per-line write pattern; the
-  `GameOutcome` record gains two fields (`cardsPlayedA`,
-  `cardsPlayedB`) so the per-game observer can attach data
-  without a parallel return type.
-- **Convention alignment**: Sealed module conventions matched
-  exactly — `domain/`/`application/`/`infrastructure/` split,
-  `<Config> + run(config)` shape in application files, single CLI
-  builder in `infrastructure/cli.py`, tests under
-  `tests/unit/sealed/...` mirroring the source tree.
-- **Third-instance check**: No third instance pattern triggered.
-  One follow-up flagged: the `_BestCheckpoint` early-stopping
-  helper becomes the second instance; extraction to a shared
-  utility is recommended on the next training feature, not this
-  one.
+- **Overlapping vocabulary**: 11 existing concepts surveyed. 8 reused as-is or extended; 3 (`CardLabel`, `WinnabilityMap`, `_aggregate_counts`) replaced because the spec changes their schema (single-scalar → 9-cell label, single-pass → two-pass aggregation). 0 parallel concepts introduced.
+- **Adjacent prior art**: 5 prior-art areas reused (cards-played streaming reader, converted-card text/mana-cost lookup, tokenizer + vocab loader, encoder save filter, linear-warmup schedule helper). The MLM head and the per-batch sum-to-1 weight normalization have no prior art; both are implemented inline in `train_encoder.py` as small private helpers.
+- **Convention alignment**: Mirrors existing `sealed` package conventions for CLI registration (`_build_*_parser` + `set_defaults(func=run_*)`), application-layer signatures (`run(config: TrainEncoderConfig) -> Path`), dataclass-backed config, persistence helper (`SealedEncoderStore`), and timestamped logging (`_log`). No deviations.
+- **Third-instance check**: `_BestCheckpoint` already exists in two trainers (price-side `train_transformer.py` and sealed `train_encoder.py`); `train_scorer.py` uses a different metric (val_acc, not val_loss) so it isn't a third instance of the *same* pattern. The existing follow-up note in `train_encoder.py` (extract when a third loss-driven trainer arrives) still stands; this feature does not introduce that third instance.
 
-### Quality Gates
+**Follow-up tasks from survey** (carry into `tasks.md`):
 
-- **I. Fast Automated Tests**: tests are written alongside
-  implementation (Python unit tests under `tests/unit/sealed/`
-  for label aggregation, shrinkage math, train/val split,
-  encoder save filtering, and CLI argument parsing; Java unit
-  tests under `forge-connector/src/test/java/...` for the
-  per-game observer, `CardsPlayedRow` formatting, and
-  `CardsPlayedWriter`). The full training loop is exercised by
-  one fast smoke test (1 epoch on a tiny synthetic corpus); the
-  long-running cases are covered by a `@pytest.mark.integration`
-  test that is excluded from the default fast suite.
-- **II. Simplicity First**: no auxiliary `aggregate-labels`
-  subcommand (FR-013). No separate config file format. No
-  speculative resume capability (out of scope per spec). Bayesian
-  shrinkage is the only low-n knob exposed.
-- **III. Data Integrity**: `cards-played.txt` is line-buffered
-  and tolerates trailing partial lines on read; `vocab.txt` is
-  versioned only by overwrite (user responsibility per
-  clarification); the encoder checkpoint stores its config dict
-  alongside the state-dict so reload is fully reproducible
-  given the same vocab.
-- **IV. DDD & Separation of Concerns**: domain entities
-  (`SealedEncoderModel`, `SealedEncoderConfig`, `CardLabel`)
-  live in `src/sealed/domain/`; application use cases
-  (`build_vocab`, `train_encoder`) in `src/sealed/application/`;
-  I/O adapters (`encoder_store`, the cards-played reader) in
-  `src/sealed/infrastructure/`. No domain entity imports
-  framework or torch state; only domain modules `import torch`,
-  consistent with sibling `scorer_model.py`.
-- **V. MTG Forge Interoperability**: no impact on the public
-  Java stub library (`PricePredictorClient`). The new Java
-  components live in the existing connector package and are CLI-
-  worker side, not consumed by Forge as a library.
-- **VI. Documentation**: README/CLAUDE.md additions cover the
-  new subcommands and file formats; `quickstart.md` is the
-  copy-pastable end-to-end walkthrough.
-- **VII. Codebase-Aware Planning**: see "Codebase Survey" subsection above.
-
-No constitutional violations. Complexity tracking section omitted.
+- *Replace* the single-scalar `CardLabel` dataclass with a 9-cell `CardCounters` + `CardLabels` pair (research.md §1.1).
+- *Replace* `_aggregate_counts` with `_aggregate_pass_one` (primary + @play counters) and `_aggregate_pass_two` (per-color counters keyed off `mana cost:`).
+- *Add* `[MASK]` to `_seed_special_tokens` in `price_predictor.application.build_vocabulary` (FR-009a) — a one-line addition, but it must precede `train-encoder` development so the vocab-build path produces the token.
+- *Extend* `SealedEncoderModel` with a `nn.ModuleDict` of regression heads + an MLM head (`Linear(d_model, vocab_size)`) that reads the contextualized token sequence (pre-pool).
+- *Update* `SealedEncoderStore._ENCODER_PREFIXES` documentation and assertion error message to name the new head prefixes that are intentionally filtered out (`regression_heads.`, `mlm_head.`).
+- *Add* `--mlm-weight` (default 0.1) and `--mlm-mask-prob` (default 0.15) flags to `_build_train_encoder_parser` and the `TrainEncoderConfig` dataclass.
+- *Update* `cards-win-rates.txt` writer: header row, 24 columns per row, sort key changes from raw_ratio to `shrunk_score_play`.
 
 ## Project Structure
 
@@ -149,150 +75,131 @@ No constitutional violations. Complexity tracking section omitted.
 
 ```text
 specs/016-card-winnability-pretraining/
-├── plan.md                # This file
-├── research.md            # Codebase survey + design decisions
-├── data-model.md          # Entities, fields, validation
-├── quickstart.md          # End-to-end walkthrough
+├── plan.md              # This file
+├── research.md          # Codebase survey + Phase 0 design decisions
+├── data-model.md        # Entity & artifact contracts
+├── quickstart.md        # End-to-end build-vocab → train → use workflow
 ├── contracts/
-│   ├── cli.md             # CLI command contracts
-│   └── files.md           # On-disk file format contracts
-├── spec.md                # Source spec (already exists)
-└── tasks.md               # Generated by /speckit.tasks
+│   ├── cli.md                    # train-encoder & build-vocab CLI surface
+│   ├── cards-win-rates.md        # FR-013a snapshot file format
+│   └── encoder-checkpoint.md     # {timestamp}.pt + latest.pt payload schema
+└── tasks.md             # Generated by /speckit.tasks (NOT created here)
 ```
 
 ### Source Code (repository root)
 
 ```text
-src/
-├── price_predictor/                  (UNCHANGED public surface)
-│   ├── application/build_vocabulary.py        (REUSED)
-│   ├── domain/tokenizer.py                    (REUSED)
-│   └── infrastructure/tokenizer_store.py      (REUSED)
-└── sealed/
-    ├── domain/
-    │   ├── encoder_model.py          NEW: SealedEncoderConfig + SealedEncoderModel
-    │   │                                  (token_encoder, card_encoder, regression_head)
-    │   ├── card_encoder.py           UNCHANGED (works against the new model.encode())
-    │   ├── deterministic_features.py UNCHANGED
-    │   └── scorer_model.py           UNCHANGED
-    ├── application/
-    │   ├── build_vocab.py            NEW: thin wrapper around price-side build_vocabulary
-    │   ├── train_encoder.py          NEW: aggregation + train loop + save
-    │   ├── encode_cards.py           UNCHANGED logic; see CLI default flip below
-    │   ├── train_scorer.py           CHANGED: encoder_checkpoint default → sealed
-    │   └── ...                       (other apps unchanged)
-    └── infrastructure/
-        ├── encoder_store.py          NEW: save/load encoder checkpoints with HEAD-filter
-        ├── cards_played_reader.py    NEW: stream parser for cards-played.txt
-        ├── cli.py                    CHANGED: register build-vocab + train-encoder; flip
-        │                                       encoder defaults for encode-cards + train-scorer
-        ├── card_name_corrections.py  REUSED
-        ├── converted_card_locator.py REUSED
-        └── scorer_store.py           UNCHANGED
+src/sealed/
+├── application/
+│   ├── train_encoder.py          # MODIFIED:
+│   │                             #   - CardLabel (single-scalar) → CardCounters (8 primary +
+│   │                             #     5 per-color counter sets) and CardLabels (9 raw + 9 shrunk)
+│   │                             #   - WinnabilityMap → CardLabelMap (rename for clarity;
+│   │                             #     payload changes)
+│   │                             #   - _aggregate_counts → _aggregate_pass_one (8 primary
+│   │                             #     counters incl. @play subset) + _aggregate_pass_two
+│   │                             #     (per-color counters from mana cost: line)
+│   │                             #   - _build_winnability_map → _build_label_map (FR-011 9-label
+│   │                             #     formulae, raw + shrunk; FR-012 zero-denominator handling)
+│   │                             #   - _split_cards: stratification key score_play (was
+│   │                             #     shrunk_label) with FR-018 fallback
+│   │                             #   - _WinnabilityDataset: returns (input_ids, attention_mask,
+│   │                             #     labels[9], weights[9]) per FR-017a
+│   │                             #   - _make_optimizer: keep AdamW + 5%-warmup; add per-group
+│   │                             #     max-norm 1.0 clip in _train_epoch (FR-022)
+│   │                             #   - _train_epoch: MLM mask draw (FR-014b), per-batch per-head
+│   │                             #     sum-to-1 weighted MSE (FR-017), MLM CE at masked positions
+│   │                             #     (FR-015a), full loss = L_reg + mlm_weight · L_mlm
+│   │                             #   - _eval_loss: full loss for early stopping & best-checkpoint
+│   │                             #     selection (FR-019)
+│   │                             #   - _write_win_rates: header row + 24-column schema
+│   │                             #     (FR-013a), sort by shrunk_score_play
+│   │                             #   - TrainEncoderConfig: + mlm_weight (0.1), mlm_mask_prob
+│   │                             #     (0.15)
+│   └── build_vocab.py            # UNCHANGED — already delegates to price-side build_vocabulary;
+│                                 #   the [MASK] seed lands in the price-side helper, not here
+├── domain/
+│   ├── encoder_model.py          # MODIFIED:
+│   │                             #   - SealedEncoderModel: regression_head (single Sequential)
+│   │                             #     replaced with nn.ModuleDict of five heads
+│   │                             #     (score_play, score_draw, played_rate, cast_lift, color_lift)
+│   │                             #     each Linear(2*d_model, 1 or 5); + mlm_head =
+│   │                             #     nn.Linear(d_model, vocab_size) reading the
+│   │                             #     contextualized token sequence
+│   │                             #   - forward(): returns dict with per-head predictions +
+│   │                             #     contextualized token sequence (training path); encode()
+│   │                             #     stays the same (inference returns pooled vector only)
+│   │                             #   - SealedEncoderConfig: no schema change (vocab_size already
+│   │                             #     includes [MASK] when the vocab is built correctly)
+│   └── (no other domain changes)
+└── infrastructure/
+    ├── cli.py                    # MODIFIED:
+    │                             #   - _build_train_encoder_parser: + --mlm-weight,
+    │                             #     --mlm-mask-prob; tighten --shrinkage-k help
+    │                             #   - run_train_encoder: pass new fields into TrainEncoderConfig
+    └── encoder_store.py          # MODIFIED:
+                                  #   - documentation: list new head prefixes that are
+                                  #     intentionally filtered out by _ENCODER_PREFIXES
+                                  #   - error path: enrich the "non-encoder keys" message to
+                                  #     point readers at FR-020
 
-forge-connector/src/main/java/com/pricepredictor/connector/
-├── CardsPlayedRow.java               NEW: 11-field per-game record
-├── CardsPlayedWriter.java            NEW: open-write-close per-line writer
-├── PlayedCardCollector.java          NEW: IGameEventVisitor.Base<Void> subclass that
-│                                          listens to GameEventCardChangeZone (→ Battlefield)
-│                                          and GameEventSpellAbilityCast, with the four
-│                                          filters from research.md D-3. Mirrors
-│                                          ../jumpstart-tierlist CardCollector.
-├── GamePlayer.java                   CHANGED: GameOutcome record gains 2 fields;
-│                                              playMatch() creates a fresh PlayedCardCollector
-│                                              per game and calls game.subscribeToEvents().
-├── MatchGenerator.java               CHANGED: returns (MatchResult, List<CardsPlayedRow>)
-├── MatchWorkerMain.java              CHANGED: writes both result files
-├── MatchResultWriter.java            UNCHANGED
-└── ...                               (other classes unchanged)
+src/price_predictor/
+└── application/
+    └── build_vocabulary.py       # MODIFIED:
+                                  #   - _seed_special_tokens: + "[MASK]" alongside [PAD]/[UNK]/cardname
+                                  #   - VocabBuildResult: domain_token_count grows by 1 (specials)
 
-tests/
-├── unit/sealed/
-│   ├── application/
-│   │   ├── test_build_vocab.py       NEW
-│   │   └── test_train_encoder.py     NEW (aggregation, shrinkage, split, save filter)
-│   ├── domain/
-│   │   └── test_encoder_model.py     NEW (forward shape, encode shape, head present)
-│   └── infrastructure/
-│       ├── test_cards_played_reader.py  NEW
-│       ├── test_encoder_store.py        NEW (round-trip save/load, head filter)
-│       └── test_cli.py               EXTENDED (new subcommand argparse, default flips)
-├── integration/
-│   └── test_winnability_e2e.py       NEW (fixture corpus → train-encoder → encode-cards
-│                                          → assert .npz shape & content)
-└── fixtures/
-    └── sealed/
-        ├── cards-played.sample.txt   NEW (small synthetic corpus)
-        └── cardsfolder/...           REUSED
+tests/unit/sealed/
+├── application/
+│   ├── test_train_encoder.py     # NEW (currently no unit tests for this module):
+│   │                             #   - aggregator pass 1 (primary + @play subset)
+│   │                             #   - aggregator pass 2 (mana cost → colors;
+│   │                             #     hybrid {W/U}, Phyrexian {W/P}, generic {2}, {X})
+│   │                             #   - label arithmetic (raw vs shrunk for all 9 heads;
+│   │                             #     k = 0 vs k = 20)
+│   │                             #   - FR-012 zero-denominator handling (cell present-but-empty,
+│   │                             #     contributes zero loss; card excluded if total in_deck = 0)
+│   │                             #   - per-batch per-head sum-to-1 weight normalization
+│   │                             #     (single-card batch, mixed-card batch with one head all-zero)
+│   │                             #   - FR-014b mask draw (probability + non-special-token mask
+│   │                             #     positions only; [PAD]/[CLS]/[MASK] never become [MASK])
+│   │                             #   - stratification fallback for degenerate score_play
+│   │                             #     distributions and for cards with empty score_play cell
+│   │                             #   - cards-win-rates.txt header + 24 columns + sort order
+│   │                             #   - corpus-consistency error names missing cards (capped)
+│   └── test_build_vocab.py       # MODIFIED: assert [MASK] present in emitted vocab
+├── domain/
+│   └── test_encoder_model.py     # MODIFIED:
+│                                 #   - forward returns the new dict shape under training=True
+│                                 #   - encode() (inference) is unchanged: returns (B, 2*d_model)
+│                                 #   - mlm_head logits shape (B, T, vocab_size)
+│                                 #   - state_dict prefixes: regression_heads.* and mlm_head.*
+│                                 #     are present in the live model and absent from the saved file
+└── infrastructure/
+    └── test_encoder_store.py     # MODIFIED: round-trip with new heads in the live model;
+                                  #   assert the saved file has only token_encoder.*/card_encoder.*
 
-forge-connector/src/test/java/com/pricepredictor/connector/
-├── CardsPlayedRowTest.java           NEW (formatting, basic-land filter)
-├── CardsPlayedWriterTest.java        NEW (line-buffered round-trip)
-└── PlayedCardCollectorTest.java      NEW (zone-change classification, controller bucketing)
+tests/integration/sealed/
+└── test_train_encoder_smoke.py   # MODIFIED:
+                                  #   - tiny synthetic cards-played.txt + tiny corpus + tiny vocab
+                                  #     (with [MASK])
+                                  #   - run train-encoder for ~3 epochs
+                                  #   - assert: latest.pt loads via SealedEncoderStore (no leaked
+                                  #     head/MLM keys), full val_loss is monotonically reported,
+                                  #     cards-win-rates.txt has the header + non-empty rows
+
+forge-connector/                  # UNCHANGED — basic-land filtering already in
+                                  #   PlayedCardCollector and MatchGenerator
 ```
 
-**Structure Decision**: Single repository, two Python packages
-(`price_predictor`, `sealed`) in `src/` plus the
-`forge-connector` Maven module. The new domain
-entities (`SealedEncoderConfig`, `SealedEncoderModel`,
-`CardLabel`) and adapters (`encoder_store`, `cards_played_reader`)
-slot into the existing `sealed/domain/` and
-`sealed/infrastructure/` directories without introducing new
-top-level layers. The Java additions (`CardsPlayedRow`,
-`CardsPlayedWriter`, `PerGameCardObserver`) live alongside the
-existing `MatchResult{Writer,Generator,…}` family in the same
-package. CLI wiring is a single-file change
-(`src/sealed/infrastructure/cli.py`) following the established
-subparser pattern.
+**Structure Decision**: All Python changes live in the existing `sealed` package
+(application + domain + infrastructure) and one shared utility in the
+`price_predictor` package (`build_vocabulary._seed_special_tokens`). No new
+modules or packages are introduced. The `forge-connector` Java module is
+untouched — its existing basic-land filtering already satisfies FR-004a.
 
 ## Complexity Tracking
 
-> No constitutional violations recorded; this section is intentionally empty.
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-## Phase 0 Output
-
-- [research.md](./research.md) — codebase survey + 7 design decisions
-
-## Phase 1 Output
-
-- [data-model.md](./data-model.md) — entities, fields, validation
-- [contracts/cli.md](./contracts/cli.md) — CLI command contracts
-- [contracts/files.md](./contracts/files.md) — on-disk file schemas
-- [quickstart.md](./quickstart.md) — end-to-end walkthrough
-
-## Post-Design Constitution Re-check
-
-After completing Phase 1 design:
-
-- **No new principle violations introduced.** The design did not
-  add a third instance of any pattern; the only follow-up
-  surfaced (extract `_BestCheckpoint`) is deferred to a future
-  feature when the third caller appears.
-- **Domain layer remains framework-light.** The new
-  `SealedEncoderModel` imports `torch` (consistent with
-  `scorer_model.py`); no infrastructure leakage.
-- **Data integrity boundaries are explicit.** Three error paths
-  in `train-encoder` (missing vocab, missing cards-played, missing
-  corpus card) each raise with a corrective-action message
-  pointing at a specific subcommand. The corpus consistency check
-  (FR-023d) runs after aggregation specifically so the error can
-  enumerate offending names.
-- **CLI defaults flip is reversible.** Passing
-  `--encoder-checkpoint <price-encoder>` to either `encode-cards`
-  or `train-scorer` restores the prior behavior in one step
-  (SC-006), with no code changes.
-
-Constitution Check: PASS.
-
-## Follow-ups surfaced by the survey
-
-- **Future**: when a third training entry point lands, extract a
-  shared `BestCheckpoint` helper from the duplicated logic in
-  `train_transformer.py` and `train_encoder.py` (Principle II,
-  three-use-cases threshold).
-- **Future**: rename the price-side `CardPriceTransformerModel`
-  state-dict prefixes (`token_embedding`, `position_embedding`,
-  `encoder`, `output_head`) into a child-module layout
-  (`token_encoder.*`, `card_encoder.*`, `regression_head.*`) that
-  matches the new sealed encoder, so a future shared base class
-  has aligned state-dict keys. Not required by this feature.
+No constitution violations. No complexity justifications needed.

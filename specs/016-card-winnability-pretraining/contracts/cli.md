@@ -1,140 +1,198 @@
 # CLI Contracts
 
-Two new sealed subcommands and two default-value flips in existing
-sealed subcommands. Each contract below is the minimum set of
-flags, error conditions, and exit codes that this feature ships.
+Two sealed subcommands exercised by this feature (`build-vocab` and
+`train-encoder`), plus default-value flips on two existing subcommands
+(`encode-cards`, `train-scorer`) that were already shipped in the v1
+iteration of spec 016 and are documented here for completeness.
 
-## `python -m sealed build-vocab` (new)
+## `python -m sealed build-vocab`
 
 Build the sealed-side tokenizer vocabulary from the converted card
 corpus. Thin wrapper around
 `price_predictor.application.build_vocabulary.build_vocabulary` with
-sealed defaults (Decision D-1, FR-007–FR-009).
+sealed defaults (Decision D-1, FR-007–FR-009a).
 
 ### Flags
 
-| Flag             | Type | Default                                | Notes                                   |
-|------------------|------|----------------------------------------|-----------------------------------------|
-| `--cards-folder` | path | `output/cardsfolder/`                  | Searched recursively for `*.txt`.       |
-| `--vocab-path`   | path | `models/sealed/encoder/vocab.txt`      | Output. Parent directory auto-created.  |
-| `--target-size`  | int  | `5000`                                 | Approximate vocab size (Decision D-1).  |
+| Flag | Type | Default | Notes |
+|---|---|---|---|
+| `--cards-folder` | path | `output/cardsfolder/` | Searched recursively for `*.txt`. |
+| `--vocab-path` | path | `models/sealed/encoder/vocab.txt` | Output. Parent directory auto-created. |
+| `--target-size` | int | `5000` | Approximate vocab size (Decision D-1). Seeded specials, including `[MASK]`, are always preserved. |
 
 ### Behavior
 
-1. Resolve `--cards-folder`. If empty (no `*.txt` files), exit code
-   `1` with message `"Cards folder is empty: <path>. Run python -m
+1. Resolve `--cards-folder`. If empty (no `*.txt` files), exit code `1`
+   with message `"Cards folder is empty: <path>. Run python -m
    price_predictor convert first."`.
-2. Call `build_vocabulary(cards_path, freq_threshold=2,
-   printings_path=resources/AllPrintings.json if present else None)`.
+2. Call `build_vocabulary(cards_path, freq_threshold=2, printings_path=
+   resources/AllPrintings.json if present else None)`. The seeded specials
+   include `[PAD]`, `[UNK]`, `cardname`, **`[MASK]`** (FR-009a).
 3. Truncate the resulting vocab dict to `--target-size` entries by
-   frequency (special tokens always preserved).
+   frequency. Seeded specials and domain tokens are always preserved.
 4. Call `tokenizer_store.save_vocabulary(vocab, vocab_path)`.
 5. Print one summary line: `"Wrote N tokens to <vocab-path> (corpus
    coverage: P%)"`.
 
 ### Exit codes
 
-| Code | Condition                                                   |
-|------|-------------------------------------------------------------|
-| `0`  | Vocabulary written successfully.                            |
-| `1`  | Cards folder missing or empty.                              |
-| `2`  | `--target-size` smaller than the seed-token count.          |
+| Code | Condition |
+|---|---|
+| `0` | Vocabulary written successfully. |
+| `1` | Cards folder missing or empty. |
+| `2` | `--target-size` smaller than the seed-token count (now includes `[MASK]`). |
 
 ### Side effects
 
 - Writes `--vocab-path`. Does NOT touch
   `models/price-predictor/transformer/vocab.txt` (FR-008).
+- The output vocab MUST contain a `[MASK]` token; downstream `train-encoder`
+  rejects vocabularies without it (FR-023a).
 
 ---
 
-## `python -m sealed train-encoder` (new)
+## `python -m sealed train-encoder`
 
-Train a sealed encoder (token + card encoder + regression head) on
-per-card winnability targets. Saves only the encoder weights
-(FR-014, FR-016, FR-017, FR-020).
+Train a sealed encoder + five regression heads + an MLM head on per-card
+winnability labels and an auxiliary mask-prediction objective. Saves only
+the encoder weights (FR-014, FR-016, FR-017, FR-020).
 
 ### Flags
 
-| Flag                    | Default                              | FR     |
-|-------------------------|--------------------------------------|--------|
-| `--cards-played-path`   | `output/sealed/cards-played.txt`     | FR-021 |
-| `--cards-folder`        | `output/cardsfolder/`                | FR-021 |
-| `--vocab-path`          | `models/sealed/encoder/vocab.txt`    | FR-021 |
-| `--model-output`        | `models/sealed/encoder/`             | FR-021 |
-| `--batch-size`          | `64`                                 | FR-021 |
-| `--epochs`              | `100`                                | FR-021 |
-| `--lr`                  | `1e-4`                               | FR-021 |
-| `--patience`            | `20`                                 | FR-021 |
-| `--dropout`             | `0.1`                                | FR-021 |
-| `--n-layers`            | `6`                                  | FR-021 |
-| `--n-heads`             | `4`                                  | FR-021 |
-| `--n-pool-queries`      | `4`                                  | FR-021 |
-| `--shrinkage-k`         | `20`                                 | FR-021 |
+| Flag | Default | FR |
+|---|---|---|
+| `--cards-played-path` | `output/sealed/cards-played.txt` | FR-021 |
+| `--cards-folder` | `output/cardsfolder/` | FR-021 |
+| `--vocab-path` | `models/sealed/encoder/vocab.txt` | FR-021 |
+| `--model-output` | `models/sealed/encoder/` | FR-021 |
+| `--batch-size` | `64` | FR-021 |
+| `--epochs` | `100` | FR-021 |
+| `--lr` | `1e-4` | FR-021 |
+| `--patience` | `20` | FR-021 |
+| `--dropout` | `0.1` | FR-021 |
+| `--n-layers` | `6` | FR-021 |
+| `--n-heads` | `4` | FR-021 |
+| `--n-pool-queries` | `4` | FR-021 |
+| `--shrinkage-k` | `20` | FR-021 |
+| `--mlm-weight` | `0.1` | FR-021 |
+| `--mlm-mask-prob` | `0.15` | FR-021 |
 
-Hardcoded constants (not flags): `d_model = 256`, `ff_dim = 1024`,
-`val_fraction = 0.2`, `random_seed = 42`, `loss = MSE`,
-`stratification = winnability quartiles`. `max_seq_len` is computed
-from the corpus at start (rounded up to a multiple of 8).
+**Hardcoded constants** (not flags), per FR-022 + Clarifications 2026-05-10:
+
+- `d_model = 256`, `ff_dim = 1024`
+- `val_fraction = 0.2`, `random_seed = 42`
+- `stratification = score_play quartiles` with FR-018 fallback chain
+- `loss formula = L_reg + (--mlm-weight) · L_mlm` per FR-017
+- Per-head per-batch sum-to-1 weight normalization on `L_reg`
+- `optimizer = AdamW with per-parameter-group max-norm 1.0 gradient clipping`
+- `lr schedule = linear warmup over the first 5% of (--epochs × batches_per_epoch) steps, then constant`
+- `max_seq_len = corpus longest tokenized card, rounded up to multiple of 8`
 
 ### Behavior
 
 1. **Pre-flight checks** (in this order; first failure wins):
-   - `--vocab-path` missing → exit `2`, message names
-     `python -m sealed build-vocab`.
-   - `--cards-played-path` missing or zero-length → exit `3`,
-     message names `python -m sealed match-outcomes`.
-   - `--cards-folder` empty → exit `4`, message names
-     `python -m price_predictor convert`.
-2. **Aggregation pass**: stream `cards-played.txt`, count
-   `wins_when_played[c]` and `wins_when_in_deck[c]` for the winning
-   side of every game, exclude cards with `wins_when_in_deck == 0`,
-   apply Bayesian shrinkage with `--shrinkage-k`.
-3. **Corpus consistency check** (FR-023d): for every card name in
-   the label map, verify that `output/cardsfolder/<filename>.txt`
-   exists (using `card_name_corrections` for known typos). If any
-   are missing, exit `5` with a message naming up to 20 missing
-   cards plus a total count, pointing the user at
-   `python -m price_predictor convert`.
-4. Write `output/sealed/cards-win-rates.txt` (FR-013a).
-5. Build the train/val split (stratified on winnability quartile,
-   card-level disjoint, seed=42, val_fraction=0.2).
-6. Construct a fresh `SealedEncoderModel(SealedEncoderConfig(...))`,
+   - `--vocab-path` missing → exit `2`, message names `python -m sealed build-vocab`.
+   - `--vocab-path` present but lacking `[MASK]` token → exit `2`, message names `python -m sealed build-vocab` (FR-023a).
+   - `--cards-played-path` missing or zero-length → exit `3`, message names `python -m sealed match-outcomes`.
+   - `--cards-folder` empty → exit `4`, message names `python -m price_predictor convert`.
+   - Architectural mismatch (`d_model % --n-pool-queries != 0` or `d_model % --n-heads != 0`) → exit `6` (raised inside `SealedEncoderConfig.__post_init__`).
+
+2. **Aggregation pass 1** (FR-010a): stream `cards-played.txt`, count for
+   every card observed in either side's deck:
+   - 4 primary counters (`wins_when_played`, `wins_when_in_deck`,
+     `losses_when_played`, `losses_when_in_deck`)
+   - 4 `@play` subset counters (same four, restricted to games where the
+     card's owner was the starter)
+
+3. **Corpus consistency check** (FR-023d): for every card name observed
+   in pass 1 with non-zero `wins_when_in_deck + losses_when_in_deck`,
+   verify the card has a `.txt` under `--cards-folder` (using
+   `card_name_corrections`). On any miss, exit `5` with a message
+   naming up to 20 missing cards plus a total count, pointing the user
+   at `python -m price_predictor convert`.
+
+4. **Aggregation pass 2** (FR-010b): stream `cards-played.txt` again. For
+   every card, on first encounter resolve its color identity from its
+   `mana cost:` line via the regex helper of Decision D-16. For each
+   game, compute each side's deck-color set as the union over its deck
+   contents. For every (card, color-X-in-deck) pairing, increment four
+   per-color counters: `wins_when_played_with_X`,
+   `wins_when_in_deck_with_X`, `losses_when_played_with_X`,
+   `losses_when_in_deck_with_X`.
+
+5. **Build label map** (FR-011, FR-012): compute 9 raw + 9 shrunk labels
+   per card. Cells whose slice denominator is zero are stored as
+   present-but-empty (the head's loss contribution will be masked out at
+   training time). Cards with `wins_when_in_deck + losses_when_in_deck
+   == 0` are excluded entirely.
+
+6. **Write `output/sealed/cards-win-rates.txt`** (FR-013a, Decision D-15):
+   one header row + one row per included card, 24 columns each, sorted by
+   `shrunk_score_play` descending. Empty cells are written as the empty
+   string in both raw and shrunk columns.
+
+7. **Build the train/val split** (FR-018, Decision D-4): card-level
+   disjoint, stratified on `score_play` quartile with the fallback chain;
+   `val_fraction = 0.2`, `random_seed = 42`.
+
+8. **Construct a fresh `SealedEncoderModel(SealedEncoderConfig(...))`**
+   with the new `regression_heads` ModuleDict and the new `mlm_head`,
    move to GPU if available.
-7. Train with AdamW + LambdaLR (linear warmup, then constant) +
-   MSE loss. Snapshot the best-by-val-loss checkpoint via the
-   `_BestCheckpoint` pattern. Stop early after `--patience`
-   consecutive no-improvement epochs.
-8. After training: write
-   `models/sealed/encoder/{ISO_TIMESTAMP}.pt` with only
-   `model_state_dict` (regression head filtered out) +
-   `config`. Copy that file's contents to
-   `models/sealed/encoder/latest.pt`.
-9. Print a final summary: `"Best epoch: E, val_loss: V. Saved
-   <path>"`.
+
+9. **Train with**:
+   - `AdamW` optimizer + `LambdaLR` (linear warmup over the first 5% of
+     scheduled steps, constant after).
+   - Per-parameter-group max-norm 1.0 gradient clipping between
+     `loss.backward()` and `optimizer.step()` (FR-022).
+   - Per-card MLM mask draw at every batch step (Decision D-10):
+     non-special, non-pad positions selected with probability
+     `--mlm-mask-prob`; selected positions overwritten with `[MASK]`
+     before the masked sequence enters the token encoder.
+   - Per-batch per-head sum-to-1 weighted MSE on the 9 regression heads
+     (Decisions D-11), summed with the `(1/5)` factor on the color-lift
+     block per FR-017.
+   - MLM cross-entropy at masked positions only; reduced by
+     `mask.sum().clamp(min=1)`.
+   - Full batch loss = `L_reg + (--mlm-weight) * L_mlm`.
+
+10. **Validate at end of every epoch**: re-evaluate the full loss on the
+    val set; update `_BestCheckpoint` on improvement; bump
+    `epochs_since_best` otherwise. Stop early after `--patience`
+    consecutive no-improvement epochs (FR-019, Clarification 2026-05-10).
+
+11. **Save**: write `models/sealed/encoder/{ISO_TIMESTAMP}.pt` with
+    `model_state_dict` (filtered to encoder children — heads and MLM
+    head dropped per FR-020) + `config`. Copy that file's contents to
+    `models/sealed/encoder/latest.pt`.
+
+12. **Print final summary**: `"Best epoch: E, val_loss: V. Saved <path>"`.
 
 ### Stdout
 
-Per-epoch progress lines via `_log()` (timestamp prefix), matching
-`train_scorer.py` style:
+Per-epoch progress lines via `_log()`:
 
 ```
-[2026-05-03 14:22:01] Epoch 1/100  train_loss=0.0481  val_loss=0.0413  best=*
-[2026-05-03 14:22:18] Epoch 2/100  train_loss=0.0395  val_loss=0.0398  best=*
+[2026-05-10 14:22:01] Epoch 1/100  train_loss=0.4721 (reg=0.4205, mlm=5.16)  val_loss=0.4519 (reg=0.4002, mlm=5.17)  best=*
+[2026-05-10 14:22:18] Epoch 2/100  train_loss=0.3984 (reg=0.3522, mlm=4.62)  val_loss=0.4071 (reg=0.3551, mlm=5.20)  best=*
 ...
-[2026-05-03 14:35:02] Early stop after 22 epochs without improvement.
-[2026-05-03 14:35:02] Best epoch: 21, val_loss: 0.0312. Saved models/sealed/encoder/2026-05-03T14-22-01.pt
+[2026-05-10 14:35:02] Early stop after 21 epochs without improvement.
+[2026-05-10 14:35:02] Best epoch: 24, val_loss: 0.3812. Saved models/sealed/encoder/2026-05-10T14-22-01.pt
 ```
+
+The `(reg=…, mlm=…)` breakdown is informational; the `best=*` flag is
+based on the full loss column per FR-019.
 
 ### Exit codes
 
-| Code | Condition                                                         |
-|------|-------------------------------------------------------------------|
-| `0`  | Training completed; best checkpoint saved.                        |
-| `2`  | Vocabulary file missing.                                          |
-| `3`  | `cards-played.txt` missing or empty.                              |
-| `4`  | Cards folder empty.                                               |
-| `5`  | Corpus references cards absent from `output/cardsfolder/`.        |
-| `6`  | Misconfiguration (`d_model % n_pool_queries != 0`, etc.).         |
+| Code | Condition |
+|---|---|
+| `0` | Training completed; best checkpoint saved. |
+| `2` | Vocabulary missing or lacking `[MASK]`. |
+| `3` | `cards-played.txt` missing or empty. |
+| `4` | Cards folder empty. |
+| `5` | Corpus references cards absent from `output/cardsfolder/`. |
+| `6` | Architectural misconfiguration (`d_model % n_pool_queries != 0`, etc.). |
+| `130` | KeyboardInterrupt (Ctrl-C). |
 
 ### Side effects
 
@@ -145,64 +203,39 @@ Per-epoch progress lines via `_log()` (timestamp prefix), matching
 
 ---
 
-## `python -m sealed encode-cards` (default change only)
+## `python -m sealed encode-cards` (default change only — already shipped in v1)
 
-The behavior is unchanged. This feature flips the default of
-`--encoder-checkpoint` (FR-025).
+The behavior is unchanged. The v1 iteration of spec 016 already flipped
+the default of `--encoder-checkpoint` (FR-025); documented here for
+completeness.
 
-### Default change
+### Default
 
-| Flag                    | Old default                                            | New default                            |
-|-------------------------|--------------------------------------------------------|----------------------------------------|
-| `--encoder-checkpoint`  | `models/price-predictor/transformer/latest.pt`         | `models/sealed/encoder/latest.pt`      |
+| Flag | Old default | Current default |
+|---|---|---|
+| `--encoder-checkpoint` | `models/price-predictor/transformer/latest.pt` | `models/sealed/encoder/latest.pt` |
+| `--vocab-path` | `models/price-predictor/transformer/vocab.txt` | `models/sealed/encoder/vocab.txt` |
 
-### New error condition (FR-026)
+### Missing-file error (FR-026)
 
-When the resolved default checkpoint does not exist *and* the user
-did not pass `--encoder-checkpoint` explicitly, exit code `2` with
-message:
+If the resolved default checkpoint does not exist *and* the user did not
+pass `--encoder-checkpoint` explicitly, exit code `2` with message:
 
 ```
 Sealed encoder not found at models/sealed/encoder/latest.pt.
 Run python -m sealed train-encoder, or pass --encoder-checkpoint <path> explicitly.
 ```
 
-Existing path with explicit `--encoder-checkpoint` continues to
-work without modification (FR-027).
-
-### Vocab path coupling
-
-The default `--vocab-path` for `encode-cards` becomes
-`models/sealed/encoder/vocab.txt` (matches the default encoder).
-Old default (`models/price-predictor/transformer/vocab.txt`)
-remains valid via explicit `--vocab-path`.
+Existing path with explicit `--encoder-checkpoint` continues to work
+without modification (FR-027).
 
 ---
 
-## `python -m sealed train-scorer` (default change only)
+## `python -m sealed train-scorer` (default change only — already shipped in v1)
 
-Identical to `encode-cards`: flip the `--encoder-checkpoint`
-default and add the same missing-file error (FR-024, FR-026).
-
-### Default change
-
-| Flag                    | Old default                                            | New default                            |
-|-------------------------|--------------------------------------------------------|----------------------------------------|
-| `--encoder-checkpoint`  | `models/price-predictor/transformer/latest.pt`         | `models/sealed/encoder/latest.pt`      |
-
-Phase A and Phase B both pick up the new default. Phase B's
-`--scorer-checkpoint <phaseA>.pt` continues to override only the
-scorer state-dict; the encoder-checkpoint default still resolves
-to the new path unless explicitly overridden.
-
-### New error condition
-
-Same shape as `encode-cards`: exit code `2` if the resolved default
-file is missing and no explicit `--encoder-checkpoint` was passed.
-
-### Resume semantics
-
-When `--resume <phaseB>.pt` is passed, the resume code path
-already pulls the encoder weights from the resumed checkpoint
-(per `train_scorer.py`'s existing logic). That path is unchanged.
-The default flip only affects fresh kickoffs.
+Identical to `encode-cards`: the v1 iteration of spec 016 flipped the
+`--encoder-checkpoint` default (FR-024) and added the same missing-file
+error (FR-026). Phase A and Phase B both pick up the new default. Phase
+B's `--scorer-checkpoint <phaseA>.pt` continues to override only the
+scorer state-dict; the encoder-checkpoint default still resolves to the
+new path unless explicitly overridden. Resume semantics are unchanged.
