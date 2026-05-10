@@ -33,14 +33,22 @@
 
 - This spec borrows technical vocabulary from the source description
   (`specs/card-winnability-pretraining.md`) — token encoder, transformer
-  layers, multi-query attention pool, MSE loss, etc. — because the
-  surrounding specs in this repo (e.g. `010-mtg-custom-tokenizer`,
-  `015-encoder-fine-tuning`) treat those terms as part of the project's
-  shared vocabulary rather than as implementation leakage. Running
-  `/speckit.clarify` will surface the small handful of remaining
-  ambiguities (e.g. should `d_token` itself be a hardcoded constant or a
-  CLI flag; should `train-encoder` warn vs error on partial cache states).
+  layers, multi-query attention pool, MSE / cross-entropy loss, MLM
+  masking, etc. — because the surrounding specs in this repo (e.g.
+  `010-mtg-custom-tokenizer`, `015-encoder-fine-tuning`) treat those
+  terms as part of the project's shared vocabulary rather than as
+  implementation leakage. Running `/speckit.clarify` will surface any
+  remaining ambiguities introduced by the amendment.
 - The "non-technical stakeholders" criterion is interpreted in the
   project context: the user is the sole stakeholder and is comfortable
   with ML and MTG vocabulary, so explanations of *why* a design choice
   exists are kept, while jargon-heavy implementation detail is avoided.
+- **2026-05-10 re-validation**: spec amended to fold in the parent
+  spec's expansion to five regression head families (`score_play`,
+  `score_draw`, `played_rate`, `cast_lift`, `color_lift_X` × 5), the
+  MLM auxiliary loss, two-pass aggregation (primary + per-color), and
+  per-head sample weighting. All checklist items re-checked against
+  the amended FRs, edge cases, and success criteria; no new
+  [NEEDS CLARIFICATION] markers introduced. Downstream artifacts
+  (`plan.md`, `tasks.md`, etc.) need regenerating via the standard
+  speckit workflow.
