@@ -30,6 +30,8 @@ class TestTrainEncoderArgs:
         assert ns.n_heads == 4
         assert ns.n_pool_queries == 4
         assert ns.shrinkage_k == 20.0
+        assert ns.mlm_weight == 0.1
+        assert ns.mlm_mask_prob == 0.15
 
     def test_overrides_propagate(self):
         ns = _parse([
@@ -38,11 +40,22 @@ class TestTrainEncoderArgs:
             "--epochs", "1",
             "--n-layers", "2",
             "--n-pool-queries", "8",
+            "--mlm-weight", "0.5",
+            "--mlm-mask-prob", "0.25",
         ])
         assert ns.shrinkage_k == 0.0
         assert ns.epochs == 1
         assert ns.n_layers == 2
         assert ns.n_pool_queries == 8
+        assert ns.mlm_weight == 0.5
+        assert ns.mlm_mask_prob == 0.25
+
+    def test_mlm_flags_surface_on_resolved_config(self):
+        """The two new flags must reach the TrainEncoderConfig dataclass."""
+        from sealed.application.train_encoder import TrainEncoderConfig
+        cfg = TrainEncoderConfig(mlm_weight=0.4, mlm_mask_prob=0.3)
+        assert cfg.mlm_weight == 0.4
+        assert cfg.mlm_mask_prob == 0.3
 
     def test_no_aggregate_labels_subcommand(self):
         # FR-013: aggregation is inline, so the help must NOT advertise

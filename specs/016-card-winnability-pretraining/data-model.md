@@ -46,13 +46,13 @@ Lifecycle: append-only across runs. Never truncated by automation.
 Written by `train-encoder` after label aggregation. One header row + one
 row per card included in the training label map.
 
-**Header row** (24 columns, semicolon-separated, no trailing `;`):
+**Header row** (23 columns, semicolon-separated, no trailing `;`):
 
 ```
 card_name;wins_when_played;wins_when_in_deck;losses_when_played;losses_when_in_deck;raw_score_play;shrunk_score_play;raw_score_draw;shrunk_score_draw;raw_played_rate;shrunk_played_rate;raw_cast_lift;shrunk_cast_lift;raw_color_lift_W;shrunk_color_lift_W;raw_color_lift_U;shrunk_color_lift_U;raw_color_lift_B;shrunk_color_lift_B;raw_color_lift_R;shrunk_color_lift_R;raw_color_lift_G;shrunk_color_lift_G
 ```
 
-**Data rows**: same 24 columns. Counters are integers; raw/shrunk values
+**Data rows**: same 23 columns. Counters are integers; raw/shrunk values
 are floats formatted to five decimal places. Cells whose slice
 denominator is zero are written as the empty string in both the raw and
 shrunk column for that head (cell present-but-empty per FR-012).

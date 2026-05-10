@@ -1,11 +1,12 @@
 """Persistence for the sealed encoder.
 
-Saves only encoder weights (token_encoder + card_encoder); strips the
-regression head before serialization (FR-020). On load, the prefix check
-fails immediately if any non-encoder key sneaked into the saved file
-(``strict=True`` semantic from data-model.md, applied at the prefix level
-because the live model still owns a freshly-initialized regression head
-that is intentionally not loaded).
+Saves only encoder weights (``token_encoder.*`` + ``card_encoder.*``);
+strips both the regression heads (``regression_heads.*``) and the MLM
+head (``mlm_head.*``) before serialization per FR-020. On load, the
+prefix check fails immediately if any non-encoder key sneaked into the
+saved file (``strict=True`` semantic from data-model.md, applied at the
+prefix level because the live model still owns freshly-initialized
+regression and MLM heads that are intentionally not loaded).
 """
 
 from __future__ import annotations
@@ -95,12 +96,17 @@ class SealedEncoderStore:
             if not any(key.startswith(prefix) for prefix in _ENCODER_PREFIXES)
         ]
         if unexpected:
+            head = sorted(unexpected)[:5]
+            extra = (
+                f" (and {len(unexpected) - 5} more)"
+                if len(unexpected) > 5 else ""
+            )
             raise RuntimeError(
-                f"Encoder checkpoint at {path} contains non-encoder keys: "
-                f"{sorted(unexpected)[:5]} (and {len(unexpected) - 5} more)"
-                if len(unexpected) > 5
-                else f"Encoder checkpoint at {path} contains non-encoder keys: "
-                f"{sorted(unexpected)}"
+                f"Encoder checkpoint at {path} contains non-encoder keys "
+                f"{head}{extra}. Per FR-020 the saved file must contain "
+                f"only {sorted(_ENCODER_PREFIXES)} prefixes; "
+                f"regression_heads.* and mlm_head.* are filtered out at "
+                f"save time."
             )
 
         token_state = {

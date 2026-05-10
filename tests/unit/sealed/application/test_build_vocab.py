@@ -39,6 +39,24 @@ class TestBuildVocab:
         assert lines[1] == "[UNK]"
         assert lines[2] == "cardname"
 
+    def test_emitted_file_contains_mask_token(self, tmp_path: Path):
+        """FR-009a: the sealed build-vocab wrapper emits a vocab file
+        whose tokens include ``[MASK]`` (the reserved MLM token used by
+        ``train-encoder``).
+        """
+        cards = tmp_path / "cardsfolder"
+        _seed_corpus(cards, [
+            "name: lightning bolt\nmana cost: {R}\ntypes: instant\n"
+            "spell[1]: cardname deals 3 damage to any target.\n",
+            "name: grizzly bears\nmana cost: {1}{G}\ntypes: creature\n",
+        ])
+        target = tmp_path / "vocab.txt"
+        run_build_vocab(BuildVocabConfig(
+            cards_folder=cards, vocab_path=target, target_size=5000,
+        ))
+        tokens = target.read_text(encoding="utf-8").splitlines()
+        assert "[MASK]" in tokens
+
     def test_does_not_modify_price_side_vocab(self, tmp_path: Path):
         cards = tmp_path / "cardsfolder"
         _seed_corpus(cards, ["name: lightning bolt\ntypes: instant\n"])

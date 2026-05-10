@@ -162,8 +162,26 @@ def _build_train_encoder_parser(subparsers) -> None:
     parser.add_argument(
         "--shrinkage-k", type=float, default=20.0,
         help=(
-            "Bayesian shrinkage strength toward 0.5 (default: 20). "
-            "0 = raw ratios; higher = more aggressive shrinkage on low-n cards."
+            "Bayesian shrinkage strength toward each head's neutral point "
+            "(default: 20). 0 = raw labels; higher = more aggressive "
+            "shrinkage on low-observation cells. Drives both label "
+            "shrinkage and FR-017a per-head sample weighting."
+        ),
+    )
+    parser.add_argument(
+        "--mlm-weight", type=float, default=0.1,
+        help=(
+            "Weight on the MLM auxiliary cross-entropy loss "
+            "(default: 0.1). Full training loss = L_reg + "
+            "(--mlm-weight) * L_mlm."
+        ),
+    )
+    parser.add_argument(
+        "--mlm-mask-prob", type=float, default=0.15,
+        help=(
+            "Per-token probability of being masked for the MLM head "
+            "(default: 0.15). Only non-special, non-pad positions are "
+            "eligible."
         ),
     )
 
@@ -1107,6 +1125,8 @@ def run_train_encoder(args: argparse.Namespace) -> int:
         n_heads=args.n_heads,
         n_pool_queries=args.n_pool_queries,
         shrinkage_k=args.shrinkage_k,
+        mlm_weight=args.mlm_weight,
+        mlm_mask_prob=args.mlm_mask_prob,
     )
     try:
         run_train_encoder_pipeline(config)

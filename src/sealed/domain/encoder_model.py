@@ -1,9 +1,11 @@
-"""Sealed encoder: token + card encoder + regression head for winnability.
+"""Sealed encoder: token + card encoder + per-card winnability heads + MLM head.
 
-Trained from scratch on per-card winnability targets aggregated from
-``cards-played.txt``. The regression head is used only during training and
-filtered out at save time so the persisted ``.pt`` carries only encoder
-weights (FR-020).
+Trained from scratch under spec 016's multi-head + MLM objective: nine
+regression cells per card (``score_play``, ``score_draw``, ``played_rate``,
+``cast_lift``, and one ``color_lift`` per WUBRG color) plus a masked-language
+modeling head reading the contextualized token sequence. The regression
+heads and the MLM head are training-only and filtered out at save time so
+the persisted ``.pt`` carries only encoder weights (FR-020).
 """
 
 from __future__ import annotations
@@ -12,6 +14,10 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
+
+# WUBRG color order — fixed to match the per-color counter ordering used by
+# ``train_encoder._build_label_map`` and the columns in ``cards-win-rates.txt``.
+COLOR_ORDER: tuple[str, ...] = ("W", "U", "B", "R", "G")
 
 
 @dataclass
@@ -70,14 +76,7 @@ class _TokenEncoder(nn.Module):
 
 
 class _MultiQueryAttentionPool(nn.Module):
-    """Pool a token sequence into a fixed-size vector via K learned queries.
-
-    Owns ``K = n_pool_queries`` learned query vectors of length
-    ``d_model / K`` each. For each query, runs single-head attention against
-    the contextualized token sequence (key/value = encoder output) and
-    concatenates the K outputs into a ``(B, d_model)`` vector. Padding is
-    masked using ``key_padding_mask``.
-    """
+    """Pool a token sequence into a fixed-size vector via K learned queries."""
 
     def __init__(self, d_model: int, n_pool_queries: int, dropout: float) -> None:
         super().__init__()
@@ -119,10 +118,10 @@ class _MultiQueryAttentionPool(nn.Module):
 class _CardEncoderBlock(nn.Module):
     """Transformer encoder stack + dual pool (multi-query attention ‖ max).
 
-    Output shape is ``(B, 2 * d_model)``: half from the multi-query
-    attention pool and half from element-wise max pooling, mirroring the
-    price-side ``cat([max, mean])`` layout but with a learned attention
-    pool on the second half (per data-model.md §"Multi-query attention pool").
+    Returns ``(contextualized, pooled)`` where ``contextualized`` is the
+    pre-pool transformer output ``(B, T, d_model)`` consumed by the MLM
+    head per FR-015a / Decision D-9, and ``pooled`` is ``(B, 2 * d_model)``
+    consumed by the regression heads.
     """
 
     def __init__(self, config: SealedEncoderConfig) -> None:
@@ -141,7 +140,7 @@ class _CardEncoderBlock(nn.Module):
 
     def forward(
         self, x: torch.Tensor, attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         padding_mask = attention_mask == 0
         encoded = self.encoder(x, src_key_padding_mask=padding_mask)
 
@@ -151,20 +150,41 @@ class _CardEncoderBlock(nn.Module):
         max_input = encoded.masked_fill(padding_mask_3d, float("-inf"))
         max_pooled = max_input.max(dim=1).values
 
-        return torch.cat([attn_pooled, max_pooled], dim=-1)
+        pooled = torch.cat([attn_pooled, max_pooled], dim=-1)
+        return encoded, pooled
+
+
+def _build_regression_heads(d_model: int) -> nn.ModuleDict:
+    """Five regression-head projections (Decision D-8).
+
+    The four signed heads (``score_play``, ``score_draw``, ``cast_lift``,
+    ``color_lift``) project to ``[-1, +1]`` via ``Tanh``; ``played_rate``
+    projects to ``[0, 1]`` via ``Sigmoid``. ``color_lift`` is one fused
+    five-output projection with one column per WUBRG letter.
+    """
+    in_features = 2 * d_model
+    return nn.ModuleDict({
+        "score_play": nn.Sequential(nn.Linear(in_features, 1), nn.Tanh()),
+        "score_draw": nn.Sequential(nn.Linear(in_features, 1), nn.Tanh()),
+        "played_rate": nn.Sequential(nn.Linear(in_features, 1), nn.Sigmoid()),
+        "cast_lift": nn.Sequential(nn.Linear(in_features, 1), nn.Tanh()),
+        "color_lift": nn.Sequential(
+            nn.Linear(in_features, len(COLOR_ORDER)), nn.Tanh(),
+        ),
+    })
 
 
 class SealedEncoderModel(nn.Module):
-    """Encoder + regression head for the winnability target.
+    """Encoder + nine regression heads + MLM head.
 
-    Three child modules:
-      * ``token_encoder`` — token + positional embedding + dropout.
-      * ``card_encoder`` — transformer stack + dual pool (attention ‖ max).
-      * ``regression_head`` — Linear(2*d_model, 1) + Sigmoid; training-only.
-
-    The state-dict prefix layout (``token_encoder.*`` / ``card_encoder.*`` /
-    ``regression_head.*``) lets the save path filter the head out by key
-    prefix at save time without monkey-patching the model.
+    Children (state-dict prefixes shown in parentheses):
+      * ``token_encoder.*`` — token + positional embedding + dropout. Saved.
+      * ``card_encoder.*`` — transformer stack + dual pool. Saved.
+      * ``regression_heads.*`` — five linear projections (Decision D-8).
+        Training-only; **filtered out at save time** per FR-020.
+      * ``mlm_head.*`` — ``Linear(d_model, vocab_size)`` reading the
+        pre-pool contextualized token sequence (FR-015a). Training-only;
+        **filtered out at save time** per FR-020.
     """
 
     def __init__(self, config: SealedEncoderConfig) -> None:
@@ -172,14 +192,12 @@ class SealedEncoderModel(nn.Module):
         self.config = config
         self.token_encoder = _TokenEncoder(config)
         self.card_encoder = _CardEncoderBlock(config)
-        self.regression_head = nn.Sequential(
-            nn.Linear(2 * config.d_model, 1),
-            nn.Sigmoid(),
-        )
+        self.regression_heads = _build_regression_heads(config.d_model)
+        self.mlm_head = nn.Linear(config.d_model, config.vocab_size)
 
-    def _encode_and_pool(
+    def _encode(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.token_encoder(input_ids)
         return self.card_encoder(x, attention_mask)
 
@@ -187,20 +205,30 @@ class SealedEncoderModel(nn.Module):
     def encode(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
     ) -> torch.Tensor:
-        """Return the pooled card embedding without the regression head.
+        """Return the pooled card embedding without the heads.
 
         Returns:
-            (batch_size, 2 * d_model)
+            ``(batch_size, 2 * d_model)``
         """
-        return self._encode_and_pool(input_ids, attention_mask)
+        _contextualized, pooled = self._encode(input_ids, attention_mask)
+        return pooled
 
     def forward(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
-    ) -> torch.Tensor:
-        """Full training path: encoder → pool → head → sigmoid.
+    ) -> dict[str, torch.Tensor]:
+        """Full training path.
 
-        Returns:
-            (batch_size,) winnability prediction in ``[0, 1]``.
+        Returns a dict with keys:
+          * ``score_play``, ``score_draw``, ``played_rate``, ``cast_lift``
+            — each ``(B,)``, range-matched.
+          * ``color_lift`` — ``(B, 5)`` (one column per WUBRG letter, in
+            ``COLOR_ORDER``).
+          * ``mlm_logits`` — ``(B, T, vocab_size)`` from ``mlm_head``.
         """
-        pooled = self._encode_and_pool(input_ids, attention_mask)
-        return self.regression_head(pooled).squeeze(-1)
+        contextualized, pooled = self._encode(input_ids, attention_mask)
+        out: dict[str, torch.Tensor] = {}
+        for name in ("score_play", "score_draw", "played_rate", "cast_lift"):
+            out[name] = self.regression_heads[name](pooled).squeeze(-1)
+        out["color_lift"] = self.regression_heads["color_lift"](pooled)
+        out["mlm_logits"] = self.mlm_head(contextualized)
+        return out

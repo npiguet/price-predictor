@@ -161,10 +161,18 @@ def _add_token(vocab: dict[str, int], token: str) -> None:
 
 
 def _seed_special_tokens(vocab: dict[str, int]) -> None:
-    """Seed [PAD], [UNK], and the cardname placeholder."""
+    """Seed [PAD], [UNK], the cardname placeholder, and the [MASK] token.
+
+    [MASK] is reserved for the sealed encoder's MLM auxiliary objective
+    (spec 016 FR-009a). Square brackets are not part of converted card
+    text, so the token cannot collide with corpus-derived entries. It is
+    seeded after ``cardname`` so its ID is stable across rebuilds and the
+    pre-existing ``[PAD]=0`` / ``[UNK]=1`` slots are preserved.
+    """
     _add_token(vocab, "[PAD]")
     _add_token(vocab, "[UNK]")
     _add_token(vocab, "cardname")
+    _add_token(vocab, "[MASK]")
 
 
 def _seed_domain_terms(vocab: dict[str, int]) -> None:
@@ -249,7 +257,8 @@ def build_vocabulary(
       0: [PAD]
       1: [UNK]
       2: cardname
-      3+: fixed domain terms (zones, colors, multi-word keywords,
+      3: [MASK]   (reserved for the sealed encoder's MLM objective)
+      4+: fixed domain terms (zones, colors, multi-word keywords,
           printing-data terms) — alphabetical within each group
       then: set-code letter fragments from AllPrintings (if printings_path given)
       then: corpus-frequency tokens (desc freq, alpha tie-break)

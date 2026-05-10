@@ -18,14 +18,13 @@ def save_vocabulary(vocab: dict[str, int], path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def load_tokenizer(vocab_path: Path) -> MtgTokenizer:
-    """Load an MtgTokenizer from a vocab.txt file.
+def load_vocabulary(vocab_path: Path) -> dict[str, int]:
+    """Load a vocab.txt file into a ``{token: id}`` dict.
 
-    Validates that [PAD] is at line 0 and [UNK] is at line 1.
-
-    Raises:
-        FileNotFoundError: if vocab_path does not exist.
-        ValueError: if [PAD] is not at line 0 or [UNK] is not at line 1.
+    Validates that ``[PAD]`` is at line 0 and ``[UNK]`` is at line 1.
+    Returns the dict so callers (e.g. the sealed train-encoder) can
+    resolve the IDs of reserved tokens such as ``[MASK]`` without
+    constructing a tokenizer.
     """
     if not vocab_path.exists():
         raise FileNotFoundError(f"Vocabulary file not found: {vocab_path}")
@@ -43,5 +42,9 @@ def load_tokenizer(vocab_path: Path) -> MtgTokenizer:
             f"vocab.txt must have '[UNK]' at line 1, got: {got!r}"
         )
 
-    vocab = {token: i for i, token in enumerate(lines)}
-    return MtgTokenizer(vocab)
+    return {token: i for i, token in enumerate(lines)}
+
+
+def load_tokenizer(vocab_path: Path) -> MtgTokenizer:
+    """Load an MtgTokenizer from a vocab.txt file."""
+    return MtgTokenizer(load_vocabulary(vocab_path))

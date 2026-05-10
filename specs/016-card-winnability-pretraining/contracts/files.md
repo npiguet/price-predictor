@@ -101,7 +101,7 @@ columns for that head.)
 | 14–23 (odd) | `raw_color_lift_X` | float in [-1, +1] or empty | One per X ∈ {W, U, B, R, G}, FR-011. |
 | 15–23 (even) | `shrunk_color_lift_X` | float in [-1, +1] or empty | One per X. |
 
-Total: **24 columns**.
+Total: **23 columns** (1 `card_name` + 4 primary counters + 9 heads × 2 raw/shrunk).
 
 ### Rules
 

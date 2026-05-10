@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 import torch
 
-from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
+from sealed.domain.encoder_model import (
+    COLOR_ORDER,
+    SealedEncoderConfig,
+    SealedEncoderModel,
+)
 
 
 def _config(**overrides) -> SealedEncoderConfig:
@@ -24,7 +28,7 @@ def _config(**overrides) -> SealedEncoderConfig:
 
 
 def _ids_and_mask(batch: int, seq_len: int, vocab_size: int):
-    input_ids = torch.randint(low=2, high=vocab_size, size=(batch, seq_len))
+    input_ids = torch.randint(low=4, high=vocab_size, size=(batch, seq_len))
     attention_mask = torch.ones(batch, seq_len, dtype=torch.long)
     return input_ids, attention_mask
 
@@ -48,17 +52,39 @@ class TestSealedEncoderConfig:
 
 
 class TestSealedEncoderModel:
-    def test_forward_shape_is_batch(self):
+    def test_forward_returns_dict_with_expected_shapes(self):
         cfg = _config()
         model = SealedEncoderModel(cfg)
         model.eval()
         ids, mask = _ids_and_mask(3, cfg.max_seq_len, cfg.vocab_size)
         out = model(ids, mask)
-        assert out.shape == (3,)
-        # sigmoid output bounded
-        assert torch.all((out >= 0) & (out <= 1))
+        assert isinstance(out, dict)
+        for name in ("score_play", "score_draw", "played_rate", "cast_lift"):
+            assert out[name].shape == (3,)
+        assert out["color_lift"].shape == (3, len(COLOR_ORDER))
+        assert out["mlm_logits"].shape == (3, cfg.max_seq_len, cfg.vocab_size)
 
-    def test_encode_shape_is_2x_d_model(self):
+    def test_played_rate_in_unit_interval(self):
+        # FR-017 activation matching: played_rate uses sigmoid → [0, 1].
+        cfg = _config()
+        model = SealedEncoderModel(cfg)
+        model.eval()
+        ids, mask = _ids_and_mask(4, cfg.max_seq_len, cfg.vocab_size)
+        out = model(ids, mask)
+        assert torch.all((out["played_rate"] >= 0) & (out["played_rate"] <= 1))
+
+    def test_signed_heads_in_minus_one_to_one(self):
+        # Tanh range check.
+        cfg = _config()
+        model = SealedEncoderModel(cfg)
+        model.eval()
+        ids, mask = _ids_and_mask(4, cfg.max_seq_len, cfg.vocab_size)
+        out = model(ids, mask)
+        for name in ("score_play", "score_draw", "cast_lift"):
+            assert torch.all((out[name] >= -1) & (out[name] <= 1))
+        assert torch.all((out["color_lift"] >= -1) & (out["color_lift"] <= 1))
+
+    def test_encode_shape_unchanged(self):
         cfg = _config()
         model = SealedEncoderModel(cfg)
         model.eval()
@@ -66,43 +92,36 @@ class TestSealedEncoderModel:
         emb = model.encode(ids, mask)
         assert emb.shape == (2, 2 * cfg.d_model)
 
-    def test_regression_head_present(self):
+    def test_state_dict_contains_regression_heads_and_mlm_head(self):
         cfg = _config()
         model = SealedEncoderModel(cfg)
         keys = set(model.state_dict().keys())
-        head_keys = {k for k in keys if k.startswith("regression_head.")}
-        assert head_keys, "regression_head weights must exist on the live model"
+        assert any(k.startswith("regression_heads.") for k in keys)
+        assert any(k.startswith("mlm_head.") for k in keys)
 
     def test_padding_mask_honored(self):
         cfg = _config()
         model = SealedEncoderModel(cfg)
         model.eval()
         ids, mask = _ids_and_mask(2, cfg.max_seq_len, cfg.vocab_size)
-        # Force second half of the sequence to padding
         mask = mask.clone()
         mask[:, cfg.max_seq_len // 2:] = 0
         ids_padded = ids.clone()
         ids_padded[:, cfg.max_seq_len // 2:] = 0  # PAD id
-        # Replace the padded positions with garbage IDs; output should be unchanged.
         ids_garbage = ids_padded.clone()
         ids_garbage[:, cfg.max_seq_len // 2:] = (cfg.vocab_size - 1)
         out_padded = model.encode(ids_padded, mask)
         out_garbage = model.encode(ids_garbage, mask)
-        assert torch.allclose(out_padded, out_garbage, atol=1e-5), (
-            "encode output must not depend on tokens at masked-out positions"
-        )
+        assert torch.allclose(out_padded, out_garbage, atol=1e-5)
 
     def test_random_init_unseeded(self):
-        """FR-016: encoder is randomly initialized — different seeds yield
-        different weights."""
         cfg = _config()
         torch.manual_seed(0)
         m1 = SealedEncoderModel(cfg)
         torch.manual_seed(1)
         m2 = SealedEncoderModel(cfg)
-        # at least one parameter must differ between the two models
         diffs = [
             not torch.equal(p1, p2)
             for (p1, p2) in zip(m1.parameters(), m2.parameters())
         ]
-        assert any(diffs), "different seeds must produce different weights"
+        assert any(diffs)

@@ -392,8 +392,9 @@ raw_color_lift_B; shrunk_color_lift_B; raw_color_lift_R; shrunk_color_lift_R;
 raw_color_lift_G; shrunk_color_lift_G
 ```
 
-(That's 1 + 4 + 2×9 = 23 columns of values plus the `card_name` lead =
-**24 fields per row**.) Cells whose slice denominator is zero are written
+(That's 1 (`card_name`) + 4 (primary counters) + 2×9 = 18 (raw/shrunk
+per head) = **23 fields per row**.) Cells whose slice denominator is
+zero are written
 as the empty string in both the raw and shrunk columns.
 
 **Rationale**: The clarification picked Option A (header row included);

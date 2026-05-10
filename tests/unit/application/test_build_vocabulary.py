@@ -71,6 +71,25 @@ class TestBuildVocabulary:
         result = build_vocabulary(tmp_path, freq_threshold=1)
         assert result.vocab["[UNK]"] == 1
 
+    def test_mask_token_seeded_between_cardname_and_domain_terms(self, tmp_path: Path):
+        """FR-009a: [MASK] is reserved for the sealed encoder's MLM
+        objective. It must be present in every vocabulary, with an ID
+        strictly between ``cardname`` and the first domain-term ID
+        (alphabetical zone ``battlefield``).
+        """
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        (tmp_path / "card.txt").write_text(
+            "name: Test Card\nmana cost: {R}\ntypes: instant\n",
+            encoding="utf-8",
+        )
+        result = build_vocabulary(tmp_path, freq_threshold=1)
+        assert "[MASK]" in result.vocab
+        cardname_id = result.vocab["cardname"]
+        mask_id = result.vocab["[MASK]"]
+        first_domain_id = result.vocab["battlefield"]
+        assert cardname_id < mask_id < first_domain_id
+
     def test_all_multi_word_keywords_present_as_underscore_tokens(self, tmp_path: Path):
         from price_predictor.application.build_vocabulary import (
             MULTI_WORD_KEYWORDS,

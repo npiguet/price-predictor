@@ -83,7 +83,7 @@ Output artifacts:
 - `models/sealed/encoder/{timestamp}.pt` — best-by-full-validation-loss
   checkpoint (regression heads and MLM head dropped at save time).
 - `models/sealed/encoder/latest.pt` — copy of the same.
-- `output/sealed/cards-win-rates.txt` — 24-column per-card label
+- `output/sealed/cards-win-rates.txt` — 23-column per-card label
   snapshot used by SC-005 verification.
 
 Verify the encoder weights are present and contain only encoder modules
@@ -101,7 +101,7 @@ Verify the new `cards-win-rates.txt` schema:
 (Get-Content output/sealed/cards-win-rates.txt | Select-Object -First 1)
 # Expected first line (header): card_name;wins_when_played;wins_when_in_deck;losses_when_played;losses_when_in_deck;raw_score_play;shrunk_score_play;raw_score_draw;...
 (Get-Content output/sealed/cards-win-rates.txt | Select-Object -Skip 1 -First 1).Split(';').Count
-# Expected: 24
+# Expected: 23
 ```
 
 ## Step 4 — Re-encode cards with the new encoder

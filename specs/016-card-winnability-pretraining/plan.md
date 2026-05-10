@@ -28,7 +28,7 @@ lands at `cards-played.txt` write time (FR-004a, satisfied by
 
 **Language/Version**: Python 3.14+ (`sealed` and `price_predictor` packages); Java 17+ for the unrelated `forge-connector` module — not touched by this feature (its `PlayedCardCollector` already implements FR-004a).
 **Primary Dependencies**: `torch` (PyTorch with CUDA 12.6 wheels), `numpy`. No new dependencies. The `MtgTokenizer` and the price-side `build_vocabulary` utility are reused; the latter gains a `[MASK]` token in its seeded specials.
-**Storage**: PyTorch `.pt` checkpoints under `models/sealed/encoder/` (extended `config` payload — `d_token`, `n_pool_queries`, plus the new auxiliary-loss config); flat-text `cards-played.txt` (already produced unchanged); new flat-text `cards-win-rates.txt` (overwritten per run, header + 24 columns); `models/sealed/encoder/vocab.txt` (extended with reserved `[MASK]` token, FR-009a).
+**Storage**: PyTorch `.pt` checkpoints under `models/sealed/encoder/` (extended `config` payload — `d_token`, `n_pool_queries`, plus the new auxiliary-loss config); flat-text `cards-played.txt` (already produced unchanged); new flat-text `cards-win-rates.txt` (overwritten per run, header + 23 columns); `models/sealed/encoder/vocab.txt` (extended with reserved `[MASK]` token, FR-009a).
 **Testing**: `pytest` for Python; new unit tests under `tests/unit/sealed/application/test_train_encoder.py` cover aggregation passes, label arithmetic, per-batch sum-to-1 weight normalization, MLM masking shape/positions, stratification fallback (FR-018), and corpus-consistency error path. `tests/unit/sealed/application/test_build_vocab.py` is extended with a `[MASK]` presence assertion. Existing slow `tests/integration/sealed/test_train_encoder_smoke.py` is updated to assert (a) `latest.pt` carries no head/MLM keys, (b) the new `cards-win-rates.txt` header, and (c) full validation loss is reported per epoch.
 **Target Platform**: Local development (Windows 11) and any OS with Python 3.14 + an optional CUDA-capable GPU. Training is CPU-feasible at small `--epochs` budgets and ~5–20× faster on a commodity GPU.
 **Project Type**: CLI tool. Two existing subcommands — `python -m sealed train-encoder` and `python -m sealed build-vocab` — gain new flags / behaviors. No new top-level commands.
@@ -42,7 +42,7 @@ lands at `cards-played.txt` write time (FR-004a, satisfied by
 
 | Principle | Status | Notes |
 |---|---|---|
-| I. Fast Automated Tests | **PASS** | New unit tests cover the two-pass aggregator (primary + per-color), the FR-011 label arithmetic in raw and shrunk form, FR-012 zero-denominator handling, FR-013a header + 24-column row format, FR-014b masking (probability + non-special-token-only), FR-015a MLM head shape, FR-017 per-batch sum-to-1 weight normalization, and FR-018 stratification fallback. The slow integration smoke is upgraded but stays marked `@pytest.mark.integration` so the fast suite remains fast. |
+| I. Fast Automated Tests | **PASS** | New unit tests cover the two-pass aggregator (primary + per-color), the FR-011 label arithmetic in raw and shrunk form, FR-012 zero-denominator handling, FR-013a header + 23-column row format, FR-014b masking (probability + non-special-token-only), FR-015a MLM head shape, FR-017 per-batch sum-to-1 weight normalization, and FR-018 stratification fallback. The slow integration smoke is upgraded but stays marked `@pytest.mark.integration` so the fast suite remains fast. |
 | II. Simplicity First | **PASS** | No new packages, no new modules, no new domain entities outside the existing `train_encoder.py` private dataclasses. The five regression-head families are realized as a single `nn.ModuleDict` of small linear projections off the shared pooled vector — no per-head encoder stack. The MLM head is one `nn.Linear`. The two-pass aggregator stays in `train_encoder.py` (single-file responsibility). The shared encoder `_BestCheckpoint` helper that already lives in `train_encoder.py` (mirroring `train_transformer.py`) is reused as-is — no premature extraction. |
 | III. Data Integrity | **PASS** | The aggregator validates input via the existing `iter_rows` parser (rejects malformed lines mid-file, tolerates a final partial line for JVM-crash recovery). The corpus-consistency check (FR-023d) runs after pass 1 so the failure message can name the offending cards. The encoder checkpoint excludes regression and MLM heads at save time via the existing `_ENCODER_PREFIXES` filter on `SealedEncoderStore` — newly-added head modules use prefixes outside that set so no leakage is possible. Random seed is fixed at 42 (FR-022); aggregation is deterministic given a fixed input file. |
 | IV. Domain-Driven Design | **PASS** | Layering preserved: `domain/encoder_model.py` extends architecture only; `application/train_encoder.py` owns the use case (aggregation, label map, train/val split, training loop); `infrastructure/encoder_store.py` and `cli.py` are extended for new payload fields and CLI flags. Aggregation never reaches into `infrastructure/`; corpus reads go through the existing `ConvertedCardLocator` adapter. The dependency graph stays inward-only (infra → app → domain). |
@@ -67,7 +67,7 @@ Full survey: [research.md#codebase-survey](research.md#codebase-survey).
 - *Extend* `SealedEncoderModel` with a `nn.ModuleDict` of regression heads + an MLM head (`Linear(d_model, vocab_size)`) that reads the contextualized token sequence (pre-pool).
 - *Update* `SealedEncoderStore._ENCODER_PREFIXES` documentation and assertion error message to name the new head prefixes that are intentionally filtered out (`regression_heads.`, `mlm_head.`).
 - *Add* `--mlm-weight` (default 0.1) and `--mlm-mask-prob` (default 0.15) flags to `_build_train_encoder_parser` and the `TrainEncoderConfig` dataclass.
-- *Update* `cards-win-rates.txt` writer: header row, 24 columns per row, sort key changes from raw_ratio to `shrunk_score_play`.
+- *Update* `cards-win-rates.txt` writer: header row, 23 columns per row, sort key changes from raw_ratio to `shrunk_score_play`.
 
 ## Project Structure
 
@@ -112,7 +112,7 @@ src/sealed/
 │   │                             #     (FR-015a), full loss = L_reg + mlm_weight · L_mlm
 │   │                             #   - _eval_loss: full loss for early stopping & best-checkpoint
 │   │                             #     selection (FR-019)
-│   │                             #   - _write_win_rates: header row + 24-column schema
+│   │                             #   - _write_win_rates: header row + 23-column schema
 │   │                             #     (FR-013a), sort by shrunk_score_play
 │   │                             #   - TrainEncoderConfig: + mlm_weight (0.1), mlm_mask_prob
 │   │                             #     (0.15)
@@ -165,7 +165,7 @@ tests/unit/sealed/
 │   │                             #     positions only; [PAD]/[UNK]/cardname/[MASK] never become [MASK])
 │   │                             #   - stratification fallback for degenerate score_play
 │   │                             #     distributions and for cards with empty score_play cell
-│   │                             #   - cards-win-rates.txt header + 24 columns + sort order
+│   │                             #   - cards-win-rates.txt header + 23 columns + sort order
 │   │                             #   - corpus-consistency error names missing cards (capped)
 │   └── test_build_vocab.py       # MODIFIED: assert [MASK] present in emitted vocab
 ├── domain/
