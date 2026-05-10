@@ -31,7 +31,9 @@ explicitly with that note.
 
 Single-project layout per `plan.md` § Project Structure. Source under
 `src/sealed/` and `src/price_predictor/`; tests under
-`tests/unit/{sealed,application}/...` and `tests/integration/sealed/...`.
+`tests/unit/application/...` (price-predictor unit tests),
+`tests/unit/sealed/...` (sealed unit tests), and
+`tests/integration/sealed/...` (sealed integration tests).
 
 ---
 
@@ -57,7 +59,7 @@ complete.
 
 - [ ] T002 [P] Update `tests/unit/application/test_build_vocabulary.py` to assert `[MASK]` is present in the returned vocab and that its ID falls between `cardname` and the first domain-term ID (regression guard against accidental removal). (Prior art: existing test cases for `[PAD]`/`[UNK]`/`cardname` presence — extend in place.)
 
-- [ ] T003 [P] Update `tests/unit/sealed/application/test_build_vocab.py` to assert that the file written by `BuildVocabConfig`-driven build contains the `[MASK]` token (read the file back and check membership). (Prior art: existing test that asserts `[PAD]` and `[UNK]` exist after build — extend.)
+- [ ] T003 [P] Update `tests/unit/sealed/application/test_build_vocab.py` to assert that the file written by `BuildVocabConfig`-driven build contains the `[MASK]` token (read the file back and check membership). Complements T002 at the price-predictor layer: T002 guards the seeded specials in the shared `build_vocabulary` helper, T003 guards the file emitted by the sealed-side wrapper. (Prior art: existing test that asserts `[PAD]` and `[UNK]` exist after build — extend.)
 
 **Checkpoint**: Foundational ready — US2 and US4 implementation can now proceed.
 
@@ -118,7 +120,7 @@ has the 24-column header + sorted data rows.
 
 - [ ] T011 [P] [US2] Update `tests/unit/sealed/infrastructure/test_encoder_store.py` round-trip test to construct a `SealedEncoderModel` with the new heads + MLM head populated, save it, then assert the saved file's `model_state_dict` contains only `token_encoder.*` / `card_encoder.*` keys (no `regression_heads.*`, no `mlm_head.*`). (Prior art: existing prefix-filter test — extend to cover the new prefixes.) [FR-020]
 
-- [ ] T012 [P] [US2] Update `tests/integration/sealed/test_train_encoder_smoke.py` to use a tiny synthetic `cards-played.txt` + tiny corpus + tiny vocab (containing `[MASK]`); run `train-encoder` for ~3 epochs; assert (a) `latest.pt` loads via `SealedEncoderStore.load_encoder` without error, (b) the saved state_dict contains no head/MLM keys, (c) per-epoch log lines include the regression-only and MLM-only loss breakdowns, (d) the new `cards-win-rates.txt` header is present at line 1.
+- [ ] T012 [P] [US2] Update `tests/integration/sealed/test_train_encoder_smoke.py` to use a tiny synthetic `cards-played.txt` + tiny corpus + tiny vocab (containing `[MASK]`); run `train-encoder` for ~3 epochs; assert (a) `latest.pt` loads via `SealedEncoderStore.load_encoder` without error, (b) the saved state_dict contains no head/MLM keys, (c) per-epoch log lines include the regression-only and MLM-only loss breakdowns, (d) the new `cards-win-rates.txt` header is present at line 1, (e) the saved `train_config` records no `init_from` / source-checkpoint field — guard against a future regression where `train-encoder` silently loads weights instead of training from random init (FR-016), (f) the LR schedule shape matches FR-022: with `total_steps = epochs × batches_per_epoch`, the optimizer's LR at step `ceil(0.05 × total_steps)` equals `--lr` to within float tolerance, the LR at every step `≥ ceil(0.05 × total_steps)` equals `--lr` (constant tail, no decay), and the LR at step 0 is strictly less than `--lr` (warmup is active). Drive the schedule directly via the `LambdaLR` (or equivalent) the trainer constructs; do not require a real 3-epoch run for (f).
 
 - [ ] T013 [P] [US2] Add CLI argparse coverage for the two new flags in `tests/unit/sealed/infrastructure/test_cli_train_encoder_argparse.py`: `--mlm-weight` defaults to 0.1 and accepts user values; `--mlm-mask-prob` defaults to 0.15 and accepts user values; both are surfaced as fields on the resolved `TrainEncoderConfig`. (Prior art: existing argparse tests in this file for `--shrinkage-k` etc.)
 
@@ -148,11 +150,11 @@ has the 24-column header + sorted data rows.
 
 - [ ] T025 [US2] Update `_split_cards` in `src/sealed/application/train_encoder.py` to (a) stratify on `score_play` quartile when present, (b) fall back through the FR-018 chain (`score_draw` → `cast_lift` → `color_lift_W/U/B/R/G`) when `score_play` is `None`, (c) place fully-degenerate cards in a single catch-all stratum. The 20% val split + `random_seed=42` shuffle inside each stratum stays. Depends on T023. [Research D-4, FR-018]
 
-- [ ] T026 [US2] Update `_WinnabilityDataset.__getitem__` in `src/sealed/application/train_encoder.py` to return `(input_ids, attention_mask, labels: Tensor[(9,)], weights: Tensor[(9,)], head_mask: Tensor[(9,)])`. `labels` carries the 9 shrunk values (with 0.0 substituted at empty cells); `weights` carries the FR-017a per-head weights computed from the card's `CardCounters` and the run's `shrinkage_k`; `head_mask` is 1.0 where the cell is non-empty and 0.0 elsewhere. Update `_WinnabilityDataset.__init__` to accept the per-card label map (now `CardLabelMap`). Depends on T018, T023.
+- [ ] T026 [US2] Update `_WinnabilityDataset.__getitem__` in `src/sealed/application/train_encoder.py` to return `(input_ids, attention_mask, labels: Tensor[(9,)], weights: Tensor[(9,)], head_mask: Tensor[(9,)])`. `labels` carries the 9 shrunk values (with 0.0 substituted at empty cells); `weights` carries the FR-017a per-head weights computed from the card's `CardCounters` and the run's `shrinkage_k`; `head_mask` is 1.0 where the cell is non-empty and 0.0 elsewhere. Update `_WinnabilityDataset.__init__` to accept the per-card label map (now `CardLabelMap`). The dataset MUST preserve the v1 FR-014a behavior of stripping the `name:` line from each converted card before tokenizing — add a regression assertion in `test_train_encoder.py` (or T010) that the tokenized input never carries the cardname token at the head position, so the multi-head refactor cannot silently re-introduce a name→label shortcut. Depends on T018, T023.
 
 - [ ] T027 [P] [US2] Add `_draw_mlm_mask(input_ids, attention_mask, mask_prob, mask_token_id, special_token_ids) -> tuple[Tensor, Tensor]` to `src/sealed/application/train_encoder.py`: returns `(masked_ids, mask_positions)` where `masked_ids[mask_positions] == mask_token_id` and the original ids at those positions are returned for the CE target. Eligible positions: real (`attention_mask == 1`) AND not in `special_token_ids`. (No prior art — new helper; documented in research D-10.) [FR-014b]
 
-- [ ] T028 [P] [US2] Add `_per_batch_weighted_mse(predictions: dict, labels: Tensor, weights: Tensor, head_mask: Tensor) -> Tensor` to `src/sealed/application/train_encoder.py`: implements the FR-017 / D-11 per-head per-batch sum-to-1 weighted average across the 9 heads; sums the four signed-head terms unweighted plus `(1/5)` × the five color-lift terms; returns a scalar `L_reg`. Use `1e-8` clamp on each head's denominator. (No prior art — new helper.)
+- [ ] T028 [P] [US2] Add `_per_batch_weighted_mse(predictions: dict, labels: Tensor, weights: Tensor, head_mask: Tensor) -> Tensor` to `src/sealed/application/train_encoder.py`: implements the FR-017 / D-11 per-head per-batch sum-to-1 weighted average across the 9 heads; sums the four signed-head terms unweighted plus `(1/5)` × the five color-lift terms; returns a scalar `L_reg`. If a head's total batch weight is zero (no card contributes to that head), the head's term MUST be exactly zero — short-circuit the head before the divide rather than relying on a denominator clamp, so a future numerator drift cannot leak through a tiny epsilon. (No prior art — new helper.)
 
 - [ ] T029 [US2] Rewrite `_train_epoch` in `src/sealed/application/train_encoder.py` to (a) draw an MLM mask per batch via T027; (b) run `model.forward(masked_ids, attention_mask)`; (c) compute `L_reg` via T028 and `L_mlm` as cross-entropy at masked positions only (denominator = `mask.sum().clamp(min=1)`); (d) backprop `L_reg + mlm_weight * L_mlm`; (e) call `clip_grad_norm_(model.parameters(), max_norm=1.0)` between `loss.backward()` and `optimizer.step()`. Track per-component losses for the per-epoch log line. Depends on T016, T026, T027, T028. [Research D-14, FR-017, FR-022]
 
