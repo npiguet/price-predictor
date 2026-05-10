@@ -1,204 +1,255 @@
 ---
-
-description: "Task list for spec 016 (card winnability pretraining for sealed encoder)"
+description: "Task list for feature 016 — Card Winnability Pretraining for Sealed Encoder"
 ---
 
 # Tasks: Card Winnability Pretraining for Sealed Encoder
 
 **Input**: Design documents from `/specs/016-card-winnability-pretraining/`
-**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/cli.md, contracts/files.md, quickstart.md
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md,
+contracts/cli.md, contracts/files.md, quickstart.md.
 
-**Tests**: Per Constitution Principle I (Fast Automated Tests), tests are MANDATORY and are written alongside (or before) the implementation tasks they cover.
+**Tests**: Constitution Principle I requires automated tests for every
+feature; test tasks below are MANDATORY.
 
-**Organization**: Tasks are grouped by user story (US1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“US5). Phase ordering follows priority (P1 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ P2 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ P3). US2 and US3 implementation work uses fixtures, so it does not block on US1 finishing match collection or on US4 finishing vocab build.
+**Organization**: Tasks are grouped by user story so each story can be
+implemented and tested independently. Spec 016 already shipped a v1
+single-`shrunk_label` implementation in master; this task list captures
+the v2 deltas (multi-head + MLM + per-color counters + new file schema +
+clarification 2026-05-10 amendments). User stories US1 ("per-game data
+collection") and US3 ("scorer consumes sealed encoder defaults") were
+fully delivered in v1 — they remain in scope for the spec's success
+criteria but require **no new tasks** in this iteration; they are listed
+explicitly with that note.
 
-## Format
+## Format: `[ID] [P?] [Story] Description`
 
-`- [ ] [TaskID] [P?] [Story?] Description with file path`
-
-- **[P]** = different files, no dependency on other incomplete tasks ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ parallelizable.
-- **[Story]** = US1 / US2 / US3 / US4 / US5. Setup, Foundational, and Polish phases carry no story label.
+- **[P]**: Can run in parallel (different files, no incomplete dependencies).
+- **[Story]**: User story label (US1…US5) for tasks inside a story phase.
+- File paths are absolute or relative to repository root.
 
 ## Path Conventions
 
-- Python source: `src/sealed/...`, `src/price_predictor/...`
-- Python tests: `tests/unit/sealed/...`, `tests/integration/...`
-- Java source: `forge-connector/src/main/java/com/pricepredictor/connector/...`
-- Java tests: `forge-connector/src/test/java/com/pricepredictor/connector/...`
-- Specs: `specs/016-card-winnability-pretraining/...`
+Single-project layout per `plan.md` § Project Structure. Source under
+`src/sealed/` and `src/price_predictor/`; tests under
+`tests/unit/{sealed,application}/...` and `tests/integration/sealed/...`.
 
 ---
 
-## Phase 1: Setup (Shared Infrastructure)
+## Phase 1: Setup
 
-**Purpose**: Cheap one-time bootstrap. The repository, build, and test stacks already exist, so this phase is intentionally small.
-
-- [X] T001 Confirm `models/sealed/encoder/` and `output/sealed/` parent directories are auto-created by their writers (no static checked-in scaffolding); document the auto-create expectation in `specs/016-card-winnability-pretraining/quickstart.md` if not already explicit.
-- [X] T002 [P] Verify `forge-connector` builds clean from main (`cd forge-connector; mvn -DskipTests package`) so subsequent Java tasks have a known-good baseline.
-- [X] T003 [P] Verify the Python fast suite is green on the current branch (`pytest -m "not integration"`) so subsequent Python tasks have a known-good baseline.
+No setup tasks. The repository, venv, dependencies, lint/test
+configuration, and `forge-connector` Maven build are all already in
+place from prior features. This iteration adds no new dependencies (per
+`plan.md` § Technical Context).
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-**Purpose**: Shared domain entities and storage adapters consumed by US2 (creator) AND US3 (loader). Must complete before either P1 Python story can finish.
+**Purpose**: One shared change that every other story depends on — the
+`[MASK]` token must be present in any vocabulary `train-encoder` (US2)
+or `build-vocab` (US4) consumes.
 
-**ÃƒÂ¢Ã…Â¡Ã‚Â ÃƒÂ¯Ã‚Â¸Ã‚Â CRITICAL**: No US2 / US3 work should land before this phase is done.
+**⚠️ CRITICAL**: No US2 or US4 task may begin until this phase is
+complete.
 
-- [X] T004 [P] Add `SealedEncoderConfig` dataclass in `src/sealed/domain/encoder_model.py` mirroring the field set in `data-model.md` Ãƒâ€šÃ‚Â§SealedEncoderConfig (vocab_size, d_model, n_layers, n_heads, ff_dim, max_seq_len, dropout, n_pool_queries) with the validation rules (`d_model % n_pool_queries == 0`, `n_heads` divides `d_model`, etc.). Prior art: `TransformerConfig` in `src/price_predictor/domain/entities.py:103`; parallel concept justified in research.md Ãƒâ€šÃ‚Â§"Overlapping domain vocabulary".
-- [X] T005 Implement `SealedEncoderModel` in the same file (`src/sealed/domain/encoder_model.py`) with three child modules ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â `token_encoder` (token+positional embedding), `card_encoder` (`nn.TransformerEncoder` stack + dual pool), `regression_head` (`Linear(2*d_model, 1)` + `Sigmoid`). Implement the multi-query attention pool concatenated with element-wise max pool to produce `(B, 2*d_model)` per data-model.md Ãƒâ€šÃ‚Â§"Multi-query attention pool". Expose `encode(input_ids, attention_mask) -> (B, 2*d_model)` (no-grad-friendly) and `forward(...) -> (B,)` (full path through head + sigmoid). Prior art: `CardPriceTransformerModel._encode_and_pool` in `src/price_predictor/infrastructure/transformer_model.py:11` (masking + positional pattern copied per research.md D-3).
-- [X] T006 [P] Unit tests for `SealedEncoderModel` in `tests/unit/sealed/domain/test_encoder_model.py`: forward output shape `(B,)`, encode output shape `(B, 2*d_model)`, regression head presence, padding mask honored, `d_model % n_pool_queries != 0` raises in config, AND a constructor smoke test that two fresh models built from the same config but different `torch.manual_seed` values produce *different* weight tensors (FR-016: encoder is randomly initialized, never seeded from a price-side checkpoint).
-- [X] T007 Implement `SealedEncoderStore` in `src/sealed/infrastructure/encoder_store.py` exposing `save_encoder(model, config, output_dir) -> Path` (writes `{ISO_TIMESTAMP}.pt` then byte-copies to `latest.pt`; filters `model_state_dict` to keys with prefix `token_encoder.` or `card_encoder.`) and `load_encoder(path) -> (SealedEncoderModel, SealedEncoderConfig)` (instantiates fresh model from saved config dict, calls `load_state_dict(strict=True)`). Prior art: `ScorerStore.save_checkpoint` in `src/sealed/infrastructure/scorer_store.py:42` (pattern-mirror per research.md Ãƒâ€šÃ‚Â§"Adjacent prior art"). Spec refs: FR-020, files.md Ãƒâ€šÃ‚Â§`models/sealed/encoder/*.pt`.
-- [X] T008 [P] Unit tests for `SealedEncoderStore` in `tests/unit/sealed/infrastructure/test_encoder_store.py`: round-trip saveÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢load reconstructs an identically-behaving model, regression-head keys are stripped from the saved state-dict, `latest.pt` is a byte-for-byte copy of the chosen timestamped file, `strict=True` load fails if a regression-head key sneaks in.
+- [ ] T001 Add `"[MASK]"` to `_seed_special_tokens` in `src/price_predictor/application/build_vocabulary.py` (after `cardname`, before domain-term seeding) so every freshly-built vocab contains the reserved token at a stable post-`cardname` ID. Update the function's docstring and the `domain_token_count` accounting; update CLAUDE.md's vocab-build description to mention the new special. (Prior art: `_seed_special_tokens` already exists at line 163; reuse — no parallel concept.) [Plan §Project Structure / Research D-1, FR-009a, FR-023a]
 
-**Checkpoint**: Domain model and store exist. US2 (creator) and US3 (consumer) can now proceed in parallel.
+- [ ] T002 [P] Update `tests/unit/application/test_build_vocabulary.py` to assert `[MASK]` is present in the returned vocab and that its ID falls between `cardname` and the first domain-term ID (regression guard against accidental removal). (Prior art: existing test cases for `[PAD]`/`[UNK]`/`cardname` presence — extend in place.)
 
----
+- [ ] T003 [P] Update `tests/unit/sealed/application/test_build_vocab.py` to assert that the file written by `BuildVocabConfig`-driven build contains the `[MASK]` token (read the file back and check membership). (Prior art: existing test that asserts `[PAD]` and `[UNK]` exist after build — extend.)
 
-## Phase 3: User Story 1 - Per-game card-play data accumulates during self-play (Priority: P1)
-
-**Goal**: Every Forge match worker emits one line per played game to `output/sealed/cards-played.txt` with the eleven-field schema in `contracts/files.md`.
-
-**Independent Test**: Run `python -m sealed match-outcomes` for a handful of matches; verify that `output/sealed/cards-played.txt` line count equals the sum of game counts across the `match-outcomes.txt` lines written during the same run, that game lines for a given match share the parent's `run_id` and appear contiguously and in game order, and that basic lands never appear in any column.
-
-### Tests for User Story 1 (write first; let them fail; then implement)
-
-- [X] T009 [P] [US1] Java unit test `forge-connector/src/test/java/com/pricepredictor/connector/CardsPlayedRowTest.java`: line-format round-trip for the eleven fields (per files.md Ãƒâ€šÃ‚Â§`cards-played.txt`), pipe-separated multiplicities preserved, empty card lists round-trip as empty strings between two `;`, ISO 8601 UTC timestamp format matches `MatchResultWriter` output style.
-- [X] T010 [P] [US1] Java unit test `forge-connector/src/test/java/com/pricepredictor/connector/CardsPlayedWriterTest.java`: open-write-close per line, two writers from concurrent threads do not interleave bytes within a line, trailing partial line is acceptable on truncation (writer must flush at line granularity).
-- [X] T011 [P] [US1] Java unit test `forge-connector/src/test/java/com/pricepredictor/connector/PlayedCardCollectorTest.java`: zone-change to Battlefield records, `GameEventSpellAbilityCast` records, basic land filter (Plains, Island, Swamp, Mountain, Forest, Wastes, snow basics) drops at observation time, `card.getController() != card.getOwner()` filter drops stolen cards, `card.isToken()` drops tokens, copy effects record `getPaperCard().getName()` not the copied permanent's name. Per research.md D-3.
-- [X] T012 [US1] Java integration-tagged test `forge-connector/src/test/java/com/pricepredictor/connector/MatchGeneratorCardsPlayedIntegrationTest.java` (`@Tag("integration")`): drive a single match through `MatchGenerator.generateMatch`, assert that the returned `List<CardsPlayedRow>` length equals the played-game count, every row's `run_id` matches the parent match, every row's set_code/method_A/method_B equals the parent's, basic lands absent, and the union of `cardsPlayedA` and `cardsNotPlayedA` equals deck A minus basics (multiplicities preserved).
-
-### Implementation for User Story 1
-
-- [X] T013 [P] [US1] Create `forge-connector/src/main/java/com/pricepredictor/connector/CardsPlayedRow.java` Java record with the eleven fields (`Instant timestamp, String runId, String setCode, String methodA, String methodB, List<String> cardsPlayedA, List<String> cardsPlayedB, List<String> cardsNotPlayedA, List<String> cardsNotPlayedB, char winner, char starter`) plus a `toLine()` formatter that emits the schema in files.md (semicolon-separated, no trailing `;`, pipes inside list columns, ISO_INSTANT timestamp). Prior art: `MatchResult` / `MatchResultWriter`.
-- [X] T014 [P] [US1] Create `forge-connector/src/main/java/com/pricepredictor/connector/CardsPlayedWriter.java` mirroring `MatchResultWriter`'s open-append-close-per-line strategy with target path `output/sealed/cards-played.txt`. Method: `void write(CardsPlayedRow row)`. Prior art: `MatchResultWriter` (research.md Ãƒâ€šÃ‚Â§"Adjacent prior art").
-- [X] T015 [P] [US1] Create `forge-connector/src/main/java/com/pricepredictor/connector/PlayedCardCollector.java` as an `IGameEventVisitor.Base<Void>` that subscribes to `GameEventCardChangeZone` (filtered to `event.to().getZoneType() == ZoneType.Battlefield`) and `GameEventSpellAbilityCast`, applying the four filters from research.md D-3 (`controller==owner`, `!isToken`, `!isBasicLand`, record `paperCard.name`). Buckets cards by `card.getOwner().getName()` and resolves to `A` / `B` via `LOBBY_NAME_A` / `LOBBY_NAME_B` from `GamePlayer`. Mirrors `../jumpstart-tierlist/.../JumpstartMatch.java#CardCollector` (research.md D-3 cites this as the prior-art template).
-- [X] T016 [US1] Extend `GameOutcome` in `forge-connector/src/main/java/com/pricepredictor/connector/GamePlayer.java` to add `Set<String> cardsPlayedA` and `Set<String> cardsPlayedB` fields (per data-model.md Ãƒâ€šÃ‚Â§`GameOutcome`). Update `GamePlayer.playMatch()` to construct one fresh `PlayedCardCollector` per game, call `game.subscribeToEvents(collector)` before play, and attach the collector's two sets to the outgoing `GameOutcome` after each game.
-- [X] T017 [US1] Update `forge-connector/src/main/java/com/pricepredictor/connector/MatchGenerator.java` so `generateMatch(...)` returns a tuple `(MatchResult, List<CardsPlayedRow>)` (introduce a tiny `MatchGenerationResult` record if a tuple type is needed). Compose each `CardsPlayedRow` from the per-game `GameOutcome.cardsPlayed{A,B}` plus the deck card lists (deck minus basics minus played = `cardsNotPlayedX`), winner/starter from `GameOutcome`, and the parent match's timestamp/run_id/set_code/method_A/method_B.
-- [X] T018 [US1] Update `forge-connector/src/main/java/com/pricepredictor/connector/MatchWorkerMain.java` so the worker loop writes the match-line via `MatchResultWriter` and the per-game lines via a `CardsPlayedWriter` instance pointing at `output/sealed/cards-played.txt`. The writes happen in the same iteration as the existing match write. Per research.md D-7: Python supervisor untouched.
-- [X] T019 [US1] Add a Python integration test in `tests/integration/test_cards_played_collection.py` (`@pytest.mark.integration`) that invokes `python -m sealed match-outcomes` for a handful of matches (or seeds via the worker entry point directly), then verifies:
-  - line count of `output/sealed/cards-played.txt` equals the sum of game counts (`match-outcomes.txt` field 8 length) for the matching `run_id`,
-  - `run_id` and `(set_code, method_A, method_B)` tuples line up between the two files,
-  - basic-land names never appear in any of the four list columns,
-  - game lines for one match appear contiguously and in game order.
-
-**Checkpoint**: `cards-played.txt` is written by every match-outcomes run. US1 is independently demoable.
+**Checkpoint**: Foundational ready — US2 and US4 implementation can now proceed.
 
 ---
 
-## Phase 4: User Story 2 - Train a sealed encoder from scratch on the winnability target (Priority: P1)
+## Phase 3: User Story 1 — Per-game card-play data accumulation (Priority: P1) ✅ ALREADY DELIVERED
 
-**Goal**: `python -m sealed train-encoder` reads `cards-played.txt`, aggregates labels inline (with shrinkage), trains the dual-pool encoder + regression head from random init on MSE, and saves only encoder weights to `models/sealed/encoder/{timestamp}.pt` + `latest.pt`. Discards the regression head.
+**Goal**: `cards-played.txt` accumulates one line per played game, with
+basic lands excluded at write time.
 
-**Independent Test**: Against a fixture `cards-played.txt` and fixture `vocab.txt`, run `train-encoder`; verify (a) `latest.pt` round-trips through `SealedEncoderStore.load_encoder` with `strict=True`, (b) the saved state-dict contains only `token_encoder.*` and `card_encoder.*` keys, (c) the train/val split is card-disjoint, (d) the saved file corresponds to the best-by-val-loss epoch within `--patience`, (e) `output/sealed/cards-win-rates.txt` is populated and sorted by raw ratio descending.
+**Independent Test**: Run `python -m sealed match-outcomes` for a few
+matches and verify line counts and contiguous game ordering per the
+spec's acceptance scenarios.
 
-### Tests for User Story 2 (write first; let them fail; then implement)
+**Status**: All FR-001 through FR-006 are satisfied by the v1 Java code
+shipped in prior commits — `CardsPlayedWriter`, `PlayedCardCollector`
+(FR-003, FR-004a basic-land filter), `CardsPlayedRow`,
+`MatchGenerator.BASIC_LAND_NAMES`, and the supervisor's existing
+opens-writes-closes-per-line strategy. The spec amendments in 016 do
+not change Java behavior. **No new tasks**; the story remains
+verifiable via the spec's existing acceptance scenarios.
 
-- [X] T020 [P] [US2] Unit test `tests/unit/sealed/infrastructure/test_cards_played_reader.py`: parses 11-field lines, raises on mid-stream malformed line, tolerates a trailing partial (non-newline-terminated) line silently (Edge Case: JVM crash mid-write), decodes the four pipe-separated card-list columns into Python lists with multiplicities preserved, recovers `winner` / `starter` characters. ALSO add a fixture where one match's game block is shorter than the parent `match-outcomes.txt` row's game count, and assert the reader yields the available game lines without aborting (Edge Case: line-count disagreement is tolerated by aggregation, FR-005).
-- [X] T021 [P] [US2] Unit test `tests/unit/sealed/application/test_label_aggregation.py`: given a synthetic in-memory cards-played stream, computes `wins_when_played[c]` and `wins_when_in_deck[c]` per FR-010 (only winning side counts), excludes cards with `wins_when_in_deck == 0` (FR-012), and returns the per-card map keyed by canonical name.
-- [X] T022 [P] [US2] Unit test `tests/unit/sealed/application/test_shrinkage.py`: with `k = 0`, shrunk label equals raw ratio. With `k = 20` and `wins_when_in_deck = 2, wins_when_played = 2`, shrunk label is meaningfully below 1.0 (pulled toward 0.5). With `k = 20` and `wins_when_in_deck = 1000`, shrunk label is within a few thousandths of the raw ratio (FR-011, US5 acceptance).
-- [X] T023 [P] [US2] Unit test `tests/unit/sealed/application/test_train_val_split.py`: stratified-by-quartile, card-level disjoint (no overlap), val_fraction == 0.2 Ãƒâ€šÃ‚Â± rounding, deterministic with seed=42, falls back gracefully when fewer than four distinct quantile bins exist (Edge Case in spec).
-- [X] T024 [P] [US2] Unit test `tests/unit/sealed/application/test_cards_win_rates_writer.py`: header row first, rows sorted by `raw_ratio` descending (FR-013a), semicolon-separated, five-decimal float formatting, file is overwritten each call.
-- [X] T025 [P] [US2] Unit test `tests/unit/sealed/application/test_corpus_consistency.py`: passes when every label-map card has a matching `output/cardsfolder/{name}.txt` (after `card_name_corrections`), raises a custom error naming up to 20 missing cards plus a total count when one or more cards are absent (FR-023d).
-- [X] T026 [P] [US2] Unit test `tests/unit/sealed/infrastructure/test_cli_train_encoder_argparse.py`: each FR-021 flag parses with the documented default, hardcoded constants (d_model, ff_dim, val_fraction, random_seed) are absent from the CLI surface (FR-022), `--n-pool-queries` that does not divide `d_model` exits code 6, and `python -m sealed --help` does NOT advertise an `aggregate-labels` subcommand (FR-013: aggregation is inline, no auxiliary command).
-- [X] T027 [P] [US2] Integration smoke test `tests/integration/test_train_encoder_smoke.py` (`@pytest.mark.integration`): point at `tests/fixtures/sealed/cards-played.sample.txt` + a tiny vocab fixture + a tiny corpus fixture; run `train_encoder(config)` for `--epochs 1 --patience 1`; assert that `models/sealed/encoder/latest.pt` round-trips through `load_encoder` and that `cards-win-rates.txt` has been written.
+---
+
+## Phase 4: User Story 2 — Train a sealed encoder from scratch (Priority: P1) 🎯 MVP
+
+**Goal**: `python -m sealed train-encoder` reads `cards-played.txt`,
+aggregates 9 per-card winnability labels in two passes, trains a token
+encoder + card encoder + 5 regression heads + an MLM head from random
+init under the FR-017 weighted MSE + MLM CE objective, and saves only
+the encoder weights.
+
+**Independent Test**: Run `train-encoder` against a small synthetic
+`cards-played.txt` and verify (a) `models/sealed/encoder/latest.pt`
+contains only `token_encoder.*` / `card_encoder.*` keys (no heads, no
+MLM head); (b) the validation set is card-disjoint from the training
+set; (c) the best checkpoint is selected by full validation loss
+(`L_reg + (--mlm-weight) · L_mlm`); (d) `output/sealed/cards-win-rates.txt`
+has the 24-column header + sorted data rows.
+
+### Tests for User Story 2 (MANDATORY) ✅
+
+> Write these first; they MUST fail before implementation lands.
+
+- [ ] T004 [US2] Create `tests/unit/sealed/application/test_train_encoder.py` with a minimal scaffold and aggregation unit tests covering `_aggregate_pass_one` (4 primary + 4 `@play` counters built from a tiny in-memory `CardsPlayedRow` list across both winning and losing sides; `starter` correctly drives the `@play` subset; multi-game matches accumulate correctly). (Prior art: `tests/unit/sealed/infrastructure/test_cards_played_reader.py` for fixture style.) [Research D-13]
+
+- [ ] T005 [US2] Extend `tests/unit/sealed/application/test_train_encoder.py` with `_aggregate_pass_two` tests (per-color counters from a fixture corpus mapping card → mana-cost line; hybrid `{W/U}`, Phyrexian `{W/P}`, mono-hybrid `{2/W}`, generic `{2}`, colorless `{C}`, and `{X}` all dispatched correctly; multi-color decks contribute to multiple slices) and a standalone test for the `_colors_from_mana_cost` helper covering the same edge cases. (Depends on T004 — same file.) [Research D-16]
+
+- [ ] T006 [US2] Extend `tests/unit/sealed/application/test_train_encoder.py` with label-arithmetic tests for `_build_label_map` (raw and shrunk values for all 9 head families with `k = 0` vs `k = 20`, FR-012 zero-denominator handling produces `None` cells, `wins_when_in_deck + losses_when_in_deck == 0` excludes the card entirely). (Depends on T005 — same file.) [Research D-15, FR-011, FR-012]
+
+- [ ] T007 [US2] Extend `tests/unit/sealed/application/test_train_encoder.py` with cards-win-rates writer tests (header row matches the FR-013a column list verbatim; data rows contain 24 fields; cells with `None` raw/shrunk values render as the empty string in both columns; rows sorted by `shrunk_score_play` descending with empty values at the end). (Depends on T006 — same file.) [Research D-15, FR-013a]
+
+- [ ] T008 [US2] Extend `tests/unit/sealed/application/test_train_encoder.py` with weighted-MSE + MLM mask + stratification tests: `_per_batch_weighted_mse` correctness on a single-card batch and on a mixed batch where one head has all-zero head_mask (returns 0 contribution, no NaN); `_draw_mlm_mask` masks at approximately the expected probability and never selects `[PAD]`/`[UNK]`/`cardname`/`[MASK]` positions; `_split_cards` stratification falls back through the FR-018 chain (`score_play` empty → `score_draw` → … → catch-all stratum) on a synthetic degenerate label distribution. (Depends on T007 — same file.) [Research D-10, D-11, D-4]
+
+- [ ] T009 [US2] Extend `tests/unit/sealed/application/test_train_encoder.py` with corpus-consistency tests: `_check_corpus_consistency` raises `CorpusInconsistencyError` naming up to 20 missing cards plus the total count; the error points the user at `python -m price_predictor convert`. (Depends on T008 — same file.) [FR-023d]
+
+- [ ] T010 [P] [US2] Update `tests/unit/sealed/domain/test_encoder_model.py` to assert (a) `forward()` returns a dict with keys `score_play`, `score_draw`, `played_rate`, `cast_lift`, `color_lift`, `mlm_logits` of the right shapes; (b) `encode()` (inference path) still returns `(B, 2*d_model)` unchanged; (c) `regression_heads.*` and `mlm_head.*` keys are present in the live model's `state_dict`. (Prior art: existing tests for `_encode_and_pool` shape.) [Research D-8, D-9]
+
+- [ ] T011 [P] [US2] Update `tests/unit/sealed/infrastructure/test_encoder_store.py` round-trip test to construct a `SealedEncoderModel` with the new heads + MLM head populated, save it, then assert the saved file's `model_state_dict` contains only `token_encoder.*` / `card_encoder.*` keys (no `regression_heads.*`, no `mlm_head.*`). (Prior art: existing prefix-filter test — extend to cover the new prefixes.) [FR-020]
+
+- [ ] T012 [P] [US2] Update `tests/integration/sealed/test_train_encoder_smoke.py` to use a tiny synthetic `cards-played.txt` + tiny corpus + tiny vocab (containing `[MASK]`); run `train-encoder` for ~3 epochs; assert (a) `latest.pt` loads via `SealedEncoderStore.load_encoder` without error, (b) the saved state_dict contains no head/MLM keys, (c) per-epoch log lines include the regression-only and MLM-only loss breakdowns, (d) the new `cards-win-rates.txt` header is present at line 1.
+
+- [ ] T013 [P] [US2] Add CLI argparse coverage for the two new flags in `tests/unit/sealed/infrastructure/test_cli_train_encoder_argparse.py`: `--mlm-weight` defaults to 0.1 and accepts user values; `--mlm-mask-prob` defaults to 0.15 and accepts user values; both are surfaced as fields on the resolved `TrainEncoderConfig`. (Prior art: existing argparse tests in this file for `--shrinkage-k` etc.)
 
 ### Implementation for User Story 2
 
-- [X] T028 [P] [US2] Create `tests/fixtures/sealed/cards-played.sample.txt` with a synthetic ~50-line `cards-played.txt` covering: high-winnability cards (>= 5 wins-in-deck), low-winnability cards (1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“2 wins-in-deck for shrinkage tests), cards never on a winning side, basic lands absent (sanity), at least two distinct `(run_id, set_code, method_A, method_B)` groups. Reuse a small `output/cardsfolder/` subset already present under `tests/fixtures/` if the layout fits.
-- [X] T029 [P] [US2] Implement `src/sealed/infrastructure/cards_played_reader.py` exposing `iter_rows(path) -> Iterator[CardsPlayedRow]` (Python record). Streams lines, tolerates a trailing partial line, raises a clear `ValueError` on mid-file malformed lines.
-- [X] T030 [P] [US2] Implement label aggregation in `src/sealed/application/train_encoder.py` (or a sibling `_aggregation.py` private helper): single pass over `cards_played_reader`, accumulates `wins_when_played` and `wins_when_in_deck` for the winning side only, returns `dict[str, (wins_when_played, wins_when_in_deck)]`. FR-010, FR-012.
-- [X] T031 [US2] Add the shrinkage transformation `_shrink(wins_when_played, wins_when_in_deck, k) -> float` in the same module, implementing FR-011: `(wins_when_played + k/2) / (wins_when_in_deck + k)`. Build the `WinnabilityMap = dict[str, CardLabel]` (`CardLabel` dataclass per data-model.md).
-- [X] T032 [US2] Implement the `cards-win-rates.txt` writer in the same module: opens `output/sealed/cards-win-rates.txt` (fixed path, FR-013a), writes header row + N data rows sorted by raw ratio descending with 5-decimal float formatting; overwrites on each call.
-- [X] T033 [US2] Implement the corpus consistency check (FR-023d) using `ConvertedCardLocator` (`src/sealed/infrastructure/converted_card_locator.py`) and `CardNameCorrections` (`src/sealed/infrastructure/card_name_corrections.py`); if any label-map card cannot be resolved on disk, raise a `CorpusInconsistencyError` naming up to 20 cards plus the total count, pointing the user at `python -m price_predictor convert`. The CLI handler in T039 maps this to exit code 5 (per cli.md Ãƒâ€šÃ‚Â§"Exit codes"). The check MUST run AFTER aggregation so the error can enumerate offending names. Per research.md Ãƒâ€šÃ‚Â§"Adjacent prior art".
-- [X] T034 [P] [US2] Implement the stratified card-level train/val split helper `_split_cards(label_map, val_fraction=0.2, seed=42) -> (train_names, val_names)`: bucket cards into 4 quantiles by shrunk label, sample 20% of each, fall back to fewer strata if quantile bins collapse (Edge Cases). Card-disjoint (FR-018).
-- [X] T035 [US2] Implement the training dataset/dataloader: tokenizes each card's converted text with `MtgTokenizer` after stripping the `name:` line via `ConvertedCardText.without_name_line()` (FR-014a; reuse from `src/sealed/domain/card_encoder.py:34`); pads to per-batch `max_seq_len`; supplies `(input_ids, attention_mask, label)` triples. `max_seq_len` for the encoder is the corpus-longest length rounded up to a multiple of 8 (FR-022).
-- [X] T036 [US2] Define `TrainEncoderConfig` dataclass in `src/sealed/application/train_encoder.py` (per data-model.md Ãƒâ€šÃ‚Â§`TrainEncoderConfig`) with the FR-021 flag fields plus the FR-022 hardcoded class constants. Top-level `run(config: TrainEncoderConfig) -> None` mirrors `train_scorer.train_scorer(config)` shape.
-- [X] T037 [US2] Implement the training loop in `src/sealed/application/train_encoder.py` consuming `TrainEncoderConfig` from T036: AdamW + LambdaLR (linear warmup ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ constant), MSE on sigmoid output vs. shrunk label, per-epoch progress lines (`_log()` style from `train_scorer.py:38`), `_BestCheckpoint` early-stopping pattern copied per research.md Ãƒâ€šÃ‚Â§"Adjacent prior art" (mark a follow-up to extract on the next training feature; do NOT extract now). On train end, snapshot best weights, hand to `SealedEncoderStore.save_encoder`. Print final summary `Best epoch: E, val_loss: V. Saved <path>`.
-- [X] T038 [US2] Implement pre-flight checks at the top of `run(config)` per contracts/cli.md Ãƒâ€šÃ‚Â§`train-encoder` "Pre-flight checks": missing vocab ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ exit 2 (point at `build-vocab`), missing/empty cards-played ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ exit 3 (point at `match-outcomes`), empty cards-folder ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ exit 4 (point at `convert`), config validation failure ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ exit 6. The corpus-consistency check (FR-023d, T033) is NOT a pre-flight ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it runs after aggregation so the error can enumerate cards ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â and surfaces as exit code 5 via the CLI handler in T039.
-- [X] T039 [US2] Wire the `train-encoder` subcommand into `src/sealed/infrastructure/cli.py`: add `_build_train_encoder_parser(subparsers)` and `run_train_encoder(args)` following the established pattern (`build_parser`, line ~60). Register the FR-021 flags with documented defaults; map exit codes from raised exceptions to the contracts/cli.md table (0/2/3/4/5/6).
+- [ ] T014 [P] [US2] Replace the single `regression_head: nn.Sequential(Linear, Sigmoid)` on `SealedEncoderModel` with `regression_heads: nn.ModuleDict({"score_play": Linear(2*d_model, 1), "score_draw": Linear(2*d_model, 1), "played_rate": Linear(2*d_model, 1), "cast_lift": Linear(2*d_model, 1), "color_lift": Linear(2*d_model, 5)})` in `src/sealed/domain/encoder_model.py`. (Prior art: existing `regression_head` attribute is being replaced — no parallel concept.) [Research D-8, FR-014]
 
-**Checkpoint**: `train-encoder` produces a usable `models/sealed/encoder/latest.pt`. US2 is independently demoable using fixture data.
+- [ ] T015 [P] [US2] Add `mlm_head: nn.Linear(d_model, vocab_size)` to `SealedEncoderModel` in `src/sealed/domain/encoder_model.py`. The head must read the contextualized token sequence (output of the transformer-layer stack, before the pool layer); add a private path on `_CardEncoderBlock` (or `SealedEncoderModel._encode_and_pool`) to expose the pre-pool sequence to the caller. (Prior art: existing `_encode_and_pool` returns post-pool only — extend to return both.) [Research D-9, FR-015a]
 
----
+- [ ] T016 [US2] Update `SealedEncoderModel.forward(input_ids, attention_mask)` in `src/sealed/domain/encoder_model.py` to return a dict `{score_play: (B,), score_draw: (B,), played_rate: (B,), cast_lift: (B,), color_lift: (B, 5), mlm_logits: (B, T, vocab_size)}` with range-matched activations (tanh on the four signed heads + color_lift, sigmoid on `played_rate`). Keep `encode()` unchanged (it still returns the pooled vector via the no-grad path). Depends on T014, T015.
 
-## Phase 5: User Story 3 - Sealed scorer consumes the sealed-trained encoder (Priority: P1)
+- [ ] T017 [P] [US2] Update `SealedEncoderStore` docstring + `_ENCODER_PREFIXES` comment in `src/sealed/infrastructure/encoder_store.py` to name `regression_heads.*` and `mlm_head.*` as the prefixes filtered out at save time; update the `RuntimeError` message in `load_encoder` to point readers at FR-020 when a leak is detected. No code-behavior change. (Prior art: existing `_ENCODER_PREFIXES` filter — reuse; documentation only.)
 
-**Goal**: `encode-cards` and `train-scorer` default `--encoder-checkpoint` to `models/sealed/encoder/latest.pt`. Missing-default-file is a hard error pointing at `train-encoder`. Explicit `--encoder-checkpoint` overrides remain functional.
+- [ ] T018 [P] [US2] Replace the v1 `CardLabel` dataclass in `src/sealed/application/train_encoder.py` with two new frozen dataclasses: `CardCounters` (4 primary + 4 `@play` ints + four `dict[str, int]` per-color counter dicts) and `CardLabels` (card_name, counters, raw + shrunk for the 9 heads as `float | None`). Define `CardLabelMap = dict[str, CardLabels]`; remove the old `WinnabilityMap` alias's references to the v1 schema. (Prior art: `CardLabel` is being replaced — no parallel concept.) [Research D-13, data-model.md]
 
-**Independent Test**: With a sealed encoder at `models/sealed/encoder/latest.pt`, run `python -m sealed encode-cards` (no flag) and `python -m sealed train-scorer` (no flag); assert the resulting `.npz` files come from the sealed encoder and the scorer checkpoint's `train_config['encoder_checkpoint']` records the sealed encoder path. Then run with `--encoder-checkpoint models/price-predictor/transformer/latest.pt` and assert the older encoder is used (SC-006).
+- [ ] T019 [P] [US2] Add the `_colors_from_mana_cost(line: str) -> set[str]` helper to `src/sealed/application/train_encoder.py`: regex over `\{[^}]+\}` symbols, union-collect WUBRG letters per symbol; return empty set when no symbol contains a letter. (No prior art — new helper; documented in research D-16.) [FR-010b]
 
-### Tests for User Story 3 (write first; let them fail; then implement)
+- [ ] T020 [US2] Replace `_aggregate_counts` in `src/sealed/application/train_encoder.py` with `_aggregate_pass_one(rows) -> dict[str, CardCounters]` that fills the 4 primary + 4 `@play` counters per card by iterating both sides of every game and bucketing by `winner` and by `starter`. Initialize the per-color counter dicts to zero — pass 2 fills them. Depends on T018. [Research D-13, FR-010a]
 
-- [X] T040 [P] [US3] Unit test `tests/unit/sealed/infrastructure/test_cli_encode_cards_default.py`: with no flag, the resolved `--encoder-checkpoint` is `models/sealed/encoder/latest.pt` and `--vocab-path` is `models/sealed/encoder/vocab.txt` (per cli.md Ãƒâ€šÃ‚Â§encode-cards "Vocab path coupling"). With explicit `--encoder-checkpoint <other>`, the explicit value wins.
-- [X] T041 [P] [US3] Unit test `tests/unit/sealed/infrastructure/test_cli_train_scorer_default.py`: with no flag, the resolved `encoder_checkpoint` in the constructed `TrainScorerConfig` is `models/sealed/encoder/latest.pt`. With `--encoder-checkpoint models/price-predictor/transformer/latest.pt`, the resolved value is the price-side path.
-- [X] T042 [P] [US3] Unit test `tests/unit/sealed/application/test_encoder_default_missing.py`: when the resolved default sealed-encoder file does not exist AND no explicit `--encoder-checkpoint` was passed, both `encode-cards` and `train-scorer` exit with code 2 and the error message names the missing file plus `python -m sealed train-encoder`. When explicit `--encoder-checkpoint` is passed at a missing path, the existing error path (whatever it currently is) is preserved (no new behavior).
-- [X] T043 [P] [US3] Integration test `tests/integration/test_sealed_encoder_default_flow.py` (`@pytest.mark.integration`): create a tiny sealed encoder via `SealedEncoderStore.save_encoder` (no full training); run `encode-cards` against a tiny corpus; assert one `.npz` shape is `(2*d_model + FEATURE_COUNT,)` and that the encoder weights used were the sealed ones (e.g., compare a known fingerprint vector).
+- [ ] T021 [US2] Add `_aggregate_pass_two(rows, counters, locator) -> None` in `src/sealed/application/train_encoder.py` that iterates `cards-played.txt` a second time. For each game, build each side's deck-color set as the union over `_colors_from_mana_cost` of every card in the deck (card → cost line via `ConvertedCardLocator.load_text(name).mana_cost_line()` cached in a per-run dict); for each (card, color X in deck) pair, increment the four per-color counter dict entries on the card's `CardCounters`. Depends on T018, T019, T020.
 
-### Implementation for User Story 3
+- [ ] T022 [US2] Update `_check_corpus_consistency` in `src/sealed/application/train_encoder.py` so it runs *between* pass 1 and pass 2 (FR-023d): the check reads the set of card names from pass 1's counter dict (not from the not-yet-built label map). The error message and capping behavior are unchanged. Depends on T020. (Prior art: existing function — reuse with a slight signature change.)
 
-- [X] T044 [US3] In `src/sealed/application/train_scorer.py:45` flip `TrainScorerConfig.encoder_checkpoint` default from `Path("models/price-predictor/transformer/latest.pt")` to `Path("models/sealed/encoder/latest.pt")` per research.md D-6 / FR-024.
-- [X] T045 [US3] In `src/sealed/infrastructure/cli.py` flip the `_ENCODE_CARDS_DEFAULT_ENCODER` constant (currently around line 523) from the price-predictor path to `Path("models/sealed/encoder/latest.pt")` per FR-025. Also flip the `encode-cards` `--vocab-path` default to `Path("models/sealed/encoder/vocab.txt")` per cli.md Ãƒâ€šÃ‚Â§"Vocab path coupling".
-- [X] T046 [US3] Add a missing-default-file guard in both call paths (`run_encode_cards`, `run_train_scorer`): if the user did NOT pass `--encoder-checkpoint` AND the resolved default path does not exist, raise/exit with code 2 and the message:
-  ```
-  Sealed encoder not found at models/sealed/encoder/latest.pt.
-  Run python -m sealed train-encoder, or pass --encoder-checkpoint <path> explicitly.
-  ```
-  (FR-026, cli.md Ãƒâ€šÃ‚Â§"New error condition"). Whether the user passed the flag explicitly is detected via argparse (e.g., a sentinel default + `args.encoder_checkpoint is _NOT_PASSED`).
-- [X] T047 [US3] Verify Phase B `--resume <phaseB>.pt` and `--scorer-checkpoint <phaseA>.pt` paths are unaffected (cli.md Ãƒâ€šÃ‚Â§"Resume semantics"): the resume path already loads encoder weights from the resumed checkpoint, and the encoder-checkpoint default flip applies only to fresh kickoffs. Add a unit test in `tests/unit/sealed/infrastructure/test_cli_train_scorer_default.py` covering this.
+- [ ] T023 [US2] Replace `_build_winnability_map` in `src/sealed/application/train_encoder.py` with `_build_label_map(counters: dict[str, CardCounters], shrinkage_k: float) -> CardLabelMap` that, per FR-011, computes 9 raw + 9 shrunk labels per card (cells with zero slice denominator stored as `None`; cards with `wins_when_in_deck + losses_when_in_deck == 0` excluded entirely per FR-012). Depends on T018, T020, T021. [FR-011, FR-012]
 
-**Checkpoint**: The sealed pipeline picks up the new encoder by default. US3 is independently demoable. P1 stories are complete (MVP achieved).
+- [ ] T024 [US2] Replace `_write_win_rates` in `src/sealed/application/train_encoder.py` with the FR-013a 24-column writer: header row first; one data row per included card with the column order from `contracts/files.md`; floats formatted to five decimals; `None` cells render as the empty string in both raw and shrunk columns; rows sorted by `shrunk_score_play` descending with empty `shrunk_score_play` values pushed to the end. Depends on T023. [Research D-15, FR-013a]
 
----
+- [ ] T025 [US2] Update `_split_cards` in `src/sealed/application/train_encoder.py` to (a) stratify on `score_play` quartile when present, (b) fall back through the FR-018 chain (`score_draw` → `cast_lift` → `color_lift_W/U/B/R/G`) when `score_play` is `None`, (c) place fully-degenerate cards in a single catch-all stratum. The 20% val split + `random_seed=42` shuffle inside each stratum stays. Depends on T023. [Research D-4, FR-018]
 
-## Phase 6: User Story 4 - Build a sealed-specific vocabulary (Priority: P2)
+- [ ] T026 [US2] Update `_WinnabilityDataset.__getitem__` in `src/sealed/application/train_encoder.py` to return `(input_ids, attention_mask, labels: Tensor[(9,)], weights: Tensor[(9,)], head_mask: Tensor[(9,)])`. `labels` carries the 9 shrunk values (with 0.0 substituted at empty cells); `weights` carries the FR-017a per-head weights computed from the card's `CardCounters` and the run's `shrinkage_k`; `head_mask` is 1.0 where the cell is non-empty and 0.0 elsewhere. Update `_WinnabilityDataset.__init__` to accept the per-card label map (now `CardLabelMap`). Depends on T018, T023.
 
-**Goal**: `python -m sealed build-vocab` writes `models/sealed/encoder/vocab.txt` from the converted card corpus, delegating to the existing price-side `build_vocabulary` utility. Independent of the price-predictor vocab file.
+- [ ] T027 [P] [US2] Add `_draw_mlm_mask(input_ids, attention_mask, mask_prob, mask_token_id, special_token_ids) -> tuple[Tensor, Tensor]` to `src/sealed/application/train_encoder.py`: returns `(masked_ids, mask_positions)` where `masked_ids[mask_positions] == mask_token_id` and the original ids at those positions are returned for the CE target. Eligible positions: real (`attention_mask == 1`) AND not in `special_token_ids`. (No prior art — new helper; documented in research D-10.) [FR-014b]
 
-**Independent Test**: Run `python -m sealed build-vocab` against `output/cardsfolder/`. Verify `models/sealed/encoder/vocab.txt` exists with one token per line, the first three tokens are `[PAD] [UNK] cardname` (seeded specials per data-model.md), known MTG terms (`creature`, `enchantment`, `flying`) are each a single line, and `models/price-predictor/transformer/vocab.txt` is unchanged.
+- [ ] T028 [P] [US2] Add `_per_batch_weighted_mse(predictions: dict, labels: Tensor, weights: Tensor, head_mask: Tensor) -> Tensor` to `src/sealed/application/train_encoder.py`: implements the FR-017 / D-11 per-head per-batch sum-to-1 weighted average across the 9 heads; sums the four signed-head terms unweighted plus `(1/5)` × the five color-lift terms; returns a scalar `L_reg`. Use `1e-8` clamp on each head's denominator. (No prior art — new helper.)
 
-### Tests for User Story 4 (write first; let them fail; then implement)
+- [ ] T029 [US2] Rewrite `_train_epoch` in `src/sealed/application/train_encoder.py` to (a) draw an MLM mask per batch via T027; (b) run `model.forward(masked_ids, attention_mask)`; (c) compute `L_reg` via T028 and `L_mlm` as cross-entropy at masked positions only (denominator = `mask.sum().clamp(min=1)`); (d) backprop `L_reg + mlm_weight * L_mlm`; (e) call `clip_grad_norm_(model.parameters(), max_norm=1.0)` between `loss.backward()` and `optimizer.step()`. Track per-component losses for the per-epoch log line. Depends on T016, T026, T027, T028. [Research D-14, FR-017, FR-022]
 
-- [X] T048 [P] [US4] Unit test `tests/unit/sealed/application/test_build_vocab.py`: given a tiny fixture corpus, the wrapper calls the price-side `build_vocabulary` and writes the output to the sealed path. The price-side vocab file (if present) is byte-unchanged after the call. With `--target-size N` smaller than the seed-token count, exits code 2 with a `ValueError`-derived message (cli.md Ãƒâ€šÃ‚Â§"Exit codes", D-1).
-- [X] T049 [P] [US4] Unit test `tests/unit/sealed/infrastructure/test_cli_build_vocab_argparse.py`: each flag parses with the documented default (`--cards-folder=output/cardsfolder/`, `--vocab-path=models/sealed/encoder/vocab.txt`, `--target-size=5000`).
+- [ ] T030 [US2] Rewrite `_eval_loss` in `src/sealed/application/train_encoder.py` to compute the same full loss (`L_reg_val + mlm_weight * L_mlm_val`) on the val set and return the scalar used by `_BestCheckpoint.update` and the patience counter. The MLM mask is drawn at val time too (with the same `--mlm-mask-prob`) so val numbers stay comparable across epochs. Depends on T027, T028. [Research D-12, FR-019]
 
-### Implementation for User Story 4
+- [ ] T031 [US2] Update `TrainEncoderConfig` in `src/sealed/application/train_encoder.py`: add `mlm_weight: float = 0.1` and `mlm_mask_prob: float = 0.15` fields. Plumb both through `run(config)` into `_train_epoch` / `_eval_loss`. (Prior art: existing dataclass — extend.)
 
-- [X] T050 [US4] Implement `src/sealed/application/build_vocab.py`: define `BuildVocabConfig` dataclass (per data-model.md Ãƒâ€šÃ‚Â§`BuildVocabConfig`) and `run(config: BuildVocabConfig) -> None`. Body: empty-folder pre-check ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ exit 1, call `price_predictor.application.build_vocabulary.build_vocabulary(cards_path=config.cards_folder, freq_threshold=2, printings_path=config.printings_path if exists else None)`, truncate the resulting vocab dict to `--target-size` entries by frequency (always preserving seeded specials per Decision D-1), call `tokenizer_store.save_vocabulary(vocab, config.vocab_path)`, print `"Wrote N tokens to <vocab-path> (corpus coverage: P%)"`.
-- [X] T051 [US4] Wire `build-vocab` into `src/sealed/infrastructure/cli.py`: `_build_build_vocab_parser(subparsers)` and `run_build_vocab(args)` following the existing pattern. Register flags `--cards-folder`, `--vocab-path`, `--target-size`. Map exits 0/1/2 per cli.md Ãƒâ€šÃ‚Â§"Exit codes".
+- [ ] T032 [US2] Extend `_run_preflight` in `src/sealed/application/train_encoder.py` to read the vocab and assert `[MASK]` is present; raise `_PreFlightError` with exit code 2 and a message naming `python -m sealed build-vocab` if absent (FR-023a). Depends on T001 (foundational).
 
-**Checkpoint**: Vocab build is one-step. The full quickstart Step 2 works. The price-side vocab file is independent (FR-008).
+- [ ] T033 [US2] Update `_log` per-epoch line format in `src/sealed/application/train_encoder.py` to include the `(reg=…, mlm=…)` breakdown alongside the full `train_loss` and `val_loss` numbers used for best-checkpoint selection. Depends on T029, T030.
+
+- [ ] T034 [P] [US2] Add `--mlm-weight` (type=float, default 0.1) and `--mlm-mask-prob` (type=float, default 0.15) flags to `_build_train_encoder_parser` in `src/sealed/infrastructure/cli.py`; thread both through `run_train_encoder` into the `TrainEncoderConfig` constructor. Depends on T031.
+
+**Checkpoint**: At this point, US2 is fully functional. Running `python -m sealed train-encoder` against a populated `cards-played.txt` produces a multi-head + MLM-trained encoder whose saved file has only encoder weights, the new `cards-win-rates.txt` schema, and per-epoch logs that report both the regression and MLM components.
 
 ---
 
-## Phase 7: User Story 5 - Tune low-n shrinkage for noisy labels (Priority: P3)
+## Phase 5: User Story 3 — Sealed scorer consumes the sealed-trained encoder (Priority: P1) ✅ ALREADY DELIVERED
 
-**Goal**: `--shrinkage-k` is observable through the inspection file. Cards with few in-deck observations shift visibly between `k=0` and `k=20`; cards with many observations stay nearly identical (SC-005).
+**Goal**: `train-scorer` and `encode-cards` default to
+`models/sealed/encoder/latest.pt` for `--encoder-checkpoint`, with a
+clear error pointing at `train-encoder` when missing.
 
-**Independent Test**: Run `train-encoder --shrinkage-k 0` and `train-encoder --shrinkage-k 20` on the same corpus; diff the two `output/sealed/cards-win-rates.txt` snapshots. Low-observation cards (e.g., `wins_when_in_deck = 2`) shift by more than 0.05 between runs; high-observation cards (e.g., `wins_when_in_deck = 1000`) shift by less than 0.005.
+**Independent Test**: Train any sealed encoder, then run `encode-cards`
+followed by `train-scorer` with no `--encoder-checkpoint` flag and
+verify the saved scorer's `train_config` records the sealed-encoder
+path.
 
-Most of US5's implementation lands inside US2's `train-encoder` flag surface (FR-021) and aggregation math (T031 / T024). This phase only adds the verification tasks that prove the flag does what SC-005 claims.
+**Status**: All FR-024 through FR-027 are satisfied by the v1 default
+flips (`_ENCODE_CARDS_DEFAULT_ENCODER` in
+`src/sealed/infrastructure/cli.py:621`,
+`TrainScorerConfig.encoder_checkpoint` default in
+`src/sealed/application/train_scorer.py`, the missing-file error wired
+in `run_train_scorer` and `run_encode_cards`). The spec amendments in
+016 do not change downstream integration. **No new tasks.**
 
-### Tests for User Story 5
+---
 
-- [X] T052 [P] [US5] Unit test `tests/unit/sealed/application/test_shrinkage_endpoints.py`: tightening assertions on the existing shrinkage helper at the SC-005 boundary values (low-n shifts visibly with `k=20`; high-n labels are within `0.005` of the raw ratio). May extend `test_shrinkage.py` rather than introducing a new file if cleaner.
-- [X] T053 [US5] Integration test `tests/integration/test_shrinkage_diff_snapshot.py` (`@pytest.mark.integration`): runs `train-encoder` twice with `--shrinkage-k 0` then `--shrinkage-k 20` on the same fixture corpus (`--epochs 1`), captures the two `cards-win-rates.txt` snapshots before they get overwritten (e.g., copy after each run), and asserts the SC-005 expected shifts hold.
+## Phase 6: User Story 4 — Build a sealed-specific vocabulary (Priority: P2)
 
-**Checkpoint**: SC-005 is verifiable from a clean checkout in two commands.
+**Goal**: `python -m sealed build-vocab` emits a vocab file that
+contains the `[MASK]` token alongside `[PAD]`, `[UNK]`, and `cardname`,
+without modifying the price-predictor vocab.
+
+**Independent Test**: Run `python -m sealed build-vocab` against
+`output/cardsfolder/`; the resulting `models/sealed/encoder/vocab.txt`
+contains a `[MASK]` line at a deterministic position; no other vocab
+file is touched.
+
+**Status**: The original `build-vocab` subcommand is already in place
+from v1 — only the `[MASK]` seeding is new for v2, and that change
+lives in the foundational T001 (because US2 also depends on it). No
+additional implementation is required. The remaining work for US4 is
+verification.
+
+- [ ] T035 [US4] After T001/T002/T003 land, run `python -m sealed build-vocab` end-to-end against `output/cardsfolder/` and verify the emitted `models/sealed/encoder/vocab.txt` contains exactly one line `[MASK]` between `cardname` and the first domain-term token; record the verification in the PR description. (Manual quickstart-style validation; no code change.)
+
+**Checkpoint**: US4 verified — every fresh `build-vocab` run produces a
+vocab usable by US2's `train-encoder`.
+
+---
+
+## Phase 7: User Story 5 — Tune low-n shrinkage for noisy labels (Priority: P3)
+
+**Goal**: `--shrinkage-k` shifts low-observation cards' labels visibly
+across all 9 heads while leaving high-observation cards' shrunk values
+within a few thousandths of their raw counterparts.
+
+**Independent Test**: Run `python -m sealed train-encoder --shrinkage-k
+0` and `python -m sealed train-encoder --shrinkage-k 20` against the
+same corpus; diff `output/sealed/cards-win-rates.txt` between the two
+runs.
+
+**Status**: The `--shrinkage-k` flag is already present and fully wired
+through `TrainEncoderConfig` from v1; the v2 label arithmetic
+(implemented under US2) automatically applies the same `k` to all 9
+heads via T023's `_build_label_map`. No production-code work is
+required beyond US2.
+
+- [ ] T036 [US5] Add an integration test in `tests/integration/sealed/test_train_encoder_shrinkage.py` (new file) that runs `train-encoder` twice on a tiny synthetic `cards-played.txt` (one card with two observations, one card with a thousand observations), once with `--shrinkage-k 0` and once with `--shrinkage-k 20`, and asserts: (a) the low-observation card's shrunk values across all 9 head columns differ measurably between the two runs; (b) the high-observation card's shrunk values differ from raw by less than 0.005 in the `k=20` run. Mark `@pytest.mark.integration`. (Prior art: existing `test_train_encoder_smoke.py` for fixture style.) [SC-005]
+
+**Checkpoint**: US5 verifiable — SC-005 is exercised by an integration
+test.
 
 ---
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-**Purpose**: Documentation, end-to-end validation, and final cleanup. Does not introduce new behavior.
+- [ ] T037 [P] Update `CLAUDE.md`'s `train-encoder` description to reflect (a) the 9 regression heads + MLM auxiliary head, (b) the new `--mlm-weight` / `--mlm-mask-prob` flags, (c) the new 24-column `cards-win-rates.txt` schema, (d) the AdamW + max-norm 1.0 + 5%-warmup-then-constant LR schedule + full-validation-loss best-checkpoint selection. Keep entries terse — match existing style.
 
-- [X] T054 [P] Update `CLAUDE.md` (`## Architecture` ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ `### `sealed`` subsection) to describe the new `build-vocab` and `train-encoder` subcommands, the new `output/sealed/cards-played.txt` artifact, and the flipped `--encoder-checkpoint` defaults for `encode-cards` and `train-scorer`. Match the existing tone (timeless present tense ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no "now supports", no benchmark numbers).
-- [X] T055 [P] Update the price-predictor entry in `CLAUDE.md` if needed to clarify that the price-predictor encoder is no longer the default `--encoder-checkpoint` for the sealed pipeline (still a valid explicit flag).
-- [X] T056 Run `specs/016-card-winnability-pretraining/quickstart.md` end to end against a real (non-fixture) checkout. Address any drift between quickstart and current behavior; if any drift surfaces it goes back as a bug into the appropriate user story.
-- [X] T057 [P] `ruff check src/ tests/` clean.
-- [X] T058 [P] `pytest -m "not integration"` clean.
-- [X] T059 [P] `pytest -m integration` clean (runs Java integration tests indirectly via the smoke tests in T019, T027, T043, T053).
-- [X] T060 [P] `cd forge-connector; mvn test` clean (runs JUnit tests added in T009ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T012).
+- [ ] T038 [P] Update `CLAUDE.md`'s `cards-win-rates.txt` paragraph (currently describes the v1 5-column schema) to describe the FR-013a 24-column schema with header row + sort by `shrunk_score_play`.
+
+- [ ] T039 Run `ruff check src/ tests/` on the entire repo and fix any issues introduced by this iteration.
+
+- [ ] T040 Run the full fast suite (`pytest -m "not integration"`) and the integration suite (`pytest tests/integration/sealed/`) and verify both pass.
+
+- [ ] T041 Walk the `quickstart.md` end-to-end on a small corpus (Steps 2–4 are the v2-relevant ones; Step 1 is unchanged). Confirm the verification commands produce the expected outputs.
 
 ---
 
@@ -206,99 +257,137 @@ Most of US5's implementation lands inside US2's `train-encoder` flag surface (FR
 
 ### Phase Dependencies
 
-- **Setup (Phase 1)**: No upstream deps. T001ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T003 are confirmation tasks.
-- **Foundational (Phase 2)**: Depends on Setup. **Blocks** US2 and US3.
-- **US1 (Phase 3)**: Depends on Setup only. Independent of Foundational. Can start immediately and run in parallel with Foundational.
-- **US2 (Phase 4)**: Depends on Foundational (needs `SealedEncoderModel`, `SealedEncoderStore`). Uses fixtures, so does NOT depend on US1 finishing match collection or on US4 finishing vocab build.
-- **US3 (Phase 5)**: Depends on Foundational (`SealedEncoderStore.load_encoder`). Tests use fixture encoder files and do not require a real `train-encoder` run.
-- **US4 (Phase 6)**: Depends on Setup only. No downstream Python deps inside this feature.
-- **US5 (Phase 7)**: Depends on US2 (needs `train-encoder` end-to-end + `cards-win-rates.txt` writer).
-- **Polish (Phase 8)**: Depends on US1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“US4 being complete. T056 (quickstart end-to-end) additionally needs US1 having produced a real `cards-played.txt`.
+- **Setup (Phase 1)**: empty.
+- **Foundational (Phase 2)**: T001 → T002, T003 (T002 and T003 are [P]; both depend only on T001).
+- **US1 (Phase 3)**: no tasks.
+- **US2 (Phase 4)**: depends on Phase 2 completion (T001 must land before any US2 implementation can validate).
+- **US3 (Phase 5)**: no tasks.
+- **US4 (Phase 6)**: depends on Phase 2 completion + T035 is verification-only.
+- **US5 (Phase 7)**: depends on US2 (T036 needs the label arithmetic from T023).
+- **Polish (Phase 8)**: depends on US2 + US4 + US5 completion.
 
-### User Story Dependencies (informational)
+### User Story Dependencies
 
-- **US1, US4** are independent of every other story.
-- **US2** is independent of US1 / US4 at implementation time (uses fixtures); end-to-end use depends on both.
-- **US3** is independent of US2 at implementation time (uses fixture encoder); end-to-end use depends on US2.
-- **US5** is a thin verification layer over US2.
+US1 and US3 are pre-shipped; they have no dependencies. US2 is the
+critical-path P1. US4 and US5 are optional priority tiers (P2/P3) but
+both share the foundational T001 and US2's implementation respectively.
 
-### Within Each User Story
+### Within User Story 2
 
-- Tests written first (per Constitution Principle I); let them fail; then implement.
-- Models / records / writers before the consuming application code.
-- Application code before CLI wiring.
-- CLI wiring before integration tests that invoke `python -m sealed ...`.
+Tests are ordered by file:
+
+- T004 → T005 → T006 → T007 → T008 → T009 (all in
+  `test_train_encoder.py`, sequential because same file).
+- T010, T011, T012, T013 are [P] — different test files.
+
+Implementation has these dependency chains:
+
+- Domain: T014 [P] T015 → T016 (forward shape).
+- Aggregator + labels: T018 → T020 → T022 (corpus check) → T021
+  (pass 2) → T023 (labels) → T024 (writer) → T025 (split) → T026
+  (dataset).
+- Helpers: T019 (colors), T027 (mask draw), T028 (weighted MSE) — all
+  [P], independent.
+- Loop: T029 (train epoch) needs T016, T026, T027, T028; T030 (eval)
+  needs T027, T028.
+- Config + CLI: T031 (config fields), T032 (preflight depends on T001),
+  T033 (log line), T034 (CLI flags) — mostly independent.
+
+Within US2, the suggested sequencing is:
+
+1. Tests first: T004 → T005 → T006 → T007 → T008 → T009; then T010,
+   T011, T012, T013 in parallel.
+2. Domain layer: T014, T015 [P] → T016.
+3. Application helpers: T018, T019, T027, T028 in parallel.
+4. Aggregation chain: T020 → T022 → T021 → T023 → T024 → T025 → T026.
+5. Training loop: T029 → T030.
+6. CLI + config: T031, T032, T033, T034 in parallel where possible
+   (T032 depends on T001; T034 depends on T031).
+7. T017 [P] (docstring update) anywhere after T014/T015 land.
 
 ### Parallel Opportunities
 
-- Phase 1: T002, T003 in parallel.
-- Phase 2: T004, T006, T008 in parallel; T005 then T007 sequentially after.
-- Phase 3 (US1): all four Java unit-test stubs (T009ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T012) in parallel; record/writer/collector implementations (T013ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T015) in parallel after the tests fail.
-- Phase 4 (US2): the seven Python test files (T020ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T026) in parallel; fixture creation (T028) in parallel with reader/aggregation/writer modules (T029ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T032) once the test stubs exist.
-- Phase 5 (US3): three test files (T040ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“T042) in parallel; default flips (T044, T045) in parallel.
-- Phase 6 (US4): T048 and T049 in parallel.
-- Phase 8 (Polish): T054, T055, T057, T058, T059, T060 all in parallel.
+Within Phase 2: T002 ‖ T003 once T001 is in.
+
+Within US2 (after tests are in place):
+
+- T014 ‖ T015 (different attributes on the same file but separate
+  edits)
+- T018 ‖ T019 ‖ T027 ‖ T028 (all add new private functions in
+  `train_encoder.py` — sequential edits to the same file but logically
+  independent; the [P] marker reflects logical independence, the actual
+  file edits happen in sequence)
+- T010 ‖ T011 ‖ T012 ‖ T013 (different test files)
+
+Within Phase 8: T037 ‖ T038 (different sections of CLAUDE.md).
 
 ---
 
-## Parallel Example: Phase 3 (US1)
+## Parallel Example: User Story 2 helper functions
 
-```text
-# Drop the four failing Java unit tests in parallel:
-- forge-connector/src/test/java/com/pricepredictor/connector/CardsPlayedRowTest.java        (T009)
-- forge-connector/src/test/java/com/pricepredictor/connector/CardsPlayedWriterTest.java     (T010)
-- forge-connector/src/test/java/com/pricepredictor/connector/PlayedCardCollectorTest.java   (T011)
-- forge-connector/src/test/java/com/pricepredictor/connector/MatchGeneratorCardsPlayedIntegrationTest.java (T012)
+Once T018 and T019 land, the loss helpers are independent:
 
-# Then implement the three new sources in parallel:
-- forge-connector/src/main/java/com/pricepredictor/connector/CardsPlayedRow.java       (T013)
-- forge-connector/src/main/java/com/pricepredictor/connector/CardsPlayedWriter.java    (T014)
-- forge-connector/src/main/java/com/pricepredictor/connector/PlayedCardCollector.java  (T015)
+```bash
+# Same file (train_encoder.py), but logically independent additions:
+Task: "T027 [US2] Add _draw_mlm_mask helper"
+Task: "T028 [US2] Add _per_batch_weighted_mse helper"
 ```
 
-## Parallel Example: Phase 4 (US2) test scaffolding
-
-```text
-- tests/unit/sealed/infrastructure/test_cards_played_reader.py       (T020)
-- tests/unit/sealed/application/test_label_aggregation.py            (T021)
-- tests/unit/sealed/application/test_shrinkage.py                    (T022)
-- tests/unit/sealed/application/test_train_val_split.py              (T023)
-- tests/unit/sealed/application/test_cards_win_rates_writer.py       (T024)
-- tests/unit/sealed/application/test_corpus_consistency.py           (T025)
-- tests/unit/sealed/infrastructure/test_cli_train_encoder_argparse.py (T026)
-```
+Once these helpers are in place plus T016 (model forward) and T026
+(dataset), T029 and T030 can both consume them.
 
 ---
 
 ## Implementation Strategy
 
-### MVP First (P1 stories: US1 + US2 + US3)
+### MVP Scope (User Story 2 only)
 
-1. Phase 1 + Phase 2 land first (one developer, ~one sitting).
-2. Then in parallel:
-   - Developer A picks up US1 (Phase 3, Java side).
-   - Developer B picks up US2 (Phase 4, Python `train-encoder`).
-   - Developer C picks up US3 (Phase 5, default flips).
-3. Validate the MVP with `tests/integration/test_sealed_encoder_default_flow.py` + a real `match-outcomes` smoke run.
-4. Demo: a sealed encoder is trained from real `cards-played.txt` and the existing scorer pipeline picks it up by default.
+US2 is the load-bearing story for this iteration. US1 and US3 are
+pre-shipped; US4 and US5 are small follow-ons. The MVP is:
 
-### Incremental Delivery After MVP
+1. Phase 2 (foundational): T001, T002, T003.
+2. Phase 4 (US2): T004…T034.
+3. **Stop and validate**: run `python -m sealed train-encoder` against
+   a real `cards-played.txt`; inspect the new `cards-win-rates.txt`;
+   confirm the saved encoder loads via `SealedEncoderStore`; confirm
+   `train-scorer` (US3, already wired) consumes it.
 
-1. Add US4 (build-vocab). Quickstart Step 2 works directly without manually copying the price-side vocab.
-2. Add US5 (shrinkage verification). SC-005 becomes one-line reproducible.
+### Incremental Delivery
 
-### Solo Strategy
+1. Foundational (T001–T003) — produces vocabularies that include
+   `[MASK]`.
+2. US2 (T004–T034) — multi-head + MLM encoder pretraining works
+   end-to-end.
+3. US4 (T035) — manual verification of the foundational `[MASK]`
+   seeding.
+4. US5 (T036) — automated SC-005 integration test.
+5. Polish (T037–T041) — CLAUDE.md updates, lint, full-suite pass,
+   quickstart walkthrough.
 
-If working alone, the natural sequential order is:
-1. Phase 1 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Phase 2 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ US4 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ US1 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ US2 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ US3 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ US5 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Polish.
-2. US4 ahead of US1 lets the developer build a real vocab before walking away to wait on the long-running `match-outcomes` collection; the priority "P2" reflects feature importance, not implementation order.
+Each step adds value without breaking the previous ones; US3's
+already-shipped default flips continue to work because the new sealed
+encoder's checkpoint shape is identical to v1's (same prefix layout).
 
 ---
 
 ## Notes
 
-- Tests are MANDATORY per Constitution Principle I and are listed before implementation tasks within each user-story phase. Verify each test fails before implementing.
-- Every new entity/service in this task list cites its prior art in plan.md's Codebase Survey (Principle VII): `SealedEncoderConfig` parallels `TransformerConfig`, `SealedEncoderModel` parallels `CardPriceTransformerModel`, `CardsPlayedWriter` mirrors `MatchResultWriter`, `PlayedCardCollector` mirrors `../jumpstart-tierlist/.../JumpstartMatch.java#CardCollector`, `SealedEncoderStore` mirrors `ScorerStore`, `_BestCheckpoint` early-stop is copied from `train_transformer.py:146` (follow-up flagged in research.md to extract on next training feature).
-- Commit after each task or logical group; a clean commit per phase boundary is a reasonable default for this feature.
-- All hot paths in `train-encoder` (Phase 4) are covered by fast unit tests; the only `@pytest.mark.integration` tests are the end-to-end smokes (T019, T027, T043, T053).
-- File-format changes (`cards-played.txt` schema, `cards-win-rates.txt` schema, encoder `.pt` payload shape) are pinned by `contracts/files.md`; downstream readers may rely on those guarantees.
+- `[P]` tasks = different files OR logically-independent additions to
+  the same file (the latter still serialize on the file but can be
+  authored in any order).
+- `[Story]` label maps task to a specific user story for traceability.
+- Each user story is independently completable; US2 is the only story
+  with substantive new code.
+- Per Constitution Principle I, every behavioral change in this
+  iteration ships with a unit or integration test (T002–T013, T036).
+- Per Constitution Principle VII, every new entity / helper task above
+  cites the prior art it reuses or replaces (see plan.md § Codebase
+  Survey and research.md). The new helpers `_colors_from_mana_cost`,
+  `_draw_mlm_mask`, and `_per_batch_weighted_mse` have no prior art in
+  the codebase; this is documented in research D-16, D-10, and D-11
+  respectively.
+- Commit after each phase or logical group; do not amend across
+  user-story boundaries.
+- Avoid: same-file conflicts inside a single PR (T004–T009 must be
+  authored in series), cross-story dependencies that break US2's
+  independence from US4/US5.
