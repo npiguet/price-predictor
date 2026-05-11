@@ -1103,7 +1103,6 @@ def run_build_vocab(args: argparse.Namespace) -> int:
 def run_train_encoder(args: argparse.Namespace) -> int:
     """Execute the train-encoder command."""
     from sealed.application.train_encoder import (
-        CorpusInconsistencyError,
         TrainEncoderConfig,
         _PreFlightError,
     )
@@ -1133,9 +1132,6 @@ def run_train_encoder(args: argparse.Namespace) -> int:
     except _PreFlightError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return exc.exit_code
-    except CorpusInconsistencyError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 5
     except ValueError as exc:
         # SealedEncoderConfig validation (n_heads / d_model, etc.)
         print(f"Error: {exc}", file=sys.stderr)

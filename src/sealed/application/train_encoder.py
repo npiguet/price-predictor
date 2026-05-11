@@ -89,15 +89,6 @@ def _log(message: str) -> None:
     print(f"[{timestamp}] {message}", flush=True)
 
 
-# ── Errors ──────────────────────────────────────────────────────────────
-
-
-class CorpusInconsistencyError(RuntimeError):
-    """Raised when the cards-played corpus references cards absent from
-    ``output/cardsfolder/`` (FR-023d).
-    """
-
-
 # ── Per-card counters and labels (replaces v1 CardLabel) ────────────────
 
 
@@ -256,33 +247,45 @@ def _aggregate_pass_one(
 
 # ── Corpus consistency check (FR-023d) ──────────────────────────────────
 
+_MISSING_CARD_DISPLAY_CAP: int = 20
 
-def _check_corpus_consistency(
+
+def _drop_missing_cards(
     counters: dict[str, CardCounters], locator: ConvertedCardLocator,
-) -> None:
-    """FR-023d. Run after pass 1, before pass 2.
+) -> int:
+    """Run after pass 1, before pass 2.
+
+    Cards referenced by ``cards-played.txt`` that have no converted
+    ``.txt`` under the cards folder cannot be tokenized, so they're
+    dropped from ``counters`` (and therefore from the label map, the
+    train/val split, and the dataset). Missing cards are *reported* via
+    a log warning naming up to ``_MISSING_CARD_DISPLAY_CAP`` of them
+    plus the total — but they do not block the run. Returns the number
+    of cards dropped.
 
     Cards with zero observations in both sides' decks won't be in
-    ``counters`` at all (since pass 1 only inserts on first sighting),
-    so the check naturally focuses on cards that the model would
-    actually train on.
+    ``counters`` at all (pass 1 only inserts on first sighting), so this
+    only ever drops cards the model would otherwise have trained on.
     """
-    missing: list[str] = []
-    for name in counters:
-        if locator.text_path(name) is None:
-            missing.append(name)
-    if not missing:
-        return
-    missing.sort()
-    head = missing[:20]
-    suffix = f" (and {len(missing) - 20} more)" if len(missing) > 20 else ""
-    raise CorpusInconsistencyError(
-        f"{len(missing)} card(s) referenced by cards-played.txt have no "
-        f"converted .txt under the cards folder. First {len(head)}: "
-        + ", ".join(head)
-        + suffix
-        + ". Run python -m price_predictor convert to rebuild the corpus."
+    missing = sorted(
+        name for name in counters if locator.text_path(name) is None
     )
+    if not missing:
+        return 0
+    for name in missing:
+        del counters[name]
+    head = missing[:_MISSING_CARD_DISPLAY_CAP]
+    suffix = (
+        f" (and {len(missing) - _MISSING_CARD_DISPLAY_CAP} more)"
+        if len(missing) > _MISSING_CARD_DISPLAY_CAP else ""
+    )
+    _log(
+        f"WARNING: {len(missing)} card(s) referenced by cards-played.txt "
+        f"have no converted .txt under the cards folder; dropping them from "
+        f"training. First {len(head)}: " + ", ".join(head) + suffix
+        + ". Run python -m price_predictor convert to add them."
+    )
+    return len(missing)
 
 
 # ── Aggregation pass 2 (per-color slices) ──────────────────────────────
@@ -1109,8 +1112,9 @@ def run(config: TrainEncoderConfig) -> Path:
     """Execute the train-encoder pipeline.
 
     Returns the path of the saved ``latest.pt``. Raises ``_PreFlightError``
-    on pre-flight failure (CLI handler maps to exit codes) and
-    ``CorpusInconsistencyError`` on missing cards.
+    on pre-flight failure (CLI handler maps to exit codes). Cards
+    referenced by ``cards-played.txt`` that lack a converted ``.txt`` are
+    reported via a log warning and dropped — they do not block the run.
     """
     _run_preflight(config)
 
@@ -1120,7 +1124,9 @@ def run(config: TrainEncoderConfig) -> Path:
     counters = _aggregate_pass_one(iter_rows(config.cards_played_path))
     _log(f"Pass 1 collected counters for {len(counters)} card(s)")
 
-    _check_corpus_consistency(counters, locator)
+    n_dropped = _drop_missing_cards(counters, locator)
+    if n_dropped:
+        _log(f"Continuing with {len(counters)} card(s) after dropping {n_dropped}")
 
     _log(f"Reading {config.cards_played_path} (pass 2: per-color slices)")
     _aggregate_pass_two(iter_rows(config.cards_played_path), counters, locator)

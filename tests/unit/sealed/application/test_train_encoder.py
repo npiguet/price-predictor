@@ -1,5 +1,5 @@
 """Unit tests for ``train-encoder``: aggregation, label arithmetic,
-weighted MSE, MLM mask draw, stratification, and corpus consistency.
+weighted MSE, MLM mask draw, stratification, and missing-card handling.
 """
 
 from __future__ import annotations
@@ -12,13 +12,12 @@ import torch
 from sealed.application.train_encoder import (
     CardCounters,
     CardLabels,
-    CorpusInconsistencyError,
     _aggregate_pass_one,
     _aggregate_pass_two,
     _build_label_map,
-    _check_corpus_consistency,
     _colors_from_mana_cost,
     _draw_mlm_mask,
+    _drop_missing_cards,
     _per_batch_weighted_mse,
     _split_cards,
     _write_win_rates,
@@ -568,33 +567,39 @@ class TestSplitCards:
         assert len(val) == 2  # 20% of 10
 
 
-# ── Corpus consistency ───────────────────────────────────────────────
+# ── Missing-card handling (report-but-don't-block) ───────────────────
 
 
-class TestCorpusConsistency:
-    def test_passes_when_all_cards_present(self, tmp_path: Path):
+class TestDropMissingCards:
+    def test_noop_when_all_cards_present(self, tmp_path: Path):
         for name in ("Lightning Bolt", "Grizzly Bears"):
             _seed_card(tmp_path, name, "{R}")
         counters = {n: CardCounters() for n in ("Lightning Bolt", "Grizzly Bears")}
-        _check_corpus_consistency(counters, ConvertedCardLocator(tmp_path))
+        dropped = _drop_missing_cards(counters, ConvertedCardLocator(tmp_path))
+        assert dropped == 0
+        assert set(counters) == {"Lightning Bolt", "Grizzly Bears"}
 
-    def test_raises_with_missing_card_names(self, tmp_path: Path):
+    def test_drops_missing_cards_and_reports(self, tmp_path: Path, capsys):
         _seed_card(tmp_path, "Lightning Bolt", "{R}")
         counters = {
             n: CardCounters()
             for n in ("Lightning Bolt", "Counterspell", "Llanowar Elves")
         }
-        with pytest.raises(CorpusInconsistencyError) as ex:
-            _check_corpus_consistency(counters, ConvertedCardLocator(tmp_path))
-        msg = str(ex.value)
-        assert "2 card(s)" in msg
-        assert "Counterspell" in msg
-        assert "Llanowar Elves" in msg
-        assert "python -m price_predictor convert" in msg
+        dropped = _drop_missing_cards(counters, ConvertedCardLocator(tmp_path))
+        assert dropped == 2
+        # Missing cards are removed; the resolvable one survives.
+        assert set(counters) == {"Lightning Bolt"}
+        # ... and they're reported on stdout (not raised).
+        out = capsys.readouterr().out
+        assert "WARNING" in out
+        assert "2 card(s)" in out
+        assert "Counterspell" in out
+        assert "Llanowar Elves" in out
+        assert "python -m price_predictor convert" in out
 
-    def test_caps_displayed_card_names_at_20(self, tmp_path: Path):
+    def test_caps_displayed_card_names_at_20(self, tmp_path: Path, capsys):
         counters = {f"Card {i}": CardCounters() for i in range(30)}
-        with pytest.raises(CorpusInconsistencyError) as ex:
-            _check_corpus_consistency(counters, ConvertedCardLocator(tmp_path))
-        msg = str(ex.value)
-        assert "and 10 more" in msg
+        dropped = _drop_missing_cards(counters, ConvertedCardLocator(tmp_path))
+        assert dropped == 30
+        assert counters == {}
+        assert "and 10 more" in capsys.readouterr().out

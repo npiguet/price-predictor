@@ -104,12 +104,15 @@ the encoder weights (FR-014, FR-016, FR-017, FR-020).
    - 4 `@play` subset counters (same four, restricted to games where the
      card's owner was the starter)
 
-3. **Corpus consistency check** (FR-023d): for every card name observed
-   in pass 1 with non-zero `wins_when_in_deck + losses_when_in_deck`,
-   verify the card has a `.txt` under `--cards-folder` (using
-   `card_name_corrections`). On any miss, exit `5` with a message
-   naming up to 20 missing cards plus a total count, pointing the user
-   at `python -m price_predictor convert`.
+3. **Missing-card check** (FR-023d): for every card name observed in
+   pass 1, verify the card has a `.txt` under `--cards-folder` (using
+   `card_name_corrections` and the front-face / `rebalanced/`
+   fallbacks). For any miss, log a warning naming up to 20 missing
+   cards plus a total count, pointing the user at `python -m
+   price_predictor convert`, then drop those cards from the counter
+   dict (and therefore from the label map, the split, and the
+   dataset). This does **not** abort the run — training proceeds with
+   the remaining cards.
 
 4. **Aggregation pass 2** (FR-010b): stream `cards-played.txt` again. For
    every card, on first encounter resolve its color identity from its
@@ -127,7 +130,7 @@ the encoder weights (FR-014, FR-016, FR-017, FR-020).
    == 0` are excluded entirely.
 
 6. **Write `output/sealed/cards-win-rates.txt`** (FR-013a, Decision D-15):
-   one header row + one row per included card, 24 columns each, sorted by
+   one header row + one row per included card, 23 columns each, sorted by
    `shrunk_score_play` descending. Empty cells are written as the empty
    string in both raw and shrunk columns.
 
@@ -190,9 +193,11 @@ based on the full loss column per FR-019.
 | `2` | Vocabulary missing or lacking `[MASK]`. |
 | `3` | `cards-played.txt` missing or empty. |
 | `4` | Cards folder empty. |
-| `5` | Corpus references cards absent from `output/cardsfolder/`. |
 | `6` | Architectural misconfiguration (`d_model % n_pool_queries != 0`, etc.). |
 | `130` | KeyboardInterrupt (Ctrl-C). |
+
+(There is no longer an exit code for "corpus references missing cards" —
+those are reported via a log warning and dropped, per FR-023d.)
 
 ### Side effects
 

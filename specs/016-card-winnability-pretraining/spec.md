@@ -270,10 +270,13 @@ observations but is nearly identical for cards with many.
   fails with a clear error pointing the user at `python -m sealed
   match-outcomes`.
 - **`cards-played.txt` references cards absent from `output/cardsfolder/`**
-  (e.g., new sets played by Forge after the last `convert` run): training
-  fails at start with a clear error naming the missing cards and pointing
-  the user at `python -m price_predictor convert`. Training does not
-  proceed by silently dropping the missing cards.
+  (e.g., new sets played by Forge after the last `convert` run, or
+  cards Forge has a play-side script for but no converted text):
+  training logs a warning naming the missing cards (capped at a
+  reasonable display count, with the total reported) and pointing the
+  user at `python -m price_predictor convert`, then drops those cards
+  from the label map / split / dataset and proceeds. Missing cards are
+  reported but do not block the run.
 - **Downstream pipeline runs before the sealed encoder exists**:
   `train-scorer` and `encode-cards` default
   `--encoder-checkpoint` to the sealed encoder; if that file is absent
@@ -578,14 +581,16 @@ observations but is nearly identical for cards with many.
   pointing the user at the corrective command if (a) the vocabulary
   file is missing or does not contain a reserved `[MASK]` token
   (point at `build-vocab`), (b) `cards-played.txt` is missing or
-  empty (point at `match-outcomes`), (c) the corpus folder is empty
-  (point at `convert`), or (d) any card name referenced in
-  `cards-played.txt` has no corresponding `.txt` file under the
-  corpus folder (point at `python -m price_predictor convert`). The
-  corpus consistency check (d) MUST run after pass 1 of aggregation
-  so the error message can name the offending cards (capped at a
-  reasonable display count, with the total count reported); training
-  MUST NOT proceed by silently dropping the missing cards.
+  empty (point at `match-outcomes`), or (c) the corpus folder is
+  empty (point at `convert`).
+- **FR-023d**: After pass 1 of aggregation, `train-encoder` MUST check
+  every observed card name against the corpus folder. Card names with
+  no corresponding `.txt` MUST be *reported* — a warning naming the
+  missing cards (capped at a reasonable display count, with the total
+  reported) and pointing the user at `python -m price_predictor
+  convert` — and then dropped from the label map, the train/val split,
+  and the dataset. Missing cards MUST NOT block the run; training
+  proceeds with the remaining cards.
 
 #### Downstream integration
 
