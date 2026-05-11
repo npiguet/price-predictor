@@ -920,11 +920,14 @@ class TrainEncoderConfig:
     n_layers: int = 6
     n_heads: int = 4
     n_pool_queries: int = 4
+    pool_mode: str = "dual"
     shrinkage_k: float = 20.0
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
 
-    # FR-022 hardcoded constants — kept on the dataclass for traceability.
+    # d_model / ff_dim default to the FR-022 constants but are tunable via
+    # --d-model / --ff-dim for architecture experiments; val_fraction and
+    # random_seed stay hardcoded.
     d_model: int = D_MODEL
     ff_dim: int = FF_DIM
     val_fraction: float = VAL_FRACTION
@@ -976,13 +979,19 @@ def _run_preflight(config: TrainEncoderConfig) -> None:
             "Run python -m price_predictor convert to build the corpus.",
             exit_code=4,
         )
-    # n_pool_queries / d_model relationship is validated again inside
-    # SealedEncoderConfig.__post_init__, but we surface it as exit code 6
-    # at the CLI handler level (the dataclass raises ValueError).
-    if D_MODEL % config.n_pool_queries != 0:
+    # d_model / n_heads / n_pool_queries divisibility is validated again
+    # inside SealedEncoderConfig.__post_init__, but we surface it as exit
+    # code 6 at the CLI handler level (the dataclass raises ValueError).
+    if config.d_model % config.n_pool_queries != 0:
         raise _PreFlightError(
-            f"d_model ({D_MODEL}) must be divisible by n_pool_queries "
+            f"d_model ({config.d_model}) must be divisible by n_pool_queries "
             f"({config.n_pool_queries})",
+            exit_code=6,
+        )
+    if config.d_model % config.n_heads != 0:
+        raise _PreFlightError(
+            f"d_model ({config.d_model}) must be divisible by n_heads "
+            f"({config.n_heads})",
             exit_code=6,
         )
 
@@ -1401,13 +1410,14 @@ def _build_training_setup(
 
     encoder_config = SealedEncoderConfig(
         vocab_size=tokenizer.vocab_size,
-        d_model=D_MODEL,
+        d_model=config.d_model,
         n_layers=config.n_layers,
         n_heads=config.n_heads,
-        ff_dim=FF_DIM,
+        ff_dim=config.ff_dim,
         max_seq_len=max_seq_len,
         dropout=config.dropout,
         n_pool_queries=config.n_pool_queries,
+        pool_mode=config.pool_mode,
     )
 
     torch.manual_seed(config.random_seed)

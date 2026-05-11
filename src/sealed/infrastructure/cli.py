@@ -149,6 +149,17 @@ def _build_train_encoder_parser(subparsers) -> None:
         help="Number of transformer encoder layers (default: 6)",
     )
     parser.add_argument(
+        "--d-model", type=int, default=256,
+        help=(
+            "Model / embedding width (default: 256). Must be divisible by "
+            "--n-heads and --n-pool-queries."
+        ),
+    )
+    parser.add_argument(
+        "--ff-dim", type=int, default=None,
+        help="Transformer feed-forward hidden dim (default: 4 * --d-model)",
+    )
+    parser.add_argument(
         "--n-heads", type=int, default=4,
         help="Number of attention heads (default: 4)",
     )
@@ -157,6 +168,15 @@ def _build_train_encoder_parser(subparsers) -> None:
         help=(
             "Number of multi-query attention pool queries (default: 4). "
             "Must divide d_model (256)."
+        ),
+    )
+    parser.add_argument(
+        "--pool-mode", choices=["dual", "attn"], default="dual",
+        help=(
+            "Card-vector pooling: 'dual' = multi-query attention pool "
+            "concatenated with max-pool over the token outputs (default, "
+            "pooled width 2*d_model); 'attn' = attention pool only (pooled "
+            "width d_model)."
         ),
     )
     parser.add_argument(
@@ -1110,6 +1130,7 @@ def run_train_encoder(args: argparse.Namespace) -> int:
         run as run_train_encoder_pipeline,
     )
 
+    ff_dim = args.ff_dim if args.ff_dim is not None else 4 * args.d_model
     config = TrainEncoderConfig(
         cards_played_path=Path(args.cards_played_path),
         cards_folder=Path(args.cards_folder),
@@ -1121,8 +1142,11 @@ def run_train_encoder(args: argparse.Namespace) -> int:
         patience=args.patience,
         dropout=args.dropout,
         n_layers=args.n_layers,
+        d_model=args.d_model,
+        ff_dim=ff_dim,
         n_heads=args.n_heads,
         n_pool_queries=args.n_pool_queries,
+        pool_mode=args.pool_mode,
         shrinkage_k=args.shrinkage_k,
         mlm_weight=args.mlm_weight,
         mlm_mask_prob=args.mlm_mask_prob,

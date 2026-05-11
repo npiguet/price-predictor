@@ -37,6 +37,7 @@ class SealedEncoderConfig:
     max_seq_len: int
     dropout: float
     n_pool_queries: int
+    pool_mode: str = "dual"  # "dual" = attention ‖ max-pool; "attn" = attention-only
 
     def __post_init__(self) -> None:
         for name in (
@@ -57,6 +58,16 @@ class SealedEncoderConfig:
             )
         if not (0.0 <= self.dropout < 1.0):
             raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")
+        if self.pool_mode not in ("dual", "attn"):
+            raise ValueError(
+                f"pool_mode must be 'dual' (attention ‖ max-pool) or 'attn' "
+                f"(attention-pool only), got {self.pool_mode!r}"
+            )
+
+    @property
+    def pooled_dim(self) -> int:
+        """Width of the pooled card vector fed to the regression heads."""
+        return self.d_model if self.pool_mode == "attn" else 2 * self.d_model
 
 
 class _TokenEncoder(nn.Module):
@@ -116,12 +127,14 @@ class _MultiQueryAttentionPool(nn.Module):
 
 
 class _CardEncoderBlock(nn.Module):
-    """Transformer encoder stack + dual pool (multi-query attention ‖ max).
+    """Transformer encoder stack + a pool over the token outputs.
 
     Returns ``(contextualized, pooled)`` where ``contextualized`` is the
     pre-pool transformer output ``(B, T, d_model)`` consumed by the MLM
-    head per FR-015a / Decision D-9, and ``pooled`` is ``(B, 2 * d_model)``
-    consumed by the regression heads.
+    head per FR-015a / Decision D-9, and ``pooled`` is consumed by the
+    regression heads. With ``pool_mode == "dual"`` (default) the pool is
+    multi-query attention ‖ max, so ``pooled`` is ``(B, 2 * d_model)``;
+    with ``pool_mode == "attn"`` it's attention-only, ``(B, d_model)``.
     """
 
     def __init__(self, config: SealedEncoderConfig) -> None:
@@ -137,6 +150,7 @@ class _CardEncoderBlock(nn.Module):
         self.attn_pool = _MultiQueryAttentionPool(
             config.d_model, config.n_pool_queries, config.dropout,
         )
+        self.pool_mode = config.pool_mode
 
     def forward(
         self, x: torch.Tensor, attention_mask: torch.Tensor,
@@ -145,6 +159,8 @@ class _CardEncoderBlock(nn.Module):
         encoded = self.encoder(x, src_key_padding_mask=padding_mask)
 
         attn_pooled = self.attn_pool(encoded, attention_mask)
+        if self.pool_mode == "attn":
+            return encoded, attn_pooled
 
         padding_mask_3d = padding_mask.unsqueeze(-1)
         max_input = encoded.masked_fill(padding_mask_3d, float("-inf"))
@@ -154,15 +170,17 @@ class _CardEncoderBlock(nn.Module):
         return encoded, pooled
 
 
-def _build_regression_heads(d_model: int) -> nn.ModuleDict:
+def _build_regression_heads(in_features: int) -> nn.ModuleDict:
     """Five regression-head projections (Decision D-8).
 
-    The four signed heads (``score_play``, ``score_draw``, ``cast_lift``,
-    ``color_lift``) project to ``[-1, +1]`` via ``Tanh``; ``played_rate``
-    projects to ``[0, 1]`` via ``Sigmoid``. ``color_lift`` is one fused
-    five-output projection with one column per WUBRG letter.
+    ``in_features`` is the pooled card-vector width (``SealedEncoderConfig
+    .pooled_dim`` — ``2 * d_model`` for the dual attention‖max pool,
+    ``d_model`` for the attention-only pool). The four signed heads
+    (``score_play``, ``score_draw``, ``cast_lift``, ``color_lift``) project
+    to ``[-1, +1]`` via ``Tanh``; ``played_rate`` projects to ``[0, 1]``
+    via ``Sigmoid``. ``color_lift`` is one fused five-output projection
+    with one column per WUBRG letter.
     """
-    in_features = 2 * d_model
     return nn.ModuleDict({
         "score_play": nn.Sequential(nn.Linear(in_features, 1), nn.Tanh()),
         "score_draw": nn.Sequential(nn.Linear(in_features, 1), nn.Tanh()),
@@ -179,9 +197,11 @@ class SealedEncoderModel(nn.Module):
 
     Children (state-dict prefixes shown in parentheses):
       * ``token_encoder.*`` — token + positional embedding + dropout. Saved.
-      * ``card_encoder.*`` — transformer stack + dual pool. Saved.
-      * ``regression_heads.*`` — five linear projections (Decision D-8).
-        Training-only; **filtered out at save time** per FR-020.
+      * ``card_encoder.*`` — transformer stack + pool (dual attention‖max,
+        or attention-only when ``config.pool_mode == "attn"``). Saved.
+      * ``regression_heads.*`` — five linear projections from
+        ``config.pooled_dim`` (Decision D-8). Training-only; **filtered out
+        at save time** per FR-020.
       * ``mlm_head.*`` — ``Linear(d_model, vocab_size)`` reading the
         pre-pool contextualized token sequence (FR-015a). Training-only;
         **filtered out at save time** per FR-020.
@@ -192,7 +212,7 @@ class SealedEncoderModel(nn.Module):
         self.config = config
         self.token_encoder = _TokenEncoder(config)
         self.card_encoder = _CardEncoderBlock(config)
-        self.regression_heads = _build_regression_heads(config.d_model)
+        self.regression_heads = _build_regression_heads(config.pooled_dim)
         self.mlm_head = nn.Linear(config.d_model, config.vocab_size)
 
     def _encode(
@@ -208,7 +228,8 @@ class SealedEncoderModel(nn.Module):
         """Return the pooled card embedding without the heads.
 
         Returns:
-            ``(batch_size, 2 * d_model)``
+            ``(batch_size, config.pooled_dim)`` — ``2 * d_model`` for the
+            dual attention‖max pool, ``d_model`` for attention-only.
         """
         _contextualized, pooled = self._encode(input_ids, attention_mask)
         return pooled

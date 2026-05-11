@@ -50,6 +50,14 @@ class TestSealedEncoderConfig:
         with pytest.raises(ValueError, match="vocab_size"):
             _config(vocab_size=0)
 
+    def test_pool_mode_rejects_unknown_value(self):
+        with pytest.raises(ValueError, match="pool_mode"):
+            _config(pool_mode="mean")
+
+    def test_pooled_dim_depends_on_pool_mode(self):
+        assert _config(d_model=32, pool_mode="dual").pooled_dim == 64
+        assert _config(d_model=32, pool_mode="attn").pooled_dim == 32
+
 
 class TestSealedEncoderModel:
     def test_forward_returns_dict_with_expected_shapes(self):
@@ -134,6 +142,19 @@ class TestSealedEncoderModel:
         out_padded = model.encode(ids_padded, mask)
         out_garbage = model.encode(ids_garbage, mask)
         assert torch.allclose(out_padded, out_garbage, atol=1e-5)
+
+    def test_attn_pool_mode_halves_pooled_width(self):
+        cfg = _config(pool_mode="attn")
+        model = SealedEncoderModel(cfg)
+        model.eval()
+        # Regression heads project from d_model, not 2*d_model.
+        assert model.regression_heads["score_play"][0].in_features == cfg.d_model
+        ids, mask = _ids_and_mask(3, cfg.max_seq_len, cfg.vocab_size)
+        assert model.encode(ids, mask).shape == (3, cfg.d_model)
+        out = model(ids, mask)
+        for name in ("score_play", "score_draw", "played_rate", "cast_lift"):
+            assert out[name].shape == (3,)
+        assert out["color_lift"].shape == (3, len(COLOR_ORDER))
 
     def test_random_init_unseeded(self):
         cfg = _config()

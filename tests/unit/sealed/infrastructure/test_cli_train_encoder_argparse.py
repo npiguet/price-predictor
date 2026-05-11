@@ -66,13 +66,23 @@ class TestTrainEncoderArgs:
         help_text = buf.getvalue()
         assert "aggregate-labels" not in help_text
 
-    def test_hardcoded_constants_absent_from_cli_surface(self):
-        # FR-022 constants (d_model, ff_dim, val_fraction, random_seed) are
-        # not flags. Passing them as flags must error out.
+    def test_val_fraction_and_random_seed_absent_from_cli_surface(self):
+        # val_fraction and random_seed stay hardcoded — not flags.
         parser = build_parser()
-        for forbidden in ("--d-model", "--ff-dim", "--val-fraction", "--random-seed"):
+        for forbidden in ("--val-fraction", "--random-seed"):
             with pytest.raises(SystemExit):
                 parser.parse_args(["train-encoder", forbidden, "1"])
+
+    def test_d_model_and_ff_dim_are_tunable(self):
+        # d_model / ff_dim are exposed for architecture experiments.
+        ns = _parse(["train-encoder", "--d-model", "128"])
+        assert ns.d_model == 128
+        assert ns.ff_dim is None  # resolved to 4 * d_model by the handler
+        ns = _parse(["train-encoder", "--d-model", "64", "--ff-dim", "300"])
+        assert (ns.d_model, ns.ff_dim) == (64, 300)
+        # defaults unchanged
+        ns = _parse(["train-encoder"])
+        assert ns.d_model == 256 and ns.ff_dim is None
 
     def test_invalid_n_pool_queries_exits_via_pipeline(self):
         # The argparse layer accepts any int; the failure surfaces as exit
