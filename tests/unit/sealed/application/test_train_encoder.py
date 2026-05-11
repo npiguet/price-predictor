@@ -13,13 +13,14 @@ from sealed.application.train_encoder import (
     N_HEADS,
     CardCounters,
     CardLabels,
-    _aggregate_pass_one,
-    _aggregate_pass_two,
+    _aggregate,
     _build_label_map,
     _colors_from_mana_cost,
     _draw_mlm_mask,
     _drop_missing_cards,
     _HeadCorrAccumulator,
+    _LengthBucketBatchSampler,
+    _pad_collate,
     _per_batch_weighted_mse,
     _split_cards,
     _write_win_rates,
@@ -53,18 +54,30 @@ def _row(
     )
 
 
-# ── Pass 1 ────────────────────────────────────────────────────────────
+def _seed_card(folder: Path, card_name: str, mana_cost: str | None) -> None:
+    sanitized = card_name.lower().replace(" ", "_").replace(",", "")
+    letter = sanitized[0]
+    (folder / letter).mkdir(parents=True, exist_ok=True)
+    cost_line = f"mana cost: {mana_cost}\n" if mana_cost is not None else ""
+    (folder / letter / f"{sanitized}.txt").write_text(
+        f"name: {card_name}\n{cost_line}types: instant\n",
+        encoding="utf-8",
+    )
 
 
-class TestAggregatePassOne:
-    def test_winning_and_losing_sides_both_counted(self):
+# ── Aggregation (primary + @play + per-color, single pass) ────────────
+
+
+class TestAggregate:
+    def test_winning_and_losing_sides_both_counted(self, tmp_path: Path):
+        loc = ConvertedCardLocator(tmp_path)
         rows = [
             _row(cp_a=["LB"], cp_b=["GB"], cnp_a=[], cnp_b=[],
                  winner="A", starter="A"),
             _row(cp_a=["LB"], cp_b=["GB"], cnp_a=[], cnp_b=[],
                  winner="B", starter="A"),
         ]
-        counters = _aggregate_pass_one(rows)
+        counters = _aggregate(rows, loc)
         # LB: A side, won game 1 / lost game 2
         assert counters["LB"].wins_when_played == 1
         assert counters["LB"].losses_when_played == 1
@@ -74,18 +87,18 @@ class TestAggregatePassOne:
         assert counters["GB"].wins_when_played == 1
         assert counters["GB"].losses_when_played == 1
 
-    def test_in_deck_includes_not_played(self):
+    def test_in_deck_includes_not_played(self, tmp_path: Path):
         rows = [
             _row(cp_a=["LB"], cp_b=[], cnp_a=["GB"], cnp_b=[],
                  winner="A", starter="A"),
         ]
-        counters = _aggregate_pass_one(rows)
+        counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
         assert counters["LB"].wins_when_played == 1
         assert counters["LB"].wins_when_in_deck == 1
         assert counters["GB"].wins_when_played == 0
         assert counters["GB"].wins_when_in_deck == 1
 
-    def test_starter_drives_at_play_subset(self):
+    def test_starter_drives_at_play_subset(self, tmp_path: Path):
         # Card on side A is starter (at play); same card later on side A
         # but starter is B (at draw).
         rows = [
@@ -94,15 +107,14 @@ class TestAggregatePassOne:
             _row(cp_a=["LB"], cp_b=[], cnp_a=[], cnp_b=[],
                  winner="A", starter="B"),
         ]
-        counters = _aggregate_pass_one(rows)
-        c = counters["LB"]
+        c = _aggregate(rows, ConvertedCardLocator(tmp_path))["LB"]
         assert c.wins_when_played_at_play == 1   # only the first row
         assert c.wins_when_in_deck_at_play == 1
-        # On draw counterparts: derivable by subtraction (FR-010a).
+        # On-draw counterparts: derivable by subtraction (FR-010a).
         assert c.wins_when_played - c.wins_when_played_at_play == 1
         assert c.wins_when_in_deck - c.wins_when_in_deck_at_play == 1
 
-    def test_multi_game_match_accumulates(self):
+    def test_multi_game_match_accumulates(self, tmp_path: Path):
         rows = [
             _row(cp_a=["LB"], cp_b=[], cnp_a=[], cnp_b=[],
                  winner="A", starter="A"),
@@ -111,12 +123,71 @@ class TestAggregatePassOne:
             _row(cp_a=["LB"], cp_b=[], cnp_a=[], cnp_b=[],
                  winner="B", starter="A"),
         ]
-        counters = _aggregate_pass_one(rows)
-        c = counters["LB"]
+        c = _aggregate(rows, ConvertedCardLocator(tmp_path))["LB"]
         assert c.wins_when_played == 2
         assert c.losses_when_played == 1
         assert c.wins_when_in_deck == 2
         assert c.losses_when_in_deck == 1
+
+    def test_per_color_counters_built_from_deck_color_set(self, tmp_path: Path):
+        # Side A deck: LB ({R}) + GB ({G}). Deck colors = {R, G}.
+        # Both LB and GB get +1 wins_when_in_deck_with_{R,G}; LB is
+        # "played", GB is "not played".
+        _seed_card(tmp_path, "LB", "{R}")
+        _seed_card(tmp_path, "GB", "{G}")
+        rows = [
+            _row(cp_a=["LB"], cp_b=[], cnp_a=["GB"], cnp_b=[],
+                 winner="A", starter="A"),
+        ]
+        counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
+        c_lb = counters["LB"]
+        assert c_lb.wins_when_played_with["R"] == 1
+        assert c_lb.wins_when_played_with["G"] == 1
+        assert c_lb.wins_when_in_deck_with["R"] == 1
+        assert c_lb.wins_when_in_deck_with["G"] == 1
+        assert c_lb.wins_when_played_with["W"] == 0
+        c_gb = counters["GB"]
+        assert c_gb.wins_when_in_deck_with["R"] == 1
+        assert c_gb.wins_when_in_deck_with["G"] == 1
+        assert c_gb.wins_when_played_with["R"] == 0  # GB was not played
+
+    def test_losing_side_per_color_counters_increment(self, tmp_path: Path):
+        _seed_card(tmp_path, "LB", "{R}")
+        _seed_card(tmp_path, "GB", "{G}")
+        rows = [
+            _row(cp_a=["LB"], cp_b=["GB"], cnp_a=[], cnp_b=[],
+                 winner="A", starter="A"),
+        ]
+        counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
+        # GB (loser): losses_when_played_with_G should be 1.
+        assert counters["GB"].losses_when_played_with["G"] == 1
+        assert counters["GB"].losses_when_in_deck_with["G"] == 1
+
+    def test_card_with_no_mana_cost_contributes_no_color(self, tmp_path: Path):
+        # Land-like card: no "mana cost:" line; deck-color set ignores it.
+        _seed_card(tmp_path, "Plains-ish", None)
+        _seed_card(tmp_path, "LB", "{R}")
+        rows = [
+            _row(cp_a=["LB"], cp_b=[], cnp_a=["Plains-ish"], cnp_b=[],
+                 winner="A", starter="A"),
+        ]
+        counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
+        # Plains-ish is "not played" but still in deck running color R.
+        assert counters["Plains-ish"].wins_when_in_deck_with["R"] == 1
+        # It contributed no color of its own.
+        assert counters["Plains-ish"].wins_when_in_deck_with["W"] == 0
+
+    def test_card_missing_from_corpus_is_still_counted(self, tmp_path: Path):
+        # A card with no .txt: still gets primary/@play counters (it's
+        # dropped later by _drop_missing_cards), and an empty color set.
+        rows = [
+            _row(cp_a=["Mystery Card"], cp_b=[], cnp_a=[], cnp_b=[],
+                 winner="A", starter="A"),
+        ]
+        counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
+        c = counters["Mystery Card"]
+        assert c.wins_when_played == 1
+        assert all(v == 0 for v in c.wins_when_in_deck_with.values())
 
 
 # ── Color extraction ─────────────────────────────────────────────────
@@ -142,74 +213,6 @@ class TestColorsFromManaCost:
     )
     def test_dispatches_correctly(self, line, expected):
         assert _colors_from_mana_cost(line) == expected
-
-
-# ── Pass 2 ────────────────────────────────────────────────────────────
-
-
-def _seed_card(folder: Path, card_name: str, mana_cost: str | None) -> None:
-    sanitized = card_name.lower().replace(" ", "_").replace(",", "")
-    letter = sanitized[0]
-    (folder / letter).mkdir(parents=True, exist_ok=True)
-    cost_line = f"mana cost: {mana_cost}\n" if mana_cost is not None else ""
-    (folder / letter / f"{sanitized}.txt").write_text(
-        f"name: {card_name}\n{cost_line}types: instant\n",
-        encoding="utf-8",
-    )
-
-
-class TestAggregatePassTwo:
-    def test_per_color_counters_built_from_deck_color_set(self, tmp_path: Path):
-        # Side A deck: LB ({R}) + GB ({G}). Deck colors = {R, G}.
-        # Both LB and GB get +1 wins_when_in_deck_with_R and ..._with_G.
-        # LB is "played", GB is "not played".
-        _seed_card(tmp_path, "LB", "{R}")
-        _seed_card(tmp_path, "GB", "{G}")
-        rows = [
-            _row(cp_a=["LB"], cp_b=[], cnp_a=["GB"], cnp_b=[],
-                 winner="A", starter="A"),
-        ]
-        # Pre-populate counters from pass 1 so pass 2 has a working set.
-        counters = _aggregate_pass_one(rows)
-        _aggregate_pass_two(rows, counters, ConvertedCardLocator(tmp_path))
-        c_lb = counters["LB"]
-        assert c_lb.wins_when_played_with["R"] == 1
-        assert c_lb.wins_when_played_with["G"] == 1
-        assert c_lb.wins_when_in_deck_with["R"] == 1
-        assert c_lb.wins_when_in_deck_with["G"] == 1
-        assert c_lb.wins_when_played_with["W"] == 0
-        c_gb = counters["GB"]
-        assert c_gb.wins_when_in_deck_with["R"] == 1
-        assert c_gb.wins_when_in_deck_with["G"] == 1
-        assert c_gb.wins_when_played_with["R"] == 0  # GB was not played
-
-    def test_losing_side_per_color_counters_increment(self, tmp_path: Path):
-        _seed_card(tmp_path, "LB", "{R}")
-        _seed_card(tmp_path, "GB", "{G}")
-        rows = [
-            _row(cp_a=["LB"], cp_b=["GB"], cnp_a=[], cnp_b=[],
-                 winner="A", starter="A"),
-        ]
-        counters = _aggregate_pass_one(rows)
-        _aggregate_pass_two(rows, counters, ConvertedCardLocator(tmp_path))
-        # GB (loser): losses_when_played_with_G should be 1.
-        assert counters["GB"].losses_when_played_with["G"] == 1
-        assert counters["GB"].losses_when_in_deck_with["G"] == 1
-
-    def test_card_with_no_mana_cost_contributes_no_color(self, tmp_path: Path):
-        # Land-like card: no "mana cost:" line; deck-color set ignores it.
-        _seed_card(tmp_path, "Plains-ish", None)
-        _seed_card(tmp_path, "LB", "{R}")
-        rows = [
-            _row(cp_a=["LB"], cp_b=[], cnp_a=["Plains-ish"], cnp_b=[],
-                 winner="A", starter="A"),
-        ]
-        counters = _aggregate_pass_one(rows)
-        _aggregate_pass_two(rows, counters, ConvertedCardLocator(tmp_path))
-        # Plains-ish is "not played" but still in deck with color R.
-        assert counters["Plains-ish"].wins_when_in_deck_with["R"] == 1
-        # No deck color other than R came from Plains-ish itself.
-        assert counters["Plains-ish"].wins_when_in_deck_with["W"] == 0
 
 
 # ── Label arithmetic ─────────────────────────────────────────────────
@@ -663,3 +666,71 @@ class TestDropMissingCards:
         assert dropped == 30
         assert counters == {}
         assert "and 10 more" in capsys.readouterr().out
+
+
+# ── Length-bucketed batching + per-batch padding ─────────────────────
+
+
+def _item(length: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """A dataset-shaped item: input_ids of the given length + zero label tensors."""
+    return (
+        torch.arange(1, length + 1, dtype=torch.long),
+        torch.zeros(N_HEADS), torch.zeros(N_HEADS), torch.zeros(N_HEADS),
+    )
+
+
+class TestPadCollate:
+    def test_pads_to_batch_max_and_builds_mask(self):
+        batch = [_item(2), _item(5), _item(3)]
+        ids, mask, labels, weights, head_mask = _pad_collate(batch)
+        assert ids.shape == (3, 5)        # padded to the longest item
+        assert mask.shape == (3, 5)
+        # row 0: real positions 0,1 then PAD(=0); mask 1,1,0,0,0.
+        assert ids[0].tolist() == [1, 2, 0, 0, 0]
+        assert mask[0].tolist() == [1, 1, 0, 0, 0]
+        assert ids[1].tolist() == [1, 2, 3, 4, 5]
+        assert mask[1].tolist() == [1, 1, 1, 1, 1]
+        assert labels.shape == (3, N_HEADS)
+        assert weights.shape == (3, N_HEADS)
+        assert head_mask.shape == (3, N_HEADS)
+
+    def test_single_item_batch(self):
+        ids, mask, *_ = _pad_collate([_item(4)])
+        assert ids.shape == (1, 4)
+        assert mask.tolist() == [[1, 1, 1, 1]]
+
+
+class TestLengthBucketBatchSampler:
+    def test_covers_every_index_once_per_epoch(self):
+        lengths = [10, 1, 7, 3, 9, 2, 8]  # 7 items, batch_size 3 → 3 batches
+        sampler = _LengthBucketBatchSampler(lengths, batch_size=3, shuffle=True)
+        assert len(sampler) == 3
+        seen = sorted(i for batch in sampler for i in batch)
+        assert seen == list(range(7))
+
+    def test_chunks_group_similar_lengths(self):
+        lengths = [100, 1, 99, 2, 98, 3]  # sorted: 1,2,3 | 98,99,100
+        sampler = _LengthBucketBatchSampler(lengths, batch_size=3, shuffle=False)
+        batches = list(sampler)
+        # not shuffled → length order; each chunk's lengths are contiguous.
+        chunk_lengths = [sorted(lengths[i] for i in b) for b in batches]
+        assert chunk_lengths == [[1, 2, 3], [98, 99, 100]]
+
+    def test_shuffle_varies_batch_order_across_epochs(self):
+        lengths = list(range(50))
+        sampler = _LengthBucketBatchSampler(lengths, batch_size=5, shuffle=True)
+        e1 = list(sampler)
+        e2 = list(sampler)
+        # Same coverage, but a different order (vanishingly unlikely to match).
+        assert sorted(i for b in e1 for i in b) == sorted(i for b in e2 for i in b)
+        assert e1 != e2
+
+    def test_no_shuffle_is_deterministic(self):
+        lengths = [5, 3, 8, 1, 9, 2]
+        s = _LengthBucketBatchSampler(lengths, batch_size=2, shuffle=False)
+        assert list(s) == list(s)
+
+    def test_empty(self):
+        s = _LengthBucketBatchSampler([], batch_size=4, shuffle=True)
+        assert len(s) == 0
+        assert list(s) == []

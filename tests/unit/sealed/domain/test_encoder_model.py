@@ -62,7 +62,28 @@ class TestSealedEncoderModel:
         for name in ("score_play", "score_draw", "played_rate", "cast_lift"):
             assert out[name].shape == (3,)
         assert out["color_lift"].shape == (3, len(COLOR_ORDER))
-        assert out["mlm_logits"].shape == (3, cfg.max_seq_len, cfg.vocab_size)
+        # forward() returns the pre-pool contextualized sequence, not the
+        # full (B, T, vocab) logits — the caller applies mlm_head only at
+        # the masked positions.
+        assert out["contextualized"].shape == (3, cfg.max_seq_len, cfg.d_model)
+        assert "mlm_logits" not in out
+
+    def test_mlm_head_at_masked_positions_matches_full_then_index(self):
+        # The MLM head is position-wise, so applying it to a gathered
+        # subset of positions equals applying it to all positions and
+        # then gathering — that equivalence is what lets _forward_batch
+        # skip the wasted (B, T, vocab) projection.
+        cfg = _config()
+        torch.manual_seed(0)
+        model = SealedEncoderModel(cfg)
+        model.eval()
+        ids, mask = _ids_and_mask(2, cfg.max_seq_len, cfg.vocab_size)
+        ctx = model(ids, mask)["contextualized"]
+        positions = torch.zeros(2, cfg.max_seq_len, dtype=torch.bool)
+        positions[0, 1] = positions[0, 3] = positions[1, 2] = True
+        at_mask = model.mlm_head(ctx[positions])
+        full = model.mlm_head(ctx)[positions]
+        assert torch.allclose(at_mask, full, atol=1e-6)
 
     def test_played_rate_in_unit_interval(self):
         # FR-017 activation matching: played_rate uses sigmoid → [0, 1].

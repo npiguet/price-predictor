@@ -223,12 +223,17 @@ class SealedEncoderModel(nn.Module):
             — each ``(B,)``, range-matched.
           * ``color_lift`` — ``(B, 5)`` (one column per WUBRG letter, in
             ``COLOR_ORDER``).
-          * ``mlm_logits`` — ``(B, T, vocab_size)`` from ``mlm_head``.
+          * ``contextualized`` — ``(B, T, d_model)``, the pre-pool
+            transformer output. The caller feeds the masked positions
+            of this through ``mlm_head`` to get the MLM logits — the
+            head is position-wise, so applying it only to the ~15 % of
+            positions that were masked avoids materialising the full
+            ``(B, T, vocab_size)`` tensor and an ~84 % wasted matmul.
         """
         contextualized, pooled = self._encode(input_ids, attention_mask)
         out: dict[str, torch.Tensor] = {}
         for name in ("score_play", "score_draw", "played_rate", "cast_lift"):
             out[name] = self.regression_heads[name](pooled).squeeze(-1)
         out["color_lift"] = self.regression_heads["color_lift"](pooled)
-        out["mlm_logits"] = self.mlm_head(contextualized)
+        out["contextualized"] = contextualized
         return out

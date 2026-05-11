@@ -97,15 +97,21 @@ the encoder weights (FR-014, FR-016, FR-017, FR-020).
    - `--cards-folder` empty → exit `4`, message names `python -m price_predictor convert`.
    - Architectural mismatch (`d_model % --n-pool-queries != 0` or `d_model % --n-heads != 0`) → exit `6` (raised inside `SealedEncoderConfig.__post_init__`).
 
-2. **Aggregation pass 1** (FR-010a): stream `cards-played.txt`, count for
-   every card observed in either side's deck:
-   - 4 primary counters (`wins_when_played`, `wins_when_in_deck`,
-     `losses_when_played`, `losses_when_in_deck`)
-   - 4 `@play` subset counters (same four, restricted to games where the
-     card's owner was the starter)
+2. **Aggregation** (FR-010): one streaming pass over `cards-played.txt`.
+   For every card observed in either side's deck, increment:
+   - the 4 primary counters (`wins_when_played`, `wins_when_in_deck`,
+     `losses_when_played`, `losses_when_in_deck`);
+   - the 4 `@play` subset counters (same four, restricted to games
+     where the card's owner was the starter); and
+   - the 4×5 per-color counters — each game's deck-color set is the
+     union of every card's `mana cost:` colors (Decision D-16), and a
+     card in a deck running color X bumps `wins_when_played_with_X`,
+     `wins_when_in_deck_with_X`, `losses_when_played_with_X`,
+     `losses_when_in_deck_with_X`. A card's color identity is resolved
+     lazily from its converted text and cached.
 
 3. **Missing-card check** (FR-023d): for every card name observed in
-   pass 1, verify the card has a `.txt` under `--cards-folder` (using
+   step 2, verify the card has a `.txt` under `--cards-folder` (using
    `card_name_corrections` and the front-face / `rebalanced/`
    fallbacks). For any miss, log a warning naming up to 20 missing
    cards plus a total count, pointing the user at `python -m
@@ -114,43 +120,48 @@ the encoder weights (FR-014, FR-016, FR-017, FR-020).
    dataset). This does **not** abort the run — training proceeds with
    the remaining cards.
 
-4. **Aggregation pass 2** (FR-010b): stream `cards-played.txt` again. For
-   every card, on first encounter resolve its color identity from its
-   `mana cost:` line via the regex helper of Decision D-16. For each
-   game, compute each side's deck-color set as the union over its deck
-   contents. For every (card, color-X-in-deck) pairing, increment four
-   per-color counters: `wins_when_played_with_X`,
-   `wins_when_in_deck_with_X`, `losses_when_played_with_X`,
-   `losses_when_in_deck_with_X`.
-
-5. **Build label map** (FR-011, FR-012): compute 9 raw + 9 shrunk labels
+4. **Build label map** (FR-011, FR-012): compute 9 raw + 9 shrunk labels
    per card. Cells whose slice denominator is zero are stored as
    present-but-empty (the head's loss contribution will be masked out at
    training time). Cards with `wins_when_in_deck + losses_when_in_deck
    == 0` are excluded entirely.
 
-6. **Write `output/sealed/cards-win-rates.txt`** (FR-013a, Decision D-15):
+5. **Write `output/sealed/cards-win-rates.txt`** (FR-013a, Decision D-15):
    one header row + one row per included card, 23 columns each, sorted by
    `shrunk_score_play` descending. Empty cells are written as the empty
    string in both raw and shrunk columns.
 
-7. **Build the train/val split** (FR-018, Decision D-4): card-level
+6. **Build the train/val split** (FR-018, Decision D-4): card-level
    disjoint, stratified on `score_play` quartile with the fallback chain;
    `val_fraction = 0.2`, `random_seed = 42`.
 
+7. **Tokenize the corpus once**: every card's converted text (with the
+   `name:` line stripped, FR-014a) is tokenized a single time into an
+   unpadded id list; `max_seq_len` = the longest card's token count
+   rounded up to a multiple of 8 (FR-022) and sizes the position
+   embedding table. The per-card `(input_ids, labels, weights,
+   head_mask)` training tuples are assembled here too — nothing is
+   re-read or re-tokenized per epoch.
+
 8. **Construct a fresh `SealedEncoderModel(SealedEncoderConfig(...))`**
-   with the new `regression_heads` ModuleDict and the new `mlm_head`,
-   move to GPU if available.
+   with the `regression_heads` ModuleDict and the `mlm_head`, move to
+   GPU if available.
 
 9. **Train with**:
    - `AdamW` optimizer + `LambdaLR` (linear warmup over the first 5% of
      scheduled steps, constant after).
    - Per-parameter-group max-norm 1.0 gradient clipping between
      `loss.backward()` and `optimizer.step()` (FR-022).
+   - Length-bucketed batches (cards of similar token length grouped, the
+     batch order reshuffled each epoch) padded per-batch to that
+     batch's longest card — the encoder is length-agnostic, so each
+     batch only pays for its own longest card.
    - Per-card MLM mask draw at every batch step (Decision D-10):
      non-special, non-pad positions selected with probability
      `--mlm-mask-prob`; selected positions overwritten with `[MASK]`
-     before the masked sequence enters the token encoder.
+     before the masked sequence enters the token encoder. The MLM head
+     is applied only at the masked positions of the contextualized
+     sequence (it's position-wise).
    - Per-batch per-head sum-to-1 weighted MSE on the 9 regression heads
      (Decisions D-11), summed with the `(1/5)` factor on the color-lift
      block per FR-017.

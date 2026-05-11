@@ -90,6 +90,32 @@ class TestMtgTokenizerTokenize:
         assert "," in tokens
 
 
+class TestMtgTokenizerTokenizeToIds:
+    def test_returns_unpadded_in_vocab_ids(self):
+        tok = _make_tokenizer()
+        # Include a mana cost: line so the tokenizer doesn't append the
+        # "mana cost: none" sentinel (whose tokens are absent from this
+        # tiny fixture vocab and would show up as UNK).
+        ids = tok.tokenize_to_ids("mana cost: {W}\nflying vigilance")
+        assert 6 in ids and 4 in ids and 9 in ids   # {W}, flying, vigilance
+        assert ids[-1] != tok.PAD_ID                # not padded
+
+    def test_unknown_word_maps_to_unk_id(self):
+        tok = _make_tokenizer()
+        ids = tok.tokenize_to_ids("mana cost: {R}\nxyzzy")
+        assert 7 in ids                  # {R}
+        assert tok.UNK_ID in ids         # xyzzy → UNK
+
+    def test_encode_is_tokenize_to_ids_truncated_and_padded(self):
+        tok = _make_tokenizer()
+        text = "mana cost: {W}\nflying vigilance creature"
+        ids, mask = tok.encode(text, max_length=10)
+        unpadded = tok.tokenize_to_ids(text)
+        real_len = sum(mask)
+        assert ids[:real_len] == unpadded[:10]
+        assert ids[real_len:] == [tok.PAD_ID] * (10 - real_len)
+
+
 class TestMtgTokenizerEncode:
     def test_flying_vigilance_produces_two_domain_tokens(self):
         tok = _make_tokenizer()

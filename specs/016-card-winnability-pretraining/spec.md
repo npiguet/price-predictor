@@ -104,9 +104,9 @@ is selected by validation loss.
 1. **Given** a populated `cards-played.txt` and a built sealed vocabulary,
    **When** the user runs `python -m sealed train-encoder`, **Then** training
    reads the cards-played corpus, computes the per-card label map inline
-   at start (two passes: primary counters + play/draw, then per-color
-   slices), and proceeds without requiring a separate aggregation
-   command or on-disk cache of the labels.
+   at start (primary + play/draw counters and per-color slices), and
+   proceeds without requiring a separate aggregation command or an
+   on-disk cache of the labels.
 2. **Given** training completes successfully, **When** the saved
    `latest.pt` is loaded, **Then** it contains the token-encoder and
    card-encoder weights but no regression-head weights and no MLM-head
@@ -368,11 +368,12 @@ observations but is nearly identical for cards with many.
 #### Label aggregation
 
 - **FR-010**: At the start of every `train-encoder` run, the system
-  MUST aggregate per-card play data from `cards-played.txt` in two
-  passes. Pass 1 collects the primary and play/draw counters
-  (FR-010a); pass 2 resolves each card's color identity from the
-  converted card corpus and fills the per-color slices (FR-010b).
-- **FR-010a**: Pass 1 MUST track, per card name, the four primary
+  MUST aggregate per-card play data from `cards-played.txt`: the
+  primary and play/draw counters (FR-010a) and the per-color slices
+  (FR-010b). (The implementation does this in a single streaming pass;
+  the number of passes is not constrained — only the resulting
+  counters are.)
+- **FR-010a**: Aggregation MUST track, per card name, the four primary
   counters `wins_when_played`, `wins_when_in_deck`,
   `losses_when_played`, `losses_when_in_deck` over all games where the
   card appeared in *either* the winning or the losing side's deck,
@@ -383,19 +384,19 @@ observations but is nearly identical for cards with many.
   The `@draw` counterparts MUST be derivable by subtraction from the
   primary and `@play` counters. The cast-lift counters
   (`wins_when_not_played`, `losses_when_not_played`) MUST be derivable
-  from the primary counters by subtraction; pass 1 MUST NOT track
-  them as independent variables.
-- **FR-010b**: Pass 2 MUST resolve each observed card's color identity
-  by reading the `mana cost:` line of the card's converted text file
-  under `--cards-folder`. WUBRG letters in the cost (including hybrid
-  symbols like `{W/U}` and Phyrexian symbols like `{W/P}`) contribute;
-  generic, colorless and `X` costs contribute nothing. Cards whose
-  converted text has no `mana cost:` line contribute no colors. For
-  each game, the deck's color set MUST be the union of the per-card
-  colors over the deck's contents. For each side and each color
-  present in that side's deck, pass 2 MUST increment four per-color
-  counters in parallel with the primary counters:
-  `wins_when_played_with_X`, `wins_when_in_deck_with_X`,
+  from the primary counters by subtraction; they MUST NOT be tracked
+  as independent variables.
+- **FR-010b**: Aggregation MUST resolve each observed card's color
+  identity by reading the `mana cost:` line of the card's converted
+  text file under `--cards-folder`. WUBRG letters in the cost
+  (including hybrid symbols like `{W/U}` and Phyrexian symbols like
+  `{W/P}`) contribute; generic, colorless and `X` costs contribute
+  nothing. Cards whose converted text has no `mana cost:` line
+  contribute no colors. For each game, the deck's color set MUST be
+  the union of the per-card colors over the deck's contents. For each
+  side and each color present in that side's deck, aggregation MUST
+  increment four per-color counters in parallel with the primary
+  counters: `wins_when_played_with_X`, `wins_when_in_deck_with_X`,
   `losses_when_played_with_X`, `losses_when_in_deck_with_X`.
   Multi-color decks contribute to multiple slices.
 - **FR-011**: The system MUST compute, per card, the following labels
@@ -583,7 +584,7 @@ observations but is nearly identical for cards with many.
   (point at `build-vocab`), (b) `cards-played.txt` is missing or
   empty (point at `match-outcomes`), or (c) the corpus folder is
   empty (point at `convert`).
-- **FR-023d**: After pass 1 of aggregation, `train-encoder` MUST check
+- **FR-023d**: After aggregation, `train-encoder` MUST check
   every observed card name against the corpus folder. Card names with
   no corresponding `.txt` MUST be *reported* — a warning naming the
   missing cards (capped at a reasonable display count, with the total
@@ -623,7 +624,7 @@ observations but is nearly identical for cards with many.
 - **Per-card label map**: An in-memory dict from card name to a tuple
   of nine scalar labels (`score_play`, `score_draw`, `played_rate`,
   `cast_lift`, and `color_lift_X` for each of WUBRG), built at train
-  start by two passes over `cards-played.txt`. Cards with zero total
+  start by aggregating `cards-played.txt`. Cards with zero total
   in-deck observations are absent from the map. Cells whose slice
   denominator is zero are present-but-empty and contribute zero loss
   during training. Not cached across runs.

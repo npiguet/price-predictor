@@ -52,24 +52,22 @@ class MtgTokenizer:
         """Total number of tokens in vocabulary."""
         return len(self._vocab)
 
+    def tokenize_to_ids(self, text: str) -> list[int]:
+        """Normalize + tokenize text and map to token IDs (no truncation,
+        no padding). Unknown tokens become ``UNK_ID``."""
+        return [self._vocab.get(t, self.UNK_ID) for t in self.tokenize(text)]
+
     def encode(self, text: str, max_length: int) -> tuple[list[int], list[int]]:
         """Encode text to (input_ids, attention_mask).
 
         Normalizes text → tokenizes → maps to IDs → truncates → pads.
         attention_mask is 1 for real tokens and 0 for padding.
         """
-        tokens = self.tokenize(text)
-        ids = [self._vocab.get(t, self.UNK_ID) for t in tokens]
-
-        # Truncate to max_length
-        ids = ids[:max_length]
-
+        ids = self.tokenize_to_ids(text)[:max_length]
         real_len = len(ids)
         pad_len = max_length - real_len
-
         ids = ids + [self.PAD_ID] * pad_len
         attention_mask = [1] * real_len + [0] * pad_len
-
         return ids, attention_mask
 
     def decode(self, token_ids: list[int]) -> str:

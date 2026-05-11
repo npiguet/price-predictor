@@ -2,12 +2,13 @@
 MLM head on per-card winnability and an auxiliary mask-prediction
 objective.
 
-The training loop reads ``cards-played.txt`` twice (primary + per-color
-slices), computes nine raw and shrunk per-card labels per FR-011, splits
-cards into train/val with FR-018 stratification, trains the dual-pool
-encoder + regression heads + MLM head jointly under FR-017's weighted
-MSE + cross-entropy objective, and saves only encoder weights to
-``models/sealed/encoder/``.
+The pipeline streams ``cards-played.txt`` once to aggregate per-card
+counters (primary, ``@play``, and per-color slices), computes nine raw
+and shrunk per-card labels per FR-011, splits cards into train/val with
+FR-018 stratification, tokenizes the corpus once, then trains the
+dual-pool encoder + regression heads + MLM head jointly under FR-017's
+weighted MSE + cross-entropy objective and saves only the encoder
+weights to ``models/sealed/encoder/``.
 
 Per FR-013, aggregation is inline: there is no separate
 ``aggregate-labels`` subcommand. The human-readable label snapshot lives
@@ -27,7 +28,7 @@ from typing import Iterable, Sequence
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Sampler
 
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.tokenizer_store import (
@@ -175,77 +176,110 @@ def _colors_from_mana_cost(line: str | None) -> set[str]:
     return colors
 
 
-# ── Aggregation pass 1 (primary + @play counters) ──────────────────────
+# ── Aggregation (FR-010: primary + @play + per-color counters) ─────────
 
 
-def _record_pass_one(
+def _record_side(
     counters: dict[str, CardCounters],
     deck_played: list[str],
     deck_not_played: list[str],
+    deck_colors: set[str],
     *,
     won: bool,
     at_play: bool,
 ) -> None:
-    """Fold one side's deck into the per-card counter dict for pass 1.
+    """Fold one side's deck of one game into ``counters``.
 
     ``deck_played`` lists distinct card names that entered the
     battlefield/stack; ``deck_not_played`` lists distinct names that
-    stayed in the deck. The two sets are disjoint per FR-004.
+    stayed in the deck (the two sets are disjoint per FR-004).
+    ``deck_colors`` is the deck's WUBRG color set (union of every
+    card's ``mana cost:`` colors). For each card the four primary
+    counters, the four ``@play`` subset counters, and the four
+    per-color counters (one slot per color in ``deck_colors``) are
+    incremented in a single pass over the deck.
     """
     played_set = set(deck_played)
     in_deck_set = played_set | set(deck_not_played)
     for name in in_deck_set:
         c = counters.setdefault(name, CardCounters())
+        played = name in played_set
         if won:
             c.wins_when_in_deck += 1
-            if name in played_set:
+            if played:
                 c.wins_when_played += 1
             if at_play:
                 c.wins_when_in_deck_at_play += 1
-                if name in played_set:
+                if played:
                     c.wins_when_played_at_play += 1
+            for color in deck_colors:
+                c.wins_when_in_deck_with[color] += 1
+                if played:
+                    c.wins_when_played_with[color] += 1
         else:
             c.losses_when_in_deck += 1
-            if name in played_set:
+            if played:
                 c.losses_when_played += 1
             if at_play:
                 c.losses_when_in_deck_at_play += 1
-                if name in played_set:
+                if played:
                     c.losses_when_played_at_play += 1
+            for color in deck_colors:
+                c.losses_when_in_deck_with[color] += 1
+                if played:
+                    c.losses_when_played_with[color] += 1
 
 
-def _aggregate_pass_one(
-    rows: Iterable[CardsPlayedRow],
+def _aggregate(
+    rows: Iterable[CardsPlayedRow], locator: ConvertedCardLocator,
 ) -> dict[str, CardCounters]:
-    """First streaming pass over ``cards-played.txt``.
+    """Single streaming pass over ``cards-played.txt`` (FR-010).
 
-    Fills the four primary and four ``@play`` counters on every card
-    observed in either side's deck (FR-010a). The per-color counters in
-    each ``CardCounters`` stay zero — pass 2 fills them after the corpus
-    consistency check.
+    For every card observed in either side's deck, fills the four
+    primary, four ``@play``, and 4×5 per-color counters. Each card's
+    color identity is resolved lazily from its converted ``mana cost:``
+    line (cached per card); each game's deck-color set is the union
+    over its contents. Cards with no converted text contribute an empty
+    color set (and are pruned afterwards by :func:`_drop_missing_cards`).
     """
     counters: dict[str, CardCounters] = {}
+    color_cache: dict[str, set[str]] = {}
+
+    def colors_of(name: str) -> set[str]:
+        cached = color_cache.get(name)
+        if cached is not None:
+            return cached
+        converted = locator.load_text(name)
+        cost_line = converted.mana_cost_line() if converted is not None else None
+        result = _colors_from_mana_cost(cost_line)
+        color_cache[name] = result
+        return result
+
+    def deck_color_set(played: list[str], not_played: list[str]) -> set[str]:
+        colors: set[str] = set()
+        for name in played:
+            colors |= colors_of(name)
+        for name in not_played:
+            colors |= colors_of(name)
+        return colors
+
     for row in rows:
         a_won = row.winner == "A"
         a_at_play = row.starter == "A"
-        _record_pass_one(
-            counters,
-            row.cards_played_a,
-            row.cards_not_played_a,
-            won=a_won,
-            at_play=a_at_play,
+        _record_side(
+            counters, row.cards_played_a, row.cards_not_played_a,
+            deck_color_set(row.cards_played_a, row.cards_not_played_a),
+            won=a_won, at_play=a_at_play,
         )
-        _record_pass_one(
-            counters,
-            row.cards_played_b,
-            row.cards_not_played_b,
-            won=not a_won,
-            at_play=not a_at_play,
+        _record_side(
+            counters, row.cards_played_b, row.cards_not_played_b,
+            deck_color_set(row.cards_played_b, row.cards_not_played_b),
+            won=not a_won, at_play=not a_at_play,
         )
     return counters
 
 
-# ── Corpus consistency check (FR-023d) ──────────────────────────────────
+# ── Missing-card check (FR-023d) ────────────────────────────────────────
 
 _MISSING_CARD_DISPLAY_CAP: int = 20
 
@@ -253,7 +287,7 @@ _MISSING_CARD_DISPLAY_CAP: int = 20
 def _drop_missing_cards(
     counters: dict[str, CardCounters], locator: ConvertedCardLocator,
 ) -> int:
-    """Run after pass 1, before pass 2.
+    """Run after aggregation, before label-map construction.
 
     Cards referenced by ``cards-played.txt`` that have no converted
     ``.txt`` under the cards folder cannot be tokenized, so they're
@@ -264,8 +298,12 @@ def _drop_missing_cards(
     of cards dropped.
 
     Cards with zero observations in both sides' decks won't be in
-    ``counters`` at all (pass 1 only inserts on first sighting), so this
-    only ever drops cards the model would otherwise have trained on.
+    ``counters`` at all (aggregation only inserts on first sighting), so
+    this only ever drops cards the model would otherwise have trained
+    on. Any per-color counters accrued for a dropped card are discarded
+    with its ``CardCounters``; since :func:`_aggregate`'s ``colors_of``
+    returns ``∅`` for cards with no converted text, a missing card never
+    contributed a color to any deck's color set in the first place.
     """
     missing = sorted(
         name for name in counters if locator.text_path(name) is None
@@ -286,80 +324,6 @@ def _drop_missing_cards(
         + ". Run python -m price_predictor convert to add them."
     )
     return len(missing)
-
-
-# ── Aggregation pass 2 (per-color slices) ──────────────────────────────
-
-
-def _record_pass_two_side(
-    counters: dict[str, CardCounters],
-    deck_played: list[str],
-    deck_not_played: list[str],
-    deck_colors: set[str],
-    *,
-    won: bool,
-) -> None:
-    """Fold one side's deck into the per-color counters for pass 2."""
-    played_set = set(deck_played)
-    in_deck_set = played_set | set(deck_not_played)
-    for name in in_deck_set:
-        c = counters.get(name)
-        if c is None:
-            continue
-        for color in deck_colors:
-            if won:
-                c.wins_when_in_deck_with[color] += 1
-                if name in played_set:
-                    c.wins_when_played_with[color] += 1
-            else:
-                c.losses_when_in_deck_with[color] += 1
-                if name in played_set:
-                    c.losses_when_played_with[color] += 1
-
-
-def _aggregate_pass_two(
-    rows: Iterable[CardsPlayedRow],
-    counters: dict[str, CardCounters],
-    locator: ConvertedCardLocator,
-) -> None:
-    """Second streaming pass over ``cards-played.txt`` (FR-010b).
-
-    For each card observed in pass 1, lazily resolve its color set from
-    the converted card text's ``mana cost:`` line and cache the result.
-    Each game's deck-color set is the union over its contents; per-color
-    counters increment for every (card, color) pair where the card was
-    in a deck running that color.
-    """
-    color_cache: dict[str, set[str]] = {}
-
-    def colors_of(name: str) -> set[str]:
-        cached = color_cache.get(name)
-        if cached is not None:
-            return cached
-        converted = locator.load_text(name)
-        cost_line = converted.mana_cost_line() if converted is not None else None
-        result = _colors_from_mana_cost(cost_line)
-        color_cache[name] = result
-        return result
-
-    for row in rows:
-        a_won = row.winner == "A"
-        deck_a = set(row.cards_played_a) | set(row.cards_not_played_a)
-        deck_b = set(row.cards_played_b) | set(row.cards_not_played_b)
-        colors_a: set[str] = set()
-        for name in deck_a:
-            colors_a |= colors_of(name)
-        colors_b: set[str] = set()
-        for name in deck_b:
-            colors_b |= colors_of(name)
-        _record_pass_two_side(
-            counters, row.cards_played_a, row.cards_not_played_a,
-            colors_a, won=a_won,
-        )
-        _record_pass_two_side(
-            counters, row.cards_played_b, row.cards_not_played_b,
-            colors_b, won=not a_won,
-        )
 
 
 # ── Label arithmetic (FR-011 / FR-012) ──────────────────────────────────
@@ -618,17 +582,17 @@ def _split_cards(
     # remain proportional to stratum size.
     if not val and len(train) > 1:
         target = max(1, int(round(len(names) * val_fraction)))
-        # Sort train by stratum size descending so we steal from
-        # bigger buckets first; keep determinism via the same RNG state.
+        # Sort train by stratum size descending so we steal from the
+        # bigger buckets first. A name → bucket-id dict keeps this linear
+        # (the earlier ``names.index(n)`` form was O(n²)).
+        name_to_bucket = {names[i]: int(bin_assignments[i]) for i in range(len(names))}
         bucket_sizes = {b: int((bin_assignments == b).sum()) for b in unique_bins}
-        train_with_bucket = [
-            (n, bucket_sizes[int(bin_assignments[names.index(n)])])
-            for n in train
-        ]
-        train_with_bucket.sort(key=lambda x: (-x[1], x[0]))
-        moved = [n for n, _ in train_with_bucket[:target]]
+        train_with_bucket = sorted(
+            train, key=lambda n: (-bucket_sizes[name_to_bucket[n]], n),
+        )
+        moved = set(train_with_bucket[:target])
         val.extend(moved)
-        train = [n for n in train if n not in set(moved)]
+        train = [n for n in train if n not in moved]
     train.sort()
     val.sort()
     return train, val
@@ -678,89 +642,163 @@ def _per_head_weight(lbl: CardLabels, head_idx: int, k: float) -> float:
     return n / (n + k)
 
 
-# ── Dataset ─────────────────────────────────────────────────────────────
+# ── Tokenized corpus + dataset ──────────────────────────────────────────
+
+
+def _tokenize_corpus(
+    card_names: Iterable[str],
+    tokenizer: MtgTokenizer,
+    locator: ConvertedCardLocator,
+) -> tuple[dict[str, list[int]], int]:
+    """Tokenize every card once.
+
+    Returns ``({card_name: token_ids}, max_seq_len)``. ``token_ids`` is
+    unpadded — the per-batch :func:`_pad_collate` pads to each batch's
+    own max. ``max_seq_len`` is the longest card's token count rounded
+    up to a multiple of 8 (and at least ``_MIN_MAX_SEQ_LEN``); it sizes
+    the encoder's position-embedding table (FR-022). The ``name:`` line
+    is stripped before tokenizing, matching ``encode-cards`` (FR-014a).
+    Card names have already been validated by :func:`_drop_missing_cards`,
+    so a missing ``.txt`` here is a real error.
+    """
+    by_name: dict[str, list[int]] = {}
+    max_len = 1
+    for name in card_names:
+        converted = locator.load_text(name)
+        if converted is None:
+            raise FileNotFoundError(f"No converted card text on disk for {name!r}")
+        ids = tokenizer.tokenize_to_ids(converted.without_name_line())
+        by_name[name] = ids
+        if len(ids) > max_len:
+            max_len = len(ids)
+    rounded = math.ceil(max_len / _MAX_SEQ_LEN_MULTIPLE) * _MAX_SEQ_LEN_MULTIPLE
+    return by_name, max(rounded, _MIN_MAX_SEQ_LEN)
 
 
 class _WinnabilityDataset(Dataset):
-    """Per-card training tuple for the multi-head + MLM encoder.
+    """Pre-built per-card training tuples for the multi-head + MLM encoder.
 
-    ``__getitem__`` returns ``(input_ids, attention_mask, labels[9],
-    weights[9], head_mask[9])``. Labels carry the shrunk-form value at
-    each head position, with 0.0 substituted at empty cells; weights
-    follow FR-017a; head_mask is 1.0 where the cell is non-empty and
-    0.0 elsewhere. The card text feeds the encoder with the ``name:``
-    line stripped per FR-014a.
+    Each item is ``(input_ids[L], labels[9], weights[9], head_mask[9])``,
+    assembled once in ``__init__`` from the pre-tokenized corpus and the
+    per-card label map — ``__getitem__`` is a pure index (no disk I/O, no
+    re-tokenization per epoch). ``input_ids`` is unpadded;
+    :func:`_pad_collate` pads each batch to its own max length.
+    ``labels`` carries the shrunk value at each head position (0.0 at
+    empty cells); ``weights`` follows FR-017a; ``head_mask`` is 1.0 at
+    non-empty cells. ``lengths[i] == len(input_ids)`` for item ``i`` —
+    consumed by :class:`_LengthBucketBatchSampler`.
     """
 
     def __init__(
         self,
         card_names: Sequence[str],
         labels: CardLabelMap,
-        tokenizer: MtgTokenizer,
-        locator: ConvertedCardLocator,
-        max_seq_len: int,
+        tokenized_by_name: dict[str, list[int]],
         shrinkage_k: float,
     ) -> None:
-        self._names = list(card_names)
-        self._labels = labels
-        self._tokenizer = tokenizer
-        self._locator = locator
-        self._max_seq_len = max_seq_len
-        self._shrinkage_k = shrinkage_k
+        self._items: list[
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        ] = []
+        self.lengths: list[int] = []
+        for name in card_names:
+            ids = tokenized_by_name[name]
+            lbl = labels[name]
+            labels_v = torch.zeros(N_HEADS, dtype=torch.float32)
+            weights_v = torch.zeros(N_HEADS, dtype=torch.float32)
+            head_mask_v = torch.zeros(N_HEADS, dtype=torch.float32)
+            for h in range(N_HEADS):
+                v = _label_value(lbl, h)
+                if v is None:
+                    continue
+                labels_v[h] = float(v)
+                weights_v[h] = _per_head_weight(lbl, h, shrinkage_k)
+                head_mask_v[h] = 1.0
+            self._items.append((
+                torch.tensor(ids, dtype=torch.long),
+                labels_v, weights_v, head_mask_v,
+            ))
+            self.lengths.append(len(ids))
 
     def __len__(self) -> int:
-        return len(self._names)
+        return len(self._items)
 
     def __getitem__(
         self, idx: int,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        name = self._names[idx]
-        text = self._read_card_text(name)
-        ids, mask = self._tokenizer.encode(text, self._max_seq_len)
-        lbl = self._labels[name]
-        labels_v = torch.zeros(N_HEADS, dtype=torch.float32)
-        weights_v = torch.zeros(N_HEADS, dtype=torch.float32)
-        head_mask_v = torch.zeros(N_HEADS, dtype=torch.float32)
-        for h in range(N_HEADS):
-            v = _label_value(lbl, h)
-            if v is None:
-                continue
-            labels_v[h] = float(v)
-            weights_v[h] = _per_head_weight(lbl, h, self._shrinkage_k)
-            head_mask_v[h] = 1.0
-        return (
-            torch.tensor(ids, dtype=torch.long),
-            torch.tensor(mask, dtype=torch.long),
-            labels_v,
-            weights_v,
-            head_mask_v,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        return self._items[idx]
+
+
+# ── Length-bucketed batching + per-batch dynamic padding (F4) ──────────
+
+
+_TrainBatch = tuple[
+    torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor,
+]  # (input_ids[B,T], attention_mask[B,T], labels[B,9], weights[B,9], head_mask[B,9])
+
+
+def _pad_collate(
+    items: list[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
+) -> _TrainBatch:
+    """Pad a batch of variable-length items to that batch's max length.
+
+    The encoder is length-agnostic — its position embedding is sliced to
+    ``seq_len`` and ``attention_mask`` marks the padding — so each batch
+    only pays for its own longest card, not the global longest.
+    """
+    ids_list, labels, weights, head_mask = zip(*items)
+    lengths = torch.tensor([t.size(0) for t in ids_list], dtype=torch.long)
+    input_ids = torch.nn.utils.rnn.pad_sequence(
+        list(ids_list), batch_first=True, padding_value=MtgTokenizer.PAD_ID,
+    )
+    seq_len = input_ids.size(1)
+    attention_mask = (
+        torch.arange(seq_len).unsqueeze(0) < lengths.unsqueeze(1)
+    ).long()
+    return (
+        input_ids,
+        attention_mask,
+        torch.stack(labels),
+        torch.stack(weights),
+        torch.stack(head_mask),
+    )
+
+
+class _LengthBucketBatchSampler(Sampler[list[int]]):
+    """Yield batches of similar-length items so per-batch padding is small.
+
+    ``__iter__`` sorts item indices by token length, chunks them into
+    ``batch_size``-sized groups, and — when ``shuffle`` — shuffles the
+    *list of chunks* (and the order within each chunk) with a generator
+    that advances every epoch (deterministic from ``RANDOM_SEED``). So
+    cards of similar length batch together (≈10× fewer padded positions
+    on typical batches) while the SGD still sees a fresh batch order each
+    epoch. The FR-017 per-batch sum-to-1 weighting is composition-robust
+    by design, and token length doesn't correlate with the per-head
+    sample weights, so bucketing does not bias training.
+    """
+
+    def __init__(
+        self, lengths: Sequence[int], batch_size: int, *, shuffle: bool,
+    ) -> None:
+        self._lengths = list(lengths)
+        self._batch_size = max(1, batch_size)
+        self._shuffle = shuffle
+        self._rng = np.random.default_rng(RANDOM_SEED)
+        self._by_length = sorted(
+            range(len(self._lengths)), key=lambda i: self._lengths[i],
         )
 
-    def _read_card_text(self, name: str) -> str:
-        converted = self._locator.load_text(name)
-        if converted is None:
-            raise FileNotFoundError(
-                f"No converted card text on disk for {name!r}",
-            )
-        return converted.without_name_line()
+    def __len__(self) -> int:
+        return math.ceil(len(self._by_length) / self._batch_size) if self._by_length else 0
 
-
-def _measure_max_seq_len(
-    card_names: Iterable[str],
-    locator: ConvertedCardLocator,
-    tokenizer: MtgTokenizer,
-) -> int:
-    """Longest tokenized card length, rounded up to a multiple of 8 (FR-022)."""
-    max_len = 1
-    for name in card_names:
-        converted = locator.load_text(name)
-        if converted is None:
-            continue
-        tokens = tokenizer.tokenize(converted.without_name_line())
-        if len(tokens) > max_len:
-            max_len = len(tokens)
-    rounded = math.ceil(max_len / _MAX_SEQ_LEN_MULTIPLE) * _MAX_SEQ_LEN_MULTIPLE
-    return max(rounded, _MIN_MAX_SEQ_LEN)
+    def __iter__(self):
+        bs = self._batch_size
+        chunks = [self._by_length[i:i + bs] for i in range(0, len(self._by_length), bs)]
+        if self._shuffle:
+            self._rng.shuffle(chunks)
+            for chunk in chunks:
+                self._rng.shuffle(chunk)
+        yield from chunks
 
 
 # ── MLM mask draw (FR-014b, Decision D-10) ──────────────────────────────
@@ -827,30 +865,24 @@ def _per_batch_weighted_mse(
 
     Each of the 9 heads gets a per-batch sum-to-1 weighted MSE term;
     the four signed-head terms sum unweighted, and the five color-lift
-    terms sum with the FR-017 ``(1/5)`` prefactor. Heads whose total
-    sample weight is zero in the batch contribute exactly zero (the
-    short-circuit is on the head_mask sum, not on a denominator clamp,
-    so a future numerator drift cannot leak through).
+    terms sum with the FR-017 ``(1/5)`` prefactor. A head with zero
+    total sample weight in the batch contributes exactly zero — its
+    numerator is also exactly zero (every contributing card's weight is
+    zero), and ``torch.where`` selects the explicit ``0`` branch, so
+    nothing leaks through the (clamped, never-actually-used) divisor.
+    Fully vectorized: no per-head Python loop, no ``.item()`` syncs.
     """
-    preds = _stack_head_preds(predictions)  # (B, 9)
-
-    sq_err = (preds - labels) ** 2  # (B, 9)
-    weighted = sq_err * weights * head_mask  # (B, 9)
-    weight_total = (weights * head_mask).sum(dim=0)  # (9,)
-    head_weight_sum = head_mask.sum(dim=0)  # (9,)
-
-    loss = preds.new_zeros(())
-    for h in range(N_HEADS):
-        if float(head_weight_sum[h].item()) == 0.0:
-            # No card in the batch contributes to head h — exact zero.
-            continue
-        denom = weight_total[h]
-        if float(denom.item()) == 0.0:
-            # head_mask is non-empty but every contributing weight is zero
-            # (FR-017a returns 0 for empty cells). Still exactly zero.
-            continue
-        loss = loss + _HEAD_LOSS_WEIGHT[h] * (weighted[:, h].sum() / denom)
-    return loss
+    preds = _stack_head_preds(predictions)              # (B, 9)
+    masked = weights * head_mask                        # (B, 9)
+    weighted = ((preds - labels) ** 2 * masked).sum(dim=0)   # (9,)
+    weight_total = masked.sum(dim=0)                    # (9,)
+    per_head = torch.where(
+        weight_total > 0,
+        weighted / weight_total.clamp(min=1.0),
+        torch.zeros_like(weighted),
+    )                                                   # (9,)
+    prefactor = preds.new_tensor(_HEAD_LOSS_WEIGHT)     # (9,)
+    return (per_head * prefactor).sum()
 
 
 # ── Config ──────────────────────────────────────────────────────────────
@@ -1009,13 +1041,22 @@ class _TrainContext:
 
 @dataclass
 class _BatchResult:
-    """Everything one forward pass produces that callers might want."""
+    """The loss components plus the small tensors the eval loop needs.
+
+    Deliberately does *not* hold the full prediction dict — only the
+    stacked ``(B, 9)`` head predictions (for the val correlation) and,
+    when any position was masked, the ``(N, vocab)`` MLM logits at those
+    positions and their targets (for the val top-1 accuracy). The big
+    ``(B, T, vocab)`` tensor of the old "logits everywhere" path never
+    exists.
+    """
 
     l_reg: torch.Tensor
     l_mlm: torch.Tensor
     l_total: torch.Tensor
-    predictions: dict[str, torch.Tensor]
-    mask_positions: torch.Tensor  # (B, T) bool — MLM-masked positions
+    head_preds: torch.Tensor                   # (B, 9)
+    mlm_logits_at_mask: torch.Tensor | None    # (N, vocab) — None if nothing masked
+    mask_targets: torch.Tensor                 # (N,) — original ids at masked positions
 
 
 def _forward_batch(
@@ -1027,20 +1068,36 @@ def _forward_batch(
     head_mask: torch.Tensor,
     ctx: _TrainContext,
 ) -> _BatchResult:
-    """Run one batch end-to-end."""
+    """Run one batch end-to-end.
+
+    The MLM head is applied only at the masked positions — it's
+    position-wise, so this is exactly the ``Linear`` the old
+    "project every position, then index ~15 %" path also wanted, minus
+    the ~84 % wasted multiply and the ~hundreds-of-MB ``(B, T, vocab)``
+    intermediate. The ``contextualized[mask_positions]`` gather runs
+    on-device (``mask_positions`` is produced on-device by
+    :func:`_draw_mlm_mask`), so there is no host sync.
+    """
     masked_ids, mask_positions = _draw_mlm_mask(
         ids, attention_mask, ctx.mlm_mask_prob,
         ctx.mask_token_id, ctx.special_token_ids,
     )
     predictions = model(masked_ids, attention_mask)
+    head_preds = _stack_head_preds(predictions)                 # (B, 9)
     l_reg = _per_batch_weighted_mse(predictions, labels, weights, head_mask)
-    mlm_logits = predictions["mlm_logits"]
+    contextualized = predictions["contextualized"]              # (B, T, d_model)
     if mask_positions.any():
-        l_mlm = F.cross_entropy(mlm_logits[mask_positions], ids[mask_positions])
+        mask_targets = ids[mask_positions]                      # (N,)
+        mlm_logits_at_mask = model.mlm_head(contextualized[mask_positions])  # (N, vocab)
+        l_mlm = F.cross_entropy(mlm_logits_at_mask, mask_targets)
     else:
-        l_mlm = mlm_logits.new_zeros(())
+        mask_targets = ids.new_empty((0,))
+        mlm_logits_at_mask = None
+        l_mlm = contextualized.new_zeros(())
     l_total = l_reg + ctx.mlm_weight * l_mlm
-    return _BatchResult(l_reg, l_mlm, l_total, predictions, mask_positions)
+    return _BatchResult(
+        l_reg, l_mlm, l_total, head_preds, mlm_logits_at_mask, mask_targets,
+    )
 
 
 def _train_epoch(
@@ -1192,13 +1249,13 @@ def _eval_loss(
         sum_total += float(result.l_total.item())
         n_batches += 1
         # MLM top-1 accuracy at masked positions.
-        if result.mask_positions.any():
-            logits_at_mask = result.predictions["mlm_logits"][result.mask_positions]
-            targets_at_mask = ids[result.mask_positions]
-            mlm_correct += int((logits_at_mask.argmax(dim=-1) == targets_at_mask).sum())
-            mlm_total += int(result.mask_positions.sum())
+        if result.mlm_logits_at_mask is not None:
+            mlm_correct += int(
+                (result.mlm_logits_at_mask.argmax(dim=-1) == result.mask_targets).sum()
+            )
+            mlm_total += int(result.mask_targets.numel())
         # Per-head prediction↔target correlation over non-empty cells.
-        corr.add(_stack_head_preds(result.predictions), labels, head_mask)
+        corr.add(result.head_preds, labels, head_mask)
     n = max(n_batches, 1)
     mlm_avg = sum_mlm / n
     return _EvalMetrics(
@@ -1222,6 +1279,91 @@ def _resolve_special_token_ids(
     return mask_id, special_ids
 
 
+@dataclass
+class _TrainingSetup:
+    """Everything the epoch loop needs, built once after the train/val split."""
+
+    model: SealedEncoderModel
+    encoder_config: SealedEncoderConfig
+    device: torch.device
+    train_loader: DataLoader
+    val_loader: DataLoader
+    optimizer: torch.optim.Optimizer
+    scheduler: torch.optim.lr_scheduler.LambdaLR
+    ctx: _TrainContext
+
+
+def _build_training_setup(
+    config: TrainEncoderConfig,
+    labels: CardLabelMap,
+    train_names: Sequence[str],
+    val_names: Sequence[str],
+    locator: ConvertedCardLocator,
+) -> _TrainingSetup:
+    """Tokenize the corpus once, build the model + datasets + loaders +
+    optimizer for the epoch loop. ``max_seq_len`` (the position-embedding
+    table size, FR-022) falls out of the one-time tokenization.
+    """
+    tokenizer = load_tokenizer(config.vocab_path)
+    vocab = load_vocabulary(config.vocab_path)
+    mask_token_id, special_token_ids = _resolve_special_token_ids(vocab)
+
+    tokenized_by_name, max_seq_len = _tokenize_corpus(labels, tokenizer, locator)
+    _log(f"Tokenized {len(tokenized_by_name)} card(s); max_seq_len = {max_seq_len}")
+
+    encoder_config = SealedEncoderConfig(
+        vocab_size=tokenizer.vocab_size,
+        d_model=D_MODEL,
+        n_layers=config.n_layers,
+        n_heads=config.n_heads,
+        ff_dim=FF_DIM,
+        max_seq_len=max_seq_len,
+        dropout=config.dropout,
+        n_pool_queries=config.n_pool_queries,
+    )
+
+    torch.manual_seed(config.random_seed)
+    model = SealedEncoderModel(encoder_config)
+    device = _select_device()
+    model.to(device)
+    _log(f"Sealed encoder on {device}")
+
+    train_ds = _WinnabilityDataset(
+        train_names, labels, tokenized_by_name, config.shrinkage_k,
+    )
+    val_ds = _WinnabilityDataset(
+        val_names, labels, tokenized_by_name, config.shrinkage_k,
+    )
+    train_loader = DataLoader(
+        train_ds,
+        batch_sampler=_LengthBucketBatchSampler(
+            train_ds.lengths, config.batch_size, shuffle=True,
+        ),
+        collate_fn=_pad_collate,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_sampler=_LengthBucketBatchSampler(
+            val_ds.lengths, config.batch_size, shuffle=False,
+        ),
+        collate_fn=_pad_collate,
+    )
+
+    total_steps = max(1, config.epochs * len(train_loader))
+    optimizer, scheduler = _make_optimizer(model, config.lr, total_steps)
+
+    ctx = _TrainContext(
+        mlm_weight=config.mlm_weight,
+        mlm_mask_prob=config.mlm_mask_prob,
+        mask_token_id=mask_token_id,
+        special_token_ids=special_token_ids,
+    )
+    return _TrainingSetup(
+        model, encoder_config, device, train_loader, val_loader,
+        optimizer, scheduler, ctx,
+    )
+
+
 def run(config: TrainEncoderConfig) -> Path:
     """Execute the train-encoder pipeline.
 
@@ -1234,16 +1376,13 @@ def run(config: TrainEncoderConfig) -> Path:
 
     locator = ConvertedCardLocator(config.cards_folder)
 
-    _log(f"Reading {config.cards_played_path} (pass 1)")
-    counters = _aggregate_pass_one(iter_rows(config.cards_played_path))
-    _log(f"Pass 1 collected counters for {len(counters)} card(s)")
+    _log(f"Reading {config.cards_played_path}")
+    counters = _aggregate(iter_rows(config.cards_played_path), locator)
+    _log(f"Aggregated counters for {len(counters)} card(s)")
 
     n_dropped = _drop_missing_cards(counters, locator)
     if n_dropped:
         _log(f"Continuing with {len(counters)} card(s) after dropping {n_dropped}")
-
-    _log(f"Reading {config.cards_played_path} (pass 2: per-color slices)")
-    _aggregate_pass_two(iter_rows(config.cards_played_path), counters, locator)
 
     labels = _build_label_map(counters, config.shrinkage_k)
     _log(
@@ -1265,49 +1404,11 @@ def run(config: TrainEncoderConfig) -> Path:
         )
     _log(f"Card-level split: {len(train_names)} train / {len(val_names)} val")
 
-    tokenizer = load_tokenizer(config.vocab_path)
-    vocab = load_vocabulary(config.vocab_path)
-    mask_token_id, special_token_ids = _resolve_special_token_ids(vocab)
-    max_seq_len = _measure_max_seq_len(labels.keys(), locator, tokenizer)
-    _log(f"max_seq_len = {max_seq_len} (rounded to multiple of 8)")
-
-    encoder_config = SealedEncoderConfig(
-        vocab_size=tokenizer.vocab_size,
-        d_model=D_MODEL,
-        n_layers=config.n_layers,
-        n_heads=config.n_heads,
-        ff_dim=FF_DIM,
-        max_seq_len=max_seq_len,
-        dropout=config.dropout,
-        n_pool_queries=config.n_pool_queries,
-    )
-
-    torch.manual_seed(config.random_seed)
-    model = SealedEncoderModel(encoder_config)
-    device = _select_device()
-    model.to(device)
-    _log(f"Sealed encoder on {device}")
-
-    train_ds = _WinnabilityDataset(
-        train_names, labels, tokenizer, locator, max_seq_len, config.shrinkage_k,
-    )
-    val_ds = _WinnabilityDataset(
-        val_names, labels, tokenizer, locator, max_seq_len, config.shrinkage_k,
-    )
-    train_loader = DataLoader(
-        train_ds, batch_size=config.batch_size, shuffle=True,
-    )
-    val_loader = DataLoader(val_ds, batch_size=config.batch_size, shuffle=False)
-
-    total_steps = max(1, config.epochs * len(train_loader))
-    optimizer, scheduler = _make_optimizer(model, config.lr, total_steps)
-
-    ctx = _TrainContext(
-        mlm_weight=config.mlm_weight,
-        mlm_mask_prob=config.mlm_mask_prob,
-        mask_token_id=mask_token_id,
-        special_token_ids=special_token_ids,
-    )
+    setup = _build_training_setup(config, labels, train_names, val_names, locator)
+    model, encoder_config = setup.model, setup.encoder_config
+    device, ctx = setup.device, setup.ctx
+    train_loader, val_loader = setup.train_loader, setup.val_loader
+    optimizer, scheduler = setup.optimizer, setup.scheduler
 
     best = _BestCheckpoint()
     epochs_since_best = 0
