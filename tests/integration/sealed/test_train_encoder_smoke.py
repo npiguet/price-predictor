@@ -99,6 +99,8 @@ def test_train_encoder_smoke(tmp_path: Path, capsys):
         assert "ppl=" in log
         assert "acc=" in log
         assert "val corr (pred vs target):" in log
+        # per-epoch debug probe: regression-vs-MLM gradient pull on the trunk
+        assert "trunk grad norm @1st batch:" in log
 
         latest = model_output / "latest.pt"
         assert latest.exists(), "latest.pt must exist after training"

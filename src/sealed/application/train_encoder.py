@@ -1110,6 +1110,38 @@ def _forward_batch(
     )
 
 
+def _global_grad_norm(grads: Iterable[torch.Tensor | None]) -> float:
+    """L2 norm of a list of gradient tensors as if flattened+concatenated.
+
+    ``None`` entries (params unused by the loss being differentiated —
+    e.g. ``l_mlm`` doesn't touch the attention-pool weights) are skipped.
+    """
+    squares = [g.detach().pow(2).sum() for g in grads if g is not None]
+    if not squares:
+        return 0.0
+    return float(torch.sqrt(torch.stack(squares).sum()))
+
+
+@dataclass
+class _EpochTrainMetrics:
+    """Per-epoch training averages plus a one-batch gradient-norm probe.
+
+    ``trunk_grad_reg`` / ``trunk_grad_mlm_weighted`` are ‖∂L/∂θ‖ over the
+    *shared encoder* params (token + card encoder), measured on the
+    epoch's first batch — ``L_reg`` vs ``mlm_weight · L_mlm`` respectively.
+    They answer "how hard does each objective pull the trunk?" (loss
+    *magnitude* doesn't tell you that — a term can be large but flat).
+    ``None`` when the first batch had no maskable position (so ``L_mlm``
+    is a detached zero) — rare in practice.
+    """
+
+    reg: float
+    mlm: float
+    total: float
+    trunk_grad_reg: float | None
+    trunk_grad_mlm_weighted: float | None
+
+
 def _train_epoch(
     model: SealedEncoderModel,
     loader: DataLoader,
@@ -1117,14 +1149,27 @@ def _train_epoch(
     scheduler: torch.optim.lr_scheduler.LambdaLR,
     device: torch.device,
     ctx: _TrainContext,
-) -> tuple[float, float, float]:
-    """Train for one epoch. Returns ``(reg_avg, mlm_avg, total_avg)``."""
+) -> _EpochTrainMetrics:
+    """Train for one epoch.
+
+    On the epoch's first batch, before the optimization ``backward()``,
+    runs two extra cheap backward passes (``torch.autograd.grad``, which
+    does not touch ``.grad``) to measure ‖∂L_reg/∂trunk‖ and
+    ‖∂(w·L_mlm)/∂trunk‖ — a per-epoch debug probe of the regression-vs-MLM
+    pull on the shared encoder. ~2 extra backwards per epoch; negligible.
+    """
     model.train()
     sum_reg = 0.0
     sum_mlm = 0.0
     sum_total = 0.0
     n_batches = 0
-    for ids, mask, labels, weights, head_mask in loader:
+    trunk_params = (
+        list(model.token_encoder.parameters())
+        + list(model.card_encoder.parameters())
+    )
+    grad_reg: float | None = None
+    grad_mlm_weighted: float | None = None
+    for batch_idx, (ids, mask, labels, weights, head_mask) in enumerate(loader):
         ids = ids.to(device)
         mask = mask.to(device)
         labels = labels.to(device)
@@ -1132,6 +1177,19 @@ def _train_epoch(
         head_mask = head_mask.to(device)
         optimizer.zero_grad()
         result = _forward_batch(model, ids, mask, labels, weights, head_mask, ctx)
+        if (
+            batch_idx == 0
+            and result.l_reg.requires_grad
+            and result.mlm_logits_at_mask is not None
+        ):
+            grad_reg = _global_grad_norm(torch.autograd.grad(
+                result.l_reg, trunk_params,
+                retain_graph=True, allow_unused=True,
+            ))
+            grad_mlm_weighted = _global_grad_norm(torch.autograd.grad(
+                ctx.mlm_weight * result.l_mlm, trunk_params,
+                retain_graph=True, allow_unused=True,
+            ))
         result.l_total.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
@@ -1141,7 +1199,27 @@ def _train_epoch(
         sum_total += float(result.l_total.item())
         n_batches += 1
     n = max(n_batches, 1)
-    return sum_reg / n, sum_mlm / n, sum_total / n
+    return _EpochTrainMetrics(
+        reg=sum_reg / n,
+        mlm=sum_mlm / n,
+        total=sum_total / n,
+        trunk_grad_reg=grad_reg,
+        trunk_grad_mlm_weighted=grad_mlm_weighted,
+    )
+
+
+def _format_trunk_grads(metrics: _EpochTrainMetrics, mlm_weight: float) -> str:
+    """Render the one-batch trunk gradient-norm probe as one log line."""
+    g_reg = metrics.trunk_grad_reg
+    g_mlm_w = metrics.trunk_grad_mlm_weighted
+    if g_reg is None or g_mlm_w is None:
+        return "trunk grad norm @1st batch: n/a (no maskable position)"
+    raw_mlm = g_mlm_w / mlm_weight if mlm_weight > 0 else float("nan")
+    ratio = g_mlm_w / g_reg if g_reg > 0 else float("inf")
+    return (
+        f"trunk grad norm @1st batch: reg={g_reg:.4f}  "
+        f"mlm*w={g_mlm_w:.4f} (raw {raw_mlm:.4f})  mlm*w / reg = {ratio:.1f}x"
+    )
 
 
 # ── Per-head prediction↔target correlation (val-set diagnostics) ───────
@@ -1423,7 +1501,7 @@ def run(config: TrainEncoderConfig) -> Path:
     best = _BestCheckpoint()
     epochs_since_best = 0
     for epoch in range(1, config.epochs + 1):
-        train_reg, train_mlm, train_total = _train_epoch(
+        train = _train_epoch(
             model, train_loader, optimizer, scheduler, device, ctx,
         )
         val = _eval_loss(model, val_loader, device, ctx)
@@ -1431,14 +1509,15 @@ def run(config: TrainEncoderConfig) -> Path:
         marker = "*" if improved else " "
         _log(
             f"Epoch {epoch}/{config.epochs}  "
-            f"train_loss={train_total:.4f} "
-            f"(reg={train_reg:.4f}, mlm={train_mlm:.4f} ppl={math.exp(train_mlm):.1f})  "
+            f"train_loss={train.total:.4f} "
+            f"(reg={train.reg:.4f}, mlm={train.mlm:.4f} ppl={math.exp(train.mlm):.1f})  "
             f"val_loss={val.total:.4f} "
             f"(reg={val.reg:.4f}, mlm={val.mlm:.4f} ppl={val.mlm_perplexity:.1f} "
             f"acc={val.mlm_top1_accuracy * 100:.1f}%)  "
             f"best={marker}"
         )
         _log("  " + _format_head_corrs(val.head_correlations))
+        _log("  " + _format_trunk_grads(train, ctx.mlm_weight))
         if improved:
             epochs_since_best = 0
         else:
