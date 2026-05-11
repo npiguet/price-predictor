@@ -172,18 +172,28 @@ the encoder weights (FR-014, FR-016, FR-017, FR-020).
 
 ### Stdout
 
-Per-epoch progress lines via `_log()`:
+Two log lines per epoch via `_log()` — the loss decomposition plus a
+human-readable diagnostics line:
 
 ```
-[2026-05-10 14:22:01] Epoch 1/100  train_loss=0.4721 (reg=0.4205, mlm=5.16)  val_loss=0.4519 (reg=0.4002, mlm=5.17)  best=*
-[2026-05-10 14:22:18] Epoch 2/100  train_loss=0.3984 (reg=0.3522, mlm=4.62)  val_loss=0.4071 (reg=0.3551, mlm=5.20)  best=*
+[2026-05-10 14:22:01] Epoch 1/100  train_loss=0.9194 (reg=0.1910, mlm=7.2841 ppl=1456.1)  val_loss=0.6419 (reg=0.0483, mlm=5.9355 ppl=378.5 acc=4.7%)  best=*
+[2026-05-10 14:22:01]   val corr (pred vs target): score_play=+0.18 score_draw=+0.11 played_rate=+0.42 cast_lift=+0.06 | color_lift W=+0.03 U=-0.01 B=+0.09 R=+0.04 G=+0.02
 ...
 [2026-05-10 14:35:02] Early stop after 21 epochs without improvement.
 [2026-05-10 14:35:02] Best epoch: 24, val_loss: 0.3812. Saved models/sealed/encoder/2026-05-10T14-22-01.pt
 ```
 
-The `(reg=…, mlm=…)` breakdown is informational; the `best=*` flag is
-based on the full loss column per FR-019.
+- `mlm` is cross-entropy in nats; `ppl = exp(mlm)` is the more legible
+  perplexity; `acc` is val-set top-1 masked-token accuracy.
+- The `val corr` line is the per-head Pearson correlation between the
+  encoder's predictions and the (shrunk) targets, over the cells each
+  card actually contributes to — `~0` means the head is predicting the
+  mean, `~0.3+` means it's tracking the per-card signal. A head with
+  fewer than two non-empty val cells (or zero target variance) shows
+  `--`.
+- The `(reg=…, mlm=…)` breakdown and the diagnostics are informational;
+  the `best=*` flag is still based on the `val_loss` column
+  (`reg + (--mlm-weight)·mlm`) per FR-019.
 
 ### Exit codes
 

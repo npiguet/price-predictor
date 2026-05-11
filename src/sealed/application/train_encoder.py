@@ -799,6 +799,24 @@ def _draw_mlm_mask(
 # ── Per-batch per-head sum-to-1 weighted MSE (FR-017, Decision D-11) ───
 
 
+def _stack_head_preds(predictions: dict[str, torch.Tensor]) -> torch.Tensor:
+    """Stack the 9 regression-head predictions into a ``(B, 9)`` tensor in
+    the canonical head order (``score_play``, ``score_draw``,
+    ``played_rate``, ``cast_lift``, then ``color_lift_{W,U,B,R,G}``) so it
+    aligns with the ``labels`` / ``weights`` / ``head_mask`` tensors.
+    """
+    cols: list[torch.Tensor] = [
+        predictions["score_play"],
+        predictions["score_draw"],
+        predictions["played_rate"],
+        predictions["cast_lift"],
+    ]
+    color_lift = predictions["color_lift"]  # (B, 5)
+    for k in range(len(COLOR_ORDER)):
+        cols.append(color_lift[:, k])
+    return torch.stack(cols, dim=1)  # (B, 9)
+
+
 def _per_batch_weighted_mse(
     predictions: dict[str, torch.Tensor],
     labels: torch.Tensor,
@@ -814,17 +832,7 @@ def _per_batch_weighted_mse(
     short-circuit is on the head_mask sum, not on a denominator clamp,
     so a future numerator drift cannot leak through).
     """
-    # Stack predictions into a (B, 9) tensor in the same head order.
-    per_head_preds: list[torch.Tensor] = [
-        predictions["score_play"],
-        predictions["score_draw"],
-        predictions["played_rate"],
-        predictions["cast_lift"],
-    ]
-    color_lift = predictions["color_lift"]  # (B, 5)
-    for k in range(len(COLOR_ORDER)):
-        per_head_preds.append(color_lift[:, k])
-    preds = torch.stack(per_head_preds, dim=1)  # (B, 9)
+    preds = _stack_head_preds(predictions)  # (B, 9)
 
     sq_err = (preds - labels) ** 2  # (B, 9)
     weighted = sq_err * weights * head_mask  # (B, 9)
@@ -999,6 +1007,17 @@ class _TrainContext:
     special_token_ids: tuple[int, ...]
 
 
+@dataclass
+class _BatchResult:
+    """Everything one forward pass produces that callers might want."""
+
+    l_reg: torch.Tensor
+    l_mlm: torch.Tensor
+    l_total: torch.Tensor
+    predictions: dict[str, torch.Tensor]
+    mask_positions: torch.Tensor  # (B, T) bool — MLM-masked positions
+
+
 def _forward_batch(
     model: SealedEncoderModel,
     ids: torch.Tensor,
@@ -1007,8 +1026,8 @@ def _forward_batch(
     weights: torch.Tensor,
     head_mask: torch.Tensor,
     ctx: _TrainContext,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Run one batch end-to-end and return ``(L_reg, L_mlm, L_total)``."""
+) -> _BatchResult:
+    """Run one batch end-to-end."""
     masked_ids, mask_positions = _draw_mlm_mask(
         ids, attention_mask, ctx.mlm_mask_prob,
         ctx.mask_token_id, ctx.special_token_ids,
@@ -1017,13 +1036,11 @@ def _forward_batch(
     l_reg = _per_batch_weighted_mse(predictions, labels, weights, head_mask)
     mlm_logits = predictions["mlm_logits"]
     if mask_positions.any():
-        flat_logits = mlm_logits[mask_positions]
-        flat_targets = ids[mask_positions]
-        l_mlm = F.cross_entropy(flat_logits, flat_targets)
+        l_mlm = F.cross_entropy(mlm_logits[mask_positions], ids[mask_positions])
     else:
         l_mlm = mlm_logits.new_zeros(())
     l_total = l_reg + ctx.mlm_weight * l_mlm
-    return l_reg, l_mlm, l_total
+    return _BatchResult(l_reg, l_mlm, l_total, predictions, mask_positions)
 
 
 def _train_epoch(
@@ -1047,19 +1064,98 @@ def _train_epoch(
         weights = weights.to(device)
         head_mask = head_mask.to(device)
         optimizer.zero_grad()
-        l_reg, l_mlm, l_total = _forward_batch(
-            model, ids, mask, labels, weights, head_mask, ctx,
-        )
-        l_total.backward()
+        result = _forward_batch(model, ids, mask, labels, weights, head_mask, ctx)
+        result.l_total.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
         scheduler.step()
-        sum_reg += float(l_reg.item())
-        sum_mlm += float(l_mlm.item())
-        sum_total += float(l_total.item())
+        sum_reg += float(result.l_reg.item())
+        sum_mlm += float(result.l_mlm.item())
+        sum_total += float(result.l_total.item())
         n_batches += 1
     n = max(n_batches, 1)
     return sum_reg / n, sum_mlm / n, sum_total / n
+
+
+# ── Per-head prediction↔target correlation (val-set diagnostics) ───────
+
+
+class _HeadCorrAccumulator:
+    """Streaming Pearson correlation between predicted and target values,
+    per regression head, over the cells a card actually contributes to.
+
+    Pearson r is the most legible "is the encoder learning this head's
+    signal?" metric: ~0 means it's predicting the mean (the aggregate
+    MSE looks fine because the labels are shrunk toward neutral), ~0.3+
+    means it's tracking the per-card signal.
+    """
+
+    def __init__(self) -> None:
+        z = lambda: np.zeros(N_HEADS, dtype=np.float64)  # noqa: E731
+        self._n = z()
+        self._sx, self._sy = z(), z()
+        self._sxx, self._syy, self._sxy = z(), z(), z()
+
+    def add(
+        self,
+        preds: torch.Tensor,    # (B, 9)
+        targets: torch.Tensor,  # (B, 9) — shrunk values, 0.0 at empty cells
+        head_mask: torch.Tensor,  # (B, 9) — 1.0 where the cell is non-empty
+    ) -> None:
+        mask = head_mask.detach().cpu().numpy().astype(bool)
+        p = preds.detach().cpu().numpy().astype(np.float64)
+        t = targets.detach().cpu().numpy().astype(np.float64)
+        for h in range(N_HEADS):
+            sel = mask[:, h]
+            if not sel.any():
+                continue
+            ph, th = p[sel, h], t[sel, h]
+            self._n[h] += ph.size
+            self._sx[h] += ph.sum()
+            self._sy[h] += th.sum()
+            self._sxx[h] += np.dot(ph, ph)
+            self._syy[h] += np.dot(th, th)
+            self._sxy[h] += np.dot(ph, th)
+
+    def correlations(self) -> dict[str, float | None]:
+        out: dict[str, float | None] = {}
+        for h, name in enumerate(_ALL_HEAD_NAMES):
+            n = self._n[h]
+            if n < 2:
+                out[name] = None
+                continue
+            cov = n * self._sxy[h] - self._sx[h] * self._sy[h]
+            vx = n * self._sxx[h] - self._sx[h] ** 2
+            vy = n * self._syy[h] - self._sy[h] ** 2
+            out[name] = (
+                float(cov / math.sqrt(vx * vy)) if vx > 0.0 and vy > 0.0 else None
+            )
+        return out
+
+
+@dataclass
+class _EvalMetrics:
+    """Per-epoch validation metrics, including human-readable diagnostics."""
+
+    reg: float
+    mlm: float          # cross-entropy in nats
+    total: float        # reg + mlm_weight * mlm — the best-checkpoint metric
+    mlm_perplexity: float          # exp(mlm)
+    mlm_top1_accuracy: float       # fraction of masked tokens predicted correctly
+    head_correlations: dict[str, float | None]  # Pearson r per head, None if undefined
+
+
+def _format_head_corrs(corrs: dict[str, float | None]) -> str:
+    """Render the per-head val correlations as one compact log line."""
+    def fmt(value: float | None) -> str:
+        return f"{value:+.2f}" if value is not None else "  --"
+
+    signed = " ".join(
+        f"{name}={fmt(corrs[name])}"
+        for name in ("score_play", "score_draw", "played_rate", "cast_lift")
+    )
+    color = " ".join(f"{c}={fmt(corrs[f'color_lift_{c}'])}" for c in COLOR_ORDER)
+    return f"val corr (pred vs target): {signed} | color_lift {color}"
 
 
 @torch.no_grad()
@@ -1068,33 +1164,51 @@ def _eval_loss(
     loader: DataLoader,
     device: torch.device,
     ctx: _TrainContext,
-) -> tuple[float, float, float]:
-    """Evaluate on the val set. Returns ``(reg_avg, mlm_avg, total_avg)``.
+) -> _EvalMetrics:
+    """Evaluate on the val set.
 
-    The MLM mask is drawn at val time too (with the same
-    ``--mlm-mask-prob``) so val numbers stay comparable across epochs
-    (Decision D-12).
+    Returns the loss components (``reg``/``mlm``/``total`` — the last is
+    the best-checkpoint metric per FR-019) plus diagnostics: MLM
+    perplexity and top-1 masked-token accuracy, and the per-head
+    Pearson correlation between predictions and (shrunk) targets. The
+    MLM mask is drawn at val time too (same ``--mlm-mask-prob``) so the
+    numbers stay comparable across epochs (Decision D-12).
     """
     model.eval()
-    sum_reg = 0.0
-    sum_mlm = 0.0
-    sum_total = 0.0
+    sum_reg = sum_mlm = sum_total = 0.0
     n_batches = 0
+    mlm_correct = 0
+    mlm_total = 0
+    corr = _HeadCorrAccumulator()
     for ids, mask, labels, weights, head_mask in loader:
         ids = ids.to(device)
         mask = mask.to(device)
         labels = labels.to(device)
         weights = weights.to(device)
         head_mask = head_mask.to(device)
-        l_reg, l_mlm, l_total = _forward_batch(
-            model, ids, mask, labels, weights, head_mask, ctx,
-        )
-        sum_reg += float(l_reg.item())
-        sum_mlm += float(l_mlm.item())
-        sum_total += float(l_total.item())
+        result = _forward_batch(model, ids, mask, labels, weights, head_mask, ctx)
+        sum_reg += float(result.l_reg.item())
+        sum_mlm += float(result.l_mlm.item())
+        sum_total += float(result.l_total.item())
         n_batches += 1
+        # MLM top-1 accuracy at masked positions.
+        if result.mask_positions.any():
+            logits_at_mask = result.predictions["mlm_logits"][result.mask_positions]
+            targets_at_mask = ids[result.mask_positions]
+            mlm_correct += int((logits_at_mask.argmax(dim=-1) == targets_at_mask).sum())
+            mlm_total += int(result.mask_positions.sum())
+        # Per-head prediction↔target correlation over non-empty cells.
+        corr.add(_stack_head_preds(result.predictions), labels, head_mask)
     n = max(n_batches, 1)
-    return sum_reg / n, sum_mlm / n, sum_total / n
+    mlm_avg = sum_mlm / n
+    return _EvalMetrics(
+        reg=sum_reg / n,
+        mlm=mlm_avg,
+        total=sum_total / n,
+        mlm_perplexity=math.exp(mlm_avg),
+        mlm_top1_accuracy=(mlm_correct / mlm_total) if mlm_total else 0.0,
+        head_correlations=corr.correlations(),
+    )
 
 
 def _resolve_special_token_ids(
@@ -1201,15 +1315,19 @@ def run(config: TrainEncoderConfig) -> Path:
         train_reg, train_mlm, train_total = _train_epoch(
             model, train_loader, optimizer, scheduler, device, ctx,
         )
-        val_reg, val_mlm, val_total = _eval_loss(model, val_loader, device, ctx)
-        improved = best.update(model, epoch, val_total)
+        val = _eval_loss(model, val_loader, device, ctx)
+        improved = best.update(model, epoch, val.total)
         marker = "*" if improved else " "
         _log(
             f"Epoch {epoch}/{config.epochs}  "
-            f"train_loss={train_total:.4f} (reg={train_reg:.4f}, mlm={train_mlm:.4f})  "
-            f"val_loss={val_total:.4f} (reg={val_reg:.4f}, mlm={val_mlm:.4f})  "
+            f"train_loss={train_total:.4f} "
+            f"(reg={train_reg:.4f}, mlm={train_mlm:.4f} ppl={math.exp(train_mlm):.1f})  "
+            f"val_loss={val.total:.4f} "
+            f"(reg={val.reg:.4f}, mlm={val.mlm:.4f} ppl={val.mlm_perplexity:.1f} "
+            f"acc={val.mlm_top1_accuracy * 100:.1f}%)  "
             f"best={marker}"
         )
+        _log("  " + _format_head_corrs(val.head_correlations))
         if improved:
             epochs_since_best = 0
         else:

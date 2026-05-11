@@ -63,7 +63,7 @@ def _build_minimal_vocab(vocab_path: Path) -> None:
 
 
 @pytest.mark.integration
-def test_train_encoder_smoke(tmp_path: Path):
+def test_train_encoder_smoke(tmp_path: Path, capsys):
     cards_folder = tmp_path / "cardsfolder"
     _ensure_letter_layout(cards_folder)
 
@@ -90,6 +90,15 @@ def test_train_encoder_smoke(tmp_path: Path):
             shrinkage_k=20.0,
         )
         run_train_encoder(config)
+
+        # Per-epoch log lines carry the loss decomposition plus the
+        # human-readable diagnostics: MLM perplexity, top-1 masked-token
+        # accuracy, and the per-head pred-vs-target correlations.
+        log = capsys.readouterr().out
+        assert "reg=" in log and "mlm=" in log
+        assert "ppl=" in log
+        assert "acc=" in log
+        assert "val corr (pred vs target):" in log
 
         latest = model_output / "latest.pt"
         assert latest.exists(), "latest.pt must exist after training"
