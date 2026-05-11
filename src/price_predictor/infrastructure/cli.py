@@ -329,8 +329,11 @@ def run_convert(args: argparse.Namespace) -> int:
     )
 
     try:
+        # ConvertMain calls ForgeEnvironmentInitializer.initialize(), which
+        # uses GuiBase / GuiHeadless / FModel — all in forge-gui (and FModel
+        # pulls in forge-ai subsystems), so the full runtime is required.
         classpath = build_forge_classpath(
-            include_full_runtime=False,
+            include_full_runtime=True,
             include_dependency_glob=True,
         )
     except FileNotFoundError as exc:

@@ -27,6 +27,7 @@ FILENAME_CORRECTIONS: dict[str, str] = {
     "voldaren_thrillseeker": "voldaren_thrilseeker",
     "sita_varma_masked_racer": "sita_varma_masker_racer",
     "spdr_piloted_by_peni": "sp_dr_piloted_by_peni",
-    "minsc__boo_timeless_heroes": "minsc_boo_timeless_heroes",
     "duke_ulder_ravengard": "duke_ulder_ravenguard",
+    # Forge's filename for "Bespoke Bō" has a stray space: "bespoke _bo.txt".
+    "bespoke_bo": "bespoke _bo",
 }

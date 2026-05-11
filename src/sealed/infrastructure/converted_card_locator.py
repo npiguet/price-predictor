@@ -62,6 +62,21 @@ class ConvertedCardLocator:
         return self._cards_path / first_letter / f"{filename}{ext}"
 
     def _find_file(self, card_name: str, ext: str) -> Path | None:
+        hit = self._find_exact_or_prefix(card_name, ext)
+        if hit is not None:
+            return hit
+        # ``Front // Back`` fallback: Forge writes meld cards under the
+        # front-face name only ("Bruna, the Fading Light // Brisela, Voice
+        # of Nightmares" -> ``bruna_the_fading_light.txt``), and some
+        # double-faced filenames carry typos ("...minsdstinger") that the
+        # front-face prefix search still resolves. Retry with the front face.
+        if " // " in card_name:
+            front_face = card_name.split(" // ", 1)[0].strip()
+            if front_face:
+                return self._find_exact_or_prefix(front_face, ext)
+        return None
+
+    def _find_exact_or_prefix(self, card_name: str, ext: str) -> Path | None:
         filename, first_letter = self._split_filename(card_name)
         index = self._index_for(first_letter)
 
@@ -87,7 +102,17 @@ class ConvertedCardLocator:
         self._letter_index[letter] = index
         return index
 
+    _REBALANCED_DIR = "rebalanced"
+
     def _split_filename(self, card_name: str) -> tuple[str, str]:
+        # Alchemy/Arena rebalanced cards are named "A-Akki Ronin" and live
+        # under cardsfolder/rebalanced/ as "a-akki_ronin.txt" — the literal
+        # "a-" prefix is kept (the general sanitizer would turn it into
+        # "a_"), and the directory is "rebalanced" rather than first-letter.
+        if card_name[:2].upper() == "A-" and len(card_name) > 2:
+            stem = sanitize_card_name(card_name[2:], FILENAME_CORRECTIONS)
+            return f"a-{stem}", self._REBALANCED_DIR
+
         resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
         if "/" in resolved:
             first_letter, filename = resolved.split("/", 1)

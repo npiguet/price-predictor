@@ -36,6 +36,11 @@ class TestSanitizeCardName:
     def test_strips_punctuation(self):
         assert sanitize_card_name("Borborygmos, Enraged!") == "borborygmos_enraged"
 
+    def test_collapses_underscore_runs(self):
+        # "&" is stripped but leaves the surrounding spaces -> "__" -> "_".
+        assert sanitize_card_name("Anchovy & Banana Pizza") == "anchovy_banana_pizza"
+        assert sanitize_card_name("Don & Leo, Problem Solvers") == "don_leo_problem_solvers"
+
 
 class TestEmbeddingPath:
     def test_exact_match(self, tmp_path):
@@ -83,6 +88,48 @@ class TestTextPath:
     def test_missing_text_returns_none(self, tmp_path):
         loc = ConvertedCardLocator(tmp_path)
         assert loc.load_text("Nonexistent") is None
+
+
+class TestRebalancedAndFaceFallback:
+    def test_alchemy_rebalanced_resolved_in_rebalanced_dir(self, tmp_path):
+        # "A-Akki Ronin" -> cardsfolder/rebalanced/a-akki_ronin.txt
+        reb = tmp_path / "rebalanced"
+        reb.mkdir()
+        (reb / "a-akki_ronin.txt").write_text("name:Akki Ronin\n")
+        loc = ConvertedCardLocator(tmp_path)
+        path = loc.text_path("A-Akki Ronin")
+        assert path is not None
+        assert path.name == "a-akki_ronin.txt"
+
+    def test_meld_combined_name_falls_back_to_front_face(self, tmp_path):
+        # Forge stores meld cards under the front-face name only.
+        b_dir = tmp_path / "b"
+        b_dir.mkdir()
+        (b_dir / "bruna_the_fading_light.txt").write_text("name:Bruna\n")
+        loc = ConvertedCardLocator(tmp_path)
+        path = loc.text_path(
+            "Bruna, the Fading Light // Brisela, Voice of Nightmares",
+        )
+        assert path is not None
+        assert path.name == "bruna_the_fading_light.txt"
+
+    def test_typo_in_dfc_filename_resolved_via_front_face_prefix(self, tmp_path):
+        # Forge filename has a typo ("...minsdstinger"); the front-face
+        # prefix search still finds it.
+        a_dir = tmp_path / "a"
+        a_dir.mkdir()
+        (a_dir / "aetherblade_agent_gitaxian_minsdstinger.txt").write_text("x")
+        loc = ConvertedCardLocator(tmp_path)
+        path = loc.text_path("Aetherblade Agent // Gitaxian Mindstinger")
+        assert path is not None
+        assert path.name == "aetherblade_agent_gitaxian_minsdstinger.txt"
+
+    def test_amp_card_collapsed_underscores(self, tmp_path):
+        a_dir = tmp_path / "a"
+        a_dir.mkdir()
+        (a_dir / "anchovy_banana_pizza.txt").write_text("x")
+        loc = ConvertedCardLocator(tmp_path)
+        assert loc.text_path("Anchovy & Banana Pizza") is not None
 
 
 class TestLoadEmbedding:

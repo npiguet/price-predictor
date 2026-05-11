@@ -52,8 +52,10 @@ def build_forge_classpath(
 
     Args:
         include_full_runtime: include forge-gui and forge-ai in addition to
-            forge-game and forge-core. The convert command runs only static
-            card-script translation and doesn't need them.
+            forge-game and forge-core. Required by every entry point that
+            calls ``ForgeEnvironmentInitializer.initialize()`` (which uses
+            ``GuiBase`` / ``GuiHeadless`` / ``FModel``) — i.e. all of them,
+            including ``ConvertMain``.
         include_dependency_glob: append ``forge-game/target/dependency/*``
             (the maven-dependency-plugin output) — required by ``ConvertMain``.
     """

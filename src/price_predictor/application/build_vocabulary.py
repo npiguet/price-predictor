@@ -110,18 +110,31 @@ _LETTER_FRAGMENT_PATTERN = re.compile(r"[a-z]+")
 
 
 def _extract_set_code_tokens(printings_path: Path) -> list[str]:
-    """Extract alphabetic token fragments from all set codes in AllPrintings.json.
+    """Extract alphabetic token fragments from set codes a card was printed in.
 
     Set codes tokenize as letter sequences: "2XM" → ["xm"], "ELD" → ["eld"],
     "M21" → ["m"]. Digit sequences are already well-covered by mana costs in
     the corpus and are skipped here.
 
+    Only set codes that appear in at least one card's ``printings`` list are
+    considered — this is exactly the universe of codes that can ever surface
+    in a card's ``set:`` enrichment line. Walking the top-level ``data{}``
+    keys instead would also pick up Art Series ("ABRO", "ACLB", ...), Token,
+    and Minigame "sets" whose codes never appear in real card text, polluting
+    the vocab with nonsense fragments like "abro" / "aclb".
+
     Returns a sorted, deduplicated list of letter-sequence tokens.
     """
     with open(printings_path, encoding="utf-8") as f:
         data = json.load(f)
+    referenced_codes: set[str] = set()
+    for set_info in data.get("data", {}).values():
+        cards = set_info if isinstance(set_info, list) else set_info.get("cards", [])
+        for card in cards:
+            for code in card.get("printings", ()):
+                referenced_codes.add(code)
     tokens: set[str] = set()
-    for code in data.get("data", {}).keys():
+    for code in referenced_codes:
         for fragment in _LETTER_FRAGMENT_PATTERN.findall(code.lower()):
             tokens.add(fragment)
     return sorted(tokens)

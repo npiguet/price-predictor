@@ -313,9 +313,18 @@ class TestSetCodeExtraction:
 
     def _make_fake_printings(self, tmp_path: Path, set_codes: list[str]) -> Path:
         import json
+        # _extract_set_code_tokens only considers codes that appear in some
+        # card's ``printings`` list, so each fake set carries one card whose
+        # printing history references every set code (mirroring how MTGJSON
+        # records a card's full reprint history on each printing).
         path = tmp_path / "AllPrintings.json"
         path.write_text(
-            json.dumps({"data": {code: {"cards": []} for code in set_codes}}),
+            json.dumps({
+                "data": {
+                    code: {"cards": [{"name": f"Card {code}", "printings": set_codes}]}
+                    for code in set_codes
+                },
+            }),
             encoding="utf-8",
         )
         return path
@@ -362,3 +371,37 @@ class TestSetCodeExtraction:
         result = build_vocabulary(tmp_path, freq_threshold=1, printings_path=None)
         # "zzzq" should not be in vocab since no printings file was given
         assert "zzzq" not in result.vocab
+
+    def test_unreferenced_set_codes_are_not_seeded(self, tmp_path: Path):
+        """A set code that exists in ``data{}`` but never appears in any
+        card's ``printings`` list (Art Series, Token, Minigame "sets")
+        must NOT leak its letter fragments into the vocab.
+        """
+        import json
+
+        from price_predictor.application.build_vocabulary import build_vocabulary
+
+        cards_dir = tmp_path / "cards"
+        cards_dir.mkdir()
+        (cards_dir / "card.txt").write_text(
+            "name: Test\nmana cost: {R}\ntypes: instant\n", encoding="utf-8"
+        )
+        printings = tmp_path / "AllPrintings.json"
+        printings.write_text(
+            json.dumps({
+                "data": {
+                    # A real expansion whose card references it.
+                    "ELD": {"cards": [{"name": "Card", "printings": ["ELD"]}]},
+                    # An "Art Series" set with cards that only ever list ABRO
+                    # in their own printings — i.e. the ABRO code is not
+                    # referenced by any *playable* card. But we want the
+                    # stronger guarantee: a set with NO cards at all is
+                    # never seeded.
+                    "ABRO": {"cards": []},
+                },
+            }),
+            encoding="utf-8",
+        )
+        result = build_vocabulary(cards_dir, freq_threshold=1, printings_path=printings)
+        assert "eld" in result.vocab
+        assert "abro" not in result.vocab

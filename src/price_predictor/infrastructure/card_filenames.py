@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import unicodedata
+
+_MULTI_UNDERSCORE = re.compile(r"_+")
 
 
 def sanitize_card_name(
@@ -11,8 +14,11 @@ def sanitize_card_name(
 ) -> str:
     """Convert a card name to its on-disk filename stem.
 
-    NFKD-decomposes accents (a -> a), lowercases, strips punctuation, and
-    optionally applies known filename corrections.
+    NFKD-decomposes accents (a -> a), lowercases, strips punctuation,
+    collapses runs of ``_`` into a single ``_`` (so ``"Anchovy & Banana
+    Pizza"`` -> ``anchovy_banana_pizza`` rather than the double-underscore
+    ``anchovy__banana_pizza``, matching Forge's own filename convention),
+    and optionally applies known filename corrections.
     """
     nfkd = unicodedata.normalize("NFKD", name)
     ascii_name = "".join(c for c in nfkd if not unicodedata.combining(c))
@@ -31,6 +37,7 @@ def sanitize_card_name(
         .replace("-", "_")
         .replace("/", "")
     )
+    sanitized = _MULTI_UNDERSCORE.sub("_", sanitized).strip("_")
     if corrections:
         return corrections.get(sanitized, sanitized)
     return sanitized

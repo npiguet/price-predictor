@@ -160,11 +160,46 @@ def build_alias_map(
     return alias_map, drop_tokens, conflicts
 
 
+_DROP = object()  # sentinel: "this name resolves to nothing on disk"
+
+
+def _resolve_name(
+    raw: str,
+    alias_map: dict[str, str],
+    locator: ConvertedCardLocator,
+    cache: dict[str, str | object],
+) -> str | object:
+    """Return the name to record for ``raw`` (canonical if mapped and the
+    result resolves to a converted card), or ``_DROP`` if no resolvable
+    form exists. Memoized per ``raw``.
+
+    A name only survives if the converted corpus actually has a ``.txt``
+    for it — so the encoder's FR-023d corpus-consistency check can't fail
+    on the cleaned output. We prefer the alias-map target (canonical MTG
+    name), but fall back to the original name when only that resolves
+    (e.g. a Forge filename typo the locator's prefix search catches under
+    the front-face name).
+    """
+    cached = cache.get(raw, None)
+    if cached is not None:
+        return cached
+    candidate = alias_map.get(raw, raw)
+    if locator.text_path(candidate) is not None:
+        cache[raw] = candidate
+        return candidate
+    if candidate != raw and locator.text_path(raw) is not None:
+        cache[raw] = raw
+        return raw
+    cache[raw] = _DROP
+    return _DROP
+
+
 def _rewrite_column(
     names: list[str],
     alias_map: dict[str, str],
     drop_tokens: frozenset[str],
     locator: ConvertedCardLocator,
+    resolve_cache: dict[str, str | object],
     junk_counter: Counter[tuple[str, str]],
     rewrite_counter: Counter[tuple[str, str]],
     unmapped_counter: Counter[str],
@@ -176,20 +211,14 @@ def _rewrite_column(
         if reason is not None:
             junk_counter[(raw, reason)] += 1
             continue
-        canonical = alias_map.get(raw)
-        if canonical is None:
-            # Fall back to Forge's converted-card corpus — handles real
-            # cards that aren't in our AllPrintings snapshot yet (e.g.
-            # Iron Man, Futurist Paragon from a newer set).
-            if locator.text_path(raw) is not None:
-                cleaned.add(raw)
-                # No rewrite recorded — name is already canonical.
-                continue
+        resolved = _resolve_name(raw, alias_map, locator, resolve_cache)
+        if resolved is _DROP:
             unmapped_counter[raw] += 1
             continue
-        if canonical != raw:
-            rewrite_counter[(raw, canonical)] += 1
-        cleaned.add(canonical)
+        assert isinstance(resolved, str)
+        if resolved != raw:
+            rewrite_counter[(raw, resolved)] += 1
+        cleaned.add(resolved)
     return cleaned
 
 
@@ -224,6 +253,7 @@ def _process(
     junk_counter: Counter[tuple[str, str]] = Counter()
     rewrite_counter: Counter[tuple[str, str]] = Counter()
     unmapped_counter: Counter[str] = Counter()
+    resolve_cache: dict[str, str | object] = {}
 
     out_handle = output_path.open("w", encoding="utf-8") if output_path else None
     try:
@@ -231,19 +261,19 @@ def _process(
             rows_in += 1
             played_a = _rewrite_column(
                 row.cards_played_a, alias_map, drop_tokens, locator,
-                junk_counter, rewrite_counter, unmapped_counter,
+                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
             )
             played_b = _rewrite_column(
                 row.cards_played_b, alias_map, drop_tokens, locator,
-                junk_counter, rewrite_counter, unmapped_counter,
+                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
             )
             not_played_a = _rewrite_column(
                 row.cards_not_played_a, alias_map, drop_tokens, locator,
-                junk_counter, rewrite_counter, unmapped_counter,
+                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
             )
             not_played_b = _rewrite_column(
                 row.cards_not_played_b, alias_map, drop_tokens, locator,
-                junk_counter, rewrite_counter, unmapped_counter,
+                resolve_cache, junk_counter, rewrite_counter, unmapped_counter,
             )
             # FR-004: a canonical that ended up in both played and
             # not_played (from two distinct faces of the same card)
@@ -349,7 +379,7 @@ def _write_report(report_path: Path, stats: dict) -> None:
             )
     lines.append("")
 
-    lines.append("## Dropped (unmapped - no alias, no Forge script)")
+    lines.append("## Dropped (no converted card on disk)")
     if not unmapped_keys:
         lines.append("(none)")
     else:
