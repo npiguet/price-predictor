@@ -92,18 +92,25 @@ def _log(message: str) -> None:
 
 # ── Per-card counters and labels (replaces v1 CardLabel) ────────────────
 
+# Letter → index into the per-color counter lists (WUBRG order). Note
+# that for a color-lift head, ``head_idx - _COLOR_LIFT_OFFSET`` already
+# equals this index.
+_COLOR_INDEX: dict[str, int] = {color: i for i, color in enumerate(COLOR_ORDER)}
+_N_COLORS: int = len(COLOR_ORDER)
 
-def _empty_color_dict() -> dict[str, int]:
-    return {color: 0 for color in COLOR_ORDER}
+
+def _empty_color_counts() -> list[int]:
+    return [0] * _N_COLORS
 
 
 @dataclass
 class CardCounters:
-    """All raw counters maintained per card across the two aggregation passes.
+    """All raw counters maintained per card during aggregation.
 
-    Pass 1 fills the four primary counters and the four ``@play`` subset
-    counters; pass 2 fills the four per-color counter dicts (one entry
-    per WUBRG letter). The ``@draw`` counterparts are derivable by
+    The four primary counters and the four ``@play`` subset counters
+    track win/loss × played/in-deck; the four per-color counter lists
+    hold the same, sliced by each of the WUBRG colors (indexed by
+    ``_COLOR_INDEX``). The ``@draw`` counterparts are derivable by
     subtraction; the cast-lift "not played" counterparts are derivable
     from ``wins_when_in_deck - wins_when_played`` (and the loss analog).
     """
@@ -116,10 +123,10 @@ class CardCounters:
     losses_when_played_at_play: int = 0
     wins_when_in_deck_at_play: int = 0
     losses_when_in_deck_at_play: int = 0
-    wins_when_played_with: dict[str, int] = field(default_factory=_empty_color_dict)
-    losses_when_played_with: dict[str, int] = field(default_factory=_empty_color_dict)
-    wins_when_in_deck_with: dict[str, int] = field(default_factory=_empty_color_dict)
-    losses_when_in_deck_with: dict[str, int] = field(default_factory=_empty_color_dict)
+    wins_when_played_with: list[int] = field(default_factory=_empty_color_counts)
+    losses_when_played_with: list[int] = field(default_factory=_empty_color_counts)
+    wins_when_in_deck_with: list[int] = field(default_factory=_empty_color_counts)
+    losses_when_in_deck_with: list[int] = field(default_factory=_empty_color_counts)
 
 
 @dataclass(frozen=True)
@@ -183,7 +190,7 @@ def _record_side(
     counters: dict[str, CardCounters],
     deck_played: list[str],
     deck_not_played: list[str],
-    deck_colors: set[str],
+    deck_colors: frozenset[int],
     *,
     won: bool,
     at_play: bool,
@@ -193,16 +200,18 @@ def _record_side(
     ``deck_played`` lists distinct card names that entered the
     battlefield/stack; ``deck_not_played`` lists distinct names that
     stayed in the deck (the two sets are disjoint per FR-004).
-    ``deck_colors`` is the deck's WUBRG color set (union of every
-    card's ``mana cost:`` colors). For each card the four primary
-    counters, the four ``@play`` subset counters, and the four
-    per-color counters (one slot per color in ``deck_colors``) are
-    incremented in a single pass over the deck.
+    ``deck_colors`` is the deck's WUBRG color set as ``_COLOR_INDEX``
+    values. For each card the four primary counters, the four ``@play``
+    subset counters, and the four per-color counter slots (one per
+    color in ``deck_colors``) are incremented in a single pass over the
+    deck.
     """
     played_set = set(deck_played)
     in_deck_set = played_set | set(deck_not_played)
     for name in in_deck_set:
-        c = counters.setdefault(name, CardCounters())
+        c = counters.get(name)
+        if c is None:
+            c = counters[name] = CardCounters()
         played = name in played_set
         if won:
             c.wins_when_in_deck += 1
@@ -237,31 +246,32 @@ def _aggregate(
 
     For every card observed in either side's deck, fills the four
     primary, four ``@play``, and 4×5 per-color counters. Each card's
-    color identity is resolved lazily from its converted ``mana cost:``
-    line (cached per card); each game's deck-color set is the union
-    over its contents. Cards with no converted text contribute an empty
-    color set (and are pruned afterwards by :func:`_drop_missing_cards`).
+    color identity (as ``_COLOR_INDEX`` values) is resolved lazily from
+    its converted ``mana cost:`` line and cached per card; each game's
+    deck-color set is the union over its contents. Cards with no
+    converted text contribute an empty color set (and are pruned
+    afterwards by :func:`_drop_missing_cards`).
     """
     counters: dict[str, CardCounters] = {}
-    color_cache: dict[str, set[str]] = {}
+    color_cache: dict[str, frozenset[int]] = {}
 
-    def colors_of(name: str) -> set[str]:
+    def colors_of(name: str) -> frozenset[int]:
         cached = color_cache.get(name)
         if cached is not None:
             return cached
         converted = locator.load_text(name)
         cost_line = converted.mana_cost_line() if converted is not None else None
-        result = _colors_from_mana_cost(cost_line)
+        result = frozenset(_COLOR_INDEX[c] for c in _colors_from_mana_cost(cost_line))
         color_cache[name] = result
         return result
 
-    def deck_color_set(played: list[str], not_played: list[str]) -> set[str]:
-        colors: set[str] = set()
+    def deck_color_set(played: list[str], not_played: list[str]) -> frozenset[int]:
+        colors: set[int] = set()
         for name in played:
             colors |= colors_of(name)
         for name in not_played:
             colors |= colors_of(name)
-        return colors
+        return frozenset(colors)
 
     for row in rows:
         a_won = row.winner == "A"
@@ -407,14 +417,14 @@ def _build_label_map(
 
         raw_color_lift: dict[str, float | None] = {}
         shrunk_color_lift: dict[str, float | None] = {}
-        for color in COLOR_ORDER:
+        for idx, color in enumerate(COLOR_ORDER):
             in_deck_color = (
-                c.wins_when_in_deck_with[color]
-                + c.losses_when_in_deck_with[color]
+                c.wins_when_in_deck_with[idx]
+                + c.losses_when_in_deck_with[idx]
             )
             played_with_color_num = (
-                c.wins_when_played_with[color]
-                - c.losses_when_played_with[color]
+                c.wins_when_played_with[idx]
+                - c.losses_when_played_with[idx]
             )
             if in_deck_color == 0:
                 raw_color_lift[color] = None
@@ -635,8 +645,8 @@ def _per_head_weight(lbl: CardLabels, head_idx: int, k: float) -> float:
         in_deck_total = c.wins_when_in_deck + c.losses_when_in_deck
         n = min(played_total, in_deck_total - played_total)
     else:
-        color = COLOR_ORDER[head_idx - _COLOR_LIFT_OFFSET]
-        n = c.wins_when_in_deck_with[color] + c.losses_when_in_deck_with[color]
+        idx = head_idx - _COLOR_LIFT_OFFSET  # 0..4 == _COLOR_INDEX value
+        n = c.wins_when_in_deck_with[idx] + c.losses_when_in_deck_with[idx]
     if n <= 0:
         return 0.0
     return n / (n + k)

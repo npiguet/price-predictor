@@ -29,6 +29,9 @@ from sealed.domain.encoder_model import COLOR_ORDER
 from sealed.infrastructure.cards_played_reader import CardsPlayedRow
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
+# Per-color counter lists on CardCounters are indexed by WUBRG position.
+_CI: dict[str, int] = {c: i for i, c in enumerate(COLOR_ORDER)}
+
 
 def _row(
     *,
@@ -141,15 +144,15 @@ class TestAggregate:
         ]
         counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
         c_lb = counters["LB"]
-        assert c_lb.wins_when_played_with["R"] == 1
-        assert c_lb.wins_when_played_with["G"] == 1
-        assert c_lb.wins_when_in_deck_with["R"] == 1
-        assert c_lb.wins_when_in_deck_with["G"] == 1
-        assert c_lb.wins_when_played_with["W"] == 0
+        assert c_lb.wins_when_played_with[_CI["R"]] == 1
+        assert c_lb.wins_when_played_with[_CI["G"]] == 1
+        assert c_lb.wins_when_in_deck_with[_CI["R"]] == 1
+        assert c_lb.wins_when_in_deck_with[_CI["G"]] == 1
+        assert c_lb.wins_when_played_with[_CI["W"]] == 0
         c_gb = counters["GB"]
-        assert c_gb.wins_when_in_deck_with["R"] == 1
-        assert c_gb.wins_when_in_deck_with["G"] == 1
-        assert c_gb.wins_when_played_with["R"] == 0  # GB was not played
+        assert c_gb.wins_when_in_deck_with[_CI["R"]] == 1
+        assert c_gb.wins_when_in_deck_with[_CI["G"]] == 1
+        assert c_gb.wins_when_played_with[_CI["R"]] == 0  # GB was not played
 
     def test_losing_side_per_color_counters_increment(self, tmp_path: Path):
         _seed_card(tmp_path, "LB", "{R}")
@@ -160,8 +163,8 @@ class TestAggregate:
         ]
         counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
         # GB (loser): losses_when_played_with_G should be 1.
-        assert counters["GB"].losses_when_played_with["G"] == 1
-        assert counters["GB"].losses_when_in_deck_with["G"] == 1
+        assert counters["GB"].losses_when_played_with[_CI["G"]] == 1
+        assert counters["GB"].losses_when_in_deck_with[_CI["G"]] == 1
 
     def test_card_with_no_mana_cost_contributes_no_color(self, tmp_path: Path):
         # Land-like card: no "mana cost:" line; deck-color set ignores it.
@@ -173,9 +176,9 @@ class TestAggregate:
         ]
         counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
         # Plains-ish is "not played" but still in deck running color R.
-        assert counters["Plains-ish"].wins_when_in_deck_with["R"] == 1
+        assert counters["Plains-ish"].wins_when_in_deck_with[_CI["R"]] == 1
         # It contributed no color of its own.
-        assert counters["Plains-ish"].wins_when_in_deck_with["W"] == 0
+        assert counters["Plains-ish"].wins_when_in_deck_with[_CI["W"]] == 0
 
     def test_card_missing_from_corpus_is_still_counted(self, tmp_path: Path):
         # A card with no .txt: still gets primary/@play counters (it's
@@ -187,7 +190,7 @@ class TestAggregate:
         counters = _aggregate(rows, ConvertedCardLocator(tmp_path))
         c = counters["Mystery Card"]
         assert c.wins_when_played == 1
-        assert all(v == 0 for v in c.wins_when_in_deck_with.values())
+        assert all(v == 0 for v in c.wins_when_in_deck_with)
 
 
 # ── Color extraction ─────────────────────────────────────────────────
@@ -237,14 +240,14 @@ def _make_counter(
     c.losses_when_played_at_play = lp_play
     c.wins_when_in_deck_at_play = wd_play
     c.losses_when_in_deck_at_play = ld_play
-    if color_in_deck:
-        c.wins_when_in_deck_with.update(color_in_deck)
-    if color_played:
-        c.wins_when_played_with.update(color_played)
-    if color_loss_in_deck:
-        c.losses_when_in_deck_with.update(color_loss_in_deck)
-    if color_loss_played:
-        c.losses_when_played_with.update(color_loss_played)
+    for letter_map, slots in (
+        (color_in_deck, c.wins_when_in_deck_with),
+        (color_played, c.wins_when_played_with),
+        (color_loss_in_deck, c.losses_when_in_deck_with),
+        (color_loss_played, c.losses_when_played_with),
+    ):
+        for letter, value in (letter_map or {}).items():
+            slots[_CI[letter]] = value
     return c
 
 
