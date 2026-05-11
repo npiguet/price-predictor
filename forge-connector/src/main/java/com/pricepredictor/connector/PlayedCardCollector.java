@@ -128,20 +128,22 @@ public class PlayedCardCollector extends IGameEventVisitor.Base<Void> {
     }
 
     /**
-     * Use the paper-card backup's name when present so copy/clone and
-     * face-down (manifested) cards credit the underlying card. Falls back
-     * to the current state's name when no backup exists (e.g. dungeons).
+     * Use the paper-card backup's oracle name when present so copy/clone
+     * and face-down (manifested) cards credit the underlying card. Falls
+     * back to the current state's oracle name when no backup exists
+     * (e.g. dungeons). Oracle name is the canonical MTG name (unaltered
+     * by flavor names or {@code SetName} effects); display name is not.
      */
     private static String resolveRecordedName(CardView card) {
         CardView backup = card.getBackup();
         if (backup != null && backup.getCurrentState() != null) {
-            String name = backup.getCurrentState().getName();
+            String name = backup.getCurrentState().getOracleName();
             if (name != null && !name.isEmpty()) {
                 return name;
             }
         }
         return card.getCurrentState() != null
-                ? card.getCurrentState().getName()
+                ? card.getCurrentState().getOracleName()
                 : null;
     }
 
