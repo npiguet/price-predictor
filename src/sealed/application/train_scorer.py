@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.domain.tokenizer import MtgTokenizer
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
+from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.match_data_loader import (
@@ -80,8 +81,15 @@ class TrainScorerConfig:
     def latest_checkpoint_name(self) -> str:
         return "latest_phaseB.pt" if self.phase == "B" else "latest.pt"
 
-    def scorer_config(self) -> ScorerConfig:
+    def scorer_config(self, d_model: int) -> ScorerConfig:
+        """Build the architecture config for a fresh scorer.
+
+        ``d_model`` is the width of the cached card embeddings (encoder
+        text-vector width + ``FEATURE_COUNT``), read off the loaded ``.npz``
+        cache by the caller — it is not a user-chosen knob.
+        """
         return ScorerConfig(
+            d_model=d_model,
             n_layers=self.n_layers,
             n_heads=self.n_heads,
             n_seeds=self.n_seeds,
@@ -267,13 +275,16 @@ class TrainScorerUseCase:
             f"({time.monotonic() - t0:.1f}s)",
         )
 
-        resume = _resume_or_build_model(config, store)
+        resume = _resume_or_build_model(config, store, embedding_table.embedding_dim)
         if config.resume is not None:
             _log(f"Resumed from checkpoint at epoch {resume.start_epoch}")
         elif config.scorer_checkpoint is not None:
             _log(f"Bootstrapped scorer from {config.scorer_checkpoint}")
         else:
-            _log(f"Built fresh scorer model (n_layers={config.n_layers}, dropout={config.dropout})")
+            _log(
+                f"Built fresh scorer model (d_model={resume.model.config.d_model}, "
+                f"n_layers={config.n_layers}, dropout={config.dropout})"
+            )
 
         _log("Computing per-card feature normalization stats")
         _set_normalization_stats(resume.model, train_examples, embedding_table)
@@ -289,6 +300,7 @@ class TrainScorerUseCase:
         idx_to_name: dict[int, str] | None = None
         if config.phase == "B":
             encoder, tokenizer, max_seq_len = _build_phase_b_encoder(config, resume)
+            _check_encoder_width(encoder, embedding_table.embedding_dim, config)
             encoder.to(device)
             locator = ConvertedCardLocator(config.cards_path)
             idx_to_name = {
@@ -400,12 +412,49 @@ def _load_dataset(
     return train_examples, val_examples, embedding_table
 
 
+def _check_scorer_width(
+    checkpoint_d_model: int, embedding_dim: int, source: str, cards_path: Path,
+) -> None:
+    """Raise if a loaded scorer expects a different card-embedding width than
+    the ``.npz`` cache currently provides — almost always a sign the cache
+    was re-encoded with a different encoder than the scorer was trained on."""
+    if checkpoint_d_model != embedding_dim:
+        raise ValueError(
+            f"{source} expects {checkpoint_d_model}-wide card embeddings, but "
+            f"the .npz cache under {cards_path} is {embedding_dim}-wide. "
+            "Re-run `sealed encode-cards` with the encoder this scorer was "
+            "trained on, or start a fresh scorer (drop --scorer-checkpoint)."
+        )
+
+
+def _check_encoder_width(
+    encoder: torch.nn.Module, embedding_dim: int, config: TrainScorerConfig,
+) -> None:
+    """Phase B: raise if the encoder's pooled-text width doesn't match the
+    text slice of the cached ``.npz`` embeddings the scorer was tuned on —
+    typically because ``--encoder-checkpoint`` points at a different encoder
+    than the one that produced the cache. Both encoder configs expose
+    ``pooled_dim`` (``d_model`` for ``--pool-mode attn``, else ``2 * d_model``)."""
+    enc_width = encoder.config.pooled_dim  # type: ignore[attr-defined]
+    text_width = embedding_dim - FEATURE_COUNT
+    if enc_width != text_width:
+        raise ValueError(
+            f"Phase B encoder produces a {enc_width}-wide text vector, but the "
+            f".npz cache under {config.cards_path} has a {text_width}-wide text "
+            f"slice ({embedding_dim}-wide total). Pass --encoder-checkpoint for "
+            "the encoder that produced the cache, or re-run `sealed encode-cards` "
+            "with this encoder."
+        )
+
+
 def _resume_or_build_model(
-    config: TrainScorerConfig, store: ScorerStore,
+    config: TrainScorerConfig, store: ScorerStore, embedding_dim: int,
 ) -> ResumeState:
     """Build the scorer model and decide what to seed it (and the encoder)
-    from. Cross-phase resume MUST raise per FR-004 (the CLI catches that
-    earlier; this is the second layer of defense)."""
+    from. ``embedding_dim`` is the width of the cached card embeddings (read
+    off the ``.npz`` cache); a fresh scorer is sized to it, and a loaded
+    scorer is validated against it. Cross-phase resume MUST raise per FR-004
+    (the CLI catches that earlier; this is the second layer of defense)."""
     requested_phase = config.phase
 
     if config.resume is not None:
@@ -420,6 +469,10 @@ def _resume_or_build_model(
                 f"{requested_phase}. Use --scorer-checkpoint to start a fresh "
                 "Phase B run from a Phase A checkpoint."
             )
+        _check_scorer_width(
+            checkpoint.config.d_model, embedding_dim,
+            f"--resume {config.resume}", config.cards_path,
+        )
         model = SetTransformerScorer(checkpoint.config)
         model.load_state_dict(checkpoint.model_state_dict)
         return ResumeState(
@@ -434,6 +487,10 @@ def _resume_or_build_model(
 
     if config.scorer_checkpoint is not None:
         checkpoint = store.load_checkpoint(config.scorer_checkpoint)
+        _check_scorer_width(
+            checkpoint.config.d_model, embedding_dim,
+            f"--scorer-checkpoint {config.scorer_checkpoint}", config.cards_path,
+        )
         model = SetTransformerScorer(checkpoint.config)
         model.load_state_dict(checkpoint.model_state_dict)
         return ResumeState(
@@ -447,7 +504,7 @@ def _resume_or_build_model(
         )
 
     return ResumeState(
-        model=SetTransformerScorer(config.scorer_config()),
+        model=SetTransformerScorer(config.scorer_config(d_model=embedding_dim)),
         start_epoch=0,
         best_val_accuracy=-1.0,
         optimizer_state=None,
@@ -680,7 +737,7 @@ def _phase_b_inject_encoder(ctx: _TrainingContext, batch: TrainingBatch) -> None
 
 
 def _encode_chunked(
-    encoder: CardPriceTransformerModel,
+    encoder: torch.nn.Module,
     input_ids: torch.Tensor,
     attention_mask: torch.Tensor,
     *,
@@ -690,6 +747,10 @@ def _encode_chunked(
     """Run the encoder forward in fixed-size chunks, applying gradient
     checkpointing per chunk during training so peak activation memory is
     bounded by ``chunk_size`` cards instead of the full unique-card count.
+
+    ``encoder`` must expose ``_encode_and_pool(input_ids, attention_mask) ->
+    (B, text_dim)`` — both ``CardPriceTransformerModel`` and ``SealedEncoderModel``
+    do.
 
     A typical Phase B step sees ~1000–3000 unique cards in a single batch
     (`batch_size * cards_per_deck * 2` minus duplicates). One forward pass at

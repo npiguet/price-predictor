@@ -138,3 +138,9 @@ class TransformerConfig:
             raise ValueError(f"dropout must be in [0.0, 1.0), got {self.dropout}")
         if self.log_offset <= 0.0:
             raise ValueError(f"log_offset must be > 0, got {self.log_offset}")
+
+    @property
+    def pooled_dim(self) -> int:
+        """Width of the pooled card vector — ``cat([max_pool, mean_pool])`` over
+        the encoder's token outputs (mirrors ``SealedEncoderConfig.pooled_dim``)."""
+        return 2 * self.d_model

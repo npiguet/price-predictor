@@ -121,6 +121,22 @@ class TestSealedEncoderModel:
         emb = model.encode(ids, mask)
         assert emb.shape == (2, 2 * cfg.d_model)
 
+    def test_encode_and_pool_matches_encode_but_keeps_grad(self):
+        # _encode_and_pool is the Phase-B alias: same pooled output as encode()
+        # but it must NOT detach (encode() is @torch.no_grad()).
+        for pool_mode in ("dual", "attn"):
+            cfg = _config(pool_mode=pool_mode)
+            torch.manual_seed(0)
+            model = SealedEncoderModel(cfg)
+            model.eval()
+            ids, mask = _ids_and_mask(3, cfg.max_seq_len, cfg.vocab_size)
+            with torch.no_grad():
+                expected = model.encode(ids, mask)
+            got = model._encode_and_pool(ids, mask)
+            assert got.shape == (3, cfg.pooled_dim)
+            assert torch.allclose(got.detach(), expected, atol=1e-6)
+            assert got.requires_grad  # gradients can flow back into the encoder
+
     def test_state_dict_contains_regression_heads_and_mlm_head(self):
         cfg = _config()
         model = SealedEncoderModel(cfg)

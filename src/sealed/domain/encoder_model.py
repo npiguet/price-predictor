@@ -221,6 +221,25 @@ class SealedEncoderModel(nn.Module):
         x = self.token_encoder(input_ids)
         return self.card_encoder(x, attention_mask)
 
+    def _encode_and_pool(
+        self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """Return the pooled card embedding, keeping the autograd graph.
+
+        Mirrors ``CardPriceTransformerModel._encode_and_pool`` so the sealed
+        encoder is a drop-in alternate encoder for the Phase B fine-tuning
+        path (``sealed.application.train_scorer._encode_chunked``,
+        ``CardEncoder.encode_batch_text``), which need gradients flowing into
+        the encoder parameters — unlike :meth:`encode`, which is
+        ``@torch.no_grad()``.
+
+        Returns:
+            ``(batch_size, config.pooled_dim)`` — ``2 * d_model`` for the
+            dual attention‖max pool, ``d_model`` for attention-only.
+        """
+        _contextualized, pooled = self._encode(input_ids, attention_mask)
+        return pooled
+
     @torch.no_grad()
     def encode(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor,
@@ -231,8 +250,7 @@ class SealedEncoderModel(nn.Module):
             ``(batch_size, config.pooled_dim)`` — ``2 * d_model`` for the
             dual attention‖max pool, ``d_model`` for attention-only.
         """
-        _contextualized, pooled = self._encode(input_ids, attention_mask)
-        return pooled
+        return self._encode_and_pool(input_ids, attention_mask)
 
     def forward(
         self, input_ids: torch.Tensor, attention_mask: torch.Tensor,

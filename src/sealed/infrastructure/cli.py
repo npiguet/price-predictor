@@ -694,6 +694,7 @@ def run_encode_cards(args: argparse.Namespace) -> int:
         CardPriceTransformerModel,
     )
     from sealed.application.encode_cards import EncodeCardsUseCase
+    from sealed.domain.card_embedding_layout import FEATURE_COUNT
     from sealed.domain.card_encoder import CardEncoder
     from sealed.infrastructure.embedding_store import EmbeddingStore
     from sealed.infrastructure.scorer_store import ScorerStore
@@ -774,9 +775,11 @@ def run_encode_cards(args: argparse.Namespace) -> int:
     if result.processed > 0 or result.skipped > 0:
         print()
 
+    text_dim = config.pooled_dim  # SealedEncoderConfig | TransformerConfig
     print(
         f"Done: {result.processed} processed, "
-        f"{result.skipped} skipped, {len(result.errors)} errors"
+        f"{result.skipped} skipped, {len(result.errors)} errors  "
+        f"(embedding dim = {text_dim + FEATURE_COUNT}: {text_dim} text + {FEATURE_COUNT} features)"
     )
 
     for err in result.errors:

@@ -79,12 +79,16 @@ class TrainingBatch:
 class EmbeddingTable(nn.Module):
     """Lookup table mapping card name → ``d_model``-dim card vector.
 
-    The leading ``2 * encoder_d_model`` columns hold the encoder's text vector;
-    the trailing ``FEATURE_COUNT`` columns hold deterministic game features.
-    The table itself is never trained; in Phase B, ``set_text_vectors`` splices
-    fresh encoder outputs into the leading slice each batch step so the
-    scorer's forward pass sees live, gradient-tracking vectors that flow back
-    into the encoder parameters.
+    The leading ``embedding_dim - FEATURE_COUNT`` columns hold the encoder's
+    pooled text vector (width depends on the encoder: ``2 * encoder_d_model``
+    for the price / ``--pool-mode dual`` encoder, ``encoder_d_model`` for
+    ``--pool-mode attn``); the trailing ``FEATURE_COUNT`` columns hold
+    deterministic game features. ``d_model`` is read straight from the loaded
+    ``.npz`` vectors — this table never assumes a fixed width. The table
+    itself is never trained; in Phase B, ``set_text_vectors`` splices fresh
+    encoder outputs into the leading slice each batch step so the scorer's
+    forward pass sees live, gradient-tracking vectors that flow back into the
+    encoder parameters.
     """
 
     def __init__(self, vectors: torch.Tensor, name_to_idx: dict[str, int]) -> None:
@@ -101,13 +105,19 @@ class EmbeddingTable(nn.Module):
     def num_cards(self) -> int:
         return self.embedding.num_embeddings
 
+    @property
+    def embedding_dim(self) -> int:
+        """Width of each card vector = encoder text-vector width + ``FEATURE_COUNT``."""
+        return self.embedding.embedding_dim
+
     def set_text_vectors(
         self, indices: torch.Tensor, text_vectors: torch.Tensor,
     ) -> None:
-        """Splice ``text_vectors`` into the leading ``2 * encoder_d_model`` columns
-        of the rows at ``indices``; trailing deterministic-feature columns
-        survive. The resulting weight tensor is non-leaf, so a downstream loss
-        backpropagates through ``text_vectors`` to its source (the encoder).
+        """Splice ``text_vectors`` into the leading ``embedding_dim - FEATURE_COUNT``
+        text columns of the rows at ``indices``; trailing deterministic-feature
+        columns survive. The resulting weight tensor is non-leaf, so a
+        downstream loss backpropagates through ``text_vectors`` to its source
+        (the encoder).
         """
         text_dim = self.embedding.embedding_dim - FEATURE_COUNT
         baseline = self.embedding.weight.detach()

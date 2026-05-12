@@ -12,7 +12,9 @@ from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, total_dim
 
 @dataclass
 class ScorerConfig:
-    d_model: int = total_dim(256)  # 2*256 text dims + 32 deterministic features
+    # Default = dual-pool 2*256 text + 32 features; train-scorer derives the
+    # actual width from the .npz embedding cache instead.
+    d_model: int = total_dim(256)
     n_layers: int = 6
     n_heads: int = 4
     n_seeds: int = 4

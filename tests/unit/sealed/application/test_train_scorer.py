@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import torch
 
 from price_predictor.domain.entities import TransformerConfig
@@ -13,9 +14,12 @@ from sealed.application.train_scorer import (
     TrainScorerConfig,
     TrainScorerUseCase,
     _build_optimizer,
+    _check_encoder_width,
+    _check_scorer_width,
     _resume_or_build_model,
 )
-from sealed.domain.card_embedding_layout import DET_FEATURE_DIM
+from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, FEATURE_COUNT
+from sealed.domain.encoder_model import SealedEncoderConfig, SealedEncoderModel
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
 from sealed.infrastructure.scorer_store import ScorerStore
 
@@ -532,7 +536,9 @@ class TestArchitectureInheritance:
             # CLI architecture flags would default to 6/4/4/1088/256/0.2 here;
             # the scorer must inherit the checkpoint's smaller architecture.
         )
-        resume = _resume_or_build_model(config, ScorerStore())
+        resume = _resume_or_build_model(
+            config, ScorerStore(), embedding_dim=custom_cfg.d_model,
+        )
         assert resume.model.config.n_layers == 3
         assert resume.model.config.d_ff == 64
         assert resume.model.config.mlp_hidden == 32
@@ -733,3 +739,48 @@ class TestDeterministicTrainValSplit:
 
         assert _signature(train1) == _signature(train2)
         assert _signature(val1) == _signature(val2)
+
+
+def _tiny_sealed_encoder(d_model: int, *, pool_mode: str = "attn") -> SealedEncoderModel:
+    cfg = SealedEncoderConfig(
+        vocab_size=64, d_model=d_model, n_layers=1, n_heads=2, ff_dim=2 * d_model,
+        max_seq_len=16, dropout=0.0, n_pool_queries=2, pool_mode=pool_mode,
+    )
+    return SealedEncoderModel(cfg)
+
+
+class TestEmbeddingWidth:
+    """The scorer's d_model is derived from the .npz cache width, not fixed at
+    544; a loaded scorer / Phase-B encoder whose width disagrees fails fast."""
+
+    def test_fresh_scorer_sized_to_embedding_cache(self, tmp_path):
+        # An attn-128 encoder produces a 128 + FEATURE_COUNT wide embedding.
+        embedding_dim = 128 + FEATURE_COUNT
+        config = _config(
+            tmp_path / "o.txt", tmp_path / "c", tmp_path / "ckpt", embedding_lr=0.0,
+        )
+        resume = _resume_or_build_model(config, ScorerStore(), embedding_dim=embedding_dim)
+        assert resume.model.config.d_model == embedding_dim
+        assert resume.model.det_feature_offset == 128
+
+    def test_scorer_config_passes_d_model(self, tmp_path):
+        config = _config(tmp_path / "o.txt", tmp_path / "c", tmp_path / "ckpt")
+        assert config.scorer_config(d_model=160).d_model == 160
+
+    def test_check_scorer_width_raises_on_mismatch(self, tmp_path):
+        with pytest.raises(ValueError, match="544-wide.*is 160-wide"):
+            _check_scorer_width(544, 160, "--scorer-checkpoint foo.pt", tmp_path / "c")
+        # equal widths: no error
+        _check_scorer_width(160, 160, "--scorer-checkpoint foo.pt", tmp_path / "c")
+
+    def test_check_encoder_width_raises_on_mismatch(self, tmp_path):
+        config = _config(tmp_path / "o.txt", tmp_path / "c", tmp_path / "ckpt")
+        attn_encoder = _tiny_sealed_encoder(128, pool_mode="attn")  # text width 128
+        # Cache says text width is 256 (≠ 128) → mismatch.
+        with pytest.raises(ValueError, match="128-wide text vector.*256-wide text"):
+            _check_encoder_width(attn_encoder, 256 + FEATURE_COUNT, config)
+        # Matching cache: no error.
+        _check_encoder_width(attn_encoder, 128 + FEATURE_COUNT, config)
+        # Dual-pool sealed encoder: text width = 2*d_model.
+        dual_encoder = _tiny_sealed_encoder(64, pool_mode="dual")  # text width 128
+        _check_encoder_width(dual_encoder, 128 + FEATURE_COUNT, config)

@@ -2,17 +2,22 @@
 
 Each card embedding the sealed pipeline produces is the concatenation of:
 
-- a ``text_dim`` slice from the price-predictor encoder (``2 * encoder_d_model``,
-  one max-pool plus one mean-pool over the encoder's token outputs), and
+- the encoder's pooled **text** vector, then
 - a ``FEATURE_COUNT`` slice of deterministic game features parsed from the
-  card script (mana cost, types, P/T, etc.).
+  card script (mana cost, types, P/T, etc.) — always the *trailing* block.
 
-Centralising the shape arithmetic here means changing the encoder's
-``d_model`` only requires retraining and re-encoding — the slice indices
-that depend on it are derived, not literal.
+The text-vector width depends on the encoder: ``2 * encoder_d_model`` for the
+price-predictor encoder and the sealed encoder's dual pool, ``encoder_d_model``
+for the sealed encoder's attention-only pool (``--pool-mode attn``). The
+``text_dim`` / ``total_dim`` helpers below give the *dual-pool* arithmetic and
+serve as the legacy default for ``ScorerConfig.d_model``; the **live** total
+width is always read from the loaded ``.npz`` cache (or the encoder config),
+never assumed from these helpers.
 
 The deterministic feature vector has a fixed named layout (see constants
-below). Color-indexed slots follow WUBRG order throughout.
+below). Color-indexed slots follow WUBRG order throughout. The accessors
+``is_land_embedding`` / ``card_colors`` index that block from the *end*, so
+they work for an embedding of any total width.
 """
 
 from __future__ import annotations
@@ -40,10 +45,20 @@ PADDING: slice = slice(26, 32)           # reserved zero padding
 
 
 def text_dim(encoder_d_model: int) -> int:
+    """Pooled-text width for a *dual-pool* encoder (``2 * d_model``).
+
+    Not valid for ``--pool-mode attn`` encoders (those produce ``d_model``);
+    the live width is read from the ``.npz`` cache, not from this function.
+    """
     return 2 * encoder_d_model
 
 
 def total_dim(encoder_d_model: int) -> int:
+    """Card-embedding width for a *dual-pool* encoder (= ``text_dim`` + features).
+
+    Used as the legacy default for ``ScorerConfig.d_model``; ``train-scorer``
+    derives the actual value from the embedding cache.
+    """
     return text_dim(encoder_d_model) + FEATURE_COUNT
 
 
