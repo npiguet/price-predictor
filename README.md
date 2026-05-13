@@ -663,7 +663,7 @@ python -m sealed build-decks \
 
 **Resuming an interrupted run**: `--resume` is the safe way to recover from a crash mid-run. The output file is line-buffered (every newline flushes to disk), so an interrupted run leaves a clean per-deck checkpoint; pass `--resume` on the next invocation to continue from where it stopped. Caveat: the line-count heuristic assumes every input pool produced a deck on the prior run. If a pool was skipped (fewer than 23 embeddable cards — vanishingly rare for real 6-booster pools), resume will be off by however many pools were skipped.
 
-See [`experiments/sa-deck-builder-tuning.md`](experiments/sa-deck-builder-tuning.md) for empirical guidance on `--sa-temperature`, `--sa-cooling`, and the restart strategy.
+See [`experiments/2026-04-25-sa-deck-builder-tuning.md`](experiments/2026-04-25-sa-deck-builder-tuning.md) for empirical guidance on `--sa-temperature`, `--sa-cooling`, and the restart strategy.
 
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 

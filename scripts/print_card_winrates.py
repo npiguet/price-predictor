@@ -158,7 +158,7 @@ class _Counts:
     def adjusted_score_on_play(self, k: float) -> float:
         """Shrunk net-influence restricted to games where the card's owner
         was on the play. See ``Play/draw split`` in
-        ``experiments/future-experiments.md``.
+        ``experiments/2026-04-30-future-experiments.md``.
         """
         denom = (
             self.wins_when_in_deck_on_play

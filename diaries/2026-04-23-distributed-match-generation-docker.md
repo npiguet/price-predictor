@@ -48,8 +48,8 @@ init` + `git fetch --depth 1` + `git checkout FETCH_HEAD` to handle
 both branch names and commit SHAs.
 
 The outputs were `docker/Dockerfile`, `docker/docker-compose.yml`,
-and a new spec at `specs/distributed-match-generation.md` (sibling
-of `sealed-deck-picker.md`). The spec documents the full topology,
+and a new spec at `specs/2026-04-23-distributed-match-generation.md` (sibling
+of `2026-03-28-sealed-deck-picker.md`). The spec documents the full topology,
 the SMB concurrent-append problem and its hostname-sharding fix,
 build and deploy procedures for TrueNAS, and the two small code
 changes still needed: a hostname-derived default output filename and

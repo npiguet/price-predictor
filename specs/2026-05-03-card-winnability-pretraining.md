@@ -9,7 +9,7 @@ heuristics at matched deck shape. The remaining gap sits in per-card quality
 discrimination, which only the 512 transformer dims can carry. The
 price-prediction signal those dims are pretrained on is loosely aligned with
 sealed playability and confounded by collector and reserved-list effects.
-See [`experiments/deterministic-feature-reliance.md`](../experiments/deterministic-feature-reliance.md)
+See [`experiments/2026-05-02-deterministic-feature-reliance.md`](../experiments/2026-05-02-deterministic-feature-reliance.md)
 for the within-bucket win-rate analysis that surfaced this gap.
 
 A dedicated sealed encoder is trained from scratch on per-card targets

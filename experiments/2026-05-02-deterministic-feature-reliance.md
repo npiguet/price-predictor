@@ -15,7 +15,7 @@ The sealed scorer's per-card embedding is a 544-dim concatenation:
   (WUBRG + C + count), power, toughness, starting loyalty, plus 6
   zero-padding slots. **These features are not learnable.**
 
-The full layout is documented in `specs/sealed-deck-picker.md` § "Deterministic
+The full layout is documented in `specs/2026-03-28-sealed-deck-picker.md` § "Deterministic
 Feature Encoding (indices 512–543)".
 
 The concern: the scorer may be using the 32 deterministic features almost
@@ -75,7 +75,7 @@ consistent with the scorer leaning almost entirely on those.
 - **Within-bucket card-quality blindness.** Distinguishing Lightning Bolt
   from Shock requires reading the oracle text. That information is in
   the 512 transformer dims and apparently not in use.
-- **Phase B's null result** (`gen2-unfrozen-embeddings.md`). Phase B
+- **Phase B's null result** (`2026-04-30-gen2-unfrozen-embeddings.md`). Phase B
   fine-tuning updates only the 512 transformer dims. If the scorer
   barely reads them, gradient updates to those dims don't change the
   deck score and don't move val_acc.
@@ -197,14 +197,14 @@ If the diagnostics confirm the hypothesis, the next steps fork:
   512-dim path, pre-train the encoder on dense per-card auxiliary
   signals (predict types, keywords, ability count, oracle-text
   classification, etc.) before scorer training. Already on
-  `future-experiments.md` under "Pre-train the encoder on a closer
+  `2026-04-30-future-experiments.md` under "Pre-train the encoder on a closer
   auxiliary task".
 
 If the diagnostics rule out the hypothesis (transformer dims are doing
 substantial work), then the within-bucket gap to forge-best is harder
 to explain via architecture and points more strongly at the label-noise
 floor — back to the data-side levers in
-`gen2-unfrozen-embeddings.md`'s "Decisions taken" § 3.
+`2026-04-30-gen2-unfrozen-embeddings.md`'s "Decisions taken" § 3.
 
 ## Status
 

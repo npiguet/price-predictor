@@ -29,7 +29,7 @@ ships.
 | `encoder_checkpoint` | `Path` | `models/price-predictor/transformer/latest.pt` | **NEW** (FR-003) | Source of encoder weights when starting a fresh Phase B run. The default value alone never triggers the FR-004 conflict; only an explicit pass on a Phase B `--resume` does. |
 | `epochs` | `int` | `100` | (existing) | Hard upper bound; `--patience` early-stops first. |
 | `batch_size` | `int` | `64` | (existing) | Unchanged. |
-| `lr` | `float` | `1e-3` → `1e-5` | (existing, default updated per `specs/encoder-fine-tuning.md` original brief) | Scorer learning rate. |
+| `lr` | `float` | `1e-3` → `1e-5` | (existing, default updated per `specs/2026-04-27-encoder-fine-tuning.md` original brief) | Scorer learning rate. |
 | `embedding_lr` | `float` | `1e-5` → `0` | (existing, **semantics + default change**, FR-001) | `0` = Phase A (encoder out of training graph). Non-zero = Phase B (encoder in training graph). |
 | `n_layers`, `n_heads`, `n_seeds`, `d_ff`, `mlp_hidden`, `dropout` | (existing) | unchanged defaults | (existing) | Architecture flags. **Forbidden when `scorer_checkpoint` is supplied** (FR-003a) — architecture is inherited from the loaded checkpoint's stored config. |
 | `patience` | `int` | `5` | **NEW** (FR-011) | Stop after this many consecutive epochs without a new peak `val_acc`. |

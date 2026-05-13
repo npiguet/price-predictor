@@ -3,7 +3,7 @@
 Fine-tune the price-predictor encoder during sealed scorer training so that card
 embeddings shift from "what predicts a card's market price" to "what predicts deck
 quality in sealed". This is the proper implementation of the "Phase B" stage
-referenced in the embedding schedule of `sealed-deck-picker.md`.
+referenced in the embedding schedule of `2026-03-28-sealed-deck-picker.md`.
 
 # Background
 
@@ -36,7 +36,7 @@ For each training example (one match outcome):
 2. Run the encoder forward pass: token embeddings → 2 SAB layers →
    `cat([max_pool, mean_pool])`. Output shape: `(2 * encoder_d_model,)`.
 3. Concatenate the encoder output with the deterministic feature vector
-   parsed from the same card text (per `sealed-deck-picker.md` § Card
+   parsed from the same card text (per `2026-03-28-sealed-deck-picker.md` § Card
    Representation).
 4. Pass the resulting per-card vectors through the scorer's SAB stack and
    PMA pooling, then through the scoring MLP.
@@ -329,7 +329,7 @@ Caching by unique card collapses the redundant calls.
 
 ## Expected impact
 
-`experiments/gen2-initial-training.md` records four interventions that all
+`experiments/2026-04-26-gen2-initial-training.md` records four interventions that all
 converged to the same val_acc ceiling: depth sweep, dropout sweep, multi-view
 pooling, and hand-computed deck statistics. All four target the scorer's
 *aggregation* over per-card features without changing the per-card features

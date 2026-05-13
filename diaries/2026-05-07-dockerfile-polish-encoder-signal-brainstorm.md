@@ -54,7 +54,7 @@ toward a set-level prior sounded useful until I remembered that in sealed all
 cards only ever play within their own set anyway, so the set-level mean
 wouldn't be more informative than the global prior.
 
-Two ideas held up well enough to log in `future-experiments.md`. The first is
+Two ideas held up well enough to log in `2026-04-30-future-experiments.md`. The first is
 a play/draw split: instead of one net-influence head, track separate counters
 for games where the card's owner was on the play versus on the draw. The
 labels become a (score_play, score_draw) pair instead of a single scalar,

@@ -32,7 +32,7 @@ class MatchDropReason(Enum):
 
 @dataclass
 class MatchOutcome:
-    """One match from ``match-outcomes.txt`` (see ``specs/sealed-deck-picker.md``)."""
+    """One match from ``match-outcomes.txt`` (see ``specs/2026-03-28-sealed-deck-picker.md``)."""
 
     timestamp: str
     run_id: str

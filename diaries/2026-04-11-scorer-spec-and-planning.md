@@ -5,7 +5,7 @@ fully-planned specs. Phase 0 (training data generation) got a new spec and
 three rounds of clarification; Phase 1 (deck scorer) went from spec through
 implementation planning.
 
-The evening started with a design discussion about the sealed-deck-picker.md
+The evening started with a design discussion about the 2026-03-28-sealed-deck-picker.md
 Phase 1 architecture before any code was written. The first question was
 whether the input projection layer in the spec — a linear layer to map from
 544 dimensions to some smaller d_model — was actually needed. The conclusion

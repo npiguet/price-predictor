@@ -32,7 +32,7 @@
 ## Notes
 
 - This spec borrows technical vocabulary from the source description
-  (`specs/card-winnability-pretraining.md`) — token encoder, transformer
+  (`specs/2026-05-03-card-winnability-pretraining.md`) — token encoder, transformer
   layers, multi-query attention pool, MSE / cross-entropy loss, MLM
   masking, etc. — because the surrounding specs in this repo (e.g.
   `010-mtg-custom-tokenizer`, `015-encoder-fine-tuning`) treat those

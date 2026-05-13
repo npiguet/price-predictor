@@ -4,7 +4,7 @@ Predict Magic: The Gathering card EUR market prices from game-visible attributes
 power/toughness, keywords) and printing metadata (reserve list status, rarity, reprint count, format legalities). The
 system works for both real cards and hypothetical ones — predicting the price of custom or unreleased cards based on
 learned patterns from the entire real card catalog is the primary use case. A secondary role: the transformer model's
-internal representations serve as card embeddings for the sealed deck picker (see `specs/sealed-deck-picker.md`).
+internal representations serve as card embeddings for the sealed deck picker (see `specs/2026-03-28-sealed-deck-picker.md`).
 
 # Overall Approach
 

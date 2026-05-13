@@ -3,7 +3,7 @@
 **Feature Branch**: `014-self-play-refinement`
 **Created**: 2026-04-20
 **Status**: Draft
-**Input**: User description: "Create a new feature based on 'phase 3' of the training curriculum as described in sealed-deck-picker.md"
+**Input**: User description: "Create a new feature based on 'phase 3' of the training curriculum as described in 2026-03-28-sealed-deck-picker.md"
 
 ## User Scenarios & Testing *(mandatory)*
 

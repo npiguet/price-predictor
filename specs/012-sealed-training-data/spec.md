@@ -3,7 +3,7 @@
 **Feature Branch**: `012-sealed-training-data`  
 **Created**: 2026-04-08  
 **Status**: Draft  
-**Input**: User description: "Phase 0 — Training dataset generation for sealed deck scorer, as described in sealed-deck-picker.md"
+**Input**: User description: "Phase 0 — Training dataset generation for sealed deck scorer, as described in 2026-03-28-sealed-deck-picker.md"
 
 ## User Scenarios & Testing *(mandatory)*
 

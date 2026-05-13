@@ -26,7 +26,7 @@ command in parallel across all 18 transcript-covered days before April
 silently deletes session transcripts after 30 days.
 
 The bigger work of the day was designing the self-play loop for
-feature 014. I asked Claude to read `sealed-deck-picker.md` and find
+feature 014. I asked Claude to read `2026-03-28-sealed-deck-picker.md` and find
 what was missing from the point of view of someone trying to actually
 run Phase 3. The analysis came back with a clear structural problem:
 the existing `match-outcomes` flow is entirely self-contained in Java
@@ -65,7 +65,7 @@ The same-set constraint also applied to `evaluate-scorer`, which had
 that evaluation should use a random sealed-legal set by default, with
 an optional `--set` flag for targeted testing.
 
-Once the design was settled, I updated `sealed-deck-picker.md` with
+Once the design was settled, I updated `2026-03-28-sealed-deck-picker.md` with
 the new Phase 3 section, then ran the speckit workflow: `speckit.specify`
 to create `specs/014-self-play-refinement/spec.md`, followed by two
 `speckit.clarify` passes that resolved questions about default output

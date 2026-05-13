@@ -2,7 +2,7 @@
 
 **Branch**: `013-sealed-deck-scorer` | **Date**: 2026-04-11 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/013-sealed-deck-scorer/spec.md`
-**Parent Spec**: [`specs/sealed-deck-picker.md`](../sealed-deck-picker.md)
+**Parent Spec**: [`specs/2026-03-28-sealed-deck-picker.md`](../2026-03-28-sealed-deck-picker.md)
 
 ## Summary
 

@@ -101,7 +101,7 @@ No third instances found. No shared abstraction extraction needed.
 
 **Decision**: For `generate-pools`, random selection happens in Java (`PoolMain`), per pool. For `evaluate-scorer`, random selection happens in Python, once per evaluation run (all pools from the same set).
 
-**Rationale**: `generate-pools` needs per-pool randomness across many sets (FR-001). `evaluate-scorer` needs a single set for all pools because the round-robin design requires same-set decks for fair comparison (the existing design in `sealed-deck-picker.md` section "Evaluation Against External Baseline" specifies "N pools from a randomly selected set").
+**Rationale**: `generate-pools` needs per-pool randomness across many sets (FR-001). `evaluate-scorer` needs a single set for all pools because the round-robin design requires same-set decks for fair comparison (the existing design in `2026-03-28-sealed-deck-picker.md` section "Evaluation Against External Baseline" specifies "N pools from a randomly selected set").
 
 **Alternatives considered**:
 - All random selection in Python: rejected — would require N separate `PoolConnector.generate()` calls (one per set), each spinning up a JVM. A single JVM selecting random sets per pool is far more efficient.

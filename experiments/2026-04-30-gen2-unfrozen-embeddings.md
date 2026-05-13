@@ -2,7 +2,7 @@
 
 ## Background
 
-This is the follow-up to `gen2-initial-training.md`, which left the val_acc
+This is the follow-up to `2026-04-26-gen2-initial-training.md`, which left the val_acc
 ceiling at ~0.70 across four orthogonal interventions (depth sweep, dropout
 sweep, multi-view pooling, hand-computed deck stats). That document concluded
 the ceiling is largely data-limited (Bo7 noise floor ~0.72–0.78) but flagged
@@ -12,7 +12,7 @@ only loosely correlated with "what makes this card good in a sealed deck",
 so fine-tuning it toward deckbuilding-relevant features could plausibly
 close the model-imperfection gap before the oracle ceiling binds.
 
-Spec `specs/encoder-fine-tuning.md` (and the implementation in
+Spec `specs/2026-04-27-encoder-fine-tuning.md` (and the implementation in
 `specs/015-encoder-fine-tuning/`) defines this as **Phase B**: a non-zero
 `--embedding-lr` puts the encoder in the training graph alongside the
 scorer, jointly trained on match outcomes. Phase A keeps the encoder
@@ -26,7 +26,7 @@ Starting point for the runs below: the gen2 best Phase A checkpoint —
 
 ### How to read the metrics
 
-Same as `gen2-initial-training.md`, plus:
+Same as `2026-04-26-gen2-initial-training.md`, plus:
 
 - `embedding_drift` — mean L2 distance between the current encoder's text
   vectors on a fixed reference batch (the unique cards in step 0's first
@@ -159,7 +159,7 @@ Phase B can't help on this corpus.
 
 ## Why this connects to the gen2-initial-training conclusions
 
-`gen2-initial-training.md` ended with four orthogonal interventions all
+`2026-04-26-gen2-initial-training.md` ended with four orthogonal interventions all
 hitting the ~0.70 ceiling and concluded the binding constraint is the Bo7
 label-noise floor (oracle ceiling estimated at 0.72–0.78 from the math in
 that document). Phase B was flagged as the one remaining model-side lever
@@ -178,7 +178,7 @@ list, and it lands the same way:
 | Hand-computed deck stats (×1 to ×200)  | Same as no deck stats  |
 | **Phase B encoder fine-tuning**        | **Same as Phase A**    |
 
-`gen2-initial-training.md` argued the four-intervention pattern was
+`2026-04-26-gen2-initial-training.md` argued the four-intervention pattern was
 already strong evidence the ceiling is data-limited. Phase B was the
 intervention with the strongest theoretical reason to break that pattern
 (it changes per-card features, not just aggregation), and it didn't. The
@@ -217,7 +217,7 @@ property of any model component.
   val_acc ceiling. Further variants (shallower scorer, even more
   aggressive LR, etc.) would be testing the same dead hypothesis.
 - **The next levers to pull are data-side, not model-side.** This
-  matches `gen2-initial-training.md`'s recommendation #4 ("noise
+  matches `2026-04-26-gen2-initial-training.md`'s recommendation #4 ("noise
   reduction at the data side"). Concrete options, in rough order of
   upside-per-cost:
   1. **More matches per pool combination.** Replace one Bo7 label per
@@ -248,7 +248,7 @@ cache. None of that translated into higher val_acc on
 encoder movement (drift 0.18 → 1.05 → 3.38) and two scorer starting
 points (converged Phase A and 1-epoch Phase A) all land in a tight band
 around 0.69–0.70 val_acc — the same ceiling four other interventions hit
-in `gen2-initial-training.md`.
+in `2026-04-26-gen2-initial-training.md`.
 
 The combined evidence across eight interventions (five from the prior
 document, three Phase B variants here) makes a strong case that the

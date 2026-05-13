@@ -52,7 +52,7 @@ specifically. That hasn't been implemented yet — at the end of the session,
 color-pair init is present in the code but marked as not recommended until the
 patience fix lands.
 
-I asked Claude to record all of this in `experiments/sa-deck-builder-tuning.md`.
+I asked Claude to record all of this in `experiments/2026-04-25-sa-deck-builder-tuning.md`.
 There was one false start where Claude tried to add a "Greedy vs SA" section that
 didn't match what I wanted, so I reverted it and deleted the open questions section
 myself.

@@ -82,7 +82,7 @@ dimensions, which are the only place card-level ability quality can live, may be
 contributing almost nothing. This would also explain why Phase B embedding fine-
 tuning never moved the needle: if the scorer barely reads those dimensions,
 retraining them changes nothing. I asked Claude to document this hypothesis with
-the diagnostic plan in `experiments/deterministic-feature-reliance.md`. The
+the diagnostic plan in `experiments/2026-05-02-deterministic-feature-reliance.md`. The
 agreed test sequence is: first, mask the 512 transformer dims to zero at
 inference and check if win rate drops; if it does not drop, that ends the
 inquiry; if it does, retrain Phase A from scratch with those dims zeroed to ask
@@ -94,7 +94,7 @@ rate or TrueSkill) to rank card quality. Claude recognized this as the missing
 pretraining signal for the embeddings — a dense per-card label grounded in
 actual play rather than deck composition. I had already rejected raw win rate in
 the jumpstart context because it over-rewards rarely-played finishers; the same
-logic applies here. This went into `experiments/future-experiments.md` as a
+logic applies here. This went into `experiments/2026-04-30-future-experiments.md` as a
 candidate pretraining target alongside the color-restricted deck-builder
 personalities (`--restarts color-pairs` and `--restarts color-slices`) that
 would let me test whether the scorer's within-bucket gap to forge-best comes

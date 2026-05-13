@@ -3,7 +3,7 @@
 **Feature Branch**: `015-encoder-fine-tuning`
 **Created**: 2026-04-29
 **Status**: Draft
-**Input**: User description: "a new feature described by the specification contained in .\specs\encoder-fine-tuning.md"
+**Input**: User description: "a new feature described by the specification contained in .\specs\2026-04-27-encoder-fine-tuning.md"
 
 ## Clarifications
 
@@ -113,7 +113,7 @@ appeared in the match-outcomes corpus.
 The user runs `evaluate-scorer` twice — once with the Phase A `best_*.pt` and
 once with the Phase B `best_*.pt` (with refreshed `.npz` files) — and compares
 match-win rate against `forge-best`. Validation accuracy alone is not
-authoritative because experiments under `experiments/gen2-initial-training.md`
+authoritative because experiments under `experiments/2026-04-26-gen2-initial-training.md`
 show several scorer-side interventions hitting the same val_acc ceiling; the
 deployment metric is the gate for whether to keep the Phase B checkpoint.
 

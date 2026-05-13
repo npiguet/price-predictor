@@ -7,7 +7,7 @@ recipe is similar to gen2's best configuration (6-layer Set Transformer, dropout
 0.2, `--lr 1e-5`, AdamW with grad-norm-1.0 clipping) but **gen3's input
 representation is different**: the per-card embedding is supplied by a new
 sealed-trained encoder built per the spec at
-[`specs/card-winnability-pretraining.md`](../specs/card-winnability-pretraining.md).
+[`specs/2026-05-03-card-winnability-pretraining.md`](../specs/2026-05-03-card-winnability-pretraining.md).
 
 That spec trains a dedicated encoder from random init on per-card targets
 derived from per-game play data (nine regression heads — net winning influence
@@ -15,7 +15,7 @@ on the play and on the draw, played rate, cast-lift, and a per-color affinity
 for each of WUBRG — plus a masked-token reconstruction auxiliary). It replaces
 the 512 price-predictor encoder dims that gen1/gen2 used as their per-card
 representation. The motivation, established in
-[`experiments/deterministic-feature-reliance.md`](deterministic-feature-reliance.md),
+[`experiments/2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md),
 was that the price-predictor encoder is loosely aligned with sealed playability
 and confounded by collector/reserved-list effects, leaving per-card quality
 discrimination as the dominant remaining bottleneck.
@@ -71,7 +71,7 @@ deck-builders alongside the existing Forge methods.
 
 Every gen2 architecture and regularization combination converged at
 val_acc ≈ 0.695 — see the "four orthogonal interventions failing" table in
-[`gen2-initial-training.md`](gen2-initial-training.md). Gen2's analysis
+[`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md). Gen2's analysis
 concluded that ceiling was the irreducible Bo7 label-noise floor, estimated
 the oracle ceiling at ~0.72–0.78, and identified per-card features (encoder
 unfreezing or replacement) as the only remaining lever. Gen3 confirms that
@@ -152,7 +152,7 @@ gain coming purely from longer training.
 
 Gen1's known failure mode was "rates its own greedy decks highly, but those
 decks lose to `forge-best` ~57% of the time at Bo7" — the over-confidence /
-reward-hacking pattern documented in `gen2-initial-training.md`. Gen3 reverses
+reward-hacking pattern documented in `2026-04-26-gen2-initial-training.md`. Gen3 reverses
 the sign of that gap by a wide margin. The downstream story (the in-play
 performance of greedy decks built from scorer scores) is no longer the
 limiting factor for scorer deployment.
@@ -160,7 +160,7 @@ limiting factor for scorer deployment.
 The new encoder is the most plausible reason: gen2 made the scorer better at
 discriminating *deck shape* (color count, curve), but per-card quality
 discrimination kept the ceiling near `forge-best` on matched-shape decks
-(see `deterministic-feature-reliance.md`). The sealed-trained encoder targets
+(see `2026-05-02-deterministic-feature-reliance.md`). The sealed-trained encoder targets
 exactly that gap, and the eval result is consistent with that gap closing.
 
 ## Variance: pool-set luck is still substantial at 24 pools × Bo7

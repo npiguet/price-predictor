@@ -3,8 +3,8 @@
 **Feature Branch**: `011-sealed-dataset`
 **Created**: 2026-03-28
 **Status**: Draft
-**Parent Spec**: [`specs/sealed-deck-picker.md`](../sealed-deck-picker.md) — this feature implements Stage 0 (Training Dataset Preparation) of the Training Curriculum defined there
-**Input**: User description: "A new python command line is created to prepare a training dataset for a future sealed deck picker feature. The sealed deck feature is described in details in specs/sealed-deck-picker.md. This feature (and its plan an implementation) aims to implement what is described in that file as Stage 0 of the Training Curriculum."
+**Parent Spec**: [`specs/2026-03-28-sealed-deck-picker.md`](../2026-03-28-sealed-deck-picker.md) — this feature implements Stage 0 (Training Dataset Preparation) of the Training Curriculum defined there
+**Input**: User description: "A new python command line is created to prepare a training dataset for a future sealed deck picker feature. The sealed deck feature is described in details in specs/2026-03-28-sealed-deck-picker.md. This feature (and its plan an implementation) aims to implement what is described in that file as Stage 0 of the Training Curriculum."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -106,7 +106,7 @@ After retraining the price predictor encoder, a researcher deletes stale embeddi
 
 ## Assumptions
 
-- All structural constants used in this spec (embedding dimensions, pool size bounds, basic land slot count, command signatures and defaults) are defined in [`specs/sealed-deck-picker.md`](../sealed-deck-picker.md). If those values change, this spec must be reviewed for consistency.
+- All structural constants used in this spec (embedding dimensions, pool size bounds, basic land slot count, command signatures and defaults) are defined in [`specs/2026-03-28-sealed-deck-picker.md`](../2026-03-28-sealed-deck-picker.md). If those values change, this spec must be reviewed for consistency.
 - This feature introduces a new top-level module (`sealed`) invoked as `python -m sealed`. It is separate from the existing `python -m price_predictor` module — they share no entry point and may evolve independently.
 - The pretrained price predictor encoder and vocabulary file are available at their default paths before `encode-cards` is run. This feature does not retrain or modify the encoder.
 - The Forge connector exists (from feature 002) but does not yet implement pool generation. Adding the pool generation logic to the connector is in scope for this feature, alongside the `generate-pools` CLI command that invokes it.

@@ -138,5 +138,5 @@ no code changes needed (SC-003).
 
 - Spec: `specs/015-encoder-fine-tuning/spec.md`
 - Plan + research: `specs/015-encoder-fine-tuning/plan.md` and `research.md`
-- Original brief: `specs/encoder-fine-tuning.md`
-- Related: `specs/sealed-deck-picker.md` (the embedding-schedule context that motivates Phase B).
+- Original brief: `specs/2026-04-27-encoder-fine-tuning.md`
+- Related: `specs/2026-03-28-sealed-deck-picker.md` (the embedding-schedule context that motivates Phase B).

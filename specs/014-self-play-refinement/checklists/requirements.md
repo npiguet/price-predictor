@@ -33,4 +33,4 @@
 
 - All items pass. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
 - The spec references file formats and CLI argument names from the parent spec
-  (sealed-deck-picker.md) — these are domain contracts, not implementation details.
+  (2026-03-28-sealed-deck-picker.md) — these are domain contracts, not implementation details.

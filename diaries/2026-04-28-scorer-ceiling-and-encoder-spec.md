@@ -115,7 +115,7 @@ parameters via shared weights. I confirmed the encoder is only 2
 layers, which makes the compute cost much more reasonable than Claude
 initially assumed: maybe 2–4× slower per epoch, not 5–15×.
 
-I asked Claude to write a spec for this in `specs/encoder-fine-tuning.md`.
+I asked Claude to write a spec for this in `specs/2026-04-27-encoder-fine-tuning.md`.
 The discussion that shaped the spec covered several important points:
 the two-run structure (Phase A with frozen encoder, Phase B resuming
 from Phase A's best checkpoint with a non-zero `--embedding-lr`),

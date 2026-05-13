@@ -32,6 +32,6 @@
 ## Notes
 
 - All items pass. Spec is ready for `/speckit.clarify` or `/speckit.plan`.
-- The spec references the parent sealed-deck-picker.md extensively for detailed feature encoding rules and model design rationale.
+- The spec references the parent 2026-03-28-sealed-deck-picker.md extensively for detailed feature encoding rules and model design rationale.
 - Architecture choice (Set Transformer) is mentioned only in Assumptions as a recommendation from the parent spec, not as a requirement -- specific architecture decisions are deferred to the planning phase.
 - The Forge baseline evaluation (P4) depends on a simple greedy search procedure. This is scoped as a minimal evaluation utility, not the full Phase 2 search-based deck builder.

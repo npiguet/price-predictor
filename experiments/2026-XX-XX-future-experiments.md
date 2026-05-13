@@ -58,7 +58,7 @@ biggest contributor to our val_acc ceiling).
 ### Estimated magnitude
 
 **+1 to +3 pp on val_acc.** The ceiling argument from
-`gen2-initial-training.md` puts the model-imperfection bucket at 2–8 pp
+`2026-04-26-gen2-initial-training.md` puts the model-imperfection bucket at 2–8 pp
 above our current 0.70 (under the oracle ceiling of 0.72–0.78). Margin
 weighting attacks that bucket by giving the model a richer signal per
 match, but doesn't move the irreducible-Bo7-noise component.
@@ -208,15 +208,15 @@ which currently treats devoid as colorless).
 ### Dependencies / when to revisit
 
 Schedule for gen-3 training. Independent of the data-side levers from
-`gen2-unfrozen-embeddings.md` and stackable with margin-weighted loss
+`2026-04-30-gen2-unfrozen-embeddings.md` and stackable with margin-weighted loss
 (above). Worth doing even if gen-3 ends up matching gen-2 in raw win
 rate — the diagnostic answer (scorer vs search) is high-value
 regardless of whether the personalities are competitive.
 
 ## Per-card winnability as encoder pretraining target
 
-Specced separately at `specs/card-winnability-pretraining.md`.
-Worth pursuing once `deterministic-feature-reliance.md` Test 1a/1b
+Specced separately at `specs/2026-05-03-card-winnability-pretraining.md`.
+Worth pursuing once `2026-05-02-deterministic-feature-reliance.md` Test 1a/1b
 confirms the encoder is underused; the spec defines the
 `output/sealed/cards-played.txt` per-game sidecar, the
 `wins_when_played / wins_when_in_deck` label, low-n regularization,
@@ -289,7 +289,7 @@ loss-weight CLI flag. No new data, no inference-time cost.
 ### Dependencies / when to revisit
 
 Conditional on the per-card winnability encoder
-(`specs/card-winnability-pretraining.md`) being implemented and
+(`specs/2026-05-03-card-winnability-pretraining.md`) being implemented and
 producing diagnostics that point at tail-card underfitting. Stackable
 with margin-weighted scorer loss and color-restricted personalities —
 operates entirely inside encoder training, not the scorer. Most natural
@@ -507,7 +507,7 @@ of conflating ride-along effects with casting effects.
 ## See also (deferred items already documented elsewhere)
 
 - **Multi-restart + multi-temperature ensemble for deck building** —
-  see `sa-deck-builder-tuning.md` open questions §3, §4. The cheap
+  see `2026-04-25-sa-deck-builder-tuning.md` open questions §3, §4. The cheap
   win for SA-built deck variance.
 - **Color-pair seeded init for the deck builder** — same doc, open
   question §4. Directly addresses "random init contains all colors";
@@ -524,7 +524,7 @@ of conflating ride-along effects with casting effects.
   contamination that the gen-2 Phase B runs revealed. High implementation
   cost — each is a substantial new pipeline. Worth revisiting only if
   Phase B becomes interesting again under a new label-noise regime.
-  See also `specs/card-winnability-pretraining.md` for one specific
+  See also `specs/2026-05-03-card-winnability-pretraining.md` for one specific
   auxiliary target with a defined data-collection format.
 - **Iterative feature distillation** (Phase B encoder → re-cache .npz
   → fresh Phase A scorer → repeat). Surfaced during gen-2 Phase B as a

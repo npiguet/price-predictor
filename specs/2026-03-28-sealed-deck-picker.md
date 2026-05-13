@@ -517,7 +517,7 @@ applies only to the seed deck; `spells_remaining` and `lands_remaining` are the 
 is unconstrained after init. Pairs without 23 eligible on-color spells are skipped; if every pair is skipped on
 a degenerate pool, the build falls back to one random restart so it always returns a deck.
 
-See [`experiments/sa-deck-builder-tuning.md`](../experiments/sa-deck-builder-tuning.md) for empirical guidance
+See [`experiments/2026-04-25-sa-deck-builder-tuning.md`](../experiments/2026-04-25-sa-deck-builder-tuning.md) for empirical guidance
 on choosing `temperature`, `cooling`, and the restart strategy.
 
 # Phase 3 — Self-Play Refinement

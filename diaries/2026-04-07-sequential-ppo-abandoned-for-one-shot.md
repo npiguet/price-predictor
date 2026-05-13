@@ -75,5 +75,5 @@ candidate.
 
 The session ended with a reset of the master branch back to the feature
 011 state (encode-cards and generate-pools only), discarding the entire
-PPO training stack, and a rewrite of `specs/sealed-deck-picker.md` to
+PPO training stack, and a rewrite of `specs/2026-03-28-sealed-deck-picker.md` to
 reflect the one-shot architecture.

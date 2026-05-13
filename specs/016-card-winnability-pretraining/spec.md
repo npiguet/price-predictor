@@ -3,7 +3,7 @@
 **Feature Branch**: `016-card-winnability-pretraining`
 **Created**: 2026-05-03
 **Status**: Draft
-**Input**: User description: "Create a new feature from the descriptions in .\specs\card-winnability-pretraining.md"
+**Input**: User description: "Create a new feature from the descriptions in .\specs\2026-05-03-card-winnability-pretraining.md"
 
 ## Clarifications
 
