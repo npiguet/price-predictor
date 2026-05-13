@@ -593,6 +593,16 @@ def _build_evaluate_scorer_parser(subparsers) -> None:
             " a random sealed-legal set is selected."
         ),
     )
+    eval_parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume a previous run from --work-dir. Skips pool/deck/matches"
+            " generation and re-enters the worker phase against the existing"
+            " validation-matches-*.txt files (workers skip already-completed"
+            " matches based on outcomes line count). Requires --work-dir."
+        ),
+    )
 
 
 def _build_match_outcomes_parser(subparsers) -> None:
@@ -1074,6 +1084,10 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
     """Execute the evaluate-scorer command."""
     from sealed.application.evaluate_scorer import EvaluateScorerUseCase
 
+    if args.resume and not args.work_dir:
+        print("Error: --resume requires --work-dir", file=sys.stderr)
+        return 2
+
     config = EvaluateScorerConfig(
         checkpoint=Path(args.checkpoint),
         cards_path=Path(args.cards_path),
@@ -1082,6 +1096,7 @@ def run_evaluate_scorer(args: argparse.Namespace) -> int:
         workers=args.workers,
         work_dir=Path(args.work_dir) if args.work_dir else None,
         set_code=args.set_code,
+        resume=args.resume,
     )
 
     try:

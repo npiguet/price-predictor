@@ -36,6 +36,7 @@ class EvaluateScorerConfig:
     workers: int = 4
     work_dir: Path | None = None
     set_code: str | None = None
+    resume: bool = False
 
 
 def score_decks(
@@ -87,30 +88,43 @@ class EvaluateScorerUseCase:
     """Round-robin evaluation pipeline: build N A-decks and N B-decks, play N² matches."""
 
     def execute(self, config: EvaluateScorerConfig) -> RoundRobinResults:
-        model = self._load_model(config.checkpoint)
-        locator = ConvertedCardLocator(config.cards_path)
         work_dir = self._prepare_work_dir(config.work_dir)
-
-        set_code = self._resolve_set_code(config.set_code)
-        print(f"Generating pools from set: {set_code}")
-        pools = self._generate_pools(config.pools, work_dir, set_code)
-
-        print(f"Building {len(pools)} scorer decks (A)...")
-        a_decks = _build_a_decks(model, pools, locator)
-
-        print(f"Building {len(pools)} Forge decks (B)...")
         eval_connector = EvaluationConnector()
-        b_decks = eval_connector.build_forge_decks(pools)
 
-        self._dump_decks(work_dir, model, a_decks, b_decks, locator)
+        if config.resume:
+            worker_files = _discover_worker_files(work_dir)
+            if not worker_files:
+                raise RuntimeError(
+                    f"--resume: no validation-matches-*.txt files in {work_dir}"
+                )
+            n = _infer_n_pools(worker_files)
+            print(
+                f"Resuming from {work_dir}: {len(worker_files)} worker shard(s),"
+                f" {n}x{n} round-robin ({n * n} matches total)"
+            )
+        else:
+            model = self._load_model(config.checkpoint)
+            locator = ConvertedCardLocator(config.cards_path)
 
-        n = len(a_decks)
-        print(f"Writing {n}² = {n * n} round-robin match pairings...")
-        worker_files = write_round_robin_matches(
-            a_decks, b_decks, config.workers, work_dir,
-        )
+            set_code = self._resolve_set_code(config.set_code)
+            print(f"Generating pools from set: {set_code}")
+            pools = self._generate_pools(config.pools, work_dir, set_code)
 
-        print(f"Launching {config.workers} workers (best-of-{config.best_of})...")
+            print(f"Building {len(pools)} scorer decks (A)...")
+            a_decks = _build_a_decks(model, pools, locator)
+
+            print(f"Building {len(pools)} Forge decks (B)...")
+            b_decks = eval_connector.build_forge_decks(pools)
+
+            self._dump_decks(work_dir, model, a_decks, b_decks, locator)
+
+            n = len(a_decks)
+            print(f"Writing {n}² = {n * n} round-robin match pairings...")
+            worker_files = write_round_robin_matches(
+                a_decks, b_decks, config.workers, work_dir,
+            )
+
+        print(f"Launching {len(worker_files)} workers (best-of-{config.best_of})...")
         outcome_files = eval_connector.launch_workers(
             worker_files, best_of=config.best_of,
         )
@@ -290,3 +304,32 @@ def write_round_robin_matches(
         worker_file.write_text("\n".join(chunk) + "\n", encoding="utf-8")
         worker_files.append(worker_file)
     return worker_files
+
+
+_WORKER_FILE_RE = re.compile(r"^validation-matches-(\d+)\.txt$")
+
+
+def _discover_worker_files(work_dir: Path) -> list[Path]:
+    """Return `validation-matches-*.txt` shards in numeric order."""
+    matched: list[tuple[int, Path]] = []
+    for path in work_dir.iterdir():
+        m = _WORKER_FILE_RE.match(path.name)
+        if m and path.is_file():
+            matched.append((int(m.group(1)), path))
+    matched.sort()
+    return [p for _, p in matched]
+
+
+def _infer_n_pools(worker_files: list[Path]) -> int:
+    """Infer the round-robin side N from the total match-line count (N² rows)."""
+    total = 0
+    for f in worker_files:
+        with f.open("r", encoding="utf-8") as fh:
+            total += sum(1 for line in fh if line.strip())
+    n = int(round(total ** 0.5))
+    if n * n != total:
+        raise RuntimeError(
+            f"--resume: match files total {total} rows, which is not a perfect"
+            f" square (cannot infer round-robin N)"
+        )
+    return n
