@@ -47,7 +47,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from sealed.infrastructure.cards_played_reader import iter_rows
+from sealed.infrastructure.cards_played_reader import CardsPlayedRow, iter_rows
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 DEFAULT_CARDS_PLAYED = Path("output/sealed/cards-played.txt")
@@ -207,9 +207,9 @@ class _Counts:
         ) / denom
 
 
-def _aggregate(cards_played_path: Path) -> dict[str, _Counts]:
+def _aggregate(rows: list[CardsPlayedRow]) -> dict[str, _Counts]:
     counts: dict[str, _Counts] = {}
-    for row in iter_rows(cards_played_path):
+    for row in rows:
         winner_was_starter = row.winner == row.starter
         if row.winner == "A":
             winner_played, winner_deck = row.cards_played_a, row.cards_not_played_a
@@ -248,13 +248,17 @@ def _aggregate(cards_played_path: Path) -> dict[str, _Counts]:
 
 
 def _aggregate_color_counters(
-    cards_played_path: Path,
+    rows: list[CardsPlayedRow],
     counts: dict[str, _Counts],
     card_colors: dict[str, set[str]],
 ) -> None:
     """Second pass: fill in the per-color slices of ``counts`` once each
-    card's color identity is known."""
-    for row in iter_rows(cards_played_path):
+    card's color identity is known. Reuses the same materialized rows the
+    first pass consumed so that concurrent writes to ``cards-played.txt``
+    (e.g. an active match-outcomes worker) can't cause the two passes to
+    see different row sets.
+    """
+    for row in rows:
         if row.winner == "A":
             winner_played_set = set(row.cards_played_a)
             winner_in_deck_set = winner_played_set | set(row.cards_not_played_a)
@@ -497,7 +501,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {args.cards_played} does not exist", file=sys.stderr)
         return 1
 
-    counts = _aggregate(args.cards_played)
+    rows = list(iter_rows(args.cards_played))
+    counts = _aggregate(rows)
     if not counts:
         print(f"No card-play data found in {args.cards_played}", file=sys.stderr)
         return 0
@@ -514,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
     card_colors = {
         name: _colors_from_mana_cost(c.mana_cost) for name, c in counts.items()
     }
-    _aggregate_color_counters(args.cards_played, counts, card_colors)
+    _aggregate_color_counters(rows, counts, card_colors)
 
     print(_format_table(counts, args.shrinkage_k))
     return 0
