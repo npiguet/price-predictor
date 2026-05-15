@@ -207,42 +207,54 @@ class _Counts:
         ) / denom
 
 
-def _aggregate(rows: list[CardsPlayedRow]) -> dict[str, _Counts]:
+def _aggregate(
+    rows: list[CardsPlayedRow],
+    allowed_methods: set[str] | None = None,
+) -> dict[str, _Counts]:
     counts: dict[str, _Counts] = {}
     for row in rows:
         winner_was_starter = row.winner == row.starter
         if row.winner == "A":
             winner_played, winner_deck = row.cards_played_a, row.cards_not_played_a
             loser_played, loser_deck = row.cards_played_b, row.cards_not_played_b
+            winner_method, loser_method = row.method_a, row.method_b
         else:
             winner_played, winner_deck = row.cards_played_b, row.cards_not_played_b
             loser_played, loser_deck = row.cards_played_a, row.cards_not_played_a
+            winner_method, loser_method = row.method_b, row.method_a
+
+        count_winner = allowed_methods is None or winner_method in allowed_methods
+        count_loser = allowed_methods is None or loser_method in allowed_methods
+        if not count_winner and not count_loser:
+            continue
 
         winner_played_set = set(winner_played)
         winner_in_deck_set = winner_played_set | set(winner_deck)
         loser_played_set = set(loser_played)
         loser_in_deck_set = loser_played_set | set(loser_deck)
 
-        for name in winner_in_deck_set:
-            entry = counts.setdefault(name, _Counts())
-            entry.wins_when_in_deck += 1
-            played = name in winner_played_set
-            if played:
-                entry.wins_when_played += 1
-            if winner_was_starter:
-                entry.wins_when_in_deck_on_play += 1
+        if count_winner:
+            for name in winner_in_deck_set:
+                entry = counts.setdefault(name, _Counts())
+                entry.wins_when_in_deck += 1
+                played = name in winner_played_set
                 if played:
-                    entry.wins_when_played_on_play += 1
-        for name in loser_in_deck_set:
-            entry = counts.setdefault(name, _Counts())
-            entry.losses_when_in_deck += 1
-            played = name in loser_played_set
-            if played:
-                entry.losses_when_played += 1
-            if not winner_was_starter:
-                entry.losses_when_in_deck_on_play += 1
+                    entry.wins_when_played += 1
+                if winner_was_starter:
+                    entry.wins_when_in_deck_on_play += 1
+                    if played:
+                        entry.wins_when_played_on_play += 1
+        if count_loser:
+            for name in loser_in_deck_set:
+                entry = counts.setdefault(name, _Counts())
+                entry.losses_when_in_deck += 1
+                played = name in loser_played_set
                 if played:
-                    entry.losses_when_played_on_play += 1
+                    entry.losses_when_played += 1
+                if not winner_was_starter:
+                    entry.losses_when_in_deck_on_play += 1
+                    if played:
+                        entry.losses_when_played_on_play += 1
 
     return counts
 
@@ -251,6 +263,7 @@ def _aggregate_color_counters(
     rows: list[CardsPlayedRow],
     counts: dict[str, _Counts],
     card_colors: dict[str, set[str]],
+    allowed_methods: set[str] | None = None,
 ) -> None:
     """Second pass: fill in the per-color slices of ``counts`` once each
     card's color identity is known. Reuses the same materialized rows the
@@ -264,33 +277,41 @@ def _aggregate_color_counters(
             winner_in_deck_set = winner_played_set | set(row.cards_not_played_a)
             loser_played_set = set(row.cards_played_b)
             loser_in_deck_set = loser_played_set | set(row.cards_not_played_b)
+            winner_method, loser_method = row.method_a, row.method_b
         else:
             winner_played_set = set(row.cards_played_b)
             winner_in_deck_set = winner_played_set | set(row.cards_not_played_b)
             loser_played_set = set(row.cards_played_a)
             loser_in_deck_set = loser_played_set | set(row.cards_not_played_a)
+            winner_method, loser_method = row.method_b, row.method_a
 
-        winner_colors: set[str] = set()
-        for name in winner_in_deck_set:
-            winner_colors |= card_colors.get(name, set())
-        loser_colors: set[str] = set()
-        for name in loser_in_deck_set:
-            loser_colors |= card_colors.get(name, set())
+        count_winner = allowed_methods is None or winner_method in allowed_methods
+        count_loser = allowed_methods is None or loser_method in allowed_methods
+        if not count_winner and not count_loser:
+            continue
 
-        for name in winner_in_deck_set:
-            entry = counts[name]
-            played = name in winner_played_set
-            for color in winner_colors:
-                entry.wins_when_in_deck_by_color[color] += 1
-                if played:
-                    entry.wins_when_played_by_color[color] += 1
-        for name in loser_in_deck_set:
-            entry = counts[name]
-            played = name in loser_played_set
-            for color in loser_colors:
-                entry.losses_when_in_deck_by_color[color] += 1
-                if played:
-                    entry.losses_when_played_by_color[color] += 1
+        if count_winner:
+            winner_colors: set[str] = set()
+            for name in winner_in_deck_set:
+                winner_colors |= card_colors.get(name, set())
+            for name in winner_in_deck_set:
+                entry = counts[name]
+                played = name in winner_played_set
+                for color in winner_colors:
+                    entry.wins_when_in_deck_by_color[color] += 1
+                    if played:
+                        entry.wins_when_played_by_color[color] += 1
+        if count_loser:
+            loser_colors: set[str] = set()
+            for name in loser_in_deck_set:
+                loser_colors |= card_colors.get(name, set())
+            for name in loser_in_deck_set:
+                entry = counts[name]
+                played = name in loser_played_set
+                for color in loser_colors:
+                    entry.losses_when_in_deck_by_color[color] += 1
+                    if played:
+                        entry.losses_when_played_by_color[color] += 1
 
 
 def _read_mana_cost(path: Path) -> Optional[str]:
@@ -495,16 +516,47 @@ def main(argv: list[str] | None = None) -> int:
             "more aggressively toward 0."
         ),
     )
+    parser.add_argument(
+        "--methods", type=str, default=None,
+        help=(
+            "Comma-separated list of deck-generation method labels to "
+            "restrict the analysis to (e.g. 'gen3-256,forge-best'). When "
+            "present, only count card observations from decks built by "
+            "the listed methods; per-side, so a game between an allowed "
+            "method and a non-allowed method still contributes the "
+            "allowed side. Default: include all decks."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if not args.cards_played.exists():
         print(f"Error: {args.cards_played} does not exist", file=sys.stderr)
         return 1
 
+    allowed_methods: set[str] | None = None
+    if args.methods is not None:
+        allowed_methods = {m.strip() for m in args.methods.split(",") if m.strip()}
+        if not allowed_methods:
+            print(
+                "Error: --methods was given but parsed to an empty set",
+                file=sys.stderr,
+            )
+            return 1
+
     rows = list(iter_rows(args.cards_played))
-    counts = _aggregate(rows)
+    counts = _aggregate(rows, allowed_methods)
     if not counts:
-        print(f"No card-play data found in {args.cards_played}", file=sys.stderr)
+        if allowed_methods is not None:
+            print(
+                f"No card-play data found in {args.cards_played} matching "
+                f"--methods {sorted(allowed_methods)}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"No card-play data found in {args.cards_played}",
+                file=sys.stderr,
+            )
         return 0
 
     locator = ConvertedCardLocator(args.cards_folder)
@@ -519,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     card_colors = {
         name: _colors_from_mana_cost(c.mana_cost) for name, c in counts.items()
     }
-    _aggregate_color_counters(rows, counts, card_colors)
+    _aggregate_color_counters(rows, counts, card_colors, allowed_methods)
 
     print(_format_table(counts, args.shrinkage_k))
     return 0
