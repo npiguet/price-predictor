@@ -163,6 +163,124 @@ discrimination kept the ceiling near `forge-best` on matched-shape decks
 (see `2026-05-02-deterministic-feature-reliance.md`). The sealed-trained encoder targets
 exactly that gap, and the eval result is consistent with that gap closing.
 
+### Splash discipline: gen3 cuts 4+ color decks 3-5×
+
+A diagnostic comparison of 4,500 gen2 decks against 10,000 gen3-128 and
+10,000 gen3-256 decks (all built via `build-decks` on random sealed pools)
+shows gen3 dialing back the multi-color overcommitting that gen2 was
+prone to:
+
+| Builder      | 2-color | 3-color | 4-color | 5-color | Avg colors |
+|--------------|---------|---------|---------|---------|------------|
+| `forge-best` | 99.9%   |  0.1%   |  0.0%   |  0.0%   | ~2.00      |
+| gen2         | 18.2%   | 44.0%   | 30.0%   |  7.6%   | ~3.27      |
+| gen3-128     | 46.3%   | 42.2%   | 10.1%   |  1.4%   | ~2.66      |
+| gen3-256     | 40.2%   | 48.3%   | 10.1%   |  1.4%   | ~2.72      |
+
+Gen3 cuts 4-color decks by ~3× and 5-color decks by ~5× relative to gen2,
+landing in the "2-color or 3-color with splash" range that matches expert
+sealed convention more closely than either gen0 (rigidly 2-color, no
+flexibility) or gen2 (over-splashing).
+
+The most plausible mechanism is two of the new encoder's per-card
+regression targets that the price-predictor encoder couldn't have
+provided: `cast_lift` (per-card win-rate lift conditional on actually
+casting the card) and the five `color_lift_X` heads (per-card win-rate
+lift contribution split by color). `cast_lift` directly penalizes cards
+that look strong on paper but rarely get cast — exactly the pathology a
+`WWG` mythic in a 4-color deck exhibits. `color_lift_X` gives the encoder
+a way to encode that a card's mana cost colors matter for its expected
+contribution. Together they amount to a learned mana-reliability
+heuristic, all from per-card targets — no deck-shape constraint anywhere
+in the scorer.
+
+Gen2's analysis explicitly identified splash overfitting as a probable
+failure mode of the price-predictor encoder, which had no playability
+signal at all (text embeddings driven by collector value, not by
+castability). Gen3 measurably fixes the splash-discipline half of that
+diagnosis without any deliberate scorer-side intervention.
+
+This is partial counter-evidence to a read of the encoder swap as
+"purely a per-card-quality improvement." The encoder also encodes
+mana-base playability, which is a deck-shape property the scorer reads
+off during greedy construction. The improvement is along both axes, not
+just one — which raises the bar for the gen4 encoder-width ablation:
+gains there may come from either further per-card quality refinement,
+further deck-shape playability signal, or both, and the analysis script
+above (color-count distribution) is the cheapest way to separate them
+post-hoc.
+
+## What this doesn't resolve: Forge-AI piloting bias
+
+The same diagnostic surfaces a bias that the encoder swap did not fix
+— and is likely to amplify across future generations:
+
+| Builder      | W      | U      | B      | R      | G      | Creatures |
+|--------------|--------|--------|--------|--------|--------|-----------|
+| `forge-best` | 40.3%  | 33.8%  | 45.0%  | 40.3%  | 40.6%  | 14.58     |
+| gen2         | 85.4%  | 60.6%  | 63.2%  | 61.5%  | 55.7%  | 16.62     |
+| gen3-128     | 72.2%  | 37.2%  | 54.3%  | 42.3%  | 60.4%  | 17.68     |
+| gen3-256     | 76.6%  | 47.9%  | 47.3%  | 29.3%  | 71.5%  | 18.15     |
+
+Two robust patterns across both gen3 widths:
+
+1. **W and G are over-represented; U and R are under-represented.** W
+   sits ~30–35 pp above the gen0 baseline; G sits ~20–30 pp above; R
+   sits ~10 pp below in gen3-256.
+2. **Creature count creeps up generation over generation.** gen0
+   14.6 → gen2 16.6 → gen3-128 17.7 → gen3-256 18.2 — a steady drift,
+   not a one-time shift.
+
+The most likely cause is a known Forge-AI limitation: combat play
+(mechanical attack/block decisions) is handled well, but instant and
+sorcery timing (when to bolt, when to wrath, when to counter) is
+handled poorly. A creature card therefore realizes closer to its full
+objective potential when Forge pilots it than a non-creature spell of
+equivalent objective strength does. The per-card labels the encoder's
+regression heads fit (derived from `cards-played.txt`) encode this
+piloting asymmetry directly: creatures win more games in Forge's
+hands, so creatures' `score_play` and `cast_lift` labels go up, and
+the scorer learns to prefer them. W and G concentrate the effect
+because they are the creature-heaviest colors; U and R suffer because
+they are spell-heavy.
+
+The bias is "real" in the sense that the encoder correctly reflects
+the Forge-AI meta. It is "wrong" in the sense that the Forge-AI meta
+diverges from the true MTG meta because of the AI's piloting
+weaknesses. The scorer is optimizing the right objective with respect
+to the deployment target (Forge-piloted matches) but the wrong one
+with respect to the underlying game.
+
+### Self-play risk for gen4
+
+The bias is self-reinforcing through the self-play loop. The new
+~100–150K `cards-played.txt` rows being generated for gen4's encoder
+retraining come almost entirely from forge-best / gen3-128 / gen3-256
+matches where gen-3 decks win 62-67% of games. Cards in those decks
+(disproportionately W/G/creature) will accumulate even stronger labels
+in gen4's encoder, pushing the bias further rather than maintaining
+its current level. Without intervention, the creature/W/G creep
+documented above is likely to continue through gen4 and beyond.
+
+Mitigations, in cost order:
+
+- **Generate diverse `match-outcomes` data in parallel.** Run the
+  existing 4-Forge-methods-on-both-sides mode alongside the gen-3
+  self-play generation. A 30-50% mix of diverse data substantially
+  dilutes the W/G/creature gradient in the encoder retraining without
+  requiring code changes.
+- **Skip encoder retraining for one generation.** Frozen embeddings
+  stop the bias-amplification half of the loop while the scorer
+  continues to iterate. Costs the ~0.3–0.7 pp marginal lift from
+  fresh data.
+- **Re-weight encoder training by inverse method-pair frequency.**
+  Requires `train-encoder` to consume the method tags from
+  `cards-played.txt` (which it currently does not).
+
+The underlying Forge-AI piloting asymmetry is the root cause and
+would require AI improvements to fix — out of scope for a training
+cycle.
+
 ## Variance: pool-set luck is still substantial at 24 pools × Bo7
 
 The two runs differ by **11.4 pp of mean per-pool delta** (28.7 vs 17.3),
