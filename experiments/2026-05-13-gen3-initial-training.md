@@ -26,8 +26,14 @@ new 256-d-trunk sealed encoder.
 
 ## Headline result
 
-Two independent `evaluate-scorer` runs, same checkpoint, same configuration
-(`--pools 24 --best-of 7 --workers 12`, set randomly chosen each run):
+The gen3 scorer's greedy-built deck beats the Forge-built deck (`forge-best`)
+on the same pool in **47 of 48 pools**, with the only negative pool losing by
+just 3.5 pp. Aggregate match win rate across both evaluation runs is ~61% /
+39% on 6,331 games.
+
+The evaluation used two independent `evaluate-scorer` runs (same checkpoint,
+same configuration, `--pools 24 --best-of 7 --workers 12`, set randomly
+chosen each run):
 
 | Run     | Aggregate (scorer / Forge) | Games | Mean per-pool delta | Per-pool min / max | Pools positive |
 |---------|----------------------------|-------|---------------------|--------------------|----------------|
@@ -35,15 +41,24 @@ Two independent `evaluate-scorer` runs, same checkpoint, same configuration
 | 2       | 58.4% / 41.6%              | 3174  | +17.3 pp            | −3.5 / +41.1 pp    | 23 / 24        |
 | **Combined** | **~61% / ~39%**       | 6331  | **~+23 pp**         | −3.5 / +52.4 pp    | **47 / 48**    |
 
-The result is unambiguously positive: the gen3 scorer's greedy-built deck
-beats the Forge-built deck (`forge-best`) on the same pool in 47 of 48 pools
-across the two runs, with the only negative pool losing by just 3.5 pp.
+Per-pool deck dumps are saved alongside the checkpoint as `...-decks.txt` /
+`...-decks-forge.txt` (run 1) and `...-decks2.txt` / `...-decks-forge2.txt`
+(run 2).
 
-The per-pool deck dumps are saved alongside the checkpoint as
-`...-decks.txt` / `...-decks-forge.txt` (run 1) and
-`...-decks2.txt` / `...-decks-forge2.txt` (run 2).
+This reverses the sign of gen1's known failure mode — "rates its own greedy
+decks highly, but those decks lose to `forge-best` ~57% of the time at Bo7,"
+the over-confidence / reward-hacking pattern documented in
+[`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md).
+The downstream story (in-play performance of greedy decks built from scorer
+scores) is no longer the limiting factor for scorer deployment.
 
-## Training behavior
+The new encoder is the most plausible reason. Gen2 made the scorer better at
+discriminating *deck shape* (color count, curve), but per-card quality
+discrimination kept the ceiling near `forge-best` on matched-shape decks (see
+[`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md)).
+The sealed-trained encoder targets exactly that gap.
+
+## Training results
 
 Two gen3 scorers were trained side-by-side on different encoder widths
 (128-d trunk and 256-d trunk). Both use the same recipe — `--epochs 200
@@ -148,203 +163,7 @@ That's +4–5 pp at epoch 1, consistent with the new encoder giving the
 scorer more useful per-card information from the start rather than the
 gain coming purely from longer training.
 
-## What this resolves about the gen1/gen2 reward-hacking concern
-
-Gen1's known failure mode was "rates its own greedy decks highly, but those
-decks lose to `forge-best` ~57% of the time at Bo7" — the over-confidence /
-reward-hacking pattern documented in `2026-04-26-gen2-initial-training.md`. Gen3 reverses
-the sign of that gap by a wide margin. The downstream story (the in-play
-performance of greedy decks built from scorer scores) is no longer the
-limiting factor for scorer deployment.
-
-The new encoder is the most plausible reason: gen2 made the scorer better at
-discriminating *deck shape* (color count, curve), but per-card quality
-discrimination kept the ceiling near `forge-best` on matched-shape decks
-(see `2026-05-02-deterministic-feature-reliance.md`). The sealed-trained encoder targets
-exactly that gap, and the eval result is consistent with that gap closing.
-
-### Splash discipline: gen3 cuts 4+ color decks 3-5×
-
-A diagnostic comparison of 4,500 gen2 decks against 10,000 gen3-128 and
-10,000 gen3-256 decks (all built via `build-decks` on random sealed pools)
-shows gen3 dialing back the multi-color overcommitting that gen2 was
-prone to:
-
-| Builder      | 2-color | 3-color | 4-color | 5-color | Avg colors |
-|--------------|---------|---------|---------|---------|------------|
-| `forge-best` | 99.9%   |  0.1%   |  0.0%   |  0.0%   | ~2.00      |
-| gen2         | 18.2%   | 44.0%   | 30.0%   |  7.6%   | ~3.27      |
-| gen3-128     | 46.3%   | 42.2%   | 10.1%   |  1.4%   | ~2.66      |
-| gen3-256     | 40.2%   | 48.3%   | 10.1%   |  1.4%   | ~2.72      |
-
-Gen3 cuts 4-color decks by ~3× and 5-color decks by ~5× relative to gen2,
-landing in the "2-color or 3-color with splash" range that matches expert
-sealed convention more closely than either gen0 (rigidly 2-color, no
-flexibility) or gen2 (over-splashing).
-
-The most plausible mechanism is two of the new encoder's per-card
-regression targets that the price-predictor encoder couldn't have
-provided: `cast_lift` (per-card win-rate lift conditional on actually
-casting the card) and the five `color_lift_X` heads (per-card win-rate
-lift contribution split by color). `cast_lift` directly penalizes cards
-that look strong on paper but rarely get cast — exactly the pathology a
-`WWG` mythic in a 4-color deck exhibits. `color_lift_X` gives the encoder
-a way to encode that a card's mana cost colors matter for its expected
-contribution. Together they amount to a learned mana-reliability
-heuristic, all from per-card targets — no deck-shape constraint anywhere
-in the scorer.
-
-Gen2's analysis explicitly identified splash overfitting as a probable
-failure mode of the price-predictor encoder, which had no playability
-signal at all (text embeddings driven by collector value, not by
-castability). Gen3 measurably fixes the splash-discipline half of that
-diagnosis without any deliberate scorer-side intervention.
-
-This is partial counter-evidence to a read of the encoder swap as
-"purely a per-card-quality improvement." The encoder also encodes
-mana-base playability, which is a deck-shape property the scorer reads
-off during greedy construction. The improvement is along both axes, not
-just one — which raises the bar for the gen4 encoder-width ablation:
-gains there may come from either further per-card quality refinement,
-further deck-shape playability signal, or both, and the analysis script
-above (color-count distribution) is the cheapest way to separate them
-post-hoc.
-
-## What this doesn't resolve: Forge-AI piloting bias
-
-The same diagnostic surfaces a bias that the encoder swap did not fix
-— and is likely to amplify across future generations:
-
-| Builder      | W      | U      | B      | R      | G      | Creatures |
-|--------------|--------|--------|--------|--------|--------|-----------|
-| `forge-best` | 40.3%  | 33.8%  | 45.0%  | 40.3%  | 40.6%  | 14.58     |
-| gen2         | 85.4%  | 60.6%  | 63.2%  | 61.5%  | 55.7%  | 16.62     |
-| gen3-128     | 72.2%  | 37.2%  | 54.3%  | 42.3%  | 60.4%  | 17.68     |
-| gen3-256     | 76.6%  | 47.9%  | 47.3%  | 29.3%  | 71.5%  | 18.15     |
-
-Two robust patterns across both gen3 widths:
-
-1. **W and G are over-represented; U and R are under-represented.** W
-   sits ~30–35 pp above the gen0 baseline; G sits ~20–30 pp above; R
-   sits ~10 pp below in gen3-256.
-2. **Creature count creeps up generation over generation.** gen0
-   14.6 → gen2 16.6 → gen3-128 17.7 → gen3-256 18.2 — a steady drift,
-   not a one-time shift.
-
-The most likely cause is a known Forge-AI limitation: combat play
-(mechanical attack/block decisions) is handled well, but instant and
-sorcery timing (when to bolt, when to wrath, when to counter) is
-handled poorly. A creature card therefore realizes closer to its full
-objective potential when Forge pilots it than a non-creature spell of
-equivalent objective strength does. The per-card labels the encoder's
-regression heads fit (derived from `cards-played.txt`) encode this
-piloting asymmetry directly: creatures win more games in Forge's
-hands, so creatures' `score_play` and `cast_lift` labels go up, and
-the scorer learns to prefer them. W and G concentrate the effect
-because they are the creature-heaviest colors; U and R suffer because
-they are spell-heavy.
-
-The bias is "real" in the sense that the encoder correctly reflects
-the Forge-AI meta. It is "wrong" in the sense that the Forge-AI meta
-diverges from the true MTG meta because of the AI's piloting
-weaknesses. The scorer is optimizing the right objective with respect
-to the deployment target (Forge-piloted matches) but the wrong one
-with respect to the underlying game.
-
-### Refinement from larger-sample analysis: gen3-256 wins uniformly across the decks it builds
-
-A follow-up `analyze_winrates.py` pass on 19,374 self-play matches
-between forge-best, gen3-128, and gen3-256 sharpens the bias picture:
-while gen3-256 *builds* biased decks (W/G/creature-heavy as documented
-above), it *wins* near-uniformly across the colors and shapes it does
-pick.
-
-Win rate when the deck contains the given color (per-color cells are
-not row-disjoint — a 3-color deck contributes to three cells):
-
-| Method      | W      | U      | B      | R      | G      | Color spread |
-|-------------|--------|--------|--------|--------|--------|--------------|
-| forge-best  | 45.4%  | 38.7%  | 41.6%  | 40.1%  | 41.3%  | 6.7 pp       |
-| gen3-128    | 52.8%  | 48.6%  | 50.4%  | 46.3%  | 50.4%  | 6.5 pp       |
-| gen3-256    | 58.8%  | 56.4%  | 56.5%  | 55.1%  | 57.6%  | **3.7 pp**   |
-
-gen3-256's win-rate spread across the five colors is roughly *half*
-of forge-best's, and no color is meaningfully weak — min 55.1% R, max
-58.8% W. The U and R cards gen3-256 chooses to pick (in 48% and 29%
-of its decks respectively) win at 55-57%, indistinguishable from the
-57-59% of its W/G-heavy decks.
-
-The creature-count slope shows the same pattern at higher resolution:
-
-| Creatures | forge-best        | gen3-256          |
-|-----------|-------------------|-------------------|
-| ≤13       | 31.4% (n=3233)    | 53.3% (n=452)     |
-| 16        | 45.1% (n=7584)    | 54.3% (n=1351)    |
-| ≥20       | 52.9% (n=34)      | 63.0% (n=3467)    |
-
-gen3-256 still benefits from creature-heavy decks (+9.7 pp from
-≤13 to ≥20), but the slope is shallower than forge-best's well-sampled
-range (+13.7 pp from ≤13 to 16-creature decks) and the baseline is
-substantially higher across every bucket.
-
-The implication is that the bias narrative in the previous subsection
-needs softening. The encoder swap did not fix the **deck-composition**
-bias (gen3 still picks W/G/creatures), but it produced a scorer whose
-win rate is **less dependent on that composition** than forge-best's
-is. The U and R cards gen3-256 picks are genuine good picks — they
-win when used — so per-card encoder labels that any future retraining
-would derive from these matches are correct signals for those cards,
-not pure bias-laundering.
-
-The "wrong objective" framing above still applies — the Forge-AI meta
-diverges from the true MTG meta because of piloting asymmetries — but
-the divergence shows up primarily in *which decks gen3-256 chooses to
-build*, not in *which decks gen3-256 wins with*. The self-play
-amplification dynamic below is correspondingly less acute than a
-"runaway feedback loop" framing implies.
-
-### Self-play risk for future encoder retrains
-
-The amplification dynamic is real but more selective than catastrophic.
-The ~110K `cards-played.txt` rows produced by the 19,374-match
-self-play run come almost entirely from forge-best / gen3-128 /
-gen3-256 matches where gen-3 decks win 58-66% per Bo7 match
-(head-to-head: gen3-256 vs forge-best at 65.6%, gen3-256 vs gen3-128
-at 58.0%, gen3-128 vs forge-best at 60.4%). Cards picked into the
-winning decks will accumulate stronger labels in any future encoder
-retraining — but per the uniformity analysis above, those cards span
-all five colors and a range of deck shapes, so the labels rising
-isn't concentrated on W/G/creature cards alone. The U and R cards
-gen3-256 does pick rise too, because they win when picked.
-
-The remaining structural narrowing is that cards gen3-* doesn't pick
-get no new signal at all and stay frozen at their prior labels. That
-is the slow, selective narrowing — "the encoder's emphasis sharpens
-toward cards strong scorers actually pick" rather than "the encoder
-weights one color or type over another." Without intervention, the
-deck-composition creep documented in the earlier table continues; the
-per-card label content gets sharper rather than more biased.
-
-Mitigations, in cost order:
-
-- **Generate diverse `match-outcomes` data in parallel.** Run the
-  existing 4-Forge-methods-on-both-sides mode alongside the gen-3
-  self-play generation. A 30-50% mix of diverse data substantially
-  dilutes the W/G/creature gradient in the encoder retraining without
-  requiring code changes.
-- **Skip encoder retraining for one generation.** Frozen embeddings
-  stop the bias-amplification half of the loop while the scorer
-  continues to iterate. Costs the ~0.3–0.7 pp marginal lift from
-  fresh data.
-- **Re-weight encoder training by inverse method-pair frequency.**
-  Requires `train-encoder` to consume the method tags from
-  `cards-played.txt` (which it currently does not).
-
-The underlying Forge-AI piloting asymmetry is the root cause and
-would require AI improvements to fix — out of scope for a training
-cycle.
-
-## Variance: pool-set luck is still substantial at 24 pools × Bo7
+### Evaluation variance: pool-set luck at 24 pools × Bo7
 
 The two runs differ by **11.4 pp of mean per-pool delta** (28.7 vs 17.3),
 with the same scorer and same configuration. The only thing that changed
@@ -360,7 +179,7 @@ the random pool draws. That fixes a useful number for future eval planning:
   memory note: ~20+ pp swings on pool-set luck) tightens roughly ~2× at
   24 pools but does not collapse.
 
-## Score-delta predicts win-rate-delta per pool
+### Score-delta predicts win-rate-delta per pool
 
 For each of the 48 pools we have both the win-rate delta from match outcomes
 and the scorer-assigned score of each of the two decks (the headers on the
@@ -393,7 +212,7 @@ signal, not deterministic. Concretely:
   predictions that didn't pay off in play; consistent with the noise level
   the r=0.52 fit implies.
 
-### Why run 2's correlation is stronger than run 1's
+#### Why run 2's correlation is stronger than run 1's
 
 Run 2's per-run r (+0.61) is more than 2× run 1's (+0.29). The mechanical
 reason is range: run 1's score deltas span +1.13 to +3.20 (a 2.07-wide
@@ -402,7 +221,7 @@ makes a linear relationship easier to detect at fixed noise level. There's
 nothing about run 2 the model "did better" — the random pool draw simply
 produced more variety in deck-pair quality.
 
-### Why this is useful
+#### Why this is useful
 
 The score gap can be read off a deck dump in milliseconds, while a single
 24-pool Bo7 eval takes hours. The gap is a useful first-order indicator of
@@ -414,6 +233,189 @@ scorer variants, with these caveats:
 - Small score gaps (<1.0) carry weak signal; expect noisy outcomes.
 - Strongly negative scores on a `forge-best` deck are the most informative
   signal — they correspond to the largest observed win deltas.
+
+## Deck-building behavior
+
+Two diagnostic comparisons characterize how gen3's deck-building differs
+from gen2 and from `forge-best`: a build-only comparison of 4,500 gen2 decks
+against 10,000 gen3-128 and 10,000 gen3-256 decks (all built via
+`build-decks` on random sealed pools), and a 19,374-match self-play
+tournament between `forge-best`, gen3-128, and gen3-256 that lets the picks
+be scored against actual game outcomes.
+
+Gen3's picks differ from gen2's in two ways: splash discipline is restored
+(a clear improvement), and W/G/creature concentration appears (an ambiguous
+shift whose sign depends on the deployment target). The in-play results
+show gen3-256's picks pay off uniformly across colors despite the
+concentration in its build mix, which sharpens the interpretation of the
+bias.
+
+### Splash discipline restored
+
+Gen3 dials back the multi-color overcommitting that gen2 was prone to:
+
+| Builder      | 2-color | 3-color | 4-color | 5-color | Avg colors |
+|--------------|---------|---------|---------|---------|------------|
+| `forge-best` | 99.9%   |  0.1%   |  0.0%   |  0.0%   | ~2.00      |
+| gen2         | 18.2%   | 44.0%   | 30.0%   |  7.6%   | ~3.27      |
+| gen3-128     | 46.3%   | 42.2%   | 10.1%   |  1.4%   | ~2.66      |
+| gen3-256     | 40.2%   | 48.3%   | 10.1%   |  1.4%   | ~2.72      |
+
+Gen3 cuts 4-color decks by ~3× and 5-color decks by ~5× relative to gen2,
+landing in the "2-color or 3-color with splash" range that matches expert
+sealed convention more closely than either `forge-best` (rigidly 2-color, no
+flexibility) or gen2 (over-splashing).
+
+The most plausible mechanism is two of the new encoder's per-card
+regression targets that the price-predictor encoder couldn't have
+provided: `cast_lift` (per-card win-rate lift conditional on actually
+casting the card) and the five `color_lift_X` heads (per-card win-rate
+lift contribution split by color). `cast_lift` directly penalizes cards
+that look strong on paper but rarely get cast — exactly the pathology a
+`WWG` mythic in a 4-color deck exhibits. `color_lift_X` gives the encoder
+a way to encode that a card's mana cost colors matter for its expected
+contribution. Together they amount to a learned mana-reliability
+heuristic, all from per-card targets — no deck-shape constraint anywhere
+in the scorer.
+
+Gen2's analysis explicitly identified splash overfitting as a probable
+failure mode of the price-predictor encoder, which had no playability
+signal at all (text embeddings driven by collector value, not by
+castability). Gen3 measurably fixes the splash-discipline half of that
+diagnosis without any deliberate scorer-side intervention.
+
+This is also evidence against reading the encoder swap as "purely a
+per-card-quality improvement." The encoder also encodes mana-base
+playability, which is a deck-shape property the scorer reads off during
+greedy construction. Future encoder-width ablations should expect gains
+along either or both axes, and the color-count distribution above is the
+cheapest way to separate them post-hoc.
+
+### Color and creature concentration in the build mix
+
+Gen3 builds decks that over-represent W and G and under-represent U and
+R relative to `forge-best`, with a steady creature-count creep across
+generations:
+
+| Builder      | W      | U      | B      | R      | G      | Creatures |
+|--------------|--------|--------|--------|--------|--------|-----------|
+| `forge-best` | 40.3%  | 33.8%  | 45.0%  | 40.3%  | 40.6%  | 14.58     |
+| gen2         | 85.4%  | 60.6%  | 63.2%  | 61.5%  | 55.7%  | 16.62     |
+| gen3-128     | 72.2%  | 37.2%  | 54.3%  | 42.3%  | 60.4%  | 17.68     |
+| gen3-256     | 76.6%  | 47.9%  | 47.3%  | 29.3%  | 71.5%  | 18.15     |
+
+Two patterns hold across both gen3 widths:
+
+1. **W and G are over-represented; U and R are under-represented.** W
+   sits ~30–35 pp above the `forge-best` baseline; G sits ~20–30 pp
+   above; R sits ~10 pp below in gen3-256.
+2. **Creature count creeps up generation over generation.** `forge-best`
+   14.6 → gen2 16.6 → gen3-128 17.7 → gen3-256 18.2 — a steady drift,
+   not a one-time shift.
+
+The most likely cause is a known Forge-AI limitation: combat play
+(mechanical attack/block decisions) is handled well, but instant and
+sorcery timing (when to bolt, when to wrath, when to counter) is
+handled poorly. A creature card therefore realizes closer to its full
+objective potential when Forge pilots it than a non-creature spell of
+equivalent objective strength does. The per-card labels the encoder's
+regression heads fit (derived from `cards-played.txt`) encode this
+piloting asymmetry directly: creatures win more games in Forge's
+hands, so creatures' `score_play` and `cast_lift` labels go up, and
+the scorer learns to prefer them. W and G concentrate the effect
+because they are the creature-heaviest colors; U and R suffer because
+they are spell-heavy.
+
+The bias is "real" in the sense that the encoder correctly reflects
+the Forge-AI meta. It is "wrong" in the sense that the Forge-AI meta
+diverges from the true MTG meta because of the AI's piloting
+weaknesses. The scorer is optimizing the right objective with respect
+to the deployment target (Forge-piloted matches) but the wrong one
+with respect to the underlying game.
+
+### Gen3-256 wins uniformly across the decks it does build
+
+While gen3-256 *builds* biased decks, it *wins* near-uniformly across the
+colors and shapes it picks. Win rate when the deck contains the given
+color (per-color cells are not row-disjoint — a 3-color deck contributes
+to three cells), measured on 19,374 self-play matches:
+
+| Method      | W      | U      | B      | R      | G      | Color spread |
+|-------------|--------|--------|--------|--------|--------|--------------|
+| forge-best  | 45.4%  | 38.7%  | 41.6%  | 40.1%  | 41.3%  | 6.7 pp       |
+| gen3-128    | 52.8%  | 48.6%  | 50.4%  | 46.3%  | 50.4%  | 6.5 pp       |
+| gen3-256    | 58.8%  | 56.4%  | 56.5%  | 55.1%  | 57.6%  | **3.7 pp**   |
+
+Gen3-256's win-rate spread across the five colors is roughly *half* of
+`forge-best`'s, and no color is meaningfully weak — min 55.1% R, max
+58.8% W. The U and R cards gen3-256 chooses to pick (in 48% and 29%
+of its decks respectively) win at 55-57%, indistinguishable from the
+57-59% of its W/G-heavy decks.
+
+The creature-count slope shows the same pattern at higher resolution:
+
+| Creatures | forge-best        | gen3-256          |
+|-----------|-------------------|-------------------|
+| ≤13       | 31.4% (n=3233)    | 53.3% (n=452)     |
+| 16        | 45.1% (n=7584)    | 54.3% (n=1351)    |
+| ≥20       | 52.9% (n=34)      | 63.0% (n=3467)    |
+
+Gen3-256 still benefits from creature-heavy decks (+9.7 pp from
+≤13 to ≥20), but the slope is shallower than `forge-best`'s well-sampled
+range (+13.7 pp from ≤13 to 16-creature decks) and the baseline is
+substantially higher across every bucket.
+
+The bias is therefore concentrated in *which decks gen3-256 chooses to
+build*, not in *which decks gen3-256 wins with*. The U and R cards
+gen3-256 picks are genuine good picks — they win when used — so per-card
+encoder labels derived from these matches in any future retraining are
+correct signals for those cards, not pure bias-laundering. The "wrong
+objective" framing above still applies (the Forge-AI meta diverges from
+the true MTG meta), but the divergence shows up primarily on the
+build-side rather than the win-side, and the self-play amplification
+dynamic is correspondingly less acute than a "runaway feedback loop"
+framing would imply.
+
+### Self-play risk for future encoder retrains
+
+The amplification dynamic is real but more selective than catastrophic.
+The ~110K `cards-played.txt` rows produced by the 19,374-match
+self-play run come almost entirely from forge-best / gen3-128 /
+gen3-256 matches where gen-3 decks win 58-66% per Bo7 match
+(head-to-head: gen3-256 vs forge-best at 65.6%, gen3-256 vs gen3-128
+at 58.0%, gen3-128 vs forge-best at 60.4%). Cards picked into the
+winning decks will accumulate stronger labels in any future encoder
+retraining — but per the uniformity result above, those cards span
+all five colors and a range of deck shapes, so the labels rising
+isn't concentrated on W/G/creature cards alone. The U and R cards
+gen3-256 does pick rise too, because they win when picked.
+
+The remaining structural narrowing is that cards gen3-* doesn't pick
+get no new signal at all and stay frozen at their prior labels. That
+is the slow, selective narrowing — "the encoder's emphasis sharpens
+toward cards strong scorers actually pick" rather than "the encoder
+weights one color or type over another." Without intervention, the
+deck-composition creep documented in the table above continues; the
+per-card label content gets sharper rather than more biased.
+
+Mitigations, in cost order:
+
+- **Generate diverse `match-outcomes` data in parallel.** Run the
+  existing 4-Forge-methods-on-both-sides mode alongside the gen-3
+  self-play generation. A 30-50% mix of diverse data substantially
+  dilutes the W/G/creature gradient in the encoder retraining without
+  requiring code changes.
+- **Skip encoder retraining for one generation.** Frozen embeddings
+  stop the bias-amplification half of the loop while the scorer
+  continues to iterate. Costs the ~0.3–0.7 pp marginal lift from
+  fresh data.
+- **Re-weight encoder training by inverse method-pair frequency.**
+  Requires `train-encoder` to consume the method tags from
+  `cards-played.txt` (which it currently does not).
+
+The underlying Forge-AI piloting asymmetry is the root cause and
+would require AI improvements to fix — out of scope for a training
+cycle.
 
 ## Decisions / next steps
 
@@ -431,9 +433,9 @@ scorer variants, with these caveats:
 - **Use the score-delta-vs-win-delta correlation as a sanity check, not a
   benchmark.** It's a cheap diagnostic on the scorer's internal calibration,
   but not a substitute for actual match play when comparing two scorers.
-- **Reassess the data-noise-floor reasoning from gen2.** Gen2's analysis
-  concluded the val_acc ceiling at ~0.70 was data-limited rather than
-  model-limited, with the encoder identified as the upstream constraint. Gen3
-  is consistent with that diagnosis — replacing the encoder is what moved the
-  in-play result. The val_acc ceiling for gen3 itself has not been measured
-  against the gen2 ceiling yet; that's the next experiment.
+- **Measure the val_acc ceiling for gen3.** Gen2's analysis concluded the
+  val_acc ceiling at ~0.70 was data-limited rather than model-limited, with
+  the encoder identified as the upstream constraint. Gen3 is consistent
+  with that diagnosis — replacing the encoder is what moved the in-play
+  result — but the new ceiling for gen3 itself has not been characterized
+  yet.
