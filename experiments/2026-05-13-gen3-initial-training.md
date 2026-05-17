@@ -251,16 +251,79 @@ weaknesses. The scorer is optimizing the right objective with respect
 to the deployment target (Forge-piloted matches) but the wrong one
 with respect to the underlying game.
 
-### Self-play risk for gen4
+### Refinement from larger-sample analysis: gen3-256 wins uniformly across the decks it builds
 
-The bias is self-reinforcing through the self-play loop. The new
-~100–150K `cards-played.txt` rows being generated for gen4's encoder
-retraining come almost entirely from forge-best / gen3-128 / gen3-256
-matches where gen-3 decks win 62-67% of games. Cards in those decks
-(disproportionately W/G/creature) will accumulate even stronger labels
-in gen4's encoder, pushing the bias further rather than maintaining
-its current level. Without intervention, the creature/W/G creep
-documented above is likely to continue through gen4 and beyond.
+A follow-up `analyze_winrates.py` pass on 19,374 self-play matches
+between forge-best, gen3-128, and gen3-256 sharpens the bias picture:
+while gen3-256 *builds* biased decks (W/G/creature-heavy as documented
+above), it *wins* near-uniformly across the colors and shapes it does
+pick.
+
+Win rate when the deck contains the given color (per-color cells are
+not row-disjoint — a 3-color deck contributes to three cells):
+
+| Method      | W      | U      | B      | R      | G      | Color spread |
+|-------------|--------|--------|--------|--------|--------|--------------|
+| forge-best  | 45.4%  | 38.7%  | 41.6%  | 40.1%  | 41.3%  | 6.7 pp       |
+| gen3-128    | 52.8%  | 48.6%  | 50.4%  | 46.3%  | 50.4%  | 6.5 pp       |
+| gen3-256    | 58.8%  | 56.4%  | 56.5%  | 55.1%  | 57.6%  | **3.7 pp**   |
+
+gen3-256's win-rate spread across the five colors is roughly *half*
+of forge-best's, and no color is meaningfully weak — min 55.1% R, max
+58.8% W. The U and R cards gen3-256 chooses to pick (in 48% and 29%
+of its decks respectively) win at 55-57%, indistinguishable from the
+57-59% of its W/G-heavy decks.
+
+The creature-count slope shows the same pattern at higher resolution:
+
+| Creatures | forge-best        | gen3-256          |
+|-----------|-------------------|-------------------|
+| ≤13       | 31.4% (n=3233)    | 53.3% (n=452)     |
+| 16        | 45.1% (n=7584)    | 54.3% (n=1351)    |
+| ≥20       | 52.9% (n=34)      | 63.0% (n=3467)    |
+
+gen3-256 still benefits from creature-heavy decks (+9.7 pp from
+≤13 to ≥20), but the slope is shallower than forge-best's well-sampled
+range (+13.7 pp from ≤13 to 16-creature decks) and the baseline is
+substantially higher across every bucket.
+
+The implication is that the bias narrative in the previous subsection
+needs softening. The encoder swap did not fix the **deck-composition**
+bias (gen3 still picks W/G/creatures), but it produced a scorer whose
+win rate is **less dependent on that composition** than forge-best's
+is. The U and R cards gen3-256 picks are genuine good picks — they
+win when used — so per-card encoder labels that any future retraining
+would derive from these matches are correct signals for those cards,
+not pure bias-laundering.
+
+The "wrong objective" framing above still applies — the Forge-AI meta
+diverges from the true MTG meta because of piloting asymmetries — but
+the divergence shows up primarily in *which decks gen3-256 chooses to
+build*, not in *which decks gen3-256 wins with*. The self-play
+amplification dynamic below is correspondingly less acute than a
+"runaway feedback loop" framing implies.
+
+### Self-play risk for future encoder retrains
+
+The amplification dynamic is real but more selective than catastrophic.
+The ~110K `cards-played.txt` rows produced by the 19,374-match
+self-play run come almost entirely from forge-best / gen3-128 /
+gen3-256 matches where gen-3 decks win 58-66% per Bo7 match
+(head-to-head: gen3-256 vs forge-best at 65.6%, gen3-256 vs gen3-128
+at 58.0%, gen3-128 vs forge-best at 60.4%). Cards picked into the
+winning decks will accumulate stronger labels in any future encoder
+retraining — but per the uniformity analysis above, those cards span
+all five colors and a range of deck shapes, so the labels rising
+isn't concentrated on W/G/creature cards alone. The U and R cards
+gen3-256 does pick rise too, because they win when picked.
+
+The remaining structural narrowing is that cards gen3-* doesn't pick
+get no new signal at all and stay frozen at their prior labels. That
+is the slow, selective narrowing — "the encoder's emphasis sharpens
+toward cards strong scorers actually pick" rather than "the encoder
+weights one color or type over another." Without intervention, the
+deck-composition creep documented in the earlier table continues; the
+per-card label content gets sharper rather than more biased.
 
 Mitigations, in cost order:
 
