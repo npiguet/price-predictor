@@ -66,6 +66,7 @@ class MatchOutcome:
 class MatchTrainingExample:
     winner_indices: torch.Tensor  # (N,) long, rows into the EmbeddingTable
     loser_indices: torch.Tensor   # (M,) long
+    margin: int                   # |wins_a - wins_b|, e.g. 1..4 for Bo7
 
 
 @dataclass
@@ -74,6 +75,7 @@ class TrainingBatch:
     loser_indices: torch.Tensor   # (batch, max_loser_cards) long
     winner_mask: torch.Tensor     # (batch, max_winner_cards) bool
     loser_mask: torch.Tensor      # (batch, max_loser_cards) bool
+    margins: torch.Tensor         # (batch,) float
 
 
 class EmbeddingTable(nn.Module):
@@ -264,6 +266,7 @@ class _ExampleBuilder:
         return MatchTrainingExample(
             winner_indices=torch.tensor(winner, dtype=torch.long),
             loser_indices=torch.tensor(loser, dtype=torch.long),
+            margin=abs(outcome.wins_a - outcome.wins_b),
         )
 
     def _report_drops(self, drops: Counter[MatchDropReason]) -> None:
@@ -327,8 +330,9 @@ def collate_training_examples(batch: list[MatchTrainingExample]) -> TrainingBatc
     loser_indices = pad_sequence(loser_seqs, batch_first=True, padding_value=0)
     winner_mask = _length_mask(winner_seqs, winner_indices.size(1))
     loser_mask = _length_mask(loser_seqs, loser_indices.size(1))
+    margins = torch.tensor([ex.margin for ex in batch], dtype=torch.float)
 
-    return TrainingBatch(winner_indices, loser_indices, winner_mask, loser_mask)
+    return TrainingBatch(winner_indices, loser_indices, winner_mask, loser_mask, margins)
 
 
 def _length_mask(sequences: list[torch.Tensor], padded_len: int) -> torch.Tensor:

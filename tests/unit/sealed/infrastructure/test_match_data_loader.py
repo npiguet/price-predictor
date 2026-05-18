@@ -162,6 +162,21 @@ class TestBuildMatchTrainingExamples:
         assert examples[0].loser_indices.shape == (1,)
         assert table.num_cards == 2
 
+    def test_margin_populated_from_games_string(self, tmp_path):
+        """A 4-0 sweep yields margin=4; a 4-3 squeaker yields margin=1."""
+        emb = np.random.randn(D_MODEL).astype(np.float32)
+        cards_dir = self._make_embeddings(tmp_path, {
+            "card_a": emb,
+            "card_b": emb + 1,
+        })
+        outcomes = [
+            _outcome(["card_a"], ["card_b"], "AAAA"),         # 4-0 sweep
+            _outcome(["card_a"], ["card_b"], "ABABABA"),      # 4-3 squeaker
+            _outcome(["card_a"], ["card_b"], "BABBAB"),       # 2-4, margin=2
+        ]
+        examples, _ = build_training_examples(outcomes, cards_dir)
+        assert [ex.margin for ex in examples] == [4, 1, 2]
+
     def test_filters_basic_lands(self, tmp_path):
         emb = np.random.randn(D_MODEL).astype(np.float32)
         cards_dir = self._make_embeddings(tmp_path, {"card_a": emb})
@@ -318,10 +333,12 @@ class TestCollateFunction:
         ex1 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(3, dtype=torch.long),
+            margin=1,
         )
         ex2 = MatchTrainingExample(
             winner_indices=torch.arange(8, dtype=torch.long),
             loser_indices=torch.arange(6, dtype=torch.long),
+            margin=1,
         )
 
         batch = collate_training_examples([ex1, ex2])
@@ -334,13 +351,33 @@ class TestCollateFunction:
         ex1 = MatchTrainingExample(
             winner_indices=torch.arange(3, dtype=torch.long),
             loser_indices=torch.arange(2, dtype=torch.long),
+            margin=1,
         )
         ex2 = MatchTrainingExample(
             winner_indices=torch.arange(5, dtype=torch.long),
             loser_indices=torch.arange(4, dtype=torch.long),
+            margin=1,
         )
 
         batch = collate_training_examples([ex1, ex2])
         assert batch.winner_mask[0, :3].all()
         assert not batch.winner_mask[0, 3:].any()
         assert batch.winner_mask[1, :5].all()
+
+    def test_collate_propagates_margin(self):
+        """Per-example margin lands in batch.margins as float tensor."""
+        ex1 = MatchTrainingExample(
+            winner_indices=torch.arange(3, dtype=torch.long),
+            loser_indices=torch.arange(2, dtype=torch.long),
+            margin=1,
+        )
+        ex2 = MatchTrainingExample(
+            winner_indices=torch.arange(4, dtype=torch.long),
+            loser_indices=torch.arange(3, dtype=torch.long),
+            margin=4,
+        )
+
+        batch = collate_training_examples([ex1, ex2])
+        assert batch.margins.dtype == torch.float
+        assert batch.margins.shape == (2,)
+        assert batch.margins.tolist() == [1.0, 4.0]

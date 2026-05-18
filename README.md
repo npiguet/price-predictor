@@ -575,7 +575,7 @@ Each Java worker uses one of four weighted deck-building methods (40/30/20/10%) 
 
 ### train-scorer
 
-Trains the Set Transformer deck scorer on a `match-outcomes-*.txt` file. Each match in the file becomes a pairwise (winner, loser) training example optimized with Bradley-Terry binary cross-entropy on the score difference. The trainer holds out a fraction of examples for validation, runs validation every epoch, and saves the best-by-val-accuracy checkpoint to `models/sealed/scorer/`.
+Trains the Set Transformer deck scorer on a `match-outcomes-*.txt` file. Each match in the file becomes a pairwise (winner, loser) training example optimized with Bradley-Terry binary cross-entropy on the score difference. By default every match contributes equally regardless of how decisive it was; `--margin-weighting linear|log` scales each match's contribution by its absolute game-win margin so 4-0 sweeps carry more gradient signal than 4-3 squeakers. The trainer holds out a fraction of examples for validation, runs validation every epoch, and saves the best-by-val-accuracy checkpoint to `models/sealed/scorer/`.
 
 **Prerequisites**: card embeddings have been written by `encode-cards` (one `.npz` per card under `output/cardsfolder/`); a match-outcomes file exists at the path passed to `--outcomes-path`.
 
@@ -608,6 +608,7 @@ python -m sealed train-scorer \
 | `--d-ff` | `1088` | Feed-forward dimension in SAB layers |
 | `--mlp-hidden` | `256` | Hidden dimension of the scoring MLP head |
 | `--dropout` | `0.2` | Dropout rate applied in SAB attention/FF, PMA attention, and the scoring MLP |
+| `--margin-weighting` | _(unset)_ | If `linear` or `log`, weight each match's pairwise loss contribution by the absolute game-win margin (Bo7: 1–4). `linear` uses the margin directly; `log` uses `log(1 + margin)` as a dampened fallback. Unset = unweighted (current default; every match contributes equally). Weighted runs gain an `_mwlin` / `_mwlog` suffix in the best/latest checkpoint name so they don't clobber unweighted checkpoints at the same architecture. |
 | `--val-interval` | `1` | Run validation every N epochs |
 | `--unfreeze-embeddings` | `False` | Enable embedding fine-tuning (Phase B) |
 | `--embedding-lr` | `1e-5` | Learning rate for embedding fine-tuning |

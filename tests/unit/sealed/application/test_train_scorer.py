@@ -16,6 +16,8 @@ from sealed.application.train_scorer import (
     _build_optimizer,
     _check_encoder_width,
     _check_scorer_width,
+    _compute_margin_weights,
+    _pairwise_bce,
     _resume_or_build_model,
 )
 from sealed.domain.card_embedding_layout import DET_FEATURE_DIM, FEATURE_COUNT
@@ -60,6 +62,36 @@ class TestBradleyTerryLoss:
         )
         assert loss.item() > 0
         assert loss.item() < 1.0
+
+    def test_pairwise_bce_unweighted_matches_reduction_mean(self):
+        """weights=None preserves the pre-flag .mean() path bit-for-bit."""
+        winner = torch.tensor([2.0, 1.5, -0.3])
+        loser = torch.tensor([0.5, 1.0, 0.1])
+        ours = _pairwise_bce(winner, loser)
+        reference = torch.nn.functional.binary_cross_entropy_with_logits(
+            winner - loser, torch.ones_like(winner),
+        )
+        assert torch.allclose(ours, reference)
+
+    def test_pairwise_bce_linear_weights_scale_loss(self):
+        """A single pair weighted by 4 produces 4x the loss of the same pair weighted by 1."""
+        winner = torch.tensor([0.8])
+        loser = torch.tensor([0.2])
+        w1 = _pairwise_bce(winner, loser, torch.tensor([1.0]))
+        w4 = _pairwise_bce(winner, loser, torch.tensor([4.0]))
+        assert torch.allclose(w4, w1 * 4.0)
+
+    def test_compute_margin_weights_modes(self):
+        margins = torch.tensor([1, 2, 3, 4])
+        assert _compute_margin_weights(margins, "none") is None
+        linear = _compute_margin_weights(margins, "linear")
+        assert torch.allclose(linear, torch.tensor([1.0, 2.0, 3.0, 4.0]))
+        log = _compute_margin_weights(margins, "log")
+        assert torch.allclose(log, torch.log(torch.tensor([2.0, 3.0, 4.0, 5.0])))
+
+    def test_compute_margin_weights_rejects_unknown_mode(self):
+        with pytest.raises(ValueError, match="margin_weighting"):
+            _compute_margin_weights(torch.tensor([1]), "sqrt")
 
 
 class TestTrainingReducesLoss:
@@ -188,6 +220,27 @@ class TestBestCheckpointName:
         assert (
             config.latest_checkpoint_name() != phase_a_config.latest_checkpoint_name()
         )
+
+    def test_margin_weighting_suffix(self, tmp_path):
+        """`--margin-weighting linear|log` appends a suffix so weighted runs
+        do not clobber unweighted ones at the same architecture; `none`
+        preserves the existing filename for backwards compatibility."""
+        base_kwargs = dict(
+            outcomes_path=tmp_path / "outcomes.txt",
+            cards_path=tmp_path / "cards",
+            checkpoint_dir=tmp_path / "checkpoints",
+            lr=1e-5,
+        )
+        unweighted = TrainScorerConfig(**base_kwargs)
+        linear = TrainScorerConfig(**base_kwargs, margin_weighting="linear")
+        log = TrainScorerConfig(**base_kwargs, margin_weighting="log")
+
+        assert "_mw" not in unweighted.best_checkpoint_name()
+        assert unweighted.latest_checkpoint_name() == "latest.pt"
+        assert linear.best_checkpoint_name().endswith("_mwlin.pt")
+        assert linear.latest_checkpoint_name() == "latest_mwlin.pt"
+        assert log.best_checkpoint_name().endswith("_mwlog.pt")
+        assert log.latest_checkpoint_name() == "latest_mwlog.pt"
 
 
 class TestPhaseProperty:
@@ -337,6 +390,7 @@ class TestPhaseBTraining:
             loser_indices=torch.tensor([[1]]),
             winner_mask=torch.tensor([[True, True, True]]),
             loser_mask=torch.tensor([[True]]),
+            margins=torch.tensor([1.0]),
         )
         ctx = _TrainingContext(
             model=None,  # type: ignore[arg-type]

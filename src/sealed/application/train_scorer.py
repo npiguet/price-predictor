@@ -61,25 +61,37 @@ class TrainScorerConfig:
     random_seed: int = 42
     encoder_chunk_size: int = 128
     max_grad_norm: float = 100.0
+    margin_weighting: str = "none"  # "none" | "linear" | "log"
 
     @property
     def phase(self) -> Literal["A", "B"]:
         return "A" if self.embedding_lr == 0 else "B"
 
+    def _margin_suffix(self) -> str:
+        if self.margin_weighting == "linear":
+            return "_mwlin"
+        if self.margin_weighting == "log":
+            return "_mwlog"
+        return ""
+
     def best_checkpoint_name(self) -> str:
+        suffix = self._margin_suffix()
         if self.phase == "B":
             return (
                 f"best_phaseB_l{self.n_layers}_h{self.n_heads}_s{self.n_seeds}"
                 f"_ff{self.d_ff}_mlp{self.mlp_hidden}"
-                f"_lr{self.lr}_emblr{self.embedding_lr}.pt"
+                f"_lr{self.lr}_emblr{self.embedding_lr}{suffix}.pt"
             )
         return (
             f"best_l{self.n_layers}_h{self.n_heads}_s{self.n_seeds}"
-            f"_ff{self.d_ff}_mlp{self.mlp_hidden}_lr{self.lr}.pt"
+            f"_ff{self.d_ff}_mlp{self.mlp_hidden}_lr{self.lr}{suffix}.pt"
         )
 
     def latest_checkpoint_name(self) -> str:
-        return "latest_phaseB.pt" if self.phase == "B" else "latest.pt"
+        suffix = self._margin_suffix()
+        return (
+            f"latest_phaseB{suffix}.pt" if self.phase == "B" else f"latest{suffix}.pt"
+        )
 
     def scorer_config(self, d_model: int) -> ScorerConfig:
         """Build the architecture config for a fresh scorer.
@@ -176,6 +188,7 @@ class _TrainingContext:
     max_seq_len: int | None = None
     encoder_chunk_size: int = 128
     max_grad_norm: float = 100.0
+    margin_weighting: str = "none"
 
 
 class _BatchStats:
@@ -237,6 +250,7 @@ class TrainScorerUseCase:
 
             val = _validate(
                 ctx.model, ctx.embedding_table, ctx.val_loader, ctx.device,
+                margin_weighting=ctx.margin_weighting,
             )
             metrics.val_losses.append(val.loss)
             metrics.val_accuracies.append(val.accuracy)
@@ -351,6 +365,7 @@ class TrainScorerUseCase:
             max_seq_len=max_seq_len,
             encoder_chunk_size=config.encoder_chunk_size,
             max_grad_norm=config.max_grad_norm,
+            margin_weighting=config.margin_weighting,
         )
 
     def _persist_checkpoint(
@@ -639,6 +654,7 @@ def _batch_to_device(batch: TrainingBatch, device: torch.device) -> TrainingBatc
         loser_indices=batch.loser_indices.to(device),
         winner_mask=batch.winner_mask.to(device),
         loser_mask=batch.loser_mask.to(device),
+        margins=batch.margins.to(device),
     )
 
 
@@ -662,7 +678,8 @@ def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
         if ctx.encoder is not None:
             _phase_b_inject_encoder(ctx, batch)
         score_winner, score_loser = _score_batch(ctx.model, ctx.embedding_table, batch)
-        loss = _pairwise_bce(score_winner, score_loser)
+        weights = _compute_margin_weights(batch.margins, ctx.margin_weighting)
+        loss = _pairwise_bce(score_winner, score_loser, weights)
         loss.backward()
         per_batch = _clip_per_group(ctx.optimizer, max_norm=ctx.max_grad_norm)
         for name, value in per_batch.items():
@@ -817,6 +834,7 @@ def _validate(
     embedding_table: EmbeddingTable,
     val_loader: DataLoader,
     device: torch.device,
+    margin_weighting: str = "none",
 ) -> ValidationResult:
     """Compute validation loss, accuracy, and score statistics."""
     model.eval()
@@ -825,7 +843,8 @@ def _validate(
         for batch in val_loader:
             batch = _batch_to_device(batch, device)
             score_winner, score_loser = _score_batch(model, embedding_table, batch)
-            loss = _pairwise_bce(score_winner, score_loser)
+            weights = _compute_margin_weights(batch.margins, margin_weighting)
+            loss = _pairwise_bce(score_winner, score_loser, weights)
             stats.add(loss, score_winner, score_loser)
 
     w_mean, w_std, l_mean, l_std = stats.score_summary()
@@ -853,12 +872,42 @@ def _score_batch(
 
 
 def _pairwise_bce(
-    score_winner: torch.Tensor, score_loser: torch.Tensor,
+    score_winner: torch.Tensor,
+    score_loser: torch.Tensor,
+    weights: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    return F.binary_cross_entropy_with_logits(
+    if weights is None:
+        return F.binary_cross_entropy_with_logits(
+            score_winner - score_loser,
+            torch.ones_like(score_winner),
+        )
+    per_example = F.binary_cross_entropy_with_logits(
         score_winner - score_loser,
         torch.ones_like(score_winner),
+        reduction="none",
     )
+    return (per_example * weights.view_as(per_example)).mean()
+
+
+def _compute_margin_weights(
+    margins: torch.Tensor, mode: str,
+) -> torch.Tensor | None:
+    """Map per-example margins to BCE weights for the configured weighting mode.
+
+    ``"none"`` returns ``None`` so ``_pairwise_bce`` takes its unweighted path
+    bit-for-bit identically to the pre-flag behavior. ``"linear"`` weights each
+    pair by its absolute game-win margin (Bo7: 1-4). ``"log"`` dampens with
+    ``log(1 + margin)`` and is the spec's recommended fallback if linear
+    training proves unstable.
+    """
+    if mode == "none":
+        return None
+    floats = margins.float()
+    if mode == "linear":
+        return floats
+    if mode == "log":
+        return (1.0 + floats).log()
+    raise ValueError(f"Unknown margin_weighting mode: {mode!r}")
 
 
 def _set_normalization_stats(

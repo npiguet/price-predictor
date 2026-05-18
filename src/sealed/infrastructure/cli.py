@@ -553,6 +553,23 @@ def _build_train_scorer_parser(subparsers) -> None:
             "clipping is rare. Resumable."
         ),
     )
+    train_parser.add_argument(
+        "--margin-weighting",
+        choices=["linear", "log"],
+        default=None,
+        help=(
+            "Weight each pairwise (winner, loser) example's contribution to "
+            "the loss by the match's |wins_A - wins_B| margin (Bo7: 1-4). "
+            "'linear' uses the margin directly; 'log' uses log(1 + margin) "
+            "for a dampened version if linear training proves unstable. "
+            "Absent = unweighted (every match contributes equally, "
+            "regardless of how decisive it was; current default). Best/latest "
+            "checkpoint names gain an _mwlin / _mwlog suffix when set so "
+            "weighted runs do not clobber unweighted ones at the same "
+            "architecture. Resumable: on --resume, falls back to the resumed "
+            "checkpoint's value when omitted."
+        ),
+    )
 
 
 def _build_evaluate_scorer_parser(subparsers) -> None:
@@ -867,7 +884,7 @@ _RESUMABLE_FLAG_NAMES: tuple[str, ...] = (
     "epochs", "batch_size", "lr",
     "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
     "embedding_lr", "patience", "val_fraction", "random_seed",
-    "encoder_chunk_size", "max_grad_norm",
+    "encoder_chunk_size", "max_grad_norm", "margin_weighting",
 )
 _PATH_FIELDS: frozenset[str] = frozenset({
     "outcomes_path", "cards_path", "checkpoint_dir",
