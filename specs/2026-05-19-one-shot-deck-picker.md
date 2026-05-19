@@ -51,13 +51,17 @@ set; the pool file already excludes basic lands per the
    where `embedding_dim` matches the scorer's `ScorerConfig.d_model` (the
    width of the `.npz` cache — pooled encoder output plus the trailing
    `FEATURE_COUNT` deterministic features).
-2. The picker's internal width `d_model` **equals** `embedding_dim`. No
-   input projection layer; the transformer operates directly on the
-   cache embeddings. A larger sealed encoder (or a wider `.npz` cache)
-   therefore produces a proportionally wider — and more capable —
-   picker. The derivation happens at startup from the
-   `--scorer-checkpoint`'s `ScorerConfig`; there is no `--d-model`
-   CLI flag.
+2. The picker's internal width `d_model` defaults to `embedding_dim`,
+   in which case the transformer operates directly on the cache
+   embeddings with no projection layer. A larger sealed encoder (or a
+   wider `.npz` cache) therefore produces a proportionally wider — and
+   more capable — picker by default. The default derivation happens
+   at startup from the `--scorer-checkpoint`'s `ScorerConfig`. A
+   `--d-model` CLI flag (§ 4.1) overrides this default for cases
+   where the picker should be wider or narrower than its input; when
+   set to a value other than `embedding_dim`, a single
+   `Linear(embedding_dim, d_model)` projection layer is inserted
+   between the input embeddings and the first SAB layer.
 3. Run a stack of `n_layers` **Set Attention Blocks** (SAB, Lee et al.
    2019 — the same primitive used by the scorer and the sealed encoder,
    chosen for consistency with the rest of the project's set-input
@@ -132,13 +136,42 @@ gradient baseline; the same value is the aux head's MSE target,
 detached so the aux loss does not flow back into the rewards). The aux
 head is discarded at inference.
 
-Its role is representation pressure on the SAB trunk: predicting
-pool-level deck quality forces the trunk to learn features that
-correlate with deck strength, complementing the per-card pick signal.
-This is the direct analogue of the MLM auxiliary head used by the
-sealed encoder (`L_reg + mlm-weight · L_mlm` in `train-encoder`),
-which improved encoder representation quality in prior generations.
-The aux head is **always trained** — it is not an opt-in flag.
+**Why include the aux head.** The aux head is structurally the same
+shape as the existing gen4-512 scorer: card embeddings → SAB trunk →
+scalar quality output. The scorer architecture has been validated on
+deck quality from match outcomes in this exact project; the aux head
+applies the same architectural pattern to a closely related task. The
+substantive difference is that the aux head reasons over the ~80-card
+pool instead of a 23-card deck — and to predict the pool's expected
+reward accurately, the head's trunk must internally model *which
+cards from this pool would be picked*. That subset-selection
+reasoning is exactly the picker's task, so the representation pressure
+the aux head exerts on the shared SAB trunk is directly aligned with
+what the per-card head needs to learn. A trunk that can implicitly
+score "the best 23-of-80 subset" is the same trunk that can rank
+cards so the top-23 form a good subset.
+
+(Prior project-internal experience also points the same direction:
+the MLM auxiliary head used by `train-encoder` measurably improved
+sealed encoder quality in prior generations. But the structural
+argument above — same architecture as the scorer, same task family,
+directly aligned representation pressure — is the load-bearing one;
+the MLM experience is corroborating evidence, not the central
+reason.)
+
+**Known caveat.** The aux target `rewards.mean(dim=1)` is a
+non-stationary on-policy quantity: it shifts as the picker improves.
+This is the standard concern with value functions in
+REINFORCE-with-baseline / A2C-style training; we're betting the
+target moves slowly enough relative to optimizer steps for the head
+to track it. Not free of risk, but a well-understood one.
+
+**Default.** `--aux-weight` defaults to `0.1` (§ 4.1). The flag is
+fully ablatable; setting it to `0` is documented as a reasonable
+comparison run if post-training analysis suggests the aux head is
+fighting the policy gradient rather than helping. The aux head
+parameters are always *present* in the model; only the loss-term
+coefficient varies.
 
 ## 2. Inference
 
@@ -162,6 +195,25 @@ lands); `compute_basic_lands` fills the rest to 40.
 **Primary plan: REINFORCE from random init**, using the frozen scorer
 as the reward function. No SA, no per-card labels, no separate data-
 generation pass.
+
+**Why vanilla REINFORCE, not PPO.** The spec uses
+REINFORCE-with-baseline rather than PPO or any other importance-
+sampled / clipped variant. This is a deliberate trade of training
+throughput for implementation simplicity. PPO would add a ratio
+computation, a clip term, possibly an EMA reference distribution,
+and the bookkeeping to do K gradient steps per sample batch — all of
+which give a 4–10× sample-efficiency multiplier in standard RL
+benchmarks. We are knowingly leaving that multiplier on the table,
+on the grounds that the binding constraint for this project is "does
+training lift off at all" (a question REINFORCE answers as well as
+PPO does) rather than "does training converge with minimum compute."
+Total training budget is expected to be a few hours of single-GPU
+time; the simpler training loop pays for itself in implementation
+and debugging effort. If REINFORCE-from-random stalls and the
+contingency plan's Option A (SA warmstart + KL-regularized
+REINFORCE) is adopted, PPO becomes a natural follow-up because the
+KL-regularization complexity budget will have already been accepted
+at that point.
 
 ### 3.1 Per-step loop
 
@@ -276,8 +328,12 @@ Where:
   deck under the current picker distribution (§ 3.5).
 - `entropy` is the entropy of the picker's softmax over the
   pool, computed per pool, averaged over the batch.
-- `entropy_coef` is a CLI hyperparameter; default ~0.01,
-  scheduled to decay over training.
+- `entropy_coef` is the current value of the entropy coefficient,
+  driven by the schedule described under § 4.1 "Entropy schedule":
+  held constant at `--entropy-coef` (default `0.01`) until val
+  reward shows monotonic improvement for `--entropy-decay-after`
+  consecutive epochs, then decayed multiplicatively as val reward
+  plateaus.
 - `pool_quality_pred` is the auxiliary head's output (§ 1.2),
   one scalar per pool in the batch.
 - `rewards.mean(dim=1)` is the per-pool mean reward across the
@@ -319,6 +375,93 @@ is taken over however many picks the walk produced.
 
 The sequential sampler (§ 3.2) draws exactly from this distribution.
 
+### 3.6 Cold-start sanity check (recommended pre-training procedure)
+
+A documented manual diagnostic to run **once before the first full
+training attempt against a given scorer checkpoint**. Not a CLI
+subcommand and not a CLI flag — a one-off check expected to be
+written as a ~30-line ad-hoc script and re-run only if the scorer
+changes.
+
+**What the check measures.** Whether the picker's within-pool reward
+std at random init is large enough relative to the scorer's
+discriminative range on similar-quality decks. The policy gradient
+signal in § 3.4 is driven by the advantage
+`rewards[i, j] - rewards[i].mean()`; if the per-pool reward std at
+random init is much smaller than the score range the scorer reports
+across nominally-similar decks, the picker's samples are
+indistinguishable from the scorer's perspective, the advantage signal
+is uninformative, and REINFORCE will stall regardless of how many
+training steps it gets.
+
+The scorer in `eval()` mode is deterministic — scoring the same deck
+twice gives the same output — so there is no "intrinsic noise floor"
+to compare against. The meaningful reference is the scorer's
+observed score variation on decks of similar quality.
+
+**Procedure.**
+
+1. Compute reference statistics from the existing 70k-match
+   corpus, one-off:
+   - Score every deck in `match-outcomes-all.txt` with the gen4-512
+     scorer (or load cached scores if available).
+   - **Within-band std**: filter to one method tag — `random` is
+     the relevant one, ~5500 deck-sides — and report the std of
+     scores within that band. This is the scorer's natural
+     discriminative spread on nominally-similar (random-built)
+     decks: `sigma_random_band`.
+   - **Cross-band gap** (for sanity): the difference of mean
+     scores between `forge-best` and `random` decks. This is
+     "what the scorer thinks a clearly-better deck is worth":
+     `delta_forge_vs_random`.
+2. Instantiate a fresh random-init picker (same architecture as
+   intended for the full run).
+3. Sample 100 pools from the intended training corpus.
+4. For each pool, draw 1024 sampled decks via the § 3.2 sampler.
+   This is essentially the planned full-training inner loop with
+   `N_samples = 1024` and `batch_size = 100`, run for exactly one
+   step.
+5. Score every sampled deck with the frozen scorer; compute the
+   per-pool reward std across the 1024 samples. Report the
+   distribution across the 100 pools (median, p25, p75).
+6. **Gating decision.** Compare the typical (median across pools)
+   per-pool reward std at random init against `sigma_random_band`:
+   - If the picker's per-pool std is on the same order as
+     `sigma_random_band` (within ~3×, either direction), the
+     picker's random-init samples span the scorer's natural
+     within-band variation. Useful gradient signal exists; the
+     full training run is justified.
+   - If the picker's per-pool std is much smaller than
+     `sigma_random_band` (e.g., < 1/10), the picker's samples are
+     compressed into a region where the scorer barely
+     differentiates them. REINFORCE will struggle to learn from
+     this signal; consider the contingency plan's Option A
+     instead of burning the full training run.
+   - The `delta_forge_vs_random` reference is for interpreting
+     the result, not gating it: if `sigma_random_band` itself is
+     a large fraction of `delta_forge_vs_random`, the scorer is
+     "fuzzy" within the random band and even a modest per-pool
+     std is informative; if `sigma_random_band` is tiny relative
+     to the gap, the scorer is sharp within bands and the picker
+     needs proportionally larger per-pool std to be useful.
+
+**Why this isn't a CLI feature.** The check is run a handful of
+times across the project's lifetime (once per scorer architecture or
+encoder choice). The CLI surface area, tests, and documentation that
+would come with a `sealed probe-picker` subcommand or `--probe-only`
+flag are not worth the ongoing maintenance burden for something that
+runs so rarely. Treat this the same way as "before training, make
+sure the pools file isn't empty" — a sanity procedure, not
+infrastructure.
+
+**N_samples ablation rides on this check.** The probe naturally
+generates 1024 sampled decks per pool, which is enough to estimate
+the variance reduction curve of the per-pool baseline as `N_samples`
+varies. Bin the 1024 samples into groups of size N and report the
+remaining std of the per-pool baseline as a function of N — this is
+exactly the information needed to set `--n-samples` for the full
+training run.
+
 ## 4. CLI
 
 ### 4.1 `train-picker` (new subcommand)
@@ -328,19 +471,20 @@ frozen scorer.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer used as the reward function. The picker's input width is derived from this checkpoint's `ScorerConfig.d_model`. |
+| `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer used as the reward function. The picker's default input width is derived from this checkpoint's `ScorerConfig.d_model`. |
 | `--cards-path` | `output/cardsfolder/` | Path to the `.npz` embedding cache. |
 | `--pools-path` | _(required)_ | Pre-generated pools file (produced by a prior `sealed generate-pools` run). The training loop shuffles and streams from this file; one full pass = one epoch (§ 3.1 "Pool source"). |
+| `--d-model` | _(derived = `embedding_dim`)_ | Picker internal width. When unset, defaults to the cache embedding width and no input projection is inserted (§ 1 step 2). When set to a value other than `embedding_dim`, a single `Linear(embedding_dim, d_model)` projection layer is inserted ahead of the first SAB layer, letting the picker be wider or narrower than its input. |
 | `--n-layers` | `4` | Number of SAB layers. |
-| `--n-heads` | `8` | Attention heads per layer. The derived `d_model` (= cache width, § 1 step 2) must be divisible by this; the run fails fast at startup if not. |
-| `--ff-dim` | `4 × d_model` | Feed-forward dimension. The derived `d_model` is read from the `--scorer-checkpoint` at startup; the default is computed from it. |
+| `--n-heads` | `8` | Attention heads per layer. `d_model` (§ 1 step 2) must be divisible by this; the run fails fast at startup if not. |
+| `--ff-dim` | `4 × d_model` | Feed-forward dimension. The default is computed from the resolved `d_model` at startup. |
 | `--dropout` | `0.0` | Dropout in transformer layers. |
-| `--aux-weight` | `0.1` | Coefficient on the auxiliary pool-quality MSE loss (§ 1.2, § 3.4). Setting this to `0` is the only way to suppress the aux loss; the head itself is always present in the model. |
+| `--aux-weight` | `0.1` | Coefficient on the auxiliary pool-quality MSE loss (§ 1.2, § 3.4). Setting this to `0` disables the aux loss while keeping the head parameters in the model; this is the documented ablation comparison. |
 | `--batch-size` | `16` | Pools per gradient step. |
-| `--n-samples` | `64` | Decks sampled per pool per step. |
+| `--n-samples` | `64` | Decks sampled per pool per step. Default is a placeholder, expected to be tuned by the cold-start sanity check (§ 3.6); the 16×64 vs 4×256 tradeoff (more pools/epoch vs more samples/pool for variance reduction) should be empirically resolved before a long training run. |
 | `--temperature` | `1.0` | Softmax temperature for sampling. |
-| `--entropy-coef` | `0.01` | Coefficient on the entropy bonus. |
-| `--entropy-decay` | `linear` | Schedule for `entropy_coef`: `linear` (to zero over training), `constant`, or `cosine`. |
+| `--entropy-coef` | `0.01` | Coefficient on the entropy bonus. Held constant until the val reward shows monotonic improvement for `--entropy-decay-after K` consecutive epochs, then decays toward 0 as val reward plateaus (see "Entropy schedule" below the table). The starting value itself is what `--entropy-coef` controls. |
+| `--entropy-decay-after` | `5` | Number of consecutive epochs of monotonic val-reward improvement required before the entropy coefficient begins decaying from its initial value. Avoids premature decay when training is still in cold-start. |
 | `--lr` | `3e-4` | AdamW learning rate. |
 | `--max-grad-norm` | `1.0` | Per-parameter-group gradient norm cap. |
 | `--epochs` | `100` | Maximum number of epochs. One epoch = one shuffled pass through the training portion of `--pools-path` (i.e., the file minus the held-out validation fraction). |
@@ -349,6 +493,19 @@ frozen scorer.
 | `--resume` | _(none)_ | Continue a stopped run from this checkpoint. Loads picker weights, optimizer state, epoch counter, and best-validation-reward metadata. Architecture flags (`--n-layers`, `--n-heads`, `--ff-dim`, `--dropout`) are forbidden when this is set — architecture is inherited from the checkpoint. Mutually exclusive with `--picker-checkpoint`. |
 | `--picker-checkpoint` | _(none)_ | Bootstrap a fresh run from this checkpoint's picker weights only. Optimizer state, epoch counter, and validation metadata are discarded. Architecture flags are forbidden (architecture is inherited from the checkpoint). Mutually exclusive with `--resume`. (Also the mechanism that would enable the Option A warmstart contingency — see "Contingency plans" — but is generally useful for any prior-picker bootstrap.) |
 | `--kl-coef` | `0.0` | Coefficient on the KL penalty against the `--picker-checkpoint` reference distribution. `0.0` disables the penalty entirely (the default for a fresh REINFORCE-from-random-init run). Non-zero values are the Option A warmstart configuration; require `--picker-checkpoint`. |
+
+**Entropy schedule.** The entropy coefficient stays constant at
+`--entropy-coef` while training is still in cold-start, then decays
+once the policy has demonstrated learning. Concretely: each epoch
+records val reward; once val reward has improved monotonically for
+`--entropy-decay-after` (default 5) consecutive epochs, the
+coefficient is multiplied by 0.9 at the end of every subsequent
+epoch in which val reward fails to improve on its previous best
+(i.e., decay tracks val-reward plateaus, not wall-clock or step
+count). This avoids the failure mode of a wall-clock-tied decay
+collapsing the policy distribution before lift-off, while still
+letting entropy fall away once the picker has converged and is in
+fine-tuning mode.
 
 ### 4.2 `pick-decks` (new subcommand)
 
@@ -398,28 +555,38 @@ Phase B can carry encoder weights.
 
 ## Cold start
 
-REINFORCE's real failure mode is the early-training reward
-landscape: at random init, sampled decks score similarly badly,
-the gradient is near-zero noise, and learning may stall before
-lifting off.
+REINFORCE's failure mode at random init is a degenerate reward
+landscape: if sampled decks score similarly, the per-pool
+advantage signal is too small relative to the scorer's
+within-band discriminative range, the gradient is uninformative,
+and learning may stall before lifting off.
 
-Three mitigations are built into the primary training loop:
+The **cold-start sanity check** (§ 3.6) is the spec's primary
+defense: it measures the within-pool reward std at random init
+directly and gates the full training run on that signal being
+non-degenerate. The check runs a few hours of GPU as a manual
+pre-training procedure and answers definitively whether
+REINFORCE-from-random-init has a chance on this scorer.
+
+Three secondary mitigations are built into the primary training
+loop, all of which the cold-start check measures the efficacy of:
 
 - **Per-pool baseline** (§ 3.3) — gives signal even when absolute
   rewards across pools are uninformative.
-- **Multi-sample per pool** (`--n-samples 64`) — relative
+- **Multi-sample per pool** (`--n-samples`) — relative
   ranking of sibling samples carries information that single
   samples cannot.
-- **Entropy bonus** (§ 3.4) — keeps the picker's distribution
-  from collapsing prematurely before exploration has surfaced
-  high-reward regions of deck space.
+- **Entropy bonus** (§ 3.4, § 4.1 "Entropy schedule") — keeps the
+  picker's distribution from collapsing prematurely before
+  exploration has surfaced high-reward regions of deck space.
 
-If these prove insufficient on a given training run, the
-contingency-plans section below describes Option A — the SA
-warmstart — which bootstraps the picker into a region of policy
-space where the reward landscape is no longer flat. Note that
-Option A is not part of this spec; pivoting to it requires a new
-spec round.
+If the cold-start check fails (per-pool reward std much smaller
+than the scorer's within-band std on similar-quality decks), the
+contingency-plans section below
+describes Option A — the SA warmstart — which bootstraps the
+picker into a region of policy space where the reward landscape
+is no longer flat. Note that Option A is not part of this spec;
+pivoting to it requires a new spec round.
 
 ## Reward hacking
 
@@ -429,18 +596,60 @@ match win rate. SA's local-search constraint keeps it in
 via single-card swaps. The picker has no such inductive bias and
 will exploit scorer blind spots if they exist.
 
-Detection: periodically (e.g., once per training day) run a
-small Forge match-outcomes batch comparing picker decks against
-forge-best. Track the correlation between scorer score and
-actual win rate. Divergence indicates the picker is drifting
-into a region of deck space the scorer mis-evaluates.
+Forge matches can't be the in-training detection mechanism. With
+~30-minute matches and ~50-match batches needed for a directional
+signal, every Forge check would take longer than the full expected
+training run. The detection plan accordingly splits into a
+**cheap in-training audit** that runs every epoch and a
+**definitive end-of-training validation** (described under
+Evaluation) that runs once.
 
-Mitigation if observed within this spec's scope: restart training
-from the most recent checkpoint with stronger entropy
-regularization. The contingency-plans section's Option A (KL
-penalty against a reference picker) is the heavier alternative
-if entropy alone does not stop the drift, but adopting it is a
-spec-level decision, not a flag flip.
+**1. Per-epoch cross-scorer agreement.** The training reward is
+the gen4-512 scorer, but reward-hacking failures are specific to
+the gen4-512 model's quirks. Other trained scorers in the
+project (gen3-256, gen3-128) have different architectures and
+different blind spots; if the picker is genuinely producing
+better decks, all scorers should agree they are better, and if
+the picker is hacking gen4-512 specifically, the other scorers
+will lag or diverge. Each epoch, score the picker's
+deterministic-inference decks (the same set used for the
+validation reward) with both gen4-512 (training reward) and
+gen3-256 (auditor). Track `corr(gen4_score, gen3_score)` on
+those decks across epochs. The baseline correlation can be
+pre-computed once on the existing 70k-match corpus (just run
+both scorers on every deck in `match-outcomes-all.txt` and take
+the Spearman rank correlation); the alert threshold is "picker's
+per-epoch correlation drops more than X std below the baseline."
+
+This is essentially ensemble disagreement as a hacking detector.
+Cost: one extra scorer forward per validation epoch. Negligible.
+
+**2. Per-epoch distributional sanity checks.** The picker's decks
+should look like sealed decks. Track per-epoch distributions on
+the validation decks: color count, CMC histogram, creature
+count, type balance. Compare against the established distribution
+of the 70k-match corpus split by build method (forge-best,
+gen3-256, etc., all already in `match-outcomes-all.txt`). If
+the picker drifts to a region no human or Forge method would
+produce — for example, 5-color decks averaging CMC 1.2 — that's
+a soft reward-hacking signal even if cross-scorer agreement
+holds. Cost: numpy aggregation on the same val-batch decks.
+Free.
+
+**3. End-of-training Forge validation.** See "End-of-training
+Forge validation" under Evaluation. The few hours of Forge time
+get spent once per completed training run rather than per
+checkpoint, providing the definitive answer to "does the picker
+actually win matches." Reward-hacking that slipped past the
+in-training audits surfaces here.
+
+**Mitigation if the in-training audits alert.** Restart training
+from the most recent checkpoint with a larger `--entropy-coef`
+and possibly an earlier checkpoint as the starting point. The
+contingency-plans section's Option A (KL penalty against a
+reference picker) is the heavier alternative if entropy
+regularization alone does not stop the drift, but adopting it is
+a spec-level decision rather than a flag flip.
 
 ## Incoherent decks
 
@@ -493,6 +702,38 @@ Sample size for a stable measurement: ≥ 200 matches at `--best-of 7`.
 This is the same metric the gen4-512 scorer is evaluated on, so
 picker results are directly comparable to scorer + SA results from
 prior generations.
+
+## End-of-training Forge validation
+
+The definitive guard against reward-hacking that the in-training
+cross-scorer audit (§ Reward hacking) cannot rule out on its own.
+Forge matches are too expensive to run in-loop (a ~50-match batch
+takes longer than the full expected training run), so the Forge
+check is amortized to **once per completed training run**, on the
+final and top-K-by-val-reward checkpoints rather than every epoch.
+
+Procedure:
+
+1. After training completes (early stop or `--epochs` reached),
+   identify the final checkpoint and the top 2–3 checkpoints by
+   validation reward.
+2. For each candidate checkpoint, run the End-to-end win rate vs
+   forge-best evaluation above (≥ 200 BO7 matches, fresh pools).
+   3. **Decision rule.** If the best checkpoint's win rate vs
+      forge-best is meaningfully above 50% and consistent with the
+      validation reward ranking (i.e., higher val reward → higher
+      actual win rate), the training run succeeded. If val reward
+      was good but Forge win rate is at or below 50%, reward hacking
+      slipped past the in-training audits and the run is discarded;
+      the picker is not deployed and the failure mode is recorded for
+      tuning the in-training audit thresholds on subsequent runs.
+
+This sits structurally alongside the cold-start sanity check
+(§ 3.6): one is a *pre*-training gate, this is a *post*-training
+gate. Both are manual procedures rather than CLI infrastructure,
+because both run a handful of times across the project's lifetime
+and the existing `sealed match-outcomes` machinery already does
+the heavy lifting.
 
 ## Per-pool comparison against SA
 
@@ -604,6 +845,14 @@ delta. This would be recorded by an instrumentation flag on
 - **Phase B picker fine-tuning** (jointly training the picker + the
   underlying encoder). Analogous to the scorer's Phase B; can be
   added later as a separate spec.
+- **Actor-critic baseline using the aux head.** The aux head
+  (§ 1.2) is structurally a critic — it predicts expected
+  reward — but is not used as the policy-gradient baseline (§ 3.3
+  uses the empirical mean instead). A natural upgrade is to use
+  `pool_quality_pred` directly as the baseline, supervised against
+  the empirical mean as a target. The initial spec keeps the
+  empirical mean baseline for simplicity; the upgrade is recorded
+  here for a future spec round once basic lift-off is confirmed.
 - **Multi-pool batching at inference.** The single-pool inference
   path is the operationally relevant one for the mobile deployment
   target; bulk evaluation can use the natural batch dimension across
