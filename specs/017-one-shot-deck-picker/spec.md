@@ -65,6 +65,16 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 - **`--n-heads` does not divide `--d-model` (resolved from the scorer width).** The run fails fast at startup with a clear divisibility error rather than producing an invalid model and crashing during the first forward pass.
 - **Scorer width changes between training and inference.** A picker trained against an `.npz` cache of width W cannot consume a cache of width W' ≠ W. The inference path rejects mismatched caches at load time with a clear error.
 
+## Clarifications
+
+### Session 2026-05-19
+
+- Q: How should the auditor scorer (FR-030 cross-scorer audit) be configured? → A: Add an off-by-default `--auditor-scorer-checkpoint <path>` flag to `train-picker`; when present, enables the cross-scorer audit.
+- Q: How should the baseline cross-scorer correlation (FR-031) be surfaced? → A: Out-of-band manual procedure / ad-hoc script — no CLI surface (same treatment as the cold-start sanity check).
+- Q: What is the best-checkpoint artifact convention? → A: Save a separately-named `best.pt` updated on each new val-reward best, alongside `{timestamp}.pt` and `latest.pt`, mirroring the scorer convention.
+- Q: How should the FR-032 distributional summaries be reported in the per-epoch log? → A: Mean / median summaries — across-validation-decks mean of color count, creature count, type-balance ratios, plus a condensed CMC histogram (bins for CMC≤2, 3, 4, 5, 6+).
+- Q: Should the picker's random seed be configurable or hardcoded? → A: Hardcoded `seed=42` (no CLI flag), matching the `train-encoder` convention.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -91,13 +101,13 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 - **FR-015**: The auxiliary head MUST be trained against the per-pool mean reward (the same quantity used as the policy-gradient baseline) with mean-squared error. The target MUST be detached so the auxiliary loss does not flow back into the reward computation.
 - **FR-016**: The entropy bonus MUST follow a val-reward-driven schedule: the coefficient is held constant at its configured initial value until validation reward has improved monotonically for a configured number of consecutive epochs, after which the coefficient is multiplied by a decay factor at the end of every subsequent epoch in which validation reward fails to improve on its previous best. Decay tracks validation-reward plateaus, not wall-clock or step count.
 - **FR-017**: AdamW MUST be used as the optimizer with per-parameter-group gradient-norm clipping at the configured cap.
-- **FR-018**: The training loop MUST shuffle the training pool slice at the start of each epoch. The validation slice MUST be the first `--val-fraction` of the file, excluded from training shuffles, and reused identically across epochs.
+- **FR-018**: The training loop MUST shuffle the training pool slice at the start of each epoch. The validation slice MUST be the first `--val-fraction` of the file, excluded from training shuffles, and reused identically across epochs. The random seed governing weight initialization, pool shuffles, deck sampling, and the train/val split MUST be hardcoded to `42` (no CLI flag), matching the `train-encoder` convention.
 - **FR-019**: At the end of every epoch, the system MUST run deterministic inference (FR-006) on the entire validation slice, score the resulting decks with the frozen training scorer, and report mean reward. Best-checkpoint selection MUST use this metric.
 - **FR-020**: Early stopping MUST fire after `--patience` epochs without improvement in validation reward.
 
 #### CLI flags and modes
 
-- **FR-021**: The `train-picker` subcommand MUST expose flags for: scorer checkpoint path, embedding cache path, pools file path (required), picker internal width (derived by default), number of attention layers, number of attention heads, feed-forward dimension (computed from width by default), dropout, auxiliary-loss weight, batch size, samples per pool, sampling temperature, entropy coefficient initial value, entropy decay-after epoch count, learning rate, gradient-norm cap, max epochs, validation fraction, early-stopping patience, resume checkpoint, prior-picker bootstrap checkpoint, and KL coefficient against the prior picker.
+- **FR-021**: The `train-picker` subcommand MUST expose flags for: scorer checkpoint path, auditor-scorer checkpoint path (off by default; when set, enables the FR-030 cross-scorer audit), embedding cache path, pools file path (required), picker internal width (derived by default), number of attention layers, number of attention heads, feed-forward dimension (computed from width by default), dropout, auxiliary-loss weight, batch size, samples per pool, sampling temperature, entropy coefficient initial value, entropy decay-after epoch count, learning rate, gradient-norm cap, max epochs, validation fraction, early-stopping patience, resume checkpoint, prior-picker bootstrap checkpoint, and KL coefficient against the prior picker.
 - **FR-022**: The system MUST support resuming a stopped training run from a checkpoint, restoring picker weights, optimizer state, epoch counter, and best-validation-reward metadata. Architecture flags MUST be forbidden when resuming; architecture MUST be inherited from the checkpoint.
 - **FR-023**: The system MUST support bootstrapping a fresh training run from another picker checkpoint's weights only, discarding optimizer state, epoch counter, and validation metadata. Architecture flags MUST be forbidden in this mode; architecture MUST be inherited from the checkpoint.
 - **FR-024**: The resume mode and the prior-picker-bootstrap mode MUST be mutually exclusive.
@@ -109,9 +119,9 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 #### Validation and reward-hacking audits
 
 - **FR-029**: The per-epoch training log MUST include the loss decomposition (policy / entropy / auxiliary) and the validation reward.
-- **FR-030**: When configured with an auditor scorer alongside the training scorer, the system MUST score the validation decks with the auditor and report rank correlation between training-scorer and auditor scores on those decks each epoch.
-- **FR-031**: The system MUST provide a way to compute a baseline rank correlation between two scorers over the existing match-outcomes corpus, intended as the reference value the per-epoch correlations are compared against.
-- **FR-032**: The per-epoch training log MUST include distributional summaries of the validation decks: color count, CMC histogram, creature count, and type balance.
+- **FR-030**: When the practitioner passes `--auditor-scorer-checkpoint` to `train-picker`, the system MUST score the validation decks with the auditor and report rank correlation between training-scorer and auditor scores on those decks each epoch. When the flag is omitted, the audit MUST be skipped (no auditor forward, no correlation line).
+- **FR-031**: The baseline rank correlation between two scorers over the existing match-outcomes corpus (the reference value the per-epoch correlations are compared against) is computed by a documented manual procedure / ad-hoc script. No CLI subcommand or flag is required, mirroring the cold-start sanity check.
+- **FR-032**: The per-epoch training log MUST include distributional summaries of the validation decks: the across-validation-decks mean of color count, creature count, and type-balance ratios, plus a condensed CMC histogram with bins for CMC≤2, 3, 4, 5, and 6+ (five bins total, reported as counts or fractions per bin).
 
 #### Failure modes
 
@@ -122,7 +132,7 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 
 #### Artifact layout
 
-- **FR-037**: Trained picker checkpoints MUST be saved to `models/sealed/picker/` as both a timestamped file and a `latest.pt` symlink-equivalent file (most-recent overwrite).
+- **FR-037**: Trained picker checkpoints MUST be saved to `models/sealed/picker/` as a timestamped file (`{timestamp}.pt`), a `latest.pt` overwritten with the most recent checkpoint, and a `best.pt` overwritten whenever a checkpoint sets a new validation-reward best. This mirrors the existing scorer convention so downstream tooling (Forge end-of-training validation, top-K candidate selection) can locate the best checkpoint by filename without inspecting metadata.
 - **FR-038**: Each picker checkpoint MUST contain: picker weights only (no scorer or encoder weights), the picker config including the input width inherited from the training scorer, the current epoch counter, the best validation reward, and training metadata.
 
 ### Key Entities
@@ -155,6 +165,7 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 - The existing manabase heuristic (`compute_basic_lands`) is reused unchanged. It already accepts a list of chosen cards and computes a basic-land distribution from their mana-pip histogram; lands in the chosen list contribute no pips.
 - The existing `is_land_embedding` partition logic on deterministic features is reused unchanged for nonbasic-land detection in both training-time sampling and inference-time decomposition.
 - The cold-start sanity check (running random-init picker samples to verify the scorer's within-pool reward std at random init) is documented as a one-off manual procedure, not built as a CLI subcommand. The full training run is gated on a practitioner having confirmed the check passes.
+- The baseline cross-scorer rank correlation over the existing match-outcomes corpus (the FR-030 reference value) is computed by an ad-hoc script run once per (training-scorer, auditor-scorer) pair, not built as a CLI subcommand. The resulting baseline number is supplied to the practitioner as context for interpreting the per-epoch correlations.
 - The end-of-training Forge validation (~200 best-of-7 matches against the strongest Forge-built opponent) is run via the existing `match-outcomes` infrastructure with the picker's `generated-decks.txt` as the side-A source. No new validation CLI surface is required.
 - The picker is trained against fixed card embeddings (frozen encoder). A future Phase B that jointly fine-tunes the encoder with the picker is explicitly out of scope.
 - Reward hacking is anticipated as a real risk. The in-training audits (cross-scorer rank correlation, distributional summaries) are the cheap early-warning layer; the end-of-training Forge validation is the definitive guard. If audits alert, the response (raise entropy, restart from earlier checkpoint, etc.) is a practitioner judgment call rather than an automated training-loop policy.
