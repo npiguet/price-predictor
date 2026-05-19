@@ -6,341 +6,335 @@ not the model or the optimizer). Each entry: what it is, why it might help,
 estimated magnitude of the effect, cost to try, and dependencies that might
 unblock or favor it.
 
-## Margin-weighted Bradley-Terry training loss
+## One-shot deck picker (no search)
 
 ### Idea
 
-Today every match contributes one training pair `(winner, loser)` with the
-loss `BCE(score_winner − score_loser, 1)`. A 4-0 match and a 4-3 match
-contribute the same gradient signal even though their information content
-about deck quality is very different.
+Replace `GreedyDeckBuilder`'s simulated-annealing loop with a model
+that picks all 23 nonland cards in a single forward pass. Pool in →
+23-card deck out, no iterative search at inference.
 
-The proposal: weight each pair's contribution to the loss by the absolute
-match margin (`|wins_a − wins_b|`, ∈ {1, 2, 3, 4} for Bo7). A 4-0 match
-contributes 4× the gradient of a 4-3 match.
+### Architecture
 
-```python
-# From: BCE(score_winner − score_loser, 1).mean()
-# To:   (BCE(score_winner − score_loser, 1, reduction="none") * |margin|).mean()
-```
+A **per-card classifier with pool context**:
 
-Three implementation shapes, in increasing intrusiveness:
+- Encoder (Set Transformer or vanilla transformer with no positional
+  encoding) reads the full ~80-card pool jointly, so each card's
+  output token is contextualized by the rest of the pool via
+  self-attention.
+- One shared `Linear(d_model, 1)` projects each token output to a
+  single logit — 80 logits total from one linear layer, not 80
+  separate heads. Same weights for every card; the variation comes
+  from the per-token transformer outputs being different.
+- Inference: sort logits, take top 23.
 
-1. **Margin-weighted BCE** (above): smallest change. Same gradient
-   direction, magnitude scales with margin. ~10 lines: extend
-   `MatchTrainingExample` with a `margin` field, pipe through the
-   collator, multiply in `_pairwise_bce`.
-2. **Per-game pairs**: split each match into N pairs, one per game.
-   Equivalent to margin-weighting in expectation but with more variance.
-   Probably worse than #1 for our dataset size.
-3. **Margin regression**: replace BCE with MSE/Huber on
-   `predicted_margin = score_a − score_b` vs `actual_margin`. Most
-   theoretically principled but biggest change — different loss, model
-   now trained to predict a value with units, val_acc metric needs to be
-   derived from sign agreement.
+Per-card decisions are not independent in practice — when scoring a
+4-drop, the model can see how many 2-drops are in the pool and
+adjust. Synergies are learned implicitly through correlations
+between pool composition and high-scoring picks, not through any
+explicit model of the chosen deck.
 
-Recommendation if revived: start with #1 (linear `|margin|` weighting),
-fall back to log-dampened (`log(1 + |margin|)`) if training proves
-unstable.
+#### Alternative architectures considered and deprioritized
+
+- **Query-decoder.** 23 learned "deck slot" query vectors
+  cross-attend to the pool; each query emits a card index. Trained
+  with Sinkhorn-normalized soft assignment to enforce distinct picks
+  (a differentiable relaxation of the assignment problem); inference
+  resolves to a hard assignment with the Hungarian algorithm. More
+  expressive when slots cleanly specialize but susceptible to query
+  collapse, and the role-specialization advantage is weaker for MTG
+  decks than for problems with hard slot structure (e.g., sports
+  lineups). Deprioritized.
+- **Autoregressive pointer.** Pick one card at a time, 23 steps,
+  conditioned on already-picked cards. Tried in earlier experiments
+  without success. Excluded.
+
+### Training approach
+
+**Primary plan: REINFORCE from random init**, using the frozen
+gen4-512 scorer as the reward function. No SA, no per-card labels,
+no separate data-generation pass.
+
+Per training step:
+
+1. Generate a sealed pool (sub-millisecond via `generate-pools`).
+2. Picker forward pass → 80 logits → softmax → sample 23 cards.
+3. Score the sampled 23-card deck with the frozen gen4-512 scorer
+   (single scorer forward, no SA) → scalar reward.
+4. Gradient: `∇ log π(deck | pool) × (reward − baseline)`.
+5. Backprop.
+
+The teacher scorer is the entire training signal.
+
+#### How sampling works (training vs inference)
+
+The picker's 80 logits describe a distribution over cards, not a
+deterministic ranking. At inference, take argmax / top-23 →
+deterministic best deck. At training, sample 23 cards
+stochastically from that distribution → can produce N different
+decks from the same pool by drawing N times.
+
+Two equivalent sampling schemes:
+
+- **Sequential categorical.** Softmax → 80 probabilities. Draw
+  one card, mask, renormalize, draw the next. 23 draws = one
+  sampled deck. Run 64 times for 64 decks. Sequential per
+  sample.
+- **Gumbel top-K.** Add independent Gumbel(0,1) noise to each
+  logit, take top-23 by noisy logits. Mathematically equivalent
+  to categorical sampling without replacement, but vectorized:
+  replicate logits 64 times, add 64 noise vectors, top-23 each
+  row in one batched op. Standard trick for batched discrete
+  sampling on GPU.
+
+Diversity across the 64 samples is controlled by softmax
+sharpness — flat distribution early in training → diverse
+samples; sharp distribution late in training → similar samples,
+exactly the RL exploration-vs-exploitation schedule that's
+typically wanted. An optional temperature knob `logits / T`
+gives manual control (T > 1 flattens, T < 1 sharpens), and the
+entropy bonus `−β · H(π)` in the loss penalizes overly sharp
+distributions and indirectly keeps sample diversity up.
+
+REINFORCE needs `log π(deck | pool)` for each sampled deck —
+the gradient is `∇ log π × (reward − baseline)`. For sampling
+without replacement this is the Plackett-Luce log-probability
+(sum over picked cards of `log(p_picked / sum_of_still_available)`),
+which has a closed form and is differentiable in the logits.
+The 64 samples per pool serve two roles simultaneously: 64
+reward observations averaged into the per-pool baseline for
+variance reduction, and 64 different `log π` terms summed into
+one gradient step.
+
+#### Why REINFORCE despite its standard sample-inefficiency reputation
+
+The conventional wisdom "REINFORCE is sample-inefficient, use
+supervised when labels are available" assumes labels are cheap.
+Here they aren't — SA distillation costs ~12s per labeled pool on
+a 3060ti. The relative throughput:
+
+- **SA distillation**: ~0.083 labeled pools per second
+  (single-stream), each yielding 23 clean per-card signals.
+- **REINFORCE** (GPU-batched, e.g. 256 decks per step): plausibly
+  ~5,000–10,000 deck samples per second, each yielding one noisy
+  reward signal.
+
+Even discounting REINFORCE samples by 100× for variance/sparsity
+penalty, informational throughput is ~1000× higher. Over ~33h of
+single-GPU compute, supervised distillation gets ~10k labeled
+pools; REINFORCE gets ~600M sampled decks.
+
+#### Why the ceiling also favors REINFORCE
+
+Supervised distillation has ceiling = "what SA picks." SA is a
+local search bounded by single-card-swap neighborhoods from a
+random init — it finds high-scoring decks under the scorer but
+not necessarily the highest. REINFORCE optimizes against the
+scorer directly with no local-search constraint; its ceiling is
+"what scores highest under the scorer," which is ≥ SA's by
+construction. The picker can in principle find better decks than
+SA does.
+
+The true ceiling under both regimes is the scorer itself — the
+picker can never beat what the scorer would rate as the best
+possible deck. But REINFORCE gets closer to that ceiling than
+supervised distillation from SA.
+
+### Risks and mitigations
+
+**Cold start.** REINFORCE's real risk is not sample efficiency
+but the early-training reward landscape: at random init, all
+sampled decks score similarly badly, gradient is near-zero noise,
+and learning may stall before lifting off. Mitigations:
+
+- **Batch baselines.** Sample N (e.g., 64) decks per pool, use
+  mean reward as the per-pool baseline. The relative ranking of
+  sampled decks always gives signal even when absolute rewards
+  are uninformative.
+- **Entropy bonus.** Add `−β · H(π)` to the loss to keep
+  exploration alive — prevents premature collapse to a narrow
+  distribution before the picker has explored enough deck space.
+
+**Reward hacking.** SA's local-search constraint keeps it in
+"reasonable deck space" — it never strays far from its random
+init via single-card swaps. REINFORCE has no such inductive bias.
+If the gen4-512 scorer has blind spots (decks it rates highly but
+that play poorly), the picker will find them. Detection:
+periodically run a small Forge match-outcomes batch against
+forge-best and watch for divergence between scorer-reported score
+and actual win rate. Mitigation if observed: KL penalty against a
+reference distribution (e.g., a small SA-supervised picker) to
+keep the picker from drifting too far from the data manifold the
+scorer was trained on. This is the standard PPO recipe from RLHF.
+
+**Failure mode of the architecture itself**: incoherent decks
+(top-23 spread across 5 colors, no curve). Diagnosable by
+comparing color/CMC distributions of the picker's picks vs SA's.
+Under REINFORCE this should be partially self-correcting — if
+incoherent decks score badly under the scorer, the reward signal
+pushes the picker away from them.
+
+### Fallback approaches
+
+If REINFORCE from random init fails to lift off in the first day
+or two of training:
+
+- **Option A: SA warmstart.** Train supervised picker on ~5k
+  SA-labeled pools (~17h compute), use it as REINFORCE
+  initialization with KL penalty against itself. The canonical
+  RLHF recipe (SFT → PPO).
+- **Option C: Pure supervised distillation.** Train against SA's
+  per-card picks. Two loss shapes worth combining:
+  - **Pairwise ranking loss.** For each pool, every
+    (teacher-picked, teacher-rejected) pair contributes
+    `max(0, margin − (logit_picked − logit_rejected))`. 23 × 57
+    = 1311 pairs per pool. Directly optimizes the ranking
+    structure that top-K selection cares about (absolute logit
+    values don't matter at inference).
+  - **Per-card marginal contribution as soft label.** For each
+    SA-built deck, compute "how much does the deck's score drop
+    if I remove card X and replace it with the best
+    remaining-in-pool?" Train via MSE against those marginals.
+    Encodes teacher decisiveness in addition to the binary
+    in/out signal.
+  - Optionally an auxiliary deck-quality regression head: one
+    extra scalar output, pooled across the trunk's tokens,
+    supervised against the teacher scorer's score of the
+    SA-built deck. Doesn't directly teach picking but pushes
+    the encoder to learn pool-level features that correlate
+    with deck strength.
+
+  Ceiling capped at SA's quality but training is stable and
+  well-understood.
 
 ### Why it might help
 
-A 4-0 result strongly suggests the per-game `p` is at least 0.65 (≈ 18%
-likelihood at p=0.65 vs 6% at p=0.50). A 4-3 result barely distinguishes
-between p = 0.50 and p = 0.55. The current binary loss treats both the
-same — throwing away the more confident pairs' extra information.
-
-The mechanism is two-fold: more total signal per match (richer label),
-and naturally down-weighting the noisiest matches (close ones at
-p ≈ 0.50–0.55 which the Bo7 label-noise math already flagged as the
-biggest contributor to our val_acc ceiling).
+The current 512-d scorer + SA produces decks in ~12s on a 3060ti
+(`restarts=1`, `sa-temperature=0.8`, `sa-cooling=0.85`, ~40
+iterations of meaningful temperature × ~1100 candidate moves per
+iteration ≈ 50k expensive forwards per deck). For a mobile
+deployment target of ≥100× speedup, a one-shot architecture is the
+most direct path: one encoder forward over the ~80-card pool plus
+a tiny head, roughly 5 orders of magnitude fewer GPU operations
+than the current search.
 
 ### Estimated magnitude
 
-**+1 to +3 pp on val_acc.** The ceiling argument from
-`2026-04-26-gen2-initial-training.md` puts the model-imperfection bucket at 2–8 pp
-above our current 0.70 (under the oracle ceiling of 0.72–0.78). Margin
-weighting attacks that bucket by giving the model a richer signal per
-match, but doesn't move the irreducible-Bo7-noise component.
+**Speed: 100×–1000× faster than the current builder**, well past
+the mobile target.
 
-May also improve val_loss without moving val_acc much — the model becomes
-more confident-and-correct on decisive matches without flipping
-borderline predictions. That's still useful (sharper score calibration
-helps `evaluate-scorer`'s deck-vs-deck ranking, the metric we actually
-deploy on) but it won't show up in the headline metric.
+**Quality** under REINFORCE: ceiling = "best deck under the
+scorer," which may meet or exceed SA's local-search output.
+Working hypothesis: 70–80% win rate vs forge-best (gen4-512's
+measured ~78% as the reference point). Lower than that if
+cold-start mitigation leaves residual instability or reward
+hacking is uncontrolled; higher if the scorer's optimum is in
+fact above SA's local-search reach.
+
+Quality under fallback Option C (supervised only): ceiling
+80–90% of SA's edge over forge-best — some compositional
+reasoning is lost since the model never directly evaluates its
+picked deck.
 
 ### Cost
 
-Low. ~10 lines of code change for option #1, plus one new field in
-`MatchTrainingExample` and the collator. No new CLI flags strictly
-required (could ship as the new default, falling back to binary if a
-flag like `--margin-weighting linear|log|none` is set to `none`). Test
-cost is small.
+**Low-medium under the primary plan (Option B).** New model
+architecture (smaller than current scorer), one new training loop
+combining picker forward + scorer reward, ~33h of single-GPU
+training. No SA dependency, no separate data-generation pass, no
+labeled dataset. Ongoing maintenance: one extra model artifact
+type (`models/sealed/picker/`) and CLI subcommand
+(`sealed pick-decks` or a `--picker` flag on `build-decks`).
 
-### Industry-practices precedent
-
-Mature technique with decades of use across three traditions:
-
-- **Sports rating systems.** Glicko and Glicko-2 (chess.com, USCF) and
-  TrueSkill (Halo matchmaking) weight rating updates by outcome
-  precision. Massey and Sagarin ratings use margin-of-victory directly
-  in college football. **Pythagorean expectation** in baseball (run
-  differential outpredicts W-L record) is the same insight at the
-  season level. The NCAA banned MOV from BCS rankings in 2002, but for
-  an incentive reason that doesn't apply to bo-N matches: NCAA didn't
-  want to encourage running up the score.
-
-- **Learning-to-rank.** **LambdaRank** (Burges, NIPS 2006) and its
-  descendants LambdaMART / LightGBM-Rank are the dominant practical
-  learning-to-rank objective at Bing/Yahoo and modern search-recsys
-  systems. The core idea is *exactly* what's proposed here: take the
-  pairwise BT/BCE loss and multiply each pair's gradient by the size
-  of the metric change that swapping the pair produces. In LambdaRank
-  that's the change in NDCG; for sealed it'd be the match margin.
-
-- **RLHF reward modeling.** BT pairwise loss is the standard objective
-  for reward models. The "graded preferences" research line (5- or
-  7-point Likert scales replacing binary preferences in DPO/IPO/KTO
-  variants) generally shows modest reward-model accuracy gains —
-  similar magnitude to the +1 to +3 pp we'd expect.
-
-Empirical effect sizes across these domains land in "useful but not
-transformative" territory, which matches the size estimate above.
+Option A adds the ~17h SA labeling pass. Option C adds a ~33h
+SA labeling pass and a more conventional supervised training
+loop in place of REINFORCE.
 
 ### Dependencies / when to revisit
 
-Worth doing once the data-side levers are exhausted and we want to
-squeeze the last bit out of model-side. **Stackable with all other
-interventions** (Phase B encoder fine-tuning, architecture changes,
-more matches, longer Bo-N) — the margin signal is orthogonal to
-everything else.
+Blocked on having a teacher scorer worth distilling — currently
+satisfied (gen-4 512d is the strongest scorer and the speed
+problem this targets). Worth scheduling once mobile deployment
+becomes a concrete goal, or alongside the policy/value approach
+(below) to compare "skip search" vs "make search cheaper"
+head-to-head. Both experiments answer independent questions and
+the better answer ships.
 
-Likely target: gen-3 model. By then we'll have more data
-(reducing the noise floor in absolute terms), at which point the
-per-pair margin weighting captures larger absolute information gains
-per match.
-
-## Color-restricted deck builder personalities
+## Learned move proposer for SA (policy/value split)
 
 ### Idea
 
-Two new `build-decks` modes that lock the SA search inside a fixed
-set of 2 or 3 colors. Intended as gen-3 personalities for self-play
-shape diversity, and as a diagnostic for the gen-2 4-5-color drift.
+Keep the SA loop, but cut the dominant cost — the ~1100 expensive
+Set Transformer evaluations per iteration — by adding a cheap
+"proposer" model that ranks moves and lets the scorer evaluate only
+the top-K. AlphaGo-style policy/value split: the policy proposes,
+the value scores.
 
-Flag shape (sketch):
+Per iteration today: enumerate ~1100 candidate moves, score all of
+them with the 512-d Set Transformer, pick the best (or sample by
+softmax). Per iteration with a proposer:
 
-- `--restrict-spell-colors`, valid only with `--restarts color-pairs`
-  or the new `--restarts color-slices`. Filters `spells_remaining` (and
-  the SA swap candidates by extension) to cards whose nonland mana cost
-  is a subset of the restart's color set, plus *truly* colorless spells.
-  **Devoid cards do not count as colorless** — they have colored mana
-  symbols in their cost even though devoid suppresses color elsewhere.
-  Today `--restarts color-pairs` only filters the *initial* 23 spells;
-  the SA can drift outside the pair via swaps. This flag closes that
-  drift.
+1. One forward of a small proposer model over `(current_deck,
+   pool)` produces a distribution over candidate moves.
+2. Take top-K (e.g. K=20) by proposer score.
+3. Evaluate those K with the expensive Set Transformer.
+4. Apply the best as today (greedy or SA-sample by score).
 
-- `--restarts color-slices`: new restart strategy enumerating all
-  C(5,3) = 10 three-color combinations (5 shards + 5 wedges). Same
-  per-restart flow as `color-pairs` (initial 23 filtered to subset
-  cards), with `--restrict-spell-colors` locking the search inside
-  the slice for the duration. "Two colors + splash" is a well-known
-  sealed archetype and a natural separate personality.
+Proposer architecture: a smaller Set Transformer (~64–128 d, 2
+layers) over the concatenated deck and pool, with a per-pool-card
+"swap-in priority" head and a per-deck-card "swap-out priority"
+head. Pair scores are the outer product; add-land and remove-land
+get special heads. This is a comparative ranking task, not an
+absolute-quality task, so the model can be much smaller than the
+scorer.
 
-Two gen-3 personalities fall out: `gen3-pair` (2 colors) and
-`gen3-slice` (3 colors). Shipped alongside the unconstrained
-gen-3 model, giving self-play three deck-shape variants from
-the same scorer.
-
-### Why it might help
-
-Diagnostic + diversity, not direct strength.
-
-1. **Disambiguates scorer-vs-search responsibility for the color drift.**
-   gen2a's training data showed 2-color decks winning 35pp more than
-   5-color (`Win rate by method by deck color count` table). gen2a still
-   built 4-5 colors 44% of the time. Two competing explanations: the
-   scorer genuinely thinks 4-color is the best deck for the pool (it's
-   right or wrong, but the search is faithful to it), or the scorer
-   knows 2-color is better but the SA landscape has 4-color local
-   optima the search settles into. A constrained 2-color deck plays
-   forge-best — if win rate jumps up, the search was the problem; if
-   it stays flat or drops, the scorer was calibrated and we need to
-   look at the training distribution instead.
-
-2. **Self-play deck-shape diversity.** The gen-2 family produced
-   multiple training variants (gen2a, gen2b1, gen2ba) that all built
-   similar shapes (~45% 3-color, ~36% 4-color). Forcing the next gen's
-   self-play matches to include `gen3-pair` and `gen3-slice` decks
-   gives the next scorer deck shapes the family has under-represented
-   in its training corpus.
-
-### Estimated magnitude
-
-**Likely negative on the scorer's reported deck score** — the
-constrained search space is a subset of the unconstrained one, so the
-unconstrained search's chosen deck always scores ≥ the constrained
-one's by definition. The user's standing prior (from running the
-existing `--restarts color-pairs`): unconstrained outputs are often
-identical or near-identical to color-pair-init decks, suggesting the
-search drifts away from 2-color almost immediately when allowed to.
-
-The interesting metric is *win rate vs forge-best*, not the score:
-
-- Win rate up while score is down → scorer miscalibrated; SA stuck in
-  4-color local optima despite better deck existing nearby.
-- Win rate down with score down → scorer is calibrated to the pools;
-  4-color is genuinely the right play and the 2-color training signal
-  comes from a confound (forge-best dominates 2-color cells, n=14988
-  of 18166 in `match-outcomes-all.txt`).
-- Win rate flat → underpowered; either the constrained deck is roughly
-  as good in expectation or n is too small to tell.
-
-### Cost
-
-Low. `--restarts color-pairs` already builds the on-color spell list
-at init; reusing that mask in `spells_remaining` is ~15 lines + the
-CLI flag. The slice variant clones the pair logic with a 10-triple
-enumeration. The "devoid doesn't count as colorless" rule is one extra
-predicate (`mana_cost.color_count == 0` instead of `Card.is_colorless()`,
-which currently treats devoid as colorless).
-
-### Dependencies / when to revisit
-
-Schedule for gen-3 training. Independent of the data-side levers from
-`2026-04-30-gen2-unfrozen-embeddings.md` and stackable with margin-weighted loss
-(above). Worth doing even if gen-3 ends up matching gen-2 in raw win
-rate — the diagnostic answer (scorer vs search) is high-value
-regardless of whether the personalities are competitive.
-
-## Per-card winnability as encoder pretraining target
-
-Specced separately at `specs/2026-05-03-card-winnability-pretraining.md`.
-Worth pursuing once `2026-05-02-deterministic-feature-reliance.md` Test 1a/1b
-confirms the encoder is underused; the spec defines the
-`output/sealed/cards-played.txt` per-game sidecar, the
-`wins_when_played / wins_when_in_deck` label, low-n regularization,
-and the auxiliary regression-head training integration.
-
-## Cast-lift as a third regression head
-
-### Idea
-
-The card-winnability spec's head 1 (net winning influence) sums over
-all in-deck observations regardless of whether the card was actually
-cast that game. This folds two distinct effects together: (a) "does
-casting this card change the outcome?" and (b) "does this card tend to
-land in winning decks?". A card that's just along for the ride in
-strong decks and a card that genuinely swings games when cast can
-arrive at the same head 1 value.
-
-The proposal: add a third regression head supervised against
-**cast-lift**:
-
-```
-p_play  = W_played      / (W_played      + L_played)        # winrate when cast
-p_dead  = W_not_played  / (W_not_played  + L_not_played)    # winrate when in deck but not cast
-lift    = p_play - p_dead                                   ∈ [-1, +1]
-```
-
-The four counters are already computable from `cards-played.txt` —
-each side of each game contributes `(played | not_played) ×
-(winner | loser)` to one of four buckets per card. No new data
-collection; aggregation pass extends to populate four counters per
-card instead of two.
-
-Architecturally, head 3 is a single linear projection + tanh on the
-shared encoder, mirroring head 1.
-
-```
-loss = MSE(score) + MSE(played_rate) + MSE(lift)
-```
+Training signal: log the existing SA's full per-iteration scored
+move set across thousands of pool builds, then train the proposer
+to match the scorer's softmax over moves via KL distillation. Each
+iteration produces ~1100 labeled samples (one per scored move),
+versus 1 label per iteration for argmax-only distillation —
+~1000× denser signal.
 
 ### Why it might help
 
-Three example cards, all 100 in-deck observations, cleanly distinct on
-the lift axis but partially confused on (head 1, head 2):
+Most of the per-iteration cost is the scorer's 1100 forwards.
+Replacing 1100 expensive forwards with 1 cheap proposer forward +
+20 expensive scorer forwards cuts scorer work ~50×, with the
+proposer overhead small enough to leave a net ~30–50× wall-clock
+gain per iteration. Combined with a smaller scorer trunk or INT8
+quantization (independent levers), the 100× mobile target is in
+reach without giving up the SA's compositional search.
 
-| Case | n_cast | p_play | p_dead | head 1 | head 2 | lift |
-|------|-------:|-------:|-------:|-------:|-------:|-----:|
-| Workhorse 2-drop  | 80 | 0.60 | 0.50 | +0.16 | 0.80 | +0.10 |
-| 6-drop bomb       | 30 | 0.70 | 0.50 | +0.12 | 0.30 | +0.20 |
-| Auto-include drag | 60 | 0.55 | 0.55 | +0.10 | 0.60 | 0.00  |
-
-The third row is the interesting one: head 1 looks like a useful card
-(+0.10), but the deck wins 55% whether or not the card hits the table.
-The card isn't doing anything — it's systematically landing in
-slightly-better-than-random decks (build-method × card-strength
-interaction: forge-best favors it over `random`). Head 1 attributes
-that lift to the card. The lift metric correctly says zero.
-
-The 6-drop bomb is the symmetric case: its head 1 is *attenuated*
-(+0.12) because two-thirds of its in-deck appearances are dead games,
-even though every individual cast swings the outcome by 20pp.
-
-### Why all three heads, not two
-
-Heads 1, 2, and lift correspond to three genuinely independent
-quantities. The four raw counters have three degrees of freedom after
-factoring out total scale, so three independent labels are needed for
-full coverage. Algebraically:
-
-```
-head_2 = played_rate
-head_1 = head_2 * (2 * p_play - 1)
-lift   = p_play - p_dead
-```
-
-From `(head_1, head_2)` you recover `p_play` but not `p_dead`. From
-`(head_2, lift)` you recover the gap but not the absolute level. All
-three are needed; none is a linear combination of the other two.
-
-This is the opposite of the play/draw split's situation, where the
-original head 1 *was* a linear combination of the two split heads and
-got dropped.
-
-### Downforce is not a separate head
-
-Defining `downforce = p_play_lose − p_dead_lose` (the loss-side
-analogue) gives `−lift` exactly. The signed lift metric already
-covers both directions: a positive value means casting helps,
-negative means casting hurts (a "trap card" — looks fine but
-backfires more often than it helps when resolved).
+Unlike the one-shot approach, this keeps SA's failure-mode
+recovery: large K rescues occasional proposer misranks, and the
+temperature-sampling escape from local optima still functions.
 
 ### Estimated magnitude
 
-Hard to ballpark without running it. The size of the gain depends on
-how many cards in the corpus are "auto-include drag" cases versus
-"6-drop bombs" — i.e., how often head 1 misattributes deck winrate to
-card contribution. The user's earlier point about random pools largely
-de-confounding teammate quality applies here too: the lift metric's
-biggest absolute wins come from the build-method-induced confound,
-which is real but bounded.
+**Speed: 30–50× on scorer work**, multiplicatively stackable with
+scorer quantization or distillation to a smaller scorer trunk. Net
+100× plausible. **Quality: close to the current SA's** since the
+scorer still evaluates the chosen move and the proposer is trained
+on the scorer's own ranking — failure mode is degradation
+proportional to how often the true best move falls outside the
+top-K, which scales gracefully with K.
 
 ### Cost
 
-Low. Aggregation pass goes from 4 counters per card to 4 (same number,
-different bucketing — wins/losses split by played/not-played instead
-of just summed). One extra regression head, one extra column in
-`cards-win-rates.txt`. Same shrinkage logic, applied to the new label.
-~30-50 lines.
-
-### Caveat
-
-Lift labels degenerate for cards with extreme played rates. A card
-that's cast nearly every time it's drawn (head 2 ≈ 1) has almost no
-`not_played` observations, so `p_dead` becomes too noisy to estimate.
-Bayesian shrinkage with the same `--shrinkage-k` knob handles this
-correctly — the prior pulls those cases toward 0 lift — but the
-encoder gets little usable gradient on those cards from this head.
-Symmetric problem at head 2 ≈ 0. The middle of the head-2 range is
-where lift carries the most signal.
+Medium. Second model architecture (smaller than the scorer),
+training pipeline, and an instrumented `GreedyDeckBuilder` run
+that logs `(deck_state, pool, scored_moves)` tuples for the
+distillation corpus. The data collection pass piggybacks on
+existing builds — every SA-driven `build-decks` run can optionally
+emit the trajectory file as a side-effect, no extra GPU time.
 
 ### Dependencies / when to revisit
 
-Conditional on the per-card winnability encoder being implemented.
-Stackable with the play/draw split (above), the MLM auxiliary loss
-(above), and margin-weighted scorer loss — orthogonal to all three.
-Most natural addition once the basic encoder is in service and a first
-training round confirms head 1 is the primary signal but is suspected
-of conflating ride-along effects with casting effects.
+Same prerequisite as the one-shot picker: a teacher scorer worth
+distilling. The two proposals are explicitly **complementary, not
+competing** — one-shot skips search entirely (highest ceiling on
+speedup, lowest ceiling on quality), policy/value makes search
+cheaper (lower ceiling on speedup, quality ≈ current SA). Worth
+prototyping both: the one-shot's quality determines whether the
+search is structurally necessary, and the policy/value approach is
+the conservative fallback if one-shot can't match the teacher.
