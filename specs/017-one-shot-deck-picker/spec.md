@@ -17,7 +17,7 @@ A sealed-ML practitioner has a trained deck scorer and a corpus of pre-generated
 
 **Acceptance Scenarios**:
 
-1. **Given** a frozen scorer checkpoint and a pools file with at least the validation fraction + a few training pools, **When** the practitioner runs `train-picker` with default flags, **Then** the run completes at least one epoch, writes both a timestamped checkpoint and `latest.pt` to `models/sealed/picker/`, and reports per-epoch training loss decomposition (policy / entropy / aux) plus validation reward.
+1. **Given** a frozen scorer checkpoint and a pools file with at least the validation fraction + a few training pools, **When** the practitioner runs `train-picker` with default flags, **Then** the run completes at least one epoch, writes `latest.pt` and a run-stamped `best_{timestamp}.pt` to `models/sealed/picker/`, and reports per-epoch training loss decomposition (policy / entropy / aux) plus validation reward.
 2. **Given** a training run in progress that produced one or more checkpoints, **When** the practitioner interrupts the run and re-runs `train-picker --resume <checkpoint>`, **Then** training continues from the saved epoch counter, best-validation-reward metadata, and optimizer state, and architecture flags passed alongside `--resume` are rejected with a clear error.
 3. **Given** a pools file but no available scorer at the default path and no explicit `--scorer-checkpoint`, **When** the practitioner runs `train-picker`, **Then** the run fails fast with a message directing them to train a scorer first or pass `--scorer-checkpoint` explicitly.
 4. **Given** an `.npz` embedding cache whose width disagrees with a checkpoint passed via `--resume` or `--picker-checkpoint`, **When** the practitioner runs `train-picker`, **Then** the run fails fast at startup with a clear width-mismatch error rather than a downstream torch shape error.
@@ -71,7 +71,7 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 
 - Q: How should the auditor scorer (FR-030 cross-scorer audit) be configured? → A: Add an off-by-default `--auditor-scorer-checkpoint <path>` flag to `train-picker`; when present, enables the cross-scorer audit.
 - Q: How should the baseline cross-scorer correlation (FR-031) be surfaced? → A: Out-of-band manual procedure / ad-hoc script — no CLI surface (same treatment as the cold-start sanity check).
-- Q: What is the best-checkpoint artifact convention? → A: Save a separately-named `best.pt` updated on each new val-reward best, alongside `{timestamp}.pt` and `latest.pt`, mirroring the scorer convention.
+- Q: What is the best-checkpoint artifact convention? → A: Save a run-stamped `best_{timestamp}.pt` (overwritten on each new val-reward best) alongside a per-epoch `latest.pt`. No per-epoch snapshot files. (Refined from the initial "best.pt + {timestamp}.pt + latest.pt" three-file scheme to two files, matching the scorer/encoder convention of best + latest only.)
 - Q: How should the FR-032 distributional summaries be reported in the per-epoch log? → A: Mean / median summaries — across-validation-decks mean of color count, creature count, type-balance ratios, plus a condensed CMC histogram (bins for CMC≤2, 3, 4, 5, 6+).
 - Q: Should the picker's random seed be configurable or hardcoded? → A: Hardcoded `seed=42` (no CLI flag), matching the `train-encoder` convention.
 
@@ -132,7 +132,7 @@ While a picker is training, the sealed-ML practitioner needs visibility into whe
 
 #### Artifact layout
 
-- **FR-037**: Trained picker checkpoints MUST be saved to `models/sealed/picker/` as a timestamped file (`{timestamp}.pt`), a `latest.pt` overwritten with the most recent checkpoint, and a `best.pt` overwritten whenever a checkpoint sets a new validation-reward best. This mirrors the existing scorer convention so downstream tooling (Forge end-of-training validation, top-K candidate selection) can locate the best checkpoint by filename without inspecting metadata.
+- **FR-037**: Trained picker checkpoints MUST be saved to `models/sealed/picker/` as two files: a `latest.pt` overwritten with the most recent checkpoint each epoch (the resume point), and a `best_{timestamp}.pt` (where `{timestamp}` is fixed at training-run start) overwritten in place whenever a checkpoint sets a new validation-reward best. No per-epoch snapshot files are written. The run-stamped best name keeps each run's best checkpoint distinct from other runs', and lets downstream tooling (Forge end-of-training validation) locate the best checkpoint by filename without inspecting metadata. The end-of-training Forge validation accordingly compares the best (`best_{timestamp}.pt`) and the final (`latest.pt`) checkpoint rather than an arbitrary top-K of per-epoch snapshots.
 - **FR-038**: Each picker checkpoint MUST contain: picker weights only (no scorer or encoder weights), the picker config including the input width inherited from the training scorer, the current epoch counter, the best validation reward, and training metadata.
 
 ### Key Entities
