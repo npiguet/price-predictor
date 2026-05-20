@@ -72,6 +72,8 @@ def build_parser() -> argparse.ArgumentParser:
     _build_match_outcomes_parser(subparsers)
     _build_train_encoder_parser(subparsers)
     _build_build_vocab_parser(subparsers)
+    _build_train_picker_parser(subparsers)
+    _build_pick_decks_parser(subparsers)
 
     return parser
 
@@ -381,9 +383,205 @@ def _build_build_decks_parser(subparsers) -> None:
     )
 
 
+def _build_train_picker_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "train-picker",
+        help="Train a one-shot deck picker via REINFORCE against a frozen scorer",
+    )
+    parser.set_defaults(func=run_train_picker)
+    # Resumable flags register with default=None so resume-precedence resolution
+    # (explicit CLI > resumed train_config > dataclass default) works.
+    parser.add_argument(
+        "--pools-path", default=None,
+        help="Pre-generated pools file (SET_CODE;Card1|...). Required. Resumable.",
+    )
+    parser.add_argument(
+        "--scorer-checkpoint", default=None,
+        help=(
+            "Frozen scorer used as the reward function "
+            "(default: models/sealed/scorer/latest.pt). Must exist. Resumable."
+        ),
+    )
+    parser.add_argument(
+        "--auditor-scorer-checkpoint", default=None,
+        help=(
+            "Optional second scorer; when set, enables the per-epoch cross-scorer "
+            "rank-correlation audit on the validation decks. Resumable."
+        ),
+    )
+    parser.add_argument(
+        "--cards-path", default=None,
+        help="Directory of .npz card embeddings (default: output/cardsfolder/). Resumable.",
+    )
+    parser.add_argument(
+        "--checkpoint-dir", default=None,
+        help=(
+            "Output dir for latest.pt + best_{timestamp}.pt "
+            "(default: models/sealed/picker/). Resumable."
+        ),
+    )
+    parser.add_argument(
+        "--resume", default=None,
+        help=(
+            "Continue a stopped run from this checkpoint (weights, optimizer, "
+            "epoch, best_val_reward). Architecture flags forbidden. Mutually "
+            "exclusive with --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--picker-checkpoint", default=None,
+        help=(
+            "Bootstrap a fresh run from this checkpoint's weights only. "
+            "Architecture flags forbidden. Required when --kl-coef is non-zero. "
+            "Mutually exclusive with --resume."
+        ),
+    )
+    parser.add_argument(
+        "--d-model", type=int, default=None, dest="d_model",
+        help=(
+            "Picker internal width (default: derived = embedding width). When set "
+            "to a value other than the embedding width, a single input projection "
+            "is inserted. Forbidden alongside --resume / --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--n-layers", type=int, default=None, dest="n_layers",
+        help=(
+            "Number of SAB layers (default: 4). Forbidden alongside "
+            "--resume / --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--n-heads", type=int, default=None, dest="n_heads",
+        help=(
+            "Attention heads per SAB (default: 8). Forbidden alongside "
+            "--resume / --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--ff-dim", type=int, default=None, dest="d_ff",
+        help=(
+            "Feed-forward dim (default: 4*d_model). Forbidden alongside "
+            "--resume / --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--dropout", type=float, default=None, dest="dropout",
+        help=(
+            "Dropout in SAB layers (default: 0.0). Forbidden alongside "
+            "--resume / --picker-checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--aux-weight", type=float, default=None, dest="aux_weight",
+        help="Coefficient on the aux pool-quality MSE loss (default: 0.1). Resumable.",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=None, dest="batch_size",
+        help="Pools per gradient step (default: 16). Resumable.",
+    )
+    parser.add_argument(
+        "--n-samples", type=int, default=None, dest="n_samples",
+        help="Sampled decks per pool per step (default: 64). Resumable.",
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=None, dest="temperature",
+        help="Softmax temperature for sampling (default: 1.0). Resumable.",
+    )
+    parser.add_argument(
+        "--entropy-coef", type=float, default=None, dest="entropy_coef",
+        help="Initial entropy coefficient (default: 0.01). Resumable.",
+    )
+    parser.add_argument(
+        "--entropy-decay-after", type=int, default=None, dest="entropy_decay_after",
+        help="Consecutive improving-val epochs before entropy decays (default: 5). Resumable.",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=None, dest="lr",
+        help="AdamW learning rate (default: 3e-4). Resumable.",
+    )
+    parser.add_argument(
+        "--max-grad-norm", type=float, default=None, dest="max_grad_norm",
+        help="Per-parameter-group L2 norm cap (default: 1.0). Resumable.",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=None, dest="epochs",
+        help="Maximum epochs (default: 100). Resumable.",
+    )
+    parser.add_argument(
+        "--val-fraction", type=float, default=None, dest="val_fraction",
+        help="Front fraction of the pools file held out for validation (default: 0.2). Resumable.",
+    )
+    parser.add_argument(
+        "--patience", type=int, default=None, dest="patience",
+        help=(
+            "Early-stop after this many epochs without val-reward improvement "
+            "(default: 10). Resumable."
+        ),
+    )
+    parser.add_argument(
+        "--kl-coef", type=float, default=None, dest="kl_coef",
+        help=(
+            "KL penalty coefficient against --picker-checkpoint's reference "
+            "distribution (default: 0.0). Non-zero requires --picker-checkpoint. Resumable."
+        ),
+    )
+
+
+def _build_pick_decks_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "pick-decks",
+        help="Build 40-card decks from a pools file using a trained picker (one forward per pool)",
+    )
+    parser.set_defaults(func=run_pick_decks)
+    parser.add_argument(
+        "--pools-path", required=True,
+        help="Input pools file (with SET_CODE; prefixes).",
+    )
+    parser.add_argument(
+        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
+        help="Picker weights (default: models/sealed/picker/latest.pt).",
+    )
+    _add_cards_path(parser)
+    parser.add_argument(
+        "--label", type=_parse_label, required=True,
+        help=(
+            "Generation-method tag written as the first column of every output "
+            "line. Must be non-empty without ';', '|', or whitespace."
+        ),
+    )
+    parser.add_argument(
+        "--output", default="output/sealed/generated-decks.txt",
+        help="Output generated-decks file (default: output/sealed/generated-decks.txt).",
+    )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help=(
+            "Append-and-skip resume: count complete lines already in --output, "
+            "skip that many pools, append the rest. Without it --output is truncated."
+        ),
+    )
+
+
 _TRAIN_SCORER_ARCHITECTURE_FLAGS: tuple[str, ...] = (
     "n_layers", "n_heads", "n_seeds", "d_ff", "mlp_hidden", "dropout",
 )
+
+_TRAIN_PICKER_ARCHITECTURE_FLAGS: tuple[str, ...] = (
+    "d_model", "n_layers", "n_heads", "d_ff", "dropout",
+)
+_RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
+    "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
+    "cards_path", "checkpoint_dir",
+    "d_model", "n_layers", "n_heads", "d_ff", "dropout",
+    "aux_weight", "batch_size", "n_samples", "temperature",
+    "entropy_coef", "entropy_decay_after", "lr", "max_grad_norm",
+    "epochs", "val_fraction", "patience", "kl_coef",
+)
+_PICKER_PATH_FIELDS: frozenset[str] = frozenset({
+    "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
+    "cards_path", "checkpoint_dir",
+})
 
 
 def _build_train_scorer_parser(subparsers) -> None:
@@ -1094,6 +1292,151 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    return 0
+
+
+def _picker_dataclass_default(field_name: str):
+    import dataclasses
+
+    from sealed.application.train_picker import TrainPickerConfig
+    f = TrainPickerConfig.__dataclass_fields__[field_name]
+    if f.default is not dataclasses.MISSING:
+        return f.default
+    if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
+        return f.default_factory()  # type: ignore[misc]
+    return None  # required field with no default (e.g. pools_path)
+
+
+def run_train_picker(args: argparse.Namespace) -> int:
+    """Execute the train-picker command."""
+    from sealed.application.train_picker import TrainPickerConfig, TrainPickerUseCase
+    from sealed.domain.picker_model import PickerArchitectureError
+    from sealed.infrastructure.picker_store import PickerStore
+
+    if args.resume is not None and args.picker_checkpoint is not None:
+        print(
+            "Error: --resume and --picker-checkpoint are mutually exclusive: "
+            "--resume continues an existing run; --picker-checkpoint bootstraps "
+            "a fresh run from another picker's weights.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.resume is not None or args.picker_checkpoint is not None:
+        for flag in _TRAIN_PICKER_ARCHITECTURE_FLAGS:
+            if getattr(args, flag) is not None:
+                print(
+                    f"Error: architecture flag --{flag.replace('_', '-')} "
+                    "conflicts with --resume / --picker-checkpoint; architecture "
+                    "is inherited from the checkpoint's stored config. Omit the flag.",
+                    file=sys.stderr,
+                )
+                return 2
+
+    kl_coef = args.kl_coef if args.kl_coef is not None else 0.0
+    if kl_coef != 0 and args.picker_checkpoint is None:
+        print(
+            "Error: --kl-coef is non-zero but --picker-checkpoint is not set. "
+            "The KL penalty needs a reference distribution; pass "
+            "--picker-checkpoint <path>.",
+            file=sys.stderr,
+        )
+        return 2
+
+    resumed_train_config: dict | None = None
+    if args.resume is not None:
+        try:
+            resumed = PickerStore().load_checkpoint(Path(args.resume))
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        resumed_train_config = resumed.train_config
+
+    resolved: dict[str, object | None] = {}
+    for flag in _RESUMABLE_PICKER_FLAG_NAMES:
+        cli_value = getattr(args, flag, None)
+        if cli_value is not None:
+            resolved[flag] = cli_value
+        elif (
+            resumed_train_config is not None
+            and resumed_train_config.get(flag) is not None
+        ):
+            resolved[flag] = resumed_train_config[flag]
+        else:
+            resolved[flag] = _picker_dataclass_default(flag)
+
+    if resolved["pools_path"] is None:
+        print("Error: --pools-path is required.", file=sys.stderr)
+        return 2
+
+    # Scorer must exist (FR-036).
+    scorer_path = Path(str(resolved["scorer_checkpoint"]))
+    if not scorer_path.exists():
+        print(
+            f"Error: scorer checkpoint not found at {scorer_path}. Train a "
+            "scorer first (python -m sealed train-scorer), or pass an existing "
+            "--scorer-checkpoint <path>.",
+            file=sys.stderr,
+        )
+        return 2
+
+    def _coerce(name: str, value):
+        if value is None:
+            return None
+        return Path(value) if name in _PICKER_PATH_FIELDS else value
+
+    config_kwargs = {
+        flag: _coerce(flag, resolved[flag]) for flag in _RESUMABLE_PICKER_FLAG_NAMES
+    }
+    config = TrainPickerConfig(
+        resume=Path(args.resume) if args.resume else None,
+        picker_checkpoint=(
+            Path(args.picker_checkpoint) if args.picker_checkpoint else None
+        ),
+        **config_kwargs,
+    )
+
+    try:
+        TrainPickerUseCase().execute(config)
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 130
+    except PickerArchitectureError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 6
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    return 0
+
+
+def run_pick_decks(args: argparse.Namespace) -> int:
+    """Execute the pick-decks command."""
+    from sealed.application.pick_decks import PickDecksConfig, PickDecksUseCase
+
+    config = PickDecksConfig(
+        pools_path=Path(args.pools_path),
+        picker_checkpoint=Path(args.picker_checkpoint),
+        cards_path=Path(args.cards_path),
+        label=args.label,
+        output=Path(args.output),
+        resume=args.resume,
+    )
+
+    try:
+        written = PickDecksUseCase().execute(config)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    print(f"Wrote {written} decks to {config.output}")
     return 0
 
 

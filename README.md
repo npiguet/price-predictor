@@ -666,6 +666,93 @@ python -m sealed build-decks \
 
 See [`experiments/2026-04-25-sa-deck-builder-tuning.md`](experiments/2026-04-25-sa-deck-builder-tuning.md) for empirical guidance on `--sa-temperature`, `--sa-cooling`, and the restart strategy.
 
+### train-picker
+
+Trains a one-shot deck **picker** — a policy transformer over a sealed pool that emits a full 23-spell deck in a single forward pass — from random initialization via REINFORCE against a frozen scorer. The picker is the inference-cheap replacement for `build-decks`' simulated-annealing search; once trained, `pick-decks` builds a deck per pool with one forward instead of tens of thousands of scorer evaluations.
+
+**Prerequisites**: card embeddings have been written by `encode-cards`; a trained scorer checkpoint exists (default `models/sealed/scorer/latest.pt`); a pools file exists at `--pools-path`. GPU strongly recommended at full scale.
+
+```bash
+# Train a picker from scratch against the default scorer
+python -m sealed train-picker \
+    --pools-path output/sealed/pools/pools.txt
+
+# Explicit scorer + auditor scorer for the cross-scorer reward-hacking audit
+python -m sealed train-picker \
+    --pools-path output/sealed/pools/pools.txt \
+    --scorer-checkpoint models/sealed/scorer/best_gen4_512.pt \
+    --auditor-scorer-checkpoint models/sealed/scorer/best_gen3_256.pt
+
+# Resume a stopped run (architecture inherited from the checkpoint)
+python -m sealed train-picker \
+    --pools-path output/sealed/pools/pools.txt \
+    --resume models/sealed/picker/latest.pt
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--pools-path` | _(required)_ | Pre-generated pools file (`SET_CODE;Card1\|...`). One shuffled pass = one epoch. |
+| `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer used as the reward function. Must exist or the run fails fast. |
+| `--auditor-scorer-checkpoint` | _(none)_ | Optional second scorer; enables the per-epoch cross-scorer Spearman audit on the validation decks. |
+| `--cards-path` | `output/cardsfolder/` | Card-embedding directory (one `.npz` per card). |
+| `--checkpoint-dir` | `models/sealed/picker/` | Output dir for `latest.pt` + `best_{timestamp}.pt`. |
+| `--resume` | _(none)_ | Continue a stopped run (weights, optimizer, epoch, best val reward). Architecture flags forbidden. Mutually exclusive with `--picker-checkpoint`. |
+| `--picker-checkpoint` | _(none)_ | Bootstrap a fresh run from this checkpoint's weights only. Architecture flags forbidden. Required when `--kl-coef` is non-zero. Mutually exclusive with `--resume`. |
+| `--d-model` | _(derived = embedding width)_ | Picker internal width; a value other than the embedding width inserts an input projection. Forbidden alongside `--resume` / `--picker-checkpoint`. |
+| `--n-layers` | `4` | Number of SAB layers. Forbidden alongside `--resume` / `--picker-checkpoint`. |
+| `--n-heads` | `8` | Attention heads per SAB; must divide `d_model`. Forbidden alongside `--resume` / `--picker-checkpoint`. |
+| `--ff-dim` | `4 * d_model` | Feed-forward dim. Forbidden alongside `--resume` / `--picker-checkpoint`. |
+| `--dropout` | `0.0` | Dropout in SAB layers. Forbidden alongside `--resume` / `--picker-checkpoint`. |
+| `--aux-weight` | `0.1` | Coefficient on the auxiliary pool-quality MSE loss (`0` disables it, head stays present). |
+| `--batch-size` | `16` | Pools per gradient step. |
+| `--n-samples` | `64` | Sampled decks per pool per step. |
+| `--temperature` | `1.0` | Softmax temperature for sampling. |
+| `--entropy-coef` | `0.01` | Initial entropy coefficient. |
+| `--entropy-decay-after` | `5` | Consecutive improving-val epochs before entropy starts decaying. |
+| `--lr` | `3e-4` | AdamW learning rate. |
+| `--max-grad-norm` | `1.0` | Per-parameter-group L2-norm cap. |
+| `--epochs` | `100` | Maximum epochs. |
+| `--val-fraction` | `0.2` | Front fraction of the pools file held out for validation (excluded from shuffles, reused each epoch). |
+| `--patience` | `10` | Early-stop after this many epochs without validation-reward improvement. |
+| `--kl-coef` | `0.0` | KL penalty against `--picker-checkpoint`'s reference distribution. Non-zero requires `--picker-checkpoint`. |
+
+The random seed is hardcoded to `42` (weight init, pool shuffle, deck sampling, train/val split). Each epoch logs the loss decomposition (`policy_loss`, `entropy_loss`, `aux_loss`), `val_reward`, the distributional summaries (`colors_mean`, `creatures_mean`, `type_creature_share`, 5-bin `cmc_hist`), and — when an auditor is configured — `audit_corr`.
+
+**Exit codes**: `0` success; `2` argument/configuration error (mutually-exclusive flags, architecture flag with `--resume`/`--picker-checkpoint`, missing scorer, width mismatch, `--kl-coef` without `--picker-checkpoint`); `6` architecture validation error (`n_heads` does not divide `d_model`); `130` interrupted.
+
+**Output**: `models/sealed/picker/latest.pt` (overwritten each epoch — the resume point) and `models/sealed/picker/best_{timestamp}.pt` (overwritten whenever validation reward sets a new best). Each checkpoint stores picker weights only (no scorer/encoder weights), the `PickerConfig`, optimizer state, epoch, best validation reward, and a flattened `train_config` for resume precedence.
+
+### pick-decks
+
+The inference counterpart to `build-decks`. Loads a trained picker, runs one deterministic forward + the pick-decomposition walk per pool (23 spells in ranked order plus any nonbasic lands ranked above the 23rd spell), fills basic lands with the existing manabase heuristic, and writes a `generated-decks.txt` that is a drop-in input for `match-outcomes --side-a-decks` / `--side-b-decks`.
+
+**Prerequisites**: card embeddings written by `encode-cards`; a trained picker checkpoint exists; a pools file exists at `--pools-path`.
+
+```bash
+python -m sealed pick-decks \
+    --pools-path output/sealed/pools/RVR/pools.txt \
+    --label picker-gen5
+
+python -m sealed pick-decks \
+    --pools-path output/sealed/pools/MH3/pools.txt \
+    --label picker-gen5 \
+    --picker-checkpoint models/sealed/picker/best_20260520_101500.pt \
+    --output output/sealed/generated-decks-picker.txt
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--pools-path` | _(required)_ | Input pools file (`SET_CODE;Card1\|...` format). |
+| `--label` | _(required)_ | Generation-method tag written verbatim as the first column of every output line. No `;`, `\|`, or whitespace. |
+| `--picker-checkpoint` | `models/sealed/picker/latest.pt` | Trained picker checkpoint. |
+| `--cards-path` | `output/cardsfolder/` | Card-embedding directory (one `.npz` per card). |
+| `--output` | `output/sealed/generated-decks.txt` | Output path for generated decks. |
+| `--resume` | `False` | Append-and-skip resume (matches `build-decks --resume`): count complete lines in `--output`, skip that many pools, append the rest. Without it `--output` is truncated. |
+
+**Exit codes**: `0` success; `2` argument error or picker/cache width mismatch.
+
+**Output**: `output/sealed/generated-decks.txt` (or `--output`) — one line per pool that produced a viable deck, in `LABEL;SET_CODE;Card1|Card2|...|Card40` format (exactly 40 cards: 23 spells + the picker's nonbasic lands + basic lands from the manabase heuristic). Pools with fewer than 23 embeddable cards are skipped silently.
+
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
 The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:
