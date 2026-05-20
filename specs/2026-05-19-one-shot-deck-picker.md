@@ -268,8 +268,14 @@ while len(chosen_spells) < 23 and remaining:
 ```
 
 Each sampled deck takes ~23–29 iterations (one per pick). The
-sampled "deck" passed to the scorer is `chosen +
-compute_basic_lands(chosen)`.
+sampled "deck" passed to the scorer is `chosen` (the chosen spells
++ nonbasic lands) — basic lands are **not** scored. They are added
+deterministically by `compute_basic_lands` only when materializing
+the final 40-card deck for output (§ 2); the scorer is trained on
+the chosen-card representation (identical to what
+`GreedyDeckBuilder` feeds it), so adding basics to the scoring
+input would be off-distribution noise with no benefit, since the
+basics are fixed post-hoc regardless.
 
 The loop is implemented on GPU, batched across the `N_samples` and
 `batch_size` dimensions: each iteration is one

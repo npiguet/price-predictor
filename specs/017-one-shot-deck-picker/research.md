@@ -238,6 +238,15 @@ batch via `scorer.normalize_features(...)`; sampled decks index into the
 normalized array and are passed via `scorer.forward_prenormalized(...)` (same
 trick `GreedyDeckBuilder._score_batch` uses to avoid per-call clones).
 
+**Scoring input is chosen-only.** The deck handed to the scorer is the chosen
+spells + nonbasic lands — basic lands are NOT scored (FR-012). This is
+bit-for-bit the input `GreedyDeckBuilder` scores (`deck_spells + deck_lands`,
+`greedy_deck_builder.py:516`), so there is no reward-comparability divergence
+with prior SA results. Basic lands are added by `compute_basic_lands` only
+when materializing the final 40-card deck for output (inference / `pick-decks`);
+since that fill is deterministic and post-hoc, feeding basics into the scorer
+would be off-distribution noise with zero upside.
+
 Width check at startup: `scorer.config.d_model == embedding_dim` (where
 `embedding_dim` is read from the first `.npz` in the cache via
 `ConvertedCardLocator.load_embedding(...).shape[-1]`). On mismatch, raise
