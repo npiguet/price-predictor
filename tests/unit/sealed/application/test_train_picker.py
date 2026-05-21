@@ -211,6 +211,18 @@ class TestKL:
         pool_mask = torch.ones(1, 3, dtype=torch.bool)
         assert _kl_penalty(a, b, pool_mask).item() > 0.0
 
+    def test_gradient_finite_with_padding(self):
+        # Masked positions make logp - logq = -inf - -inf = nan; the backward
+        # must not propagate that nan into the logit gradient.
+        logits = torch.randn(2, 6, requires_grad=True)
+        ref = torch.randn(2, 6)
+        pool_mask = torch.tensor(
+            [[True, True, True, False, False, False],
+             [True, True, True, True, False, False]],
+        )
+        _kl_penalty(logits, ref, pool_mask).backward()
+        assert torch.isfinite(logits.grad).all()
+
 
 class TestEntropyMasking:
     def test_padding_excluded(self):
@@ -223,6 +235,19 @@ class TestEntropyMasking:
         # it finite (no nan from -inf * 0).
         assert torch.isfinite(ent_masked).all()
         assert ent_masked.item() != ent_full.item()
+
+    def test_gradient_finite_with_padding(self):
+        # Regression guard: masked positions have logp = -inf, p = 0, so the
+        # entropy product is 0 * -inf = nan. The forward value is masked clean,
+        # but autograd would otherwise backpropagate nan into every parameter
+        # (which NaN-poisoned the picker on its first optimizer step).
+        logits = torch.randn(2, 6, requires_grad=True)
+        pool_mask = torch.tensor(
+            [[True, True, True, False, False, False],
+             [True, True, True, True, False, False]],
+        )
+        _policy_entropy(logits, pool_mask).sum().backward()
+        assert torch.isfinite(logits.grad).all()
 
 
 # --------------------------------------------------------------------------- #

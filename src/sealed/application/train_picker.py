@@ -103,37 +103,120 @@ def _build_train_config(config: TrainPickerConfig) -> dict[str, Any]:
 # Prepared pools and batching
 # --------------------------------------------------------------------------- #
 
-@dataclass
 class PreparedPool:
-    set_code: str
-    names: list[str]
-    embeddings: np.ndarray  # (N, dim) float32
-    is_land: np.ndarray     # (N,) bool
+    """A sealed pool plus its card embeddings.
+
+    Cards repeat heavily across pools of the same set, so a 100k-pool file of
+    per-pool ``(N, dim)`` float32 copies costs ~20 GB. To bound that, pools may
+    instead store ``int32`` indices into a shared embedding table built once by
+    ``_prepare_pools``; ``.embeddings`` materializes the per-pool ``(N, dim)``
+    view on demand (transient, GC'd after each batch). The dense form — passing
+    a real ``(N, dim)`` array — is kept for tests and small callers.
+    """
+
+    def __init__(
+        self,
+        set_code: str,
+        names: list[str],
+        embeddings: np.ndarray,
+        is_land: np.ndarray,
+    ) -> None:
+        self.set_code = set_code
+        self.names = names
+        self.is_land = is_land
+        self._dense: np.ndarray | None = embeddings
+        self._table: np.ndarray | None = None
+        self._indices: np.ndarray | None = None
+
+    @classmethod
+    def from_shared(
+        cls,
+        set_code: str,
+        names: list[str],
+        table: np.ndarray,
+        indices: np.ndarray,
+        is_land: np.ndarray,
+    ) -> "PreparedPool":
+        obj = cls.__new__(cls)
+        obj.set_code = set_code
+        obj.names = names
+        obj.is_land = is_land
+        obj._dense = None
+        obj._table = table
+        obj._indices = indices
+        return obj
+
+    @property
+    def embeddings(self) -> np.ndarray:
+        if self._dense is not None:
+            return self._dense
+        assert self._table is not None and self._indices is not None
+        return self._table[self._indices]
+
+    @property
+    def num_cards(self) -> int:
+        return int(self.is_land.shape[0])
+
+    @property
+    def dim(self) -> int:
+        if self._dense is not None:
+            return int(self._dense.shape[1])
+        assert self._table is not None
+        return int(self._table.shape[1])
 
 
 def _prepare_pools(
     pools: list[tuple[str, list[str]]], locator: ConvertedCardLocator,
 ) -> list[PreparedPool]:
-    """Load embeddings for every pool; skip pools with < 23 embeddable cards."""
-    prepared: list[PreparedPool] = []
-    cache: dict[str, np.ndarray | None] = {}
+    """Load embeddings for every pool; skip pools with < 23 embeddable cards.
+
+    Each distinct card is loaded once into a shared table; pools keep only int
+    indices into it (see ``PreparedPool``) so a large pool file stays at the
+    size of the unique-card set rather than the sum of all pool copies.
+    """
+    table_rows: list[np.ndarray] = []
+    table_is_land: list[bool] = []
+    name_to_idx: dict[str, int | None] = {}
+
+    def _intern(name: str) -> int | None:
+        idx = name_to_idx.get(name, -1)
+        if idx != -1:
+            return idx
+        emb = locator.load_embedding(name)
+        if emb is None:
+            name_to_idx[name] = None
+            return None
+        new_idx = len(table_rows)
+        table_rows.append(np.asarray(emb, dtype=np.float32))
+        table_is_land.append(bool(is_land_embedding(emb)))
+        name_to_idx[name] = new_idx
+        return new_idx
+
+    pending: list[tuple[str, list[str], list[int]]] = []
     for set_code, names in pools:
-        rows: list[np.ndarray] = []
         valid_names: list[str] = []
+        idxs: list[int] = []
         for name in names:
-            if name not in cache:
-                cache[name] = locator.load_embedding(name)
-            emb = cache[name]
-            if emb is not None:
-                rows.append(emb)
+            idx = _intern(name)
+            if idx is not None:
                 valid_names.append(name)
+                idxs.append(idx)
         if len(valid_names) < NONLAND_DECK_SIZE:
             continue
-        arr = np.stack(rows).astype(np.float32)
-        lands = np.array(
-            [is_land_embedding(arr[i]) for i in range(arr.shape[0])], dtype=bool,
+        pending.append((set_code, valid_names, idxs))
+
+    if not pending:
+        return []
+    table = np.stack(table_rows).astype(np.float32)
+    land_table = np.array(table_is_land, dtype=bool)
+    prepared: list[PreparedPool] = []
+    for set_code, valid_names, idxs in pending:
+        index_arr = np.asarray(idxs, dtype=np.int64)
+        prepared.append(
+            PreparedPool.from_shared(
+                set_code, valid_names, table, index_arr, land_table[index_arr],
+            )
         )
-        prepared.append(PreparedPool(set_code, valid_names, arr, lands))
     return prepared
 
 
@@ -156,13 +239,13 @@ def _shuffle_train(
 def _collate(pool_slice: list[PreparedPool]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Zero-pad a slice of pools to ``(B, max_N, dim)`` + masks."""
     b = len(pool_slice)
-    max_n = max(p.embeddings.shape[0] for p in pool_slice)
-    dim = pool_slice[0].embeddings.shape[1]
+    max_n = max(p.num_cards for p in pool_slice)
+    dim = pool_slice[0].dim
     cards = np.zeros((b, max_n, dim), dtype=np.float32)
     mask = np.zeros((b, max_n), dtype=bool)
     land = np.zeros((b, max_n), dtype=bool)
     for i, p in enumerate(pool_slice):
-        n = p.embeddings.shape[0]
+        n = p.num_cards
         cards[i, :n] = p.embeddings
         mask[i, :n] = True
         land[i, :n] = p.is_land
@@ -267,21 +350,34 @@ def _masked_log_softmax(logits: torch.Tensor, pool_mask: torch.Tensor) -> torch.
 
 
 def _policy_entropy(logits: torch.Tensor, pool_mask: torch.Tensor) -> torch.Tensor:
-    """Per-pool entropy of the picker's softmax over valid positions (B,)."""
+    """Per-pool entropy of the picker's softmax over valid positions (B,).
+
+    Masked positions have ``logp = -inf`` and ``p = 0``. Computing ``p * logp``
+    there is ``0 * -inf = NaN``; ``torch.where`` would mask the NaN out of the
+    forward value but autograd still backpropagates NaN through the discarded
+    branch. Zeroing the ``-inf`` log-probs *before* the product keeps both the
+    value and the gradient finite (the contribution is genuinely 0 there).
+    """
     logp = _masked_log_softmax(logits, pool_mask)
     p = logp.exp()
-    plogp = torch.where(pool_mask, p * logp, torch.zeros_like(p))
-    return -plogp.sum(dim=-1)
+    safe_logp = logp.masked_fill(~pool_mask, 0.0)
+    return -(p * safe_logp).sum(dim=-1)
 
 
 def _kl_penalty(
     logits: torch.Tensor, ref_logits: torch.Tensor, pool_mask: torch.Tensor,
 ) -> torch.Tensor:
-    """Mean per-pool KL(picker || reference) over valid positions (FR-025)."""
+    """Mean per-pool KL(picker || reference) over valid positions (FR-025).
+
+    Same ``0 * -inf`` / NaN-gradient trap as ``_policy_entropy``: at masked
+    positions ``logp - logq`` is ``-inf - -inf = NaN``. Zero the per-position
+    log-ratio before weighting by ``p`` (which is 0 there anyway).
+    """
     logp = _masked_log_softmax(logits, pool_mask)
     logq = _masked_log_softmax(ref_logits, pool_mask)
     p = logp.exp()
-    kl = torch.where(pool_mask, p * (logp - logq), torch.zeros_like(p)).sum(dim=-1)
+    log_ratio = (logp - logq).masked_fill(~pool_mask, 0.0)
+    kl = (p * log_ratio).sum(dim=-1)
     return kl.mean()
 
 
@@ -409,7 +505,7 @@ def _score_chosen_decks(
     """Score deterministic chosen-card decks. Returns (n_decks,) numpy scores."""
     if not pools:
         return np.zeros(0, dtype=np.float32)
-    dim = pools[0].embeddings.shape[1]
+    dim = pools[0].dim
     n = len(pools)
     scores = np.zeros(n, dtype=np.float32)
     for start in range(0, n, _SCORE_CHUNK):
@@ -614,7 +710,7 @@ def _deterministic_chosen(
             mask_t = torch.from_numpy(mask).to(device)
             logits, _ = model(cards_t, mask_t)
             for i, p in enumerate(group):
-                n = p.embeddings.shape[0]
+                n = p.num_cards
                 row = logits[i, :n].cpu()
                 chosen.append(walk_pick_indices(row, p.is_land))
     return chosen
@@ -683,7 +779,7 @@ class TrainPickerUseCase:
                 f"No usable pools in {config.pools_path} (every pool had fewer "
                 f"than {NONLAND_DECK_SIZE} embeddable cards under {config.cards_path})."
             )
-        cache_width = prepared[0].embeddings.shape[1]
+        cache_width = prepared[0].dim
         _check_picker_width(
             scorer.config.d_model, cache_width,
             f"--scorer-checkpoint {config.scorer_checkpoint}", config.cards_path,
