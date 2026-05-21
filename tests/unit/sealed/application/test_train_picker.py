@@ -164,6 +164,32 @@ class TestLosses:
         assert aux_pred.grad is not None
         assert rewards.grad is None
 
+    def test_normalize_advantage_unit_variance_per_pool(self):
+        # GRPO normalization: each pool's advantage is zero-mean, unit-std
+        # (population), independent of that pool's raw reward spread.
+        rewards = torch.tensor([[1.0, 3.0], [100.0, 0.0]])
+        log_prob = torch.zeros(2, 2)
+        losses = _compute_losses(
+            rewards, log_prob, torch.ones(2), torch.zeros(2), 0.0, 0.0,
+            normalize_advantage=True,
+        )
+        adv = losses.advantage
+        assert torch.allclose(adv.mean(dim=1), torch.zeros(2), atol=1e-5)
+        assert torch.allclose(adv.std(dim=1, unbiased=False), torch.ones(2), atol=1e-3)
+        # The aux/baseline target stays the raw per-pool mean (unnormalized).
+        assert losses.baseline.tolist() == pytest.approx([2.0, 50.0])
+
+    def test_normalize_advantage_degenerate_pool_no_nan(self):
+        # All samples equal -> std 0; the eps floor keeps the advantage finite
+        # (and ~0, since the numerator is 0) rather than NaN/inf.
+        rewards = torch.full((1, 4), 5.0)
+        losses = _compute_losses(
+            rewards, torch.zeros(1, 4), torch.ones(1), torch.zeros(1), 0.0, 0.0,
+            normalize_advantage=True,
+        )
+        assert torch.isfinite(losses.advantage).all()
+        assert torch.allclose(losses.advantage, torch.zeros_like(losses.advantage))
+
 
 # --------------------------------------------------------------------------- #
 # Entropy schedule / early stop / KL

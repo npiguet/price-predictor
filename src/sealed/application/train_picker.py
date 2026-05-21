@@ -45,6 +45,7 @@ from sealed.infrastructure.scorer_store import ScorerStore
 
 RANDOM_SEED = 42  # hardcoded (FR-018); governs init, shuffle, sampling, split.
 _SCORE_CHUNK = 256  # sub-batch size for frozen-scorer forwards over many decks.
+_ADVANTAGE_STD_EPS = 1e-6  # floor for the per-pool std in GRPO advantage norm.
 
 
 def _log(message: str) -> None:
@@ -69,6 +70,7 @@ class TrainPickerConfig:
     d_ff: int | None = None
     dropout: float = 0.0
     aux_weight: float = 0.1
+    normalize_advantage: bool = False
     batch_size: int = 16
     n_samples: int = 64
     temperature: float = 1.0
@@ -434,6 +436,7 @@ def _compute_losses(
     aux_pred: torch.Tensor,
     entropy_coef: float,
     aux_weight: float,
+    normalize_advantage: bool = False,
 ) -> _Losses:
     """Assemble the REINFORCE loss (spec § 3.3, § 3.4).
 
@@ -441,9 +444,21 @@ def _compute_losses(
     are ``(B,)``. The per-pool baseline is the mean reward; the advantage is
     detached (it weights the log-prob gradient, FR-014); the aux target is the
     detached per-pool mean reward (FR-015).
+
+    When ``normalize_advantage`` is set, the centered reward is divided by the
+    per-pool reward std (GRPO-style group normalization). Within-pool reward
+    variance is small here — the 64 sampled decks share most of their cards —
+    so the raw advantages are tiny and the policy gradient is weak; rescaling
+    to unit variance per pool gives a consistent step magnitude regardless of
+    how spread out a given pool's scores happen to be. A degenerate pool
+    (all samples equal) keeps a ~0 advantage because the numerator is 0.
     """
     baseline = rewards.mean(dim=1)
-    advantage = (rewards - baseline.unsqueeze(1)).detach()
+    centered = rewards - baseline.unsqueeze(1)
+    if normalize_advantage:
+        std = rewards.std(dim=1, unbiased=False, keepdim=True)
+        centered = centered / (std + _ADVANTAGE_STD_EPS)
+    advantage = centered.detach()
     policy_loss = -(advantage * log_prob).mean()
     entropy_loss = -entropy_coef * entropy.mean()
     aux_loss = F.mse_loss(aux_pred, baseline.detach())
@@ -921,7 +936,7 @@ class TrainPickerUseCase:
             entropy = _policy_entropy(logits, pool_mask)
             losses = _compute_losses(
                 rewards, log_prob, entropy, aux_pred,
-                entropy_coef, config.aux_weight,
+                entropy_coef, config.aux_weight, config.normalize_advantage,
             )
             total = losses.total
 

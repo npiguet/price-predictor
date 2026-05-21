@@ -138,7 +138,7 @@ tests.
 | `sampled_deck_mask` | `(B*S, max_picks)` bool | Same shape as `picked_mask`; passed to scorer as `key_padding_mask`. |
 | `rewards` | `(B, S)` float | Scorer scores after un-flatten. |
 | `baselines` | `(B,)` float | `rewards.mean(dim=1)`. |
-| `advantages` | `(B, S)` float | `rewards - baselines.unsqueeze(1)`, detached (FR-014). |
+| `advantages` | `(B, S)` float | `rewards - baselines.unsqueeze(1)`, detached (FR-014); optionally divided by the per-pool reward std (GRPO normalization) when `normalize_advantage` is set. |
 | `log_probs` | `(B, S)` float | Plackett-Luce log-probs, differentiable in `logits` (FR-014). |
 | `entropy` | `(B,)` float | Per-pool entropy of the picker's softmax over `pool_mask`-valid positions. |
 

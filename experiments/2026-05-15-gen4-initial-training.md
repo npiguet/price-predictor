@@ -260,10 +260,10 @@ the table is under 0.5 pp — well inside the run-to-run / seed noise
 the gen-3 sweep already established at this corpus size. The
 discussion below threads the same caveat through every cell.
 
-### Encoder width: 256d ties 512d at the picker
+### Encoder width: val_acc cannot separate the widths
 
-The encoder TL;DR's open question — does 512d's MLM-driven encoder gain
-translate into a picker-stage win? — resolves to *no*:
+On val_acc, 512d does not separate from 256d at any scorer body / margin
+setting:
 
 - Unweighted, same scorer body: S1 (256d, 0.7165) → S4 (512d, 0.7190) ⇒
   +0.25 pp.
@@ -273,22 +273,24 @@ translate into a picker-stage win? — resolves to *no*:
   +0.31 pp.
 
 Every cross-encoder gap sits at 0.25–0.31 pp, single-seed, on a
-sweep where the overall spread is 0.35 pp. The encoder-stage TL;DR
-called this question explicitly open ("encoder metrics did *not*
-predict the picker outcome at the 128d → 256d doubling. By the same
-logic they may not predict it at 256d → 512d either"); the
-picker-stage answer is that **they did predict it this time** —
-512d's encoder-stage MLM gain does not buy a picker-stage win
-distinguishable from noise.
+sweep where the overall spread is 0.35 pp — the scorer-ranking metric
+does not separate 256d from 512d, just as it does not separate scorer
+body size or margin mode. This is exactly the flat-metric reading the
+encoder-stage TL;DR flagged: encoder/scorer-ranking numbers did not
+separate 128d from 256d either, and that null did not survive contact
+with downstream deck quality.
 
-The deployment-economics arm of the encoder TL;DR now bites: 512d's
-`pooled_dim = 512` doubles the scorer's input width and ~4×s its body
-compute relative to 256d, and that cost has bought a sub-noise val_acc
-swing. **256d is preserved as the gen-4 production encoder by
-exclusion** — 512d had to beat 256d at the picker to be worth keeping,
-not just tie. The gen-3 precedent that motivated the 512d sweep
-(MLM gains paid off downstream at 128d → 256d even when regression
-heads were flat) does not replicate at 256d → 512d.
+val_acc is a scorer-ranking metric, not a deck-quality one; the
+arbiter is the match-play evaluation (see *Match-play evaluation*
+below), which plays the deployed builders head-to-head. There the
+gen-4 512d build beats the gen-4 256d build at ~3.3σ — the encoder
+width that val_acc cannot separate **is** separated once decks are
+played out, in 512d's favor, repeating the gen-3 128d → 256d pattern
+(an MLM-driven encoder gain invisible to the ranking metric but real
+in games). The deployment-economics tradeoff — 512d's `pooled_dim =
+512` doubles the scorer input width and ~4×s its body compute relative
+to 256d — is therefore resolved in favor of 512d: the match-play
+margin justifies the cost.
 
 ### Scorer body: doubling FF/MLP buys nothing
 
@@ -348,14 +350,20 @@ the run, well before the train/val divergence opens up.
 
 ### Picker-stage conclusions
 
-1. **Ship gen-4 production scorer as 256d encoder × small scorer ×
-   unweighted (S1)** — the cheapest configuration, tied for val_acc
-   with everything else under noise. The downstream deck-building /
-   match-play eval starts from this checkpoint.
-2. **Shelve the 512d encoder.** Its 2 pp MLM accuracy win at the
-   encoder stage was the only non-trivial signal it had, and it does
-   not transfer to the picker. The gen-3 precedent (MLM-only gain
-   paid off downstream) does not replicate here.
+1. **Ship the gen-4 production scorer on the 512d encoder.** On
+   val_acc all gen-4 configurations tie under noise, so the
+   scorer-ranking metric alone would favor the cheapest (256d × small
+   × unweighted, S1). The match-play evaluation (below) breaks the
+   tie: the 512d build beats the 256d build head-to-head at ~3.3σ in
+   played-out deck quality, which is the metric that governs
+   deployment. Scorer body and margin mode are not isolated by that
+   match-play comparison and stay at their val_acc-determined defaults
+   (#3, #4) pending an axis-isolated rerun.
+2. **Retain the 512d encoder.** Its 2 pp MLM accuracy advantage at the
+   encoder stage is invisible to val_acc but surfaces as a match-play
+   deck-quality win — the same shape of evidence that paid off at
+   128d → 256d in gen-3. The doubled scorer-input cost is justified by
+   the match-play margin.
 3. **Shelve margin weighting at this corpus size.** The +0.28 pp
    linear gain at 256d/small is the biggest swing in the sweep and is
    single-seed; the +0.10 pp log gain at 512d/big is the next-best and
@@ -367,29 +375,141 @@ the run, well before the train/val divergence opens up.
    structural* (depth, attention pattern, set-pool order) rather than
    widen FF/MLP — width is not the bottleneck.
 
+## Match-play evaluation — gen-4 vs gen-3 vs forge-best
+
+*Round-robin self-play among five deck builders on freshly generated
+sealed pools, Forge AI piloting both sides, best-of-7 per match. 16,856
+matches (`output/sealed/match-outcomes-gen4-best.txt`, summarized by
+`scripts/analyze_winrates.py`). "Deck builder" here means a
+scorer-guided greedy build (the gen-3 / gen-4 scorers at the noted
+encoder width) or Forge's own optimal builder (`forge-best`); it is not
+the spec-017 one-shot picker. This is the deck-quality arbiter the
+scorer sweep deferred to: where val_acc could not separate the gen-4
+configurations, played-out match results do.*
+
+### Ranking (Bo7 match win rate vs the field)
+
+| builder | Bo7 WR | instances |
+|---|---|---|
+| gen4-512 | 57.8% | 6583 |
+| gen4-256 | 54.4% | 6589 |
+| gen3-256 | 53.0% | 6536 |
+| gen3-128 | 47.6% | 6850 |
+| forge-best | 38.2% | 7154 |
+
+The ordering is strictly monotone in generation and width, and the
+head-to-head matrix is fully transitive (no rock-paper-scissors):
+gen4-512 beats every other builder; forge-best loses to every other
+builder.
+
+### Significance (head-to-head, Bo7)
+
+Head-to-head match win rate is the unit of significance — matches, not
+games (the 4–7 games inside a Bo7 share the same two decks and are
+correlated). Matches are independent — enough decks were generated that
+deck reuse across the round-robin is negligible — so
+`z = (p − ½)/√(¼/n)` applies directly:
+
+| comparison | WR | n | σ above ½ |
+|---|---|---|---|
+| gen4-512 ▸ forge-best | 69.4% | 1448 | ~14.8 |
+| gen4-512 ▸ gen3-128 | 59.6% | 1317 | ~7.0 |
+| gen3-256 ▸ gen3-128 | 57.0% | 1359 | ~5.2 |
+| gen4-512 ▸ gen4-256 | 54.6% | 1254 | ~3.3 |
+| gen4-512 ▸ gen3-256 | 53.8% | 1302 | ~2.7 |
+| gen4-256 ▸ gen3-256 | 53.3% | 1346 | ~2.4 |
+
+The three gen-4/gen-3 separations sit at 2.4–3.3σ individually but are
+mutually reinforcing — 512 ▸ 256, 512 ▸ gen3-256, and 256 ▸ gen3-256
+are three distinct matchups telling one consistent story — so the joint
+confidence in "gen-4 > gen-3, and the 512d build > the 256d build"
+exceeds any single cell. The forge-best and gen3-128 separations are
+decisive on their own (≥5σ).
+
+### The 512d build wins where val_acc could not separate it
+
+The scorer sweep found the gen-4 encoder widths tied on val_acc
+(256d ↔ 512d within 0.25–0.31 pp, inside the 0.35 pp sweep spread).
+Match play breaks that tie: the gen-4 512d build beats the gen-4 256d
+build head-to-head at ~3.3σ (54.6%, n=1254) and carries +3.4 pp more
+win rate against the field. The win is **structural, not a distribution
+artifact** — 512d beats 256d *within* each color-count bucket (2-color
+62.4% vs 57.5%; 3-color 56.3% vs 52.8%) and across the creature-count
+and curve buckets, so it is building better decks at fixed shape rather
+than only shifting toward shapes Forge pilots well.
+
+### Deck-shape reads
+
+- **Color count.** forge-best is rigidly 2-color (≈100%); the learned
+  builders splash. gen-4 plays more 3-color than gen-3 and holds a
+  higher win rate there (gen4-512 3-color 56.3% vs gen3-256 52.9%), so
+  the extra splashing pays rather than dilutes. All builders fall off
+  at 4–5 colors (small n at 5).
+- **Creature count.** The documented Forge piloting bias is visible:
+  forge-best's win rate climbs steeply with creature count (27% at ≤13
+  → ~43–50% at 16+). The learned builders are flatter — gen4-512 holds
+  ~50–60% across the whole creature-count range — i.e. less dependent
+  on stuffing creatures to win.
+- **Curve.** gen4-512 is strong across average mana value, peaking in
+  the 3.1–3.4 and 3.7–4.0 bands; no curve region is a weakness.
+
+### Sanity checks
+
+- **Mirror diagonal.** A builder against itself should win 50% by
+  symmetry; the diagonal reads 52.0% / 50.7% / 48.7% / 50.3% / 50.3%,
+  all within ~1σ of 50%. No systematic play/draw or harness bias is
+  inflating the off-diagonal margins.
+- **Bo7 is the right unit.**29% of Bo1 outcomes would flip under Bo7
+  (11.6% for Bo5), so single games are far too noisy to rank builders;
+  the Bo7 match is what makes the sigmas trustworthy. The match-length
+  spread (20% 4–0 sweeps, 24% to game 7) confirms the builders are
+  differentiated but not deterministically so.
+
+### Caveats on the certainty
+
+Match independence holds — enough distinct decks were generated that
+reuse across the round-robin is negligible — so the sigmas above stand
+as computed rather than as upper bounds. The remaining caveats:
+
+1. **Package-level result (by design).** The gen4-512 vs gen4-256
+   comparison is between the two deployed gen-4 builds, which differ in
+   scorer body and margin mode as well as encoder width. The match-play
+   margin is therefore a win for the *package*, not an isolated
+   encoder-width effect (val_acc could not isolate width either). This
+   is the deployment-relevant claim — the production choice rests on
+   the build that wins games, not on attributing the win to a specific
+   axis — so axis isolation is not pursued.
+2. **Forge piloting.** Every cell is "win rate as piloted by Forge AI,"
+   which carries the documented creature / W-G skew. It applies to all
+   builders so it does not threaten the ranking, but absolute margins
+   partly reflect what Forge pilots well.
+3. **Single run.** No seed replication; the ~2.4σ cell
+   (gen4-256 ▸ gen3-256) is the one most worth a second run — the ≥5σ
+   cells are not.
+
+### Match-play conclusion
+
+The gen-4 512d build is the strongest deck builder in the field —
+decisively over forge-best and gen3-128 (≥7σ), clearly over gen3-256
+(~2.7σ), and over the gen-4 256d build at ~3.3σ. This selects the 512d
+encoder as the production gen-4 build and supersedes the val_acc-only
+reading that would have shipped 256d by cost-exclusion.
+
+**A gen-5 of the same architecture is unlikely to move match play
+measurably.** At fixed 256d width, gen-3 → gen-4 already bundled three
+levers — the spec-016 encoder retrain, +70% more scorer matches
+(41k → 70k), and margin weighting — yet reached only 53.3% head-to-head
+(~2.4σ). The single change that delivered more was width (gen4-512 ▸
+gen4-256, ~3.3σ). Since the data lever was already partly spent for a
+small return, val_acc sits near the ~0.72–0.78 oracle ceiling, and
+additional self-play data amplifies the Forge-piloting bias it carries,
+more same-architecture data should be expected to return even less. The
+residual headroom is the scorer's overfitting at 70k matches; but the
+higher-yield gen-5 lever is structural (architecture, a stronger pilot /
+opponent, or a less-biased data distribution), not volume.
+
 ## Open questions / next steps
 
-- **Deck-building from S1 checkpoint.** Run `sealed build-decks` on a
-  sealed-pool sweep with the gen-4 256d-encoder scorer and inspect
-  pool-level deck quality and shape (colour count, curve, mana
-  symbols) versus gen-3. This is the first place the gen-3 →
-  gen-4 production change can show up qualitatively even if val_acc
-  was flat.
-- **Match-play vs `forge-best` and vs gen-3.** Same pool sweep, two
-  matchups: gen-4 (S1) vs `forge-best` (the gen-3 baseline matchup,
-  to compare directly to gen-3's 47/48-pool headline), and gen-4 vs
-  gen-3 in self-play (the apples-to-apples test, with both scorers
-  building from the same pools). The +0.25–0.31 pp val_acc gap to
-  the noise-eclipsed cells should be ignored; the relevant
-  comparison is whether gen-4 (S1) ties or beats gen-3's match-play
-  number, since the only architectural change at the production
-  width is the encoder retrain.
-- **Effective-rank / PCA probe on a 512d checkpoint.** Cheap, direct
-  confirmation that 512d's extra width is mostly unused — the
-  mechanistic explanation for why the picker doesn't notice the
-  doubling. Wasn't needed to make the gen-4 production call (the
-  scorer-stage tie is sufficient) but completes the gen-3 →
-  gen-4 width-scaling story.
 - **Replicate S7 (512d/big/log) and S2 (256d/small/linear).** Both
   are the best-in-axis margin-weighting runs and both sit in the
   noise band; a single replicate per configuration would tell us

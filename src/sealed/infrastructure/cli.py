@@ -477,6 +477,18 @@ def _build_train_picker_parser(subparsers) -> None:
         help="Coefficient on the aux pool-quality MSE loss (default: 0.1). Resumable.",
     )
     parser.add_argument(
+        "--normalize-advantage", default=None,
+        action=argparse.BooleanOptionalAction, dest="normalize_advantage",
+        help=(
+            "GRPO-style per-pool advantage normalization: divide the centered "
+            "reward by the per-pool reward std before weighting the policy "
+            "gradient. Sharpens the (otherwise tiny) signal when within-pool "
+            "reward variance is small (default: off). When enabled you may want "
+            "a larger --entropy-coef, since the rescaled policy term dominates "
+            "the fixed-scale entropy/aux terms. Resumable."
+        ),
+    )
+    parser.add_argument(
         "--batch-size", type=int, default=None, dest="batch_size",
         help="Pools per gradient step (default: 16). Resumable.",
     )
@@ -574,7 +586,7 @@ _RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
     "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
     "cards_path", "checkpoint_dir",
     "d_model", "n_layers", "n_heads", "d_ff", "dropout",
-    "aux_weight", "batch_size", "n_samples", "temperature",
+    "aux_weight", "normalize_advantage", "batch_size", "n_samples", "temperature",
     "entropy_coef", "entropy_decay_after", "lr", "max_grad_norm",
     "epochs", "val_fraction", "patience", "kl_coef",
 )
