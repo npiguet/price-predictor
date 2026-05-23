@@ -83,6 +83,7 @@ class TrainPickerConfig:
     epochs: int = 100
     val_fraction: float = 0.2
     patience: int = 10
+    evals_per_epoch: int = 1
     kl_coef: float = 0.0
 
     def picker_config(self, embedding_dim: int) -> PickerConfig:
@@ -856,46 +857,75 @@ class TrainPickerUseCase:
         rng = random.Random(RANDOM_SEED)
         best_val_reward = resume.best_val_reward
         best_epoch = resume.start_epoch
-        epochs_since_best = 0
+        evals_since_best = 0
 
-        _log(f"Starting training loop ({config.epochs} epochs) on {device}")
+        # Validate `evals_per_epoch` times per epoch (a "mini-epoch" is one such
+        # interval). With the default 1 this collapses to one eval at epoch end,
+        # i.e. the original behavior. Checkpoints and early-stop act on every
+        # eval, so patience is denominated in mini-epochs (FR-019, FR-020).
+        n_steps = math.ceil(len(train_pools) / config.batch_size)
+        evals_per_epoch = max(1, config.evals_per_epoch)
+        eval_interval = max(1, n_steps // evals_per_epoch)
+
+        _log(
+            f"Starting training loop ({config.epochs} epochs, {n_steps} steps/epoch, "
+            f"validating every {eval_interval} steps = ~{evals_per_epoch}x/epoch; "
+            f"patience={config.patience} evals) on {device}"
+        )
         last_epoch = resume.start_epoch
+        stop = False
         for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
             last_epoch = epoch
             shuffled = _shuffle_train(train_pools, rng)
-            stats = self._train_one_epoch(
-                picker, scorer, reference, optimizer, shuffled, config,
-                schedule.coef, device,
-            )
-            report = _validate(
-                picker, scorer, auditor, val_pools, config.batch_size, device,
-            )
-            schedule.update(report.mean_reward)
-            _log_epoch(epoch, stats, report)
+            picker.train()
+            stats = _EpochStats()
+            for step, start in enumerate(
+                range(0, len(shuffled), config.batch_size), start=1,
+            ):
+                group = shuffled[start:start + config.batch_size]
+                policy, entropy, aux, kl = self._train_one_step(
+                    picker, scorer, reference, optimizer, group, config,
+                    schedule.coef, device,
+                )
+                stats.add(policy, entropy, aux, kl)
 
-            new_best = report.mean_reward > best_val_reward
-            if new_best:
-                best_val_reward = report.mean_reward
-                best_epoch = epoch
-                epochs_since_best = 0
-            else:
-                epochs_since_best += 1
+                if step % eval_interval != 0 and step != n_steps:
+                    continue
 
-            store.save_checkpoint(
-                picker, optimizer, epoch, best_val_reward, picker.config,
-                latest_path, train_config=train_config,
-            )
-            if new_best:
+                report = _validate(
+                    picker, scorer, auditor, val_pools, config.batch_size, device,
+                )
+                schedule.update(report.mean_reward)
+                _log_epoch(epoch, step, n_steps, stats, report)
+                stats = _EpochStats()
+
+                new_best = report.mean_reward > best_val_reward
+                if new_best:
+                    best_val_reward = report.mean_reward
+                    best_epoch = epoch
+                    evals_since_best = 0
+                else:
+                    evals_since_best += 1
+
                 store.save_checkpoint(
                     picker, optimizer, epoch, best_val_reward, picker.config,
-                    best_path, train_config=train_config,
+                    latest_path, train_config=train_config,
                 )
+                if new_best:
+                    store.save_checkpoint(
+                        picker, optimizer, epoch, best_val_reward, picker.config,
+                        best_path, train_config=train_config,
+                    )
 
-            if _should_stop(epochs_since_best, config.patience):
-                _log(
-                    f"Early stop: {epochs_since_best} epochs without val-reward "
-                    f"improvement (--patience={config.patience})"
-                )
+                if _should_stop(evals_since_best, config.patience):
+                    _log(
+                        f"Early stop: {evals_since_best} evals without val-reward "
+                        f"improvement (--patience={config.patience})"
+                    )
+                    stop = True
+                    break
+                picker.train()  # _validate switched the picker to eval mode
+            if stop:
                 break
 
         _log(
@@ -904,78 +934,75 @@ class TrainPickerUseCase:
         )
         return TrainPickerResult(picker, best_val_reward, best_epoch, best_path)
 
-    def _train_one_epoch(
+    def _train_one_step(
         self,
         picker: PickerModel,
         scorer: SetTransformerScorer,
         reference: PickerModel | None,
         optimizer: torch.optim.Optimizer,
-        train_pools: list[PreparedPool],
+        group: list[PreparedPool],
         config: TrainPickerConfig,
         entropy_coef: float,
         device: torch.device,
-    ) -> "_EpochStats":
-        picker.train()
-        agg = _EpochStats()
-        for start in range(0, len(train_pools), config.batch_size):
-            group = train_pools[start:start + config.batch_size]
-            cards, mask, land = _collate(group)
-            pool_cards = torch.from_numpy(cards).to(device)
-            pool_mask = torch.from_numpy(mask).to(device)
-            is_land_mask = torch.from_numpy(land).to(device)
+    ) -> tuple[float, float, float, float]:
+        """One gradient step over a batch of pools. Returns the detached
+        (policy_loss, entropy_loss, aux_loss, kl) for logging."""
+        cards, mask, land = _collate(group)
+        pool_cards = torch.from_numpy(cards).to(device)
+        pool_mask = torch.from_numpy(mask).to(device)
+        is_land_mask = torch.from_numpy(land).to(device)
 
-            logits, aux_pred = picker(pool_cards, pool_mask)
+        logits, aux_pred = picker(pool_cards, pool_mask)
 
-            pick_indices, picked_mask = _sample_decks(
-                logits.detach(), is_land_mask, pool_mask,
-                config.n_samples, config.temperature,
-            )
+        pick_indices, picked_mask = _sample_decks(
+            logits.detach(), is_land_mask, pool_mask,
+            config.n_samples, config.temperature,
+        )
 
-            norm_pool = scorer.normalize_features(pool_cards)
-            rewards = _score_sampled(
-                scorer, norm_pool, pick_indices, picked_mask,
-                config.n_samples, device,
-            )  # (B, S)
+        norm_pool = scorer.normalize_features(pool_cards)
+        rewards = _score_sampled(
+            scorer, norm_pool, pick_indices, picked_mask,
+            config.n_samples, device,
+        )  # (B, S)
 
-            # PL log-prob on temperature-scaled, padding-masked logits (B*S, N).
-            b, n = logits.shape
-            scaled = (logits / config.temperature).masked_fill(
-                ~pool_mask, float("-inf"),
-            )
-            scaled_bs = scaled.unsqueeze(1).expand(b, config.n_samples, n).reshape(
-                b * config.n_samples, n,
-            )
-            log_prob = _plackett_luce_log_prob(
-                scaled_bs, pick_indices, picked_mask,
-            ).view(b, config.n_samples)
+        # PL log-prob on temperature-scaled, padding-masked logits (B*S, N).
+        b, n = logits.shape
+        scaled = (logits / config.temperature).masked_fill(
+            ~pool_mask, float("-inf"),
+        )
+        scaled_bs = scaled.unsqueeze(1).expand(b, config.n_samples, n).reshape(
+            b * config.n_samples, n,
+        )
+        log_prob = _plackett_luce_log_prob(
+            scaled_bs, pick_indices, picked_mask,
+        ).view(b, config.n_samples)
 
-            entropy = _policy_entropy(logits, pool_mask)
-            losses = _compute_losses(
-                rewards, log_prob, entropy, aux_pred,
-                entropy_coef, config.aux_weight, config.normalize_advantage,
-                config.objective, config.topk,
-            )
-            total = losses.total
+        entropy = _policy_entropy(logits, pool_mask)
+        losses = _compute_losses(
+            rewards, log_prob, entropy, aux_pred,
+            entropy_coef, config.aux_weight, config.normalize_advantage,
+            config.objective, config.topk,
+        )
+        total = losses.total
 
-            kl_value = 0.0
-            if reference is not None:
-                with torch.no_grad():
-                    ref_logits, _ = reference(pool_cards, pool_mask)
-                kl = _kl_penalty(logits, ref_logits, pool_mask)
-                total = total + config.kl_coef * kl
-                kl_value = float(kl)
+        kl_value = 0.0
+        if reference is not None:
+            with torch.no_grad():
+                ref_logits, _ = reference(pool_cards, pool_mask)
+            kl = _kl_penalty(logits, ref_logits, pool_mask)
+            total = total + config.kl_coef * kl
+            kl_value = float(kl)
 
-            optimizer.zero_grad()
-            total.backward()
-            _clip_per_group(optimizer, max_norm=config.max_grad_norm)
-            optimizer.step()
+        optimizer.zero_grad()
+        total.backward()
+        _clip_per_group(optimizer, max_norm=config.max_grad_norm)
+        optimizer.step()
 
-            agg.add(
-                float(losses.policy_loss.detach()),
-                float(losses.entropy_loss.detach()),
-                float(losses.aux_loss.detach()), kl_value,
-            )
-        return agg
+        return (
+            float(losses.policy_loss.detach()),
+            float(losses.entropy_loss.detach()),
+            float(losses.aux_loss.detach()), kl_value,
+        )
 
 
 @dataclass
@@ -1001,10 +1028,14 @@ class _EpochStats:
         )
 
 
-def _log_epoch(epoch: int, stats: _EpochStats, report: ValidationReport) -> None:
+def _log_epoch(
+    epoch: int, step: int, n_steps: int, stats: _EpochStats,
+    report: ValidationReport,
+) -> None:
     policy, entropy, aux, kl = stats.mean()
     parts = [
         f"epoch={epoch}",
+        f"step={step}/{n_steps}",
         f"policy_loss={policy:.4f}",
         f"entropy_loss={entropy:.4f}",
         f"aux_loss={aux:.4f}",

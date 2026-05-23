@@ -544,10 +544,20 @@ def _build_train_picker_parser(subparsers) -> None:
         help="Front fraction of the pools file held out for validation (default: 0.2). Resumable.",
     )
     parser.add_argument(
+        "--evals-per-epoch", type=int, default=None, dest="evals_per_epoch",
+        help=(
+            "How many times to validate per epoch (default: 1 = once at epoch "
+            "end). Each eval runs the full validation set and updates latest.pt "
+            "and best_*.pt; --patience is counted in these evals (mini-epochs). "
+            "Resumable."
+        ),
+    )
+    parser.add_argument(
         "--patience", type=int, default=None, dest="patience",
         help=(
-            "Early-stop after this many epochs without val-reward improvement "
-            "(default: 10). Resumable."
+            "Early-stop after this many evals (mini-epochs) without val-reward "
+            "improvement (default: 10). Equals epochs when --evals-per-epoch=1. "
+            "Resumable."
         ),
     )
     parser.add_argument(
@@ -608,7 +618,7 @@ _RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
     "aux_weight", "normalize_advantage", "objective", "topk",
     "batch_size", "n_samples", "temperature",
     "entropy_coef", "entropy_decay_after", "lr", "max_grad_norm",
-    "epochs", "val_fraction", "patience", "kl_coef",
+    "epochs", "val_fraction", "patience", "evals_per_epoch", "kl_coef",
 )
 _PICKER_PATH_FIELDS: frozenset[str] = frozenset({
     "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",

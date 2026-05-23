@@ -486,6 +486,37 @@ class TestUseCaseEndToEnd:
         assert np.isfinite(result.best_val_reward)
         assert loaded.train_config is not None
 
+    def test_evals_per_epoch_validates_more_often(self, tmp_path, monkeypatch):
+        # With 4 train pools / batch_size 2 = 2 steps/epoch, evals_per_epoch=2
+        # validates after every step → 2 evals in one epoch (vs 1 at default).
+        import sealed.application.train_picker as tp
+        scorer_path = tmp_path / "scorer.pt"
+        cards_dir = tmp_path / "cardsfolder"
+        _make_scorer_checkpoint(scorer_path)
+        names = _make_cards(cards_dir)
+        pools_path = tmp_path / "pools.txt"
+        pools_path.write_text(
+            "\n".join(f"SET;{'|'.join(names)}" for _ in range(5)) + "\n",
+            encoding="utf-8",
+        )
+
+        calls = {"n": 0}
+        real_validate = tp._validate
+
+        def counting(*a, **k):
+            calls["n"] += 1
+            return real_validate(*a, **k)
+
+        monkeypatch.setattr(tp, "_validate", counting)
+        config = TrainPickerConfig(
+            pools_path=pools_path, scorer_checkpoint=scorer_path,
+            cards_path=cards_dir, checkpoint_dir=tmp_path / "picker",
+            epochs=1, batch_size=2, n_samples=4, val_fraction=0.2,
+            evals_per_epoch=2, patience=10,
+        )
+        tp.TrainPickerUseCase().execute(config)
+        assert calls["n"] == 2
+
 
 # --------------------------------------------------------------------------- #
 # US3: audits + distributional summaries

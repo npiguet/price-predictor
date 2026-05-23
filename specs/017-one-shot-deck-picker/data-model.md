@@ -85,7 +85,8 @@ Dataclass capturing every CLI knob for `train-picker`. Mirror of
 | `max_grad_norm` | float | `1.0` | FR-017, FR-021 | Yes |
 | `epochs` | int | `100` | FR-021 | Yes |
 | `val_fraction` | float | `0.2` | FR-018, FR-021 | Yes |
-| `patience` | int | `10` | FR-020, FR-021 | Yes |
+| `evals_per_epoch` | int | `1` | FR-019 | Yes |
+| `patience` | int | `10` | FR-020, FR-021 | Yes (counted in mini-epochs) |
 | `kl_coef` | float | `0.0` | FR-025, FR-021 | Yes |
 
 **Constants** (not flags):

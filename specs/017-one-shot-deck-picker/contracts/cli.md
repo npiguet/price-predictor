@@ -38,7 +38,8 @@ Train a one-shot picker from scratch using REINFORCE against a frozen scorer.
 | `--max-grad-norm` | float | `1.0` | Per-parameter-group L2-norm cap (FR-017). |
 | `--epochs` | int | `100` | Maximum epochs. One epoch = one shuffled pass through the training portion of `--pools-path` (FR-018). |
 | `--val-fraction` | float | `0.2` | Validation slice: first this fraction of the pools file. Excluded from training shuffles and reused identically across epochs (FR-018). |
-| `--patience` | int | `10` | Early-stop after this many epochs without validation-reward improvement (FR-020). |
+| `--evals-per-epoch` | int | `1` | Validations per epoch, at evenly spaced step intervals (default 1 = once at epoch end). Each runs the full val set and updates `latest.pt` + `best_*.pt`; the interval between two validations is a "mini-epoch" (FR-019). Resumable. |
+| `--patience` | int | `10` | Early-stop after this many evals (mini-epochs) without validation-reward improvement (FR-020). Equals epochs when `--evals-per-epoch=1`. |
 | `--kl-coef` | float | `0.0` | KL penalty coefficient against `--picker-checkpoint`'s frozen reference distribution. `0.0` disables (default for REINFORCE-from-random). Non-zero requires `--picker-checkpoint` (FR-025). |
 
 ### Exit codes
