@@ -152,6 +152,45 @@ remaining job for actual match-play is only to confirm the score gap reflects
 real win rate, which — per the gen-4 match-play evaluation — it reliably does
 for in-distribution decks.
 
+### Score ceiling: the gen4-512 builder's mean as the picker's target
+
+The picker amortizes the `build-decks` greedy/SA search, so the **mean deck
+score that search achieves is the natural single-number target** the picker is
+trying to match (parity) and ideally exceed. Scoring all 10,000 gen4-512
+builder decks (`output/sealed/generated-decks-gen4-512.txt`) with the gen4-512
+scorer gives that reference distribution:
+
+| stat | value |
+|---|---|
+| n | 10,000 |
+| mean | **2.36** |
+| std | 0.74 |
+| min / max | −1.05 / 4.01 |
+| p5 / p25 / p50 / p75 / p95 | 1.03 / 1.93 / 2.44 / 2.90 / 3.44 |
+
+Read as a stopping gauge: the picker's REINFORCE-baseline val_reward (2.234, a
+mean over its 20k val pools) sits **~0.13 below the builder mean (2.36)** —
+i.e. the picker is already near builder parity, with only ~0.13 of headroom to
+the search it amortizes. The reward-ranked top-k runs have since narrowed this
+to ~0.08. Training is "good enough" once the picker's mean val_reward approaches
+2.36; pushing well past it would mean out-optimizing the explicit search,
+which is the most a frozen-scorer picker can deliver.
+
+Why the mean-to-mean is precise despite the wide per-deck spread: every deck
+in both samples is built from its own fresh random pool drawn by the same
+generation method, so the two are i.i.d. samples from the same pool
+distribution. The per-deck std (0.74) is dominated by pool difficulty, but
+that averages out of the **mean** by √n — the standard error of the builder
+mean is ~0.74/√10000 ≈ 0.007 and of the picker mean ~0.74/√20000 ≈ 0.005, so
+the standard error of the 0.08 gap is ~0.01 (the gap is ~8–9σ). Pool
+variability does not contaminate the comparison; it is averaged away. The only
+assumption the gauge rests on is that both pool sets were generated from the
+**same distribution** (same set-eligibility / method) — given that, the
+mean-to-mean is a tight single-number headroom estimate. (A same-pool paired
+comparison would additionally reveal per-pool *consistency* — how often, not
+just on average, the picker matches the builder — but is not needed to
+estimate the average headroom at this sample size.)
+
 ## Improvement attempts that did not work
 
 The plateau at ~2.23 prompted two changes. Both destabilized training; both
