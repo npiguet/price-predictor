@@ -29,18 +29,20 @@ for reading every metric below.
 
 ## Headline result
 
-The picker trains stably from random init and reaches a validation reward
-(the frozen gen-4 scorer's mean rating of the picker's deterministic decks on
-held-out pools) of **2.234**, up from ~1.96 at the first epoch. On the
-deck-quality comparison against the other builders on shared pools
-(`scripts/compare_deck_builders.py`, all decks rated by the same gen-4
-scorer), the picker lands **a notch below the greedy/SA builder, occasionally
-above it, and consistently and substantially above `forge-best`**.
+The picker trains stably from random init under REINFORCE to a validation
+reward (the frozen gen-4 scorer's mean rating of the picker's deterministic
+decks on held-out pools) of **2.234**, up from ~1.96 at the first epoch.
+Switching to a reward-ranked **top-k** objective then pushes it to **2.3126** —
+within **~0.047** of the gen4-512 greedy/SA builder's mean (2.36), i.e. **~0.5
+pp of win rate from builder parity**. So a single-forward policy now
+essentially matches an explicit per-pool search, and clears Forge's own
+builder by a wide margin (forge-best mean 0.90).
 
-That is a working amortized optimizer: a single-forward policy reproducing
-most of an explicit search's deck quality, and clearing Forge's own builder
-comfortably. The open work is closing the small remaining gap to the search —
-and the rest of this file is the record of what was tried.
+That is the amortized-optimizer goal reached: search-level deck quality at one
+forward pass per pool. The remaining open work is match-play confirmation that
+the scorer-score parity holds up in real games — not further scorer-chasing.
+The rest of this file is the record of how it got there, including two
+improvement attempts that failed before top-k succeeded.
 
 ## Setup
 
@@ -172,7 +174,8 @@ Read as a stopping gauge: the picker's REINFORCE-baseline val_reward (2.234, a
 mean over its 20k val pools) sits **~0.13 below the builder mean (2.36)** —
 i.e. the picker is already near builder parity, with only ~0.13 of headroom to
 the search it amortizes. The reward-ranked top-k runs have since narrowed this
-to ~0.08. Training is "good enough" once the picker's mean val_reward approaches
+to ~0.047 (best val_reward 2.3126). Training is "good enough" once the picker's
+mean val_reward approaches
 2.36; pushing well past it would mean out-optimizing the explicit search,
 which is the most a frozen-scorer picker can deliver.
 
@@ -190,6 +193,47 @@ mean-to-mean is a tight single-number headroom estimate. (A same-pool paired
 comparison would additionally reveal per-pool *consistency* — how often, not
 just on average, the picker matches the builder — but is not needed to
 estimate the average headroom at this sample size.)
+
+### Score-to-win-rate: the builder ladder
+
+To translate score gaps into win rates, three builders that are all in the
+gen-4 match-play tournament were scored with the gen4-512 scorer (their
+generated-decks files), pairing each builder's mean deck score with its
+measured Bo7 match win rate:
+
+| builder | mean score | std | Bo7 WR (vs field) |
+|---|---|---|---|
+| gen4-512 | 2.36 | 0.74 | 57.8% |
+| gen4-256 | 1.98 | 0.80 | 54.4% |
+| forge-best | 0.90 | 1.12 | 38.2% |
+
+This places the gen4-512 ceiling (2.36) in context: the builder ladder spans
+~0.9 → 2.0 → 2.36, so the picker at ~2.28 sits just shy of the gen4-512 builder
+and well above gen4-256 and forge-best — its 0.08 shortfall is tiny against the
+~1.5-point forge→gen4-512 span. (Weaker builders also show a larger std —
+forge-best 1.12, min −7.4 — because they occasionally build genuinely bad
+decks; and the forge-best decks are an older set mix than the gen-4 decks, so
+that anchor carries the distribution-mismatch caveat. The gen4-512-vs-256 pair
+is the clean comparison.)
+
+**Empirical conversion: ~10–13 pp of Bo7 win rate per 1.0 of scorer score**
+near this operating range. gen4-512 vs gen4-256 is Δscore 0.38 ↔ +3.4 pp (or
+head-to-head 54.6% = +4.6 pp) → ~9–12 pp/1.0; the wider forge→gen-4 range gives
+~13–15 pp/1.0. Consistent with the pipeline's earlier ~7.8 pp/1.0 estimate.
+
+The conversion is **flatter than the scorer's own score scale implies.** The
+scorer is a Bradley-Terry ranking model, so if a score gap Δ were a calibrated
+win-probability logit, the predicted edge would be ≈ logistic(Δ) — ~25 pp/1.0
+near even. The measured ~10–13 pp/1.0 is roughly half that, i.e. the scorer's
+score scale is **over-dispersed (overconfident) by ~2×** relative to real win
+rates: a score gap corresponds to a smaller real-game edge than its magnitude
+suggests. Use the empirical slope, not logistic(Δ).
+
+Cashing this out for the picker: after top-k the remaining 0.047 gap to the
+gen4-512 builder ≈ **~0.5 pp** of win rate, and the total top-k gain over plain
+REINFORCE (+0.079) ≈ **~0.8–1 pp**. Small but real — confirming "near builder
+parity," with roughly half a point of win rate left to extract against this
+scorer.
 
 ## Improvement attempts that did not work
 
@@ -261,62 +305,84 @@ it (dropout), tipping the policy into collapse. Tuning REINFORCE knobs is
 fighting the symptom. The more promising direction is to change the
 **objective type** to something with a stable, scale-invariant gradient.
 
-## Planned next step — reward-ranked (top-k / RAFT–ReST) objective
+## Reward-ranked (top-k / RAFT–ReST) objective — results
 
-Instead of advantage-weighting all 64 samples, keep only the **top-k by
-reward per pool** and train by plain maximum likelihood to make those decks
-more likely (RAFT / ReST / reward-weighted-regression family — the policy
-imitating its own best samples). Why this fits the picker's failure mode:
+The fix that worked: change the *objective type*. Instead of advantage-
+weighting all 64 samples, keep only the **top-k by reward per pool** and train
+by plain maximum likelihood on their log-probs (RAFT / ReST / reward-weighted-
+regression family — the policy imitating its own best samples). Why it fits
+the picker's failure mode:
 
-- **Scale-invariant.** Depends only on the *ranking* of the 64 samples, not
-  on the magnitude of their reward differences — so it gives a full-strength
-  gradient even when decks score nearly identically, sidestepping the tiny-
-  advantage problem without the normalization blow-up.
+- **Scale-invariant.** Depends only on the *ranking* of the samples, not on
+  the magnitude of their reward differences — full-strength gradient even when
+  decks score nearly identically, sidestepping the tiny-advantage problem
+  without the normalization blow-up.
 - **No negative gradient.** Only pushes *up* toward good decks; the softmax
-  normalization handles "push down the rest" for free. This removes the
-  high-variance term that amplified into collapse under both prior attempts.
-- **Supervised within a step**, so optimizers (and dropout) behave — the
-  policy-gradient pathologies do not apply.
+  handles "push down the rest" for free, removing the high-variance term that
+  collapsed both prior attempts.
 - **Self-improvement loop.** Sample → score → keep best → imitate → repeat
-  ratchets the policy up; this is ReST exactly, and the cheap (self-expert)
-  cousin of search-distillation.
+  ratchets the policy up (ReST exactly; the cheap self-expert cousin of
+  search-distillation).
 
-**Recommended configs.** Start with **top-16 of 64** (25% kept), holding
-`--n-samples` at 64 so the only change vs the 2.234 baseline is the objective
-(clean A/B). Then try **top-16 of 128** (deeper sample pool → higher-quality
-targets while keeping a stable 16-target gradient). Avoid very small k early:
-the scorer is only ~72% pairwise-accurate, so the single "best" sample is
-often best by scorer noise — keeping the top quarter hedges against imitating
-noise. k controls *target greediness*; sampling temperature / entropy controls
-*candidate diversity* — they must move together (keep temperature ≥ 1 so the
-top-k filter has varied candidates to choose from; if diversity collapses,
-top-k starves).
+All runs warm-start from the 2.234 REINFORCE checkpoint (the objective is
+resumable and not architecture-locked, FR-039), switching only the policy
+loss. Top-16 of 64 holds `--n-samples` at 64 so the only change vs the 2.234
+baseline is the objective.
 
-**Cheap first test.** Warm-start: resume from the 2.234 checkpoint with
-top-16-of-64 immediately (`--objective topk --topk 16`, lower `--lr` ~1e-4),
-which asks the directly-useful question "can top-k push past where REINFORCE
-plateaued?" for a fraction of the compute. A positive result is clean
-evidence top-k helps; a null is ambiguous (could be at the scorer ceiling
-where REINFORCE also stalled). The schedule (anneal k 16 → 8 → 4 across
-resume-from-best stages, ReST's rising threshold) can be run manually once
-fixed-k is validated.
+### The crux is the entropy/diversity interaction
+
+Top-k *sharpens* the policy (it chases its own best samples), so the entropy
+bonus must be strong enough — and the LR gentle enough — to keep the 64
+sampled candidates diverse, or the top-k filter starves on near-identical
+decks. Two runs at top-16-of-64 made this concrete:
+
+| run | LR | entropy-coef | temp | entropy held | best val_reward |
+|---|---|---|---|---|---|
+| default | 3e-4 | 0.01 | 1.0 | collapsed to ~0.5–0.7 nats | 2.281 |
+| gentle | 1e-4 | 0.03 | 1.2 | healthy ~1.7–2.5 nats | **2.3126** |
+
+The default-LR run over-sharpened: ~5,000 top-k updates per epoch at LR 3e-4
+overwhelmed the 0.01 entropy bonus, entropy crashed from 2.65 to ~0.6 nats in
+the first epoch, candidate diversity starved, and val_reward only crept to
+2.281. The gentle run (1e-4 LR, 3× entropy, temperature 1.2) held entropy at
+1.7–2.5 nats, kept improving for ~28 epochs, and reached **best val_reward
+2.3126 at epoch 60** (early-stopped at 70). So: k controls *target greediness*;
+temperature/entropy controls *candidate diversity*; they must move together.
+
+### Outcome — near builder parity
+
+2.3126 vs the gen4-512 builder ceiling (2.36) is a gap of **~0.047** (≈0.5 pp
+of win rate). The picker closed the headroom from 0.13 (REINFORCE) → 0.047
+(~64% of it), with the total top-k gain over REINFORCE (+0.079) worth ~0.8–1
+pp. Deck shapes stayed in-distribution throughout (~2.85 colors, ~18
+creatures). The picker now essentially **matches the explicit greedy/SA search
+at one forward pass per pool** — the goal of an amortized picker.
+
+A `top-16 of 128` warm-start (deeper sample pool → higher-quality targets,
+same gentle settings) is running to test the last sliver of headroom, but the
+remaining ~0.047 is small enough that the higher-value next step is match-play
+validation rather than more scorer-chasing. The ReST k-annealing schedule
+(16 → 8 → 4 across resume-from-best stages) remains available if more is
+wanted.
 
 ## Open questions / next steps
 
-- **Validate fixed-k top-k** (top-16 of 64) against the 2.234 baseline —
-  warm-started first for a fast read, from-scratch if the warm-start is
-  ambiguous. Then top-16 of 128.
-- **Manual k-annealing schedule** (16 → 8 → 4, resume-from-best per stage,
-  dual patience), if fixed-k validates and then plateaus.
+- **Match-play confirmation (highest value).** The top-k picker (2.3126) is at
+  ~builder parity on scorer score; run self-play (`pick-decks` decks vs
+  `build-decks` decks, same pools) to confirm that translates to real win rate
+  in Forge games. This, not more scorer-chasing, is the gating test for
+  whether the picker is deployable.
+- **`top-16 of 128` run (in progress).** Warm-started from 2.3126 with the
+  gentle settings; testing whether a deeper sample pool extracts the last
+  ~0.047 toward the 2.36 ceiling.
+- **ReST k-annealing schedule** (16 → 8 → 4, resume-from-best per stage) — the
+  remaining lever if 128-sample stalls and more headroom is still wanted; keep
+  temperature ≥ 1.2 so the deeper-cut filter doesn't starve.
 - **Fix the entropy decay schedule** so it actually anneals against a noisy
-  val curve (time/step-based or best-not-improved-for-N trigger), letting the
-  policy sharpen late instead of holding constant exploration.
-- **Builder distillation (expert iteration).** Train the picker to imitate
-  the SA builder's chosen decks (the explicit search as expert), optionally
-  followed by RL fine-tuning — the search-based counterpart to the self-expert
-  top-k loop.
-- **Isolate dropout from depth** with a `--n-layers 6 --n-heads 4 --dropout 0`
-  rerun, to confirm the 6L/4H architecture trains normally without dropout.
-- **Match-play confirmation.** Once a picker beats the greedy builder on
-  scorer score, run self-play (`pick-decks` decks vs `build-decks` decks, same
-  pools) to confirm the score advantage is real win rate.
+  val curve (time/step-based or best-not-improved-for-N trigger) rather than
+  the never-firing "N consecutive improvements" condition. Less urgent now
+  that the manual entropy-coef/temperature tuning works.
+- **Builder distillation (expert iteration)** — train the picker to imitate
+  the SA builder's chosen decks directly (the explicit search as expert), the
+  search-based counterpart to the self-expert top-k loop. A fallback if the
+  picker needs to exceed (not just match) the builder.
