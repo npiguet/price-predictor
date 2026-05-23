@@ -73,6 +73,9 @@ Dataclass capturing every CLI knob for `train-picker`. Mirror of
 | `d_ff` | int \| None | `None` (= 4 * d_model) | FR-021 | Forbidden on resume/bootstrap |
 | `dropout` | float | `0.0` | FR-021 | Forbidden on resume/bootstrap |
 | `aux_weight` | float | `0.1` | FR-021, § 3.4, § 1.2 | Yes |
+| `normalize_advantage` | bool | `False` | FR-021 | Yes |
+| `objective` | str | `reinforce` | FR-039 | Yes (not architecture-locked) |
+| `topk` | int | `16` | FR-039 | Yes |
 | `batch_size` | int | `16` | FR-021 | Yes |
 | `n_samples` | int | `64` | FR-011, FR-021 | Yes |
 | `temperature` | float | `1.0` | FR-021, § 3.2 | Yes |
@@ -138,7 +141,8 @@ tests.
 | `sampled_deck_mask` | `(B*S, max_picks)` bool | Same shape as `picked_mask`; passed to scorer as `key_padding_mask`. |
 | `rewards` | `(B, S)` float | Scorer scores after un-flatten. |
 | `baselines` | `(B,)` float | `rewards.mean(dim=1)`. |
-| `advantages` | `(B, S)` float | `rewards - baselines.unsqueeze(1)`, detached (FR-014); optionally divided by the per-pool reward std (GRPO normalization) when `normalize_advantage` is set. |
+| `advantages` | `(B, S)` float | `rewards - baselines.unsqueeze(1)`, detached (FR-014); optionally divided by the per-pool reward std (GRPO normalization) when `normalize_advantage` is set. Used only by the `reinforce` objective. |
+| `topk_idx` | `(B, k)` long | `rewards.topk(k, dim=1).indices`, the per-pool top-k decks selected by the `topk` objective (FR-039). The policy loss is then max-likelihood on `log_probs.gather(1, topk_idx)` — no advantage weighting. |
 | `log_probs` | `(B, S)` float | Plackett-Luce log-probs, differentiable in `logits` (FR-014). |
 | `entropy` | `(B,)` float | Per-pool entropy of the picker's softmax over `pool_mask`-valid positions. |
 

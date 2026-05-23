@@ -190,6 +190,61 @@ class TestLosses:
         assert torch.isfinite(losses.advantage).all()
         assert torch.allclose(losses.advantage, torch.zeros_like(losses.advantage))
 
+    def test_topk_objective_maximizes_selected_log_probs(self):
+        # topk keeps the k highest-reward decks per pool and maximizes their
+        # log-prob (max-likelihood), independent of any advantage/baseline.
+        rewards = torch.tensor([[1.0, 9.0, 2.0, 8.0]])  # top-2 are idx 1, 3
+        log_prob = torch.tensor([[-5.0, -1.0, -4.0, -2.0]])
+        losses = _compute_losses(
+            rewards, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
+            objective="topk", topk=2,
+        )
+        # policy_loss = -mean(log_prob[selected]) = -mean([-1.0, -2.0]) = 1.5
+        assert losses.policy_loss.item() == pytest.approx(1.5)
+
+    def test_topk_objective_ignores_advantage_magnitude(self):
+        # Scale-invariance: scaling the rewards (without changing their order)
+        # leaves the topk policy loss unchanged (only the ranking matters).
+        log_prob = torch.tensor([[-5.0, -1.0, -4.0, -2.0]])
+        base = torch.tensor([[1.0, 9.0, 2.0, 8.0]])
+        a = _compute_losses(
+            base, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
+            objective="topk", topk=2,
+        )
+        b = _compute_losses(
+            base * 1000.0, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
+            objective="topk", topk=2,
+        )
+        assert a.policy_loss.item() == pytest.approx(b.policy_loss.item())
+
+    def test_topk_clamps_to_n_samples(self):
+        # k larger than the sample count keeps all samples without error.
+        rewards = torch.tensor([[1.0, 2.0, 3.0]])
+        log_prob = torch.tensor([[-1.0, -2.0, -3.0]])
+        losses = _compute_losses(
+            rewards, log_prob, torch.ones(1), torch.zeros(1), 0.0, 0.0,
+            objective="topk", topk=99,
+        )
+        # All three kept: -mean([-1, -2, -3]) = 2.0
+        assert losses.policy_loss.item() == pytest.approx(2.0)
+
+    def test_topk_entropy_and_aux_match_reinforce(self):
+        # Only the policy term differs between objectives; entropy and aux are
+        # computed identically.
+        rewards = torch.tensor([[1.0, 9.0, 2.0, 8.0]])
+        log_prob = torch.randn(1, 4)
+        entropy = torch.tensor([2.5])
+        aux_pred = torch.tensor([3.0])
+        rein = _compute_losses(
+            rewards, log_prob, entropy, aux_pred, 0.01, 0.1, objective="reinforce",
+        )
+        topk = _compute_losses(
+            rewards, log_prob, entropy, aux_pred, 0.01, 0.1,
+            objective="topk", topk=2,
+        )
+        assert topk.entropy_loss.item() == pytest.approx(rein.entropy_loss.item())
+        assert topk.aux_loss.item() == pytest.approx(rein.aux_loss.item())
+
 
 # --------------------------------------------------------------------------- #
 # Entropy schedule / early stop / KL

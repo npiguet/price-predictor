@@ -113,6 +113,28 @@ against the bootstrap checkpoint's distribution — this is the contingency
 plan's Option A configuration; not part of the primary plan, but the CLI
 surface supports it.
 
+### Reward-ranked (top-k) objective
+
+```powershell
+# warm-start a reinforce checkpoint under the top-k objective
+python -m sealed train-picker `
+  --pools-path output/sealed/pools/pools.txt `
+  --resume models/sealed/picker/best_<reinforce-run>.pt `
+  --objective topk --topk 16 --lr 1e-4
+```
+
+`--objective topk` switches the policy loss from advantage-weighted REINFORCE
+to reward-ranked / best-of-N (FR-039): per pool, keep the `--topk` (16)
+highest-reward sampled decks and maximize their log-prob by max-likelihood; no
+baseline/advantage. The entropy bonus and aux head are unchanged. Because the
+objective is resumable and not architecture-locked, it can be set on a fresh
+run or — as above — on a `--resume` of an existing `reinforce` checkpoint, the
+cheap way to test whether top-k improves on a plateaued REINFORCE policy. `k`
+must satisfy `1 ≤ k < --n-samples`. To run the soft→greedy curriculum,
+re-`--resume` from the best checkpoint with a smaller `--topk` each stage
+(e.g. 16 → 8 → 4), keeping `--temperature ≥ 1` so the sampler still produces
+diverse candidates for the filter to choose from.
+
 ## Step 3 — Generate decks with the trained picker
 
 ```powershell

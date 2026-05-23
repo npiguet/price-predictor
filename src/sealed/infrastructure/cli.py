@@ -489,6 +489,25 @@ def _build_train_picker_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--objective", default=None, choices=["reinforce", "topk"],
+        dest="objective",
+        help=(
+            "Training objective (default: reinforce). 'reinforce' is the "
+            "advantage-weighted policy gradient with a per-pool baseline; "
+            "'topk' is reward-ranked / best-of-N (keep the --topk highest-"
+            "reward sampled decks per pool and maximize their log-prob, no "
+            "baseline). Resumable and not architecture-locked, so a reinforce "
+            "checkpoint can be continued or warm-started under topk."
+        ),
+    )
+    parser.add_argument(
+        "--topk", type=int, default=None, dest="topk",
+        help=(
+            "Decks kept per pool under --objective topk (default: 16). Must be "
+            "between 1 and --n-samples; smaller = greedier. Resumable."
+        ),
+    )
+    parser.add_argument(
         "--batch-size", type=int, default=None, dest="batch_size",
         help="Pools per gradient step (default: 16). Resumable.",
     )
@@ -586,7 +605,8 @@ _RESUMABLE_PICKER_FLAG_NAMES: tuple[str, ...] = (
     "pools_path", "scorer_checkpoint", "auditor_scorer_checkpoint",
     "cards_path", "checkpoint_dir",
     "d_model", "n_layers", "n_heads", "d_ff", "dropout",
-    "aux_weight", "normalize_advantage", "batch_size", "n_samples", "temperature",
+    "aux_weight", "normalize_advantage", "objective", "topk",
+    "batch_size", "n_samples", "temperature",
     "entropy_coef", "entropy_decay_after", "lr", "max_grad_norm",
     "epochs", "val_fraction", "patience", "kl_coef",
 )
@@ -1380,6 +1400,21 @@ def run_train_picker(args: argparse.Namespace) -> int:
     if resolved["pools_path"] is None:
         print("Error: --pools-path is required.", file=sys.stderr)
         return 2
+
+    # Top-k objective needs real selection pressure: 1 <= topk < n_samples
+    # (FR-039). topk == n_samples keeps every sampled deck = no selection.
+    if resolved["objective"] == "topk":
+        topk = int(resolved["topk"])  # type: ignore[arg-type]
+        n_samples = int(resolved["n_samples"])  # type: ignore[arg-type]
+        if not 1 <= topk < n_samples:
+            print(
+                f"Error: --topk must be between 1 and --n-samples-1 "
+                f"({n_samples - 1}) for the topk objective, got {topk} with "
+                f"--n-samples {n_samples}. topk == n_samples keeps every "
+                "sampled deck, which removes all selection pressure.",
+                file=sys.stderr,
+            )
+            return 2
 
     # Scorer must exist (FR-036).
     scorer_path = Path(str(resolved["scorer_checkpoint"]))

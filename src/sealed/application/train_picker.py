@@ -71,6 +71,8 @@ class TrainPickerConfig:
     dropout: float = 0.0
     aux_weight: float = 0.1
     normalize_advantage: bool = False
+    objective: str = "reinforce"
+    topk: int = 16
     batch_size: int = 16
     n_samples: int = 64
     temperature: float = 1.0
@@ -437,21 +439,29 @@ def _compute_losses(
     entropy_coef: float,
     aux_weight: float,
     normalize_advantage: bool = False,
+    objective: str = "reinforce",
+    topk: int = 16,
 ) -> _Losses:
-    """Assemble the REINFORCE loss (spec § 3.3, § 3.4).
+    """Assemble the picker training loss (spec § 3.3, § 3.4, FR-039).
 
     ``rewards`` and ``log_prob`` are ``(B, S)``; ``entropy`` and ``aux_pred``
-    are ``(B,)``. The per-pool baseline is the mean reward; the advantage is
-    detached (it weights the log-prob gradient, FR-014); the aux target is the
-    detached per-pool mean reward (FR-015).
+    are ``(B,)``. The per-pool baseline is the mean reward; the aux target is
+    the detached per-pool mean reward (FR-015). The entropy and aux terms are
+    identical across objectives; only the policy-loss term differs.
 
-    When ``normalize_advantage`` is set, the centered reward is divided by the
-    per-pool reward std (GRPO-style group normalization). Within-pool reward
-    variance is small here — the 64 sampled decks share most of their cards —
-    so the raw advantages are tiny and the policy gradient is weak; rescaling
-    to unit variance per pool gives a consistent step magnitude regardless of
-    how spread out a given pool's scores happen to be. A degenerate pool
-    (all samples equal) keeps a ~0 advantage because the numerator is 0.
+    ``objective="reinforce"`` (default): advantage-weighted policy gradient
+    with a detached per-pool baseline (FR-014). When ``normalize_advantage``
+    is set, the centered reward is divided by the per-pool reward std
+    (GRPO-style group normalization) — within-pool reward variance is small
+    (the sampled decks share most cards), so raw advantages are tiny and the
+    gradient weak; rescaling to unit variance gives a consistent step. A
+    degenerate pool (all samples equal) keeps a ~0 advantage.
+
+    ``objective="topk"`` (FR-039): reward-ranked / best-of-N. Per pool, keep
+    the ``topk`` highest-reward sampled decks and maximize their log-prob by
+    plain max-likelihood (no baseline/advantage term). Depends only on the
+    ranking, not the (tiny) advantage magnitudes, and has no high-variance
+    negative-gradient term.
     """
     baseline = rewards.mean(dim=1)
     centered = rewards - baseline.unsqueeze(1)
@@ -459,7 +469,13 @@ def _compute_losses(
         std = rewards.std(dim=1, unbiased=False, keepdim=True)
         centered = centered / (std + _ADVANTAGE_STD_EPS)
     advantage = centered.detach()
-    policy_loss = -(advantage * log_prob).mean()
+    if objective == "topk":
+        k = min(topk, rewards.shape[1])
+        topk_idx = rewards.topk(k, dim=1).indices  # (B, k)
+        selected_log_prob = log_prob.gather(1, topk_idx)
+        policy_loss = -selected_log_prob.mean()
+    else:
+        policy_loss = -(advantage * log_prob).mean()
     entropy_loss = -entropy_coef * entropy.mean()
     aux_loss = F.mse_loss(aux_pred, baseline.detach())
     total = policy_loss + entropy_loss + aux_weight * aux_loss
@@ -937,6 +953,7 @@ class TrainPickerUseCase:
             losses = _compute_losses(
                 rewards, log_prob, entropy, aux_pred,
                 entropy_coef, config.aux_weight, config.normalize_advantage,
+                config.objective, config.topk,
             )
             total = losses.total
 

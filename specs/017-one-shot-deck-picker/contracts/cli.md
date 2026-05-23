@@ -26,6 +26,9 @@ Train a one-shot picker from scratch using REINFORCE against a frozen scorer.
 | `--ff-dim` | int | `4 * d_model` | Feed-forward dim in SAB. Computed from the resolved `d_model` when unset. Forbidden alongside `--resume` / `--picker-checkpoint`. |
 | `--dropout` | float | `0.0` | Dropout in SAB layers. Forbidden alongside `--resume` / `--picker-checkpoint`. |
 | `--aux-weight` | float | `0.1` | Coefficient on the auxiliary pool-quality MSE loss (FR-005, § 1.2, § 3.4). Setting to `0` disables the aux loss while keeping the head parameters in the model. |
+| `--normalize-advantage` / `--no-normalize-advantage` | bool | `False` | GRPO-style per-pool advantage normalization (divide the centered reward by the per-pool reward std). Applies only to `--objective reinforce`. Resumable. |
+| `--objective` | `reinforce` \| `topk` | `reinforce` | Training objective (FR-039). `reinforce` = advantage-weighted policy gradient with a per-pool baseline; `topk` = reward-ranked / best-of-N (keep the `--topk` highest-reward decks per pool and maximize their log-prob, no baseline). Resumable and **not** architecture-locked — a `reinforce` checkpoint may be resumed/warm-started under `topk`. |
+| `--topk` | int | `16` | Decks kept per pool under `--objective topk` (FR-039). Must satisfy `1 ≤ topk < --n-samples`; `topk == --n-samples` fails fast (no selection pressure). Smaller = greedier. Resumable. |
 | `--batch-size` | int | `16` | Pools per gradient step. |
 | `--n-samples` | int | `64` | Sampled decks per pool per step (FR-011). |
 | `--temperature` | float | `1.0` | Softmax temperature for sampling (FR-021, § 3.2). |

@@ -385,6 +385,37 @@ testable without a real GPU, real Forge JVM, or real `.npz` cache. Constitution
 Principle I (Fast Automated Tests) is satisfied: every test in this list
 runs in milliseconds on CPU.
 
+### D10: Reward-ranked (top-k) objective (post-Phase-0, FR-039)
+
+**Decision**: Add a selectable `topk` objective alongside the default
+`reinforce`. Per pool, keep the `k` highest-reward sampled decks
+(`rewards.topk(k, dim=1)`) and train by max-likelihood on their PL log-probs;
+no baseline/advantage. Entropy and aux terms unchanged. Implemented as a
+branch in `_compute_losses` (the sampler, scoring, log-prob, entropy, and
+validation paths are reused unchanged); exposed as `--objective` / `--topk`,
+both resumable and **not** architecture-locked so a `reinforce` checkpoint can
+be warm-started under `topk`.
+
+**Rationale**: REINFORCE's signal here is weak and high-variance — the sampled
+decks of a pool share most cards, so the within-pool reward spread (and thus
+the advantages) is tiny, and the policy plateaus. Two REINFORCE-tuning
+attempts made it worse: GRPO advantage normalization (divide by per-pool std)
+collapsed the policy by over-scaling the gradient against an unchanged
+LR/entropy, and dropout collapsed it by injecting noise into the on-policy
+action distribution. Top-k changes the *objective type* rather than tuning the
+fragile gradient: it depends only on the per-pool reward *ranking* (so it is
+scale-invariant — immune to the tiny-advantage problem) and has no
+high-variance negative-gradient term, giving a stable supervised-style loss.
+It is the policy imitating its own best samples (RAFT / ReST / self-imitation),
+which also enables the cheap warm-start test against the plateaued REINFORCE
+checkpoint.
+
+**Alternative considered**: soft reward-weighted regression (RWR) — weight
+every sample's log-prob by `exp(reward / τ)` and anneal τ — and an automated
+k-annealing scheduler. Both deferred: hard top-k with manual k-annealing
+(re-resume from best with smaller `k`) is simpler and sufficient to validate
+the objective before adding scheduler machinery.
+
 ## Open items handed to Phase 1 / implementation
 
 - Confirm `POWER > 0 or TOUGHNESS > 0` is a sound creature heuristic against
