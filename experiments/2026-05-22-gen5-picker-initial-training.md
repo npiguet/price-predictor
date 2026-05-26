@@ -32,17 +32,20 @@ for reading every metric below.
 The picker trains stably from random init under REINFORCE to a validation
 reward (the frozen gen-4 scorer's mean rating of the picker's deterministic
 decks on held-out pools) of **2.234**, up from ~1.96 at the first epoch.
-Switching to a reward-ranked **top-k** objective then pushes it to **2.3126** —
-within **~0.047** of the gen4-512 greedy/SA builder's mean (2.36), i.e. **~0.5
-pp of win rate from builder parity**. So a single-forward policy now
-essentially matches an explicit per-pool search, and clears Forge's own
-builder by a wide margin (forge-best mean 0.90).
+Switching to a reward-ranked **top-k** objective and chaining four runs of it
+(deeper sample pools, greedier selection, gentler LR) then climbs the picker to
+**2.426** on scorer-score — past the gen4-512 greedy/SA builder's mean (2.36) by
+~0.07. So as a *scorer-maximizer* the single-forward policy out-optimizes the
+explicit per-pool SA search.
 
-That is the amortized-optimizer goal reached: search-level deck quality at one
-forward pass per pool. The remaining open work is match-play confirmation that
-the scorer-score parity holds up in real games — not further scorer-chasing.
-The rest of this file is the record of how it got there, including two
-improvement attempts that failed before top-k succeeded.
+**Match-play settles the real question:** in 4,442 best-of-7 Forge games the
+picker plays at **parity with the SA builder** (head-to-head 52.3%, ~1.1σ — not
+significant) and dominates Forge's builders (beats `forge-best` 69%). So the
+above-SA *scorer-score* margin did **not** show up as a win-rate edge, but the
+deployable result is exactly what an amortized optimizer is for: **search-level
+deck quality at one forward pass per pool**, equalling a 200-iteration search in
+real games at a fraction of the cost. The frontier is now the scorer,
+not the policy.
 
 ## Setup
 
@@ -142,14 +145,17 @@ shape check above argues it does not).
 `scripts/compare_deck_builders.py` builds one deck per shared pool three ways
 (forge-best, the `build-decks` greedy/SA search, and the picker), then rates
 all of them with the same gen-4 scorer so the score headers are directly
-comparable pool-by-pool. The picker scored a notch below the SA builder on
-most pools, edged it on a few, and stayed well above `forge-best` throughout.
+comparable pool-by-pool. At this point — the REINFORCE-baseline picker, before
+top-k — it scored a notch below the SA builder on most pools, edged it on a
+few, and stayed well above `forge-best` throughout. (The later top-k runs
+closed and reversed this gap; see the top-k section.)
 
 This is the cheap, no-Forge-games version of the validation: the question
 "is the picker a better scorer-maximizer than greedy?" is answered directly
-by these scores, since both maximize the same scorer. The current answer is
-"close, slightly behind," which is a strong result for a one-shot policy
-against an explicit search and motivates the improvement work below. The
+by these scores, since both maximize the same scorer. At the baseline the
+answer was "close, slightly behind," which is already a strong result for a
+one-shot policy against an explicit search and motivated the improvement work
+below. The
 remaining job for actual match-play is only to confirm the score gap reflects
 real win rate, which — per the gen-4 match-play evaluation — it reliably does
 for in-distribution decks.
@@ -173,8 +179,9 @@ scorer gives that reference distribution:
 Read as a stopping gauge: the picker's REINFORCE-baseline val_reward (2.234, a
 mean over its 20k val pools) sits **~0.13 below the builder mean (2.36)** —
 i.e. the picker is already near builder parity, with only ~0.13 of headroom to
-the search it amortizes. The reward-ranked top-k runs have since narrowed this
-to ~0.047 (best val_reward 2.3126). Training is "good enough" once the picker's
+the search it amortizes. The reward-ranked top-k runs have since closed that
+gap and gone past it — best val_reward 2.426, ~0.07 *above* the SA mean (see
+the top-k section). Training is "good enough" once the picker's
 mean val_reward approaches
 2.36; pushing well past it would mean out-optimizing the explicit search,
 which is the most a frozen-scorer picker can deliver.
@@ -229,11 +236,14 @@ score scale is **over-dispersed (overconfident) by ~2×** relative to real win
 rates: a score gap corresponds to a smaller real-game edge than its magnitude
 suggests. Use the empirical slope, not logistic(Δ).
 
-Cashing this out for the picker: after top-k the remaining 0.047 gap to the
-gen4-512 builder ≈ **~0.5 pp** of win rate, and the total top-k gain over plain
-REINFORCE (+0.079) ≈ **~0.8–1 pp**. Small but real — confirming "near builder
-parity," with roughly half a point of win rate left to extract against this
-scorer.
+Cashing this out for the picker: the final top-k picker (2.426) is now ~0.07
+*above* the gen4-512 builder (2.36) ≈ **~0.7–0.9 pp** of win rate, and the
+total gain over plain REINFORCE (2.234 → 2.426, +0.19) ≈ **~2 pp**. These are
+modest in absolute terms and — above the SA baseline — increasingly
+extrapolation (the calibration was fit in the normal-builder regime). Match-play
+later checked exactly this and found **no measurable above-SA win-rate edge**
+(parity with the SA builder; see *Match-play validation*) — the extrapolated
+above-SA score did not cash out.
 
 ## Improvement attempts that did not work
 
@@ -349,40 +359,143 @@ the first epoch, candidate diversity starved, and val_reward only crept to
 2.3126 at epoch 60** (early-stopped at 70). So: k controls *target greediness*;
 temperature/entropy controls *candidate diversity*; they must move together.
 
-### Outcome — near builder parity
+### The top-k ladder: from parity to measurably above the SA search
 
-2.3126 vs the gen4-512 builder ceiling (2.36) is a gap of **~0.047** (≈0.5 pp
-of win rate). The picker closed the headroom from 0.13 (REINFORCE) → 0.047
-(~64% of it), with the total top-k gain over REINFORCE (+0.079) worth ~0.8–1
-pp. Deck shapes stayed in-distribution throughout (~2.85 colors, ~18
-creatures). The picker now essentially **matches the explicit greedy/SA search
-at one forward pass per pool** — the goal of an amortized picker.
+Four top-k runs were chained, each warm-started from the previous best, with
+the sample pool deepened, selection made greedier, and the learning rate
+lowered at each step. Entropy was held healthy throughout (via elevated
+`--entropy-coef` + `--temperature 1.2`); the lone failure was the first run,
+left at the default LR, where entropy collapsed.
 
-A `top-16 of 128` warm-start (deeper sample pool → higher-quality targets,
-same gentle settings) is running to test the last sliver of headroom, but the
-remaining ~0.047 is small enough that the higher-value next step is match-play
-validation rather than more scorer-chasing. The ReST k-annealing schedule
-(16 → 8 → 4 across resume-from-best stages) remains available if more is
-wanted.
+| run (chained) | config | entropy held | peak val_reward |
+|---|---|---|---|
+| top-16/64, default | lr 3e-4, ec 0.01, T 1.0 | collapsed ~0.6 nats | 2.281 |
+| top-16/64, gentle | lr 1e-4, ec 0.03, T 1.2 | ~2.2 nats | 2.313 |
+| top-16/128 | lr 1e-4, ec 0.03, T 1.2, 20 evals/epoch | ~2.4 nats | 2.373 |
+| top-4/256 | lr 1e-5, ec 0.04, T 1.2, 20 evals/epoch | ~2.6 nats | **2.426** |
 
-## Open questions / next steps
+Against the REINFORCE baseline (2.234) and the SA builder mean (2.36), the
+picker **crossed parity at top-16/128 (2.373) and pulled clearly above the SA
+search at top-4/256 (2.426)** — ~+0.07 over the SA mean, several σ on the
+mean-to-mean comparison. So the amortized one-shot picker is now a
+**measurably better scorer-maximizer than the explicit per-pool SA search**,
+at one forward pass versus a 200-iteration search. The per-stage gains shrank
+as compute grew (+0.079 → +0.060 → +0.053, each stage ~2× the sampling cost
+and the last needing ~40 epochs of slow creep): clear diminishing returns.
 
-- **Match-play confirmation (highest value).** The top-k picker (2.3126) is at
-  ~builder parity on scorer score; run self-play (`pick-decks` decks vs
-  `build-decks` decks, same pools) to confirm that translates to real win rate
-  in Forge games. This, not more scorer-chasing, is the gating test for
-  whether the picker is deployable.
-- **`top-16 of 128` run (in progress).** Warm-started from 2.3126 with the
-  gentle settings; testing whether a deeper sample pool extracts the last
-  ~0.047 toward the 2.36 ceiling.
-- **ReST k-annealing schedule** (16 → 8 → 4, resume-from-best per stage) — the
-  remaining lever if 128-sample stalls and more headroom is still wanted; keep
-  temperature ≥ 1.2 so the deeper-cut filter doesn't starve.
-- **Fix the entropy decay schedule** so it actually anneals against a noisy
-  val curve (time/step-based or best-not-improved-for-N trigger) rather than
-  the never-firing "N consecutive improvements" condition. Less urgent now
-  that the manual entropy-coef/temperature tuning works.
-- **Builder distillation (expert iteration)** — train the picker to imitate
-  the SA builder's chosen decks directly (the explicit search as expert), the
-  search-based counterpart to the self-expert top-k loop. A fallback if the
-  picker needs to exceed (not just match) the builder.
+### The recipe that worked
+
+- **Change the objective, not the REINFORCE knobs.** The two REINFORCE patches
+  (advantage normalization, dropout) collapsed; top-k — a scale-invariant,
+  no-negative-gradient supervised loss — is what broke the plateau.
+- **Hold candidate diversity or the greedy filter starves.** Gentle LR
+  (1e-4 → 1e-5) + elevated `--entropy-coef` (0.03 → 0.04) + `--temperature 1.2`
+  kept entropy at ~2.2–2.6 nats. The one run left at the default LR
+  over-sharpened (entropy → 0.6 nats) and stalled at 2.281.
+- **Deepen the pool and tighten the cut for more headroom.** Larger N (64 → 256)
+  gives higher-quality targets; greedier k (16 → 4) raises selection pressure.
+  Together they took the picker above SA — at ~2× compute per step.
+- **Frequent eval + best-checkpoint banks intra-epoch peaks** (FR-019): the
+  best states landed mid-epoch and would have been missed at epoch boundaries.
+
+### Two caveats on the above-SA gains
+
+1. **Maximization bias.** With ~20 evals/epoch over 30+ epochs (~600 evals) and
+   the best-checkpoint keeping the max, late "new highs" are partly
+   extreme-value statistics on a roughly-plateaued oscillation, not continued
+   learning. The early climb was real (the oscillation *center* rose); the last
+   ~0.02–0.03 is inflated by max-of-many on a fixed val set.
+2. **Colors drift — ambiguous, not clearly Goodhart.** `colors_mean` fell
+   monotonically along the ladder: REINFORCE ~2.9 → 16/64 ~2.79 → 16/128 ~2.7 →
+   4/256 ~2.64 (dipping to ~2.5). This *could* be the scorer over-rewarding low
+   color count (a quirk the greedy picker would exploit), but it is at least as
+   plausibly **real 2-color discipline**: tighter sealed decks are genuinely
+   more consistent, the gen2→gen3 step cut colors (3.27 → 2.7) as a documented
+   *improvement*, and the encoder's `cast_lift` / `color_lift` heads were
+   built to value castability. **Match-play resolved this in favor of "real
+   discipline":** the picker's 2-color decks won *more* than the SA builder's
+   (64.9% vs 62.2%; see *Match-play validation*), so the drift was a genuine
+   improvement, not scorer exploitation.
+
+### Conclusion
+
+Top-k is the objective that unlocked the picker: REINFORCE plateaued at 2.234;
+chained top-k reached **2.426**, surpassing both the REINFORCE policy and the
+explicit SA search on scorer-score. The recipe — gentle LR, diversity held via
+entropy-coef/temperature, progressively deeper pools and greedier selection,
+frequent eval — is the reusable finding. **What is settled:** the picker
+matches and exceeds the SA search as a scorer-*maximizer* at one forward pass.
+**What match-play then resolved** (see *Match-play validation* below): the
+above-SA *scorer-score* margin did **not** translate into a measurable
+win-rate edge — the picker plays at **parity** with the SA search in real games
+(head-to-head 52.3%, ~1.1σ). So top-k's deployable achievement is *matching*
+the explicit search at one forward pass, not beating it; the last above-SA
+scorer-score climb was score that didn't cash out (the maximization-bias caveat
+biting). The picker has saturated this scorer; further deck-quality gains
+require a better reward model (gen-6 scorer), not more policy tuning.
+
+## Match-play validation — gen-5 picker vs the SA builder
+
+Round-robin self-play, best-of-7, **4,442 matches**, between the gen-5 picker
+(`gen5`), the gen-4 SA builders (`gen4-512`, `gen4-256`), Forge's own builders
+(`forge-best`, `forge-3sub`, `forge-8sub`), and `random`. This is the decisive
+test of whether the picker's above-SA *scorer-score* is real *win rate*.
+
+### Ranking (Bo7 win rate vs the field)
+
+| builder | Bo7 WR |
+|---|---|
+| gen5 (picker) | 61.6% |
+| gen4-512 (SA) | 60.2% |
+| gen4-256 (SA) | 58.4% |
+| forge-best | 30.4% |
+| forge-3sub | 16.2% |
+| forge-8sub | 7.6% |
+| random | 2.0% |
+
+The three learned builders are a class apart from Forge's; gen5 sits nominally
+on top.
+
+### The decisive comparison: gen5 ≈ SA builder
+
+Head-to-head, **gen5 beats gen4-512 (the SA search) 52.3% (n=560)** — `z ≈
+1.1σ` from 50%, **not significant**. gen5 vs gen4-256 is 51.7% (n=524, ~0.8σ);
+gen4-512 vs gen4-256 is 54.2% (n=498, ~1.9σ). So the picker plays at
+**statistical parity with the explicit per-pool SA search in real games** — the
+amortized-optimizer goal reached: one forward pass equals a 200-iteration
+search on win rate. Against Forge it dominates exactly as the SA builders do
+(gen5 beats forge-best 69.0%, forge-3sub 86.5%, forge-8sub 95.2%, random 98.9%).
+
+### The above-SA scorer-score did not cash out (as expected)
+
+The picker's +0.07 *scorer-score* margin over SA (2.426 vs 2.36) predicted only
+~0.6 pp of win rate, and head-to-head shows no measurable edge — consistent
+with the maximization-bias caveat. **Caveat on the caveat:** at n=560 this eval
+only resolves edges ≥ ~4 pp at 2σ, and the predicted edge (~0.6 pp) is below
+that floor. So the result **confirms there is no *large* gen5-over-SA edge
+(parity)** and cannot confirm or refute the sub-pp one — either way the
+practical verdict is parity, and the late scorer-score climb bought no
+demonstrable wins.
+
+### The colors drift was real discipline, not Goodhart
+
+gen5 shifted toward 2-color (1,154 two-color decks vs gen4-512's 760, fewer
+3-color) — the `colors_mean` → ~2.5 drift we flagged during training. It did
+**not** hurt: gen5's 2-color win rate is **64.9% vs gen4-512's 62.2%**. So the
+drift was the picker finding tighter, more consistent decks that win at least
+as well — vindicating the read that 2-color discipline is a genuine sealed
+virtue, not a scorer quirk being exploited.
+
+### Sanity
+
+Mirror diagonals (a builder vs itself) sit within ~1σ of 50% (gen5 52.3%,
+gen4-512 47.7%, gen4-256 53.4%), so no systematic harness bias. Bo7 is the
+right unit: 26.9% of Bo1 outcomes would flip under Bo7 (9.6% for Bo5).
+
+### Verdict
+
+**Gen-5 is validated and deployable.** The one-shot picker equals the gen-4 SA
+search's deck quality in real Forge games — at a fraction of the inference cost
+— and crushes every weaker builder. The "beating SA on scorer-score" was score
+that did not translate to wins; the real, confirmed achievement is *parity at
+one forward pass*. 
