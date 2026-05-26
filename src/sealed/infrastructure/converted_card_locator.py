@@ -38,6 +38,8 @@ class ConvertedCardLocator:
     def __init__(self, cards_path: Path) -> None:
         self._cards_path = cards_path
         self._letter_index: dict[str, dict[str, Path]] = {}
+        self._embedding_cache: dict[str, np.ndarray | None] = {}
+        self._text_cache: dict[str, ConvertedCardText | None] = {}
 
     def text_path(self, card_name: str) -> Path | None:
         return self._find_file(card_name, ".txt")
@@ -46,15 +48,43 @@ class ConvertedCardLocator:
         return self._find_file(card_name, ".npz")
 
     def load_text(self, card_name: str) -> ConvertedCardText | None:
-        path = self.text_path(card_name)
-        return ConvertedCardText.from_file(path) if path else None
+        """Load and parse a card's ``.txt``, memoized by name.
+
+        Like ``load_embedding``, the parse result is cached so repeated lookups
+        — e.g. ``compute_basic_lands`` re-reading the chosen cards' mana costs
+        on every deck in ``pick-decks`` / ``build-decks`` — become a dict hit
+        instead of re-opening and re-parsing the ``.txt``. ``ConvertedCardText``
+        is treated read-only by all callers, so the cached instance is shared
+        directly (no copy needed).
+        """
+        if card_name not in self._text_cache:
+            path = self.text_path(card_name)
+            self._text_cache[card_name] = (
+                ConvertedCardText.from_file(path) if path else None
+            )
+        return self._text_cache[card_name]
 
     def load_embedding(self, card_name: str) -> np.ndarray | None:
-        path = self.embedding_path(card_name)
-        if path is None:
-            return None
-        with np.load(path) as f:
-            return f["embedding"].copy()
+        """Load a card's ``.npz`` embedding, memoized by name.
+
+        Cards recur heavily across sealed pools, so the per-name cache turns
+        repeated lookups into a dict hit instead of re-opening and decompressing
+        the ``.npz`` every time (the dominant cost in ``pick-decks`` /
+        ``build-decks`` / ``evaluate-scorer``, which reload per pool). A
+        defensive copy is returned on each call so callers keep the original
+        "fresh array per call" contract and cannot mutate the cached row. Same
+        memoize-by-name technique as ``MatchDataLoader._intern`` and
+        ``train_picker._prepare_pools``.
+        """
+        if card_name not in self._embedding_cache:
+            path = self.embedding_path(card_name)
+            if path is None:
+                self._embedding_cache[card_name] = None
+            else:
+                with np.load(path) as f:
+                    self._embedding_cache[card_name] = f["embedding"].copy()
+        cached = self._embedding_cache[card_name]
+        return None if cached is None else cached.copy()
 
     def expected_path(self, card_name: str, ext: str) -> Path:
         """Return the expected exact-match path (used for error messages)."""
