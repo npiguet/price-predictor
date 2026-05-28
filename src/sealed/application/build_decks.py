@@ -6,45 +6,27 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-import numpy as np
 import torch
 
+from sealed.application.deck_assembly import (
+    assemble_full_deck,
+    load_pool_embeddings,
+)
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
-from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
-from sealed.infrastructure.pool_file_reader import parse_pools
+from sealed.infrastructure.pool_file_reader import (
+    count_complete_lines_and_truncate_partial,
+    format_generated_deck,
+    parse_pools,
+)
 from sealed.infrastructure.scorer_store import ScorerStore
 
 
 def _log(message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
-
-
-def _count_complete_lines_and_truncate_partial(path: Path) -> int:
-    """Count newline-terminated lines in ``path`` and prepare it for append.
-
-    A "complete line" is one that ends with ``\\n``. If the file ends in a
-    partial line (process killed between two of the per-deck ``out.write``
-    calls), it is truncated back to the last newline so a subsequent append
-    starts on a clean line. Returns the count of surviving complete lines
-    (0 if the file is missing or empty).
-    """
-    if not path.exists():
-        return 0
-    content = path.read_bytes()
-    if not content:
-        return 0
-    count = content.count(b"\n")
-    if not content.endswith(b"\n"):
-        last_nl = content.rfind(b"\n")
-        if last_nl == -1:
-            path.write_bytes(b"")
-            return 0
-        path.write_bytes(content[:last_nl + 1])
-    return count
 
 
 @dataclass
@@ -96,7 +78,7 @@ class BuildDecksUseCase:
 
         total = len(pools)
         if config.resume:
-            skip = _count_complete_lines_and_truncate_partial(config.output)
+            skip = count_complete_lines_and_truncate_partial(config.output)
             open_mode = "a"
             if skip > 0:
                 _log(
@@ -135,11 +117,7 @@ class BuildDecksUseCase:
             for i, (set_code, pool_names) in enumerate(pools, start=skip + 1):
                 deck = self._build_one_deck(model, pool_names, locator, config)
                 if deck is not None:
-                    out.write(config.label)
-                    out.write(";")
-                    out.write(set_code)
-                    out.write(";")
-                    out.write("|".join(deck))
+                    out.write(format_generated_deck(config.label, set_code, deck))
                     out.write("\n")
                     written += 1
                     if config.print_decks:
@@ -170,14 +148,7 @@ class BuildDecksUseCase:
         locator: ConvertedCardLocator,
         config: BuildDecksConfig,
     ) -> list[str] | None:
-        pool_embeddings: dict[str, np.ndarray] = {}
-        valid_names: list[str] = []
-        for name in pool_names:
-            emb = locator.load_embedding(name)
-            if emb is not None:
-                pool_embeddings[name] = emb
-                valid_names.append(name)
-
+        pool_embeddings, valid_names = load_pool_embeddings(pool_names, locator)
         if len(valid_names) < NONLAND_DECK_SIZE:
             return None
 
@@ -188,12 +159,4 @@ class BuildDecksUseCase:
             max_iterations=config.sa_max_iterations,
             restarts=config.restarts,
         ).build(valid_names)
-        nonland_texts = [
-            text for n in nonland_deck if (text := locator.load_text(n)) is not None
-        ]
-        lands = compute_basic_lands(nonland_texts)
-
-        full_deck: list[str] = list(nonland_deck)
-        for land_name, count in lands.items():
-            full_deck.extend([land_name] * count)
-        return full_deck
+        return assemble_full_deck(nonland_deck, locator)

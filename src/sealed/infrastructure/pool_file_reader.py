@@ -59,6 +59,44 @@ def parse_pools(pools_file: Path) -> list[tuple[str, list[str]]]:
     return pools
 
 
+def format_generated_deck(label: str, set_code: str, cards: list[str]) -> str:
+    """Render one generated-decks line: ``LABEL;SET_CODE;Card1|...|CardN``.
+
+    The inverse of :func:`parse_generated_decks`'s per-line parse. Returned
+    without a trailing newline — the caller adds the line terminator. Kept
+    beside the parser so the read and write sides of the format cannot drift.
+    """
+    return f"{label};{set_code};{'|'.join(cards)}"
+
+
+def count_complete_lines_and_truncate_partial(path: Path) -> int:
+    """Count newline-terminated lines in ``path`` and prepare it for append.
+
+    A "complete line" is one that ends with ``\\n``. If the file ends in a
+    partial line (process killed between two of the per-deck ``out.write``
+    calls), it is truncated back to the last newline so a subsequent append
+    starts on a clean line. Returns the count of surviving complete lines
+    (0 if the file is missing or empty).
+
+    Shared by ``build-decks --resume`` and ``pick-decks --resume``, which both
+    append one ``format_generated_deck`` line per pool and need identical
+    append-and-skip recovery semantics.
+    """
+    if not path.exists():
+        return 0
+    content = path.read_bytes()
+    if not content:
+        return 0
+    count = content.count(b"\n")
+    if not content.endswith(b"\n"):
+        last_nl = content.rfind(b"\n")
+        if last_nl == -1:
+            path.write_bytes(b"")
+            return 0
+        path.write_bytes(content[:last_nl + 1])
+    return count
+
+
 def parse_generated_decks(decks_file: Path) -> list[GeneratedDeck]:
     """Parse a generated-decks file into ``GeneratedDeck`` objects.
 

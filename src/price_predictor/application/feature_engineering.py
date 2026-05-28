@@ -103,7 +103,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
     def _mana_features(self, card: Card) -> list[float]:
         mc = card.mana_cost
         if mc is None:
-            return [0.0] * 13
+            return [0.0] * _MANA_FEATURE_WIDTH
         return [
             1.0,  # has_mana_cost
             mc.total_mana_value,
@@ -149,7 +149,7 @@ class FeatureEngineering(BaseEstimator, TransformerMixin):
     def _printing_features(self, card: Card) -> list[float]:
         pd = card.printing_data
         if pd is None:
-            return [0.0] * 19
+            return [0.0] * _PRINTING_FEATURE_WIDTH
         features = [
             1.0 if pd.is_reserved else 0.0,
             1.0 if pd.is_abu else 0.0,

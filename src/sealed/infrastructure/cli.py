@@ -11,6 +11,10 @@ from sealed.application.encode_cards import EncodeCardsConfig
 from sealed.application.evaluate_scorer import EvaluateScorerConfig
 from sealed.application.train_scorer import TrainScorerConfig
 from sealed.domain.greedy_deck_builder import COLOR_PAIRS_STRATEGY
+from sealed.infrastructure.cli_resume import (
+    dataclass_default,
+    resolve_resumable_args,
+)
 from sealed.infrastructure.match_worker_connector import DEFAULT_SIDE_B_DECKS_WEIGHT
 
 
@@ -1139,29 +1143,13 @@ _REQUIRED_FIELD_CLI_DEFAULTS: dict[str, str] = {
 }
 
 
-def _dataclass_default(field_name: str):
-    field = TrainScorerConfig.__dataclass_fields__[field_name]
-    import dataclasses
-    if field.default is not dataclasses.MISSING:
-        return field.default
-    if field.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-        return field.default_factory()  # type: ignore[misc]
-    if field_name in _REQUIRED_FIELD_CLI_DEFAULTS:
-        return _REQUIRED_FIELD_CLI_DEFAULTS[field_name]
-    raise ValueError(f"No fallback default for required field {field_name!r}")
+def _validate_scorer_exclusive_flags(args: argparse.Namespace) -> int | None:
+    """Reject incompatible flag combinations that need only ``args``.
 
-
-def _coerce_path_value(field_name: str, value):
-    if value is None:
-        return None
-    return Path(value) if field_name in _PATH_FIELDS else value
-
-
-def run_train_scorer(args: argparse.Namespace) -> int:
-    """Execute the train-scorer command."""
-    from sealed.application.train_scorer import TrainScorerUseCase
-    from sealed.infrastructure.scorer_store import ScorerStore
-
+    Returns an exit code to propagate, or ``None`` to continue. Covers the
+    --resume xor --scorer-checkpoint guard and the architecture-flags-forbidden
+    -on-resume guard.
+    """
     if args.resume is not None and args.scorer_checkpoint is not None:
         print(
             "Error: --resume and --scorer-checkpoint are mutually exclusive: "
@@ -1182,43 +1170,36 @@ def run_train_scorer(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
+    return None
 
-    resumed_train_config: dict | None = None
-    resumed_is_phase_b: bool | None = None
-    if args.resume is not None:
-        resume_path = Path(args.resume)
-        try:
-            resumed = ScorerStore().load_checkpoint(resume_path)
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-        resumed_train_config = resumed.train_config
-        resumed_is_phase_b = resumed.encoder_state_dict is not None
 
-    if args.scorer_checkpoint is not None:
-        scorer_path = Path(args.scorer_checkpoint)
-        try:
-            ScorerStore().load_checkpoint(scorer_path)
-        except FileNotFoundError as exc:
-            print(f"Error: {exc}", file=sys.stderr)
-            return 2
-
-    resolved: dict[str, object | None] = {}
-    for flag in _RESUMABLE_FLAG_NAMES:
-        cli_value = getattr(args, flag, None)
-        if cli_value is not None:
-            resolved[flag] = cli_value
-        elif resumed_train_config is not None and flag in resumed_train_config:
-            resolved[flag] = resumed_train_config[flag]
-        else:
-            default = _dataclass_default(flag)
-            resolved[flag] = default if not isinstance(default, Path) else str(default)
-
-    embedding_lr = float(resolved["embedding_lr"])
-    requested_phase_b = embedding_lr != 0
-    if requested_phase_b and (
-        args.scorer_checkpoint is None and args.resume is None
+def _resolve_scorer_encoder_checkpoint(
+    args: argparse.Namespace, resumed_train_config: dict | None,
+) -> Path:
+    """Resolve --encoder-checkpoint with resume precedence (explicit > resumed
+    > dataclass default). No effect on Phase A; consumed only on Phase B."""
+    if args.encoder_checkpoint is not None:
+        return Path(args.encoder_checkpoint)
+    if (
+        resumed_train_config is not None
+        and resumed_train_config.get("encoder_checkpoint") is not None
     ):
+        return Path(resumed_train_config["encoder_checkpoint"])
+    return dataclass_default(TrainScorerConfig, "encoder_checkpoint")
+
+
+def _validate_scorer_phase(
+    args: argparse.Namespace,
+    embedding_lr: float,
+    requested_phase_b: bool,
+    resumed_is_phase_b: bool | None,
+    encoder_checkpoint: Path,
+) -> int | None:
+    """Reject Phase A/B flag combinations that are only knowable post-resolution.
+
+    Returns an exit code to propagate, or ``None`` to continue.
+    """
+    if requested_phase_b and args.scorer_checkpoint is None and args.resume is None:
         print(
             f"Error: --embedding-lr {embedding_lr} requires either "
             "--scorer-checkpoint <phaseA>.pt (fresh Phase B kickoff) or "
@@ -1278,47 +1259,78 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         )
         return 2
 
-    if args.encoder_checkpoint is not None:
-        encoder_checkpoint = Path(args.encoder_checkpoint)
-    elif (
-        resumed_train_config is not None
-        and resumed_train_config.get("encoder_checkpoint") is not None
-    ):
-        encoder_checkpoint = Path(resumed_train_config["encoder_checkpoint"])
-    else:
-        encoder_checkpoint = _dataclass_default("encoder_checkpoint")
-
     # Missing-default-file guard (FR-026 / cli.md "New error condition").
     # Only fires on Phase B fresh kickoffs where the encoder is actually
     # loaded from `--encoder-checkpoint`; Phase A skips the encoder load
     # path entirely, and Phase B resumes pull encoder weights from the
     # resumed checkpoint.
-    is_phase_b_fresh_kickoff = (
-        requested_phase_b
-        and args.resume is None
-    )
+    is_phase_b_fresh_kickoff = requested_phase_b and args.resume is None
     if (
         is_phase_b_fresh_kickoff
         and args.encoder_checkpoint is None
-        and not Path(encoder_checkpoint).exists()
+        and not encoder_checkpoint.exists()
     ):
         print(
-            f"Error: {_missing_sealed_encoder_message(Path(encoder_checkpoint))}",
+            f"Error: {_missing_sealed_encoder_message(encoder_checkpoint)}",
             file=sys.stderr,
         )
         return 2
+    return None
 
-    config_kwargs = {
-        flag: _coerce_path_value(flag, resolved[flag])
-        for flag in _RESUMABLE_FLAG_NAMES
-    }
+
+def run_train_scorer(args: argparse.Namespace) -> int:
+    """Execute the train-scorer command."""
+    from sealed.application.train_scorer import TrainScorerUseCase
+    from sealed.infrastructure.scorer_store import ScorerStore
+
+    exclusive_err = _validate_scorer_exclusive_flags(args)
+    if exclusive_err is not None:
+        return exclusive_err
+
+    resumed_train_config: dict | None = None
+    resumed_is_phase_b: bool | None = None
+    if args.resume is not None:
+        try:
+            resumed = ScorerStore().load_checkpoint(Path(args.resume))
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        resumed_train_config = resumed.train_config
+        resumed_is_phase_b = resumed.encoder_state_dict is not None
+
+    if args.scorer_checkpoint is not None:
+        try:
+            ScorerStore().load_checkpoint(Path(args.scorer_checkpoint))
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+
+    resolved = resolve_resumable_args(
+        args,
+        flag_names=_RESUMABLE_FLAG_NAMES,
+        config_cls=TrainScorerConfig,
+        path_fields=_PATH_FIELDS,
+        resumed_config=resumed_train_config,
+        required_defaults=_REQUIRED_FIELD_CLI_DEFAULTS,
+    )
+
+    embedding_lr = float(resolved["embedding_lr"])
+    requested_phase_b = embedding_lr != 0
+    encoder_checkpoint = _resolve_scorer_encoder_checkpoint(args, resumed_train_config)
+
+    phase_err = _validate_scorer_phase(
+        args, embedding_lr, requested_phase_b, resumed_is_phase_b, encoder_checkpoint,
+    )
+    if phase_err is not None:
+        return phase_err
+
     config = TrainScorerConfig(
         resume=Path(args.resume) if args.resume else None,
         scorer_checkpoint=(
             Path(args.scorer_checkpoint) if args.scorer_checkpoint else None
         ),
         encoder_checkpoint=encoder_checkpoint,
-        **config_kwargs,
+        **resolved,
     )
 
     try:
@@ -1335,18 +1347,6 @@ def run_train_scorer(args: argparse.Namespace) -> int:
         return 2
 
     return 0
-
-
-def _picker_dataclass_default(field_name: str):
-    import dataclasses
-
-    from sealed.application.train_picker import TrainPickerConfig
-    f = TrainPickerConfig.__dataclass_fields__[field_name]
-    if f.default is not dataclasses.MISSING:
-        return f.default
-    if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-        return f.default_factory()  # type: ignore[misc]
-    return None  # required field with no default (e.g. pools_path)
 
 
 def run_train_picker(args: argparse.Namespace) -> int:
@@ -1394,18 +1394,13 @@ def run_train_picker(args: argparse.Namespace) -> int:
             return 2
         resumed_train_config = resumed.train_config
 
-    resolved: dict[str, object | None] = {}
-    for flag in _RESUMABLE_PICKER_FLAG_NAMES:
-        cli_value = getattr(args, flag, None)
-        if cli_value is not None:
-            resolved[flag] = cli_value
-        elif (
-            resumed_train_config is not None
-            and resumed_train_config.get(flag) is not None
-        ):
-            resolved[flag] = resumed_train_config[flag]
-        else:
-            resolved[flag] = _picker_dataclass_default(flag)
+    resolved = resolve_resumable_args(
+        args,
+        flag_names=_RESUMABLE_PICKER_FLAG_NAMES,
+        config_cls=TrainPickerConfig,
+        path_fields=_PICKER_PATH_FIELDS,
+        resumed_config=resumed_train_config,
+    )
 
     if resolved["pools_path"] is None:
         print("Error: --pools-path is required.", file=sys.stderr)
@@ -1427,7 +1422,7 @@ def run_train_picker(args: argparse.Namespace) -> int:
             return 2
 
     # Scorer must exist (FR-036).
-    scorer_path = Path(str(resolved["scorer_checkpoint"]))
+    scorer_path = resolved["scorer_checkpoint"]
     if not scorer_path.exists():
         print(
             f"Error: scorer checkpoint not found at {scorer_path}. Train a "
@@ -1437,20 +1432,12 @@ def run_train_picker(args: argparse.Namespace) -> int:
         )
         return 2
 
-    def _coerce(name: str, value):
-        if value is None:
-            return None
-        return Path(value) if name in _PICKER_PATH_FIELDS else value
-
-    config_kwargs = {
-        flag: _coerce(flag, resolved[flag]) for flag in _RESUMABLE_PICKER_FLAG_NAMES
-    }
     config = TrainPickerConfig(
         resume=Path(args.resume) if args.resume else None,
         picker_checkpoint=(
             Path(args.picker_checkpoint) if args.picker_checkpoint else None
         ),
-        **config_kwargs,
+        **resolved,
     )
 
     try:

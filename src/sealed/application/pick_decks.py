@@ -16,13 +16,19 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from sealed.application.build_decks import _count_complete_lines_and_truncate_partial
+from sealed.application.deck_assembly import (
+    assemble_full_deck,
+    load_pool_embeddings,
+)
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
-from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.picker_model import PickerModel, decompose_picks
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.picker_store import PickerStore
-from sealed.infrastructure.pool_file_reader import parse_pools
+from sealed.infrastructure.pool_file_reader import (
+    count_complete_lines_and_truncate_partial,
+    format_generated_deck,
+    parse_pools,
+)
 
 
 def _log(message: str) -> None:
@@ -57,7 +63,7 @@ class PickDecksUseCase:
 
         total = len(pools)
         if config.resume:
-            skip = _count_complete_lines_and_truncate_partial(config.output)
+            skip = count_complete_lines_and_truncate_partial(config.output)
             open_mode = "a"
             if skip > 0:
                 _log(
@@ -75,16 +81,20 @@ class PickDecksUseCase:
         width_checked = False
         with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
             for i, (set_code, pool_names) in enumerate(pools, start=skip + 1):
-                embs, valid_names = self._load_pool(pool_names, locator)
+                embeddings, valid_names = load_pool_embeddings(pool_names, locator)
                 if len(valid_names) >= NONLAND_DECK_SIZE:
                     if not width_checked:
                         self._check_width(
-                            embedding_dim, embs[0].shape[0],
+                            embedding_dim, embeddings[valid_names[0]].shape[0],
                             config.picker_checkpoint, config.cards_path,
                         )
                         width_checked = True
-                    deck = self._build_one_deck(model, embs, valid_names, locator, device)
-                    out.write(f"{config.label};{set_code};{'|'.join(deck)}\n")
+                    deck = self._build_one_deck(
+                        model, embeddings, valid_names, locator, device,
+                    )
+                    out.write(
+                        format_generated_deck(config.label, set_code, deck) + "\n",
+                    )
                     written += 1
                 if i % progress_interval == 0 or i == total:
                     _log(f"  {i}/{total} pools processed ({written} decks written)")
@@ -113,39 +123,19 @@ class PickDecksUseCase:
                 "encoder this picker was trained on."
             )
 
-    @staticmethod
-    def _load_pool(
-        pool_names: list[str], locator: ConvertedCardLocator,
-    ) -> tuple[list[np.ndarray], list[str]]:
-        embs: list[np.ndarray] = []
-        valid_names: list[str] = []
-        for name in pool_names:
-            emb = locator.load_embedding(name)
-            if emb is not None:
-                embs.append(emb)
-                valid_names.append(name)
-        return embs, valid_names
-
     def _build_one_deck(
         self,
         model: PickerModel,
-        embs: list[np.ndarray],
+        embeddings: dict[str, np.ndarray],
         valid_names: list[str],
         locator: ConvertedCardLocator,
         device: torch.device,
     ) -> list[str]:
+        embs = [embeddings[name] for name in valid_names]
         arr = np.stack(embs).astype(np.float32)
         cards = torch.from_numpy(arr).unsqueeze(0).to(device)
         mask = torch.ones(1, arr.shape[0], dtype=torch.bool, device=device)
         with torch.no_grad():
             logits, _ = model(cards, mask)
         chosen = decompose_picks(logits[0].cpu(), embs, valid_names)
-
-        nonland_texts = [
-            text for n in chosen if (text := locator.load_text(n)) is not None
-        ]
-        lands = compute_basic_lands(nonland_texts)
-        full_deck: list[str] = list(chosen)
-        for land_name, count in lands.items():
-            full_deck.extend([land_name] * count)
-        return full_deck
+        return assemble_full_deck(chosen, locator)

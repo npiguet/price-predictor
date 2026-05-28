@@ -11,8 +11,11 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from sealed.application.deck_assembly import (
+    assemble_full_deck,
+    load_pool_embeddings,
+)
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
-from sealed.domain.manabase import compute_basic_lands
 from sealed.domain.round_robin_results import RoundRobinResults, aggregate_results
 from sealed.domain.round_robin_scheduling import row_major_pairings, split_evenly
 from sealed.domain.scorer_model import SetTransformerScorer
@@ -262,27 +265,12 @@ def _build_a_decks(
     """Build one scorer deck per pool via greedy search. Returns list of 40-card decks."""
     a_decks = []
     for pool_names in pools:
-        pool_embeddings: dict[str, np.ndarray] = {}
-        valid_names = []
-        for name in pool_names:
-            emb = locator.load_embedding(name)
-            if emb is not None:
-                pool_embeddings[name] = emb
-                valid_names.append(name)
-
+        pool_embeddings, valid_names = load_pool_embeddings(pool_names, locator)
         if len(valid_names) < NONLAND_DECK_SIZE:
             continue
 
         nonland_deck = GreedyDeckBuilder(model, pool_embeddings).build(valid_names)
-        nonland_texts = [
-            text for n in nonland_deck if (text := locator.load_text(n)) is not None
-        ]
-        lands = compute_basic_lands(nonland_texts)
-        full_deck: list[str] = list(nonland_deck)
-        for land_name, count in lands.items():
-            full_deck.extend([land_name] * count)
-
-        a_decks.append(full_deck)
+        a_decks.append(assemble_full_deck(nonland_deck, locator))
 
     return a_decks
 
