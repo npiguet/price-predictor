@@ -133,20 +133,25 @@ below):
 |------|----------|
 | `POOL` | Cards this seat has already drafted. Accumulates across all three packs. **Multiset** — two copies of a card are two tokens, since copy count changes the deck-building state. |
 | `PACK` | Cards in the pack now in front of the seat — the legal actions this pick. A `P`-card booster shows `P − pick_number + 1` cards. **Deduped to one token per distinct card name**: the action is choosing a name, and duplicate copies (boosters can contain them; collation varies by set) are equivalent picks. Replaced every pick, reset to a fresh booster each pack; never accumulates. |
-| `PASSED` | Cards the seat saw in an earlier pack and passed, with **no observed evidence they were taken**. One token per card instance (not deduped by name — two physical copies are two instances). Accumulates across the draft. |
-| `TAKEN` | Cards the seat saw, passed, and **later observed removed** when that pack wheeled back — directly observed opponent picks. One token per card instance (not deduped by name). The contested-colours signal. Accumulates across the draft. |
+| `PASSED` | Cards the seat saw and passed *this pack*, whose fate it hasn't observed yet. One token per card instance (not deduped by name — two physical copies are two instances). A **within-pack transient**: it empties at each pack boundary (below) and never carries across packs. |
+| `TAKEN` | Cards the seat saw that ended up in an **opponent's pool** — known taken, whether seen leaving via the wheel or inferred certain at the pack's end (below). One token per card instance (not deduped by name). The contested-colours signal. Accumulates across the draft. |
 
-**The wheel, and the PASSED/TAKEN split.** In an 8-seat pod a `P`-card pack
-returns to the seat 8 picks after it was first seen, with `P − 8` cards left.
-Diffing what the seat saw against what came back identifies exactly which
-cards the seven intervening opponents took. At that wheel pick those cards
-move `PASSED → TAKEN` (observed opponent picks) and the survivors move
-`PASSED → PACK` (available again; the seat picks one and the rest return to
-`PASSED`). `TAKEN` is therefore populated only from pick 9 onward — exactly
-when open/contested-colour reading becomes actionable. The *positive* half of
-the wheel (a strong card that came back, signalling your colours are open)
-needs no separate type: it reappears as a `PACK` token carrying a recency of
-~8 (below).
+**The wheel, the round-end flush, and the PASSED/TAKEN split.** A card moves
+`PASSED → TAKEN` once the seat knows an opponent took it, which happens at two
+times. (1) *The wheel*: in an 8-seat pod a `P`-card pack returns to the seat 8
+picks after it was first seen, with `P − 8` cards left; diffing what the seat
+saw against what came back identifies exactly which cards the seven intervening
+opponents took (those move `PASSED → TAKEN`), while the survivors move
+`PASSED → PACK` (available again — the seat picks one and the rest return to
+`PASSED`). (2) *The pack's end*: once a pack is exhausted every card from it is
+in some pool, so anything still in `PASSED` is necessarily in an opponent's
+pool — the whole remaining `PASSED` set flushes to `TAKEN`. So the wheel gives
+early, within-pack detection (informing picks 9–15) and the flush resolves the
+rest for use in later packs; `PASSED` is consequently a within-pack transient
+that empties at every boundary, and `TAKEN` is the complete record of cards
+opponents took. The *positive* half of the wheel (a strong card that came back,
+signalling your colours are open) needs no separate type: it reappears as a
+`PACK` token carrying a recency of ~8 (below).
 
 **Duplicates, by role.** Whether a type keeps duplicate cards follows from
 what the type *is*. `PACK` is the action space — the pick is one card *name*
@@ -200,16 +205,15 @@ own):
 - `pick_number` ∈ {1 .. P}, where P is the maximum booster size in the corpus
   (the embedding table is sized from the data, like `train-encoder`'s
   `max_seq_len`).
-- `seat_position` ∈ {0 .. 7}.
-- `set_code` — one learned embedding per set code present in the training
-  corpus, plus an `[UNK-SET]` slot for sets unseen at train time.
-- `skill` — the continuation-skill tag of the seat being modelled
-  (`full`, `r30`, `r100`; generation 2 adds `policy`). See § 3.4 for why the
-  critic conditions on it.
 
-The context token participates in attention so every card token can condition
-on draft progress, and its trunk output is the pooled representation the
-critic head reads (§ 2).
+The token deliberately carries **no seat, set, or skill identity**: a draft pod
+is a symmetric ring, so absolute seat position carries no signal; omitting the
+set keeps the model **format-agnostic** — it reads the format from the cards
+themselves, whose embeddings already encode it, so one model works across sets
+and Chaos draft; and skill is a synthetic data-generation artefact the model
+never needs (§ 3.4). The context token participates in attention so every card
+token can condition on draft progress, and its trunk output is the pooled
+representation the critic head reads (§ 2).
 
 ### 1.3 Assembled sequence
 
@@ -220,9 +224,10 @@ critic head reads (§ 2).
 Order within each type group is not significant (the trunk is
 permutation-equivariant; no positional encoding). Sequences are padded per
 batch to the longest in the batch, with an attention mask; padding positions
-never contribute to attention or to any head. `PASSED` and `TAKEN` accumulate
-across the whole draft, one token per observed card instance, so by pack 3 a
-sequence can reach ~200–300 tokens — larger than the ~80-card sealed pools but
+never contribute to attention or to any head. `TAKEN` accumulates across the
+whole draft (with `PASSED` flushing into it at each pack boundary, § 1.1), one
+token per observed card instance, so by pack 3 a sequence can reach ~200–300
+tokens — larger than the ~80-card sealed pools but
 well within reach; recency (§ 1.1) lets the model discount the stale tail
 rather than needing a hard reset, and the accumulation can be capped to a
 recent window if sequence length becomes a throughput problem.
@@ -296,9 +301,10 @@ state for that `(draft_id, seat, pack_number, pick_number)` using the seat's
 prior rows: `POOL` = the seat's prior picks; `PASSED`/`TAKEN` are recovered by
 replaying the seat's pack views — each pack seen at pick N is matched to its
 wheel return at pick N+8 (8-seat pod), the cards missing on return (less the
-seat's own pick) become `TAKEN`, and passed cards with no observed removal
-stay `PASSED`; per-card `packs_ago`/`pick_ago` follow from each card's most
-recent in-pack pick prior to the current one (§ 1.1). `PACK` and the context scalars come from the row
+seat's own pick) become `TAKEN`; passed cards with no observed removal stay
+`PASSED` within the pack and flush to `TAKEN` at each pack boundary (§ 1.1);
+per-card `packs_ago`/`pick_ago` follow from each card's most recent in-pack
+pick prior to the current one (§ 1.1). `PACK` and the context scalars come from the row
 itself. The label pair is:
 
 - **Imitation target**: the index (within `PACK`) of the card the recorded
@@ -312,22 +318,23 @@ A draft yields up to 8 × 45 = 360 examples.
 
 ### 3.2 Loss
 
-Two heads, one combined loss per batch:
+Two heads, one combined loss per batch, both computed over **full-skill seats
+only** — degraded seats are opponents, not training targets (§ 3.4):
 
 ```
-L = imitation_weight · CE(policy_logits, taken_index)   [imitation-eligible states]
-  +     critic_weight · MSE(critic_pred, seat_reward)    [all states]
+L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states]
+  +     critic_weight · MSE(critic_pred, seat_reward)    [full-skill states]
 ```
 
-- **Imitation eligibility.** Cross-entropy is computed only for states whose
-  seat skill is at or above `--imitation-skill-threshold` (default: `full`
-  only). Degraded-bot seats are present for opponent diversity and critic
-  coverage, but the policy must imitate *competent* drafting, so their picks
-  are not imitation targets.
-- **Critic coverage.** MSE is computed for *all* states regardless of skill;
-  the critic must learn what weak continuations are worth too (§ 3.4).
-- A `full`-skill state contributes to both terms; a degraded state contributes
-  to the critic term only.
+- **Why full-skill only.** The policy must imitate *competent* drafting, so a
+  degraded bot's picks are not imitation targets; and the critic must predict
+  the final deck score under a *competent* continuation (§ 3.4), so a degraded
+  seat's final reward is the wrong regression target. Both heads therefore
+  train on the same full-skill seats.
+- **Degraded seats** still sit in the pod (set by `--skill-mix`, § 5.1) and
+  vary the signals and open colours the full-skill seats see, but they
+  contribute no training rows to either head. Which seats count as
+  training targets is set by `--train-skill-threshold` (§ 5.2).
 
 ### 3.3 Optimisation and split
 
@@ -348,17 +355,24 @@ L = imitation_weight · CE(policy_logits, taken_index)   [imitation-eligible sta
   reported via a log warning (naming up to 20 + the total) and their picks
   dropped, mirroring `train-encoder`; they do not block the run.
 
-### 3.4 Skill-conditioned critic
+### 3.4 Critic continuation (the full-skill restriction)
 
-The critic predicts the final deck score *assuming a particular continuation*.
-The generation-1 corpus deliberately mixes seat skill levels (§ 5.1), so a
-critic trained by plain regression would fit the *average* drafter in the
-mix — the wrong target. Conditioning the critic on the per-seat `skill` tag
-(§ 1.2) lets it learn a skill-aware value instead of mush. In generation 2,
-querying the critic with the `policy` skill tag yields the value under our own
-policy's continuation; in generation 1 the tag simply identifies which
-Forge-bot strength finished that seat. The policy head ignores skill at
-inference because it is only ever trained to imitate `full`-skill seats.
+The critic predicts the final deck score *assuming a particular continuation*,
+so the question is *whose*. We want the value under a competent drafter —
+ultimately, in generation 2, under the policy itself. Generation 1 has no
+policy rollouts, only Forge bots, so it approximates that by training the
+critic on **full-skill seats only**: their final-deck labels reflect a
+competent continuation. Degraded seats stay in the pod for opponent diversity
+(§ 5.1) but are not critic targets, so the critic never regresses toward a
+random-bot continuation and needs no skill input to disentangle one.
+Generation 2's on-policy actor-critic closes the gap exactly — the critic
+trains on the policy's own rollouts, so the continuation is the policy's by
+construction, yielding `V^π` with no skill tag.
+
+The cost is that generation 1's critic mostly sees coherent (full-skill) pools
+and has thin coverage of incoherent ones. That is acceptable for a foundation:
+generation-2 self-play repopulates the off-distribution states the policy
+actually visits, and the on-policy critic learns to value them.
 
 ## 4. Draft-event file format
 
@@ -466,11 +480,13 @@ workers are restarted (long Forge runs may crash the JVM; recovery handles it).
 | `--output-dir` | `output/draft/` | Destination for `draft-picks.txt` + `draft-results.txt`. |
 | `--resume` | off | Append to existing files and continue toward `--n-drafts`, counting drafts already present. |
 
-Skill levels serve two purposes: opponent diversity (varied signals/colours,
-robustness) and critic coverage (the critic must see weak states and value
-them correctly). Heavily-random pods are kept a minority via the default mix,
-because all-random dynamics (colours wide open, signals meaningless) are
-unrealistic and would teach a greedy policy that competent pods punish.
+Skill levels exist only for **opponent diversity**: degraded bots vary the
+signals and open colours the full-skill seats see, broadening the state
+coverage of the full-skill rows that actually train the model (§ 3.2).
+Degraded seats are never training targets themselves. Heavily-random pods are
+kept a minority via the default mix, because all-random dynamics (colours wide
+open, signals meaningless) are unrealistic and would teach the policy patterns
+that competent pods punish.
 
 ### 5.2 `train-draft-agent`
 
@@ -488,7 +504,7 @@ Trains the policy + critic jointly on a recorded corpus.
 | `--dropout` | `0.0` | Transformer dropout. |
 | `--imitation-weight` | `1.0` | Coefficient on the cross-entropy term. `0` = critic-only run. |
 | `--critic-weight` | `1.0` | Coefficient on the critic MSE term. `0` = imitation-only run (the "solidify Rung 1 first" mode). |
-| `--imitation-skill-threshold` | `full` | Minimum seat skill whose picks are imitation targets (§ 3.2). |
+| `--train-skill-threshold` | `full` | Minimum seat skill whose rows are used as training targets, for **both** heads (§ 3.2). Default `full`: only full-skill seats train the policy and critic; degraded seats are opponents only. |
 | `--critic-target` | `pod-relative` | Which `draft-results.txt` reward column the critic regresses (`pod-relative` or `absolute`). |
 | `--lr` | `3e-4` | AdamW learning rate. |
 | `--warmup-frac` | `0.05` | Fraction of scheduled steps for linear LR warmup. |
@@ -564,11 +580,12 @@ models/draft/agent/
 
 Each checkpoint contains:
 
-- `model_state_dict` — trunk + policy head + critic head + type/context/skill/
-  set/pick/pack/seat embedding tables.
+- `model_state_dict` — trunk + policy head + critic head + the recency
+  (`packs_ago`/`pick_ago`) and context (`pack_number`/`pick_number`) embedding
+  tables. (Type is a concatenated one-hot, not a learned table.)
 - `config` — architecture (`d_model`, `n_layers`, `n_heads`, `ff_dim`,
-  `dropout`, derived `embedding_dim`) and the set-code / pick-size embedding
-  table sizes resolved from the training corpus.
+  `dropout`, derived `embedding_dim`) and the booster size `P` (which sizes the
+  `pick_number` and `pick_ago` tables) resolved from the training corpus.
 - `epoch`, `best_val_loss`, training metadata.
 
 No encoder weights are embedded (Phase A only): the drafter is paired at use
@@ -656,9 +673,10 @@ picker might flub (the 23rd card, a marginal splash) move the score least — so
 its degradation translates into small score error here, plausibly smaller than
 on a wide sealed pool. The residual risk is *structured* (pool-composition-
 dependent) divergence, which is exactly what the § 5.3 validation gates on,
-with SA as the higher-fidelity fallback. This is also the same
-continuation-consistency principle as the skill-conditioned critic: label with
-whatever builder will actually materialise the agent's decks downstream.
+with SA as the higher-fidelity fallback. This is the same
+continuation-consistency principle behind training the critic on competent
+continuations (§ 3.4): label with whatever builder will actually materialise
+the agent's decks downstream.
 
 ## Reward / fitness
 
@@ -729,20 +747,24 @@ the policy produces picks and the rollouts the critic learns from, so the
 critic's assumed continuation stays locked to the actual one. Generation 1
 already trains both on the same body; generation 2 closes the loop.
 
-## Skill-laddered data and skill-conditioning
+## Skill-laddered data, and why the critic isn't skill-conditioned
 
-Accepted (§ 3.4, § 5.1). Mixing bot strengths fixes the Monte-Carlo critic's
-worst failure mode — never seeing bad regions of state space and extrapolating
-wildly there — and 100%-random seats anchor the bottom of the value scale.
-The catch: `V(s)` is only defined relative to who continues, so a plain
-regression on a skill-mix fits the *average* drafter. Conditioning the critic
-on a per-seat skill embedding turns that contamination into a feature and
-learns a skill-aware value; querying with the policy's own tag in generation 2
-yields `V^π`. Opponent-seat randomness is near pure upside (diversity,
-robustness) and used generously; own-seat randomness is the delicate dial
-(it creates the off-policy issue the skill embedding addresses) and is kept a
-minority. All-random pods stay a minority so the policy is not trained mostly
-on unrealistic dynamics.
+Mixing bot strengths in the pod (§ 5.1) is kept for **opponent diversity** —
+degraded seats vary the signals and open colours the full-skill seats read,
+broadening coverage of the rows that train the model. An earlier design fed a
+per-seat skill tag to the model and trained the critic on all seats, so it
+could learn a skill-aware `V` and be queried with the policy's tag for `V^π`.
+We dropped that: the tag is an artefact of the synthetic data, the actor never
+needs it (it always plays full-skill), and the critic gets a competent-
+continuation target more simply by training on full-skill seats only (§ 3.4).
+Generation 2's on-policy training yields `V^π` directly, so the tag was only
+ever a generation-1 crutch. Opponent-seat randomness stays near pure upside and
+is used generously; own-seat randomness and all-random pods are kept a
+minority, so the model is not trained mostly on unrealistic dynamics.
+
+The tradeoff is thinner generation-1 coverage of incoherent own-pool states
+(the critic mostly sees full-skill pools); that is deferred to generation-2
+self-play, which repopulates the states the policy actually reaches.
 
 ## Self-play regeneration (generation 2)
 
@@ -818,4 +840,6 @@ critic's jump should agree with the branch that ends better.
 - **CRN** — common random numbers; hold the future fixed across compared
   branches.
 - **`V^π`** — the value assuming the current policy continues (the target RL
-  actually wants); approached here by conditioning the critic on a skill tag.
+  actually wants); approximated in generation 1 by training the critic on
+  competent (full-skill) continuations, and reached directly by generation 2's
+  on-policy training.
