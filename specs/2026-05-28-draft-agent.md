@@ -94,9 +94,14 @@ emerge from the input representation without an explicit opponent model.
 - **Greedy deck builder** + `compute_basic_lands`: turn a drafted 45-card
   pool into a 40-card deck for scoring.
 
-The draft agent **imports from** `price_predictor` (tokenizer/embeddings) and
-lives in `sealed`, alongside the picker and scorer. The objective is win rate
-*when the Forge AI pilots the deck* — Forge's piloting tendencies are the
+The draft agent is its own top-level Python package, `draft`, laid out in the
+same hexagonal style as the other packages (`domain` → `application` →
+`infrastructure`) with a `python -m draft <subcommand>` entry point. It is
+**not** part of `sealed`. It **imports from** `sealed` (the scorer, picker,
+`GreedyDeckBuilder`, the `.npz` embedding cache, and the card-embedding layout
+helpers) and from `price_predictor` (the shared MTG tokenizer); nothing in
+`sealed` or `price_predictor` imports back from `draft`. The objective is win
+rate *when the Forge AI pilots the deck* — Forge's piloting tendencies are the
 target distribution by design, not a bias to correct.
 
 # Specification
@@ -111,31 +116,85 @@ is a **typed token sequence** built from card embeddings plus a context token.
 
 ### 1.1 Card tokens
 
-Every card token is the card's cached embedding (`embedding_dim` wide, looked
-up by Forge canonical name in the `.npz` cache) optionally projected to the
-model width `d_model` (§ 2), with a learned **type embedding** added. Three
-card types:
+Each card token starts from that card's cached embedding (`embedding_dim`
+wide = `pooled_dim + FEATURE_COUNT`, looked up by Forge canonical name in the
+`.npz` cache). Onto that context-free vector the draft state concatenates a
+type one-hot and two recency embeddings — features that cannot live in the
+cache because they depend on where the card sits in *this* draft. § 1.4 covers
+the concatenation and the resulting `d_model`.
+
+**Four token types**, mutually exclusive. Every card *instance* the seat has
+observed is in exactly one set at a time — never two. As the draft proceeds an
+instance moves between sets (e.g. a `PASSED` instance the wheel reveals was
+taken moves to `TAKEN` and is removed from `PASSED`; see the transitions
+below):
 
 | Type | Contents |
 |------|----------|
-| `POOL` | Every card this seat has already drafted before this pick (0..44 cards). |
-| `PACK` | Every card currently in the pack in front of this seat — the legal actions for this pick (`16 − pick_number` cards within a 15-card booster; one fewer per pick). The pick is chosen from these. |
-| `SEEN` | Distinct cards this seat saw in *earlier* packs it received and did **not** pick (cards seen-and-passed). Empty at pack 1 pick 1; grows as the draft proceeds. Carries the open-colour / signal information. |
+| `POOL` | Cards this seat has already drafted. Accumulates across all three packs. **Multiset** — two copies of a card are two tokens, since copy count changes the deck-building state. |
+| `PACK` | Cards in the pack now in front of the seat — the legal actions this pick. A `P`-card booster shows `P − pick_number + 1` cards. **Deduped to one token per distinct card name**: the action is choosing a name, and duplicate copies (boosters can contain them; collation varies by set) are equivalent picks. Replaced every pick, reset to a fresh booster each pack; never accumulates. |
+| `PASSED` | Cards the seat saw in an earlier pack and passed, with **no observed evidence they were taken**. One token per card instance (not deduped by name — two physical copies are two instances). Accumulates across the draft. |
+| `TAKEN` | Cards the seat saw, passed, and **later observed removed** when that pack wheeled back — directly observed opponent picks. One token per card instance (not deduped by name). The contested-colours signal. Accumulates across the draft. |
 
-`SEEN` is the set union of the contents of every pack this seat previously
-received, minus this seat's own prior picks, minus the cards currently in the
-live `PACK`. A card seen, passed, and later taken when it wheeled ends up in
-`POOL`, not `SEEN`. `SEEN` collapses to one token per distinct card —
-re-seeing the same card carries no signal the encoder can use beyond "it was
-available." `POOL` **preserves multiplicity** (one token per drafted copy):
-having two copies of a card is a different deck-building state than one, so
-the duplicate tokens are kept. A booster never contains duplicates, so `PACK`
-is naturally distinct.
+**The wheel, and the PASSED/TAKEN split.** In an 8-seat pod a `P`-card pack
+returns to the seat 8 picks after it was first seen, with `P − 8` cards left.
+Diffing what the seat saw against what came back identifies exactly which
+cards the seven intervening opponents took. At that wheel pick those cards
+move `PASSED → TAKEN` (observed opponent picks) and the survivors move
+`PASSED → PACK` (available again; the seat picks one and the rest return to
+`PASSED`). `TAKEN` is therefore populated only from pick 9 onward — exactly
+when open/contested-colour reading becomes actionable. The *positive* half of
+the wheel (a strong card that came back, signalling your colours are open)
+needs no separate type: it reappears as a `PACK` token carrying a recency of
+~8 (below).
+
+**Duplicates, by role.** Whether a type keeps duplicate cards follows from
+what the type *is*. `PACK` is the action space — the pick is one card *name*
+and two physical copies are the same choice — so it is deduped to one token
+per name; keeping both would only inflate that name's selection probability by
+its copy count, which has nothing to do with the card's pick value. `POOL` is
+the deck the seat holds, where a second copy is a materially different build
+(you can run the playset), so it stays a multiset. `PASSED`/`TAKEN` are
+observation history, kept one token per *card instance* — distinct physical
+copies stay distinct (two copies taken from different packs are two `TAKEN`
+tokens, the stronger contested signal), but re-observing the *same* instance
+(e.g. a card that wheels back) updates that instance's status and recency
+rather than spawning a second token. Each instance is in at most one set at a
+time, so when the wheel reveals a `PASSED` instance was taken it moves to
+`TAKEN` and leaves `PASSED`.
+
+**Recency — `packs_ago` and `pick_ago`.** Every card token carries how long
+since the card was last in the seat's pack, as two concatenated learned
+embeddings:
+
+- `packs_ago ∈ {0, 1, 2}` — packs since the card was last in the seat's pack.
+  `0` = this pack (live, wheel-capable); `≥ 1` = a prior pack (stale colour
+  history).
+- `pick_ago ∈ {0 .. P−1}` — picks since the card was last in the seat's pack
+  *prior to the current pick* (`0` if it has never been in the pack before
+  now), **frozen at the pack boundary**: once `packs_ago` becomes `≥ 1` it
+  stops advancing and holds its end-of-pack value, so it stays in the
+  within-pack range and never re-encodes what `packs_ago` already says.
+
+So a fresh `PACK` card is `(0, 0)`; a wheeled `PACK` card just back is
+`(0, ~8)` — `pick_ago ≥ 1` on a `PACK` token is exactly the "it came back,
+colours open" signal; a card passed one pick ago is `(0, 1)`, growing as it
+sits; and a prior-pack card is `(≥1, frozen)`. When a wheeled card is passed
+again `pick_ago` resets to `1` (its last in-pack pick is now the wheel pick) —
+the reset falls out of the definition rather than being special-cased. Recency
+matters most for `PACK`/`PASSED`/`TAKEN`; for `POOL` the same pair records when
+the card was drafted (incidental, kept for uniformity).
+
+Freezing fixes only which embedding *row* a stale card reads — that row still
+trains normally from every token that selects it, live or stale (no
+stop-gradient; the index carries no gradient in the first place, and the
+shared row's meaning is disambiguated by the `packs_ago` it is paired with).
 
 ### 1.2 Context token
 
-One additional token of type `CONTEXT`, carrying the per-state scalars as a
-sum of learned embeddings:
+One additional token of type `CONTEXT`, carrying the per-state globals as a
+sum of learned, `d_model`-wide embeddings (it has no card embedding of its
+own):
 
 - `pack_number` ∈ {1, 2, 3}.
 - `pick_number` ∈ {1 .. P}, where P is the maximum booster size in the corpus
@@ -155,29 +214,62 @@ critic head reads (§ 2).
 ### 1.3 Assembled sequence
 
 ```
-[CONTEXT] [POOL_1 .. POOL_p] [PACK_1 .. PACK_k] [SEEN_1 .. SEEN_s]
+[CONTEXT] [POOL …] [PACK …] [PASSED …] [TAKEN …]
 ```
 
 Order within each type group is not significant (the trunk is
 permutation-equivariant; no positional encoding). Sequences are padded per
-batch to the longest sequence in the batch, with an attention mask; padding
-positions never contribute to attention or to any head.
+batch to the longest in the batch, with an attention mask; padding positions
+never contribute to attention or to any head. `PASSED` and `TAKEN` accumulate
+across the whole draft, one token per observed card instance, so by pack 3 a
+sequence can reach ~200–300 tokens — larger than the ~80-card sealed pools but
+well within reach; recency (§ 1.1) lets the model discount the stale tail
+rather than needing a hard reset, and the accumulation can be capped to a
+recent window if sequence length becomes a throughput problem.
+
+### 1.4 Token vector width and `d_model`
+
+Per the convention the scorer and picker already use for their `FEATURE_COUNT`
+block, the per-card draft features are **concatenated** onto the card
+embedding (not projected into a fixed width), and `d_model` grows to include
+them — no input projection:
+
+```
+d_model = embedding_dim + 4 (type one-hot) + d(packs_ago) + d(pick_ago)
+```
+
+- **Type** is a 4-dim one-hot; no separate learned type table is needed, since
+  the first SAB's projection learns the per-type interpretation from the
+  indicator dims.
+- **`packs_ago`, `pick_ago`** are small learned embedding tables, concatenated.
+
+`d_model` must stay divisible by `n_heads`. `embedding_dim` already is, so size
+the feature widths to sum to a multiple of `n_heads` — e.g. with `n_heads = 8`,
+type 4 + `packs_ago` 4 + `pick_ago` 8 = +16. The widths are tunable; only the
+divisibility of the total is fixed.
+
+The `CONTEXT` token (§ 1.2) has no card embedding, so it is assembled to this
+same `d_model` purely as a sum of its (`d_model`-wide) metadata embeddings.
 
 ## 2. Model architecture and pick mechanism
 
 The model is a set transformer over the § 1.3 sequence with two heads.
 
-1. **Input projection.** Each card embedding is `embedding_dim` wide. The
-   model width `d_model` defaults to `embedding_dim`, in which case no
-   projection is inserted. When `--d-model` differs, a single
-   `Linear(embedding_dim, d_model)` projects card embeddings before the type
-   embedding is added. Type, context, and skill embeddings are `d_model` wide.
+1. **Token assembly.** Each card token is its cache embedding with the type
+   one-hot and the `packs_ago`/`pick_ago` embeddings concatenated (§ 1.1,
+   § 1.4); `d_model` is the resulting concatenated width, with no input
+   projection by default (a non-default `--d-model` inserts a projection from
+   that width; § 5.2). The `CONTEXT` token is a `d_model`-wide sum of metadata
+   embeddings (§ 1.2).
 2. **Trunk.** A stack of `n_layers` **Set Attention Blocks** (SAB, the same
    primitive as the scorer/picker/encoder). All tokens attend to all tokens.
 3. **Policy head.** A shared `Linear(d_model, 1)` applied to each `PACK` token
-   output produces one logit per pack card. A masked softmax over the `PACK`
-   positions only (pool/seen/context positions excluded) gives the pick
-   distribution. The pick is `argmax` at inference (deterministic) and a
+   output produces one logit per pack card; a masked softmax over the `PACK`
+   positions only (`POOL`/`PASSED`/`TAKEN`/`CONTEXT` excluded) is the pick
+   distribution directly. Because `PACK` is deduped to distinct card names
+   (§ 1.1), every token is a distinct action — no name-aggregation is needed:
+   imitation cross-entropy targets the picked card's token, and sampling draws
+   one token. The pick is `argmax` at inference (deterministic) and a
    categorical sample during generation-2 rollouts.
 4. **Critic head.** A `Linear(d_model, 1)` applied to the `CONTEXT` token
    output produces one scalar: the predicted final deck score for this seat
@@ -201,9 +293,13 @@ environment interaction, no live drafting.
 
 Each pick row (§ 4.1) is one example. From it the loader reconstructs the §1
 state for that `(draft_id, seat, pack_number, pick_number)` using the seat's
-prior rows: `POOL` = the seat's prior picks; `SEEN` = union of the seat's
-prior pack contents minus prior picks minus the current pack; `PACK` and the
-context scalars come from the row itself. The label pair is:
+prior rows: `POOL` = the seat's prior picks; `PASSED`/`TAKEN` are recovered by
+replaying the seat's pack views — each pack seen at pick N is matched to its
+wheel return at pick N+8 (8-seat pod), the cards missing on return (less the
+seat's own pick) become `TAKEN`, and passed cards with no observed removal
+stay `PASSED`; per-card `packs_ago`/`pick_ago` follow from each card's most
+recent in-pack pick prior to the current one (§ 1.1). `PACK` and the context scalars come from the row
+itself. The label pair is:
 
 - **Imitation target**: the index (within `PACK`) of the card the recorded
   drafter took.
@@ -270,7 +366,7 @@ A complete draft is recorded across two append-only, semicolon-delimited text
 files joined by `draft_id`, mirroring the `match-outcomes.txt` /
 `cards-played.txt` pairing. Card names are Forge canonical names; lists are
 pipe-delimited. Readers tolerate a trailing partial line (JVM-crash-mid-write
-recovery). Both files live under `output/sealed/drafts/` by default.
+recovery). Both files live under `output/draft/` by default.
 
 ### 4.1 `draft-picks.txt` — one line per pick
 
@@ -291,7 +387,8 @@ draft_id;set_code;seat;skill;pack_number;pick_number;pack;pick
 - `pick` — the chosen card (must be a member of `pack`).
 
 Row order is not significant: the loader groups by `draft_id`, then sorts each
-seat's rows by `(pack_number, pick_number)` to reconstruct `POOL` and `SEEN`.
+seat's rows by `(pack_number, pick_number)` to reconstruct `POOL`, `PASSED`,
+and `TAKEN` (§ 3.1).
 Rows are typically written in chronological pick order. This file is the input
 to the imitation head and, after reconstruction, the source of every critic
 state.
@@ -343,7 +440,8 @@ trusted as the labeler.
 
 ## 5. CLI
 
-Two new `sealed` subcommands.
+Two subcommands on the `draft` package's own entry point
+(`python -m draft <subcommand>`).
 
 ### 5.1 `generate-draft-data`
 
@@ -365,7 +463,7 @@ workers are restarted (long Forge runs may crash the JVM; recovery handles it).
 | `--picker-checkpoint` | `models/sealed/picker/latest.pt` | Picker used when `--build-method picker`; ignored for `greedy`. |
 | `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache used by the deck build + scorer. |
 | `--workers` | _(host CPU count)_ | Parallel Forge draft workers. |
-| `--output-dir` | `output/sealed/drafts/` | Destination for `draft-picks.txt` + `draft-results.txt`. |
+| `--output-dir` | `output/draft/` | Destination for `draft-picks.txt` + `draft-results.txt`. |
 | `--resume` | off | Append to existing files and continue toward `--n-drafts`, counting drafts already present. |
 
 Skill levels serve two purposes: opponent diversity (varied signals/colours,
@@ -380,10 +478,10 @@ Trains the policy + critic jointly on a recorded corpus.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--draft-picks-path` | `output/sealed/drafts/draft-picks.txt` | Per-pick training rows. |
-| `--draft-results-path` | `output/sealed/drafts/draft-results.txt` | Per-seat reward labels. |
+| `--draft-picks-path` | `output/draft/draft-picks.txt` | Per-pick training rows. |
+| `--draft-results-path` | `output/draft/draft-results.txt` | Per-seat reward labels. |
 | `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache. |
-| `--d-model` | _(derived = `embedding_dim`)_ | Model width; a value other than the cache width inserts a `Linear(embedding_dim, d_model)` projection (§ 2). |
+| `--d-model` | _(derived: `embedding_dim` + feature widths)_ | Model width. By default `d_model` is the concatenated token width (§ 1.4) and no projection is inserted; a different value inserts a `Linear` from the concatenated width to `d_model`. |
 | `--n-layers` | `4` | SAB layers. |
 | `--n-heads` | `8` | Attention heads; `d_model` must be divisible by this (fails fast at startup otherwise). |
 | `--ff-dim` | `4 × d_model` | Feed-forward width, computed from the resolved `d_model`. |
@@ -456,10 +554,10 @@ across independent restarts on the same pools as the reference ceiling.
 
 ## 6. Model artifacts
 
-Checkpoints saved to `models/sealed/drafter/`:
+Checkpoints saved to `models/draft/agent/`:
 
 ```
-models/sealed/drafter/
+models/draft/agent/
   {timestamp}.pt
   latest.pt
 ```
@@ -494,12 +592,14 @@ pre-aligned on one play distribution before any RL.
 
 ## State representation
 
-Accepted: the typed token sequence (`POOL` / `PACK` / `SEEN` / `CONTEXT`) over
-reused card embeddings. Hidden information and open-colour reading are left
-**implicit** — the `SEEN` tokens plus pack/pick counters carry the signal, so
-no explicit opponent model is built. An auxiliary head predicting each
-neighbour's archetype was considered and deferred to generation 2 (it needs
-self-play ground truth to supervise).
+Accepted: the typed token sequence (`POOL` / `PACK` / `PASSED` / `TAKEN` /
+`CONTEXT`) over reused card embeddings. Open-colour reading is left **implicit**
+— the `PASSED`/`TAKEN` tokens plus pack/pick counters carry the signal. `TAKEN`
+records *observed* opponent picks read off the wheel (§ 1.1), which is factual
+observation, not a learned model of any neighbour, so the policy still builds
+no explicit opponent model. An auxiliary head predicting each neighbour's
+archetype was considered and deferred to generation 2 (it needs self-play
+ground truth to supervise).
 
 **Rejected — pick-as-attention-op.** Treating the pick distribution *as* the
 attention weights between a pool/context query and the pack keys is
