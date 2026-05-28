@@ -318,23 +318,23 @@ A draft yields up to 8 × 45 = 360 examples.
 
 ### 3.2 Loss
 
-Two heads, one combined loss per batch, both computed over **full-skill seats
-only** — degraded seats are opponents, not training targets (§ 3.4):
+Two heads with **different training seats** (§ 3.4): the policy imitates only
+full-skill seats, while the critic regresses on **all** seats.
 
 ```
-L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states]
-  +     critic_weight · MSE(critic_pred, seat_reward)    [full-skill states]
+L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states only]
+  +     critic_weight · MSE(critic_pred, seat_reward)    [all states]
 ```
 
-- **Why full-skill only.** The policy must imitate *competent* drafting, so a
-  degraded bot's picks are not imitation targets; and the critic must predict
-  the final deck score under a *competent* continuation (§ 3.4), so a degraded
-  seat's final reward is the wrong regression target. Both heads therefore
-  train on the same full-skill seats.
-- **Degraded seats** still sit in the pod (set by `--skill-mix`, § 5.1) and
-  vary the signals and open colours the full-skill seats see, but they
-  contribute no training rows to either head. Which seats count as
-  training targets is set by `--train-skill-threshold` (§ 5.2).
+- **Policy: full-skill only.** Cross-entropy *copies* the demonstrator, so
+  training it on a degraded bot's picks would teach the policy to reproduce
+  bad picks. It imitates competent play only; steering *away* from bad picks
+  is a generation-2 RL effect, not something imitation can express (§ 3.4).
+- **Critic: all seats.** The critic's job is to value states, including bad
+  ones, so degraded seats give it the coverage of incoherent pools it needs to
+  anchor the low end of the value scale (§ 3.4).
+- The imitation cut is set by `--imitation-skill-threshold` (§ 5.2, default
+  `full`); the critic ignores it.
 
 ### 3.3 Optimisation and split
 
@@ -355,24 +355,33 @@ L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states]
   reported via a log warning (naming up to 20 + the total) and their picks
   dropped, mirroring `train-encoder`; they do not block the run.
 
-### 3.4 Critic continuation (the full-skill restriction)
+### 3.4 What each head trains on
 
-The critic predicts the final deck score *assuming a particular continuation*,
-so the question is *whose*. We want the value under a competent drafter —
-ultimately, in generation 2, under the policy itself. Generation 1 has no
-policy rollouts, only Forge bots, so it approximates that by training the
-critic on **full-skill seats only**: their final-deck labels reflect a
-competent continuation. Degraded seats stay in the pod for opponent diversity
-(§ 5.1) but are not critic targets, so the critic never regresses toward a
-random-bot continuation and needs no skill input to disentangle one.
-Generation 2's on-policy actor-critic closes the gap exactly — the critic
-trains on the policy's own rollouts, so the continuation is the policy's by
-construction, yielding `V^π` with no skill tag.
+**The policy imitates full-skill seats only.** Cross-entropy maximises the
+probability of the demonstrated pick — it copies, with no notion of good or
+bad — so feeding it a degraded bot's picks would teach it to reproduce them.
+Avoidance ("steer away from this pick") requires an advantage signal that signs
+the gradient by outcome, which is generation-2 RL; imitation can't express it.
+So the policy learns from competent demonstrations only.
 
-The cost is that generation 1's critic mostly sees coherent (full-skill) pools
-and has thin coverage of incoherent ones. That is acceptable for a foundation:
-generation-2 self-play repopulates the off-distribution states the policy
-actually visits, and the on-policy critic learns to value them.
+**The critic trains on all seats.** Its job is to value states, and that
+includes recognising bad ones, so it needs to *see* incoherent pools — exactly
+what degraded seats supply. Training it only on full-skill seats would leave it
+blind to the low end of the value scale and prone to wild extrapolation there.
+The apparent objection — that a degraded seat's final-deck label reflects a
+*bad* continuation, not a competent one — is mostly benign here: (a) the critic
+is used as a baseline for advantages, and *any* state-dependent value is a valid
+baseline regardless of bias; (b) genuinely-bad pools score low whoever finishes
+them, so their labels are about right anyway, and the continuation confound only
+bites for middling pools finished sloppily. We accept that mild bias rather than
+reintroducing a skill tag (dropped as artificial, § 1.2); generation 2 removes
+it outright by regressing the critic on the policy's *own* rollouts, so the
+continuation is the policy's by construction, yielding `V^π`.
+
+Together this is the generation-1 foundation for generation 2's "steer away
+from bad picks": imitation establishes competent play, the broadly-trained
+critic learns to recognise bad states, and gen-2 actor-critic wires the
+critic's advantage into the policy gradient so it actually steers.
 
 ## 4. Draft-event file format
 
@@ -480,10 +489,11 @@ workers are restarted (long Forge runs may crash the JVM; recovery handles it).
 | `--output-dir` | `output/draft/` | Destination for `draft-picks.txt` + `draft-results.txt`. |
 | `--resume` | off | Append to existing files and continue toward `--n-drafts`, counting drafts already present. |
 
-Skill levels exist only for **opponent diversity**: degraded bots vary the
-signals and open colours the full-skill seats see, broadening the state
-coverage of the full-skill rows that actually train the model (§ 3.2).
-Degraded seats are never training targets themselves. Heavily-random pods are
+Skill levels serve two purposes (§ 3.4): **opponent diversity** — degraded
+bots vary the signals and open colours the full-skill seats see — and **critic
+coverage** — the critic trains on the degraded seats too, so it learns to value
+the incoherent pools they reach. Degraded seats are *not* imitation targets,
+though; the policy learns from full-skill seats only. Heavily-random pods are
 kept a minority via the default mix, because all-random dynamics (colours wide
 open, signals meaningless) are unrealistic and would teach the policy patterns
 that competent pods punish.
@@ -504,7 +514,7 @@ Trains the policy + critic jointly on a recorded corpus.
 | `--dropout` | `0.0` | Transformer dropout. |
 | `--imitation-weight` | `1.0` | Coefficient on the cross-entropy term. `0` = critic-only run. |
 | `--critic-weight` | `1.0` | Coefficient on the critic MSE term. `0` = imitation-only run (the "solidify Rung 1 first" mode). |
-| `--train-skill-threshold` | `full` | Minimum seat skill whose rows are used as training targets, for **both** heads (§ 3.2). Default `full`: only full-skill seats train the policy and critic; degraded seats are opponents only. |
+| `--imitation-skill-threshold` | `full` | Minimum seat skill whose picks are imitation (policy) targets (§ 3.2). Default `full`: the policy learns from full-skill seats only. The critic is unaffected — it trains on all seats regardless. |
 | `--critic-target` | `pod-relative` | Which `draft-results.txt` reward column the critic regresses (`pod-relative` or `absolute`). |
 | `--lr` | `3e-4` | AdamW learning rate. |
 | `--warmup-frac` | `0.05` | Fraction of scheduled steps for linear LR warmup. |
@@ -673,10 +683,9 @@ picker might flub (the 23rd card, a marginal splash) move the score least — so
 its degradation translates into small score error here, plausibly smaller than
 on a wide sealed pool. The residual risk is *structured* (pool-composition-
 dependent) divergence, which is exactly what the § 5.3 validation gates on,
-with SA as the higher-fidelity fallback. This is the same
-continuation-consistency principle behind training the critic on competent
-continuations (§ 3.4): label with whatever builder will actually materialise
-the agent's decks downstream.
+with SA as the higher-fidelity fallback. It's the same continuation-matching
+idea that recurs elsewhere (§ 3.4): label with whatever builder will actually
+materialise the agent's decks downstream.
 
 ## Reward / fitness
 
@@ -749,22 +758,20 @@ already trains both on the same body; generation 2 closes the loop.
 
 ## Skill-laddered data, and why the critic isn't skill-conditioned
 
-Mixing bot strengths in the pod (§ 5.1) is kept for **opponent diversity** —
-degraded seats vary the signals and open colours the full-skill seats read,
-broadening coverage of the rows that train the model. An earlier design fed a
-per-seat skill tag to the model and trained the critic on all seats, so it
-could learn a skill-aware `V` and be queried with the policy's tag for `V^π`.
-We dropped that: the tag is an artefact of the synthetic data, the actor never
-needs it (it always plays full-skill), and the critic gets a competent-
-continuation target more simply by training on full-skill seats only (§ 3.4).
-Generation 2's on-policy training yields `V^π` directly, so the tag was only
-ever a generation-1 crutch. Opponent-seat randomness stays near pure upside and
-is used generously; own-seat randomness and all-random pods are kept a
-minority, so the model is not trained mostly on unrealistic dynamics.
-
-The tradeoff is thinner generation-1 coverage of incoherent own-pool states
-(the critic mostly sees full-skill pools); that is deferred to generation-2
-self-play, which repopulates the states the policy actually reaches.
+Mixing bot strengths in the pod (§ 5.1) does two jobs: opponent diversity for
+the full-skill seats to read, and — since the **critic trains on all seats**
+(§ 3.4) — coverage of the incoherent pools degraded bots reach, which anchors
+the low end of the value scale. An earlier design also fed a per-seat skill tag
+to the model so the critic could learn a skill-aware `V` and be queried with the
+policy's tag for `V^π`. We dropped the *tag* — it's an artefact of the synthetic
+data, and the actor never needs it (it always plays full-skill) — but kept
+training the critic broadly. The cost is that a degraded seat's label reflects a
+degraded continuation, so generation-1's `V` is mildly biased; we accept that
+(harmless for a baseline, roughly correct for genuinely-bad pools, § 3.4) rather
+than reintroducing the tag, and generation 2 removes it by regressing on the
+policy's own rollouts. Opponent-seat randomness stays near pure upside and is
+used generously; own-seat randomness and all-random pods are kept a minority, so
+the model is not trained mostly on unrealistic dynamics.
 
 ## Self-play regeneration (generation 2)
 
@@ -840,6 +847,6 @@ critic's jump should agree with the branch that ends better.
 - **CRN** — common random numbers; hold the future fixed across compared
   branches.
 - **`V^π`** — the value assuming the current policy continues (the target RL
-  actually wants); approximated in generation 1 by training the critic on
-  competent (full-skill) continuations, and reached directly by generation 2's
-  on-policy training.
+  actually wants); in generation 1 only loosely approximated (the critic
+  regresses on a mix of Forge continuations), and reached directly by
+  generation 2's on-policy training.
