@@ -13,6 +13,7 @@ from sealed.application.deck_assembly import (
     load_pool_embeddings,
 )
 from sealed.application.evaluate_scorer import format_decks_for_display, score_decks
+from sealed.domain.deck import Deck
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE, GreedyDeckBuilder
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -114,14 +115,16 @@ class BuildDecksUseCase:
         # an interrupted run keeps the decks built so far, and `tail -f` on
         # the output file stays current with the loop.
         with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
-            for i, (set_code, pool_names) in enumerate(pools, start=skip + 1):
-                deck = self._build_one_deck(model, pool_names, locator, config)
+            for i, pool in enumerate(pools, start=skip + 1):
+                deck = self._build_one_deck(model, pool.cards, locator, config)
                 if deck is not None:
-                    out.write(format_generated_deck(config.label, set_code, deck))
+                    out.write(
+                        format_generated_deck(config.label, pool.set_code, deck.cards),
+                    )
                     out.write("\n")
                     written += 1
                     if config.print_decks:
-                        built_decks.append(deck)
+                        built_decks.append(list(deck.cards))
                 if i % progress_interval == 0 or i == total:
                     _log(f"  {i}/{total} pools processed ({written} decks written)")
         _log(f"Done: {written} decks written to {config.output}")
@@ -147,7 +150,7 @@ class BuildDecksUseCase:
         pool_names: list[str],
         locator: ConvertedCardLocator,
         config: BuildDecksConfig,
-    ) -> list[str] | None:
+    ) -> Deck | None:
         pool_embeddings, valid_names = load_pool_embeddings(pool_names, locator)
         if len(valid_names) < NONLAND_DECK_SIZE:
             return None
@@ -159,4 +162,4 @@ class BuildDecksUseCase:
             max_iterations=config.sa_max_iterations,
             restarts=config.restarts,
         ).build(valid_names)
-        return assemble_full_deck(nonland_deck, locator)
+        return Deck.of(assemble_full_deck(nonland_deck, locator))

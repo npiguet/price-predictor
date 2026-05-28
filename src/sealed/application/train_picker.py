@@ -40,7 +40,7 @@ from sealed.domain.picker_model import PickerConfig, PickerModel, walk_pick_indi
 from sealed.domain.scorer_model import SetTransformerScorer
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 from sealed.infrastructure.picker_store import PickerStore
-from sealed.infrastructure.pool_file_reader import parse_pools
+from sealed.infrastructure.pool_file_reader import SealedPool, parse_pools
 from sealed.infrastructure.scorer_store import ScorerStore
 
 RANDOM_SEED = 42  # hardcoded (FR-018); governs init, shuffle, sampling, split.
@@ -171,7 +171,7 @@ class PreparedPool:
 
 
 def _prepare_pools(
-    pools: list[tuple[str, list[str]]], locator: ConvertedCardLocator,
+    pools: list[SealedPool], locator: ConvertedCardLocator,
 ) -> list[PreparedPool]:
     """Load embeddings for every pool; skip pools with < 23 embeddable cards.
 
@@ -198,7 +198,8 @@ def _prepare_pools(
         return new_idx
 
     pending: list[tuple[str, list[str], list[int]]] = []
-    for set_code, names in pools:
+    for pool in pools:
+        set_code, names = pool.set_code, pool.cards
         valid_names: list[str] = []
         idxs: list[int] = []
         for name in names:

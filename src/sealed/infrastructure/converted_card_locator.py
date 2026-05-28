@@ -17,11 +17,11 @@ from price_predictor.domain.card_text import ConvertedCardText
 from price_predictor.infrastructure.card_filenames import (
     sanitize_card_name,
 )
+from sealed.domain.deck import BASIC_LAND_NAMES
 from sealed.infrastructure.card_name_corrections import FILENAME_CORRECTIONS
 
-BASIC_LAND_NAMES: frozenset[str] = frozenset(
-    {"plains", "island", "swamp", "mountain", "forest"}
-)
+# Re-exported for callers that historically imported it from here.
+__all__ = ["BASIC_LAND_NAMES", "ConvertedCardLocator"]
 
 
 class ConvertedCardLocator:

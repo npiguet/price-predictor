@@ -15,9 +15,14 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
+from price_predictor.domain.value_objects import WUBRG
+
 # WUBRG color order — fixed to match the per-color counter ordering used by
 # ``train_encoder._build_label_map`` and the columns in ``cards-win-rates.txt``.
-COLOR_ORDER: tuple[str, ...] = ("W", "U", "B", "R", "G")
+# Single source of truth: the shared ``WUBRG`` tuple (also used by
+# ``card_embedding_layout``), re-exported here under the domain name the
+# sealed encoder and its label heads read.
+COLOR_ORDER: tuple[str, ...] = WUBRG
 
 
 @dataclass

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from sealed.domain.match import Side, match_winner
+
 
 @dataclass(frozen=True)
 class RoundRobinOutcome:
@@ -16,6 +18,10 @@ class RoundRobinOutcome:
     @property
     def total_games(self) -> int:
         return self.wins_a + self.wins_b
+
+    @property
+    def winner(self) -> Side | None:
+        return match_winner(self.wins_a, self.wins_b)
 
 
 @dataclass(frozen=True)
@@ -141,8 +147,8 @@ def aggregate_results(outcome_files: list[Path], n_pools: int) -> RoundRobinResu
 
     a_match_rates, b_match_rates = _per_pool_match_win_rates(outcomes, n_pools)
     pool_match_deltas = [a - b for a, b in zip(a_match_rates, b_match_rates)]
-    a_match_wins = sum(1 for o in outcomes if o.wins_a > o.wins_b)
-    b_match_wins = sum(1 for o in outcomes if o.wins_b > o.wins_a)
+    a_match_wins = sum(1 for o in outcomes if o.winner is Side.A)
+    b_match_wins = sum(1 for o in outcomes if o.winner is Side.B)
     a_match_aggregate = a_match_wins / max(n_matches, 1)
     b_match_aggregate = b_match_wins / max(n_matches, 1)
 
@@ -211,9 +217,9 @@ def _per_pool_match_win_rates(
         j = k % n_pools
         a_matches[i] += 1
         b_matches[j] += 1
-        if outcome.wins_a > outcome.wins_b:
+        if outcome.winner is Side.A:
             a_wins[i] += 1
-        elif outcome.wins_b > outcome.wins_a:
+        elif outcome.winner is Side.B:
             b_wins[j] += 1
 
     a_rates = [a_wins[i] / max(a_matches[i], 1) for i in range(n_pools)]

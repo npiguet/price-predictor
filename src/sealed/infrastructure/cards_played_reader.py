@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from sealed.domain.match import Side
+from sealed.infrastructure.delimited import parse_pipe_list, split_record
+
 _EXPECTED_FIELDS: int = 11
 
 
@@ -30,45 +33,25 @@ class CardsPlayedRow:
     cards_played_b: list[str]
     cards_not_played_a: list[str]
     cards_not_played_b: list[str]
-    winner: str
-    starter: str
-
-
-def _parse_pipe_list(raw: str) -> list[str]:
-    if raw == "":
-        return []
-    return raw.split("|")
+    winner: Side
+    starter: Side
 
 
 def _parse_line(line: str) -> CardsPlayedRow:
-    fields = line.split(";")
-    if len(fields) != _EXPECTED_FIELDS:
-        raise ValueError(
-            f"Expected {_EXPECTED_FIELDS} fields, got {len(fields)}: {line!r}"
-        )
+    fields = split_record(line, _EXPECTED_FIELDS)
     timestamp, run_id, set_code, method_a, method_b = fields[0:5]
-    cards_played_a = _parse_pipe_list(fields[5])
-    cards_played_b = _parse_pipe_list(fields[6])
-    cards_not_played_a = _parse_pipe_list(fields[7])
-    cards_not_played_b = _parse_pipe_list(fields[8])
-    winner = fields[9]
-    starter = fields[10]
-    if winner not in ("A", "B"):
-        raise ValueError(f"winner must be 'A' or 'B', got {winner!r}")
-    if starter not in ("A", "B"):
-        raise ValueError(f"starter must be 'A' or 'B', got {starter!r}")
     return CardsPlayedRow(
         timestamp=timestamp,
         run_id=run_id,
         set_code=set_code,
         method_a=method_a,
         method_b=method_b,
-        cards_played_a=cards_played_a,
-        cards_played_b=cards_played_b,
-        cards_not_played_a=cards_not_played_a,
-        cards_not_played_b=cards_not_played_b,
-        winner=winner,
-        starter=starter,
+        cards_played_a=parse_pipe_list(fields[5]),
+        cards_played_b=parse_pipe_list(fields[6]),
+        cards_not_played_a=parse_pipe_list(fields[7]),
+        cards_not_played_b=parse_pipe_list(fields[8]),
+        winner=Side.parse(fields[9], label="winner"),
+        starter=Side.parse(fields[10], label="starter"),
     )
 
 

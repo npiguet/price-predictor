@@ -40,6 +40,7 @@ from sealed.domain.encoder_model import (
     SealedEncoderConfig,
     SealedEncoderModel,
 )
+from sealed.domain.match import Side
 from sealed.infrastructure.cards_played_reader import (
     CardsPlayedRow,
     iter_rows,
@@ -274,8 +275,8 @@ def _aggregate(
         return frozenset(colors)
 
     for row in rows:
-        a_won = row.winner == "A"
-        a_at_play = row.starter == "A"
+        a_won = row.winner is Side.A
+        a_at_play = row.starter is Side.A
         _record_side(
             counters, row.cards_played_a, row.cards_not_played_a,
             deck_color_set(row.cards_played_a, row.cards_not_played_a),

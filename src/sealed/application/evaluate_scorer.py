@@ -161,7 +161,7 @@ class EvaluateScorerUseCase:
         pools_path = work_dir / "pools"
         pools_path.mkdir(exist_ok=True)
         PoolConnector().generate(set_code, n_pools, pools_path)
-        return [names for _, names in parse_pools(pools_path / "pools.txt")]
+        return [pool.cards for pool in parse_pools(pools_path / "pools.txt")]
 
     def _resolve_set_code(self, set_code: str | None) -> str:
         """Return the given set code, or a random sealed-legal set when None."""

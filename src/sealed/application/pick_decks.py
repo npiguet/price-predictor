@@ -20,6 +20,7 @@ from sealed.application.deck_assembly import (
     assemble_full_deck,
     load_pool_embeddings,
 )
+from sealed.domain.deck import Deck
 from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
 from sealed.domain.picker_model import PickerModel, decompose_picks
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -80,8 +81,8 @@ class PickDecksUseCase:
         progress_interval = max(1, total // 100)
         width_checked = False
         with open(config.output, open_mode, buffering=1, encoding="utf-8") as out:
-            for i, (set_code, pool_names) in enumerate(pools, start=skip + 1):
-                embeddings, valid_names = load_pool_embeddings(pool_names, locator)
+            for i, pool in enumerate(pools, start=skip + 1):
+                embeddings, valid_names = load_pool_embeddings(pool.cards, locator)
                 if len(valid_names) >= NONLAND_DECK_SIZE:
                     if not width_checked:
                         self._check_width(
@@ -93,7 +94,8 @@ class PickDecksUseCase:
                         model, embeddings, valid_names, locator, device,
                     )
                     out.write(
-                        format_generated_deck(config.label, set_code, deck) + "\n",
+                        format_generated_deck(config.label, pool.set_code, deck.cards)
+                        + "\n",
                     )
                     written += 1
                 if i % progress_interval == 0 or i == total:
@@ -130,7 +132,7 @@ class PickDecksUseCase:
         valid_names: list[str],
         locator: ConvertedCardLocator,
         device: torch.device,
-    ) -> list[str]:
+    ) -> Deck:
         embs = [embeddings[name] for name in valid_names]
         arr = np.stack(embs).astype(np.float32)
         cards = torch.from_numpy(arr).unsqueeze(0).to(device)
@@ -138,4 +140,4 @@ class PickDecksUseCase:
         with torch.no_grad():
             logits, _ = model(cards, mask)
         chosen = decompose_picks(logits[0].cpu(), embs, valid_names)
-        return assemble_full_deck(chosen, locator)
+        return Deck.of(assemble_full_deck(chosen, locator))

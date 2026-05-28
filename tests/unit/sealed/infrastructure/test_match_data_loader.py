@@ -9,6 +9,7 @@ import pytest
 import torch
 
 from sealed.domain.card_embedding_layout import total_dim
+from sealed.domain.deck import Deck
 from sealed.infrastructure.converted_card_locator import BASIC_LAND_NAMES
 from sealed.infrastructure.match_data_loader import (
     EmbeddingTable,
@@ -51,8 +52,8 @@ def _outcome(
         set_code=set_code,
         method_a=method_a,
         method_b=method_b,
-        deck_a_names=deck_a,
-        deck_b_names=deck_b,
+        deck_a=Deck.of(deck_a),
+        deck_b=Deck.of(deck_b),
         games=games,
         play=play,
         duration_s=duration_s,
@@ -62,8 +63,8 @@ def _outcome(
 class TestParseMatchOutcome:
     def test_basic_parse(self):
         outcome = parse_match_outcome(SAMPLE_LINE)
-        assert outcome.deck_a_names == ["CardA", "CardB"]
-        assert outcome.deck_b_names == ["CardC", "CardD"]
+        assert outcome.deck_a.cards == ("CardA", "CardB")
+        assert outcome.deck_b.cards == ("CardC", "CardD")
         assert outcome.wins_a == 2
         assert outcome.wins_b == 1
 

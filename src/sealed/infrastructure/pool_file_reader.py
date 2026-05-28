@@ -11,26 +11,43 @@ generation-method tag passed to ``build-decks --label``.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+
+from sealed.domain.deck import Deck
+from sealed.infrastructure.delimited import parse_pipe_list
+
+
+@dataclass(frozen=True, slots=True)
+class SealedPool:
+    """One line of a pools file: a set code and the booster pool's card names."""
+
+    set_code: str
+    cards: list[str]
 
 
 @dataclass(frozen=True, slots=True)
 class GeneratedDeck:
-    """One line of a generated-decks file.
+    """One line of a generated-decks file: a labelled, set-stamped ``Deck``.
 
     ``label`` is the generation-method tag (e.g. ``"gen-2"``,
     ``"gen-3-experimental"``) recorded by ``build-decks --label`` and used
     by ``match-outcomes`` as the ``method_A`` / ``method_B`` value when this
     deck is sampled into a self-play match.
     """
+
     label: str
     set_code: str
-    cards: list[str]
+    deck: Deck
+
+    @property
+    def cards(self) -> tuple[str, ...]:
+        return self.deck.cards
 
 
-def parse_pools(pools_file: Path) -> list[tuple[str, list[str]]]:
-    """Parse a pools.txt file into ``(set_code, card_names)`` tuples.
+def parse_pools(pools_file: Path) -> list[SealedPool]:
+    """Parse a pools.txt file into ``SealedPool`` objects.
 
     The file format is one pool per line:
     ``SET_CODE;Card1|Card2|...|CardN``. Blank lines are ignored.
@@ -39,12 +56,12 @@ def parse_pools(pools_file: Path) -> list[tuple[str, list[str]]]:
         pools_file: Path to the pools.txt file.
 
     Returns:
-        One tuple per pool line. Order matches the source file.
+        One ``SealedPool`` per pool line. Order matches the source file.
 
     Raises:
         ValueError: If a non-blank line does not contain a ``;`` separator.
     """
-    pools: list[tuple[str, list[str]]] = []
+    pools: list[SealedPool] = []
     for line in pools_file.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if not stripped:
@@ -54,12 +71,11 @@ def parse_pools(pools_file: Path) -> list[tuple[str, list[str]]]:
                 f"Pool line missing ';' set code separator: {stripped!r}"
             )
         set_code, _, names_field = stripped.partition(";")
-        card_names = names_field.split("|") if names_field else []
-        pools.append((set_code, card_names))
+        pools.append(SealedPool(set_code, parse_pipe_list(names_field)))
     return pools
 
 
-def format_generated_deck(label: str, set_code: str, cards: list[str]) -> str:
+def format_generated_deck(label: str, set_code: str, cards: Sequence[str]) -> str:
     """Render one generated-decks line: ``LABEL;SET_CODE;Card1|...|CardN``.
 
     The inverse of :func:`parse_generated_decks`'s per-line parse. Returned
@@ -125,6 +141,6 @@ def parse_generated_decks(decks_file: Path) -> list[GeneratedDeck]:
                 f"{stripped!r}"
             )
         label, set_code, names_field = parts
-        cards = names_field.split("|") if names_field else []
-        decks.append(GeneratedDeck(label=label, set_code=set_code, cards=cards))
+        deck = Deck.of(parse_pipe_list(names_field))
+        decks.append(GeneratedDeck(label=label, set_code=set_code, deck=deck))
     return decks

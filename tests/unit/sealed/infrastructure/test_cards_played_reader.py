@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from sealed.domain.match import Side
 from sealed.infrastructure.cards_played_reader import iter_rows
 
 
@@ -46,8 +47,8 @@ class TestIterRows:
         assert row.cards_played_b == ["Counterspell"]
         assert row.cards_not_played_a == []
         assert row.cards_not_played_b == []
-        assert row.winner == "A"
-        assert row.starter == "B"
+        assert row.winner is Side.A
+        assert row.starter is Side.B
 
     def test_pipe_multiplicities_preserved(self, tmp_path: Path):
         text = _line(

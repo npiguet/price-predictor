@@ -26,6 +26,7 @@ from sealed.application.train_encoder import (
     _write_win_rates,
 )
 from sealed.domain.encoder_model import COLOR_ORDER
+from sealed.domain.match import Side
 from sealed.infrastructure.cards_played_reader import CardsPlayedRow
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
@@ -52,8 +53,8 @@ def _row(
         cards_played_b=cp_b,
         cards_not_played_a=cnp_a,
         cards_not_played_b=cnp_b,
-        winner=winner,
-        starter=starter,
+        winner=Side(winner),
+        starter=Side(starter),
     )
 
 

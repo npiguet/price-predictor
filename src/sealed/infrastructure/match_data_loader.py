@@ -16,11 +16,11 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
+from sealed.domain.deck import Deck
+from sealed.domain.match import Side, match_winner
 from sealed.domain.scorer_model import ScorerConfig
-from sealed.infrastructure.converted_card_locator import (
-    BASIC_LAND_NAMES,
-    ConvertedCardLocator,
-)
+from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+from sealed.infrastructure.delimited import parse_pipe_list, split_record
 
 _LOAD_WORKERS = 8
 
@@ -39,8 +39,8 @@ class MatchOutcome:
     set_code: str
     method_a: str
     method_b: str
-    deck_a_names: list[str]
-    deck_b_names: list[str]
+    deck_a: Deck
+    deck_b: Deck
     games: str  # per-game winner sequence, e.g. "ABB"
     play: str   # per-game play-first sequence, same length as games
     duration_s: int
@@ -54,12 +54,21 @@ class MatchOutcome:
         return self.games.count("B")
 
     @property
+    def winner(self) -> Deck:
+        """The match-winning deck (ties resolve to deck B, matching `>`)."""
+        return self.deck_a if match_winner(self.wins_a, self.wins_b) is Side.A else self.deck_b
+
+    @property
+    def loser(self) -> Deck:
+        return self.deck_b if match_winner(self.wins_a, self.wins_b) is Side.A else self.deck_a
+
+    @property
     def winner_names(self) -> list[str]:
-        return self.deck_a_names if self.wins_a > self.wins_b else self.deck_b_names
+        return list(self.winner.cards)
 
     @property
     def loser_names(self) -> list[str]:
-        return self.deck_b_names if self.wins_a > self.wins_b else self.deck_a_names
+        return list(self.loser.cards)
 
 
 @dataclass
@@ -153,27 +162,19 @@ def parse_match_outcome(line: str) -> MatchOutcome:
 
     Format: ``timestamp;run_id;set_code;method_A;method_B;deckA;deckB;games;play;duration_s``.
     """
-    parts = line.strip().split(";")
-    if len(parts) != 10:
-        raise ValueError(
-            f"Expected 10 semicolon-delimited fields in match-outcomes line, got {len(parts)}"
-        )
+    parts = split_record(line.strip(), 10)
     timestamp, run_id, set_code, method_a, method_b = parts[0:5]
-    deck_a_names = parts[5].split("|")
-    deck_b_names = parts[6].split("|")
-    games, play = parts[7], parts[8]
-    duration_s = int(parts[9])
     return MatchOutcome(
         timestamp=timestamp,
         run_id=run_id,
         set_code=set_code,
         method_a=method_a,
         method_b=method_b,
-        deck_a_names=deck_a_names,
-        deck_b_names=deck_b_names,
-        games=games,
-        play=play,
-        duration_s=duration_s,
+        deck_a=Deck.of(parse_pipe_list(parts[5])),
+        deck_b=Deck.of(parse_pipe_list(parts[6])),
+        games=parts[7],
+        play=parts[8],
+        duration_s=int(parts[9]),
     )
 
 
@@ -239,9 +240,8 @@ class _ExampleBuilder:
         unique_names = sorted({
             name
             for outcome in outcomes
-            for deck in (outcome.deck_a_names, outcome.deck_b_names)
-            for name in deck
-            if name.lower() not in BASIC_LAND_NAMES
+            for deck in (outcome.deck_a, outcome.deck_b)
+            for name in deck.nonbasic_cards()
         })
         with ThreadPoolExecutor(max_workers=_LOAD_WORKERS) as executor:
             embeddings = list(
@@ -257,8 +257,8 @@ class _ExampleBuilder:
     def _resolve_match(
         self, outcome: MatchOutcome,
     ) -> MatchTrainingExample | MatchDropReason:
-        winner = self._resolve_deck(outcome.winner_names)
-        loser = self._resolve_deck(outcome.loser_names)
+        winner = self._resolve_deck(outcome.winner)
+        loser = self._resolve_deck(outcome.loser)
         if winner is None or loser is None:
             return MatchDropReason.MISSING_CARD
         if not winner or not loser:
@@ -286,11 +286,9 @@ class _ExampleBuilder:
             stacked = torch.zeros(1, ScorerConfig().d_model)
         return EmbeddingTable(stacked, self._name_to_idx)
 
-    def _resolve_deck(self, names: list[str]) -> list[int] | None:
+    def _resolve_deck(self, deck: Deck) -> list[int] | None:
         indices: list[int] = []
-        for name in names:
-            if name.lower() in BASIC_LAND_NAMES:
-                continue
+        for name in deck.nonbasic_cards():
             idx = self._intern(name)
             if idx is None:
                 return None
