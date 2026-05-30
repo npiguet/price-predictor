@@ -28,8 +28,8 @@ set-transformer primitives, but adds the sequential draft state as input.
 **Generation 1 (this spec):**
 
 - A CLI to generate a training corpus of complete Forge drafts, recorded in a
-  draft-event file format, with a configurable skill-laddered mix of bot
-  strengths across the eight seats.
+  draft-event file format, with a configurable agent mix across the eight
+  seats.
 - A draft state representation (typed token sequence) fed to a transformer.
 - A model with a **policy head** (one logit per pack card → the pick) and a
   **critic head** (one scalar → predicted final deck score).
@@ -206,12 +206,12 @@ own):
   (the embedding table is sized from the data, like `train-encoder`'s
   `max_seq_len`).
 
-The token deliberately carries **no seat, set, or skill identity**: a draft pod
+The token deliberately carries **no seat, set, or agent identity**: a draft pod
 is a symmetric ring, so absolute seat position carries no signal; omitting the
 set keeps the model **format-agnostic** — it reads the format from the cards
 themselves, whose embeddings already encode it, so one model works across sets
-and Chaos draft; and skill is a synthetic data-generation artefact the model
-never needs (§ 3.4). The context token participates in attention so every card
+and Chaos draft; and the per-seat agent identifier is a synthetic
+data-generation artefact the model never needs (§ 3.4). The context token participates in attention so every card
 token can condition on draft progress, and its trunk output is the pooled
 representation the critic head reads (§ 2).
 
@@ -296,45 +296,57 @@ environment interaction, no live drafting.
 
 ### 3.1 Training examples
 
-Each pick row (§ 4.1) is one example. From it the loader reconstructs the §1
-state for that `(draft_id, seat, pack_number, pick_number)` using the seat's
-prior rows: `POOL` = the seat's prior picks; `PASSED`/`TAKEN` are recovered by
-replaying the seat's pack views — each pack seen at pick N is matched to its
-wheel return at pick N+8 (8-seat pod), the cards missing on return (less the
-seat's own pick) become `TAKEN`; passed cards with no observed removal stay
-`PASSED` within the pack and flush to `TAKEN` at each pack boundary (§ 1.1);
-per-card `packs_ago`/`pick_ago` follow from each card's most recent in-pack
-pick prior to the current one (§ 1.1). `PACK` and the context scalars come from the row
-itself. The label pair is:
+Each `(draft_id, seat s, pack_number p, pick_number i)` is one example. From
+the JSON record (§ 4) the loader locates the booster `k` that reaches seat `s`
+at this pick — by the conventions in § 4.1, `s_open = (s − (i − 1) · dir_p)
+mod pod_size`, `k = (p − 1) · pod_size + s_open`, and the seat's offset into
+that booster is `j = i − 1`. Then:
 
-- **Imitation target**: the index (within `PACK`) of the card the recorded
-  drafter took.
-- **Critic target**: the seat's final reward, joined from the results row
-  (§ 4.2) by `(draft_id, seat)`. Every pick of a given seat shares that
-  seat's single final reward (Monte-Carlo regression — the same label for all
-  45 states of a draft seat).
+- **`PACK`** = `boosters[k].picks[j:]` — the cards still in the booster when
+  seat `s` sees it.
+- **`POOL`** = each prior pick of seat `s`, found by the same geometry
+  applied to each prior `(p', i')`.
+- **`PASSED` / `TAKEN`** = walk each prior booster the seat saw: the cards
+  the seat passed are those at offsets after the seat's offset; for a booster
+  that wheeled back to the seat, the cards strictly between the two seat
+  offsets are observed `TAKEN`; remaining passed cards flush to `TAKEN` at
+  each pack boundary (§ 1.1); the rest stay `PASSED` within the current pack.
+- **Recency** (`packs_ago` / `pick_ago`) follows each instance's most recent
+  in-pack pick prior to `(p, i)`, frozen at pack boundaries (§ 1.1).
+- The context scalars `pack_number` and `pick_number` come from `(p, i)`.
+
+The label pair is:
+
+- **Imitation target**: `boosters[k].picks[j]` — the card the recorded agent
+  took at this pick.
+- **Critic target**: `seats[s].deck_score` or its pod-relative form
+  (`--critic-target`, § 5.2). Every pick of a given seat shares this single
+  reward (Monte-Carlo regression — the same label for all 45 states of a
+  draft seat).
 
 A draft yields up to 8 × 45 = 360 examples.
 
 ### 3.2 Loss
 
 Two heads with **different training seats** (§ 3.4): the policy imitates only
-full-skill seats, while the critic regresses on **all** seats.
+seats whose `agent` (§ 4.1) is on the `--imitation-agents` whitelist (§ 5.2,
+default `forge-full`), while the critic regresses on **all** seats.
 
 ```
-L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states only]
+L = imitation_weight · CE(policy_logits, taken_index)   [whitelisted-agent states only]
   +     critic_weight · MSE(critic_pred, seat_reward)    [all states]
 ```
 
-- **Policy: full-skill only.** Cross-entropy *copies* the demonstrator, so
-  training it on a degraded bot's picks would teach the policy to reproduce
-  bad picks. It imitates competent play only; steering *away* from bad picks
-  is a generation-2 RL effect, not something imitation can express (§ 3.4).
+- **Policy: whitelisted agents only.** Cross-entropy *copies* the
+  demonstrator, so training it on a weaker agent's picks would teach the
+  policy to reproduce bad picks. It imitates competent play only; steering
+  *away* from bad picks is a generation-2 RL effect, not something imitation
+  can express (§ 3.4).
 - **Critic: all seats.** The critic's job is to value states, including bad
-  ones, so degraded seats give it the coverage of incoherent pools it needs to
-  anchor the low end of the value scale (§ 3.4).
-- The imitation cut is set by `--imitation-skill-threshold` (§ 5.2, default
-  `full`); the critic ignores it.
+  ones, so weaker-agent seats give it the coverage of incoherent pools it
+  needs to anchor the low end of the value scale (§ 3.4).
+- The imitation whitelist is set by `--imitation-agents` (§ 5.2); the critic
+  ignores it.
 
 ### 3.3 Optimisation and split
 
@@ -357,26 +369,28 @@ L = imitation_weight · CE(policy_logits, taken_index)   [full-skill states only
 
 ### 3.4 What each head trains on
 
-**The policy imitates full-skill seats only.** Cross-entropy maximises the
+**The policy imitates only seats whose `agent` is on a competent-demonstrator
+whitelist** (default `forge-full`; § 5.2). Cross-entropy maximises the
 probability of the demonstrated pick — it copies, with no notion of good or
-bad — so feeding it a degraded bot's picks would teach it to reproduce them.
+bad — so feeding it a weaker agent's picks would teach it to reproduce them.
 Avoidance ("steer away from this pick") requires an advantage signal that signs
 the gradient by outcome, which is generation-2 RL; imitation can't express it.
 So the policy learns from competent demonstrations only.
 
-**The critic trains on all seats.** Its job is to value states, and that
-includes recognising bad ones, so it needs to *see* incoherent pools — exactly
-what degraded seats supply. Training it only on full-skill seats would leave it
-blind to the low end of the value scale and prone to wild extrapolation there.
-The apparent objection — that a degraded seat's final-deck label reflects a
-*bad* continuation, not a competent one — is mostly benign here: (a) the critic
-is used as a baseline for advantages, and *any* state-dependent value is a valid
+**The critic trains on all seats**, including those played by weaker Forge
+variants. Its job is to value states, and that includes recognising bad ones,
+so it needs to *see* incoherent pools — exactly what weaker agents supply.
+Training it only on whitelisted-agent seats would leave it blind to the low
+end of the value scale and prone to wild extrapolation there. The apparent
+objection — that a weaker agent's final-deck label reflects a *bad*
+continuation, not a competent one — is mostly benign here: (a) the critic is
+used as a baseline for advantages, and *any* state-dependent value is a valid
 baseline regardless of bias; (b) genuinely-bad pools score low whoever finishes
-them, so their labels are about right anyway, and the continuation confound only
-bites for middling pools finished sloppily. We accept that mild bias rather than
-reintroducing a skill tag (dropped as artificial, § 1.2); generation 2 removes
-it outright by regressing the critic on the policy's *own* rollouts, so the
-continuation is the policy's by construction, yielding `V^π`.
+them, so their labels are about right anyway, and the continuation confound
+only bites for middling pools finished sloppily. We accept that mild bias rather
+than reintroducing an agent tag (dropped as artificial, § 1.2); generation 2
+removes it outright by regressing the critic on the policy's *own* rollouts,
+so the continuation is the policy's by construction, yielding `V^π`.
 
 Together this is the generation-1 foundation for generation 2's "steer away
 from bad picks": imitation establishes competent play, the broadly-trained
@@ -385,67 +399,88 @@ critic's advantage into the policy gradient so it actually steers.
 
 ## 4. Draft-event file format
 
-A complete draft is recorded across two append-only, semicolon-delimited text
-files joined by `draft_id`, mirroring the `match-outcomes.txt` /
-`cards-played.txt` pairing. Card names are Forge canonical names; lists are
-pipe-delimited. Readers tolerate a trailing partial line (JVM-crash-mid-write
-recovery). Both files live under `output/draft/` by default.
+Each complete draft is recorded as **one self-contained JSON record per line**
+in an append-only JSONL file at `output/draft/drafts.jsonl`. Card names are
+Forge canonical names. Readers tolerate a trailing partial line
+(JVM-crash-mid-write recovery).
 
-### 4.1 `draft-picks.txt` — one line per pick
+### 4.1 Record schema
 
-Eight fields:
+One JSON object per line:
 
-```
-draft_id;set_code;seat;skill;pack_number;pick_number;pack;pick
-```
-
-- `draft_id` — UUID grouping all rows of one draft (360 rows for a full pod).
-- `set_code` — the MTG set the boosters were drawn from (single-set drafts).
-- `seat` — `0`..`7`.
-- `skill` — `full` | `r30` | `r100`, the seat's bot strength (§ 5.1).
-- `pack_number` — `1`..`3`.
-- `pick_number` — `1`..`P` (booster size).
-- `pack` — pipe-delimited cards in the pack at this pick (the legal actions;
-  **includes** the picked card).
-- `pick` — the chosen card (must be a member of `pack`).
-
-Row order is not significant: the loader groups by `draft_id`, then sorts each
-seat's rows by `(pack_number, pick_number)` to reconstruct `POOL`, `PASSED`,
-and `TAKEN` (§ 3.1).
-Rows are typically written in chronological pick order. This file is the input
-to the imitation head and, after reconstruction, the source of every critic
-state.
-
-### 4.2 `draft-results.txt` — one line per seat per draft
-
-Eight fields:
-
-```
-draft_id;set_code;seat;skill;final_pool;deck;deck_score;pod_relative_reward
+```json
+{
+  "draft_id": "<uuid>",
+  "run_id": "<uuid>",
+  "timestamp": "<ISO 8601 UTC>",
+  "seats": [
+    {"agent": "forge-full", "deck": ["...40 names..."], "deck_score": 12.34}
+  ],
+  "boosters": [
+    {"set_code": "BLB", "picks": ["...P names in pick-order..."]}
+  ]
+}
 ```
 
-- `final_pool` — the seat's 45 drafted cards (the union of its picks; stored
-  explicitly for inspection and self-contained scoring).
-- `deck` — the 40-card deck built from `final_pool` by `--build-method`
-  (spells + nonbasic lands + basics).
-- `deck_score` — the scorer's scalar for the scored subset (chosen spells +
-  nonbasic lands, exactly the scorer's input contract; basics are not scored).
-- `pod_relative_reward` — `deck_score` minus the mean `deck_score` over the
-  eight seats of this draft. The default critic target (`--critic-target`),
-  forward-compatible with the generation-2 pod-relative reward; the absolute
-  `deck_score` column remains available via `--critic-target absolute`.
+(Each array has one entry shown; a real record has `pod_size` seats and
+`pod_size × packs` boosters.)
 
-The critic label for every pick of `(draft_id, seat)` is this row's
-`pod_relative_reward` (or `deck_score`). Seats whose pool fails to build a
-legal deck are written with empty `deck`/`deck_score`/`pod_relative_reward`
-and excluded from both critic training and the pod mean.
+Everything else is derived from these fields by convention:
 
-**Building the deck (default: the picker).** The `deck` column is produced by
-`--build-method` (§ 5.1), defaulting to the one-shot picker for throughput:
-labeling runs one build per seat per draft (eight per draft), and the picker's
-~5 ms forward versus the SA builder's ~5 s is the difference between labeling
-costing days and costing minutes across a large corpus. SA (`greedy`) is the
-higher-fidelity fallback, used only if the § 5.3 validation rejects the picker.
+- `seats` has length `pod_size`, and `seats[i]` is seat `i`.
+- `boosters` has length `pod_size × packs` (24 for a standard 8-seat 3-pack
+  draft). The convention is: pack-1 boosters first (one per opening seat, in
+  seat order), then pack-2, then pack-3. So for `boosters[k]`:
+  - `pack_number = floor(k / pod_size) + 1`
+  - `opening_seat = k mod pod_size`
+- Inside `boosters[k].picks` (length `pack_size`, in pick-order), the pick at
+  position `j` was made by seat `(opening_seat + j · dir_p) mod pod_size`,
+  where `dir_p = +1` for L-passing packs (1 and 3) and `−1` for R-passing
+  pack (2).
+- Every booster is fully drained (`len(picks) == pack_size`), so the multiset
+  of `picks` is also the booster's initial contents.
+
+Pod size, pack count, and pack size are read at load time from `len(seats)`,
+`len(boosters) / len(seats)`, and `len(boosters[0].picks)` respectively.
+
+### 4.2 Field semantics
+
+- **`draft_id`** — UUID grouping the record.
+- **`run_id`** — UUID identifying the `generate-draft-data` invocation that
+  produced this record. One supervisor run stamps the same `run_id` on every
+  draft it appends, so a bad batch can be located and deleted/filtered after
+  the fact by filtering on this field.
+- **`timestamp`** — ISO 8601 UTC string at the moment the draft completed.
+- **`seats[i].agent`** — free-form identifier for whatever played seat `i`:
+  Forge variants (`forge-full`, `forge-r30`, `forge-r100`), our model
+  versions (`draft-agent-v0.1.2`), humans (`human-nicolas`), etc. Identifiers
+  are set by `--agent-mix` at generation time (§ 5.1). The trainer's
+  `--imitation-agents` flag (§ 5.2) decides which agents count as imitation
+  targets; the critic ignores it.
+- **`seats[i].deck`** — the 40-card deck built from seat `i`'s 45-card final
+  pool by the configured `--build-method` (§ 5.1), with basics included.
+- **`seats[i].deck_score`** — the frozen scorer's scalar for that deck's
+  non-basic subset (the scorer's input contract; basics are not scored). The
+  critic label per pick of `(draft_id, i)` is either `deck_score` or its
+  pod-relative form (`deck_score − mean(deck_scores)`), selected by
+  `--critic-target` (§ 5.2). The pod mean is computed across the seats of
+  this draft, skipping any seat whose pool failed to build a legal deck (its
+  `deck` is `[]` and `deck_score` is `null`); such seats are also excluded
+  from critic training.
+- **`boosters[k].set_code`** — MTG set of this booster. Per-booster, not
+  per-draft, so Chaos draft (each booster from a different set) is supported
+  natively.
+- **`boosters[k].picks`** — the cards in the order they were taken from this
+  booster.
+
+### 4.3 Building the deck (default: the picker)
+
+The `deck` and `deck_score` fields are produced by `--build-method` (§ 5.1),
+defaulting to the one-shot picker for throughput: labeling runs one build per
+seat per draft (eight per draft), and the picker's ~5 ms forward versus the SA
+builder's ~5 s is the difference between labeling costing days and costing
+minutes across a large corpus. SA (`greedy`) is the higher-fidelity fallback,
+used only if the § 5.3 validation rejects the picker.
 
 **Feeding 45 cards to a picker trained on ~80 — the technique.** No padding,
 resizing, or special handling. The picker is a set transformer (SAB layers, no
@@ -470,33 +505,37 @@ Two subcommands on the `draft` package's own entry point
 
 Generates a corpus of complete Forge drafts. A Python supervisor spawns Java
 draft workers (a new `DraftWorkerMain`, analogous to `PoolMain` /
-`MatchWorkerMain`) that run Forge's draft AI for all eight seats at their
-assigned skill levels and emit `draft-picks.txt` rows. After each draft
-completes, the supervisor builds a deck from each seat's 45-card pool, scores
-it with the frozen scorer, and appends the `draft-results.txt` rows. Crashed
-workers are restarted (long Forge runs may crash the JVM; recovery handles it).
+`MatchWorkerMain`) that run Forge's draft AI for all eight seats at the agents
+assigned by `--agent-mix`. The supervisor generates a fresh `run_id` (UUID) at
+startup and stamps it on every record it writes. For each completed draft, the
+supervisor receives the transcript from the worker (boosters + per-seat agent
+identifiers), builds a deck from each seat's 45-card pool, scores it with the
+frozen scorer, and appends one complete JSONL record to `drafts.jsonl` (§ 4).
+Crashed workers are restarted (long Forge runs may crash the JVM; recovery
+handles it).
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--n-drafts` | _(required)_ | Number of complete drafts to generate. |
 | `--set` | _(none → random per draft)_ | Restrict all drafts to one set code; otherwise each draft uses an independently chosen random sealed-legal set. |
-| `--skill-mix` | `full:6,r30:1,r100:1` | Per-draft assignment of the eight seats to skill levels. `full` = Forge draft AI; `r30` / `r100` = 30% / 100% of that seat's picks replaced by uniform-random legal picks. Counts must sum to 8. |
+| `--agent-mix` | `forge-full:6,forge-r30:1,forge-r100:1` | Per-draft assignment of pod seats to agent identifiers. Built-in identifiers: `forge-full` = Forge draft AI; `forge-r30` / `forge-r100` = 30% / 100% of that seat's picks replaced by uniform-random legal picks. Counts must sum to `pod_size`. The identifiers chosen here are written into each seat's `agent` field (§ 4.1). |
 | `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer used to label finished decks (scores the built deck under either build method). |
 | `--build-method` | `picker` | How each seat's 45-card pool is built into a 40-card deck for scoring. `picker` runs `--picker-checkpoint` in one ~5 ms forward (§ 4.2); `greedy` runs `GreedyDeckBuilder`'s SA search — the higher-fidelity but ~1000× slower fallback, selected only when the § 5.3 validation shows the picker diverges from SA. |
 | `--picker-checkpoint` | `models/sealed/picker/latest.pt` | Picker used when `--build-method picker`; ignored for `greedy`. |
 | `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache used by the deck build + scorer. |
 | `--workers` | _(host CPU count)_ | Parallel Forge draft workers. |
-| `--output-dir` | `output/draft/` | Destination for `draft-picks.txt` + `draft-results.txt`. |
+| `--output-path` | `output/draft/drafts.jsonl` | Destination JSONL file (§ 4). Records are appended; the file is created if missing. |
 | `--resume` | off | Append to existing files and continue toward `--n-drafts`, counting drafts already present. |
 
-Skill levels serve two purposes (§ 3.4): **opponent diversity** — degraded
-bots vary the signals and open colours the full-skill seats see — and **critic
-coverage** — the critic trains on the degraded seats too, so it learns to value
-the incoherent pools they reach. Degraded seats are *not* imitation targets,
-though; the policy learns from full-skill seats only. Heavily-random pods are
-kept a minority via the default mix, because all-random dynamics (colours wide
-open, signals meaningless) are unrealistic and would teach the policy patterns
-that competent pods punish.
+The agent mix in each pod serves two purposes (§ 3.4): **opponent diversity**
+— weaker agents vary the signals and open colours the strong seats see — and
+**critic coverage** — the critic trains on the weaker-agent seats too, so it
+learns to value the incoherent pools they reach. Weaker-agent seats are *not*
+imitation targets, though; the policy learns only from agents on the
+`--imitation-agents` whitelist (§ 5.2). Heavily-random pods are kept a minority
+via the default mix, because all-random dynamics (colours wide open, signals
+meaningless) are unrealistic and would teach the policy patterns that competent
+pods punish.
 
 ### 5.2 `train-draft-agent`
 
@@ -504,8 +543,7 @@ Trains the policy + critic jointly on a recorded corpus.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--draft-picks-path` | `output/draft/draft-picks.txt` | Per-pick training rows. |
-| `--draft-results-path` | `output/draft/draft-results.txt` | Per-seat reward labels. |
+| `--drafts-path` | `output/draft/drafts.jsonl` | The JSONL file of recorded drafts (§ 4); one record per line, each carrying every pick the policy and critic need. |
 | `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache. |
 | `--d-model` | _(derived: `embedding_dim` + feature widths)_ | Model width. By default `d_model` is the concatenated token width (§ 1.4) and no projection is inserted; a different value inserts a `Linear` from the concatenated width to `d_model`. |
 | `--n-layers` | `4` | SAB layers. |
@@ -514,8 +552,8 @@ Trains the policy + critic jointly on a recorded corpus.
 | `--dropout` | `0.0` | Transformer dropout. |
 | `--imitation-weight` | `1.0` | Coefficient on the cross-entropy term. `0` = critic-only run. |
 | `--critic-weight` | `1.0` | Coefficient on the critic MSE term. `0` = imitation-only run (the "solidify Rung 1 first" mode). |
-| `--imitation-skill-threshold` | `full` | Minimum seat skill whose picks are imitation (policy) targets (§ 3.2). Default `full`: the policy learns from full-skill seats only. The critic is unaffected — it trains on all seats regardless. |
-| `--critic-target` | `pod-relative` | Which `draft-results.txt` reward column the critic regresses (`pod-relative` or `absolute`). |
+| `--imitation-agents` | `forge-full` | Whitelist (comma-separated, or the flag repeated) of agent identifiers whose picks are imitation (policy) targets (§ 3.2). Default `forge-full`: the policy learns only from `forge-full` seats. The critic is unaffected — it trains on all seats regardless. |
+| `--critic-target` | `pod-relative` | Which form of `deck_score` (§ 4.2) the critic regresses: `pod-relative` = `deck_score − mean(deck_scores)` across the pod, or `absolute` = raw `deck_score`. |
 | `--lr` | `3e-4` | AdamW learning rate. |
 | `--warmup-frac` | `0.05` | Fraction of scheduled steps for linear LR warmup. |
 | `--batch-size` | `32` | States per gradient step. |
@@ -552,9 +590,11 @@ absolute agreement.
 
 **Procedure.**
 
-1. Sample a few hundred drafted 45-card pools. The `final_pool` column of an
-   existing `draft-results.txt` is the natural source — this is what makes the
-   script "run on draft event outcomes"; freshly generated pools also work.
+1. Sample a few hundred drafted 45-card pools. An existing `drafts.jsonl` is
+   the natural source — each seat's 45-card final pool is derivable from the
+   record by walking its picks across its three boosters (§ 4.1 conventions),
+   which is what makes the script "run on draft event outcomes"; freshly
+   generated pools also work.
 2. For each pool, build a deck two ways from the same `.npz` cache: the
    one-shot picker (`--picker-checkpoint`) and the SA `GreedyDeckBuilder`.
 3. Score both decks with the frozen scorer → `picker_score`, `sa_score` per
@@ -756,22 +796,22 @@ the policy produces picks and the rollouts the critic learns from, so the
 critic's assumed continuation stays locked to the actual one. Generation 1
 already trains both on the same body; generation 2 closes the loop.
 
-## Skill-laddered data, and why the critic isn't skill-conditioned
+## Agent-mixed data, and why the critic isn't agent-conditioned
 
-Mixing bot strengths in the pod (§ 5.1) does two jobs: opponent diversity for
-the full-skill seats to read, and — since the **critic trains on all seats**
-(§ 3.4) — coverage of the incoherent pools degraded bots reach, which anchors
-the low end of the value scale. An earlier design also fed a per-seat skill tag
-to the model so the critic could learn a skill-aware `V` and be queried with the
+Mixing agents in the pod (§ 5.1) does two jobs: opponent diversity for the
+competent seats to read, and — since the **critic trains on all seats** (§ 3.4)
+— coverage of the incoherent pools weaker agents reach, which anchors the low
+end of the value scale. An earlier design also fed a per-seat agent tag to the
+model so the critic could learn an agent-aware `V` and be queried with the
 policy's tag for `V^π`. We dropped the *tag* — it's an artefact of the synthetic
-data, and the actor never needs it (it always plays full-skill) — but kept
-training the critic broadly. The cost is that a degraded seat's label reflects a
-degraded continuation, so generation-1's `V` is mildly biased; we accept that
-(harmless for a baseline, roughly correct for genuinely-bad pools, § 3.4) rather
-than reintroducing the tag, and generation 2 removes it by regressing on the
-policy's own rollouts. Opponent-seat randomness stays near pure upside and is
-used generously; own-seat randomness and all-random pods are kept a minority, so
-the model is not trained mostly on unrealistic dynamics.
+data, and the actor never needs it (it always plays as the same agent) — but
+kept training the critic broadly. The cost is that a weaker agent's label
+reflects a weak continuation, so generation-1's `V` is mildly biased; we accept
+that (harmless for a baseline, roughly correct for genuinely-bad pools, § 3.4)
+rather than reintroducing the tag, and generation 2 removes it by regressing on
+the policy's own rollouts. Opponent-seat randomness stays near pure upside and
+is used generously; own-seat randomness and all-random pods are kept a
+minority, so the model is not trained mostly on unrealistic dynamics.
 
 ## Self-play regeneration (generation 2)
 
@@ -804,13 +844,13 @@ deck), spreading and sharpening late. Over-confident early predictions signal
 overfitting to noise. Ranking checks, which matter more than absolute values
 because only the per-pick value *jumps* are used downstream: a competent-
 continued state should be valued above the same state with a random
-continuation (skill-laddered ordering), and where pack-2 forks exist the
+continuation (competent-agent ordering), and where pack-2 forks exist the
 critic's jump should agree with the branch that ends better.
 
 # Out of scope
 
 - **Live integration of our policy as a Forge draft seat** (self-play). The
-  generation-1 corpus comes only from Forge's own draft AI and degraded
+  generation-1 corpus comes only from Forge's own draft AI and its weaker
   variants. (Generation 2.)
 - **Reinforcement-learning fine-tuning** of the policy (actor-critic, GAE,
   REINFORCE/PPO, the pod-relative reward as an optimisation objective,
