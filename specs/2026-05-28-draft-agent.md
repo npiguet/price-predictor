@@ -319,10 +319,12 @@ The label pair is:
 
 - **Imitation target**: `boosters[k].picks[j]` — the card the recorded agent
   took at this pick.
-- **Critic target**: `seats[s].deck_score` or its pod-relative form
-  (`--critic-target`, § 5.2). Every pick of a given seat shares this single
-  reward (Monte-Carlo regression — the same label for all 45 states of a
-  draft seat).
+- **Critic target**: the pod-relative form of `seats[s].deck_score` —
+  `seats[s].deck_score − mean({seats[j].deck_score : j ≠ s})`, i.e. the
+  seat's own score minus the mean of the *other* pod seats' scores (leave-
+  one-out) — computed at load time from the JSON record (§ 4.2). Every pick
+  of a given seat shares this single reward (Monte-Carlo regression — the
+  same label for all 45 states of a draft seat).
 
 A draft yields up to 8 × 45 = 360 examples.
 
@@ -461,12 +463,13 @@ Pod size, pack count, and pack size are read at load time from `len(seats)`,
   pool by the configured `--build-method` (§ 5.1), with basics included.
 - **`seats[i].deck_score`** — the frozen scorer's scalar for that deck's
   non-basic subset (the scorer's input contract; basics are not scored). The
-  critic label per pick of `(draft_id, i)` is either `deck_score` or its
-  pod-relative form (`deck_score − mean(deck_scores)`), selected by
-  `--critic-target` (§ 5.2). The pod mean is computed across the seats of
-  this draft, skipping any seat whose pool failed to build a legal deck (its
-  `deck` is `[]` and `deck_score` is `null`); such seats are also excluded
-  from critic training.
+  critic label per pick of `(draft_id, i)` is the **pod-relative** form:
+  `seats[i].deck_score − mean({seats[j].deck_score : j ≠ i})` — the seat's
+  own score minus the mean of the *other* pod seats' scores (leave-one-out;
+  seat `i` is not in the mean, so it can't subtract itself). Computed at
+  load time. The mean skips any seat whose pool failed to build a legal deck
+  (its `deck` is `[]` and `deck_score` is `null`); such seats are also
+  excluded from critic training.
 - **`boosters[k].set_code`** — MTG set of this booster. Per-booster, not
   per-draft, so Chaos draft (each booster from a different set) is supported
   natively.
@@ -504,26 +507,40 @@ Two subcommands on the `draft` package's own entry point
 ### 5.1 `generate-draft-data`
 
 Generates a corpus of complete Forge drafts. A Python supervisor spawns Java
-draft workers (a new `DraftWorkerMain`, analogous to `PoolMain` /
-`MatchWorkerMain`) that run Forge's draft AI for all eight seats at the agents
-assigned by `--agent-mix`. The supervisor generates a fresh `run_id` (UUID) at
-startup and stamps it on every record it writes. For each completed draft, the
-supervisor receives the transcript from the worker (boosters + per-seat agent
+a Java draft worker (a new `DraftWorkerMain`, analogous to `PoolMain` /
+`MatchWorkerMain`) that runs Forge's draft AI for all eight seats at the agents
+assigned by `--agent-mix`. A single worker is sufficient — Forge drafts are
+fast (no game simulation, just pick decisions) — but the supervisor/worker
+split is kept for JVM-crash recovery: the supervisor restarts a fresh worker
+on each crash. The supervisor generates a fresh `run_id` (UUID) at startup and
+stamps it on every record it writes. For each completed draft, the supervisor
+receives the transcript from the worker (boosters + per-seat agent
 identifiers), builds a deck from each seat's 45-card pool, scores it with the
 frozen scorer, and appends one complete JSONL record to `drafts.jsonl` (§ 4).
-Crashed workers are restarted (long Forge runs may crash the JVM; recovery
-handles it).
+
+**Worker → supervisor transport.** The worker emits each completed draft as a
+single line on stdout, prefixed with the sentinel `<<DRAFT-EVENT-JSON>>`
+followed by the compact (no embedded newlines) JSON transcript — boosters and
+per-seat agent identifiers, without `deck`/`deck_score`. The worker `flush()`es
+after each line. The supervisor reads stdout line-by-line, filters for the
+sentinel, attempts to parse the suffix as JSON (silently skipping anything
+that doesn't parse), completes each record with the picker-built `deck` and
+the scorer's `deck_score`, and appends the finalised record to `drafts.jsonl`.
+Forge's incidental stdout output and the worker's own diagnostics on stderr
+are ignored by the parser (stderr is piped to a log file for post-mortems).
+This avoids stdout-noise misparsing without the complexity of a file-based
+pending area. If the supervisor crashes mid-record the in-flight draft is
+lost; if the worker JVM crashes the supervisor restarts it and continues.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--n-drafts` | _(required)_ | Number of complete drafts to generate. |
 | `--set` | _(none → random per draft)_ | Restrict all drafts to one set code; otherwise each draft uses an independently chosen random sealed-legal set. |
-| `--agent-mix` | `forge-full:6,forge-r30:1,forge-r100:1` | Per-draft assignment of pod seats to agent identifiers. Built-in identifiers: `forge-full` = Forge draft AI; `forge-r30` / `forge-r100` = 30% / 100% of that seat's picks replaced by uniform-random legal picks. Counts must sum to `pod_size`. The identifiers chosen here are written into each seat's `agent` field (§ 4.1). |
+| `--agent-mix` | `forge-full:6,forge-r30:1,forge-r100:1` | Probability weights for assigning agents to pod seats. Each of the `pod_size` seats is sampled **independently** from this categorical distribution, normalised across the listed weights (the default gives each seat ≈ 6/8 chance of `forge-full`, 1/8 each of `forge-r30` / `forge-r100`), so pod compositions vary draft-to-draft. The sampled identifier is written into each seat's `agent` field (§ 4.1). Built-in identifiers: `forge-full` = Forge draft AI; `forge-r30` / `forge-r100` = 30% / 100% of that seat's picks replaced by uniform-random legal picks. |
 | `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer used to label finished decks (scores the built deck under either build method). |
 | `--build-method` | `picker` | How each seat's 45-card pool is built into a 40-card deck for scoring. `picker` runs `--picker-checkpoint` in one ~5 ms forward (§ 4.2); `greedy` runs `GreedyDeckBuilder`'s SA search — the higher-fidelity but ~1000× slower fallback, selected only when the § 5.3 validation shows the picker diverges from SA. |
 | `--picker-checkpoint` | `models/sealed/picker/latest.pt` | Picker used when `--build-method picker`; ignored for `greedy`. |
 | `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache used by the deck build + scorer. |
-| `--workers` | _(host CPU count)_ | Parallel Forge draft workers. |
 | `--output-path` | `output/draft/drafts.jsonl` | Destination JSONL file (§ 4). Records are appended; the file is created if missing. |
 | `--resume` | off | Append to existing files and continue toward `--n-drafts`, counting drafts already present. |
 
@@ -553,7 +570,6 @@ Trains the policy + critic jointly on a recorded corpus.
 | `--imitation-weight` | `1.0` | Coefficient on the cross-entropy term. `0` = critic-only run. |
 | `--critic-weight` | `1.0` | Coefficient on the critic MSE term. `0` = imitation-only run (the "solidify Rung 1 first" mode). |
 | `--imitation-agents` | `forge-full` | Whitelist (comma-separated, or the flag repeated) of agent identifiers whose picks are imitation (policy) targets (§ 3.2). Default `forge-full`: the policy learns only from `forge-full` seats. The critic is unaffected — it trains on all seats regardless. |
-| `--critic-target` | `pod-relative` | Which form of `deck_score` (§ 4.2) the critic regresses: `pod-relative` = `deck_score − mean(deck_scores)` across the pod, or `absolute` = raw `deck_score`. |
 | `--lr` | `3e-4` | AdamW learning rate. |
 | `--warmup-frac` | `0.05` | Fraction of scheduled steps for linear LR warmup. |
 | `--batch-size` | `32` | States per gradient step. |
@@ -729,11 +745,19 @@ materialise the agent's decks downstream.
 
 ## Reward / fitness
 
-Accepted: **pod-relative** reward — a seat's deck score minus the pod mean
-(`pod_relative_reward`, § 4.2). Subtracting a pod reference is a variance-
-reducing baseline, and in draft it is more than that: drafters fight over the
-same cards, so the pod-relative reward has a genuine two-sided gradient
-(improving yours degrades theirs).
+Accepted: **pod-relative** reward — a seat's `deck_score` minus the **mean of
+the other pod seats' `deck_score`s** (leave-one-out, so the seat doesn't
+subtract itself), computed at load time from § 4.2's `deck_score` field. It is the only critic
+target — there is no absolute-reward option. Subtracting a pod reference is a
+variance-reducing baseline, and in draft it is more than that: drafters fight
+over the same cards, so the pod-relative reward has a genuine two-sided
+gradient (improving yours degrades theirs). The clinching case is the **hate
+pick** — slightly lowering your own deck to deny a key card to a competitor.
+Under absolute reward that looks bad (your `deck_score` drops); under
+pod-relative reward it is correctly valued positive whenever the competitor's
+deck loses more than yours does. The objective the gameplay actually optimises
+is "win the pod," not "maximise my deck's absolute quality," and pod-relative
+reward is what aligns the gradient with that objective.
 
 - **Aggregate over opponents with the mean, not the max.** Max/argmax is
   high-variance and flips discontinuously through a single opponent; in
@@ -748,7 +772,7 @@ same cards, so the pod-relative reward has a genuine two-sided gradient
   (`binary_cross_entropy_with_logits` on the score delta), so scores are
   already logits: `sigmoid((S_A − S_B)/T)` is a win probability up to one
   temperature `T`, fit in an afternoon on held-out matches. Generation 1's
-  critic regresses the raw `pod_relative_reward` (score space); the
+  critic regresses the pod-relative reward in raw score space; the
   temperature fit is what lets generation 2 switch to the product objective if
   the goal becomes robustly beating the whole pod rather than crushing one
   deck. Transitivity of the scalar score is treated as a working assumption,
