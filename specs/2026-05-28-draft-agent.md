@@ -58,7 +58,11 @@ observed.
 Each card token is the card's `.npz` vector with three concatenated draft
 features: a 4-dim type one-hot and two recency embeddings (§ 1.4). The four
 token types are mutually exclusive — every observed card *instance* is in
-exactly one set at a time.
+exactly one set at a time. The one-hot's four positions correspond one-to-one
+to the types below, with exactly one position set per token; **this one-hot is
+the sole differentiator of multiset membership** — two tokens for the same card
+name in different sets share the `.npz` block and differ only in these four
+dimensions. The trunk learns the per-type interpretation from them (§ 1.4).
 
 | Type | Contents | Dedup | Lifecycle |
 |------|----------|-------|-----------|
