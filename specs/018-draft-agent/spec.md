@@ -19,6 +19,19 @@ The objective the whole stack optimises is win rate **when the Forge AI pilots t
 deck the agent drafts** — Forge's piloting tendencies are the target distribution
 by design, not a bias to correct.
 
+## Clarifications
+
+### Session 2026-05-31
+
+- Q: Default `--imitation-weight` / `--critic-weight`, given imitation CE (≈ ln P
+  nats) and the raw critic MSE (Bradley-Terry score differences, O(1) or smaller)
+  live on very different scales? → A: Both default to `1.0`; the critic regression
+  target is z-scored to zero mean / unit variance over the training split so the 1:1
+  balance holds and the critic still trains meaningfully on every non-failed seat,
+  with the standardization mean/std recorded in the checkpoint and predictions
+  de-standardized back to raw scorer-score space at inference. Policy still trains on
+  the imitation whitelist only; the critic still trains on all non-failed seats.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Generate a labeled draft corpus (Priority: P1)
@@ -281,12 +294,18 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
 - **FR-032**: The critic target MUST be the leave-one-out pod-relative reward
   `seats[s].deck_score − mean({seats[j].deck_score : j ≠ s})`, shared by all of a
   seat's states (Monte-Carlo regression); failed-build seats are excluded from both
-  the mean and critic training.
+  the mean and critic training. For optimisation stability this target MUST be
+  standardized to zero mean / unit variance over the training split before the MSE;
+  the standardization mean and std MUST be recorded in the checkpoint (FR-040) and
+  critic predictions de-standardized back to raw scorer-score space at inference (no
+  win-probability calibration).
 - **FR-033**: The loss MUST be
   `imitation_weight · CE(policy, taken)` over imitation-whitelisted seats only, plus
-  `critic_weight · MSE(critic, reward)` over all (non-failed) seats. The imitation
-  whitelist is set by `--imitation-agents` (default `forge-full`) and does not affect
-  the critic.
+  `critic_weight · MSE(critic, reward)` over all (non-failed) seats, with
+  `--imitation-weight` and `--critic-weight` both defaulting to `1.0` (the critic
+  target standardization in FR-032 is what keeps this 1:1 balance meaningful). The
+  imitation whitelist is set by `--imitation-agents` (default `forge-full`) and does
+  not affect the critic.
 - **FR-034**: Optimisation MUST use AdamW with per-parameter-group max-norm gradient
   clipping (`--max-grad-norm`, default 1.0) and a linear LR warmup over the first
   `--warmup-frac` (default 0.05) of scheduled steps, then constant `--lr`
@@ -312,7 +331,8 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   critic head + recency and context embedding tables; type is a one-hot, not a learned
   table), `config` (architecture: `d_model`, `n_layers`, `n_heads`, `ff_dim`,
   `dropout`, derived `embedding_dim`, and booster size `P`), and `epoch`,
-  `best_val_loss`, plus training metadata. No encoder weights are embedded.
+  `best_val_loss`, plus training metadata including the critic-target standardization
+  mean/std (FR-032). No encoder weights are embedded.
 - **FR-041**: Checkpoints MUST be written as `{timestamp}.pt` and `latest.pt` under
   `models/draft/agent/`.
 
@@ -379,7 +399,9 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   paths and were produced by an `encode-cards` run whose `.npz` width matches; width
   mismatches fail fast per the existing scorer/picker contracts.
 - Reward is regressed in raw scorer-score space (no temperature calibration in
-  generation 1); calibration to win-probability is a generation-2 concern.
+  generation 1) — the critic target is z-scored to unit variance only for
+  optimisation stability and de-standardized back to raw scorer-score space at
+  inference (FR-032); calibration to win-probability is a generation-2 concern.
 - Generation 1 ships data generation, training, and offline evaluation only — there
   is no inference/play-out CLI and no live Forge seat.
 
