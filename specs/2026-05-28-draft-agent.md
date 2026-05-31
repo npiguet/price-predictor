@@ -33,7 +33,7 @@ arrive in gen 2.
 | Artefact | Role here |
 |----------|-----------|
 | Sealed scorer (`models/sealed/scorer/latest.pt`) | Labels each finished drafted deck with a scalar score. |
-| One-shot picker (`models/sealed/picker/latest.pt`) | Builds a 40-card deck from each seat's 45-card drafted pool for scoring. |
+| One-shot picker (`models/sealed/picker/latest.pt`) | Builds a 40-card deck from each seat's drafted pool for scoring. |
 | `.npz` cache from `encode-cards` (`output/cardsfolder/`) | Per-card vectors of width `embedding_dim = pooled_dim + FEATURE_COUNT`. |
 | `GreedyDeckBuilder` + `compute_basic_lands` | Fallback (SA) deck builder for labeling. |
 | Forge-connector pattern (Python supervisor + Java worker) | Same as `generate-pools` / `match-outcomes`. |
@@ -277,7 +277,7 @@ Pod size, pack count, and pack size are read at load time from
 | `run_id` | UUID of the `generate-draft-data` invocation; one run stamps the same `run_id` on every record it appends, so a bad batch can be located and filtered/deleted after the fact. |
 | `timestamp` | ISO 8601 UTC at draft completion. |
 | `seats[i].agent` | Free-form identifier (`forge-full`, `forge-r30`, `forge-r100`, `draft-agent-v0.1.2`, `human-nicolas`, …). Set by `--agent-mix` (§ 5.1); read by `--imitation-agents` (§ 5.2). |
-| `seats[i].deck` | 40-card deck built from seat `i`'s 45-card pool by `--build-method` (§ 5.1); includes basics. |
+| `seats[i].deck` | 40-card deck built from seat `i`'s drafted pool by `--build-method` (§ 5.1); includes basics. |
 | `seats[i].deck_score` | Frozen scorer's scalar for the non-basic subset of `deck` (basics not scored). The critic label is the **pod-relative** form `seats[i].deck_score − mean({seats[j].deck_score : j ≠ i})` — leave-one-out, computed at load time. Failed builds: `deck = []`, `deck_score = null`; excluded from the mean and from critic training. |
 | `boosters[k].set_code` | MTG set of this booster. Per-booster (not per-draft) so Chaos draft is supported natively. |
 | `boosters[k].picks` | Cards in pick-order. |
@@ -288,11 +288,12 @@ Pod size, pack count, and pack size are read at load time from
 to `picker`. `greedy` is the higher-fidelity SA fallback, selected only if
 the § 5.3 validation rejects the picker.
 
-The picker is fed the 45-card pool with no padding or resizing — its set
-transformer is length-agnostic, so the 45 cards run through the same code
-path a ~80-card sealed pool takes. `(1, 45, embedding_dim)` tensor +
-all-true mask → 45 logits → the spec-017 spell-quota walk selects the
-23-spell deck; `compute_basic_lands` fills basics.
+The picker is fed the full drafted pool (`3 × pack_size` cards, e.g. 45 for a
+15-card-pack set) with no padding or resizing — its set transformer is
+length-agnostic, so those cards run through the same code path a ~80-card
+sealed pool takes. `(1, pool_size, embedding_dim)` tensor + all-true mask →
+`pool_size` logits → the spec-017 spell-quota walk selects the 23-spell deck;
+`compute_basic_lands` fills basics.
 
 # 5. CLI
 
@@ -307,7 +308,7 @@ is kept for JVM-crash recovery (the supervisor restarts the worker on
 crash); a single worker suffices. The supervisor generates a fresh
 `run_id` (UUID) at startup and stamps it on every record. For each
 completed draft the supervisor receives the transcript from the worker,
-builds a deck from each seat's 45-card pool, scores it, and appends one
+builds a deck from each seat's drafted pool, scores it, and appends one
 complete JSONL record to `drafts.jsonl`.
 
 **Worker → supervisor transport.** The worker emits each completed draft
@@ -369,8 +370,8 @@ pair before committing to a large `generate-draft-data` run.
 
 **Procedure.**
 
-1. Sample a few hundred drafted 45-card pools. The natural source is an
-   existing `drafts.jsonl` (each seat's 45-card final pool is derivable by
+1. Sample a few hundred drafted pools. The natural source is an
+   existing `drafts.jsonl` (each seat's final pool is derivable by
    walking its picks across its three boosters, per § 4.1 conventions);
    fresh pools also work.
 2. Build each pool two ways: the one-shot picker and the SA
