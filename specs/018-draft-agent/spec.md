@@ -25,8 +25,8 @@ by design, not a bias to correct.
 
 A researcher runs a single command to produce a corpus of complete Forge drafts.
 Forge's draft AI fills all eight seats (some seats optionally degraded with random
-picks), and for every seat the system builds a 40-card deck from the 45-card pool
-and scores it with the frozen sealed scorer. Each finished draft is appended as one
+picks), and for every seat the system builds a 40-card deck from the seat's full
+drafted pool and scores it with the frozen sealed scorer. Each finished draft is appended as one
 self-contained JSON record to an append-only file.
 
 **Why this priority**: Training has no input without this corpus. It is the
@@ -43,7 +43,7 @@ state at any pick from the record alone.
    **When** the researcher runs `generate-draft-data --n-drafts 10`, **Then** the
    output file contains 10 self-contained JSON records, one per line, each with
    `pod_size` seats and `pod_size × packs` fully-drained boosters.
-2. **Given** a seat whose 45-card pool cannot be built into a legal deck, **When**
+2. **Given** a seat whose drafted pool cannot be built into a legal deck, **When**
    the record is written, **Then** that seat has `deck = []` and `deck_score = null`,
    and the run continues.
 3. **Given** a long Forge AI draft crashes the worker JVM mid-run, **When** the
@@ -108,7 +108,7 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
 
 **Acceptance Scenarios**:
 
-1. **Given** a set of drafted 45-card pools, **When** the diagnostic runs, **Then**
+1. **Given** a set of drafted pools, **When** the diagnostic runs, **Then**
    it builds each pool both ways, scores both with the frozen scorer, and reports the
    picker-vs-SA Spearman correlation plus the SA-vs-SA reference ceiling.
 2. **Given** the picker tracks SA roughly as well as SA tracks itself, **Then** the
@@ -171,13 +171,13 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   `forge-r100` (30% / 100% of that seat's picks replaced by uniform-random legal
   picks).
 - **FR-007**: For each completed draft the supervisor MUST build a 40-card deck from
-  each seat's 45-card pool using `--build-method` (default `picker`; alternative
+  each seat's full drafted pool using `--build-method` (default `picker`; alternative
   `greedy`), score the non-basic subset with the frozen scorer
   (`--scorer-checkpoint`, default `models/sealed/scorer/latest.pt`), and append one
   complete JSON record.
 - **FR-008**: When `--build-method picker`, the picker (`--picker-checkpoint`,
-  default `models/sealed/picker/latest.pt`) MUST be fed each 45-card pool with no
-  padding or resizing, producing the 23-spell deck via the existing spell-quota walk,
+  default `models/sealed/picker/latest.pt`) MUST be fed each seat's full drafted pool
+  with no padding or resizing, producing the 23-spell deck via the existing spell-quota walk,
   with basics filled by the existing basic-land computation.
 - **FR-009**: `--set` MUST restrict all drafts to one set code; when omitted, each
   draft independently selects a random sealed-legal set.
@@ -319,7 +319,7 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
 #### Builder validation diagnostic
 
 - **FR-042**: A one-off diagnostic script (not a CLI subcommand) MUST, over a few
-  hundred drafted 45-card pools, build each pool with both the picker and the SA
+  hundred drafted pools, build each pool with both the picker and the SA
   greedy builder, score both with the frozen scorer, and report the picker-vs-SA
   Spearman rank correlation, the distribution (median + spread) of the SA−picker
   score gap, and the SA-vs-SA reference correlation across independent SA restarts.
@@ -368,9 +368,13 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
 
 ## Assumptions
 
-- Pod size is 8, with 3 packs of 15 cards (45 picks per seat), matching standard
-  Forge booster draft; the loader derives these from each record rather than hardcoding
-  them, so other pod/pack sizes are representable.
+- Pod size is 8 and there are 3 packs per draft, matching standard Forge booster
+  draft. Pack size `P` is **set-dependent** (typically 12–15 cards) — it is not a
+  fixed constant. The loader derives pod size, pack count, and pack size from each
+  record (`len(seats)`, `len(boosters)/len(seats)`, `len(boosters[0].picks)`; FR-016)
+  rather than hardcoding them, and `P`-dependent table sizes (`pick_number`,
+  `pick_ago`) are recorded in the checkpoint config (FR-040), so other pod/pack sizes
+  are representable. A single draft's boosters are assumed to share one pack size.
 - The frozen sealed scorer and one-shot picker checkpoints exist at their default
   paths and were produced by an `encode-cards` run whose `.npz` width matches; width
   mismatches fail fast per the existing scorer/picker contracts.
