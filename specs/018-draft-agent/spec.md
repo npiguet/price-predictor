@@ -234,6 +234,14 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   remaining `PASSED` instances flush to `TAKEN`.
 - **FR-020**: Each card token MUST be the card's `.npz` vector concatenated with a
   4-dim type one-hot and two learned recency embeddings (`packs_ago`, `pick_ago`).
+  The one-hot's four positions correspond one-to-one to the FR-018 types
+  (`POOL`, `PACK`, `PASSED`, `TAKEN`), with exactly one position set per token —
+  this one-hot is the **sole differentiator of multiset membership**: two tokens
+  for the same card name in different sets share the `.npz` block and differ only
+  in these four dimensions. Because there is no input projection (FR-025), those
+  dimensions persist through the residual stream and the first transformer layer's
+  query/key/value projections are where the per-type interpretation is learned; no
+  separate learned type table is used.
 - **FR-021**: `packs_ago ∈ {0,1,2}` MUST measure packs since the card was last in the
   seat's pack (`0` = this pack / wheel-capable). `pick_ago ∈ {0,…,P−1}` MUST measure
   picks since the card was last in the seat's pack prior to the current pick (`0` if
