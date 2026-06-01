@@ -4,13 +4,19 @@ REINFORCE-from-random-init against a frozen scorer, with a per-pool
 empirical-mean baseline, an entropy bonus on a val-reward-driven decay
 schedule, and an auxiliary pool-quality head (spec 017).
 
-TODO(shared-trainer): three trainers now share the resume / bootstrap /
-best-vs-latest persistence / fail-fast width-check / early-stop scaffolding —
-``train_encoder``, ``train_scorer``, and this ``train_picker``. They diverge on
-loss type (weighted MSE+MLM / pairwise BCE / REINFORCE-with-baseline), metric
-direction (val_loss / val_acc / val_reward), and per-step dataset shape, so a
-unifying abstraction would be a generic training loop (premature today). If a
-fourth REINFORCE-style trainer arrives, extract the common scaffolding then.
+shared-trainer (resolved, spec 018): four trainers now share the resume /
+bootstrap / best-vs-latest persistence / fail-fast width-check / early-stop
+scaffolding — ``train_encoder``, ``train_scorer``, ``train_picker``, and
+``draft.application.train_draft_agent`` (supervised CE + MC-regression MSE).
+The fourth arrival was *not* REINFORCE-style (the original extraction trigger),
+and it diverges yet again on dataset shape (per-(draft,seat,pick) typed-token
+states) and on carrying two heads over two seat-subsets. The genuinely
+identical pieces remain small and stable — the warmup ``LambdaLR`` lambda and
+the per-group ``clip_grad_norm_`` — while loss/metric/val bodies differ across
+all four. Decision (re-evaluated in specs/018-draft-agent, research §Third-
+instance check): **defer extraction**; a generic loop over four loss/metric/
+shape variants would be speculative coupling (Simplicity-First). Each trainer
+copies the two small helpers by following the pattern.
 """
 
 from __future__ import annotations

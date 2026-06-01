@@ -776,3 +776,34 @@ The `@torch.no_grad()` decorator is applied because `encode-cards` is inference-
 models/             Trained model artifacts (.gitignored)
 resources/          Frozen MTGJSON data files
 ```
+
+## `python -m draft` — Draft Agent
+
+The `draft` module trains a generation-1 MTG-draft agent: a two-headed set
+transformer (imitation **policy** over the cards in the current pack + a
+Monte-Carlo **critic** on a context token) learned offline from a corpus of
+Forge-generated drafts. It reuses the sealed scorer, picker, greedy builder,
+embedding cache, and Forge worker pattern. Per-command flags and the data
+formats are documented in `CLAUDE.md` and `specs/018-draft-agent/quickstart.md`;
+the launch entries are:
+
+```bash
+# 1. (optional) decide picker vs SA as the labeling builder
+python -m draft.scripts.validate_builder --pools-from output/draft/drafts.jsonl
+
+# 2. generate a labeled draft corpus (drives Forge's draft AI for all pod seats)
+python -m draft generate-draft-data --n-drafts 1000          # random set per draft
+python -m draft generate-draft-data --n-drafts 1000 --set BLB
+python -m draft generate-draft-data --n-drafts 1000 --resume # continue a stopped run
+
+# 3. train the two-headed agent (policy + critic)
+python -m draft train-draft-agent
+python -m draft train-draft-agent --imitation-weight 0       # critic-only ablation
+python -m draft train-draft-agent --resume models/draft/agent/latest.pt
+```
+
+Requires the `forge-connector` fat JAR (now also containing `DraftWorkerMain`),
+a frozen sealed scorer + picker, and a populated `.npz` card cache. The corpus
+is `output/draft/drafts.jsonl` (one self-contained record per line); checkpoints
+land under `models/draft/agent/`. Full per-command detail intentionally lives in
+`CLAUDE.md` and the spec's `quickstart.md` to avoid duplicating it here.

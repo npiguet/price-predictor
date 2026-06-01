@@ -104,6 +104,24 @@ Key modules inside `sealed`:
 - `application/` — `build_vocab.py`, `train_encoder.py`, `encode_cards.py`, `generate_pools.py`, `build_decks.py`, `match_outcomes.py`, `train_scorer.py`, `train_picker.py`, `pick_decks.py`, `evaluate_scorer.py`.
 - `infrastructure/` — `cli.py`, `cards_played_reader.py`, `encoder_store.py`, `embedding_store.py`, `pool_connector.py`, `match_worker_connector.py`, `evaluation_connector.py`, `match_data_loader.py`, `scorer_store.py`, `picker_store.py`, `card_name_corrections.py`.
 
+### `draft` — draft-agent ML pipeline
+
+Entry point: `python -m draft <subcommand>` (see `src/draft/__main__.py` and `infrastructure/cli.py`). A generation-1 MTG-draft agent: a two-headed Set Transformer (imitation **policy** over the cards in the current pack + a Monte-Carlo **critic** on a context token) trained offline from a corpus of Forge-generated drafts. `draft` **imports from** `sealed` and `price_predictor` (scorer, picker, greedy builder, embedding layout, card locator, checkpoint plumbing, Forge worker pattern); never the reverse.
+
+Subcommands:
+- **`generate-draft-data`** — supervisor (Python) + Java `DraftWorkerMain` that drives Forge's draft AI for all pod seats. The worker streams one `<<DRAFT-EVENT-JSON>>` transcript per completed draft (boosters + per-seat agent); the supervisor reconstructs each seat's drafted pool from the booster geometry, builds a deck per seat with the frozen picker (`--build-method picker`, default) or SA greedy builder (`greedy`), scores the non-basic subset with the frozen scorer, and appends one self-contained record to `output/draft/drafts.jsonl`. One `run_id` (UUID) per invocation; crashed workers are restarted toward `--n-drafts` (Ctrl-C stops cleanly); `--resume` counts pre-existing records. `--set` restricts every draft to one set (else a random sealed-legal set per draft); `--agent-mix` (default `forge-full:6,forge-r30:1,forge-r100:1`) is a categorical sampled independently per seat — `forge-full` is pure Forge AI, `forge-r30`/`forge-r100` replace 30%/100% of that seat's picks with uniform-random legal picks.
+- **`train-draft-agent`** — turns each `(draft, seat, pack, pick)` into a typed-token training example (`[CONTEXT][POOL][PACK][PASSED][TAKEN]` with learned `packs_ago`/`pick_ago` recency), then trains the imitation policy (cross-entropy over `--imitation-agents`-whitelisted seats' `PACK` tokens; default whitelist `forge-full`) and the critic (MSE over the standardized leave-one-out pod-relative reward of every non-failed seat) jointly: `L = imitation_weight·CE + critic_weight·MSE`. AdamW + linear-warmup-then-constant LR + per-group max-norm clip; draft-disjoint train/val split (`random_seed=42`); per-epoch log of the loss split + val imitation top-1/top-3 + per-`pack_number` critic MSE; best-by-val-loss checkpoint + `latest.pt` under `models/draft/agent/`. `--d-model` default derives from the `.npz` width + feature widths (non-default inserts a `Linear`); `d_model % n_heads == 0` and architecture-flags-with-`--resume`/`--checkpoint` both fail fast. The critic-target standardization mean/std are stored in the checkpoint and de-standardized at inference back to raw scorer-score space.
+
+The builder-validation diagnostic is a **script**, not a subcommand: `python -m draft.scripts.validate_builder --pools-from output/draft/drafts.jsonl` (or `--fresh-pools --set X --n-pools N`) builds each drafted pool with both the picker and SA, scores both with the frozen scorer, and prints the gating picker-vs-SA Spearman, the SA−picker score-gap median/IQR, and the SA-vs-SA reference ceiling — run once per picker/scorer pair to choose `--build-method`.
+
+Drafts file format (`output/draft/drafts.jsonl`): one self-contained JSON record per line, append-only; readers tolerate a trailing partial final line. Each record has `draft_id`, `run_id`, `timestamp` (ISO 8601 UTC), `seats` (length `pod_size`; each `{agent, deck (40 names incl. basics, or [] on failed build), deck_score (scorer scalar, or null on failed build)}`), and `boosters` (length `pod_size × packs`; each `{set_code, picks}` where `picks` is the cards drafted from that physical pack in pick order, fully drained to `pack_size`). The booster *ordering* pins all geometry: `pack_number(k)=⌊k/pod_size⌋+1`, `opening_seat(k)=k mod pod_size`, and the pick at offset `j` of `boosters[k]` was made by seat `(opening_seat + j·dir_p) mod pod_size` with `dir_p=+1` for packs 1 & 3 and `−1` for pack 2 — so any seat's full observation history reconstructs from the record alone (`draft/domain/draft_geometry.py`).
+
+Key modules inside `draft`:
+- `domain/` — `draft_geometry.py` (FR-016 booster↔seat/pick geometry + `DraftRecord`/`Seat`/`Booster` dataclasses + drafted-pool reconstruction), `draft_state.py` (typed-token state assembly with wheel-diff/pack-flush `PASSED→TAKEN` transitions + recency), `draft_agent_model.py` (`DraftAgentConfig` + `DraftAgentModel`: SAB trunk + policy head + critic head).
+- `application/` — `agent_mix.py` (parse/sample `--agent-mix`), `generate_draft_data.py` (supervisor + sentinel parsing + record assembly + picker/greedy labelers), `train_draft_agent.py` (loader + joint training loop + val metrics), `validate_builder.py` (diagnostic logic).
+- `infrastructure/` — `cli.py`, `draft_record_io.py` (JSONL read/write + resume count), `draft_worker_connector.py` (launches `DraftWorkerMain`), `draft_agent_store.py` (checkpoint save/load, mirrors `PickerStore`).
+- `scripts/` — `validate_builder.py` (~40-line entry for the builder diagnostic).
+
 ### `forge-connector` — Java Maven module
 
 Zero-dependency (stdlib-only) Java 17+ library at `forge-connector/` with two roles:
@@ -115,12 +133,15 @@ Zero-dependency (stdlib-only) Java 17+ library at `forge-connector/` with two ro
    - `MatchWorkerMain` — one per worker in `python -m sealed match-outcomes`
    - `ValidationWorkerMain` — `python -m sealed evaluate-scorer`
    - `DeckBuilderMain` — used during scorer evaluation to build decks from pools
+   - `DraftWorkerMain` — one per worker in `python -m draft generate-draft-data` (drives Forge's `BoosterDraft`/`LimitedPlayerAI` for all pod seats, streams one transcript per draft)
 
 These workers import `forge-game` / `forge-core` from the sibling `../forge` checkout (classpath assembled in `run_convert` in `infrastructure/cli.py`). `ForgeEnvironmentInitializer` bootstraps Forge's static state in each JVM.
 
 ### Cross-package dependencies
 
 `sealed` **imports from** `price_predictor` (tokenizer, vocabulary builder, transformer model/store) — `price_predictor` provides the shared MTG tokenizer, vocab-build utility, and the alternate price-trained encoder available via `--encoder-checkpoint`. Don't create the reverse dependency.
+
+`draft` **imports from** `sealed` and `price_predictor` (scorer, picker, greedy builder, `deck_assembly`, `score_decks`, `ConvertedCardLocator`, card-embedding layout, `torch_checkpoint`, `forge_jvm` worker helpers) — never the reverse. `draft` adds only the genuinely-new logic (booster→state geometry, typed-token state, the two-headed model, the Java draft worker).
 
 ## Tests
 
@@ -140,6 +161,8 @@ models/
     encoder/        {timestamp}.pt, latest.pt, vocab.txt
     scorer/         checkpoints (best_* selected by val accuracy)
     picker/         latest.pt (per epoch), best_{timestamp}.pt (best val reward)
+  draft/
+    agent/          {timestamp}.pt (best by val loss), latest.pt (per epoch)
 ```
 
 Inputs the code expects to find on disk:
@@ -150,6 +173,7 @@ Inputs the code expects to find on disk:
 - `output/sealed/generated-decks.txt` — scorer-built 40-card decks from `build-decks` (`LABEL;SET_CODE;Card1|...|Card40` per line); input to `match-outcomes --side-a-decks` / `--side-b-decks`.
 - `output/sealed/match-outcomes.txt` — append-only training data for the scorer.
 - `output/sealed/cards-played.txt` — append-only per-game card-play log; the input to `train-encoder` after label aggregation.
+- `output/draft/drafts.jsonl` — append-only labeled draft corpus from `generate-draft-data` (one self-contained JSON record per line); the input to `train-draft-agent`.
 
 ## Specs
 
