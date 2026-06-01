@@ -112,11 +112,31 @@ def parse_sentinel_line(line: str) -> dict[str, Any] | None:
 
 
 class DeckLabeler(Protocol):
-    """Builds + scores a 40-card deck from one seat's drafted pool."""
+    """Builds + scores a 40-card deck from one seat's drafted pool.
+
+    A labeler MAY additionally implement ``build_and_score_many(pools)`` to label
+    a whole pod's seats in one batched GPU pass; :func:`_label_pools` uses it when
+    present and otherwise falls back to per-pool ``build_and_score``.
+    """
 
     def build_and_score(self, pool: list[str]) -> tuple[list[str], float | None]:
         """Return ``(deck, deck_score)``; ``([], None)`` on a failed build."""
         ...
+
+
+def _label_pools(
+    labeler: DeckLabeler, pools: list[list[str]],
+) -> list[tuple[list[str], float | None]]:
+    """Label all of a pod's seat pools, batching when the labeler supports it.
+
+    The real picker/greedy labelers expose ``build_and_score_many`` so the 8
+    seats of a draft go through one picker forward + one scorer forward instead
+    of 16 batch-of-1 calls; simple test doubles only need ``build_and_score``.
+    """
+    batch = getattr(labeler, "build_and_score_many", None)
+    if batch is not None:
+        return batch(pools)
+    return [labeler.build_and_score(p) for p in pools]
 
 
 def assemble_record(
@@ -142,11 +162,12 @@ def assemble_record(
         boosters=boosters,
     )
     geo = DraftGeometry.from_record(placeholder)
-    seats: list[Seat] = []
-    for seat_idx, agent in enumerate(agents):
-        pool = geo.drafted_pool(placeholder, seat_idx)
-        deck, score = labeler.build_and_score(pool)
-        seats.append(Seat(agent=agent, deck=deck, deck_score=score))
+    pools = [geo.drafted_pool(placeholder, i) for i in range(len(agents))]
+    labeled = _label_pools(labeler, pools)
+    seats = [
+        Seat(agent=agent, deck=deck, deck_score=score)
+        for agent, (deck, score) in zip(agents, labeled)
+    ]
     return DraftRecord(
         draft_id=transcript["draft_id"],
         run_id=run_id,
@@ -203,6 +224,17 @@ class _PickerLabeler:
         self._device = device
 
     def build_and_score(self, pool: list[str]) -> tuple[list[str], float | None]:
+        return self.build_and_score_many([pool])[0]
+
+    def build_and_score_many(
+        self, pools: list[list[str]],
+    ) -> list[tuple[list[str], float | None]]:
+        """Label a whole pod in one picker forward + one scorer forward.
+
+        Pools with < 23 embeddable cards fail to ``([], None)`` and are left out
+        of both batches; the rest are zero-padded to the pod's longest pool,
+        run through the picker once, decomposed into decks, and scored once.
+        """
         import numpy as np
 
         from sealed.application.deck_assembly import (
@@ -213,19 +245,42 @@ class _PickerLabeler:
         from sealed.domain.greedy_deck_builder import NONLAND_DECK_SIZE
         from sealed.domain.picker_model import decompose_picks
 
-        embeddings, valid = load_pool_embeddings(pool, self._locator)
-        if len(valid) < NONLAND_DECK_SIZE:
-            return [], None
-        embs = [embeddings[n] for n in valid]
-        arr = np.stack(embs).astype(np.float32)
-        cards = self._torch.from_numpy(arr).unsqueeze(0).to(self._device)
-        mask = self._torch.ones(1, arr.shape[0], dtype=self._torch.bool, device=self._device)
-        with self._torch.no_grad():
-            logits, _ = self._model(cards, mask)
-        chosen = decompose_picks(logits[0].cpu(), embs, valid)
-        deck = assemble_full_deck(chosen, self._locator)
-        score = score_decks(self._scorer, [deck], self._locator)[0]
-        return deck, float(score)
+        torch = self._torch
+        results: list[tuple[list[str], float | None] | None] = [None] * len(pools)
+        prepared: list[tuple[int, list[str], list]] = []
+        for i, pool in enumerate(pools):
+            embeddings, valid = load_pool_embeddings(pool, self._locator)
+            if len(valid) < NONLAND_DECK_SIZE:
+                results[i] = ([], None)
+                continue
+            prepared.append((i, valid, [embeddings[n] for n in valid]))
+
+        if prepared:
+            b = len(prepared)
+            max_n = max(len(embs) for _, _, embs in prepared)
+            dim = prepared[0][2][0].shape[0]
+            arr = np.zeros((b, max_n, dim), dtype=np.float32)
+            mask_np = np.zeros((b, max_n), dtype=bool)
+            for row, (_, _, embs) in enumerate(prepared):
+                arr[row, : len(embs)] = np.stack(embs)
+                mask_np[row, : len(embs)] = True
+            cards = torch.from_numpy(arr).to(self._device)
+            mask = torch.from_numpy(mask_np).to(self._device)
+            with torch.no_grad():
+                logits, _ = self._model(cards, mask)
+            logits_cpu = logits.cpu()  # single device->host sync for the pod
+
+            decks: list[list[str]] = []
+            deck_idx: list[int] = []
+            for row, (i, valid, embs) in enumerate(prepared):
+                chosen = decompose_picks(logits_cpu[row, : len(embs)], embs, valid)
+                decks.append(assemble_full_deck(chosen, self._locator))
+                deck_idx.append(i)
+            scores = score_decks(self._scorer, decks, self._locator)
+            for j, i in enumerate(deck_idx):
+                results[i] = (decks[j], float(scores[j]))
+
+        return [r if r is not None else ([], None) for r in results]
 
 
 class _GreedyLabeler:
@@ -236,6 +291,12 @@ class _GreedyLabeler:
         self._locator = locator
 
     def build_and_score(self, pool: list[str]) -> tuple[list[str], float | None]:
+        return self.build_and_score_many([pool])[0]
+
+    def build_and_score_many(
+        self, pools: list[list[str]],
+    ) -> list[tuple[list[str], float | None]]:
+        """Per-pool SA search (independent), then one batched scorer forward."""
         from sealed.application.deck_assembly import (
             assemble_full_deck,
             load_pool_embeddings,
@@ -246,13 +307,22 @@ class _GreedyLabeler:
             GreedyDeckBuilder,
         )
 
-        embeddings, valid = load_pool_embeddings(pool, self._locator)
-        if len(valid) < NONLAND_DECK_SIZE:
-            return [], None
-        chosen = GreedyDeckBuilder(self._scorer, embeddings).build(valid)
-        deck = assemble_full_deck(chosen, self._locator)
-        score = score_decks(self._scorer, [deck], self._locator)[0]
-        return deck, float(score)
+        results: list[tuple[list[str], float | None] | None] = [None] * len(pools)
+        decks: list[list[str]] = []
+        deck_idx: list[int] = []
+        for i, pool in enumerate(pools):
+            embeddings, valid = load_pool_embeddings(pool, self._locator)
+            if len(valid) < NONLAND_DECK_SIZE:
+                results[i] = ([], None)
+                continue
+            chosen = GreedyDeckBuilder(self._scorer, embeddings).build(valid)
+            decks.append(assemble_full_deck(chosen, self._locator))
+            deck_idx.append(i)
+        if decks:
+            scores = score_decks(self._scorer, decks, self._locator)
+            for j, i in enumerate(deck_idx):
+                results[i] = (decks[j], float(scores[j]))
+        return [r if r is not None else ([], None) for r in results]
 
 
 # --------------------------------------------------------------------------- #
