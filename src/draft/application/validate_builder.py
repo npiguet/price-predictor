@@ -16,9 +16,15 @@ torch/Forge); the surrounding builder/scorer wiring reuses ``sealed``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+
+
+def _log(message: str) -> None:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] {message}", flush=True)
 
 
 @dataclass(frozen=True)
@@ -143,15 +149,23 @@ def run_validate(config: ValidateBuilderConfig) -> BuilderDiagnostic:
     picker = PickerModel(picker_ckpt.config)
     picker.load_state_dict(picker_ckpt.model_state_dict)
     picker.eval().to(device)
+    _log(f"Loaded scorer + picker on {device}")
 
     pools = _source_pools(config)
+    _log(f"Sourced {len(pools)} pools; building picker + 2 SA decks each...")
 
     picker_scores: list[float] = []
     sa_a: list[float] = []
     sa_b: list[float] = []
-    for pool in pools:
+    skipped = 0
+    total = len(pools)
+    report_every = max(1, total // 20)
+    for i, pool in enumerate(pools, start=1):
         embeddings, valid = load_pool_embeddings(pool, locator)
         if len(valid) < NONLAND_DECK_SIZE:
+            skipped += 1
+            if i % report_every == 0 or i == total:
+                _log(f"  {i}/{total} pools  ({len(picker_scores)} scored, {skipped} skipped)")
             continue
         embs = [embeddings[n] for n in valid]
         arr = np.stack(embs).astype(np.float32)
@@ -172,7 +186,13 @@ def run_validate(config: ValidateBuilderConfig) -> BuilderDiagnostic:
         picker_scores.append(scores[0])
         sa_a.append(scores[1])
         sa_b.append(scores[2])
+        if i % report_every == 0 or i == total:
+            _log(f"  {i}/{total} pools  ({len(picker_scores)} scored, {skipped} skipped)")
 
+    _log(
+        f"Done: {len(picker_scores)} pools scored "
+        f"({skipped} skipped for < {NONLAND_DECK_SIZE} embeddable cards)"
+    )
     return compute_diagnostic(picker_scores, sa_a, sa_b)
 
 
@@ -203,8 +223,10 @@ def fresh_drafted_pools(set_code: str | None, limit: int) -> list[list[str]]:
     mix = format_agent_mix(parse_agent_mix("forge-full:6,forge-r30:1,forge-r100:1"))
     connector = DraftWorkerConnector()
     pools: list[list[str]] = []
+    drafts = 0
     attempts = 0
     max_attempts = 50  # bound restarts so a broken Forge can't loop forever
+    _log(f"Drafting fresh pools (target {limit}, set={set_code or 'random per draft'})...")
     while len(pools) < limit and attempts < max_attempts:
         attempts += 1
         proc = connector.start(agent_mix=mix, set_code=set_code)
@@ -226,7 +248,12 @@ def fresh_drafted_pools(set_code: str | None, limit: int) -> list[list[str]]:
                 for seat_idx in range(geo.pod_size):
                     pools.append(geo.drafted_pool(record, seat_idx))
                     if len(pools) >= limit:
+                        _log(f"  collected {len(pools)} pools from {drafts + 1} drafts")
                         return pools
+                drafts += 1
+                if drafts % 5 == 0:
+                    _log(f"  {drafts} drafts -> {len(pools)} pools")
         finally:
             kill_process_tree(proc)
+    _log(f"  collected {len(pools)} pools from {drafts} drafts")
     return pools
