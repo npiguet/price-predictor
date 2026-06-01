@@ -473,6 +473,33 @@ building well on some pool types and badly on others — which would inject
 structured label noise. That's exactly what the §5.3 validation gates on,
 with SA as the higher-fidelity fallback.
 
+### Gen-1 validation outcome (2026-06-01): picker confirmed
+
+Ran the §5.3 builder-validation script on 300 freshly-drafted 45-card pools
+(`validate_builder --fresh-pools --n-pools 300`, 512-d scorer + the gen5
+`4top256` picker):
+
+- picker-vs-SA Spearman ≈ **0.945** (gating),
+- SA-vs-SA reference ceiling ≈ **0.995** (SA is near-deterministic on draft
+  pools, so almost none of the picker's disagreement is SA noise),
+- SA − picker score-gap **median ≈ 0.19**, **IQR ≈ 0.44**.
+
+**Decision: keep `--build-method picker` for gen 1.** The deciding fact is that
+the ≈0.19 median gap matches what the picker showed against SA at its *initial*
+training, before the (time-consuming) fine-tuning runs
+(`experiments/2026-05-22-gen5-picker-initial-training.md`). So the
+~60–90-card-sealed → 45-card-draft distribution shift did **not** meaningfully
+degrade the picker — the gap is its intrinsic one-shot-vs-search deficit, not
+draft-specific — and pod-relative leave-one-out reward absorbs the roughly
+uniform component of that gap. Good enough for the first training round.
+
+The one unresolved signal is the IQR ≈ 0.44 (gap spread > 2× the median): the
+gap is far from constant across pools, so *if* it is pool-composition-correlated
+it would survive pod-relative subtraction as structured noise (the residual risk
+above). Quantifying that — and a dedicated picker fine-tuning run on 45-card
+draft pools to shrink it — is deferred to a later draft-agent iteration; it does
+not gate gen 1.
+
 This is the same continuation-matching idea that recurs elsewhere: label
 with whatever builder will actually materialise the agent's decks
 downstream.
