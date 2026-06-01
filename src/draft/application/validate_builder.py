@@ -48,7 +48,7 @@ def compute_diagnostic(
     ``sa_scores_a`` is the reference SA build (compared against the picker);
     ``sa_scores_b`` is a second independent SA restart (for the SA-vs-SA ceiling).
     """
-    from scipy.stats import spearmanr
+    from scipy.stats import rankdata
 
     picker = np.asarray(picker_scores, dtype=np.float64)
     sa_a = np.asarray(sa_scores_a, dtype=np.float64)
@@ -56,10 +56,14 @@ def compute_diagnostic(
     n = len(picker)
 
     def _spearman(x: np.ndarray, y: np.ndarray) -> float:
+        # Spearman = Pearson on (average-tie) ranks — identical to
+        # scipy.stats.spearmanr but with cleanly-typed calls.
         if n < 2:
             return float("nan")
-        corr, _ = spearmanr(x, y)
-        return float(corr)
+        rx, ry = rankdata(x), rankdata(y)
+        if rx.std() == 0 or ry.std() == 0:
+            return float("nan")  # constant input -> correlation undefined
+        return float(np.corrcoef(rx, ry)[0, 1])
 
     gap = sa_a - picker
     if n:
@@ -122,7 +126,6 @@ def drafted_pools_from_corpus(path: Path, limit: int) -> list[list[str]]:
 
 def run_validate(config: ValidateBuilderConfig) -> BuilderDiagnostic:
     """Build each pool with picker + two SA restarts, score, and diagnose."""
-    import numpy as np
     import torch
 
     from sealed.application.deck_assembly import (
