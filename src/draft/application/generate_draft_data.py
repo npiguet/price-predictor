@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import signal
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -33,6 +34,34 @@ from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Sea
 from draft.infrastructure.draft_record_io import append_record, count_complete_records
 
 SENTINEL = "<<DRAFT-EVENT-JSON>>"
+
+
+def _format_duration(seconds: float) -> str:
+    """Compact h/m/s duration, e.g. '4m12s' or '1h03m'."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
+
+
+def _progress_line(
+    count: int, target: int, done_this_run: int, elapsed: float,
+) -> str:
+    """Progress with throughput + ETA over the drafts produced this run."""
+    rate = done_this_run / elapsed * 60 if elapsed > 0 else 0.0
+    parts = [
+        f"  {count}/{target} drafts recorded",
+        f"{rate:.1f}/min",
+        f"{_format_duration(elapsed)} elapsed",
+    ]
+    remaining = target - count
+    if rate > 0 and remaining > 0:
+        parts.append(f"ETA ~{_format_duration(remaining / rate * 60)}")
+    return " | ".join(parts)
 
 
 def _log(message: str) -> None:
@@ -283,11 +312,21 @@ class GenerateDraftDataSupervisor:
             f"(have {count}) -> {out_path}"
         )
 
+        start_count = count
+        start_time = time.monotonic()
         open_mode = "a" if (self._config.resume or out_path.exists()) else "w"
         with open(out_path, open_mode, buffering=1, encoding="utf-8") as out:
-            count = self._supervise(launch, labeler, out, count, target)
+            count = self._supervise(
+                launch, labeler, out, count, target, start_count, start_time,
+            )
 
-        _log(f"Done: {count} records in {out_path}")
+        elapsed = time.monotonic() - start_time
+        produced = count - start_count
+        rate = produced / elapsed * 60 if elapsed > 0 else 0.0
+        _log(
+            f"Done: {count} records in {out_path} "
+            f"({produced} this run in {_format_duration(elapsed)}, {rate:.1f}/min)"
+        )
         return count
 
     def _supervise(
@@ -297,6 +336,8 @@ class GenerateDraftDataSupervisor:
         out: Any,
         count: int,
         target: int,
+        start_count: int,
+        start_time: float,
     ) -> int:
         from price_predictor.infrastructure.forge_jvm import kill_process_tree
 
@@ -316,14 +357,22 @@ class GenerateDraftDataSupervisor:
                         continue
                     append_record(out, record)
                     count += 1
-                    if count % self.STATUS_EVERY == 0:
-                        _log(f"  {count}/{target} drafts recorded")
+                    produced = count - start_count
+                    # First draft confirms the pipeline is alive; then every
+                    # STATUS_EVERY drafts report throughput + ETA.
+                    if produced == 1 or count % self.STATUS_EVERY == 0:
+                        _log(_progress_line(
+                            count, target, produced, time.monotonic() - start_time,
+                        ))
                     if count >= target:
                         break
             finally:
                 self._terminate(proc, kill_process_tree)
             if count < target and not self._shutdown.is_set():
-                _log(f"Worker exited (code {self._returncode(proc)}); restarting...")
+                _log(
+                    f"Worker exited (code {self._returncode(proc)}) at "
+                    f"{count}/{target}; restarting..."
+                )
         return count
 
     @staticmethod
