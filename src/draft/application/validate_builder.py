@@ -180,21 +180,53 @@ def _source_pools(config: ValidateBuilderConfig) -> list[list[str]]:
     if config.pools_from is not None:
         return drafted_pools_from_corpus(config.pools_from, config.n_pools)
     if config.fresh_pools:
-        return _generate_fresh_pools(config)
+        return fresh_drafted_pools(config.set_code, config.n_pools)
     raise ValueError("Provide either --pools-from or --fresh-pools")
 
 
-def _generate_fresh_pools(config: ValidateBuilderConfig) -> list[list[str]]:
-    import tempfile
+def fresh_drafted_pools(set_code: str | None, limit: int) -> list[list[str]]:
+    """Run the draft worker and return freshly-*drafted* pools (``packs × P`` cards).
 
-    from sealed.application.generate_pools import GeneratePoolsUseCase
-    from sealed.infrastructure.pool_connector import PoolConnector
-    from sealed.infrastructure.pool_file_reader import parse_pools
+    "Fresh pools" for this diagnostic means freshly *drafted* pools — the exact
+    45-card shape the picker labels in ``generate-draft-data`` — not 6-booster
+    sealed pools, whose 23-of-~75 selection problem is a different distribution
+    and would make the gating decision misleading (spec §5.3). Drives
+    ``DraftWorkerMain`` (restarting on crash) and reconstructs each seat's pool
+    from the booster transcript until ``limit`` pools are collected.
+    """
+    from draft.application.agent_mix import format_agent_mix, parse_agent_mix
+    from draft.application.generate_draft_data import parse_sentinel_line
+    from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Seat
+    from draft.infrastructure.draft_worker_connector import DraftWorkerConnector
+    from price_predictor.infrastructure.forge_jvm import kill_process_tree
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_dir = Path(tmp)
-        GeneratePoolsUseCase().execute(
-            config.set_code, config.n_pools, out_dir, PoolConnector(),
-        )
-        pools = parse_pools(out_dir / "pools.txt")
-    return [p.cards for p in pools]
+    mix = format_agent_mix(parse_agent_mix("forge-full:6,forge-r30:1,forge-r100:1"))
+    connector = DraftWorkerConnector()
+    pools: list[list[str]] = []
+    attempts = 0
+    max_attempts = 50  # bound restarts so a broken Forge can't loop forever
+    while len(pools) < limit and attempts < max_attempts:
+        attempts += 1
+        proc = connector.start(agent_mix=mix, set_code=set_code)
+        try:
+            for line in proc.stdout:
+                transcript = parse_sentinel_line(line)
+                if transcript is None:
+                    continue
+                boosters = [
+                    Booster(b["set_code"], list(b["picks"]))
+                    for b in transcript["boosters"]
+                ]
+                agents = [s["agent"] for s in transcript["seats"]]
+                record = DraftRecord(
+                    transcript["draft_id"], "", "",
+                    [Seat(a, [], None) for a in agents], boosters,
+                )
+                geo = DraftGeometry.from_record(record)
+                for seat_idx in range(geo.pod_size):
+                    pools.append(geo.drafted_pool(record, seat_idx))
+                    if len(pools) >= limit:
+                        return pools
+        finally:
+            kill_process_tree(proc)
+    return pools

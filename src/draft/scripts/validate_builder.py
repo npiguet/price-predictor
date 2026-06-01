@@ -35,11 +35,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     source.add_argument(
         "--fresh-pools", action="store_true",
-        help="Generate fresh sealed pools instead (needs Forge).",
+        help=(
+            "Run a fresh draft session and use its drafted pools (the 45-card "
+            "shape the picker labels), instead of an existing corpus. Needs Forge."
+        ),
     )
     parser.add_argument(
         "--set", dest="set_code", default=None,
-        help="Set code for --fresh-pools (random sealed-legal set if omitted).",
+        help="Set code for --fresh-pools drafts (random sealed-legal set if omitted).",
     )
     parser.add_argument(
         "--n-pools", type=int, default=300,
