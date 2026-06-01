@@ -493,12 +493,8 @@ degrade the picker — the gap is its intrinsic one-shot-vs-search deficit, not
 draft-specific — and pod-relative leave-one-out reward absorbs the roughly
 uniform component of that gap. Good enough for the first training round.
 
-The one unresolved signal is the IQR ≈ 0.44 (gap spread > 2× the median): the
-gap is far from constant across pools, so *if* it is pool-composition-correlated
-it would survive pod-relative subtraction as structured noise (the residual risk
-above). Quantifying that — and a dedicated picker fine-tuning run on 45-card
-draft pools to shrink it — is deferred to a later draft-agent iteration; it does
-not gate gen 1.
+A dedicated picker fine-tuning run on 45-card draft pools is a possible later
+improvement, but it does not gate gen 1.
 
 This is the same continuation-matching idea that recurs elsewhere: label
 with whatever builder will actually materialise the agent's decks
