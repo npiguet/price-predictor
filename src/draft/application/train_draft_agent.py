@@ -85,16 +85,22 @@ class TrainDraftAgentConfig:
 # Training examples
 # --------------------------------------------------------------------------- #
 
-@dataclass
+@dataclass(slots=True)
 class DraftExample:
-    """One ``(draft, seat, pack, pick)`` training example (data-model §2)."""
+    """One ``(draft, seat, pack, pick)`` training example (data-model §2).
 
-    draft_id: str
-    card_emb: np.ndarray         # (N, embedding_dim) float32
-    type_idx: np.ndarray         # (N,) int64
-    packs_ago: np.ndarray        # (N,) int64
-    pick_ago: np.ndarray         # (N,) int64
-    pack_mask: np.ndarray        # (N,) bool, True = PACK token
+    To keep millions of examples in RAM, the card embeddings are *not* stored
+    here: ``card_idx`` holds int32 rows into a shared embedding table (see
+    ``_Loader.table``) materialized per-batch in :func:`_collate`. The small
+    per-token int arrays are downcast (type/packs_ago/pick_ago all fit in int8);
+    ``pack_mask`` is derived from ``type_idx == TYPE_PACK`` rather than stored.
+    """
+
+    draft_index: int             # groups examples for the draft-disjoint split
+    card_idx: np.ndarray         # (N,) int32, rows into the shared table
+    type_idx: np.ndarray         # (N,) int8
+    packs_ago: np.ndarray        # (N,) int8
+    pick_ago: np.ndarray         # (N,) int8
     pack_number: int
     pick_number: int
     imitation_active: bool
@@ -104,7 +110,7 @@ class DraftExample:
 
     @property
     def n_tokens(self) -> int:
-        return int(self.type_idx.shape[0])
+        return int(self.card_idx.shape[0])
 
 
 def _leave_one_out_rewards(record: DraftRecord) -> list[float | None]:
@@ -132,17 +138,32 @@ class _Loader:
         self.max_pack_size = 0
         self._missing: set[str] = set()
         self._missing_total = 0
+        # Shared embedding table: each distinct card is loaded once; examples
+        # keep only int rows into it (mirrors train_picker's PreparedPool).
+        self._table_rows: list[np.ndarray] = []
+        self._name_to_idx: dict[str, int | None] = {}
 
-    def _embedding(self, name: str) -> np.ndarray | None:
+    def _card_index(self, name: str) -> int | None:
+        """Row index of ``name`` in the shared table, loading it once; None if no .npz."""
+        idx = self._name_to_idx.get(name, -1)
+        if idx != -1:
+            return idx
         emb = self._locator.load_embedding(name)
         if emb is None:
-            if len(self._missing) < _MISSING_WARN_CAP:
-                self._missing.add(name)
-            self._missing_total += 1
+            self._name_to_idx[name] = None
             return None
         if self.embedding_dim is None:
             self.embedding_dim = int(emb.shape[0])
-        return emb.astype(np.float32)
+        new_idx = len(self._table_rows)
+        self._table_rows.append(np.asarray(emb, dtype=np.float32))
+        self._name_to_idx[name] = new_idx
+        return new_idx
+
+    def table(self) -> np.ndarray:
+        """The shared ``(num_unique_cards, embedding_dim)`` embedding table."""
+        if not self._table_rows:
+            return np.zeros((0, self.embedding_dim or 1), dtype=np.float32)
+        return np.stack(self._table_rows).astype(np.float32)
 
     def build(self, records: list[DraftRecord]) -> list[DraftExample]:
         examples: list[DraftExample] = []
@@ -163,7 +184,7 @@ class _Loader:
                 for pack in range(1, geo.packs + 1):
                     for pick in range(1, geo.pack_size + 1):
                         ex = self._example(
-                            record, geo, seat_idx, pack, pick,
+                            record, geo, ri - 1, seat_idx, pack, pick,
                             whitelisted, critic_active, rewards[seat_idx],
                         )
                         if ex is not None:
@@ -188,6 +209,7 @@ class _Loader:
         self,
         record: DraftRecord,
         geo: DraftGeometry,
+        draft_index: int,
         seat_idx: int,
         pack: int,
         pick: int,
@@ -196,11 +218,11 @@ class _Loader:
         reward: float | None,
     ) -> DraftExample | None:
         state = build_state(record, geo, seat_idx, pack, pick)
-        embs: list[np.ndarray] = []
+        card_idx: list[int] = []
         types: list[int] = []
         packs_ago: list[int] = []
         pick_ago: list[int] = []
-        pack_mask: list[bool] = []
+        has_pack = False
         target_token = -1
         # The taken PACK card is the instance at (pool_count + target_index);
         # track the original index so we can map it through the missing-drop.
@@ -209,26 +231,28 @@ class _Loader:
             pack_positions[state.target_index] if pack_positions else -1
         )
         for orig_idx, card in enumerate(state.cards):
-            emb = self._embedding(card.name)
-            if emb is None:
+            idx = self._card_index(card.name)
+            if idx is None:
+                if len(self._missing) < _MISSING_WARN_CAP:
+                    self._missing.add(card.name)
+                self._missing_total += 1
                 continue
             if orig_idx == target_orig:
-                target_token = len(embs)
-            embs.append(emb)
+                target_token = len(card_idx)
+            card_idx.append(idx)
             types.append(card.token_type)
             packs_ago.append(card.packs_ago)
             pick_ago.append(card.pick_ago)
-            pack_mask.append(card.token_type == TYPE_PACK)
-        if not embs or not any(pack_mask):
+            has_pack = has_pack or card.token_type == TYPE_PACK
+        if not card_idx or not has_pack:
             return None  # no usable PACK tokens — nothing to learn here
         imitation_active = whitelisted and target_token >= 0
         return DraftExample(
-            draft_id=record.draft_id,
-            card_emb=np.stack(embs).astype(np.float32),
-            type_idx=np.asarray(types, dtype=np.int64),
-            packs_ago=np.asarray(packs_ago, dtype=np.int64),
-            pick_ago=np.asarray(pick_ago, dtype=np.int64),
-            pack_mask=np.asarray(pack_mask, dtype=bool),
+            draft_index=draft_index,
+            card_idx=np.asarray(card_idx, dtype=np.int32),
+            type_idx=np.asarray(types, dtype=np.int8),
+            packs_ago=np.asarray(packs_ago, dtype=np.int8),
+            pick_ago=np.asarray(pick_ago, dtype=np.int8),
             pack_number=pack,
             pick_number=pick,
             imitation_active=imitation_active,
@@ -245,18 +269,18 @@ class _Loader:
 def split_draft_disjoint(
     examples: list[DraftExample], val_fraction: float, seed: int = RANDOM_SEED,
 ) -> tuple[list[DraftExample], list[DraftExample]]:
-    """Partition examples by ``draft_id`` so a draft is entirely train or val.
+    """Partition examples by ``draft_index`` so a draft is entirely train or val.
 
-    Distinct ids are shuffled with ``seed`` and the first ``val_fraction`` form
-    the held-out set (FR-035).
+    Distinct draft indices are shuffled with ``seed`` and the first
+    ``val_fraction`` form the held-out set (FR-035).
     """
-    ids = sorted({ex.draft_id for ex in examples})
+    ids = sorted({ex.draft_index for ex in examples})
     rng = random.Random(seed)
     rng.shuffle(ids)
     n_val = int(len(ids) * val_fraction)
     val_ids = set(ids[:n_val])
-    val = [ex for ex in examples if ex.draft_id in val_ids]
-    train = [ex for ex in examples if ex.draft_id not in val_ids]
+    val = [ex for ex in examples if ex.draft_index in val_ids]
+    train = [ex for ex in examples if ex.draft_index not in val_ids]
     return train, val
 
 
@@ -315,11 +339,12 @@ class _Batch:
 
 
 def _collate(
-    batch: list[DraftExample], mean: float, std: float, device: torch.device,
+    batch: list[DraftExample], table: np.ndarray, mean: float, std: float,
+    device: torch.device,
 ) -> _Batch:
     b = len(batch)
     max_n = max(ex.n_tokens for ex in batch)
-    dim = batch[0].card_emb.shape[1]
+    dim = table.shape[1]
     card_emb = np.zeros((b, max_n, dim), dtype=np.float32)
     type_idx = np.zeros((b, max_n), dtype=np.int64)
     packs_ago = np.zeros((b, max_n), dtype=np.int64)
@@ -328,12 +353,12 @@ def _collate(
     pack_mask = np.zeros((b, max_n), dtype=bool)
     for i, ex in enumerate(batch):
         n = ex.n_tokens
-        card_emb[i, :n] = ex.card_emb
+        card_emb[i, :n] = table[ex.card_idx]  # materialize embeddings per batch
         type_idx[i, :n] = ex.type_idx
         packs_ago[i, :n] = ex.packs_ago
         pick_ago[i, :n] = ex.pick_ago
         card_mask[i, :n] = True
-        pack_mask[i, :n] = ex.pack_mask
+        pack_mask[i, :n] = ex.type_idx == TYPE_PACK
     return _Batch(
         card_emb=torch.from_numpy(card_emb).to(device),
         type_idx=torch.from_numpy(type_idx).to(device),
@@ -498,6 +523,7 @@ class _ValReport:
 def _validate(
     model: DraftAgentModel,
     val: list[DraftExample],
+    table: np.ndarray,
     mean: float,
     std: float,
     config: TrainDraftAgentConfig,
@@ -517,13 +543,13 @@ def _validate(
     with torch.no_grad():
         for start in range(0, len(val), config.batch_size):
             chunk = val[start:start + config.batch_size]
-            batch = _collate(chunk, mean, std, device)
+            batch = _collate(chunk, table, mean, std, device)
             losses, logits, critic_pred = _compute_loss(
                 model, batch, config.imitation_weight, config.critic_weight,
             )
             for i, ex in enumerate(chunk):
                 if ex.imitation_active:
-                    pack_idx = np.flatnonzero(ex.pack_mask)
+                    pack_idx = np.flatnonzero(ex.type_idx == TYPE_PACK)
                     row = logits[i, :ex.n_tokens].cpu().numpy()
                     pack_logits = row[pack_idx]
                     target_in_pack = int(np.flatnonzero(pack_idx == ex.target_token)[0])
@@ -581,6 +607,7 @@ class TrainDraftAgentUseCase:
             raise ValueError("No usable training examples (all picks missing embeddings?)")
         if loader.embedding_dim is None:
             raise ValueError("Could not determine embedding dimension from the cache")
+        table = loader.table()  # shared (num_unique_cards, dim) embedding table
 
         train, val = split_draft_disjoint(examples, config.val_fraction)
         if not train:
@@ -636,7 +663,7 @@ class TrainDraftAgentUseCase:
                 range(0, len(shuffled), config.batch_size), start=1,
             ):
                 chunk = shuffled[start:start + config.batch_size]
-                batch = _collate(chunk, mean, std, device)
+                batch = _collate(chunk, table, mean, std, device)
                 losses, _, _ = _compute_loss(
                     model, batch, config.imitation_weight, config.critic_weight,
                 )
@@ -668,7 +695,7 @@ class TrainDraftAgentUseCase:
                     win_n = 0
 
             epoch_secs = time.monotonic() - epoch_start
-            report = _validate(model, val, mean, std, config, device)
+            report = _validate(model, val, table, mean, std, config, device)
             mse_str = ", ".join(
                 f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
             )

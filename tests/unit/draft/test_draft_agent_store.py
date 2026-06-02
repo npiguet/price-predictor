@@ -17,14 +17,13 @@ from draft.infrastructure.cli import build_parser, run_train_draft_agent
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 
 
-def _example(draft_id: str) -> DraftExample:
+def _example(draft_index: int) -> DraftExample:
     return DraftExample(
-        draft_id=draft_id,
-        card_emb=np.zeros((2, 8), dtype=np.float32),
-        type_idx=np.array([1, 1], dtype=np.int64),
-        packs_ago=np.zeros(2, dtype=np.int64),
-        pick_ago=np.zeros(2, dtype=np.int64),
-        pack_mask=np.array([True, True]),
+        draft_index=draft_index,
+        card_idx=np.zeros(2, dtype=np.int32),
+        type_idx=np.array([1, 1], dtype=np.int8),
+        packs_ago=np.zeros(2, dtype=np.int8),
+        pick_ago=np.zeros(2, dtype=np.int8),
         pack_number=1,
         pick_number=1,
         imitation_active=True,
@@ -36,20 +35,20 @@ def _example(draft_id: str) -> DraftExample:
 
 def test_split_is_draft_disjoint() -> None:
     # 10 drafts, 3 examples each.
-    examples = [_example(f"d{i}") for i in range(10) for _ in range(3)]
+    examples = [_example(i) for i in range(10) for _ in range(3)]
     train, val = split_draft_disjoint(examples, val_fraction=0.2, seed=42)
-    train_ids = {ex.draft_id for ex in train}
-    val_ids = {ex.draft_id for ex in val}
+    train_ids = {ex.draft_index for ex in train}
+    val_ids = {ex.draft_index for ex in val}
     assert train_ids.isdisjoint(val_ids)         # no draft straddles the split
     assert len(val_ids) == 2                      # 0.2 * 10 distinct ids
     assert len(train) + len(val) == 30
 
 
 def test_split_is_deterministic_with_seed() -> None:
-    examples = [_example(f"d{i}") for i in range(10) for _ in range(2)]
+    examples = [_example(i) for i in range(10) for _ in range(2)]
     a = split_draft_disjoint(examples, 0.2, seed=42)
     b = split_draft_disjoint(examples, 0.2, seed=42)
-    assert {e.draft_id for e in a[1]} == {e.draft_id for e in b[1]}
+    assert {e.draft_index for e in a[1]} == {e.draft_index for e in b[1]}
 
 
 def test_checkpoint_round_trip_reloads_to_predict(tmp_path: Path) -> None:
