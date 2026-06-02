@@ -56,6 +56,8 @@ class DraftWorkerConnector:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
-            bufsize=1,  # line-buffered
+            encoding="utf-8",   # worker emits UTF-8; don't fall back to the
+            errors="replace",   # platform codec (cp1252 on Windows) and choke
+            bufsize=1,          # on accented card names
             start_new_session=True,
         )
