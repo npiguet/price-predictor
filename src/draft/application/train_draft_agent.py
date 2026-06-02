@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 import random
+import time
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -37,11 +38,24 @@ from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 RANDOM_SEED = 42  # hardcoded (FR-035): governs init, the draft-disjoint split.
 _MISSING_WARN_CAP = 20
+_STEP_LOG_INTERVAL = 15.0  # seconds between within-epoch progress lines
 
 
 def _log(message: str) -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def _fmt_dur(seconds: float) -> str:
+    """Compact h/m/s duration for progress/ETA lines."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h{minutes:02d}m"
 
 
 @dataclass
@@ -132,7 +146,11 @@ class _Loader:
 
     def build(self, records: list[DraftRecord]) -> list[DraftExample]:
         examples: list[DraftExample] = []
-        for record in records:
+        total = len(records)
+        log_every = max(200, total // 20)  # ~20 progress lines on a big corpus
+        start = time.monotonic()
+        _log(f"Building examples from {total} drafts...")
+        for ri, record in enumerate(records, start=1):
             geo = DraftGeometry.from_record(record)
             self.max_packs = max(self.max_packs, geo.packs)
             self.max_pack_size = max(self.max_pack_size, geo.pack_size)
@@ -150,6 +168,14 @@ class _Loader:
                         )
                         if ex is not None:
                             examples.append(ex)
+            if ri % log_every == 0 or ri == total:
+                elapsed = time.monotonic() - start
+                rate = ri / elapsed if elapsed > 0 else 0.0
+                eta = (total - ri) / rate if rate > 0 else 0.0
+                _log(
+                    f"  loaded {ri}/{total} drafts -> {len(examples)} examples "
+                    f"({rate:.0f} drafts/s, ETA {_fmt_dur(eta)})"
+                )
         if self._missing_total:
             sample = ", ".join(sorted(self._missing))
             _log(
@@ -602,7 +628,13 @@ class TrainDraftAgentUseCase:
             shuffled = list(train)
             rng.shuffle(shuffled)
             ep_imit = ep_crit = 0.0
-            for start in range(0, len(shuffled), config.batch_size):
+            epoch_start = time.monotonic()
+            last_log = epoch_start
+            win_imit = win_crit = 0.0
+            win_n = 0
+            for step, start in enumerate(
+                range(0, len(shuffled), config.batch_size), start=1,
+            ):
                 chunk = shuffled[start:start + config.batch_size]
                 batch = _collate(chunk, mean, std, device)
                 losses, _, _ = _compute_loss(
@@ -614,15 +646,35 @@ class TrainDraftAgentUseCase:
                     torch.nn.utils.clip_grad_norm_(group["params"], config.max_grad_norm)
                 optimizer.step()
                 scheduler.step()
-                ep_imit += float(losses.imitation.detach())
-                ep_crit += float(losses.critic.detach())
+                imit_v = float(losses.imitation.detach())
+                crit_v = float(losses.critic.detach())
+                ep_imit += imit_v
+                ep_crit += crit_v
+                win_imit += imit_v
+                win_crit += crit_v
+                win_n += 1
+                now = time.monotonic()
+                if now - last_log >= _STEP_LOG_INTERVAL and step < n_steps:
+                    rate = step / (now - epoch_start)
+                    eta = (n_steps - step) / rate if rate > 0 else 0.0
+                    _log(
+                        f"  epoch {epoch} step {step}/{n_steps} "
+                        f"({step / n_steps * 100:.0f}%) "
+                        f"imit={win_imit / win_n:.4f} crit={win_crit / win_n:.4f} "
+                        f"{rate:.1f} steps/s ETA {_fmt_dur(eta)}"
+                    )
+                    last_log = now
+                    win_imit = win_crit = 0.0
+                    win_n = 0
 
+            epoch_secs = time.monotonic() - epoch_start
             report = _validate(model, val, mean, std, config, device)
             mse_str = ", ".join(
                 f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
             )
             _log(
-                f"epoch={epoch} train_imit={ep_imit / n_steps:.4f} "
+                f"epoch={epoch} ({_fmt_dur(epoch_secs)}) "
+                f"train_imit={ep_imit / n_steps:.4f} "
                 f"train_crit={ep_crit / n_steps:.4f} | val_loss={report.loss:.4f} "
                 f"val_imit={report.imitation:.4f} val_crit={report.critic:.4f} "
                 f"top1={report.top1:.3f} top3={report.top3:.3f} "
