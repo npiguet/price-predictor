@@ -31,7 +31,12 @@ from draft.domain.draft_agent_model import (
     DraftAgentModel,
 )
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
-from draft.domain.draft_state import TYPE_PACK, build_state
+from draft.domain.draft_state import (
+    TYPE_PACK,
+    TYPE_PASSED,
+    TYPE_POOL,
+    TYPE_TAKEN,
+)
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 from draft.infrastructure.draft_record_io import read_records
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -181,14 +186,10 @@ class _Loader:
                 critic_active = rewards[seat_idx] is not None
                 if not whitelisted and not critic_active:
                     continue  # neither head learns from this seat
-                for pack in range(1, geo.packs + 1):
-                    for pick in range(1, geo.pack_size + 1):
-                        ex = self._example(
-                            record, geo, ri - 1, seat_idx, pack, pick,
-                            whitelisted, critic_active, rewards[seat_idx],
-                        )
-                        if ex is not None:
-                            examples.append(ex)
+                self._emit_seat(
+                    record, geo, ri - 1, seat_idx,
+                    whitelisted, critic_active, rewards[seat_idx], examples,
+                )
             if ri % log_every == 0 or ri == total:
                 elapsed = time.monotonic() - start
                 rate = ri / elapsed if elapsed > 0 else 0.0
@@ -205,61 +206,132 @@ class _Loader:
             )
         return examples
 
-    def _example(
+    def _emit_seat(
         self,
         record: DraftRecord,
         geo: DraftGeometry,
         draft_index: int,
-        seat_idx: int,
-        pack: int,
-        pick: int,
+        seat: int,
         whitelisted: bool,
         critic_active: bool,
         reward: float | None,
-    ) -> DraftExample | None:
-        state = build_state(record, geo, seat_idx, pack, pick)
+        examples: list[DraftExample],
+    ) -> None:
+        """Emit one example per pick for ``seat`` in a single incremental pass.
+
+        Walks the seat's boosters once (the running POOL/PASSED/TAKEN/last-seen
+        state is advanced pick by pick) and, at each pick, materializes the
+        typed-token arrays directly — no per-token ``CardInstance`` and no
+        re-walk. Semantics are identical to building each pick via
+        :func:`draft.domain.draft_state.build_state` (locked by an equivalence
+        test); recency is inlined for speed (FR-019/FR-021).
+        """
+        pod, P, packs = geo.pod_size, geo.pack_size, geo.packs
+        boosters = record.boosters
+        reward_val = float(reward) if reward is not None else 0.0
+        card_index = self._card_index
+
+        pool: list[str] = []
+        taken: list[str] = []
+        passed: dict[str, tuple[int, int]] = {}
+        last_seen: dict[str, tuple[int, int]] = {}
+        # Per-pick accumulators (rebound each pick); ``push`` mutates them.
         card_idx: list[int] = []
         types: list[int] = []
-        packs_ago: list[int] = []
-        pick_ago: list[int] = []
-        has_pack = False
-        target_token = -1
-        # The taken PACK card is the instance at (pool_count + target_index);
-        # track the original index so we can map it through the missing-drop.
-        pack_positions = [i for i, c in enumerate(state.cards) if c.token_type == TYPE_PACK]
-        target_orig = (
-            pack_positions[state.target_index] if pack_positions else -1
-        )
-        for orig_idx, card in enumerate(state.cards):
-            idx = self._card_index(card.name)
+        pas: list[int] = []
+        pks: list[int] = []
+        p = i = 0  # current pack/pick, read live by ``push``
+
+        def push(name: str, ttype: int) -> bool:
+            idx = card_index(name)
             if idx is None:
                 if len(self._missing) < _MISSING_WARN_CAP:
-                    self._missing.add(card.name)
+                    self._missing.add(name)
                 self._missing_total += 1
-                continue
-            if orig_idx == target_orig:
-                target_token = len(card_idx)
+                return False
+            ls = last_seen.get(name)
+            if ls is None:
+                pa = pk = 0
+            else:
+                lp, li = ls
+                pa = p - lp
+                if pa > 2:
+                    pa = 2
+                pk = (i - li) if pa == 0 else (P - li)
+                if pk < 0:
+                    pk = 0
+                elif pk >= P:
+                    pk = P - 1
             card_idx.append(idx)
-            types.append(card.token_type)
-            packs_ago.append(card.packs_ago)
-            pick_ago.append(card.pick_ago)
-            has_pack = has_pack or card.token_type == TYPE_PACK
-        if not card_idx or not has_pack:
-            return None  # no usable PACK tokens — nothing to learn here
-        imitation_active = whitelisted and target_token >= 0
-        return DraftExample(
-            draft_index=draft_index,
-            card_idx=np.asarray(card_idx, dtype=np.int32),
-            type_idx=np.asarray(types, dtype=np.int8),
-            packs_ago=np.asarray(packs_ago, dtype=np.int8),
-            pick_ago=np.asarray(pick_ago, dtype=np.int8),
-            pack_number=pack,
-            pick_number=pick,
-            imitation_active=imitation_active,
-            target_token=target_token,
-            critic_active=critic_active,
-            critic_target=float(reward) if reward is not None else 0.0,
-        )
+            types.append(ttype)
+            pas.append(pa)
+            pks.append(pk)
+            return True
+
+        for p in range(1, packs + 1):
+            for i in range(1, P + 1):
+                k, off = geo.booster_for_pick(seat, p, i)
+                picks = boosters[k].picks
+                vis = picks[off:]
+                # Wheel diff: cards passed from this booster last time, gone now,
+                # were taken by others (persistent; serves emit + advance).
+                if off >= pod:
+                    for c in picks[off - pod + 1: off]:
+                        passed.pop(c, None)
+                        taken.append(c)
+                pack_set: set[str] = set()
+                pack_actions: list[str] = []
+                for c in vis:
+                    if c not in pack_set:
+                        pack_set.add(c)
+                        pack_actions.append(c)
+
+                # --- emit the example for target (p, i) ---
+                card_idx = []
+                types = []
+                pas = []
+                pks = []
+                target_token = -1
+                pack_pushed = False
+                for name in pool:
+                    push(name, TYPE_POOL)
+                for j, name in enumerate(pack_actions):
+                    if push(name, TYPE_PACK):
+                        pack_pushed = True
+                        if j == 0:  # taken card == first PACK action
+                            target_token = len(card_idx) - 1
+                for name in passed:
+                    if name not in pack_set:  # wheel survivors re-enter PACK
+                        push(name, TYPE_PASSED)
+                for name in taken:
+                    push(name, TYPE_TAKEN)
+                if card_idx and pack_pushed:
+                    examples.append(DraftExample(
+                        draft_index=draft_index,
+                        card_idx=np.asarray(card_idx, dtype=np.int32),
+                        type_idx=np.asarray(types, dtype=np.int8),
+                        packs_ago=np.asarray(pas, dtype=np.int8),
+                        pick_ago=np.asarray(pks, dtype=np.int8),
+                        pack_number=p,
+                        pick_number=i,
+                        imitation_active=whitelisted and target_token >= 0,
+                        target_token=target_token,
+                        critic_active=critic_active,
+                        critic_target=reward_val,
+                    ))
+
+                # --- advance past pick (p, i) ---
+                taken_card = vis[0]
+                pool.append(taken_card)
+                passed.pop(taken_card, None)
+                for c in vis:
+                    last_seen[c] = (p, i)
+                for c in vis[1:]:
+                    passed[c] = (p, i)
+            # Pack boundary: remaining PASSED flush to TAKEN (FR-019b).
+            for c in passed:
+                taken.append(c)
+            passed.clear()
 
 
 # --------------------------------------------------------------------------- #
