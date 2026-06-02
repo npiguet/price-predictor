@@ -424,7 +424,15 @@ class GenerateDraftDataSupervisor:
 
         def windowed_rate(now: float, current: int) -> float:
             samples.append((now, current))
-            while len(samples) > 1 and now - samples[0][0] > self.RATE_WINDOW_SECONDS:
+            # Trim to the window, but always keep at least the previous sample
+            # (evict a left sample only when the next one is still in-window).
+            # This way a log interval longer than the window — e.g. slow greedy
+            # builds logging every ~30s with a 20s window — still yields the
+            # inter-log rate instead of a degenerate zero.
+            while (
+                len(samples) > 2
+                and now - samples[1][0] > self.RATE_WINDOW_SECONDS
+            ):
                 samples.popleft()
             old_t, old_c = samples[0]
             interval = now - old_t
