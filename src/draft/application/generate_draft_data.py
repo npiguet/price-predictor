@@ -49,18 +49,22 @@ def _format_duration(seconds: float) -> str:
 
 
 def _progress_line(
-    count: int, target: int, done_this_run: int, elapsed: float,
+    count: int, target: int, rate_per_min: float, elapsed: float,
 ) -> str:
-    """Progress with throughput + ETA over the drafts produced this run."""
-    rate = done_this_run / elapsed * 60 if elapsed > 0 else 0.0
+    """Progress line with a recent-window throughput + ETA.
+
+    ``rate_per_min`` is a rolling rate (drafts over the last window), not the
+    lifetime average, so it reflects current speed and a responsive ETA rather
+    than being dragged down by one-time startup cost.
+    """
     parts = [
         f"  {count}/{target} drafts recorded",
-        f"{rate:.1f}/min",
+        f"{rate_per_min:.1f}/min",
         f"{_format_duration(elapsed)} elapsed",
     ]
     remaining = target - count
-    if rate > 0 and remaining > 0:
-        parts.append(f"ETA ~{_format_duration(remaining / rate * 60)}")
+    if rate_per_min > 0 and remaining > 0:
+        parts.append(f"ETA ~{_format_duration(remaining / rate_per_min * 60)}")
     return " | ".join(parts)
 
 
@@ -399,6 +403,8 @@ class GenerateDraftDataSupervisor:
         )
         return count
 
+    RATE_WINDOW_SECONDS = 20  # rolling window for the reported drafts/min
+
     def _supervise(
         self,
         launch: Callable[[], Any],
@@ -409,7 +415,20 @@ class GenerateDraftDataSupervisor:
         start_count: int,
         start_time: float,
     ) -> int:
+        from collections import deque
+
         from price_predictor.infrastructure.forge_jvm import kill_process_tree
+
+        # (monotonic time, count) samples for the rolling-window rate.
+        samples: deque[tuple[float, int]] = deque([(start_time, count)])
+
+        def windowed_rate(now: float, current: int) -> float:
+            samples.append((now, current))
+            while len(samples) > 1 and now - samples[0][0] > self.RATE_WINDOW_SECONDS:
+                samples.popleft()
+            old_t, old_c = samples[0]
+            interval = now - old_t
+            return (current - old_c) / interval * 60 if interval > 0 else 0.0
 
         while count < target and not self._shutdown.is_set():
             proc = launch()
@@ -431,8 +450,10 @@ class GenerateDraftDataSupervisor:
                     # First draft confirms the pipeline is alive; then every
                     # STATUS_EVERY drafts report throughput + ETA.
                     if produced == 1 or count % self.STATUS_EVERY == 0:
+                        now = time.monotonic()
                         _log(_progress_line(
-                            count, target, produced, time.monotonic() - start_time,
+                            count, target, windowed_rate(now, count),
+                            now - start_time,
                         ))
                     if count >= target:
                         break
