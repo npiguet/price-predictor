@@ -56,13 +56,18 @@ python -m draft train-draft-agent --imitation-weight 0
 python -m draft train-draft-agent --critic-weight 0
 # imitate only the strong agent's picks (default), or widen the whitelist:
 python -m draft train-draft-agent --imitation-agents forge-full,forge-r30
-# continue a stopped run:
-python -m draft train-draft-agent --resume models/draft/agent/latest.pt
+# continue a stopped run (inherits its settings); override only what you pass,
+# e.g. anneal the LR:
+python -m draft train-draft-agent --resume models/draft/agent/latest.pt --lr 3e-5
 ```
 
-Each epoch logs the imitation/critic loss split plus validation imitation
-top-1/top-3 accuracy and critic MSE sliced by pack number. The best checkpoint
-(by validation `L`) and `latest.pt` land under `models/draft/agent/`.
+Training validates and checkpoints `--evals-per-epoch` times per epoch
+(default 100 — "mini-epochs"). Each mini-epoch logs the training and validation
+loss split plus validation imitation top-1/top-3 accuracy and critic MSE sliced
+by pack number; `latest.pt` and the best checkpoint (by validation `L`) land
+under `models/draft/agent/`, so a crash costs at most one mini-epoch and
+`--resume` continues. `--resume` inherits the run's training settings and any
+CLI flag overrides them (resume precedence).
 
 ## 4. Inspect the artefact
 
@@ -79,7 +84,7 @@ critic-target standardization mean/std are stored in the checkpoint config.
 | Any seat's POOL/PACK/PASSED/TAKEN reconstructs from a record alone | SC-002 |
 | Worker crash didn't abort the run | SC-003 |
 | Training emits a reloadable best checkpoint producing picks + critic | SC-004 |
-| Per-epoch val log has top-1/top-3 + per-pack critic MSE | SC-005 |
+| Mini-epoch val log has train/val loss + top-1/top-3 + per-pack critic MSE | SC-005 |
 | `d_model % n_heads != 0` (or arch flags with `--resume`) fails fast | SC-006 |
 | Diagnostic prints a gating Spearman + SA-vs-SA ceiling | SC-007 |
 

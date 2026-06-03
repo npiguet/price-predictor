@@ -51,15 +51,20 @@ Trains policy + critic jointly on a recorded corpus.
 | `--imitation-weight` | 1.0 | CE coefficient; `0` ⇒ critic-only (FR-033). |
 | `--critic-weight` | 1.0 | MSE coefficient; `0` ⇒ imitation-only (FR-033). |
 | `--imitation-agents` | `forge-full` | Whitelist of agents whose picks are imitation targets; critic unaffected (FR-033). |
-| `--lr` | `3e-4` | AdamW LR (FR-034). |
-| `--warmup-frac` | 0.05 | LR linear-warmup fraction (FR-034). |
-| `--batch-size` | 32 | States per gradient step. |
-| `--max-grad-norm` | 1.0 | Per-group gradient-norm cap (FR-034). |
-| `--epochs` | 100 | Max epochs (FR-039). |
-| `--val-fraction` | 0.2 | Draft-disjoint validation fraction (FR-035). |
-| `--patience` | 10 | Early-stop epochs w/o val improvement (FR-039). |
-| `--resume <ckpt>` | none | Restore weights+optimizer+epoch+best-val; **architecture flags forbidden**; mutually exclusive with `--checkpoint` (FR-039, SC-006). |
+| `--lr` | `3e-4` | AdamW LR (FR-034). Resumable; re-applied to a resumed optimiser. |
+| `--warmup-frac` | 0.05 | Linear-warmup fraction of **one epoch** (FR-034). Resumable. |
+| `--batch-size` | 32 | States per gradient step. Resumable. |
+| `--max-grad-norm` | 1.0 | Per-group gradient-norm cap (FR-034). Resumable. |
+| `--epochs` | 100 | Max epochs (FR-039). Resumable. |
+| `--val-fraction` | 0.0025 | Draft-disjoint validation fraction — small held-out monitor (FR-035). Resumable. |
+| `--evals-per-epoch` | 100 | Validate + checkpoint this many times per epoch ("mini-epochs") (FR-039). Resumable. |
+| `--patience` | 30 | Early-stop after this many mini-epochs w/o val improvement (FR-039). Resumable. |
+| `--resume <ckpt>` | none | Continue a run: restore weights+optimizer+epoch+best-val and inherit its training settings (CLI flags override; **architecture flags forbidden**); mutually exclusive with `--checkpoint` (FR-039, SC-006). |
 | `--checkpoint <ckpt>` | none | Bootstrap fresh run from weights only; **architecture flags forbidden**; mutually exclusive with `--resume` (FR-039). |
+
+Resumable flags (every flag above except the architecture flags) resolve with the
+precedence **explicit CLI value > resumed checkpoint's stored setting > default**, so
+`--resume <ckpt> --lr 3e-5` keeps every prior setting and changes only the LR.
 
 Behavior contract:
 - Each `(draft, seat, pack, pick)` is one example (FR-030); loader reconstructs
@@ -67,8 +72,12 @@ Behavior contract:
 - Loss `= imitation_weight·CE(policy, taken)` over whitelisted seats only
   `+ critic_weight·MSE(critic, standardized reward)` over all non-failed seats
   (FR-032, FR-033).
-- Per-epoch log: loss decomposition + val imitation top-1/top-3 accuracy +
-  critic MSE sliced by `pack_number` (FR-037, SC-005).
+- Length-bucketed batches (similar-length states together, reshuffled each epoch)
+  minimise padding/mask work (FR-036).
+- Every mini-epoch (`--evals-per-epoch`×/epoch): validate, log the training and
+  validation loss decomposition + val imitation top-1/top-3 accuracy + critic MSE
+  sliced by `pack_number` (FR-037, SC-005), write `latest.pt`, update the best
+  checkpoint, and check early-stopping.
 - Best checkpoint by validation `L`; writes `{timestamp}.pt` + `latest.pt`
   under `models/draft/agent/` (FR-036, FR-041).
 - Missing `.npz` cards warned (≤20 + total) and dropped (FR-038).

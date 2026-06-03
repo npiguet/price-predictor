@@ -74,22 +74,23 @@ A researcher trains the policy and critic jointly on a recorded corpus with one
 command. Each `(draft, seat, pack, pick)` decision becomes a training example. The
 policy head learns to imitate the picks of whitelisted (competent) agents; the
 critic head regresses every seat's final pod-relative reward. Training reports its
-loss decomposition and validation metrics per epoch and saves the best checkpoint.
+loss decomposition and validation metrics each mini-epoch and saves the best
+checkpoint.
 
 **Why this priority**: This produces the actual model artefact, but it depends on a
 corpus from User Story 1 already existing.
 
 **Independent Test**: Run `train-draft-agent` against a small recorded corpus and
-confirm it produces a checkpoint, logs the per-epoch loss decomposition plus
-validation imitation top-1/top-3 accuracy and critic MSE sliced by pack number, and
-selects a best checkpoint by validation loss.
+confirm it produces a checkpoint, logs each mini-epoch's training and validation loss
+decomposition plus validation imitation top-1/top-3 accuracy and critic MSE sliced by
+pack number, and selects a best checkpoint by validation loss.
 
 **Acceptance Scenarios**:
 
 1. **Given** a recorded corpus, **When** the researcher runs `train-draft-agent`,
    **Then** the system trains both heads, writes `{timestamp}.pt` and `latest.pt`
-   under `models/draft/agent/`, and each per-epoch log line reports the imitation/
-   critic loss split and the validation metrics.
+   under `models/draft/agent/`, and each mini-epoch log line reports the training and
+   validation loss split and the validation metrics.
 2. **Given** `--imitation-weight 0`, **When** training runs, **Then** only the critic
    is optimised; given `--critic-weight 0`, only the policy is optimised.
 3. **Given** `--imitation-agents forge-full`, **When** training runs, **Then** only
@@ -100,7 +101,9 @@ selects a best checkpoint by validation loss.
    shape mismatch.
 5. **Given** a stopped run, **When** the researcher passes `--resume <checkpoint>`,
    **Then** weights, optimiser state, epoch counter, and best-validation score are
-   restored and architecture-defining flags are rejected.
+   restored, the run's training settings are inherited from the checkpoint with any
+   explicitly-passed flag (e.g. a lowered `--lr`) overriding them, and
+   architecture-defining flags are rejected.
 
 ---
 
@@ -308,22 +311,34 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   not affect the critic.
 - **FR-034**: Optimisation MUST use AdamW with per-parameter-group max-norm gradient
   clipping (`--max-grad-norm`, default 1.0) and a linear LR warmup over the first
-  `--warmup-frac` (default 0.05) of scheduled steps, then constant `--lr`
-  (default `3e-4`).
+  `--warmup-frac` (default 0.05) of **one epoch's** steps, then constant `--lr`
+  (default `3e-4`). Warmup is sized to a single epoch, not the `--epochs` cap, so a
+  run that early-stops after a few epochs still reaches full LR.
 - **FR-035**: The train/validation split MUST be draft-disjoint — all picks of a
-  `draft_id` go entirely to one side; the first `--val-fraction` (default 0.2) of
-  distinct draft IDs form the held-out set with `random_seed = 42`.
-- **FR-036**: States MUST be padded per batch (length bucketing permitted); the best
-  checkpoint MUST be selected by validation loss `L`.
-- **FR-037**: Each per-epoch log MUST report the loss decomposition plus validation
-  imitation top-1 / top-3 accuracy and critic MSE sliced by `pack_number`.
+  `draft_id` go entirely to one side; the first `--val-fraction` (default 0.0025) of
+  distinct draft IDs form the held-out set with `random_seed = 42`. The default is a
+  small held-out monitor: the corpus is large relative to model size, so the val
+  set's role is generalisation monitoring rather than regularisation.
+- **FR-036**: States MUST be padded per batch and grouped into length-bucketed
+  batches (similar-length states together, batch order reshuffled each epoch) so
+  padding/mask work is minimised; the best checkpoint MUST be selected by validation
+  loss `L`.
+- **FR-037**: Each validation (run `--evals-per-epoch` times per epoch — see FR-039)
+  MUST report the training and validation loss (combined `loss`, decomposed into the
+  imitation and critic terms) plus validation imitation top-1 / top-3 accuracy and
+  critic MSE sliced by `pack_number`.
 - **FR-038**: Corpus cards with no `.npz` under `--cards-path` MUST be warned (up to
   20 names plus the total) and their picks dropped, without blocking the run.
-- **FR-039**: Training MUST support `--resume` (restores weights, optimiser, epoch
-  counter, best-val; architecture flags forbidden) and `--checkpoint` (bootstrap a
-  fresh run from weights only; architecture flags forbidden); the two are mutually
-  exclusive. `--epochs` (default 100) caps epochs and `--patience` (default 10)
-  early-stops on no validation improvement.
+- **FR-039**: Training MUST validate, write `latest.pt`, update the best checkpoint,
+  and apply early-stopping `--evals-per-epoch` times per epoch (default 100; these
+  intervals are "mini-epochs"). `--resume` restores weights, optimiser, epoch
+  counter, and best-val, and inherits the checkpoint's training settings — any
+  explicitly-passed CLI flag overrides them (resume precedence: explicit CLI >
+  resumed setting > default), and an overridden `--lr` is re-applied to the resumed
+  optimiser. `--checkpoint` bootstraps a fresh run from weights only. Both forbid
+  architecture flags and are mutually exclusive. `--epochs` (default 100) caps epochs
+  and `--patience` (default 30) early-stops on no validation improvement, counted in
+  mini-epochs.
 
 #### Checkpoints
 
@@ -376,9 +391,9 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
 - **SC-004**: `train-draft-agent` on a recorded corpus runs to completion, emits a
   best checkpoint under `models/draft/agent/`, and the checkpoint reloads and produces
   picks and critic scalars on held-out states.
-- **SC-005**: Per-epoch validation logging reports imitation top-1 and top-3 accuracy
-  and critic MSE sliced by pack number, enabling ranking of model variants on a shared
-  held-out set.
+- **SC-005**: Mini-epoch validation logging reports the training and validation loss,
+  imitation top-1 and top-3 accuracy, and critic MSE sliced by pack number, enabling
+  ranking of model variants on a shared held-out set.
 - **SC-006**: A misconfigured architecture (`d_model` not divisible by `n_heads`, or
   architecture flags supplied with `--resume`/`--checkpoint`) fails fast at startup
   with a clear message rather than a runtime error.
