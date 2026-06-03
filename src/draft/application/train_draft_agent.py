@@ -911,7 +911,8 @@ class TrainDraftAgentUseCase:
                     eta = (nb - step) / rate if rate > 0 else 0.0
                     _log(
                         f"  epoch {epoch} step {step}/{nb} ({step / nb * 100:.0f}%) "
-                        f"imit={win_imit / win_n:.4f} crit={win_crit / win_n:.4f} "
+                        f"train_imit={win_imit / win_n:.4f} "
+                        f"train_crit={win_crit / win_n:.4f} "
                         f"{rate:.1f} steps/s ETA {_fmt_dur(eta)}"
                     )
                     last_log = now
