@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import torch
+
+from draft.application.train_draft_agent import _make_scheduler, _reapply_resume_lr
 from draft.infrastructure.cli import _resolve_train_agent_config, build_parser
 
 
@@ -60,3 +63,35 @@ def test_resume_falls_back_to_default_when_neither_cli_nor_checkpoint() -> None:
     assert cfg.evals_per_epoch == 100    # default (absent in checkpoint, no CLI)
     assert cfg.patience == 30            # default
     assert cfg.imitation_agents == ("forge-full",)  # default
+
+
+def test_resume_lr_override_survives_scheduler_rebuild() -> None:
+    """A --lr override must reach the scheduler's base_lr, not be clobbered.
+
+    Regression: a previous run's LambdaLR bakes ``initial_lr`` into the optimizer
+    param group, which is saved in the optimizer state dict. On resume that stale
+    ``initial_lr`` would override the new --lr unless explicitly dropped, so the
+    warmup scheduler would silently ramp back to the *old* LR on its first step().
+    """
+    model = torch.nn.Linear(4, 4)
+
+    # Original run at the 3e-4 default; its scheduler injects initial_lr=3e-4,
+    # which then lives in the saved optimizer state dict.
+    old_opt = torch.optim.AdamW([{"params": list(model.parameters()), "lr": 3e-4}])
+    _make_scheduler(old_opt, total_steps=1000, warmup_frac=0.05)
+    saved_state = old_opt.state_dict()
+    assert saved_state["param_groups"][0]["initial_lr"] == 3e-4
+
+    # Resume at an overridden 3e-6.
+    new_lr = 3e-6
+    new_opt = torch.optim.AdamW([{"params": list(model.parameters()), "lr": new_lr}])
+    new_opt.load_state_dict(saved_state)
+    _reapply_resume_lr(new_opt, new_lr)
+    scheduler = _make_scheduler(new_opt, total_steps=1000, warmup_frac=0.05)
+
+    assert scheduler.base_lrs == [new_lr]          # base recaptured from --lr
+    new_opt.step()
+    scheduler.step()
+    # First warmup step is base_lr × (1/warmup_steps), bounded by the new base —
+    # the bug let this jump back to the inherited 3e-4.
+    assert new_opt.param_groups[0]["lr"] <= new_lr

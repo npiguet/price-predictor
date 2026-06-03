@@ -606,6 +606,22 @@ def _select_device() -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def _reapply_resume_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
+    """Force ``optimizer`` onto ``lr`` after loading a resumed state dict.
+
+    ``load_state_dict`` restores both the saved ``lr`` and the stale
+    ``initial_lr`` a previous run's ``LambdaLR`` baked into each param group.
+    Setting ``lr`` alone is not enough: a freshly-built ``LambdaLR`` reads its
+    ``base_lr`` from ``initial_lr`` (via ``setdefault``, which won't overwrite an
+    existing value), then clobbers ``lr`` with ``base_lr × λ`` on the first
+    ``step()`` — silently defeating a ``--lr`` override. Popping ``initial_lr``
+    lets the new scheduler recapture its base from this ``lr``.
+    """
+    for group in optimizer.param_groups:
+        group["lr"] = lr
+        group.pop("initial_lr", None)
+
+
 def _make_scheduler(
     optimizer: torch.optim.Optimizer, total_steps: int, warmup_frac: float,
 ) -> torch.optim.lr_scheduler.LambdaLR:
@@ -805,11 +821,9 @@ class TrainDraftAgentUseCase:
         )
         if resume.optimizer_state:
             optimizer.load_state_dict(resume.optimizer_state)
-            # load_state_dict restores the saved LR into the param group; re-apply
-            # config.lr (which may be a CLI override on resume) so the scheduler's
-            # base LR — and thus --lr changes like annealing — take effect.
-            for group in optimizer.param_groups:
-                group["lr"] = config.lr
+            # Re-apply config.lr (a possible --lr override) so the fresh scheduler
+            # below recaptures its base_lr from it instead of the inherited one.
+            _reapply_resume_lr(optimizer, config.lr)
         n_steps = max(1, math.ceil(len(train) / config.batch_size))
         # Warmup over a fraction of ONE epoch (not epochs*n_steps): with early
         # stopping a run rarely passes epoch ~2-3, so a warmup sized to the max
