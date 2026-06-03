@@ -887,6 +887,7 @@ class TrainDraftAgentUseCase:
             nb = len(batches)
             epoch_start = time.monotonic()
             last_log = epoch_start
+            last_log_step = 0
             win_imit = win_crit = 0.0
             win_n = 0
             ev_imit = ev_crit = 0.0  # train loss since the last eval (mini-epoch)
@@ -912,8 +913,12 @@ class TrainDraftAgentUseCase:
                 ev_n += 1
                 now = time.monotonic()
                 if now - last_log >= _STEP_LOG_INTERVAL and step < nb:
-                    rate = step / (now - epoch_start)
-                    eta = (nb - step) / rate if rate > 0 else 0.0
+                    # Windowed rate = true recent training speed; ETA uses the
+                    # cumulative rate (which includes the eval/checkpoint pauses)
+                    # so it reflects real end-to-end wall time.
+                    rate = (step - last_log_step) / (now - last_log)
+                    overall = step / (now - epoch_start)
+                    eta = (nb - step) / overall if overall > 0 else 0.0
                     ti, tc = win_imit / win_n, win_crit / win_n
                     tl = config.imitation_weight * ti + config.critic_weight * tc
                     _log(
@@ -922,6 +927,7 @@ class TrainDraftAgentUseCase:
                         f"{rate:.1f} steps/s ETA {_fmt_dur(eta)}"
                     )
                     last_log = now
+                    last_log_step = step
                     win_imit = win_crit = 0.0
                     win_n = 0
                 if step % eval_interval == 0 or step == nb:
