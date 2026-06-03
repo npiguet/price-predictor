@@ -830,8 +830,15 @@ class TrainDraftAgentUseCase:
         evals_per_epoch = max(1, config.evals_per_epoch)
         eval_interval = max(1, n_steps // evals_per_epoch)
 
-        def run_eval(epoch: int, step: int) -> bool:
-            """Validate + save latest/best; return True if early-stop is reached."""
+        def run_eval(
+            epoch: int, step: int, train_imit: float, train_crit: float,
+        ) -> bool:
+            """Validate + save latest/best; return True if early-stop is reached.
+
+            ``train_imit``/``train_crit`` are the mean training losses over the
+            mini-epoch just finished, logged beside the val losses so the
+            train-vs-val gap is visible on one line.
+            """
             nonlocal best_val_loss, best_at, evals_since_best
             report = _validate(model, val, table, mean, std, config, device)
             mse_str = ", ".join(
@@ -839,6 +846,7 @@ class TrainDraftAgentUseCase:
             )
             _log(
                 f"  eval epoch {epoch} step {step}/{n_steps} | "
+                f"train_imit={train_imit:.4f} train_crit={train_crit:.4f} | "
                 f"val_loss={report.loss:.4f} val_imit={report.imitation:.4f} "
                 f"val_crit={report.critic:.4f} top1={report.top1:.3f} "
                 f"top3={report.top3:.3f} per_pack_mse[{mse_str}]"
@@ -876,6 +884,8 @@ class TrainDraftAgentUseCase:
             last_log = epoch_start
             win_imit = win_crit = 0.0
             win_n = 0
+            ev_imit = ev_crit = 0.0  # train loss since the last eval (mini-epoch)
+            ev_n = 0
             for step, chunk in enumerate(batches, start=1):
                 batch = _collate(chunk, table, mean, std, device)
                 losses, _, _ = _compute_loss(
@@ -887,9 +897,14 @@ class TrainDraftAgentUseCase:
                     torch.nn.utils.clip_grad_norm_(group["params"], config.max_grad_norm)
                 optimizer.step()
                 scheduler.step()
-                win_imit += float(losses.imitation.detach())
-                win_crit += float(losses.critic.detach())
+                imit_v = float(losses.imitation.detach())
+                crit_v = float(losses.critic.detach())
+                win_imit += imit_v
+                win_crit += crit_v
                 win_n += 1
+                ev_imit += imit_v
+                ev_crit += crit_v
+                ev_n += 1
                 now = time.monotonic()
                 if now - last_log >= _STEP_LOG_INTERVAL and step < nb:
                     rate = step / (now - epoch_start)
@@ -903,7 +918,11 @@ class TrainDraftAgentUseCase:
                     win_imit = win_crit = 0.0
                     win_n = 0
                 if step % eval_interval == 0 or step == nb:
-                    if run_eval(epoch, step):
+                    train_imit = ev_imit / ev_n if ev_n else 0.0
+                    train_crit = ev_crit / ev_n if ev_n else 0.0
+                    ev_imit = ev_crit = 0.0
+                    ev_n = 0
+                    if run_eval(epoch, step, train_imit, train_crit):
                         _log(
                             f"Early stop: {evals_since_best} mini-epochs without "
                             f"val improvement (--patience={config.patience})"
