@@ -155,12 +155,17 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         help="Max epochs (default: 100).",
     )
     parser.add_argument(
-        "--val-fraction", type=float, default=0.2,
-        help="Draft-disjoint validation fraction (default: 0.2).",
+        "--val-fraction", type=float, default=0.0025,
+        help="Draft-disjoint validation fraction (default: 0.0025 — a small "
+             "held-out monitor; the huge train set makes overfit unlikely).",
     )
     parser.add_argument(
-        "--patience", type=int, default=10,
-        help="Early-stop epochs without val improvement (default: 10).",
+        "--evals-per-epoch", type=int, default=100,
+        help="Validate + checkpoint this many times per epoch (mini-epochs; default: 100).",
+    )
+    parser.add_argument(
+        "--patience", type=int, default=30,
+        help="Early-stop after this many mini-epochs without val improvement (default: 30).",
     )
     parser.add_argument(
         "--resume", default=None,
@@ -261,6 +266,7 @@ def run_train_draft_agent(args: argparse.Namespace) -> int:
         max_grad_norm=args.max_grad_norm,
         epochs=args.epochs,
         val_fraction=args.val_fraction,
+        evals_per_epoch=args.evals_per_epoch,
         patience=args.patience,
         resume=Path(args.resume) if args.resume else None,
         checkpoint=Path(args.checkpoint) if args.checkpoint else None,

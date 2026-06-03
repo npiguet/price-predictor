@@ -80,8 +80,9 @@ class TrainDraftAgentConfig:
     batch_size: int = 32
     max_grad_norm: float = 1.0
     epochs: int = 100
-    val_fraction: float = 0.2
-    patience: int = 10
+    val_fraction: float = 0.0025
+    evals_per_epoch: int = 100  # "mini-epochs": validate + checkpoint this often
+    patience: int = 30  # counted in mini-epochs (evals), not full epochs
     resume: Path | None = None
     checkpoint: Path | None = None
 
@@ -423,6 +424,32 @@ def split_draft_disjoint(
     val = [ex for ex in examples if ex.draft_index in val_ids]
     train = [ex for ex in examples if ex.draft_index not in val_ids]
     return train, val
+
+
+_BUCKET_MULTIPLIER = 50  # megabatch = bucket_multiplier * batch_size examples
+
+
+def length_bucketed_batches(
+    examples: list[DraftExample], batch_size: int, rng: random.Random,
+) -> list[list[DraftExample]]:
+    """Group similar-length examples into batches; reshuffle batch order per call.
+
+    Examples are shuffled, partitioned into megabatches, sorted by token count
+    *within* each megabatch, cut into batches, and the batch order is shuffled.
+    So each batch holds near-equal-length examples (little padding wasted on
+    masks) while still varying composition and order across epochs.
+    """
+    order = list(examples)
+    rng.shuffle(order)
+    mega = batch_size * _BUCKET_MULTIPLIER
+    batches: list[list[DraftExample]] = []
+    for start in range(0, len(order), mega):
+        chunk = order[start:start + mega]
+        chunk.sort(key=lambda ex: ex.n_tokens)
+        for b in range(0, len(chunk), batch_size):
+            batches.append(chunk[b:b + batch_size])
+    rng.shuffle(batches)
+    return batches
 
 
 def critic_standardization(train: list[DraftExample]) -> tuple[float, float]:
@@ -772,9 +799,10 @@ class TrainDraftAgentUseCase:
         if resume.optimizer_state:
             optimizer.load_state_dict(resume.optimizer_state)
         n_steps = max(1, math.ceil(len(train) / config.batch_size))
-        scheduler = _make_scheduler(
-            optimizer, n_steps * config.epochs, config.warmup_frac,
-        )
+        # Warmup over a fraction of ONE epoch (not epochs*n_steps): with early
+        # stopping a run rarely passes epoch ~2-3, so a warmup sized to the max
+        # epoch count would never reach full LR.
+        scheduler = _make_scheduler(optimizer, n_steps, config.warmup_frac)
 
         out_dir = Path("models/draft/agent")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -785,25 +813,63 @@ class TrainDraftAgentUseCase:
             k: (str(v) if isinstance(v, Path) else v) for k, v in asdict(config).items()
         }
 
+        # Sort val once by length so eval batches are low-padding (cheap eval).
+        val = sorted(val, key=lambda ex: ex.n_tokens)
+
         rng = random.Random(RANDOM_SEED)
         best_val_loss = resume.best_val_loss
-        best_epoch = resume.start_epoch
-        epochs_since_best = 0
+        best_at = (resume.start_epoch, 0)
+        evals_since_best = 0
+        evals_per_epoch = max(1, config.evals_per_epoch)
+        eval_interval = max(1, n_steps // evals_per_epoch)
 
-        _log(f"Training: {config.epochs} epochs, {n_steps} steps/epoch on {device}")
+        def run_eval(epoch: int, step: int) -> bool:
+            """Validate + save latest/best; return True if early-stop is reached."""
+            nonlocal best_val_loss, best_at, evals_since_best
+            report = _validate(model, val, table, mean, std, config, device)
+            mse_str = ", ".join(
+                f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
+            )
+            _log(
+                f"  eval epoch {epoch} step {step}/{n_steps} | "
+                f"val_loss={report.loss:.4f} val_imit={report.imitation:.4f} "
+                f"val_crit={report.critic:.4f} top1={report.top1:.3f} "
+                f"top3={report.top3:.3f} per_pack_mse[{mse_str}]"
+            )
+            new_best = report.loss < best_val_loss
+            if new_best:
+                best_val_loss = report.loss
+                best_at = (epoch, step)
+                evals_since_best = 0
+            else:
+                evals_since_best += 1
+            store.save_checkpoint(
+                model, optimizer, epoch, best_val_loss, model.config, latest_path,
+                critic_mean=mean, critic_std=std, train_config=train_config,
+            )
+            if new_best:
+                store.save_checkpoint(
+                    model, optimizer, epoch, best_val_loss, model.config, best_path,
+                    critic_mean=mean, critic_std=std, train_config=train_config,
+                )
+            model.train()  # _validate switched to eval mode
+            return evals_since_best >= config.patience
+
+        _log(
+            f"Training: up to {config.epochs} epochs, {n_steps} steps/epoch; "
+            f"eval+checkpoint every {eval_interval} steps (~{evals_per_epoch} "
+            f"mini-epochs/epoch); patience {config.patience} mini-epochs; on {device}"
+        )
+        stop = False
         for epoch in range(resume.start_epoch, resume.start_epoch + config.epochs):
             model.train()
-            shuffled = list(train)
-            rng.shuffle(shuffled)
-            ep_imit = ep_crit = 0.0
+            batches = length_bucketed_batches(train, config.batch_size, rng)
+            nb = len(batches)
             epoch_start = time.monotonic()
             last_log = epoch_start
             win_imit = win_crit = 0.0
             win_n = 0
-            for step, start in enumerate(
-                range(0, len(shuffled), config.batch_size), start=1,
-            ):
-                chunk = shuffled[start:start + config.batch_size]
+            for step, chunk in enumerate(batches, start=1):
                 batch = _collate(chunk, table, mean, std, device)
                 losses, _, _ = _compute_loss(
                     model, batch, config.imitation_weight, config.critic_weight,
@@ -814,64 +880,35 @@ class TrainDraftAgentUseCase:
                     torch.nn.utils.clip_grad_norm_(group["params"], config.max_grad_norm)
                 optimizer.step()
                 scheduler.step()
-                imit_v = float(losses.imitation.detach())
-                crit_v = float(losses.critic.detach())
-                ep_imit += imit_v
-                ep_crit += crit_v
-                win_imit += imit_v
-                win_crit += crit_v
+                win_imit += float(losses.imitation.detach())
+                win_crit += float(losses.critic.detach())
                 win_n += 1
                 now = time.monotonic()
-                if now - last_log >= _STEP_LOG_INTERVAL and step < n_steps:
+                if now - last_log >= _STEP_LOG_INTERVAL and step < nb:
                     rate = step / (now - epoch_start)
-                    eta = (n_steps - step) / rate if rate > 0 else 0.0
+                    eta = (nb - step) / rate if rate > 0 else 0.0
                     _log(
-                        f"  epoch {epoch} step {step}/{n_steps} "
-                        f"({step / n_steps * 100:.0f}%) "
+                        f"  epoch {epoch} step {step}/{nb} ({step / nb * 100:.0f}%) "
                         f"imit={win_imit / win_n:.4f} crit={win_crit / win_n:.4f} "
                         f"{rate:.1f} steps/s ETA {_fmt_dur(eta)}"
                     )
                     last_log = now
                     win_imit = win_crit = 0.0
                     win_n = 0
-
-            epoch_secs = time.monotonic() - epoch_start
-            report = _validate(model, val, table, mean, std, config, device)
-            mse_str = ", ".join(
-                f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
-            )
-            _log(
-                f"epoch={epoch} ({_fmt_dur(epoch_secs)}) "
-                f"train_imit={ep_imit / n_steps:.4f} "
-                f"train_crit={ep_crit / n_steps:.4f} | val_loss={report.loss:.4f} "
-                f"val_imit={report.imitation:.4f} val_crit={report.critic:.4f} "
-                f"top1={report.top1:.3f} top3={report.top3:.3f} "
-                f"per_pack_mse[{mse_str}]"
-            )
-
-            new_best = report.loss < best_val_loss
-            if new_best:
-                best_val_loss = report.loss
-                best_epoch = epoch
-                epochs_since_best = 0
-            else:
-                epochs_since_best += 1
-
-            store.save_checkpoint(
-                model, optimizer, epoch, best_val_loss, model.config, latest_path,
-                critic_mean=mean, critic_std=std, train_config=train_config,
-            )
-            if new_best:
-                store.save_checkpoint(
-                    model, optimizer, epoch, best_val_loss, model.config, best_path,
-                    critic_mean=mean, critic_std=std, train_config=train_config,
-                )
-            if epochs_since_best >= config.patience:
-                _log(f"Early stop: {epochs_since_best} epochs without val improvement")
+                if step % eval_interval == 0 or step == nb:
+                    if run_eval(epoch, step):
+                        _log(
+                            f"Early stop: {evals_since_best} mini-epochs without "
+                            f"val improvement (--patience={config.patience})"
+                        )
+                        stop = True
+                        break
+            if stop:
                 break
 
+        best_epoch, best_step = best_at
         _log(
-            f"Done. Best val_loss={best_val_loss:.4f} at epoch {best_epoch}; "
-            f"best checkpoint: {best_path}"
+            f"Done. Best val_loss={best_val_loss:.4f} at epoch {best_epoch} "
+            f"step {best_step}; best checkpoint: {best_path}"
         )
         return TrainDraftAgentResult(best_val_loss, best_epoch, best_path)
