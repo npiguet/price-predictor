@@ -844,12 +844,17 @@ class TrainDraftAgentUseCase:
             mse_str = ", ".join(
                 f"p{pk}={v:.4f}" for pk, v in sorted(report.per_pack_mse.items())
             )
+            train_loss = (
+                config.imitation_weight * train_imit
+                + config.critic_weight * train_crit
+            )
             _log(
                 f"  eval epoch {epoch} step {step}/{n_steps} | "
-                f"train_imit={train_imit:.4f} train_crit={train_crit:.4f} | "
-                f"val_loss={report.loss:.4f} val_imit={report.imitation:.4f} "
-                f"val_crit={report.critic:.4f} top1={report.top1:.3f} "
-                f"top3={report.top3:.3f} per_pack_mse[{mse_str}]"
+                f"train_loss={train_loss:.4f} train_imit={train_imit:.4f} "
+                f"train_crit={train_crit:.4f} | val_loss={report.loss:.4f} "
+                f"val_imit={report.imitation:.4f} val_crit={report.critic:.4f} "
+                f"top1={report.top1:.3f} top3={report.top3:.3f} "
+                f"per_pack_mse[{mse_str}]"
             )
             new_best = report.loss < best_val_loss
             if new_best:
@@ -909,10 +914,11 @@ class TrainDraftAgentUseCase:
                 if now - last_log >= _STEP_LOG_INTERVAL and step < nb:
                     rate = step / (now - epoch_start)
                     eta = (nb - step) / rate if rate > 0 else 0.0
+                    ti, tc = win_imit / win_n, win_crit / win_n
+                    tl = config.imitation_weight * ti + config.critic_weight * tc
                     _log(
                         f"  epoch {epoch} step {step}/{nb} ({step / nb * 100:.0f}%) "
-                        f"train_imit={win_imit / win_n:.4f} "
-                        f"train_crit={win_crit / win_n:.4f} "
+                        f"train_loss={tl:.4f} train_imit={ti:.4f} train_crit={tc:.4f} "
                         f"{rate:.1f} steps/s ETA {_fmt_dur(eta)}"
                     )
                     last_log = now
