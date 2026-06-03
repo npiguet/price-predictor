@@ -183,6 +183,7 @@ class _Loader:
         total = len(records)
         log_every = max(200, total // 20)  # ~20 progress lines on a big corpus
         start = time.monotonic()
+        last_ri, last_t = 0, start  # windowed-rate anchors
         _log(f"Building examples from {total} drafts...")
         for ri, record in enumerate(records, start=1):
             geo = DraftGeometry.from_record(record)
@@ -199,9 +200,14 @@ class _Loader:
                     whitelisted, critic_active, rewards[seat_idx], examples,
                 )
             if ri % log_every == 0 or ri == total:
-                elapsed = time.monotonic() - start
-                rate = ri / elapsed if elapsed > 0 else 0.0
+                now = time.monotonic()
+                # Windowed (since-last-log) rate: the cold first chunk reads most
+                # of the ~28k unique card .npz files off disk, so a lifetime
+                # average would understate the (much faster) cached steady state.
+                interval = now - last_t
+                rate = (ri - last_ri) / interval if interval > 0 else 0.0
                 eta = (total - ri) / rate if rate > 0 else 0.0
+                last_ri, last_t = ri, now
                 _log(
                     f"  loaded {ri}/{total} drafts -> {len(examples)} examples "
                     f"({rate:.0f} drafts/s, ETA {_fmt_dur(eta)})"
