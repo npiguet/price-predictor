@@ -644,6 +644,66 @@ during gen-1 development: stick to standard `nn.Module` building blocks
 (no custom CUDA kernels or exotic Python control flow that won't trace).
 Eventual TorchScript export becomes mechanical.
 
+## First training run (2026-06-03)
+
+First full `train-draft-agent` run, on the greedy-labelled corpus
+(`drafts-greedy.jsonl`, `--cards-path output/cardsfolder-512/`). Killed
+partway through epoch 1 by hand — read below for why.
+
+**Setup.** 10 623 drafts → 3 793 008 train + 9 240 val examples (draft-disjoint
+split), `embedding_dim=544`, `packs=3`, `P=20`. Critic raw target (pod-relative
+reward) `mean≈0, std≈1.4712`; targets are standardised before the MSE, so the
+meaningful critic baseline is "predict the mean → MSE ≈ 1.0". Schedule: up to
+100 epochs, eval+checkpoint every 1185 steps (≈100 mini-epochs/epoch), patience
+30 mini-epochs. ~10.5 steps/s, drifting down to ~8.7 over the run (likely host/
+GPU contention or throttling, not the eval pauses).
+
+**Where it got to (~1.8 epochs):**
+
+- **Imitation head — learned well.** top1 (model's #1 == Forge's actual pick)
+  0.35 → ~0.78; top3 0.67 → ~0.98; val_imit (CE) 1.70 → ~0.55. Top-3 of ~0.98
+  is the headline: the demonstrated pick is almost always in the model's top
+  three.
+- **Critic head — good, plateaued early.** val_crit ≈ 0.27–0.28 on the
+  standardised scale ⇒ roughly **75 % of reward variance explained**. It was
+  already there by mid-epoch 0 and barely moved afterwards. `per_pack_mse`
+  ordered p1 ≈ 0.44 > p2 ≈ 0.23 > p3 ≈ 0.14 — exactly right: final-deck quality
+  is hardest to predict at pack 1 (deck maximally undetermined) and easiest at
+  pack 3 (deck nearly fixed).
+- **No overfitting.** train and val track each other tightly throughout
+  (3.8 M examples vs this model size), so the gap is negligible.
+
+**Why it was killed.** The run *looked* like it was bouncing in a fixed range,
+and the apparent best (val_loss ≈ 0.804 at epoch 1 step 52140) looked like
+chance rather than a durable level. That read is half right:
+
+- *The 0.804 is a lucky eval.* Its neighbours sit at 0.84–0.86, so it's a ~0.04
+  downward spike off a local level of ~0.85. Best-checkpoint-by-val_loss takes
+  the **minimum over ~180 noisy eval estimates** (≈100/epoch × ~1.8 epochs);
+  with an eval-noise band of ±0.03–0.04 the min of that many draws sits well
+  below the true level by order-statistics alone. So the saved "best" is partly
+  selection bias.
+- *But there was real epoch-over-epoch improvement.* The val_loss **envelope**
+  went from ~0.91 (end of epoch 0) to ~0.83 typical in epoch 1 — a genuine
+  ~0.07–0.08 drop, not noise. The improvement is **decelerating**, and the
+  per-epoch gain is now comparable to the eval noise, which is exactly why it
+  reads as "flat" to the eye.
+- *The moving part is imitation, not the critic.* Almost all of the epoch-0→1
+  val gain is in val_imit (~0.63 → ~0.55); val_crit was flat from early epoch 0.
+  So the critic was effectively done; pick-prediction was still slowly
+  improving.
+
+**Caveats / follow-ups.**
+
+- This run used **greedy**-built deck labels, whereas gen-1's chosen labeller is
+  `--build-method picker` (see the 2026-06-01 validation entry). The `imit`
+  numbers are builder-independent (pick labels don't depend on the builder), but
+  the `crit` numbers are **not** comparable to a picker-labelled run.
+- Next run: judge convergence on a **trailing average** of evals (or a larger
+  val set) so the trend isn't drowned by ±0.03 jitter — and so best-checkpoint
+  selection doesn't lock onto a lucky dip. If maximum imitation top-1 is wanted,
+  another epoch or two probably still had a little to give; the critic did not.
+
 ## Open / future questions
 
 - **Gen-2 RL spec.** Actor-critic with GAE, the choice between REINFORCE
