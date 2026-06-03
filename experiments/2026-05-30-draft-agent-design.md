@@ -704,6 +704,39 @@ chance rather than a durable level. That read is half right:
   selection doesn't lock onto a lucky dip. If maximum imitation top-1 is wanted,
   another epoch or two probably still had a little to give; the critic did not.
 
+### Resume at lower LR — warmup overshoot (2026-06-03)
+
+Resumed the 0.804 best at `--lr 3e-5` (10× below the `3e-4` default) to push the
+imitation head further. val_loss *improved* for the first ~2400 steps to
+**0.7633** (top1 0.802, vs the first run's 0.804 / top1 0.79), then steadily
+**degraded** and never recovered, early-stopping at step 37920 (30 evals without
+a new best).
+
+The cause is the LR schedule, not the data: `--resume` restores the optimizer
+moments but rebuilds the warmup scheduler from step 0 (linear ramp `0 → lr` over
+5 % of one epoch ≈ 5900 steps). The degradation tracks the ramp one-for-one:
+
+| step | approx LR     | val_loss   | top1  |
+|------|---------------|------------|-------|
+| 1185 | ~6e-6         | 0.7677     | 0.805 |
+| 2370 | ~1.2e-5       | **0.7633** | 0.802 |
+| 3555 | ~1.8e-5       | 0.7808     | 0.806 |
+| 4740 | ~2.4e-5       | 0.8023     | 0.795 |
+| 5925 | ~3e-5 (top)   | 0.8249     | 0.785 |
+| 7110 | 3e-5 flat     | 0.8451     | 0.779 |
+| 8295 | 3e-5 flat     | 0.8775     | 0.771 |
+| …    | 3e-5 flat     | ~0.80–0.85 | ~0.78 |
+
+Best is mid-warmup at LR ≈ 1.2e-5; worst is right as the ramp tops out at 3e-5.
+`train` loss rose alongside `val`, so it's the optimizer being pushed off the
+fine minimum, not overfitting. The lesson: when fine-tuning an already-converged
+checkpoint, even `3e-5` is too hot to settle in the basin this model sits in
+(the original `3e-4` worked because it was still in coarse descent), and a fresh
+warmup ramp overshoots the working LR. Net: a modestly better checkpoint
+(`20260603_181259.pt`, val 0.7633 / top1 0.802) was still banked from the warmup
+transient. To go lower, resume from it at ~`1e-5` with little/no warmup
+(`--warmup-frac` near 0) so the LR stays where it was actually working.
+
 ## Open / future questions
 
 - **Gen-2 RL spec.** Actor-critic with GAE, the choice between REINFORCE
