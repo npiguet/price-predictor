@@ -805,6 +805,11 @@ class TrainDraftAgentUseCase:
         )
         if resume.optimizer_state:
             optimizer.load_state_dict(resume.optimizer_state)
+            # load_state_dict restores the saved LR into the param group; re-apply
+            # config.lr (which may be a CLI override on resume) so the scheduler's
+            # base LR — and thus --lr changes like annealing — take effect.
+            for group in optimizer.param_groups:
+                group["lr"] = config.lr
         n_steps = max(1, math.ceil(len(train) / config.batch_size))
         # Warmup over a fraction of ONE epoch (not epochs*n_steps): with early
         # stopping a run rarely passes epoch ~2-3, so a warmup sized to the max

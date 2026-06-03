@@ -18,6 +18,57 @@ _TRAIN_AGENT_ARCHITECTURE_FLAGS: tuple[str, ...] = (
     "d_model", "n_layers", "n_heads", "ff_dim", "dropout",
 )
 
+# Non-architecture training flags resolved with resume precedence (explicit CLI
+# > resumed train_config > dataclass default). imitation_agents is resolved
+# separately (CLI string -> tuple); architecture flags are inherited from the
+# checkpoint's stored config, not train_config.
+_RESUMABLE_TRAIN_FLAGS: tuple[str, ...] = (
+    "drafts_path", "cards_path", "imitation_weight", "critic_weight",
+    "lr", "warmup_frac", "batch_size", "max_grad_norm", "epochs",
+    "val_fraction", "evals_per_epoch", "patience",
+)
+_TRAIN_PATH_FIELDS = frozenset({"drafts_path", "cards_path"})
+
+
+def _resolve_train_agent_config(
+    args: argparse.Namespace, resumed_train_config: dict | None,
+):
+    """Build TrainDraftAgentConfig with resume precedence (CLI > resumed > default)."""
+    from draft.application.train_draft_agent import TrainDraftAgentConfig
+    from sealed.infrastructure.cli_resume import resolve_resumable_args
+
+    resolved = resolve_resumable_args(
+        args,
+        flag_names=_RESUMABLE_TRAIN_FLAGS,
+        config_cls=TrainDraftAgentConfig,
+        path_fields=_TRAIN_PATH_FIELDS,
+        resumed_config=resumed_train_config,
+    )
+
+    # imitation_agents: CLI is a comma string; config wants a tuple.
+    if args.imitation_agents is not None:
+        agents = tuple(
+            a.strip() for a in args.imitation_agents.split(",") if a.strip()
+        )
+    elif resumed_train_config and resumed_train_config.get("imitation_agents"):
+        agents = tuple(resumed_train_config["imitation_agents"])
+    else:
+        agents = ("forge-full",)
+
+    return TrainDraftAgentConfig(
+        # Architecture is inherited from the checkpoint on resume/checkpoint;
+        # these only matter for a fresh run and are forbidden when loading.
+        d_model=args.d_model,
+        n_layers=args.n_layers if args.n_layers is not None else 4,
+        n_heads=args.n_heads if args.n_heads is not None else 8,
+        ff_dim=args.ff_dim,
+        dropout=args.dropout if args.dropout is not None else 0.0,
+        imitation_agents=agents,
+        resume=Path(args.resume) if args.resume else None,
+        checkpoint=Path(args.checkpoint) if args.checkpoint else None,
+        **resolved,
+    )
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -93,13 +144,15 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         help="Train the imitation policy + MC-regression critic jointly on a recorded corpus",
     )
     parser.set_defaults(func=run_train_draft_agent)
+    # Resumable flags register with default=None so a value resolves as:
+    # explicit CLI > resumed checkpoint's train_config > dataclass default.
     parser.add_argument(
-        "--drafts-path", default="output/draft/drafts.jsonl",
-        help="Recorded corpus (default: output/draft/drafts.jsonl).",
+        "--drafts-path", default=None,
+        help="Recorded corpus (default: output/draft/drafts.jsonl). Resumable.",
     )
     parser.add_argument(
-        "--cards-path", default="output/cardsfolder/",
-        help=".npz cache (default: output/cardsfolder/).",
+        "--cards-path", default=None,
+        help=".npz cache (default: output/cardsfolder/). Resumable.",
     )
     # Architecture flags: default=None so they can be rejected with --resume/--checkpoint.
     parser.add_argument(
@@ -123,53 +176,59 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         help="Transformer dropout (default: 0.0).",
     )
     parser.add_argument(
-        "--imitation-weight", type=float, default=1.0,
-        help="CE coefficient; 0 => critic-only (default: 1.0).",
+        "--imitation-weight", type=float, default=None,
+        help="CE coefficient; 0 => critic-only (default: 1.0). Resumable.",
     )
     parser.add_argument(
-        "--critic-weight", type=float, default=1.0,
-        help="MSE coefficient; 0 => imitation-only (default: 1.0).",
+        "--critic-weight", type=float, default=None,
+        help="MSE coefficient; 0 => imitation-only (default: 1.0). Resumable.",
     )
     parser.add_argument(
-        "--imitation-agents", default="forge-full",
-        help="Comma-separated whitelist of agents whose picks are imitation targets.",
+        "--imitation-agents", default=None,
+        help="Comma-separated whitelist of imitation-target agents (default: "
+             "forge-full). Resumable.",
     )
     parser.add_argument(
-        "--lr", type=float, default=3e-4,
-        help="AdamW LR (default: 3e-4).",
+        "--lr", type=float, default=None,
+        help="AdamW LR (default: 3e-4). Resumable (also re-applied to a resumed "
+             "optimizer, so --lr changes the LR on resume).",
     )
     parser.add_argument(
-        "--warmup-frac", type=float, default=0.05,
-        help="LR linear-warmup fraction (default: 0.05).",
+        "--warmup-frac", type=float, default=None,
+        help="LR linear-warmup fraction (default: 0.05). Resumable.",
     )
     parser.add_argument(
-        "--batch-size", type=int, default=32,
-        help="States per gradient step (default: 32).",
+        "--batch-size", type=int, default=None,
+        help="States per gradient step (default: 32). Resumable.",
     )
     parser.add_argument(
-        "--max-grad-norm", type=float, default=1.0,
-        help="Per-group gradient-norm cap (default: 1.0).",
+        "--max-grad-norm", type=float, default=None,
+        help="Per-group gradient-norm cap (default: 1.0). Resumable.",
     )
     parser.add_argument(
-        "--epochs", type=int, default=100,
-        help="Max epochs (default: 100).",
+        "--epochs", type=int, default=None,
+        help="Max epochs (default: 100). Resumable.",
     )
     parser.add_argument(
-        "--val-fraction", type=float, default=0.0025,
+        "--val-fraction", type=float, default=None,
         help="Draft-disjoint validation fraction (default: 0.0025 — a small "
-             "held-out monitor; the huge train set makes overfit unlikely).",
+             "held-out monitor; the huge train set makes overfit unlikely). Resumable.",
     )
     parser.add_argument(
-        "--evals-per-epoch", type=int, default=100,
-        help="Validate + checkpoint this many times per epoch (mini-epochs; default: 100).",
+        "--evals-per-epoch", type=int, default=None,
+        help="Validate + checkpoint this many times per epoch (mini-epochs; "
+             "default: 100). Resumable.",
     )
     parser.add_argument(
-        "--patience", type=int, default=30,
-        help="Early-stop after this many mini-epochs without val improvement (default: 30).",
+        "--patience", type=int, default=None,
+        help="Early-stop after this many mini-epochs without val improvement "
+             "(default: 30). Resumable.",
     )
     parser.add_argument(
         "--resume", default=None,
-        help="Restore weights+optimizer+epoch+best-val; arch flags forbidden; xor --checkpoint.",
+        help="Continue a run: restore weights+optimizer+epoch+best-val and "
+             "inherit its training settings; CLI flags override them; arch flags "
+             "forbidden; xor --checkpoint.",
     )
     parser.add_argument(
         "--checkpoint", default=None,
@@ -220,11 +279,9 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
 
 def run_train_draft_agent(args: argparse.Namespace) -> int:
     """Execute the train-draft-agent command."""
-    from draft.application.train_draft_agent import (
-        TrainDraftAgentConfig,
-        TrainDraftAgentUseCase,
-    )
+    from draft.application.train_draft_agent import TrainDraftAgentUseCase
     from draft.domain.draft_agent_model import DraftAgentArchitectureError
+    from draft.infrastructure.draft_agent_store import DraftAgentStore
 
     if args.resume is not None and args.checkpoint is not None:
         print(
@@ -247,30 +304,18 @@ def run_train_draft_agent(args: argparse.Namespace) -> int:
                 )
                 return 2
 
-    config = TrainDraftAgentConfig(
-        drafts_path=Path(args.drafts_path),
-        cards_path=Path(args.cards_path),
-        d_model=args.d_model,
-        n_layers=args.n_layers if args.n_layers is not None else 4,
-        n_heads=args.n_heads if args.n_heads is not None else 8,
-        ff_dim=args.ff_dim,
-        dropout=args.dropout if args.dropout is not None else 0.0,
-        imitation_weight=args.imitation_weight,
-        critic_weight=args.critic_weight,
-        imitation_agents=tuple(
-            a.strip() for a in args.imitation_agents.split(",") if a.strip()
-        ),
-        lr=args.lr,
-        warmup_frac=args.warmup_frac,
-        batch_size=args.batch_size,
-        max_grad_norm=args.max_grad_norm,
-        epochs=args.epochs,
-        val_fraction=args.val_fraction,
-        evals_per_epoch=args.evals_per_epoch,
-        patience=args.patience,
-        resume=Path(args.resume) if args.resume else None,
-        checkpoint=Path(args.checkpoint) if args.checkpoint else None,
-    )
+    # On --resume, inherit the run's settings from its checkpoint; CLI flags
+    # override. (--checkpoint is a fresh run from weights only, so no inherit.)
+    resumed_train_config: dict | None = None
+    if args.resume is not None:
+        try:
+            resumed = DraftAgentStore().load_checkpoint(Path(args.resume))
+        except FileNotFoundError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        resumed_train_config = resumed.train_config
+
+    config = _resolve_train_agent_config(args, resumed_train_config)
 
     try:
         TrainDraftAgentUseCase().execute(config)
