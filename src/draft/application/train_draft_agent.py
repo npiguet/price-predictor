@@ -782,6 +782,7 @@ class TrainDraftAgentUseCase:
         if loader.embedding_dim is None:
             raise ValueError("Could not determine embedding dimension from the cache")
         table = loader.table()  # shared (num_unique_cards, dim) embedding table
+        del records  # ~1 GB of parsed JSON no longer needed once examples are built
 
         train, val = split_draft_disjoint(examples, config.val_fraction)
         if not train:
