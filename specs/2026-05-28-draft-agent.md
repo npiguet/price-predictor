@@ -214,15 +214,28 @@ L = imitation_weight · CE(policy_logits, taken_index)   [whitelisted-agent stat
 
 - **Optimiser:** AdamW, per-parameter-group max-norm 1.0 gradient clipping.
 - **LR schedule:** linear warmup over the first `--warmup-frac` (default
-  0.05) of scheduled steps, then constant `--lr`.
+  0.05) of **one epoch's** steps (sized to a single epoch, not the
+  `--epochs` cap, so a run that early-stops after a few epochs still reaches
+  full LR), then constant `--lr`. Optional ReduceLROnPlateau-style annealing
+  is off by default and enabled by `--lr-decay-patience`: after that many
+  mini-epochs without a new best validation loss the LR is multiplied by
+  `--lr-decay-factor` (default 0.1) down to `--min-lr` (default `lr · 1e-3`).
 - **Split:** draft-disjoint — all picks of a `draft_id` go entirely to train
-  or validation. First `--val-fraction` (default 0.2) of distinct
-  `draft_id`s form the held-out set; `random_seed = 42`.
+  or validation. First `--val-fraction` (default 0.0025) of distinct
+  `draft_id`s form the held-out set; `random_seed = 42`. The default is a
+  small held-out monitor: the corpus is large relative to model size, so the
+  val set's role is generalisation monitoring rather than regularisation.
 - **Batching:** states padded per batch (§ 1.4); length bucketing
   permitted.
-- **Best checkpoint:** selected by validation `L`. Per-epoch log reports
-  the loss decomposition plus validation imitation top-1 / top-3 accuracy
-  and critic MSE sliced by `pack_number`.
+- **Validation & best checkpoint:** validation runs `--evals-per-epoch`
+  times per epoch (default 100; these intervals are "mini-epochs"). Each
+  writes `latest.pt`, updates the best-by-validation-`L` checkpoint, and
+  drives early stopping (`--patience`, default 30 mini-epochs). With LR
+  annealing on, the shared no-improvement counter triggers a decay before
+  early stop (`--lr-decay-patience` must be `< --patience`), so early stop
+  fires only once the `--min-lr` floor is reached. Each validation logs the
+  loss decomposition plus validation imitation top-1 / top-3 accuracy and
+  critic MSE sliced by `pack_number`.
 - Cards in the corpus with no `.npz` under `--cards-path` are warned (up
   to 20 names + total) and their picks dropped; do not block the run.
 
@@ -356,9 +369,13 @@ Trains policy + critic jointly on a recorded corpus.
 | `--batch-size` | `32` | States per gradient step. |
 | `--max-grad-norm` | `1.0` | Per-group gradient-norm cap. |
 | `--epochs` | `100` | Max epochs. |
-| `--val-fraction` | `0.2` | Draft-disjoint validation fraction. |
-| `--patience` | `10` | Early-stop epochs without val improvement. |
-| `--resume` | _(none)_ | Continue a stopped run (weights + optimiser + epoch counter + best-val). Architecture flags forbidden. Mutually exclusive with `--checkpoint`. |
+| `--val-fraction` | `0.0025` | Draft-disjoint validation fraction (a small held-out monitor; the corpus is large relative to model size). |
+| `--evals-per-epoch` | `100` | Validate + checkpoint this many times per epoch ("mini-epochs"). |
+| `--patience` | `30` | Early-stop after this many mini-epochs (validations) without val improvement. |
+| `--lr-decay-patience` | _(none; disabled)_ | Opt-in plateau LR annealing: divide the LR (by `--lr-decay-factor`) after this many mini-epochs without a new best val loss. Must be `< --patience`. |
+| `--lr-decay-factor` | `0.1` | LR multiplier applied on each plateau. |
+| `--min-lr` | `lr × 1e-3` | Annealing floor; no decay below this. |
+| `--resume` | _(none)_ | Continue a stopped run: restore weights + optimiser + epoch counter + best-val + LR-anneal position, and inherit the checkpoint's training settings (resume precedence: explicit CLI flag > resumed setting > default). An overridden `--lr` is re-applied to the optimiser and restarts annealing. Architecture flags forbidden. Mutually exclusive with `--checkpoint`. |
 | `--checkpoint` | _(none)_ | Bootstrap a fresh run from this checkpoint's weights only. Architecture flags forbidden. Mutually exclusive with `--resume`. |
 
 ## 5.3 Picker-vs-SA builder validation (script)
