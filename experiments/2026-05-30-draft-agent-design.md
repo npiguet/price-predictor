@@ -704,38 +704,34 @@ chance rather than a durable level. That read is half right:
   selection doesn't lock onto a lucky dip. If maximum imitation top-1 is wanted,
   another epoch or two probably still had a little to give; the critic did not.
 
-### Resume at lower LR — warmup overshoot (2026-06-03)
+### Lowering the LR — the 3e-4 → 3e-5 → 3e-6 decay ladder (2026-06-03)
 
-Resumed the 0.804 best at `--lr 3e-5` (10× below the `3e-4` default) to push the
-imitation head further. val_loss *improved* for the first ~2400 steps to
-**0.7633** (top1 0.802, vs the first run's 0.804 / top1 0.79), then steadily
-**degraded** and never recovered, early-stopping at step 37920 (30 evals without
-a new best).
+Dropping the LR one decade at a time at each plateau is a clean, monotone win —
+textbook decay-at-plateau, and exactly the behaviour the `--lr-decay-patience`
+annealing automates in a single run:
 
-The cause is the LR schedule, not the data: `--resume` restores the optimizer
-moments but rebuilds the warmup scheduler from step 0 (linear ramp `0 → lr` over
-5 % of one epoch ≈ 5900 steps). The degradation tracks the ramp one-for-one:
+| stage            | resumed from | best val_loss | val_imit | val_crit | top1  |
+|------------------|--------------|---------------|----------|----------|-------|
+| `3e-4` (initial) | scratch      | ~0.80         | ~0.53    | ~0.27    | 0.79  |
+| `3e-5`           | 3e-4 plateau | **0.635**     | 0.363    | 0.272    | 0.860 |
+| `3e-6`           | 3e-5 best    | **0.615**     | 0.338    | 0.277    | 0.870 |
 
-| step | approx LR     | val_loss   | top1  |
-|------|---------------|------------|-------|
-| 1185 | ~6e-6         | 0.7677     | 0.805 |
-| 2370 | ~1.2e-5       | **0.7633** | 0.802 |
-| 3555 | ~1.8e-5       | 0.7808     | 0.806 |
-| 4740 | ~2.4e-5       | 0.8023     | 0.795 |
-| 5925 | ~3e-5 (top)   | 0.8249     | 0.785 |
-| 7110 | 3e-5 flat     | 0.8451     | 0.779 |
-| 8295 | 3e-5 flat     | 0.8775     | 0.771 |
-| …    | 3e-5 flat     | ~0.80–0.85 | ~0.78 |
+- **`3e-5` is the big win.** The `3e-4` run plateaus around 0.80 / top1 0.79;
+  resumed at `3e-5` it descends cleanly and monotonically to **0.635 / top1
+  0.860** over one epoch. `3e-4` is too hot to settle the near-converged policy;
+  a decade lower unsticks it.
+- **`3e-6` is a small polish.** Resumed from the `3e-5` best, val_loss sits nearly
+  flat (~0.628–0.635) for most of the epoch, then dips late to **0.6148 / top1
+  0.870** (step 100725) and early-stops 30 mini-epochs later. ~0.02 val_loss and
+  +1 pt top1 — sharply diminishing returns, i.e. `3e-6` is near the floor.
+- **All of it is the policy head.** Across the two stages val_imit falls
+  0.51 → 0.338 while val_crit stays pinned ~0.27 (the critic converged early and
+  even drifts slightly *up* at the lower LRs as the policy keeps fitting); top1
+  climbs 0.79 → 0.87.
 
-Best is mid-warmup at LR ≈ 1.2e-5; worst is right as the ramp tops out at 3e-5.
-`train` loss rose alongside `val`, so it's the optimizer being pushed off the
-fine minimum, not overfitting. The lesson: when fine-tuning an already-converged
-checkpoint, even `3e-5` is too hot to settle in the basin this model sits in
-(the original `3e-4` worked because it was still in coarse descent), and a fresh
-warmup ramp overshoots the working LR. Net: a modestly better checkpoint
-(`20260603_181259.pt`, val 0.7633 / top1 0.802) was still banked from the warmup
-transient. To go lower, resume from it at ~`1e-5` with little/no warmup
-(`--warmup-frac` near 0) so the LR stays where it was actually working.
+Net: the gen-1 best is **val_loss 0.6148 / top1 0.870** (`20260603_234318.pt`),
+reached by the decay ladder — each decade lower settles the policy a notch finer
+with diminishing returns, which is what the annealing feature drives end-to-end.
 
 ## Open / future questions
 
