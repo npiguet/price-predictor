@@ -65,6 +65,30 @@ def test_resume_falls_back_to_default_when_neither_cli_nor_checkpoint() -> None:
     assert cfg.imitation_agents == ("forge-full",)  # default
 
 
+def test_lr_decay_flags_default_to_disabled() -> None:
+    cfg = _resolve_train_agent_config(_args([]), resumed_train_config=None)
+    assert cfg.lr_decay_patience is None   # opt-in: off by default
+    assert cfg.lr_decay_factor == 0.1      # dataclass default
+    assert cfg.min_lr is None              # => computed as lr * 1e-3 at run time
+
+
+def test_lr_decay_flags_resolve_from_cli_and_resume() -> None:
+    args = _args(
+        ["--lr-decay-patience", "10", "--lr-decay-factor", "0.5", "--min-lr", "1e-7"]
+    )
+    cfg = _resolve_train_agent_config(args, resumed_train_config=None)
+    assert cfg.lr_decay_patience == 10
+    assert cfg.lr_decay_factor == 0.5
+    assert cfg.min_lr == 1e-7
+    # Inherited from a resumed checkpoint when not given on the CLI.
+    inherited = _resolve_train_agent_config(
+        _args(["--resume", "ckpt.pt"]),
+        {"lr_decay_patience": 8, "lr_decay_factor": 0.2},
+    )
+    assert inherited.lr_decay_patience == 8
+    assert inherited.lr_decay_factor == 0.2
+
+
 def test_resume_lr_override_survives_scheduler_rebuild() -> None:
     """A --lr override must reach the scheduler's base_lr, not be clobbered.
 

@@ -83,6 +83,12 @@ class TrainDraftAgentConfig:
     val_fraction: float = 0.0025
     evals_per_epoch: int = 100  # "mini-epochs": validate + checkpoint this often
     patience: int = 30  # counted in mini-epochs (evals), not full epochs
+    # Optional ReduceLROnPlateau-style annealing: after lr_decay_patience
+    # mini-epochs without a new best val_loss, LR *= lr_decay_factor, down to
+    # min_lr. None disables (constant LR after warmup, the default).
+    lr_decay_patience: int | None = None
+    lr_decay_factor: float = 0.1
+    min_lr: float | None = None  # decay floor; None => lr * 1e-3
     resume: Path | None = None
     checkpoint: Path | None = None
 
@@ -622,16 +628,86 @@ def _reapply_resume_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
         group.pop("initial_lr", None)
 
 
+class _PlateauLR:
+    """ReduceLROnPlateau-style multiplier folded into the warmup scheduler.
+
+    Holds a discrete ``decay_count``; the effective LR is
+    ``base_lr * factor ** decay_count`` (times the warmup ramp). The eval loop
+    calls :meth:`decay` after ``lr_decay_patience`` mini-epochs without a new
+    best val_loss, bounded below by ``min_lr``. ``decay_count`` is persisted in
+    the checkpoint so a resumed run continues annealing where it left off.
+    """
+
+    def __init__(
+        self, base_lr: float, factor: float, min_lr: float, decay_count: int = 0,
+    ) -> None:
+        self.base_lr = base_lr
+        self.factor = factor
+        self.min_lr = min_lr
+        self.decay_count = decay_count
+
+    def multiplier(self) -> float:
+        return self.factor ** self.decay_count
+
+    def current_lr(self) -> float:
+        return self.base_lr * self.multiplier()
+
+    def can_decay(self) -> bool:
+        """True if one more decay stays at/above ``min_lr``."""
+        return self.base_lr * self.factor ** (self.decay_count + 1) >= self.min_lr
+
+    def decay(self) -> float:
+        self.decay_count += 1
+        return self.current_lr()
+
+
+def _maybe_decay(
+    evals_since_best: int, patience: int | None, controller: _PlateauLR,
+) -> float | None:
+    """Decay the LR if stuck for ``patience`` evals and the floor allows it.
+
+    Returns the new LR on decay, else ``None``. ``patience is None`` (the
+    feature switch) disables annealing entirely.
+    """
+    if patience is None:
+        return None
+    if evals_since_best >= patience and controller.can_decay():
+        return controller.decay()
+    return None
+
+
+def _validate_lr_decay(config: TrainDraftAgentConfig) -> None:
+    """Fail fast on inconsistent LR-annealing flags (no-op when disabled)."""
+    if config.lr_decay_patience is None:
+        return
+    if config.lr_decay_patience < 1:
+        raise ValueError("--lr-decay-patience must be >= 1")
+    if not 0.0 < config.lr_decay_factor < 1.0:
+        raise ValueError("--lr-decay-factor must be in (0, 1)")
+    if config.lr_decay_patience >= config.patience:
+        raise ValueError(
+            f"--lr-decay-patience ({config.lr_decay_patience}) must be < "
+            f"--patience ({config.patience}) so a decay pre-empts early stop"
+        )
+
+
 def _make_scheduler(
-    optimizer: torch.optim.Optimizer, total_steps: int, warmup_frac: float,
+    optimizer: torch.optim.Optimizer,
+    total_steps: int,
+    warmup_frac: float,
+    controller: _PlateauLR | None = None,
 ) -> torch.optim.lr_scheduler.LambdaLR:
-    """Linear warmup over ``warmup_frac`` of total steps, then constant."""
+    """Linear warmup over ``warmup_frac`` of total steps, then constant.
+
+    When a plateau ``controller`` is given, the per-step multiplier also folds
+    in its (live) decay factor, so a decay recorded mid-run takes effect on the
+    next batch.
+    """
     warmup_steps = max(1, int(math.ceil(total_steps * warmup_frac)))
 
     def schedule(step: int) -> float:
-        if step < warmup_steps:
-            return float(step) / float(warmup_steps)
-        return 1.0
+        warm = float(step) / float(warmup_steps) if step < warmup_steps else 1.0
+        return warm * (controller.multiplier() if controller is not None else 1.0)
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, schedule)
 
@@ -642,6 +718,7 @@ class _Resume:
     start_epoch: int
     best_val_loss: float
     optimizer_state: dict[str, Any] | None
+    lr_decay_count: int = 0
 
 
 def _resume_or_build(
@@ -657,9 +734,16 @@ def _resume_or_build(
         _check_dims(ckpt.config, embedding_dim, config.cards_path)
         model = DraftAgentModel(ckpt.config)
         model.load_state_dict(ckpt.model_state_dict)
+        # Inherit the annealing position unless --lr was explicitly overridden
+        # (a different base LR restarts annealing from decay_count 0). --lr is a
+        # resumable flag, so an *absent* --lr resolves equal to the stored lr.
+        resumed_lr = (ckpt.train_config or {}).get("lr")
+        decay_count = ckpt.lr_decay_count
+        if resumed_lr is not None and resumed_lr != config.lr:
+            decay_count = 0
         return (
             _Resume(model, ckpt.epoch + 1, ckpt.best_val_loss,
-                    ckpt.optimizer_state_dict or None),
+                    ckpt.optimizer_state_dict or None, decay_count),
             ckpt.critic_mean, ckpt.critic_std,
         )
     if config.checkpoint is not None:
@@ -785,6 +869,7 @@ class TrainDraftAgentUseCase:
         np.random.seed(RANDOM_SEED)
         device = _select_device()
         store = DraftAgentStore()
+        _validate_lr_decay(config)
 
         records = list(read_records(config.drafts_path))
         if not records:
@@ -824,11 +909,16 @@ class TrainDraftAgentUseCase:
             # Re-apply config.lr (a possible --lr override) so the fresh scheduler
             # below recaptures its base_lr from it instead of the inherited one.
             _reapply_resume_lr(optimizer, config.lr)
+        min_lr = config.min_lr if config.min_lr is not None else config.lr * 1e-3
+        plateau = _PlateauLR(
+            base_lr=config.lr, factor=config.lr_decay_factor,
+            min_lr=min_lr, decay_count=resume.lr_decay_count,
+        )
         n_steps = max(1, math.ceil(len(train) / config.batch_size))
         # Warmup over a fraction of ONE epoch (not epochs*n_steps): with early
         # stopping a run rarely passes epoch ~2-3, so a warmup sized to the max
         # epoch count would never reach full LR.
-        scheduler = _make_scheduler(optimizer, n_steps, config.warmup_frac)
+        scheduler = _make_scheduler(optimizer, n_steps, config.warmup_frac, plateau)
 
         out_dir = Path("models/draft/agent")
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -867,13 +957,19 @@ class TrainDraftAgentUseCase:
                 config.imitation_weight * train_imit
                 + config.critic_weight * train_crit
             )
+            # Show the live LR only when annealing is on (keeps default output
+            # byte-identical to before).
+            lr_str = (
+                f" lr={optimizer.param_groups[0]['lr']:.2e}"
+                if config.lr_decay_patience is not None else ""
+            )
             _log(
                 f"  eval epoch {epoch} step {step}/{n_steps} | "
                 f"train_loss={train_loss:.4f} train_imit={train_imit:.4f} "
                 f"train_crit={train_crit:.4f} | val_loss={report.loss:.4f} "
                 f"val_imit={report.imitation:.4f} val_crit={report.critic:.4f} "
                 f"top1={report.top1:.3f} top3={report.top3:.3f} "
-                f"per_pack_mse[{mse_str}]"
+                f"per_pack_mse[{mse_str}]{lr_str}"
             )
             new_best = report.loss < best_val_loss
             if new_best:
@@ -882,14 +978,27 @@ class TrainDraftAgentUseCase:
                 evals_since_best = 0
             else:
                 evals_since_best += 1
+            # Plateau decay: divide the LR and reset the counter so the new LR
+            # gets a fresh patience window (an implicit cooldown). With
+            # lr_decay_patience < patience this pre-empts early stop until the
+            # floor is reached, so early stop only fires at min_lr.
+            new_lr = _maybe_decay(evals_since_best, config.lr_decay_patience, plateau)
+            if new_lr is not None:
+                _log(
+                    f"  LR decay #{plateau.decay_count} -> {new_lr:.2e} after "
+                    f"{config.lr_decay_patience} mini-epochs without improvement"
+                )
+                evals_since_best = 0
             store.save_checkpoint(
                 model, optimizer, epoch, best_val_loss, model.config, latest_path,
                 critic_mean=mean, critic_std=std, train_config=train_config,
+                lr_decay_count=plateau.decay_count,
             )
             if new_best:
                 store.save_checkpoint(
                     model, optimizer, epoch, best_val_loss, model.config, best_path,
                     critic_mean=mean, critic_std=std, train_config=train_config,
+                    lr_decay_count=plateau.decay_count,
                 )
             model.train()  # _validate switched to eval mode
             return evals_since_best >= config.patience

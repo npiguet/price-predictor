@@ -26,6 +26,7 @@ _RESUMABLE_TRAIN_FLAGS: tuple[str, ...] = (
     "drafts_path", "cards_path", "imitation_weight", "critic_weight",
     "lr", "warmup_frac", "batch_size", "max_grad_norm", "epochs",
     "val_fraction", "evals_per_epoch", "patience",
+    "lr_decay_patience", "lr_decay_factor", "min_lr",
 )
 _TRAIN_PATH_FIELDS = frozenset({"drafts_path", "cards_path"})
 
@@ -223,6 +224,20 @@ def _build_train_draft_agent_parser(subparsers) -> None:
         "--patience", type=int, default=None,
         help="Early-stop after this many mini-epochs without val improvement "
              "(default: 30). Resumable.",
+    )
+    parser.add_argument(
+        "--lr-decay-patience", type=int, default=None, dest="lr_decay_patience",
+        help="Enable plateau LR annealing: after this many mini-epochs without a "
+             "new best val_loss, LR *= --lr-decay-factor (down to --min-lr). Must "
+             "be < --patience. Default: disabled (constant LR). Resumable.",
+    )
+    parser.add_argument(
+        "--lr-decay-factor", type=float, default=None, dest="lr_decay_factor",
+        help="LR multiplier applied on each plateau (default: 0.1). Resumable.",
+    )
+    parser.add_argument(
+        "--min-lr", type=float, default=None, dest="min_lr",
+        help="Annealing floor; no decay below this (default: lr * 1e-3). Resumable.",
     )
     parser.add_argument(
         "--resume", default=None,

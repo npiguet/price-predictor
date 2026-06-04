@@ -60,6 +60,7 @@ def test_checkpoint_round_trip_reloads_to_predict(tmp_path: Path) -> None:
     store.save_checkpoint(
         model, optimizer, epoch=4, best_val_loss=0.5, config=cfg, path=path,
         critic_mean=2.5, critic_std=1.5, train_config={"lr": 1e-3},
+        lr_decay_count=3,
     )
 
     loaded = store.load_checkpoint(path)
@@ -67,6 +68,7 @@ def test_checkpoint_round_trip_reloads_to_predict(tmp_path: Path) -> None:
     assert loaded.best_val_loss == 0.5
     assert loaded.critic_mean == 2.5
     assert loaded.critic_std == 1.5
+    assert loaded.lr_decay_count == 3
     assert loaded.config.embedding_dim == 8
 
     reloaded = DraftAgentModel(loaded.config)
@@ -85,6 +87,22 @@ def test_checkpoint_round_trip_reloads_to_predict(tmp_path: Path) -> None:
         )
     assert logits.shape == (1, n)
     assert critic.shape == (1,)
+
+
+def test_lr_decay_count_defaults_to_zero_for_old_checkpoints(tmp_path: Path) -> None:
+    # A checkpoint written before the annealing feature has no lr_decay_count.
+    from price_predictor.infrastructure.torch_checkpoint import save_checkpoint
+
+    cfg = DraftAgentConfig(embedding_dim=8, packs=3, P=15)
+    model = DraftAgentModel(cfg)
+    path = tmp_path / "old.pt"
+    save_checkpoint(
+        path,
+        {"model_state_dict": model.state_dict(), "epoch": 1, "best_val_loss": 0.7},
+        cfg,
+    )
+    loaded = DraftAgentStore().load_checkpoint(path)
+    assert loaded.lr_decay_count == 0
 
 
 def test_arch_flags_rejected_with_resume() -> None:

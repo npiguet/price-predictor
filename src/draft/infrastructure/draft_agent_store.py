@@ -4,8 +4,9 @@ Mirrors ``sealed/infrastructure/picker_store.py``: ``model_state_dict`` +
 ``config`` + ``epoch`` + ``best_val_loss`` + optimizer state + training
 metadata. The draft agent additionally stores the critic-target
 standardization ``mean``/``std`` so inference can de-standardize the critic
-back to raw scorer-score space (FR-032, FR-040, FR-041). No encoder/scorer
-weights — agent weights only.
+back to raw scorer-score space (FR-032, FR-040, FR-041), plus the LR-plateau
+``lr_decay_count`` so a resumed run continues annealing where it left off. No
+encoder/scorer weights — agent weights only.
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ class LoadedDraftAgentCheckpoint:
     critic_mean: float
     critic_std: float
     train_config: dict[str, Any] | None = None
+    lr_decay_count: int = 0
 
 
 class DraftAgentStore:
@@ -53,6 +55,7 @@ class DraftAgentStore:
         critic_mean: float,
         critic_std: float,
         train_config: dict[str, Any] | None = None,
+        lr_decay_count: int = 0,
     ) -> None:
         payload: dict[str, Any] = {
             "model_state_dict": model.state_dict(),
@@ -61,6 +64,7 @@ class DraftAgentStore:
             "best_val_loss": best_val_loss,
             "critic_mean": critic_mean,
             "critic_std": critic_std,
+            "lr_decay_count": lr_decay_count,
         }
         if train_config is not None:
             payload["train_config"] = train_config
@@ -79,4 +83,5 @@ class DraftAgentStore:
             critic_mean=payload.get("critic_mean", 0.0),
             critic_std=payload.get("critic_std", 1.0),
             train_config=payload.get("train_config"),
+            lr_decay_count=payload.get("lr_decay_count", 0),
         )

@@ -313,7 +313,14 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   clipping (`--max-grad-norm`, default 1.0) and a linear LR warmup over the first
   `--warmup-frac` (default 0.05) of **one epoch's** steps, then constant `--lr`
   (default `3e-4`). Warmup is sized to a single epoch, not the `--epochs` cap, so a
-  run that early-stops after a few epochs still reaches full LR.
+  run that early-stops after a few epochs still reaches full LR. Optional
+  ReduceLROnPlateau-style annealing is off by default and enabled by
+  `--lr-decay-patience`: after that many mini-epochs without a new best validation
+  loss the LR is multiplied by `--lr-decay-factor` (default 0.1), bounded below by
+  `--min-lr` (default `lr · 1e-3`). The decay reuses the same strict-best
+  no-improvement counter as early stop (FR-039), so `--lr-decay-patience` MUST be
+  `< --patience` (fail fast otherwise) and resetting the counter on each decay makes
+  early stop fire only once the `--min-lr` floor is reached.
 - **FR-035**: The train/validation split MUST be draft-disjoint — all picks of a
   `draft_id` go entirely to one side; the first `--val-fraction` (default 0.0025) of
   distinct draft IDs form the held-out set with `random_seed = 42`. The default is a
@@ -335,7 +342,10 @@ distribution of their score gap, and the SA-vs-SA reference correlation.
   counter, and best-val, and inherits the checkpoint's training settings — any
   explicitly-passed CLI flag overrides them (resume precedence: explicit CLI >
   resumed setting > default), and an overridden `--lr` is re-applied to the resumed
-  optimiser. `--checkpoint` bootstraps a fresh run from weights only. Both forbid
+  optimiser. The LR-annealing position (`lr_decay_count`) is also restored so a
+  resumed run continues annealing where it left off, unless `--lr` is explicitly
+  overridden, which restarts annealing from the new base. `--checkpoint` bootstraps a
+  fresh run from weights only. Both forbid
   architecture flags and are mutually exclusive. `--epochs` (default 100) caps epochs
   and `--patience` (default 30) early-stops on no validation improvement, counted in
   mini-epochs.

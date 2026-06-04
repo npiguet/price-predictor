@@ -173,7 +173,7 @@ Mirrors `PickerConfig` (`sealed/domain/picker_model.py`).
 | `config` | `DraftAgentConfig` (architecture + derived `embedding_dim` + `P`). |
 | `epoch` | last completed epoch (resume counter). |
 | `best_val_loss` | best validation `L` (selection metric, FR-036). |
-| training metadata | incl. critic-target standardization **mean/std** (FR-032), optimizer state (for `--resume`), and `train_config` — the run's training settings, which `--resume` inherits and CLI flags override (resume precedence, FR-039). |
+| training metadata | incl. critic-target standardization **mean/std** (FR-032), optimizer state (for `--resume`), `lr_decay_count` (LR-annealing position, so `--resume` continues annealing; FR-034/FR-039), and `train_config` — the run's training settings, which `--resume` inherits and CLI flags override (resume precedence, FR-039). |
 
 ## Entity relationships
 
