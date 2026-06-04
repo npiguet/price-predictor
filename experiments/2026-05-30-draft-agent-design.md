@@ -710,11 +710,17 @@ Dropping the LR one decade at a time at each plateau is a clean, monotone win �
 textbook decay-at-plateau, and exactly the behaviour the `--lr-decay-patience`
 annealing automates in a single run:
 
-| stage            | resumed from | best val_loss | val_imit | val_crit | top1  |
-|------------------|--------------|---------------|----------|----------|-------|
-| `3e-4` (initial) | scratch      | ~0.80         | ~0.53    | ~0.27    | 0.79  |
-| `3e-5`           | 3e-4 plateau | **0.635**     | 0.363    | 0.272    | 0.860 |
-| `3e-6`           | 3e-5 best    | **0.615**     | 0.338    | 0.277    | 0.870 |
+| stage            | resumed from | best val_loss | val_imit | crit mse p1/p2/p3 (R²) | top1  | top3  |
+|------------------|--------------|---------------|----------|------------------------|-------|-------|
+| `3e-4` (initial) | scratch      | ~0.80         | ~0.53    | 0.43/0.23/0.15 (0.73)  | 0.79  | 0.978 |
+| `3e-5`           | 3e-4 plateau | **0.635**     | 0.363    | 0.44/0.23/0.14 (0.73)  | 0.860 | 0.990 |
+| `3e-6`           | 3e-5 best    | **0.615**     | 0.338    | 0.44/0.24/0.15 (0.72)  | 0.870 | 0.992 |
+
+*Critic targets are standardized to unit variance, so `R² = 1 − val_crit` is the
+fraction of critic-target variance explained. Per-pack MSE falls p1 → p3 because
+later-pack states carry less remaining outcome uncertainty (lower inherent
+variance), not only because the critic predicts them better — so the packs
+aren't comparable as "skill" across columns, hence a single overall R².*
 
 - **`3e-5` is the big win.** The `3e-4` run plateaus around 0.80 / top1 0.79;
   resumed at `3e-5` it descends cleanly and monotonically to **0.635 / top1
@@ -732,6 +738,69 @@ annealing automates in a single run:
 Net: the gen-1 best is **val_loss 0.6148 / top1 0.870** (`20260603_234318.pt`),
 reached by the decay ladder — each decade lower settles the policy a notch finer
 with diminishing returns, which is what the annealing feature drives end-to-end.
+
+## Depth: 4 → 6 layers (2026-06-04)
+
+A 6-layer model (`--n-layers 6`, otherwise identical) trained from scratch at
+`3e-4` with the plateau annealing (`--lr-decay-patience 15`), which self-decayed
+`3e-4 → 3e-5 → 3e-6 → 3e-7` and early-stopped — one hands-off run reproducing
+the manual decay ladder. The best landed at the **`3e-6`** stage (`3e-7` added
+nothing: 0.5851 ≥ 0.5813), so it compares apples-to-apples against the 4-layer
+ladder's `3e-6` floor on the same corpus and val set:
+
+| metric   | 4-layer @ 3e-6 | 6-layer @ 3e-6 | Δ      |
+|----------|----------------|----------------|--------|
+| val_loss | 0.6148         | **0.5813**     | −0.033 |
+| val_imit | 0.338          | 0.315          | −0.023 |
+| crit p1  | 0.445          | 0.437          | −0.008 |
+| crit p2  | 0.237          | 0.226          | −0.012 |
+| crit p3  | 0.149          | 0.136          | −0.012 |
+| crit R²  | 0.723          | 0.734          | +0.011 |
+| top1     | 0.870          | 0.877          | +0.007 |
+| top3     | 0.992          | 0.993          | +0.001 |
+
+- **Depth helps, ~⅔ of it on the policy head.** The gain splits ≈0.023 imitation
+  / ≈0.011 critic, top1 +0.7 pt. This settles the capacity question left open at
+  the 4-layer asymptote: 4 layers was mildly capacity-limited on imitation (its
+  `train_imit` was still falling at convergence), and the extra depth captures
+  that headroom — `val_imit` 0.338 → 0.315, the head that carries into gen-2.
+- **The critic didn't degrade.** The worry that more capacity would let the
+  variance-bound critic overfit harder (worse `val_crit`) didn't materialise:
+  `val_crit` is a hair *better* (0.277 → 0.266, on the right side of the ~±0.01
+  noise band) — the larger shared trunk improves the representation the critic
+  reads enough to offset any extra fitting. Within the run `val_crit` still
+  drifts up as the LR drops (0.262 → 0.266 → 0.269 across `3e-5`/`3e-6`/`3e-7`),
+  the same converged-and-slightly-rising pattern as 4 layers.
+- **The critic gain concentrates in the late packs.** Per-pack MSE drops by a
+  similar absolute amount across the board (p1 −0.008, p2 −0.012, p3 −0.012),
+  but against each pack's much smaller baseline that is ≈2 % / 5 % / 8 % — the
+  relative improvement grows p1 → p3. Pack 1's MSE is mostly *irreducible*
+  outcome variance (the deck is barely determined, so even a perfect critic
+  can't predict the final reward), leaving little headroom for capacity to
+  recover; the later packs hold more *learnable* structure as the deck firms up,
+  and the deeper trunk captures it. So depth sharpens the critic where the signal
+  is actually reducible, not where it is noise-bound — consistent with the
+  picture that the p1 MSE is near its floor while p2/p3 still have slack.
+- **Per-stage shape mirrors the manual ladder** — big `3e-4 → 3e-5` jump
+  (0.90 → 0.61), smaller `3e-5 → 3e-6` (0.61 → 0.58), nothing at `3e-7` — so the
+  run also validates the annealing feature end-to-end: it drove the three-decade
+  ladder automatically and stopped itself at the floor (~14.5 h wall-clock; 6
+  layers is slower per step).
+
+The 6-layer run's best val metrics reached at each LR stage:
+
+| LR     | val_loss | val_imit | crit mse p1/p2/p3 (R²) | top1  | top3  |
+|--------|----------|----------|------------------------|-------|-------|
+| `3e-4` | 0.9037   | 0.6315   | 0.46/0.22/0.13 (0.73)  | 0.757 | 0.963 |
+| `3e-5` | 0.6068   | 0.3452   | 0.43/0.22/0.13 (0.74)  | 0.863 | 0.991 |
+| `3e-6` | 0.5813   | 0.3151   | 0.44/0.23/0.14 (0.73)  | 0.877 | 0.993 |
+| `3e-7` | 0.5851   | 0.3163   | 0.44/0.23/0.14 (0.73)  | 0.878 | 0.993 |
+
+(`3e-6` is the selected best; `3e-7` does not lower val_loss — hence the early
+stop — though top1 nudges to 0.878.)
+
+Decision: **6 layers is the gen-1 model** at val_loss 0.5813 / top1 0.877
+(`20260604_080249.pt`), a clean win over the 4-layer 0.6148 / top1 0.870.
 
 ## Open / future questions
 
