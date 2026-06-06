@@ -802,6 +802,65 @@ stop — though top1 nudges to 0.878.)
 Decision: **6 layers is the gen-1 model** at val_loss 0.5813 / top1 0.877
 (`20260604_080249.pt`), a clean win over the 4-layer 0.6148 / top1 0.870.
 
+## Depth: 6 → 8 layers (2026-06-05)
+
+An 8-layer model (`--n-layers 8`, same recipe and corpus, `--lr-decay-patience
+15`) self-decayed the same `3e-4 → 3e-5 → 3e-6 → 3e-7` ladder; I interrupted it
+after the `3e-7` floor plateaued (val flat at ~0.6224 across the final ~27
+evals, ~17.7 h wall-clock). The best again landed at `3e-6` (`3e-7` added
+nothing: 0.6224 ≥ 0.6215). Against the 6-layer `3e-6` floor on the same val set:
+
+| metric   | 6-layer @ 3e-6 | 8-layer @ 3e-6 | Δ (8−6) |
+|----------|----------------|----------------|---------|
+| val_loss | **0.5813**     | 0.6215         | +0.040  |
+| val_imit | **0.315**      | 0.361          | +0.046  |
+| val_crit | 0.266          | **0.260**      | −0.006  |
+| crit p1  | 0.437          | 0.448          | +0.011  |
+| crit p2  | 0.226          | **0.206**      | −0.020  |
+| crit p3  | 0.136          | **0.127**      | −0.009  |
+| top1     | **0.877**      | 0.858          | −0.019  |
+| top3     | **0.993**      | 0.991          | −0.002  |
+
+- **8 layers is a regression, and it's entirely the policy head.** val_loss
+  rises 0.040, all of it from `val_imit` (+0.046); `val_crit` is flat-to-better.
+  top1 drops 1.9 pt. Depth has overshot — past 6 layers the policy gets *worse*,
+  not better.
+- **It's an optimisation failure, not overfitting.** The deeper model also fits
+  the *training* imitation objective worse: at the `3e-6` best its `train_imit`
+  is **0.356 vs 6 layers' 0.309**, with a near-identical train–val gap (~0.005
+  in both). So 8 layers isn't memorising train and generalising badly — under
+  the same LR/warmup schedule it simply settles into a worse minimum on the
+  imitation loss, train and val alike. The extra capacity is there; the recipe
+  can't reach it.
+- **The crossover with LR is the tell.** At `3e-4` the 8-layer is actually
+  *ahead* (val 0.866 vs 0.904, top1 0.764 vs 0.757) — more capacity helps while
+  the LR is high and the optimiser explores broadly — but it loses ground at
+  every decay and finishes clearly behind. The deeper trunk wants something this
+  schedule doesn't give it (more warmup, a lower peak LR, or a longer low-LR
+  soak); the annealing tuned for 6 layers leaves 8 in a worse basin. So the
+  result rules *out* "8 is fundamentally too big for the data" and points at a
+  recipe mismatch — but on the recipe we have, 8 loses.
+- **The critic is a wash.** `val_crit` 0.266 → 0.260 sits inside the ~±0.01
+  noise band; late-pack MSE is a touch better (p2 −0.020, p3 −0.009) and pack 1
+  a touch worse (+0.011). The larger shared trunk marginally helps the critic's
+  representation, but its variance floor dominates either way — the critic
+  neither motivates nor opposes the depth change.
+
+The 8-layer run's best val metrics reached at each LR stage:
+
+| LR     | val_loss | val_imit | crit mse p1/p2/p3 (R²) | top1  | top3  |
+|--------|----------|----------|------------------------|-------|-------|
+| `3e-4` | 0.8665   | 0.6003   | 0.44/0.22/0.14 (0.73)  | 0.764 | 0.972 |
+| `3e-5` | 0.6342   | 0.3809   | 0.44/0.20/0.12 (0.75)  | 0.851 | 0.991 |
+| `3e-6` | 0.6215   | 0.3610   | 0.45/0.21/0.13 (0.74)  | 0.858 | 0.991 |
+| `3e-7` | 0.6224   | 0.3601   | 0.45/0.21/0.13 (0.74)  | 0.863 | 0.990 |
+
+Decision: **6 layers stays the gen-1 model.** Depth peaks at 6 under this recipe;
+8 regresses the policy head by ~0.05 `val_imit` / ~2 pt top1 while the critic is
+flat. 8+ layers isn't ruled out in principle (the high-LR lead says the capacity
+is usable), but it would need its own LR/warmup retune to pay off, and that is
+gen-2+ territory — for gen 1, 6 layers is the pick.
+
 ## Open / future questions
 
 - **Gen-2 RL spec.** Actor-critic with GAE, the choice between REINFORCE
