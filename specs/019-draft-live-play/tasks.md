@@ -76,6 +76,7 @@ agent seats carry that label with built+scored decks and the policy's own picks.
 - [ ] T007 [P] [US1] Unit test in `tests/unit/draft/test_agent_registry.py`: `LABEL=PATH` parsing incl. bare-`PATH`→`draft-agent`; unknown mix label (neither Forge built-in nor bound) fails fast exit 2 (FR-011); `config.packs ≠ live PACKS` or `config.P < pack size` fails fast exit 2 (FR-012); missing checkpoint file fails fast (contracts/cli.md §Validation).
 - [ ] T008 [P] [US1] Unit test in `tests/unit/draft/test_supervisor_pick_routing.py` driving the supervisor read loop with a **fake worker** stream: a `<<DRAFT-PICK-REQUEST>>` is answered with the registry's pick; a Python-side `PickFault` sends `abort:true` and the draft is dropped (no record, SC-002); a `<<DRAFT-ABANDONED>>` is logged + counted; the consecutive-fault counter resets on any completed `<<DRAFT-EVENT-JSON>>`; `--max-consecutive-faults` consecutive faults raises a fatal nonzero-exit error (FR-016, SC-008); with an empty registry the loop emits no responses and behaves identically to gen-1 (SC-004).
 - [ ] T009 [P] [US1] Java unit test (non-Forge) in `forge-connector/src/test/java/com/pricepredictor/connector/DraftWorkerMainTest.java`: `<<DRAFT-PICK-REQUEST>>` payload formatting (data-model.md §2.1 fields); response routing-field validation (`draft_id`/`seat`/`pack_number`/`pick_number` must match outstanding request; `pick` must be a held-pack card); mismatch ⇒ `<<DRAFT-ABANDONED>>` emitted; `abort:true` ⇒ draft dropped.
+- [ ] T025 [P] [US1] Extend `tests/unit/draft/test_draft_resume.py`: a corpus containing records whose seats carry a model label is counted by `--resume` toward `--n-drafts` exactly as gen-1 (FR-014), and an abandoned (pick-fault) draft leaves no partial record that resume would miscount (SC-005). REUSE the gen-1 resume-count path in `src/draft/infrastructure/draft_record_io.py`.
 
 ### Implementation for User Story 1
 
@@ -84,7 +85,7 @@ agent seats carry that label with built+scored decks and the policy's own picks.
 - [ ] T012 [US1] Extend CLI in `src/draft/infrastructure/cli.py`: add `--agent-checkpoint LABEL=PATH` (repeatable) and `--max-consecutive-faults` (default 5); populate the new `GenerateDraftDataConfig` fields (data-model.md §4); validation failures exit `2` (contracts/cli.md). Argmax-only here; `--pick-mode`/`--temperature`/`--seed` land in US3.
 - [ ] T013 [US1] Extend the connector in `src/draft/infrastructure/draft_worker_connector.py`: open the worker with `stdin=PIPE`, redirect worker stderr to a per-run log `output/draft/worker-<run_id>.log` (research D8, FR-015), and pass `-Ddraft.external.agents=<labels>` (contracts/pick-protocol.md §Worker JVM properties). Empty external set ⇒ unchanged gen-1 launch.
 - [ ] T014 [US1] Extend `DraftWorkerMain.java` in `forge-connector/src/main/java/com/pricepredictor/connector/DraftWorkerMain.java`: allocate `draft_id` at draft start and thread it through the pick loop + transcript (research D2); branch `decidePick` for external labels to emit `<<DRAFT-PICK-REQUEST>>` and block on stdin for `<<DRAFT-PICK-RESPONSE>>` under strict synchrony (≤1 outstanding); validate routing fields + held-pack membership; on mismatch/garbled response emit `<<DRAFT-ABANDONED>>` and drop the draft; on `abort:true` drop the draft; on stdin EOF exit (supervisor restart path). Keep UTF-8 sentinel-on-stdout / Forge-chatter-to-stderr discipline.
-- [ ] T015 [US1] Extend the supervisor in `src/draft/application/generate_draft_data.py`: build the `AgentRegistry` (skip entirely when `agent_checkpoints` is empty, SC-004); in the single read loop route a parsed `PickRequest` → `registry.pick` → write `PickResponse` (`pick` or `abort` on `PickFault`); reset per-draft trackers on completion; handle `AbandonedNotice` (log prominently + increment the consecutive-fault counter); reset the counter on any completed draft; raise a fatal nonzero-exit error at `--max-consecutive-faults` (FR-016, research D7); add startup + per-draft progress logging of model seats and a prominent `ERROR` on abandonment (FR-013). REUSE gen-1 labeling/scoring/JSONL-append/run-id/crash-restart unchanged.
+- [ ] T015 [US1] Extend the supervisor in `src/draft/application/generate_draft_data.py`: build the `AgentRegistry` (skip entirely when `agent_checkpoints` is empty, SC-004); in the single read loop route a parsed `PickRequest` → `registry.pick` → write `PickResponse` (`pick` or `abort` on `PickFault`); reset per-draft trackers on completion; handle `AbandonedNotice` (log prominently + increment the consecutive-fault counter); reset the counter on any completed draft; raise a fatal nonzero-exit error at `--max-consecutive-faults` (FR-016, research D7); add startup + per-draft progress logging of model seats and a prominent `ERROR` on abandonment (FR-013). REUSE gen-1 labeling/scoring/JSONL-append/run-id/crash-restart/`--resume` count unchanged (FR-014); confirm resume counts pre-existing model-labeled records toward `--n-drafts` (no re-piloting of already-recorded drafts).
 
 **Checkpoint**: A single trained agent can pilot live seats; faults abandon
 cleanly; deterministic faults auto-abort. US1 is an independently testable MVP.
@@ -136,7 +137,7 @@ configurable; all three stories independently functional.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T020 [P] Update the `generate-draft-data` paragraph in `CLAUDE.md`: the model-pilot flags (`--agent-checkpoint`, `--pick-mode`, `--temperature`, `--seed`, `--max-consecutive-faults`), the pick side-channel, fault-abandon/auto-abort semantics, and the per-run worker stderr log (Principle VI; FR-013/FR-015).
+- [ ] T020 [P] Update the `generate-draft-data` documentation in **both** `CLAUDE.md` and the root `README.md`: the model-pilot flags (`--agent-checkpoint`, `--pick-mode`, `--temperature`, `--seed`, `--max-consecutive-faults`), the pick side-channel, fault-abandon/auto-abort semantics, and the per-run worker stderr log (Constitution VI Quality Gate — docs complete for changed CLI commands; FR-013/FR-015).
 - [ ] T021 [P] Forge-dependent integration smoke test in `tests/integration/test_draft_live_play.py` (pytest `integration` marker): run one live-JVM draft with ≥1 model seat and assert a labeled record with the agent label + scored decks is appended (US1 end-to-end). Pair with the Forge-tagged Java protocol test (`@Tag("integration")`) in `DraftWorkerMainTest.java`.
 - [ ] T022 Performance review per Principle VIII over the new code (`agent_pick_service.py`, supervisor loop): confirm model/registry/locator load-once, `.npz` embeddings memoized, single host↔device sync per pick, no batching needed under strict synchrony (plan.md §Performance Review).
 - [ ] T023 Run the `specs/019-draft-live-play/quickstart.md` workflows 1–3 and the SC-004 no-`--agent-checkpoint` regression check; record results.
@@ -157,7 +158,7 @@ configurable; all three stories independently functional.
 
 ### Within User Story 1
 
-- Tests T006–T009 before implementation T010–T015.
+- Tests T006–T009 + T025 before implementation T010–T015.
 - T010 (pick service) before T011 (registry wraps services) and before T015 (supervisor calls registry).
 - T004 (message types) before T014/T015 (worker + supervisor use them).
 - T012 (CLI flags / config fields) before T015 (supervisor reads config).
@@ -171,7 +172,7 @@ configurable; all three stories independently functional.
 ### Parallel Opportunities
 
 - T002 and T004 are different files → parallel; T003 and T005 (their tests) parallel.
-- US1 tests T006, T007, T008, T009 are different files → all parallel.
+- US1 tests T006, T007, T008, T009, T025 are different files → all parallel.
 - T010 and T014 (Python service vs Java worker) touch different files → parallel after Foundational; T011 depends on T010.
 - Polish T020, T021, T024 are parallel (different files).
 
@@ -185,6 +186,7 @@ Task: "Unit test agent pick service in tests/unit/draft/test_agent_pick_service.
 Task: "Unit test agent registry in tests/unit/draft/test_agent_registry.py"
 Task: "Unit test supervisor pick routing in tests/unit/draft/test_supervisor_pick_routing.py"
 Task: "Java pick-protocol test in forge-connector/.../DraftWorkerMainTest.java"
+Task: "Resume count with model labels in tests/unit/draft/test_draft_resume.py"
 ```
 
 ---
