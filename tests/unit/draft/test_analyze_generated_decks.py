@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from draft.application.analyze_generated_decks import (
+    available_agents,
     deck_score_summary,
     format_deck_score_section,
     generated_decks_from_drafts,
@@ -30,8 +33,8 @@ def test_generated_decks_skips_failed_builds_and_stamps_label_and_set() -> None:
     assert decks[0].cards == tuple(["Plains"] * 40)
 
 
-def test_deck_score_summary_per_label_skips_none() -> None:
-    records = [
+def _mixed_records():
+    return [
         _record("d1", [
             Seat("draft-agent", ["Plains"] * 40, 6.0),
             Seat("forge-full", ["Forest"] * 40, 5.0),
@@ -41,9 +44,26 @@ def test_deck_score_summary_per_label_skips_none() -> None:
             Seat("forge-full", [], None),        # no score → excluded
         ]),
     ]
-    summary = dict((label, (m, med, n)) for label, m, med, n in deck_score_summary(records))
+
+
+def test_deck_score_summary_per_label_skips_none() -> None:
+    summary = dict(
+        (label, (m, med, n)) for label, m, med, n in deck_score_summary(_mixed_records())
+    )
     assert summary["draft-agent"] == (7.0, 7.0, 2)   # mean/median of [6,8]
     assert summary["forge-full"] == (5.0, 5.0, 1)
+
+
+def test_agent_filter_scopes_decks_and_scores() -> None:
+    records = _mixed_records()
+    assert available_agents(records) == ["draft-agent", "forge-full"]
+
+    decks = generated_decks_from_drafts(records, agent="draft-agent")
+    assert {d.label for d in decks} == {"draft-agent"}
+    assert len(decks) == 2
+
+    summary = deck_score_summary(records, agent="draft-agent")
+    assert summary == [("draft-agent", 7.0, 7.0, 2)]  # forge-full excluded
 
 
 def test_format_deck_score_section_renders_labels() -> None:
@@ -55,7 +75,15 @@ def test_format_deck_score_section_renders_labels() -> None:
 
 
 def test_draft_subcommand_dispatches() -> None:
-    args = build_parser().parse_args(["analyze-generated-decks"])
+    args = build_parser().parse_args(
+        ["analyze-generated-decks", "--agent", "draft-agent"]
+    )
     assert args.func is run_analyze_generated_decks
+    assert args.agent == "draft-agent"
     assert args.drafts_path == "output/draft/drafts.jsonl"
     assert args.no_rarity is False
+
+
+def test_draft_subcommand_requires_agent() -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["analyze-generated-decks"])  # --agent missing

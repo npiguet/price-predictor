@@ -762,7 +762,7 @@ python -m sealed analyze-generated-decks                                   # def
 python -m sealed analyze-generated-decks gen1.txt gen2.txt --no-rarity     # compare labels, skip MTGJSON
 ```
 
-The same engine powers `python -m draft analyze-generated-decks`, which sources the per-seat decks from a `drafts.jsonl` corpus and adds a per-label `deck_score` summary (agent vs Forge).
+The same engine powers `python -m draft analyze-generated-decks`, which sources the per-seat decks from a `drafts.jsonl` corpus and adds a `deck_score` summary. It takes a required `--agent` that scopes the report to one agent/mix label (e.g. `--agent draft-agent`), so you compare agents by running it once each.
 
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
@@ -817,8 +817,8 @@ python -m draft train-draft-agent
 python -m draft train-draft-agent --imitation-weight 0       # critic-only ablation
 python -m draft train-draft-agent --resume models/draft/agent/latest.pt
 
-# (any time) inspect the corpus: per-label deck-score + composition stats
-python -m draft analyze-generated-decks   # reads output/draft/drafts.jsonl
+# (any time) inspect one agent's decks: deck-score + composition stats
+python -m draft analyze-generated-decks --agent draft-agent   # then --agent forge-full to compare
 ```
 
 A draft-agent checkpoint can **pilot live seats**: bind a mix label to a

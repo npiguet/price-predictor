@@ -21,14 +21,21 @@ from sealed.domain.deck import Deck
 from sealed.infrastructure.pool_file_reader import GeneratedDeck
 
 
+def available_agents(records: Iterable[DraftRecord]) -> list[str]:
+    """Sorted distinct agent/label values present across all seats."""
+    return sorted({seat.agent for record in records for seat in record.seats})
+
+
 def generated_decks_from_drafts(
     records: Iterable[DraftRecord],
+    agent: str | None = None,
 ) -> list[GeneratedDeck]:
     """One :class:`GeneratedDeck` per built seat across all records.
 
     The seat's ``agent`` is the deck label and the draft's set (from its first
     booster) is the set code. Seats whose build failed (empty ``deck``) are
-    skipped, matching the ``deck_score is None`` convention.
+    skipped, matching the ``deck_score is None`` convention. When ``agent`` is
+    given, only seats piloted by that agent are included.
     """
     decks: list[GeneratedDeck] = []
     for record in records:
@@ -36,6 +43,8 @@ def generated_decks_from_drafts(
             continue
         set_code = record.boosters[0].set_code
         for seat in record.seats:
+            if agent is not None and seat.agent != agent:
+                continue
             if not seat.deck:
                 continue
             decks.append(GeneratedDeck(
@@ -46,15 +55,19 @@ def generated_decks_from_drafts(
 
 def deck_score_summary(
     records: Iterable[DraftRecord],
+    agent: str | None = None,
 ) -> list[tuple[str, float, float, int]]:
     """Per-label ``(mean, median, n)`` deck score, sorted by label.
 
     Aggregates ``seat.deck_score`` across every record, skipping seats whose
-    score is ``None`` (failed build). Labels with no scored seat are omitted.
+    score is ``None`` (failed build). When ``agent`` is given, only that agent's
+    seats are summarized. Labels with no scored seat are omitted.
     """
     scores_by_label: dict[str, list[float]] = {}
     for record in records:
         for seat in record.seats:
+            if agent is not None and seat.agent != agent:
+                continue
             if seat.deck_score is None:
                 continue
             scores_by_label.setdefault(seat.agent, []).append(seat.deck_score)
