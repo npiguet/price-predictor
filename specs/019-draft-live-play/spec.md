@@ -12,6 +12,12 @@ and the self-play corpus this feature emits. That note remains the authority on
 the communication protocol; this document restates the capability as prioritized,
 testable user stories and requirements for planning.
 
+## Clarifications
+
+### Session 2026-06-10
+
+- Q: When fault-driven draft abandons recur (e.g. a deterministic bug), how should the overall run behave so it doesn't stall silently? → A: Auto-abort the whole run with a nonzero exit after K **consecutive** fault-aborted drafts (K configurable; default 5). Expected worker JVM crashes are recovered and do **not** count toward this threshold.
+
 ## User Scenarios & Testing *(mandatory)*
 
 The actor throughout is the **operator** — the researcher running the draft
@@ -102,7 +108,7 @@ identical across the two runs.
 - **No usable action**: if *every* legal card in a pack is un-embeddable (not expected with a complete card set), the pick cannot be made genuinely, so the draft is abandoned (US1 scenario 3) rather than guessed.
 - **Protocol desync**: a pick answer that does not match the outstanding request (wrong draft/seat/pick, or a card not in the held pack) abandons the draft rather than being repaired with a substitute.
 - **Supervisor disappears**: if the worker loses contact while awaiting a pick, it abandons the current draft instead of hanging the pod indefinitely.
-- **Persistent deterministic fault**: if a fault recurs on every draft, the run makes visibly no progress (errors surfaced prominently) so the operator investigates, rather than silently filling the corpus with degraded data.
+- **Persistent deterministic fault**: if pick-faults abort K consecutive drafts (K configurable, default 5), the run aborts with a nonzero exit and a prominent error rather than stalling silently or filling the corpus with degraded data. Expected worker JVM crashes are recovered (US1 scenario 4) and do not count toward this threshold.
 - **Geometry mismatch**: a checkpoint whose expected pack size or pod size disagrees with the live draft fails fast at startup rather than producing malformed picks.
 - **Unknown label**: a seat-assignment label that is neither a Forge built-in nor bound to a checkpoint fails fast at startup.
 - **Resume**: re-running against an existing corpus counts drafts already present toward the requested total.
@@ -126,6 +132,7 @@ identical across the two runs.
 - **FR-013**: The operator MUST be able to observe run progress — target count, completed count, ETA, and which seats each draft agent-piloted — and a prominent error whenever a draft is abandoned.
 - **FR-014**: The system MUST support resuming a run, counting drafts already present in the corpus toward the requested total.
 - **FR-015**: The feature MUST NOT produce new model artifacts; the only persistent outputs are the appended corpus and a diagnostic log.
+- **FR-016**: The system MUST abort the entire run with a nonzero exit status and a prominent error after K consecutive drafts end in a pick-fault abandonment (K configurable, default 5), so a systemic fault fails fast instead of looping indefinitely. A recovered worker crash (US1 scenario 4) MUST NOT count toward this consecutive threshold, and any non-aborted completed draft MUST reset the counter.
 
 ### Key Entities
 
@@ -143,7 +150,8 @@ identical across the two runs.
 - **SC-002**: 100% of recorded agent-seat picks are the agent's genuine choices — no completed draft containing a substituted pick is ever written to the corpus.
 - **SC-003**: For every draft position, the card the agent picks live is the same card it would pick offline for the identical situation, verified by a position-by-position equivalence check that passes 100%.
 - **SC-004**: Running with no agent labels reproduces the prior generation's output exactly (zero behavioral or format regression).
-- **SC-005**: A single fault aborts only the affected draft; the run still reaches the requested completed-draft count, with no hangs and no partial records left in the corpus.
+- **SC-005**: Sporadic faults abort only the affected draft and the run still reaches the requested completed-draft count; in all cases there are no hangs and no partial records left in the corpus.
+- **SC-008**: A run subject to a persistent fault halts within K consecutive fault-aborted drafts (default 5) with a nonzero exit, never looping indefinitely.
 - **SC-006**: In every mixed-pod draft, agent and Forge seats are scored on the same scale from the same boosters, so an agent-vs-Forge strength delta is computable per draft without cross-pod normalization.
 - **SC-007**: With a fixed seed and the sampled pick mode, two runs over the same inputs produce identical agent-seat picks.
 
