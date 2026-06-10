@@ -34,6 +34,13 @@ from draft.domain.draft_geometry import Booster, DraftGeometry, DraftRecord, Sea
 from draft.infrastructure.draft_record_io import append_record, count_complete_records
 
 SENTINEL = "<<DRAFT-EVENT-JSON>>"
+PICK_REQUEST_SENTINEL = "<<DRAFT-PICK-REQUEST>>"
+PICK_RESPONSE_SENTINEL = "<<DRAFT-PICK-RESPONSE>>"
+ABANDONED_SENTINEL = "<<DRAFT-ABANDONED>>"
+
+# Live draft geometry (fixed on both sides; the Java worker mirrors these).
+POD_SIZE = 8
+PACKS = 3
 
 
 def _format_duration(seconds: float) -> str:
@@ -90,6 +97,12 @@ class GenerateDraftDataConfig:
         default_factory=lambda: Path("output/draft/drafts.jsonl"),
     )
     resume: bool = False
+    # Live model-pilot additions (all optional; defaults preserve gen-1, SC-004).
+    agent_checkpoints: dict[str, Path] = field(default_factory=dict)
+    pick_mode: str = "argmax"
+    temperature: float = 1.0
+    seed: int | None = None
+    max_consecutive_faults: int = 5
 
 
 # --------------------------------------------------------------------------- #
@@ -113,6 +126,143 @@ def parse_sentinel_line(line: str) -> dict[str, Any] | None:
     if not isinstance(parsed, dict):
         return None
     return parsed
+
+
+# --------------------------------------------------------------------------- #
+# Live-pick side-channel messages (contracts/pick-protocol.md, data-model §2.1–2.3)
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class PickRequest:
+    """Worker→supervisor request for one external (model-piloted) seat's pick.
+
+    Parsed from a ``<<DRAFT-PICK-REQUEST>>`` line. ``pack`` holds the card names
+    remaining in the held pack, in pick (offset) order (order is insignificant
+    to the model); ``set_code`` is informational (data-model §2.1).
+    """
+
+    draft_id: str
+    seat: int
+    agent: str
+    pod_size: int
+    pack_number: int
+    pick_number: int
+    set_code: str
+    pack: list[str]
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> "PickRequest":
+        """Build + validate a request from its JSON payload (data-model §2.1).
+
+        Raises ``ValueError`` on a structurally invalid request (a protocol
+        desync the supervisor treats as a pick fault).
+        """
+        try:
+            request = cls(
+                draft_id=str(payload["draft_id"]),
+                seat=int(payload["seat"]),
+                agent=str(payload["agent"]),
+                pod_size=int(payload["pod_size"]),
+                pack_number=int(payload["pack_number"]),
+                pick_number=int(payload["pick_number"]),
+                set_code=str(payload.get("set_code", "")),
+                pack=[str(c) for c in payload["pack"]],
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"malformed pick request: {exc}") from exc
+        if request.pod_size != POD_SIZE:
+            raise ValueError(
+                f"pick request pod_size {request.pod_size} != live pod size {POD_SIZE}"
+            )
+        if not 1 <= request.pack_number <= PACKS:
+            raise ValueError(
+                f"pick request pack_number {request.pack_number} out of range 1..{PACKS}"
+            )
+        if request.pick_number < 1:
+            raise ValueError(f"pick request pick_number {request.pick_number} < 1")
+        if not request.pack:
+            raise ValueError("pick request has an empty pack")
+        return request
+
+
+def parse_pick_request(line: str) -> PickRequest | None:
+    """Parse a ``<<DRAFT-PICK-REQUEST>>`` line, else ``None`` for any other line.
+
+    Returns ``None`` when the line is not a pick request or its JSON suffix is
+    not a dict; raises ``ValueError`` (via :meth:`PickRequest.from_payload`) for
+    a pick request whose fields are invalid.
+    """
+    if not line.startswith(PICK_REQUEST_SENTINEL):
+        return None
+    suffix = line[len(PICK_REQUEST_SENTINEL):].strip()
+    try:
+        payload = json.loads(suffix)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return PickRequest.from_payload(payload)
+
+
+@dataclass(frozen=True)
+class PickResponse:
+    """Supervisor→worker response for one pick (data-model §2.2).
+
+    Exactly one of ``pick`` (the chosen card) or ``abort`` (supervisor-initiated
+    draft abandonment on a Python-side fault) is meaningful.
+    """
+
+    draft_id: str
+    seat: int
+    pack_number: int
+    pick_number: int
+    pick: str | None = None
+    abort: bool = False
+
+    def __post_init__(self) -> None:
+        if (self.pick is None) == (not self.abort):
+            raise ValueError(
+                "PickResponse must carry exactly one of `pick` or `abort=True`"
+            )
+
+    def serialize(self) -> str:
+        """Render the ``<<DRAFT-PICK-RESPONSE>>`` line (newline-free, UTF-8)."""
+        payload: dict[str, Any] = {
+            "draft_id": self.draft_id,
+            "seat": self.seat,
+            "pack_number": self.pack_number,
+            "pick_number": self.pick_number,
+        }
+        if self.abort:
+            payload["abort"] = True
+        else:
+            payload["pick"] = self.pick
+        return PICK_RESPONSE_SENTINEL + json.dumps(payload, separators=(",", ":"))
+
+
+@dataclass(frozen=True)
+class AbandonedNotice:
+    """Worker→supervisor notice that the worker self-detected a fault (§2.3)."""
+
+    draft_id: str
+    reason: str
+
+
+def parse_abandoned(line: str) -> AbandonedNotice | None:
+    """Parse a ``<<DRAFT-ABANDONED>>`` line, else ``None`` for any other line."""
+    if not line.startswith(ABANDONED_SENTINEL):
+        return None
+    suffix = line[len(ABANDONED_SENTINEL):].strip()
+    try:
+        payload = json.loads(suffix)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return AbandonedNotice(
+        draft_id=str(payload.get("draft_id", "")),
+        reason=str(payload.get("reason", "")),
+    )
 
 
 class DeckLabeler(Protocol):
@@ -333,6 +483,18 @@ class _GreedyLabeler:
 # Supervisor
 # --------------------------------------------------------------------------- #
 
+class MaxConsecutiveFaultsError(RuntimeError):
+    """Raised when too many consecutive drafts abandon on a pick fault (FR-016)."""
+
+
+class _WorkerRestart(Exception):
+    """Internal: force the current worker to be terminated + restarted.
+
+    Used for an unanswerable protocol desync (a malformed pick request leaves
+    the worker blocked on stdin); restarting is the gen-1 crash path.
+    """
+
+
 class GenerateDraftDataSupervisor:
     """Spawn/restart the draft worker, label transcripts, append records."""
 
@@ -344,25 +506,44 @@ class GenerateDraftDataSupervisor:
         *,
         labeler: DeckLabeler | None = None,
         launch_worker: Callable[[], Any] | None = None,
+        registry: Any | None = None,
     ) -> None:
         self._config = config
         self._run_id = str(uuid.uuid4())
         self._labeler = labeler
         self._launch_worker = launch_worker
+        self._registry = registry  # AgentRegistry | None (None ⇒ gen-1 path)
+        self._consecutive_faults = 0
         self._shutdown = threading.Event()
 
     @property
     def run_id(self) -> str:
         return self._run_id
 
-    def _default_launch_worker(self) -> Callable[[], Any]:
+    def _build_registry(self) -> Any:
+        from draft.application.agent_registry import AgentRegistry
+        from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
+
+        locator = ConvertedCardLocator(self._config.cards_path)
+        mix_labels = {label for label, _ in self._config.agent_mix}
+        return AgentRegistry.build(
+            self._config.agent_checkpoints, mix_labels,
+            locator=locator, pick_mode=self._config.pick_mode,
+            temperature=self._config.temperature, seed=self._config.seed,
+        )
+
+    def _default_launch_worker(self, external_labels: frozenset[str]) -> Callable[[], Any]:
         from draft.infrastructure.draft_worker_connector import DraftWorkerConnector
 
         connector = DraftWorkerConnector()
         mix = format_agent_mix(self._config.agent_mix)
+        run_id = self._run_id
 
         def launch() -> Any:
-            return connector.start(agent_mix=mix, set_code=self._config.set_code)
+            return connector.start(
+                agent_mix=mix, set_code=self._config.set_code,
+                external_agents=external_labels, run_id=run_id,
+            )
 
         return launch
 
@@ -378,13 +559,32 @@ class GenerateDraftDataSupervisor:
             return count
 
         labeler = self._labeler if self._labeler is not None else build_labeler(self._config)
-        launch = self._launch_worker or self._default_launch_worker()
+
+        # Build the agent registry once (fail fast on bad labels/geometry, FR-011/
+        # FR-012) before any worker launches. With no bound checkpoints the
+        # registry stays None and the path is byte-for-byte gen-1 (SC-004).
+        if self._registry is None and self._config.agent_checkpoints:
+            self._registry = self._build_registry()
+        external_labels = (
+            self._registry.external_labels if self._registry is not None
+            else frozenset()
+        )
+        launch = self._launch_worker or self._default_launch_worker(external_labels)
 
         self._install_signal_handlers()
         _log(
             f"Run {self._run_id}: generating {target - count} more drafts "
             f"(have {count}) -> {out_path}"
         )
+        if self._registry is not None:
+            for label in sorted(self._config.agent_checkpoints):
+                _log(
+                    f"  model agent: {label} -> "
+                    f"{self._config.agent_checkpoints[label]} "
+                    f"(pick-mode={self._config.pick_mode}"
+                    + (f", seed={self._config.seed}" if self._config.seed is not None else "")
+                    + ")"
+                )
 
         start_count = count
         start_time = time.monotonic()
@@ -444,6 +644,10 @@ class GenerateDraftDataSupervisor:
                 for line in proc.stdout:
                     if self._shutdown.is_set():
                         break
+                    # Live pick side-channel (only when model seats are bound).
+                    if self._registry is not None:
+                        if self._route_pick_line(line, proc):
+                            continue  # answered a request / logged an abandonment
                     transcript = parse_sentinel_line(line)
                     if transcript is None:
                         continue
@@ -454,6 +658,11 @@ class GenerateDraftDataSupervisor:
                         continue
                     append_record(out, record)
                     count += 1
+                    # A completed draft resets the consecutive-fault counter and
+                    # discards that draft's trackers (FR-016).
+                    self._consecutive_faults = 0
+                    if self._registry is not None:
+                        self._registry.reset_draft(record.draft_id)
                     produced = count - start_count
                     # First draft confirms the pipeline is alive; then every
                     # STATUS_EVERY drafts report throughput + ETA.
@@ -465,6 +674,8 @@ class GenerateDraftDataSupervisor:
                         ))
                     if count >= target:
                         break
+            except _WorkerRestart:
+                pass  # terminate + relaunch below (gen-1 crash path)
             finally:
                 self._terminate(proc, kill_process_tree)
             if count < target and not self._shutdown.is_set():
@@ -473,6 +684,75 @@ class GenerateDraftDataSupervisor:
                     f"{count}/{target}; restarting..."
                 )
         return count
+
+    def _route_pick_line(self, line: str, proc: Any) -> bool:
+        """Handle a live-pick side-channel line; return True if it was one.
+
+        A ``<<DRAFT-PICK-REQUEST>>`` is answered with the policy's pick (or an
+        ``abort`` on a Python-side fault); a ``<<DRAFT-ABANDONED>>`` is logged +
+        counted. Both kinds of fault feed the consecutive-fault auto-abort
+        (FR-016), which raises :class:`MaxConsecutiveFaultsError`.
+        """
+        try:
+            request = parse_pick_request(line)
+        except ValueError as exc:
+            # A pick-request sentinel with invalid fields is a protocol desync we
+            # cannot answer; force a worker restart (the gen-1 crash path) and
+            # count it as a fault.
+            _log(f"ERROR malformed pick request — dropping draft, restarting worker: {exc}")
+            self._register_fault("")
+            raise _WorkerRestart from exc
+        if request is not None:
+            self._answer_pick(request, proc)
+            return True
+        notice = parse_abandoned(line)
+        if notice is not None:
+            _log(
+                f"ERROR worker abandoned draft {notice.draft_id}: {notice.reason} "
+                "— not recorded"
+            )
+            if self._registry is not None:
+                self._registry.reset_draft(notice.draft_id)
+            self._register_fault(notice.draft_id)
+            return True
+        return False
+
+    def _answer_pick(self, request: "PickRequest", proc: Any) -> None:
+        from draft.application.agent_pick_service import PickFault
+
+        try:
+            card = self._registry.pick(request)
+        except PickFault as exc:
+            _log(
+                f"ERROR pick fault on draft {request.draft_id} seat {request.seat} "
+                f"(pack {request.pack_number} pick {request.pick_number}): {exc} "
+                "— draft abandoned, not recorded"
+            )
+            self._send_response(proc, PickResponse(
+                request.draft_id, request.seat, request.pack_number,
+                request.pick_number, abort=True,
+            ))
+            self._registry.reset_draft(request.draft_id)
+            self._register_fault(request.draft_id)
+            return
+        self._send_response(proc, PickResponse(
+            request.draft_id, request.seat, request.pack_number,
+            request.pick_number, pick=card,
+        ))
+
+    @staticmethod
+    def _send_response(proc: Any, response: PickResponse) -> None:
+        proc.stdin.write(response.serialize() + "\n")
+        proc.stdin.flush()
+
+    def _register_fault(self, draft_id: str) -> None:
+        self._consecutive_faults += 1
+        if self._consecutive_faults >= self._config.max_consecutive_faults:
+            raise MaxConsecutiveFaultsError(
+                f"{self._consecutive_faults} consecutive pick-fault-abandoned "
+                f"drafts (--max-consecutive-faults="
+                f"{self._config.max_consecutive_faults}); aborting run"
+            )
 
     @staticmethod
     def _returncode(proc: Any) -> Any:

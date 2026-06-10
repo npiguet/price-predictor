@@ -6,8 +6,16 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -96,5 +104,97 @@ class DraftWorkerMainTest {
             idx += needle.length();
         }
         return count;
+    }
+
+    // ── Live model-seat pick side-channel (Forge-driven) ──────────────────────
+
+    /**
+     * Drives a full pod where every seat is the external label "draft-agent": a
+     * responder thread answers each {@code <<DRAFT-PICK-REQUEST>>} by echoing the
+     * first card in the held pack, and the draft completes with a normal
+     * transcript whose seats all carry the model label.
+     */
+    @Test
+    void liveModelSeatDraftProducesTranscript() throws Exception {
+        List<String> eligible = MatchGenerator.computeEligibleSets();
+        assertFalse(eligible.isEmpty());
+        String setCode = eligible.get(0);
+
+        // requests: worker `out` → responder; responses: responder → worker `stdin`.
+        PipedInputStream reqIn = new PipedInputStream(1 << 16);
+        PrintStream out = new PrintStream(new PipedOutputStream(reqIn), true, StandardCharsets.UTF_8);
+        BufferedReader reqReader = new BufferedReader(new InputStreamReader(reqIn, StandardCharsets.UTF_8));
+        PipedInputStream respIn = new PipedInputStream(1 << 16);
+        PrintStream respOut = new PrintStream(new PipedOutputStream(respIn), true, StandardCharsets.UTF_8);
+        BufferedReader stdin = new BufferedReader(new InputStreamReader(respIn, StandardCharsets.UTF_8));
+
+        Thread responder = new Thread(() -> {
+            try {
+                String line;
+                while ((line = reqReader.readLine()) != null) {
+                    if (!line.startsWith(DraftWorkerMain.PICK_REQUEST_SENTINEL)) {
+                        continue;
+                    }
+                    String json = line.substring(DraftWorkerMain.PICK_REQUEST_SENTINEL.length());
+                    respOut.println(DraftWorkerMain.PICK_RESPONSE_SENTINEL
+                            + "{\"draft_id\":\"" + jsonStringField(json, "draft_id")
+                            + "\",\"seat\":" + jsonIntField(json, "seat")
+                            + ",\"pack_number\":" + jsonIntField(json, "pack_number")
+                            + ",\"pick_number\":" + jsonIntField(json, "pick_number")
+                            + ",\"pick\":\"" + DraftWorkerMain.jsonEscape(firstPackCard(json)) + "\"}");
+                }
+            } catch (IOException e) {
+                // The request pipe closed when the draft finished; expected.
+            }
+        });
+        responder.setDaemon(true);
+        responder.start();
+
+        BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
+        DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("draft-agent:1");
+        String line = DraftWorkerMain.generateDraft(
+                context, setCode, mix, new Random(0), out, stdin,
+                Set.of("draft-agent"), "test-draft");
+        out.close();  // signal the responder EOF
+
+        assertNotNull(line, "model-piloted draft should produce a transcript");
+        assertTrue(line.startsWith(DraftWorkerMain.SENTINEL));
+        String json = line.substring(DraftWorkerMain.SENTINEL.length());
+        assertTrue(json.contains("\"draft_id\":\"test-draft\""));
+        assertEquals(8, countOccurrences(json, "\"agent\":\"draft-agent\""),
+                "every seat should carry the model label");
+        assertEquals(24, countOccurrences(json, "\"picks\":["), "every booster drained");
+    }
+
+    private static String jsonStringField(String json, String key) {
+        String marker = "\"" + key + "\":\"";
+        int i = json.indexOf(marker) + marker.length();
+        int j = json.indexOf('"', i);  // uuid / scalar fields carry no escaped quotes
+        return json.substring(i, j);
+    }
+
+    private static long jsonIntField(String json, String key) {
+        String marker = "\"" + key + "\":";
+        int i = json.indexOf(marker) + marker.length();
+        int j = i;
+        while (Character.isDigit(json.charAt(j))) {
+            j++;
+        }
+        return Long.parseLong(json.substring(i, j));
+    }
+
+    private static String firstPackCard(String json) {
+        int i = json.indexOf("\"pack\":[\"") + "\"pack\":[\"".length();
+        StringBuilder sb = new StringBuilder();
+        while (json.charAt(i) != '"') {
+            if (json.charAt(i) == '\\') {
+                sb.append(json.charAt(i + 1));  // unescape \" and \\ (card names)
+                i += 2;
+            } else {
+                sb.append(json.charAt(i));
+                i++;
+            }
+        }
+        return sb.toString();
     }
 }

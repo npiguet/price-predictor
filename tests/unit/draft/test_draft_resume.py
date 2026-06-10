@@ -1,4 +1,10 @@
-"""Resume precedence for train-draft-agent: CLI > resumed checkpoint > default."""
+"""Resume precedence for train-draft-agent: CLI > resumed checkpoint > default.
+
+Also covers ``generate-draft-data --resume`` counting of model-labeled records
+(FR-014, T025): a corpus whose seats carry a model label counts toward
+``--n-drafts`` exactly as gen-1, and a pick-fault-abandoned draft leaves no
+partial record for resume to miscount (SC-005).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,12 @@ from pathlib import Path
 import torch
 
 from draft.application.train_draft_agent import _make_scheduler, _reapply_resume_lr
+from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 from draft.infrastructure.cli import _resolve_train_agent_config, build_parser
+from draft.infrastructure.draft_record_io import (
+    append_record,
+    count_complete_records,
+)
 
 
 def _args(argv: list[str]):
@@ -119,3 +130,33 @@ def test_resume_lr_override_survives_scheduler_rebuild() -> None:
     # First warmup step is base_lr × (1/warmup_steps), bounded by the new base —
     # the bug let this jump back to the inherited 3e-4.
     assert new_opt.param_groups[0]["lr"] <= new_lr
+
+
+# ── generate-draft-data --resume counts model-labeled records (T025, FR-014) ──
+
+def _record(draft_id: str, agent: str) -> DraftRecord:
+    return DraftRecord(
+        draft_id=draft_id, run_id="r", timestamp="t",
+        seats=[Seat(agent, ["Plains"] * 40, 7.0), Seat("forge-full", ["Forest"] * 40, 6.0)],
+        boosters=[Booster("TST", ["A"]), Booster("TST", ["B"])],
+    )
+
+
+def test_resume_counts_model_labeled_records(tmp_path) -> None:
+    """A model-piloted seat's label is just a mix label — counted like gen-1."""
+    path = tmp_path / "drafts.jsonl"
+    with open(path, "w", encoding="utf-8") as out:
+        append_record(out, _record("d1", "draft-agent"))
+        append_record(out, _record("d2", "forge-full"))
+        append_record(out, _record("d3", "draft-agent"))
+    assert count_complete_records(path) == 3
+
+
+def test_abandoned_draft_leaves_no_partial_record(tmp_path) -> None:
+    """A pick fault is never written, so it cannot be miscounted on resume (SC-005)."""
+    path = tmp_path / "drafts.jsonl"
+    with open(path, "w", encoding="utf-8") as out:
+        append_record(out, _record("d1", "draft-agent"))
+        # An abandoned draft writes nothing — the file ends cleanly after d1.
+    assert count_complete_records(path) == 1
+

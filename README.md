@@ -796,11 +796,28 @@ python -m draft generate-draft-data --n-drafts 1000          # random set per dr
 python -m draft generate-draft-data --n-drafts 1000 --set BLB
 python -m draft generate-draft-data --n-drafts 1000 --resume # continue a stopped run
 
+# 2b. let a trained agent pilot live seats (self-play corpus + in-pod vs Forge)
+python -m draft generate-draft-data --n-drafts 500 --set BLB \
+  --agent-mix forge-full:7,draft-agent:1 \
+  --agent-checkpoint draft-agent=models/draft/agent/latest.pt
+
 # 3. train the two-headed agent (policy + critic)
 python -m draft train-draft-agent
 python -m draft train-draft-agent --imitation-weight 0       # critic-only ablation
 python -m draft train-draft-agent --resume models/draft/agent/latest.pt
 ```
+
+A draft-agent checkpoint can **pilot live seats**: bind a mix label to a
+checkpoint with `--agent-checkpoint LABEL=PATH` (repeatable; bare `PATH` ⇒ label
+`draft-agent`) and any seat sampled to that label asks the trained policy for its
+pick over a worker↔supervisor side-channel. `--pick-mode {argmax,sample}`
+(default `argmax`), `--temperature`, and `--seed` control pick determinism
+(seeded `sample` is reproducible); `--max-consecutive-faults` (default 5) aborts
+the run if picks keep faulting. A pick fault (policy error, protocol desync, or
+every legal card un-embeddable) **abandons the whole draft** — no substitute is
+ever recorded — and the worker's per-run stderr log lands at
+`output/draft/worker-<run_id>.log`. With no `--agent-checkpoint` the command is
+byte-for-byte the gen-1 behavior.
 
 Requires the `forge-connector` fat JAR (now also containing `DraftWorkerMain`),
 a frozen sealed scorer + picker, and a populated `.npz` card cache. The corpus

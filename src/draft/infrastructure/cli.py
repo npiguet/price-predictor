@@ -137,6 +137,38 @@ def _build_generate_draft_data_parser(subparsers) -> None:
         "--resume", action="store_true",
         help="Append + count pre-existing drafts toward --n-drafts (FR-012).",
     )
+    # Live model-pilot flags (opt-in; absent ⇒ byte-for-byte gen-1, SC-004).
+    parser.add_argument(
+        "--agent-checkpoint", action="append", default=[], dest="agent_checkpoints",
+        metavar="LABEL=PATH",
+        help=(
+            "Bind a mix label to a trained agent checkpoint (repeatable). A bare "
+            "PATH is shorthand for label 'draft-agent'. A mix label that is "
+            "neither a Forge built-in nor bound here fails fast (FR-011)."
+        ),
+    )
+    parser.add_argument(
+        "--pick-mode", default="argmax", choices=["argmax", "sample"],
+        help=(
+            "argmax = the policy's strongest legal card (default); sample = "
+            "temperature-scaled softmax over PACK logits (rollout diversity)."
+        ),
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=1.0,
+        help="Softmax temperature for --pick-mode sample; ignored for argmax (default 1.0).",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Seed the pick-sampling RNG for reproducible sampled rollouts (SC-007).",
+    )
+    parser.add_argument(
+        "--max-consecutive-faults", type=int, default=5,
+        help=(
+            "Abort the run with a nonzero exit after this many consecutive "
+            "pick-fault-abandoned drafts (FR-016; default 5)."
+        ),
+    )
 
 
 def _build_train_draft_agent_parser(subparsers) -> None:
@@ -254,9 +286,14 @@ def _build_train_draft_agent_parser(subparsers) -> None:
 def run_generate_draft_data(args: argparse.Namespace) -> int:
     """Execute the generate-draft-data command."""
     from draft.application.agent_mix import AgentMixError, parse_agent_mix
+    from draft.application.agent_registry import (
+        AgentRegistryError,
+        parse_agent_checkpoints,
+    )
     from draft.application.generate_draft_data import (
         GenerateDraftDataConfig,
         GenerateDraftDataSupervisor,
+        MaxConsecutiveFaultsError,
     )
 
     if args.n_drafts < 1:
@@ -269,6 +306,19 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    try:
+        agent_checkpoints = parse_agent_checkpoints(args.agent_checkpoints)
+    except AgentRegistryError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    if args.pick_mode == "sample" and args.temperature <= 0:
+        print(
+            "Error: --temperature must be > 0 with --pick-mode sample.",
+            file=sys.stderr,
+        )
+        return 2
+
     config = GenerateDraftDataConfig(
         n_drafts=args.n_drafts,
         set_code=args.set_code,
@@ -279,10 +329,21 @@ def run_generate_draft_data(args: argparse.Namespace) -> int:
         cards_path=Path(args.cards_path),
         output_path=Path(args.output_path),
         resume=args.resume,
+        agent_checkpoints=agent_checkpoints,
+        pick_mode=args.pick_mode,
+        temperature=args.temperature,
+        seed=args.seed,
+        max_consecutive_faults=args.max_consecutive_faults,
     )
 
     try:
         GenerateDraftDataSupervisor(config).run()
+    except AgentRegistryError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except MaxConsecutiveFaultsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
