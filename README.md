@@ -753,6 +753,17 @@ python -m sealed pick-decks \
 
 **Output**: `output/sealed/generated-decks.txt` (or `--output`) — one line per pool that produced a viable deck, in `LABEL;SET_CODE;Card1|Card2|...|Card40` format (exactly 40 cards: 23 spells + the picker's nonbasic lands + basic lands from the manabase heuristic). Pools with fewer than 23 embeddable cards are skipped silently.
 
+### analyze-generated-decks
+
+Aggregate composition statistics over one or more generated-decks files — color presence, color-count distribution, pip-share-by-rank, mana curve, type balance, basic/nonbasic land split, pip distribution, and (unless `--no-rarity`) rarity distribution — with a per-label breakdown when more than one `LABEL` is loaded. Useful for inspecting how a builder's decks are shaped (e.g. a self-play generation's color/curve drift).
+
+```bash
+python -m sealed analyze-generated-decks                                   # default output/sealed/generated-decks.txt
+python -m sealed analyze-generated-decks gen1.txt gen2.txt --no-rarity     # compare labels, skip MTGJSON
+```
+
+The same engine powers `python -m draft analyze-generated-decks`, which sources the per-seat decks from a `drafts.jsonl` corpus and adds a per-label `deck_score` summary (agent vs Forge).
+
 ### ML rationale — `cat([max_pool, mean_pool])` pooling
 
 The pretrained transformer encoder produces a sequence of hidden states (one per token). To get a fixed-size card representation we apply two pooling operations over the token dimension:
@@ -805,6 +816,9 @@ python -m draft generate-draft-data --n-drafts 500 --set BLB \
 python -m draft train-draft-agent
 python -m draft train-draft-agent --imitation-weight 0       # critic-only ablation
 python -m draft train-draft-agent --resume models/draft/agent/latest.pt
+
+# (any time) inspect the corpus: per-label deck-score + composition stats
+python -m draft analyze-generated-decks   # reads output/draft/drafts.jsonl
 ```
 
 A draft-agent checkpoint can **pilot live seats**: bind a mix label to a

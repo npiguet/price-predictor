@@ -1,28 +1,25 @@
-"""Aggregate stats over generated-decks files.
+"""Aggregate composition stats over generated 40-card decks.
 
-Reads one or more ``LABEL;SET_CODE;Card1|...|Card40`` files produced by
-``python -m sealed build-decks`` and prints color preference, color-count
-distribution, mana curve, type balance, basic/nonbasic land split, pip
-distribution, and (optionally) rarity distribution. When multiple labels
-or set codes are loaded, per-label and per-set breakdowns are appended
-after the global report.
+The engine behind ``sealed analyze-generated-decks`` (and, via reuse,
+``draft analyze-generated-decks``): given a list of ``GeneratedDeck`` objects it
+reports color preference, color-count distribution, mana curve, type balance,
+basic/nonbasic land split, pip distribution, and — when MTGJSON is available —
+rarity distribution, with per-label breakdowns when more than one label is
+present.
 
-Usage:
-    python scripts/analyze_generated_decks.py
-    python scripts/analyze_generated_decks.py output/sealed/generated-decks.txt output/sealed/generated-decks-gen1.txt
-    python scripts/analyze_generated_decks.py --no-rarity
+Decoupled from the data source: callers build the ``GeneratedDeck`` list (from
+``LABEL;SET_CODE;…`` files, or from a ``drafts.jsonl`` corpus's per-seat decks)
+and pass it to :func:`analyze_decks`. Moved here from the former
+``scripts/analyze_generated_decks.py`` so both the sealed and draft CLIs share
+one implementation.
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import mean
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from price_predictor.domain.entities import Card
 from price_predictor.domain.value_objects import PrintingData
@@ -32,8 +29,7 @@ from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
     ConvertedCardLocator,
 )
-from sealed.infrastructure.pool_file_reader import GeneratedDeck, parse_generated_decks
-
+from sealed.infrastructure.pool_file_reader import GeneratedDeck
 
 DEFAULT_DECKS_PATH = Path("output/sealed/generated-decks.txt")
 DEFAULT_CARDS_PATH = Path("output/cardsfolder")
@@ -65,26 +61,21 @@ class DeckStats:
     unresolved_count: int
 
 
-def main() -> None:
-    args = _parse_args()
-    deck_paths: list[Path] = list(args.decks_files) or [DEFAULT_DECKS_PATH]
+def analyze_decks(
+    decks: list[GeneratedDeck],
+    cards_path: Path,
+    *,
+    no_rarity: bool,
+    source_summary: list[tuple[str, int]],
+) -> None:
+    """Compute per-deck stats and print the global + per-label reports.
 
-    all_decks: list[GeneratedDeck] = []
-    per_file_count: list[tuple[Path, int]] = []
-    for path in deck_paths:
-        if not path.exists():
-            print(f"File not found: {path}")
-            return
-        decks = parse_generated_decks(path)
-        all_decks.extend(decks)
-        per_file_count.append((path, len(decks)))
-
-    if not all_decks:
-        print("No decks loaded.")
-        return
-
-    locator = ConvertedCardLocator(args.cards_path)
-    distinct_names = sorted({name for deck in all_decks for name in deck.cards})
+    ``source_summary`` is the ``(source, count)`` lines printed under
+    ``=== Decks loaded ===`` (one per generated-decks file, or one for the
+    drafts corpus). ``decks`` must be non-empty.
+    """
+    locator = ConvertedCardLocator(cards_path)
+    distinct_names = sorted({name for deck in decks for name in deck.cards})
     card_cache: dict[str, Card | None] = {}
     for name in distinct_names:
         path = locator.text_path(name)
@@ -97,23 +88,19 @@ def main() -> None:
 
     metadata: dict[str, PrintingData] | None = None
     rarity_skip_reason: str | None = None
-    if args.no_rarity:
+    if no_rarity:
         rarity_skip_reason = "--no-rarity flag set"
     elif not (ALLPRINTINGS_PATH.exists() and ALLPRICES_PATH.exists()):
-        rarity_skip_reason = (
-            f"missing {ALLPRINTINGS_PATH} or {ALLPRICES_PATH}"
-        )
+        rarity_skip_reason = f"missing {ALLPRINTINGS_PATH} or {ALLPRICES_PATH}"
     else:
         metadata, _ = build_metadata_map(ALLPRINTINGS_PATH, ALLPRICES_PATH)
 
-    all_stats = [
-        _compute_deck_stats(deck, card_cache, metadata) for deck in all_decks
-    ]
+    all_stats = [compute_deck_stats(deck, card_cache, metadata) for deck in decks]
 
     print("=== Decks loaded ===")
-    for path, count in per_file_count:
-        print(f"  {path}: {count}")
-    print(f"  total: {len(all_decks)}")
+    for source, count in source_summary:
+        print(f"  {source}: {count}")
+    print(f"  total: {len(decks)}")
     print(f"  distinct nonbasic card names: {len(distinct_names)}")
     print(f"  unresolved card names (skipped from stats): {unresolved_total}")
     print()
@@ -131,32 +118,7 @@ def main() -> None:
             )
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "decks_files",
-        nargs="*",
-        type=Path,
-        help=(
-            "Generated-decks files to analyze "
-            f"(default: {DEFAULT_DECKS_PATH})"
-        ),
-    )
-    parser.add_argument(
-        "--cards-path",
-        type=Path,
-        default=DEFAULT_CARDS_PATH,
-        help="Path to converted cardsfolder (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--no-rarity",
-        action="store_true",
-        help="Skip the rarity-distribution section",
-    )
-    return parser.parse_args()
-
-
-def _compute_deck_stats(
+def compute_deck_stats(
     deck: GeneratedDeck,
     card_cache: dict[str, Card | None],
     metadata: dict[str, PrintingData] | None,
@@ -386,7 +348,3 @@ def _print_bar(label: str, count: int, total: int) -> None:
     pct = 100 * count / total if total else 0.0
     bar = "#" * int(pct / 2)
     print(f"  {label:<16}: {count:>5}/{total:<5} ({pct:5.1f}%) {bar}")
-
-
-if __name__ == "__main__":
-    main()

@@ -80,7 +80,33 @@ def build_parser() -> argparse.ArgumentParser:
     _build_generate_draft_data_parser(subparsers)
     _build_train_draft_agent_parser(subparsers)
     _build_validate_builder_parser(subparsers)
+    _build_analyze_generated_decks_parser(subparsers)
     return parser
+
+
+def _build_analyze_generated_decks_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "analyze-generated-decks",
+        help=(
+            "Aggregate composition stats (colors, curve, types, lands, pips, "
+            "rarity) over the per-seat decks in a drafts.jsonl corpus, plus a "
+            "per-label deck-score summary (agent vs Forge). Per-label breakdowns "
+            "follow the global report."
+        ),
+    )
+    parser.set_defaults(func=run_analyze_generated_decks)
+    parser.add_argument(
+        "--drafts-path", default="output/draft/drafts.jsonl",
+        help="Drafts corpus to analyze (default: output/draft/drafts.jsonl).",
+    )
+    parser.add_argument(
+        "--cards-path", default="output/cardsfolder/",
+        help="Directory with converted card files (default: output/cardsfolder/).",
+    )
+    parser.add_argument(
+        "--no-rarity", action="store_true",
+        help="Skip the rarity-distribution section (no MTGJSON load).",
+    )
 
 
 def _build_validate_builder_parser(subparsers) -> None:
@@ -480,6 +506,38 @@ def run_validate_builder(args: argparse.Namespace) -> int:
         print("\nInterrupted.", file=sys.stderr)
         return 130
     print(format_diagnostic(diagnostic))
+    return 0
+
+
+def run_analyze_generated_decks(args: argparse.Namespace) -> int:
+    """Composition + per-label deck-score stats over a drafts.jsonl corpus."""
+    from draft.application.analyze_generated_decks import (
+        deck_score_summary,
+        format_deck_score_section,
+        generated_decks_from_drafts,
+    )
+    from draft.infrastructure.draft_record_io import read_records
+    from sealed.application.analyze_generated_decks import analyze_decks
+
+    drafts_path = Path(args.drafts_path)
+    records = list(read_records(drafts_path))
+    if not records:
+        print(f"Error: no records in {drafts_path}", file=sys.stderr)
+        return 2
+
+    print(format_deck_score_section(deck_score_summary(records)))
+    print()
+
+    decks = generated_decks_from_drafts(records)
+    if not decks:
+        print("No built decks in the corpus.", file=sys.stderr)
+        return 2
+
+    analyze_decks(
+        decks, Path(args.cards_path),
+        no_rarity=args.no_rarity,
+        source_summary=[(str(drafts_path), len(decks))],
+    )
     return 0
 
 

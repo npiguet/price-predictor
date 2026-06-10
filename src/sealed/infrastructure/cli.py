@@ -78,8 +78,30 @@ def build_parser() -> argparse.ArgumentParser:
     _build_build_vocab_parser(subparsers)
     _build_train_picker_parser(subparsers)
     _build_pick_decks_parser(subparsers)
+    _build_analyze_generated_decks_parser(subparsers)
 
     return parser
+
+
+def _build_analyze_generated_decks_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "analyze-generated-decks",
+        help=(
+            "Aggregate composition stats (colors, curve, types, lands, pips, "
+            "rarity) over one or more generated-decks files, with per-label "
+            "breakdowns."
+        ),
+    )
+    parser.set_defaults(func=run_analyze_generated_decks)
+    parser.add_argument(
+        "decks_files", nargs="*", type=Path,
+        help="Generated-decks files (default: output/sealed/generated-decks.txt).",
+    )
+    _add_cards_path(parser)
+    parser.add_argument(
+        "--no-rarity", action="store_true",
+        help="Skip the rarity-distribution section (no MTGJSON load).",
+    )
 
 
 def _build_build_vocab_parser(subparsers) -> None:
@@ -1635,6 +1657,36 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
 
+    return 0
+
+
+def run_analyze_generated_decks(args: argparse.Namespace) -> int:
+    """Print composition stats over generated-decks files."""
+    from sealed.application.analyze_generated_decks import (
+        DEFAULT_DECKS_PATH,
+        analyze_decks,
+    )
+    from sealed.infrastructure.pool_file_reader import parse_generated_decks
+
+    deck_paths: list[Path] = list(args.decks_files) or [DEFAULT_DECKS_PATH]
+    all_decks = []
+    source_summary: list[tuple[str, int]] = []
+    for path in deck_paths:
+        if not path.exists():
+            print(f"Error: file not found: {path}", file=sys.stderr)
+            return 2
+        decks = parse_generated_decks(path)
+        all_decks.extend(decks)
+        source_summary.append((str(path), len(decks)))
+
+    if not all_decks:
+        print("No decks loaded.", file=sys.stderr)
+        return 2
+
+    analyze_decks(
+        all_decks, Path(args.cards_path),
+        no_rarity=args.no_rarity, source_summary=source_summary,
+    )
     return 0
 
 
