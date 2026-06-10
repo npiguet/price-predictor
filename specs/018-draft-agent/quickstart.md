@@ -19,11 +19,11 @@ no live Forge seat, no RL (those are gen 2).
 ## 1. (Optional) Validate the picker as a label-builder  (User Story 3)
 
 Before a large corpus run, decide whether the fast picker can build the
-labeling decks or whether you need the slower SA builder. Run the one-off
-diagnostic script (not a CLI subcommand):
+labeling decks or whether you need the slower SA builder. Run the diagnostic
+subcommand:
 
 ```bash
-python -m draft.scripts.validate_builder --pools-from output/draft/drafts.jsonl
+python -m draft validate-builder --pools-from output/draft/drafts.jsonl
 # or --fresh-pools --set BLB --n-pools 300
 ```
 

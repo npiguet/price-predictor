@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 
 import numpy as np
+import pytest
 
 from draft.application.validate_builder import compute_diagnostic
+from draft.infrastructure.cli import build_parser, run_validate_builder
 
 
 def test_perfect_rank_agreement() -> None:
@@ -55,3 +57,26 @@ def test_matches_scipy_on_noisy_data() -> None:
     diag = compute_diagnostic(picker, sa, sa2)
     expected, _ = spearmanr(picker, sa)
     assert math.isclose(diag.picker_vs_sa_spearman, float(expected))
+
+
+# ── CLI subcommand wiring ─────────────────────────────────────────────────────
+
+def test_validate_builder_subcommand_dispatches() -> None:
+    args = build_parser().parse_args(
+        ["validate-builder", "--pools-from", "output/draft/drafts.jsonl",
+         "--n-pools", "50"]
+    )
+    assert args.func is run_validate_builder
+    assert args.pools_from == "output/draft/drafts.jsonl"
+    assert args.n_pools == 50
+    assert args.fresh_pools is False
+
+
+def test_validate_builder_requires_a_pool_source() -> None:
+    # --pools-from and --fresh-pools are a required mutually-exclusive group.
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["validate-builder"])
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            ["validate-builder", "--pools-from", "x", "--fresh-pools"]
+        )

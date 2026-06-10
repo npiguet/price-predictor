@@ -789,7 +789,7 @@ the launch entries are:
 
 ```bash
 # 1. (optional) decide picker vs SA as the labeling builder
-python -m draft.scripts.validate_builder --pools-from output/draft/drafts.jsonl
+python -m draft validate-builder --pools-from output/draft/drafts.jsonl
 
 # 2. generate a labeled draft corpus (drives Forge's draft AI for all pod seats)
 python -m draft generate-draft-data --n-drafts 1000          # random set per draft
