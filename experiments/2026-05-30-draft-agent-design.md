@@ -861,6 +861,80 @@ flat. 8+ layers isn't ruled out in principle (the high-LR lead says the capacity
 is usable), but it would need its own LR/warmup retune to pay off, and that is
 gen-2+ territory — for gen 1, 6 layers is the pick.
 
+## Gen-1 live play: agent vs Forge deck composition (2026-06-10)
+
+First analysis of the gen-1 agent **piloting live seats** (the 019 live-play
+integration), via `draft analyze-generated-decks --agent <label>` over the
+argmax-piloted corpus `drafts-gen1-argmax.jsonl` (`--pick-mode argmax`, no
+sampling; 6-layer gen-1 model, 512-d scorer/picker, `output/cardsfolder-512/`).
+The corpus is a mixed pod of Forge (`forge-full`) and gen-1 (`gen1`) seats, so
+every seat drafts the **same boosters**, and every seat's pool is built + scored
+by the **same** frozen picker + scorer. The only variable is who made the picks
+— a clean apples-to-apples read on the agent's drafting against gen-0.
+
+**Headline: gen-1 is a faithful clone of Forge, a hair ahead on scorer quality.**
+
+| | forge-full (n=3083) | gen1 (n=1965) | Δ (gen1−forge) |
+|---|---|---|---|
+| deck_score mean | 1.48 | 1.52 | **+0.04** |
+| deck_score median | 1.57 | 1.62 | +0.05 |
+
+At these n the mean gap is precisely measured (not sampling noise in the mean),
+but the *effect size* is tiny: by this project's score-delta↔win-rate
+calibration (~7.8 pp per 1.0 score), +0.04 ≈ **0.3 pp** of win rate. The scorer
+is a trusted proxy here (it earned that in the sealed work — per-pool score
+deltas track win-rate deltas, and Forge seats are in-distribution), so
+scorer-equality is taken as quality-equality. That equivalence is exactly the
+gen-1 success criterion: imitation converged, the agent drafts Forge-quality
+pools (a touch better), no degradation.
+
+**Composition is near-identical, with a few small, coherent shifts.** Curve
+(avg MV 3.11 both), creature count (~16.6), land split (17 lands / ~16.6
+basics), and rarity mix are effectively unchanged. The real deltas:
+
+| feature | forge-full | gen1 | read |
+|---|---|---|---|
+| 2-color decks | 64.4% | 66.0% | gen-1 slightly **more color-disciplined** |
+| 4–5 color decks | 7.3% | 6.5% | …fewer greedy manabases |
+| Artifacts / deck | 1.71 | **1.99** (+16%) | biggest single shift |
+| Green pip share | 21.4% (top) | 20.1% | de-emphasizes green |
+| Blue pip share | 18.1% | 19.3% | …toward blue |
+| Green presence | 47.9% | 45.5% | −2.4 pp |
+
+These cohere into one mild learned fingerprint: **tighter color commitment +
+more color-flexible artifact picks + a step off green (toward blue)**. Artifacts
+being mostly splash-free fits the more-2-color tendency. Notably gen-1 *trims*
+green rather than amplifying the Forge W/G lean flagged in the sealed self-play
+bias note — at this generation the imitation isn't compounding that particular
+Forge bias.
+
+**Anticipated objections.** Two objections might be raised against reading the
+score parity as genuine quality-equivalence; neither survives scrutiny here.
+
+- *"The metric is the scorer, not match wins, so equal score need not mean
+  equal strength."* The scorer is a validated proxy in this project — per-pool
+  score deltas track measured win-rate deltas — and both Forge and agent seats
+  produce in-distribution, Forge-pilotable decks, so the proxy is sound in
+  precisely this regime. The argmax pilot makes the estimate unbiased besides:
+  the corpus records every genuine pick (no temperature sampling) and is not
+  filtered to high-scoring decks so the +0.04 is an unbiased estimate, not a 
+  selection artifact.
+- *"The shared builder collapses pick-level differences, so near-identical
+  composition need not mean near-identical drafting."* This targets the wrong
+  objective. Drafting is the problem of acquiring cards that compose into the
+  best buildable 40, so the built-deck lens measures precisely what matters; the
+  picks the builder discards are by definition the ones that did not move deck
+  quality, and learning which speculative picks one can afford never to play is
+  part of the skill under test, not a difference being hidden. The pick-level
+  fingerprint (cards drafted but cut) survives in the raw 45-card pool for a
+  separate analysis, but it is not the quality signal.
+
+**Implication for gen-2.** Because gen-1 ≈ Forge, training gen-2 by pure
+imitation on a gen-1-piloted corpus would just clone a clone — improvement has
+to come from the **critic steering picks** (or selection pressure), not from
+`--imitation-agents gen1` alone. This is the concrete data point behind "gen-2
+leans on the critic / keeps a Forge anchor."
+
 ## Open / future questions
 
 - **Gen-2 RL spec.** Actor-critic with GAE, the choice between REINFORCE
