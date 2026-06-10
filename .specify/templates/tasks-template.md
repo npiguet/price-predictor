@@ -152,7 +152,7 @@ Examples of foundational tasks (adjust based on your project):
 
 - [ ] TXXX [P] Documentation updates in docs/
 - [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories
+- [ ] TXXX Performance review per Principle VIII across all stories (I/O batching/caching, GPU placement & batching, no per-item host↔device transfers in hot loops, streaming for large inputs, load-once reuse)
 - [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
 - [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
@@ -250,3 +250,4 @@ With multiple developers:
 - Stop at any checkpoint to validate story independently
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
 - **Principle VII (Codebase-Aware Planning)**: Any task that creates a new entity, service, port, or adapter MUST reference the nearest prior art identified in plan.md's Codebase Survey. If no prior art is cited, either reuse/extend existing code or document in the task description why a parallel concept is warranted.
+- **Principle VIII (Performance-Conscious Implementation)**: Any task touching data loading or model compute MUST be checked against the performance checklist (batch/cache I/O, GPU placement, batch GPU ops, no per-item host↔device transfers in hot loops, stream large inputs, load-once reuse). Optimization beyond the checklist requires a profiling/measurement justification.

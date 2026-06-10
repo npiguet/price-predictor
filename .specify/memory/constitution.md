@@ -1,30 +1,32 @@
 <!--
   Sync Impact Report
   ==================
-  Version change: 2.1.0 → 2.2.0
+  Version change: 2.2.0 → 2.3.0
   Modified principles: None
   Added sections:
-    - VII. Codebase-Aware Planning (new principle requiring
-      a deliberate survey of the existing codebase during
-      /speckit.plan and /speckit.tasks, with findings
-      recorded in research.md and only summarized in
-      plan.md, to prevent pigeonholed designs, duplicate
-      entities, and domain-concept drift)
+    - VIII. Performance-Conscious Implementation (new principle
+      requiring any feature that moves data or runs model compute
+      to be reviewed against a checklist of recurring performance
+      pitfalls — I/O batching/caching, GPU placement, GPU
+      batching, vectorization, streaming, load-once reuse — with
+      optimization beyond the checklist gated on measurement so it
+      stays bounded by Principle II)
   Removed sections: None
   Templates requiring updates:
     - .specify/templates/plan-template.md — ✅ updated
-      (Constitution Check gate now includes a Codebase
-      Survey subsection with required outputs)
+      (Constitution Check now includes a Performance Review
+      subsection for Principle VIII, applied when the feature
+      moves data or runs model compute)
     - .specify/templates/tasks-template.md — ✅ updated
-      (Notes section now reminds the agent to reference
-      prior art before creating new entities/services)
+      (Notes section references Principle VIII; the Polish-phase
+      performance task is tied to the Principle VIII checklist)
     - .specify/templates/spec-template.md — ✅ No change
-      (the spec is upstream of plan; survey belongs in
-      plan/research, not in the problem statement)
+      (performance is a plan/implementation concern, not part of
+      the problem statement — same rationale as Principle VII)
   Quality Gates updated:
-    - ✅ Added codebase survey gate: plans that introduce
-      new domain concepts must cite prior art or justify
-      divergence
+    - ✅ Added performance review gate: features touching data
+      loading or model compute must pass the Principle VIII
+      checklist
   Follow-up TODOs: None
 -->
 # Price Predictor Constitution
@@ -224,6 +226,55 @@ the survey as a first-class planning step — on the same footing as
 the Constitution Check itself — is the cheapest insurance against
 duplication and domain decay.
 
+### VIII. Performance-Conscious Implementation
+
+Any feature that moves data or runs model compute MUST be reviewed
+against a checklist of recurring performance pitfalls before it is
+considered complete. These are concrete, repeatedly-observed problems
+in this codebase — not speculative concerns — so the checks are
+mandatory, while optimization *beyond* them stays evidence-driven.
+
+- **Batch and cache I/O.** Repeated or per-item I/O — card embedding
+  `.npz` loads, MTGJSON lookups, file reads — MUST be batched and/or
+  cached rather than re-read inside a loop. Deterministic, reusable
+  artifacts (e.g., card embeddings) MUST be computed once and
+  persisted/reused across iterations and runs.
+- **Use the GPU when it helps.** Compute that meaningfully benefits
+  from the GPU (model forward/backward, large tensor ops) MUST run on
+  the GPU when one is available, with the model and its inputs on the
+  same device. Work the GPU can do MUST NOT silently run on the CPU.
+- **Batch GPU operations.** GPU work MUST be batched where batching
+  helps, to amortize kernel-launch and transfer cost and avoid
+  CPU↔GPU ping-pong. Per-item host↔device transfers (`.item()`,
+  `.cpu()`, `.numpy()`, Python-scalar reads) inside hot loops MUST be
+  hoisted out or accumulated on-device.
+- **Vectorize hot loops.** Element-wise work over arrays, tensors, or
+  dataframes MUST use vectorized numpy/pandas/torch operations instead
+  of per-row Python loops on hot paths.
+- **Stream large inputs.** Large files MUST be processed in a
+  streaming/single pass (as the MTGJSON and cards-played readers
+  already do) rather than materialized wholesale in memory when a
+  streaming pass suffices.
+- **Load once, reuse.** Expensive-to-construct objects (models,
+  tokenizers, metadata maps) MUST be loaded once and reused across
+  requests/iterations, not reconstructed per call.
+- **Measure before going further.** Optimization beyond this checklist
+  MUST be justified by a profile or measurement that identifies the
+  hot path. This keeps the principle bounded by Principle II: do not
+  trade simplicity for speculative speedups on cold paths.
+
+**Rationale**: ML and data pipelines live and die by I/O and device
+efficiency. The dominant costs here are loading card embeddings and
+MTGJSON data, moving tensors to and from the GPU, and the per-call
+overhead of unbatched kernels — and these exact issues have
+repeatedly required after-the-fact fixes once a feature was already
+implemented. Encoding them as a standing checklist, applied during
+planning and again at review, catches them while the design is still
+cheap to change instead of as a follow-up patch. The closing
+"measure first" clause prevents this principle from inviting the
+premature optimization Principle II forbids: the listed items are
+known hot spots; anything beyond them needs evidence.
+
 ## Quality Gates
 
 Every pull request and feature delivery MUST satisfy these gates:
@@ -240,6 +291,10 @@ Every pull request and feature delivery MUST satisfy these gates:
 - Plans introducing new domain concepts MUST cite prior art
   from the codebase survey (Principle VII) or document why a
   parallel concept is warranted.
+- Features that move data or run model compute MUST pass the
+  Principle VIII performance review (I/O batching/caching, GPU
+  placement and batching, no per-item host↔device transfers in
+  hot loops, streaming for large inputs, load-once reuse).
 - Code has been reviewed by at least one other contributor (or
   self-reviewed with a structured checklist for solo work).
 
@@ -272,4 +327,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 2.2.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-04-20
+**Version**: 2.3.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-06-10

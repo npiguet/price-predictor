@@ -73,6 +73,33 @@ pointer and the outcome:
 - Any follow-up tasks the survey surfaced (e.g., a rename, an
   extraction) that must be added to `tasks.md`.
 
+### Performance Review (Principle VIII — required when applicable)
+
+*GATE: Apply when the feature moves data or runs model compute.
+Skip with an explicit "N/A — no data movement or model compute"
+note only when neither applies.*
+
+Identify the feature's data-movement and model-compute hot paths,
+then confirm the plan addresses each item below or record why it
+does not apply. Capture the result in this `plan.md` as a one-line
+status per item (addressed / N/A-with-reason):
+
+- **I/O batching & caching** — repeated/per-item loads (card
+  embedding `.npz`, MTGJSON lookups, file reads) are batched and/or
+  cached; deterministic artifacts are computed once and reused.
+- **GPU placement** — compute that benefits from the GPU runs on it,
+  with model and inputs co-located on the device.
+- **GPU batching** — GPU operations are batched; no per-item
+  host↔device transfers (`.item()`/`.cpu()`/`.numpy()`) inside hot
+  loops.
+- **Streaming & load-once** — large inputs are streamed rather than
+  fully materialized; expensive objects (models, tokenizers, metadata
+  maps) are loaded once and reused.
+
+Optimization *beyond* this checklist MUST be backed by a
+profile/measurement identifying the hot path; do not add speculative
+optimizations (Principle II).
+
 ## Project Structure
 
 ### Documentation (this feature)
