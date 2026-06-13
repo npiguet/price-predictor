@@ -150,7 +150,7 @@ importance-corrected. This constrains how generations of data may be combined:
   coverage of incoherent / low-end states (MC value targets are valid off-policy,
   though a clean `V^π` is dominated by the on-policy rollouts), (b) a steady
   **minority of dumb/random-bot pods** every generation so that coverage does not
-  evaporate as the policy improves, and (c) the **frozen held-out yardstick**
+  evaporate as the policy improves, and (c) the **cross-generation yardstick**
   below.
 
 This is the subtlety the spec must get right: "more data is better" silently
@@ -272,5 +272,7 @@ are the build.
   regressing the critic on the policy's own on-policy rollouts.
 - **Reward hacking** — the policy exploiting flaws in the (frozen, imperfect)
   scorer to score well without genuinely better decks.
-- **Frozen yardstick** — a held-out evaluation battery fixed before training, so
-  successive generations are comparable on a stable reference.
+- **Cross-generation yardstick** — a single fixed-mix evaluation run with every
+  generation randomly co-seated, compared on raw mean `deck_score` (the frozen
+  scorer gives a stable absolute scale; randomization balances the
+  opponent-strength confound).
