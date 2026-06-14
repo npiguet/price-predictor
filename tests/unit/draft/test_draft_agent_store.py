@@ -89,6 +89,46 @@ def test_checkpoint_round_trip_reloads_to_predict(tmp_path: Path) -> None:
     assert critic.shape == (1,)
 
 
+def test_rl_metadata_round_trip(tmp_path: Path) -> None:
+    """RL-produced checkpoints carry rl_metadata (spec 020 FR-019)."""
+    cfg = DraftAgentConfig(embedding_dim=8, packs=3, P=15)
+    model = DraftAgentModel(cfg)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    store = DraftAgentStore()
+    path = tmp_path / "gen2.pt"
+    rl_metadata = {
+        "generation": 2,
+        "reference_checkpoint": "models/draft/agent/gen1.pt",
+        "algorithm": "reinforce+gae",
+        "gae_lambda": 0.95,
+        "kl_coef": 0.1,
+        "entropy_coef": 0.01,
+        "value_weight": 1.0,
+        "rollout_temperature": 1.2,
+    }
+    store.save_checkpoint(
+        model, optimizer, epoch=2, best_val_loss=0.3, config=cfg, path=path,
+        critic_mean=0.0, critic_std=1.0, rl_metadata=rl_metadata,
+    )
+    loaded = store.load_checkpoint(path)
+    assert loaded.rl_metadata == rl_metadata
+
+
+def test_rl_metadata_defaults_to_none_for_gen1_checkpoints(tmp_path: Path) -> None:
+    """A gen-1 / imitation checkpoint (no rl_metadata) still loads cleanly."""
+    cfg = DraftAgentConfig(embedding_dim=8, packs=3, P=15)
+    model = DraftAgentModel(cfg)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    store = DraftAgentStore()
+    path = tmp_path / "gen1.pt"
+    store.save_checkpoint(
+        model, optimizer, epoch=1, best_val_loss=0.5, config=cfg, path=path,
+        critic_mean=0.0, critic_std=1.0,
+    )
+    loaded = store.load_checkpoint(path)
+    assert loaded.rl_metadata is None
+
+
 def test_lr_decay_count_defaults_to_zero_for_old_checkpoints(tmp_path: Path) -> None:
     # A checkpoint written before the annealing feature has no lr_decay_count.
     from price_predictor.infrastructure.torch_checkpoint import save_checkpoint

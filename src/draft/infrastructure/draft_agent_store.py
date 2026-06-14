@@ -38,6 +38,10 @@ class LoadedDraftAgentCheckpoint:
     critic_std: float
     train_config: dict[str, Any] | None = None
     lr_decay_count: int = 0
+    # RL-produced checkpoints (spec 020 FR-019) carry this; gen-1 / imitation
+    # checkpoints leave it None. Self-describes the generation lineage and the RL
+    # hyper-parameters so the next self-play cycle can read them back.
+    rl_metadata: dict[str, Any] | None = None
 
 
 class DraftAgentStore:
@@ -56,6 +60,7 @@ class DraftAgentStore:
         critic_std: float,
         train_config: dict[str, Any] | None = None,
         lr_decay_count: int = 0,
+        rl_metadata: dict[str, Any] | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "model_state_dict": model.state_dict(),
@@ -68,6 +73,8 @@ class DraftAgentStore:
         }
         if train_config is not None:
             payload["train_config"] = train_config
+        if rl_metadata is not None:
+            payload["rl_metadata"] = rl_metadata
         save_checkpoint(path, payload, config)
 
     def load_checkpoint(self, path: Path) -> LoadedDraftAgentCheckpoint:
@@ -84,4 +91,5 @@ class DraftAgentStore:
             critic_std=payload.get("critic_std", 1.0),
             train_config=payload.get("train_config"),
             lr_decay_count=payload.get("lr_decay_count", 0),
+            rl_metadata=payload.get("rl_metadata"),
         )

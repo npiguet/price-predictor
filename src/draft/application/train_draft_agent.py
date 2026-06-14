@@ -26,17 +26,13 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from draft.application.draft_pick_states import iter_seat_pick_states
 from draft.domain.draft_agent_model import (
     DraftAgentConfig,
     DraftAgentModel,
 )
 from draft.domain.draft_geometry import DraftGeometry, DraftRecord
-from draft.domain.draft_state import (
-    TYPE_PACK,
-    TYPE_PASSED,
-    TYPE_POOL,
-    TYPE_TAKEN,
-)
+from draft.domain.draft_state import TYPE_PACK
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 from draft.infrastructure.draft_record_io import read_records
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
@@ -237,183 +233,32 @@ class _Loader:
         reward: float | None,
         examples: list[DraftExample],
     ) -> None:
-        """Emit one example per pick for ``seat`` in a single incremental pass.
+        """Emit one ``DraftExample`` per pick for ``seat``.
 
-        Walks the seat's boosters once. The dominant POOL/TAKEN blocks are kept
-        as parallel ``(idx, last-seen-pack, last-seen-pick)`` lists — each card
-        resolved to an embedding row and last-seen exactly once, when it enters
-        the block — so at each pick the example is assembled by list-concat +
-        **vectorized** recency in numpy, with a small Python loop only over the
-        PACK/PASSED blocks. Semantics are identical to building each pick via
-        :func:`draft.domain.draft_state.build_state` (locked by an equivalence
-        test); recency follows FR-019/FR-021.
-
-        ``passed`` and ``last_seen`` track *all* cards (the wheel/flush logic
-        needs them); POOL/TAKEN/PACK/PASSED *emission* drops cards with no
-        ``.npz`` (consistent with the missing-embedding policy).
+        Thin adapter over the shared per-pick state walk
+        (:func:`draft.application.draft_pick_states.iter_seat_pick_states`),
+        which yields the typed-token state at each pick; this wraps each in a
+        ``DraftExample`` with the imitation target + critic label. The walk is
+        shared with the gen-2 RL loader so the two cannot drift (research
+        §Overlapping vocabulary).
         """
-        pod, P, packs = geo.pod_size, geo.pack_size, geo.packs
-        boosters = record.boosters
         reward_val = float(reward) if reward is not None else 0.0
-        card_index = self._card_index
-
-        # POOL / TAKEN as embeddable (idx, lp, li); built once on entry.
-        pool_idx: list[int] = []
-        pool_lp: list[int] = []
-        pool_li: list[int] = []
-        taken_idx: list[int] = []
-        taken_lp: list[int] = []
-        taken_li: list[int] = []
-        passed: dict[str, tuple[int, int]] = {}      # all cards (state)
-        last_seen: dict[str, tuple[int, int]] = {}   # all cards (state)
-
-        for p in range(1, packs + 1):
-            for i in range(1, P + 1):
-                k, off = geo.booster_for_pick(seat, p, i)
-                picks = boosters[k].picks
-                vis = picks[off:]
-                # Wheel diff: cards passed from this booster last time, gone now,
-                # were taken by others (persistent; serves emit + advance).
-                if off >= pod:
-                    for c in picks[off - pod + 1: off]:
-                        passed.pop(c, None)
-                        idx = card_index(c)
-                        if idx is not None:
-                            lp, li = last_seen[c]
-                            taken_idx.append(idx)
-                            taken_lp.append(lp)
-                            taken_li.append(li)
-                pack_set: set[str] = set()
-                pack_actions: list[str] = []
-                for c in vis:
-                    if c not in pack_set:
-                        pack_set.add(c)
-                        pack_actions.append(c)
-
-                # --- emit the example for target (p, i) ---
-                self._emit_example(
-                    draft_index, p, i, P, pack_actions, pack_set,
-                    pool_idx, pool_lp, pool_li, taken_idx, taken_lp, taken_li,
-                    passed, last_seen, whitelisted, critic_active, reward_val,
-                    examples,
-                )
-
-                # --- advance past pick (p, i) ---
-                taken_card = vis[0]
-                t_idx = card_index(taken_card)
-                if t_idx is not None:
-                    pool_idx.append(t_idx)
-                    pool_lp.append(p)
-                    pool_li.append(i)
-                passed.pop(taken_card, None)
-                for c in vis:
-                    last_seen[c] = (p, i)
-                for c in vis[1:]:
-                    passed[c] = (p, i)
-            # Pack boundary: remaining PASSED flush to TAKEN (FR-019b).
-            for c, (lp, li) in passed.items():
-                idx = card_index(c)
-                if idx is not None:
-                    taken_idx.append(idx)
-                    taken_lp.append(lp)
-                    taken_li.append(li)
-            passed.clear()
-
-    def _emit_example(
-        self,
-        draft_index: int,
-        p: int,
-        i: int,
-        P: int,
-        pack_actions: list[str],
-        pack_set: set[str],
-        pool_idx: list[int],
-        pool_lp: list[int],
-        pool_li: list[int],
-        taken_idx: list[int],
-        taken_lp: list[int],
-        taken_li: list[int],
-        passed: dict[str, tuple[int, int]],
-        last_seen: dict[str, tuple[int, int]],
-        whitelisted: bool,
-        critic_active: bool,
-        reward_val: float,
-        examples: list[DraftExample],
-    ) -> None:
-        """Assemble one example: concat the 4 typed blocks, vectorize recency."""
-        card_index = self._card_index
-        n_pool = len(pool_idx)
-
-        # PACK block (small Python loop). The taken card is pack_actions[0];
-        # its position fixes the imitation target (or -1 if it was dropped).
-        pack_i: list[int] = []
-        pack_lp: list[int] = []
-        pack_li: list[int] = []
-        target_token = -1
-        for j, name in enumerate(pack_actions):
-            idx = card_index(name)
-            if idx is None:
-                continue
-            ls = last_seen.get(name)
-            lp, li = ls if ls is not None else (p, i)  # never-seen -> recency 0,0
-            if j == 0:
-                target_token = n_pool + len(pack_i)
-            pack_i.append(idx)
-            pack_lp.append(lp)
-            pack_li.append(li)
-        if not pack_i:
-            return  # no usable PACK tokens — nothing to learn here
-
-        # PASSED block (small Python loop); wheel survivors are now in PACK.
-        pass_i: list[int] = []
-        pass_lp: list[int] = []
-        pass_li: list[int] = []
-        for name, (lp, li) in passed.items():
-            if name in pack_set:
-                continue
-            idx = card_index(name)
-            if idx is None:
-                continue
-            pass_i.append(idx)
-            pass_lp.append(lp)
-            pass_li.append(li)
-
-        idx_all = pool_idx + pack_i + pass_i + taken_idx
-        lp_all = pool_lp + pack_lp + pass_lp + taken_lp
-        li_all = pool_li + pack_li + pass_li + taken_li
-        n = len(idx_all)
-
-        # Vectorized recency (FR-021), entirely in int8: packs_ago = min(2,
-        # p - lp); pick_ago is (i - li) within the current pack else the frozen
-        # end-of-pack value (P - li). Both are provably already in range
-        # (lp ≤ p, 1 ≤ li ≤ P), so no clip/astype is needed.
-        lpli = np.asarray((lp_all, li_all), dtype=np.int8)  # (2, n)
-        lp_arr, li_arr = lpli[0], lpli[1]
-        packs_ago = np.minimum(p - lp_arr, 2)
-        pick_ago = np.where(packs_ago == 0, i - li_arr, P - li_arr)
-
-        type_idx = np.empty(n, dtype=np.int8)
-        a = n_pool
-        b = a + len(pack_i)
-        c = b + len(pass_i)
-        type_idx[:a] = TYPE_POOL
-        type_idx[a:b] = TYPE_PACK
-        type_idx[b:c] = TYPE_PASSED
-        type_idx[c:] = TYPE_TAKEN
-
-        examples.append(DraftExample(
-            draft_index=draft_index,
-            card_idx=np.asarray(idx_all, dtype=np.int32),
-            type_idx=type_idx,
-            packs_ago=packs_ago,
-            pick_ago=pick_ago,
-            pack_number=p,
-            pick_number=i,
-            imitation_active=whitelisted and target_token >= 0,
-            target_token=target_token,
-            critic_active=critic_active,
-            critic_target=reward_val,
-        ))
+        for state in iter_seat_pick_states(
+            geo, record.boosters, seat, self._card_index,
+        ):
+            examples.append(DraftExample(
+                draft_index=draft_index,
+                card_idx=state.card_idx,
+                type_idx=state.type_idx,
+                packs_ago=state.packs_ago,
+                pick_ago=state.pick_ago,
+                pack_number=state.pack_number,
+                pick_number=state.pick_number,
+                imitation_active=whitelisted and state.action_position >= 0,
+                target_token=state.action_position,
+                critic_active=critic_active,
+                critic_target=reward_val,
+            ))
 
 
 # --------------------------------------------------------------------------- #
