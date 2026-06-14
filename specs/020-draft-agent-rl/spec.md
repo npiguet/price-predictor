@@ -111,7 +111,7 @@ An operator wants to advance the agent one generation end to end: freeze the ref
 
 - **FR-015**: Learner seats with a failed build MUST be excluded from the reward, the pod mean, and the gradient, without aborting the run.
 - **FR-016**: On-policy pairing is an **operator responsibility**: because no generating-checkpoint provenance is stored in the corpus (operator convention only — see FR-021), the system MUST NOT attempt to hard-reject a corpus on a provenance mismatch. Its only safeguard is the FR-009 anomaly warning.
-- **FR-017**: At startup the system MUST validate that the reference checkpoint exists and its architecture matches the embedding-cache width, that the learner whitelist is non-empty, and that a rollout pick-mode/temperature is available (read from the corpus or supplied explicitly); failures exit nonzero with a clear message.
+- **FR-017**: At startup the system MUST validate that the reference checkpoint exists and its architecture matches the embedding-cache width, that the learner whitelist is non-empty, and that a rollout temperature is **supplied explicitly and positive** (the corpus stores none — FR-021 — so it cannot be read back and MUST be provided by the operator); failures exit nonzero with a clear message.
 
 **Optimisation & checkpoints**
 
@@ -153,7 +153,7 @@ An operator wants to advance the agent one generation end to end: freeze the ref
 
 - **SC-001**: On the cross-generation yardstick, a trained gen-2 candidate achieves a higher mean deck-quality score than gen-1 by more than the measured run-to-run noise band.
 - **SC-002**: On the same yardstick, the promoted generation's mean deck-quality score also exceeds Forge's (gen-0).
-- **SC-003**: 100% of runs with an invalid startup configuration (missing/architecture-mismatched checkpoint, empty learner whitelist, or no available rollout temperature) fail fast before any training step, with a clear message.
+- **SC-003**: 100% of runs with an invalid startup configuration (missing/architecture-mismatched checkpoint, empty learner whitelist, or a missing/non-positive rollout temperature) fail fast before any training step, with a clear message.
 - **SC-004**: For every run, the trainer reports a summary of behaviour-distribution anomalies (count/fraction of learner picks the reference checkpoint assigns implausibly low probability), so the operator can spot a wrong corpus/checkpoint/temperature pairing; training proceeds regardless.
 - **SC-005**: Learner seats with failed builds are excluded from reward, pod mean, and gradient in 100% of cases, and their presence never aborts an otherwise valid run.
 - **SC-006**: An operator can complete one full self-play cycle (freeze → generate → train → evaluate → promotion decision) using documented commands with no manual editing of corpus or checkpoint files, ending with an unambiguously identified champion (new or retained).

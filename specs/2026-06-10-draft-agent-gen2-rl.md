@@ -107,12 +107,16 @@ trainer recomputes — in a batched post-rollout pass — the behaviour log-prob
 the critic values, and hence the advantages. Live play (019) is unchanged; the
 only new code is the trainer and the loop orchestration.
 
-**The single new correctness requirement** (the gating property, analogous to
-live-play's state-equivalence test): the behaviour log-probs the trainer
-recomputes from the generating checkpoint must reproduce the **same distribution
-that actually drew the recorded picks** (same pick-mode and temperature), so the
-policy-gradient estimate is genuinely on-policy. A run trains the policy gradient
-**only** on a corpus produced by the checkpoint passed as `--checkpoint`.
+**The core correctness property** (on-policy pairing): the policy gradient is
+genuine only when the corpus was produced by the checkpoint passed as
+`--checkpoint`, at the temperature passed as `--rollout-temperature`. This
+pairing is an **operator responsibility** — the corpus stores no
+generating-checkpoint provenance (operator convention only, § 8), so the trainer
+does **not** hard-reject a mismatched corpus. As a safeguard it recomputes the
+behaviour log-probs from the reference checkpoint at the rollout temperature and
+**warns** when picks look anomalous under that distribution (a possible
+wrong-checkpoint/wrong-temperature pairing), then proceeds regardless. A run
+trains the policy gradient **only** on the corpus passed as `--drafts-path`.
 
 # 4. The RL update contract
 
@@ -126,7 +130,7 @@ the `--learner-agents` whitelist — the generation being trained; § 7):
 |----------|------------|
 | state `sₜ` | the typed-token state at `(seat, pack, pick)`, reconstructed exactly as gen-1's loader builds it (§ 1, § 3 of the gen-1 spec). |
 | action `aₜ` | the card recorded as taken at this pick. |
-| behaviour log-prob `bₜ` | `log πref(aₜ | sₜ)` under the generating checkpoint at the **rollout** pick-mode/temperature (recomputed; not stored in the corpus). Used only for the § 3 on-policy gating check, not the gradient. |
+| behaviour log-prob `bₜ` | `log πref(aₜ | sₜ)` under the generating checkpoint at the **rollout** temperature (recomputed; not stored in the corpus). Used only for the § 3 on-policy anomaly **warning**, not the gradient. |
 | value `V(sₜ)` | the current critic on `sₜ`. |
 | reward `R` | the seat's **pod-relative leave-one-out** `deck_score` — `deck_score_seat − mean({other non-failed seats' deck_score})` — the same terminal reward gen-1's critic regressed (§ 4.2 of the gen-1 spec). Mean form (expected match wins); the product objective is out of scope here. |
 | return / advantage | `Gₜ` (discounted-to-terminal return; draft reward is terminal so `Gₜ = R`) and the **GAE(λ)** advantage `Aₜ` computed from `V` and `R`. |
@@ -142,7 +146,8 @@ L =  − ρₜ · Aₜ                          policy gradient
 
 - `ρₜ = log π(aₜ|sₜ)` is the policy-gradient weight. The behaviour log-prob `bₜ`
   is **not** a gradient input under on-policy REINFORCE; it is recomputed only to
-  verify the corpus is genuinely on-policy (the § 3 gating check).
+  **warn** when the corpus looks off-policy for this checkpoint/temperature (the
+  § 3 safeguard), never to block training.
 - The **policy-gradient term uses only the on-policy corpus** (the one
   `--checkpoint` produced). Earlier generations' corpora may be supplied as
   **critic-only** coverage (`--critic-corpus`, § 7): they contribute to the value
@@ -150,14 +155,19 @@ L =  − ρₜ · Aₜ                          policy gradient
   gradient.
 - The critic regresses on the policy's own rollouts, so it predicts `V^π`.
 - Optimisation reuses gen-1's conventions: AdamW, per-group max-norm clip,
-  linear-warmup-then-constant LR, validation/best-checkpoint/early-stop on a
-  held-out split of the corpus. `kl_coef` and `entropy_coef` follow a schedule
+  linear-warmup-then-constant LR, and early stopping. Because the corpus is fixed
+  and a candidate's true strength is judged externally by the yardstick (§ 6),
+  in-run best-checkpoint selection and early stopping use the **held-out RL
+  objective** (the same `L` above evaluated on a held-out split of the corpus) as
+  a guard, not a strength measure. `kl_coef` and `entropy_coef` follow a schedule
   (heavier early, relaxed as the critic proves out).
 
 **Failure / integrity.** A learner seat with a failed build (`deck = []`,
 `deck_score = null`) is excluded from the reward, the pod mean, and the gradient
-(as in gen-1). A corpus whose generating checkpoint does not match `--checkpoint`
-(detectable when provenance is recorded, § 8) is rejected.
+(as in gen-1). On-policy pairing is the operator's responsibility: the corpus
+carries no generating-checkpoint provenance (operator convention, § 8), so a
+mismatched corpus is **not** auto-rejected — the § 3 anomaly warning is the only
+safeguard.
 
 # 5. Self-play generation loop
 
@@ -211,21 +221,23 @@ reuses the unchanged `generate-draft-data` (§ 5 of the live-play spec).
 | `--kl-coef` | _(scheduled; nonzero)_ | Coefficient of the KL anchor to `--checkpoint`'s policy. |
 | `--entropy-coef` | _(scheduled)_ | Entropy-bonus coefficient. |
 | `--value-weight` | `1.0` | Critic-regression coefficient. |
-| `--rollout-temperature` | _(read from corpus; else required)_ | The pick-mode/temperature the corpus was generated at, so recomputed behaviour log-probs match the sampling distribution. |
+| `--rollout-temperature` | _(required; no default)_ | The temperature the corpus was generated at; all policy distributions use it. The corpus stores no temperature (§ 8), so it must be supplied and positive — required (not defaulted to 1.0) so a forgotten flag fails fast instead of silently training an off-policy gradient. |
 | `--lr`, `--warmup-frac`, `--batch-size`, `--max-grad-norm`, `--epochs`, `--val-fraction`, `--evals-per-epoch`, `--patience`, `--lr-decay-*` | _(gen-1 defaults)_ | Same optimisation/validation knobs and semantics as `train-draft-agent`. |
 
 A run validates at startup: `--checkpoint` exists and its architecture matches
-the `.npz` width; `--learner-agents` is non-empty; and (when provenance is
-present) `--drafts-path` was generated by `--checkpoint`. Failures exit nonzero
-with a clear message.
+the `.npz` width; `--learner-agents` is non-empty; and `--rollout-temperature`
+is supplied and positive. On-policy pairing of `--drafts-path` to `--checkpoint`
+is not validated (no stored provenance, § 8) — it is the operator's
+responsibility, with the § 3 anomaly warning as the only safeguard. Failures
+exit nonzero with a clear message.
 
 # 8. Records and artifacts
 
-- **Rollout corpora** are the **unchanged** `drafts.jsonl` (live-play § 7). To
-  make the on-policy pairing unambiguous, a cycle's corpus carries the generating
-  checkpoint's identity (e.g. via the existing per-run `run_id` plus an operator
-  convention, or a recorded checkpoint id) — the minimal addition needed so the
-  trainer can verify provenance (§ 4). No other schema change.
+- **Rollout corpora** are the **unchanged** `drafts.jsonl` (live-play § 7) — no
+  schema change at all, no provenance field. On-policy pairing is kept
+  unambiguous by **operator convention** (e.g. a per-cycle corpus filename such
+  as `drafts-genK.jsonl` plus the existing per-run `run_id`); the trainer does
+  not read or verify a stored generating-checkpoint id (§ 3, § 4).
 - **Checkpoints** are written to `models/draft/agent/` as `{timestamp}.pt` +
   `latest.pt`, in the gen-1 agent checkpoint format (trunk + policy + critic +
   recency/context tables, `config`, `epoch`, `best_val_loss`), with added RL
@@ -245,6 +257,7 @@ with a clear message.
 - Surgical pack-2 forking / vine advantage estimation (an optional later
   sharpener; GAE is the estimator here).
 - Joint encoder fine-tuning, picker/scorer changes, and any `drafts.jsonl`
-  schema change beyond the minimal generating-checkpoint provenance.
+  schema change (on-policy pairing is by operator convention, not a stored
+  provenance field).
 - Shipping the agent into the Forge client (TorchScript/ONNX) — a separate
   deployment concern.

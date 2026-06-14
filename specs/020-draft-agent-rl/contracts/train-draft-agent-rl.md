@@ -14,8 +14,9 @@ python -m draft train-draft-agent-rl \
     --checkpoint <reference.pt> \
     --drafts-path <on-policy-corpus.jsonl> \
     --learner-agents <label[,label...]> \
+    --rollout-temperature <T> \
     [--critic-corpus <corpus.jsonl> ...] \
-    [--rollout-temperature 1.0] [--gae-lambda 0.95] \
+    [--gae-lambda 0.95] \
     [--kl-coef 0.1] [--entropy-coef 0.01] [--value-weight 1.0] \
     [--lr ...] [--batch-size ...] [--epochs ...] [--val-fraction ...] \
     [--evals-per-epoch ...] [--patience ...] [--warmup-frac ...] \
@@ -32,7 +33,7 @@ python -m draft train-draft-agent-rl \
 | `--drafts-path` | yes | `output/draft/drafts.jsonl` | yes | On-policy corpus; sole policy-gradient source. |
 | `--critic-corpus` | no (repeatable) | none | yes (list) | Extra off-policy corpora, critic regression/coverage only — never the policy gradient. |
 | `--learner-agents` | yes | — | yes | Comma-separated whitelist of mix labels feeding the policy gradient. Must be non-empty. |
-| `--rollout-temperature` | no | `1.0` | yes | T the corpus was sampled at; all policy distributions use it. MUST match the `generate-draft-data --temperature` that produced the corpus. |
+| `--rollout-temperature` | **yes** | _none_ | yes | T the corpus was sampled at; all policy distributions use it. Required (no default) so a forgotten flag fails fast instead of silently training at T=1.0. MUST match the `generate-draft-data --temperature` that produced the corpus. |
 | `--gae-lambda` | no | `0.95` | yes | GAE λ (γ fixed at 1.0). |
 | `--kl-coef` | no | `0.1` | yes | Initial KL-anchor coefficient (val-driven schedule). |
 | `--entropy-coef` | no | `0.01` | yes | Initial entropy-bonus coefficient (val-driven schedule). |
@@ -54,6 +55,7 @@ Each failure prints `Error: …` to stderr and exits nonzero:
 | `--checkpoint` and `--resume` both set, or neither | 2 |
 | An architecture flag passed alongside `--checkpoint`/`--resume` | 2 |
 | `--learner-agents` empty/whitespace | 2 |
+| `--rollout-temperature` missing (required) | 2 |
 | `--rollout-temperature <= 0` | 2 |
 | `--checkpoint`/`--resume` file missing | 2 |
 | Checkpoint `embedding_dim` ≠ `.npz` cache width | (raised `ValueError`, nonzero) |

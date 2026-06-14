@@ -118,13 +118,16 @@ complex batching for no accuracy gain at λ≈1.
 **Decision**: The behaviour log-prob, the trained policy's `log π(a_t)` in the
 gradient, the entropy `H(π)`, and `KL(π‖π_ref)` are all computed on
 `π_T = softmax(logits / T)` at the **rollout temperature** `T`
-(`--rollout-temperature`, default `1.0`). **Rationale**: the actions were
-sampled from `π_T`, so the on-policy gradient of `E_{a∼π_T}[R]` uses `∇log π_T`
-(design doc "behaviour log-probs are recomputed at the same temperature, so the
-policy gradient is exact"). Because no temperature is stored in the corpus
-(operator-convention provenance, spec FR-021), `T` is supplied on the CLI and
-MUST match the `generate-draft-data --temperature` used for the rollouts; a
-mismatch is an operator error surfaced only by the D6 warning.
+(`--rollout-temperature`, **required, no default**). **Rationale**: the actions
+were sampled from `π_T`, so the on-policy gradient of `E_{a∼π_T}[R]` uses
+`∇log π_T` (design doc "behaviour log-probs are recomputed at the same
+temperature, so the policy gradient is exact"). Because no temperature is stored
+in the corpus (operator-convention provenance, spec FR-021), `T` cannot be read
+back and MUST be supplied on the CLI and match the `generate-draft-data
+--temperature` used for the rollouts. It is **required (not defaulted to 1.0)**
+precisely so a forgotten flag fails fast rather than silently training an
+off-policy gradient at the wrong temperature; a value that is present but wrong
+is still an operator error, surfaced only by the D6 warning.
 
 ### D5 — Loss decomposition and which seats feed which term
 

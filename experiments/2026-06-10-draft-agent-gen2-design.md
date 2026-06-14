@@ -208,9 +208,6 @@ gen-2 is gated on new code, not just a spec:
   or more self-play corpora, recomputes log-probs/values from the generating
   snapshot, computes GAE advantages, and applies the KL-anchored
   policy-gradient + value + entropy update.
-- **Snapshot/provenance recording** so a corpus is unambiguously tied to the
-  policy that generated it (required for on-policy correctness) — the generating
-  checkpoint identity per generation.
 - **Multi-corpus input** for the trainer, at least for the off-policy-safe
   critic/coverage roles.
 - The **generation-loop orchestration** (freeze → generate → train → promote),

@@ -17,7 +17,7 @@ Dataclass mirroring `TrainDraftAgentConfig`, in
 | `drafts_path` | `Path` | `output/draft/drafts.jsonl` | The on-policy corpus; **sole** source of the policy gradient (FR-003). |
 | **`critic_corpus`** | `tuple[Path, ...]` | `()` | Extra off-policy corpora, critic regression only (FR-004, repeatable). |
 | **`learner_agents`** | `tuple[str, ...]` | _required_ | Whitelist of mix labels whose seats feed the policy gradient (FR-005). Non-empty (FR-017). |
-| **`rollout_temperature`** | `float` | `1.0` | T the corpus was sampled at; all policy distributions use it (research D4). |
+| **`rollout_temperature`** | `float` | _required_ | T the corpus was sampled at; all policy distributions use it (research D4). **Required, no default** — a forgotten flag must fail fast, not silently train at T=1.0. |
 | **`gae_lambda`** | `float` | `0.95` | GAE λ (research D2). |
 | **`kl_coef`** | `float` | `0.1`* | Initial KL-anchor coefficient (scheduled, research D8). |
 | **`entropy_coef`** | `float` | `0.01`* | Initial entropy-bonus coefficient (scheduled, research D8). |
@@ -34,8 +34,9 @@ accepted — architecture is inherited from `--checkpoint`/`--resume`.
 **Validation (startup, FR-017; SC-003)** — fail fast, nonzero exit:
 `checkpoint` (or `resume`) exists and `config.embedding_dim` matches the `.npz`
 cache width (reuse gen-1 `_check_dims`); `learner_agents` non-empty;
-`rollout_temperature > 0`; `resume` xor `checkpoint`. No provenance check
-(research D6).
+`rollout_temperature` supplied and `> 0` (required flag — a missing value is a
+usage error, not a silent default); `resume` xor `checkpoint`. No provenance
+check (research D6).
 
 ## 2. Trajectory (per-seat ordered states for GAE)
 
