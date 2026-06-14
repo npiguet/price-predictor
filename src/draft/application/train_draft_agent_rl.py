@@ -56,6 +56,8 @@ RANDOM_SEED = 42  # hardcoded; governs init and the draft-disjoint split.
 _GAMMA = 1.0  # draft reward is terminal, so the return is R (research D2).
 _PROB_FLOOR = 1e-4  # behaviour prob below this counts as an anomaly (D6).
 _ANOMALY_FRACTION = 0.05  # warn if more than this fraction of learner picks anomalous.
+_ANOMALY_SAMPLE_FRACTION = 0.01  # behaviour check scans only a 1% subset (D6 is a
+_ANOMALY_SAMPLE_FLOOR = 2000      # gross-mispairing probe, not a full-corpus pass)…
 _BUCKET_MULTIPLIER = 50  # megabatch = bucket_multiplier * batch_size examples.
 _MISSING_WARN_CAP = 20
 _STEP_LOG_INTERVAL = 15.0
@@ -482,18 +484,36 @@ def _compute_loss(
 def _critic_values(
     model: DraftAgentModel, examples: list[RLExample], table: np.ndarray,
     mean: float, std: float, batch_size: int, device: torch.device,
+    *, log_label: str | None = None,
 ) -> None:
-    """Write the current critic value onto each example (batched, no_grad)."""
+    """Write the current critic value onto each example (batched, no_grad).
+
+    Logs a progress line every ``_STEP_LOG_INTERVAL`` when ``log_label`` is set
+    (this is otherwise a long silent pass on a large corpus).
+    """
     order = sorted(range(len(examples)), key=lambda i: examples[i].n_tokens)
+    n = len(order)
     model.eval()
+    start = time.monotonic()
+    last_log = start
     with torch.no_grad():
-        for s in range(0, len(order), batch_size):
+        for s in range(0, n, batch_size):
             idxs = order[s:s + batch_size]
             batch = _collate([examples[i] for i in idxs], table, mean, std, device)
             _, critic = _forward_logits_critic(model, batch)
             vals = critic.cpu().numpy()  # one device→host transfer per batch
             for j, i in enumerate(idxs):
                 examples[i].value = float(vals[j])
+            now = time.monotonic()
+            if log_label is not None and now - last_log >= _STEP_LOG_INTERVAL:
+                done = min(s + batch_size, n)
+                rate = done / (now - start) if now > start else 0.0
+                eta = (n - done) / rate if rate > 0 else 0.0
+                _log(
+                    f"  {log_label}: {done}/{n} picks "
+                    f"({rate:.0f}/s, ETA {_fmt_dur(eta)})"
+                )
+                last_log = now
     model.train()
 
 
@@ -506,23 +526,34 @@ def _precompute_advantages(
     gae_lambda: float,
     batch_size: int,
     device: torch.device,
+    *, epoch: int | None = None,
 ) -> None:
-    """Refresh GAE advantages over every learner trajectory (research D3)."""
+    """Refresh GAE advantages over every learner trajectory (research D3).
+
+    Needs the critic value at *every* learner pick (each feeds the GAE over its
+    full trajectory → the policy gradient), so — unlike the behaviour check — it
+    cannot be subsampled. It logs start/progress/done so the pass is not silent.
+    """
     flat = [ex for traj in trajectories for ex in traj]
     if not flat:
         return
-    _critic_values(model, flat, table, mean, std, batch_size, device)
+    label = f"epoch {epoch} GAE precompute" if epoch is not None else "GAE precompute"
+    _log(f"{label}: critic forward over {len(flat)} learner picks...")
+    t0 = time.monotonic()
+    _critic_values(model, flat, table, mean, std, batch_size, device, log_label=label)
     for traj in trajectories:
         values = np.asarray([ex.value for ex in traj], dtype=np.float64)
         reward_std = (traj[0].reward - mean) / std
         adv = gae_advantages(values, reward_std, gae_lambda, _GAMMA)
         for ex, a in zip(traj, adv):
             ex.advantage = float(a)
+    _log(f"{label}: done in {_fmt_dur(time.monotonic() - t0)}")
 
 
 @dataclass
 class _AnomalySummary:
-    n_learner: int
+    n_learner: int        # learner picks actually evaluated (the sampled subset)
+    n_total: int          # total learner picks available
     frac_below_floor: float
     mean_behaviour_logprob: float
 
@@ -536,11 +567,22 @@ def _behaviour_anomaly_summary(
     config: TrainDraftAgentRLConfig,
     device: torch.device,
 ) -> _AnomalySummary:
-    """Recompute log π_ref,T(a_t) over learner picks; summarize anomalies (D6)."""
+    """Recompute log π_ref,T(a_t) over a learner-pick subset; summarize anomalies (D6).
+
+    Scans only a seeded 1% sample (floored at ``_ANOMALY_SAMPLE_FLOOR``) — this is
+    a gross checkpoint/temperature-mispairing probe, not a quantity that needs the
+    whole corpus, so it stays a fast pre-training sanity check on large corpora.
+    """
     temp = float(config.rollout_temperature or 1.0)
-    learner = [ex for ex in examples if ex.learner_active]
-    if not learner:
-        return _AnomalySummary(0, 0.0, float("nan"))
+    learner_all = [ex for ex in examples if ex.learner_active]
+    n_total = len(learner_all)
+    if n_total == 0:
+        return _AnomalySummary(0, 0, 0.0, float("nan"))
+    cap = min(n_total, max(_ANOMALY_SAMPLE_FLOOR, int(n_total * _ANOMALY_SAMPLE_FRACTION)))
+    learner = (
+        random.Random(RANDOM_SEED).sample(learner_all, cap)
+        if cap < n_total else learner_all
+    )
     order = sorted(range(len(learner)), key=lambda i: learner[i].n_tokens)
     below = 0
     logp_sum = 0.0
@@ -557,7 +599,7 @@ def _behaviour_anomaly_summary(
             logp_sum += float(logp_action.sum())
             below += int((np.exp(logp_action) < _PROB_FLOOR).sum())
     n = len(learner)
-    return _AnomalySummary(n, below / n, logp_sum / n)
+    return _AnomalySummary(n, n_total, below / n, logp_sum / n)
 
 
 # --------------------------------------------------------------------------- #
@@ -743,8 +785,8 @@ class TrainDraftAgentRLUseCase:
             reference, examples, table, mean, std, config, device,
         )
         msg = (
-            f"Behaviour check: {anomaly.n_learner} learner picks, "
-            f"mean log π_ref={anomaly.mean_behaviour_logprob:.3f}, "
+            f"Behaviour check: sampled {anomaly.n_learner}/{anomaly.n_total} "
+            f"learner picks, mean log π_ref={anomaly.mean_behaviour_logprob:.3f}, "
             f"{anomaly.frac_below_floor:.1%} below prob {_PROB_FLOOR:g}"
         )
         if anomaly.frac_below_floor > _ANOMALY_FRACTION:
@@ -846,7 +888,7 @@ class TrainDraftAgentRLUseCase:
             # Refresh GAE advantages from the current critic (research D3).
             _precompute_advantages(
                 model, trajectories, table, mean, std,
-                config.gae_lambda, config.batch_size, device,
+                config.gae_lambda, config.batch_size, device, epoch=epoch,
             )
             model.train()
             batches = length_bucketed_batches(train, config.batch_size, rng)

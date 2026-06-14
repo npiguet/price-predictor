@@ -65,4 +65,22 @@ def test_summary_handles_no_learner_picks() -> None:
         ref, [_ex(False)], table, 0.0, 1.0, _config(), torch.device("cpu"),
     )
     assert summary.n_learner == 0
+    assert summary.n_total == 0
     assert summary.frac_below_floor == 0.0
+
+
+def test_summary_subsamples_large_corpora() -> None:
+    # Above the floor, the check scans only a capped subset (1% floored at 2000),
+    # not the whole corpus — so it stays fast on million-pick corpora.
+    from draft.application.train_draft_agent_rl import _ANOMALY_SAMPLE_FLOOR
+
+    torch.manual_seed(0)
+    ref = DraftAgentModel(DraftAgentConfig(embedding_dim=DIM, packs=1, P=4))
+    table = np.random.default_rng(0).standard_normal((6, DIM)).astype(np.float32)
+    n_total = _ANOMALY_SAMPLE_FLOOR + 500   # just above the floor
+    summary = _behaviour_anomaly_summary(
+        ref, [_ex(True) for _ in range(n_total)], table, 0.0, 1.0,
+        _config(), torch.device("cpu"),
+    )
+    assert summary.n_total == n_total
+    assert summary.n_learner == _ANOMALY_SAMPLE_FLOOR   # capped at the floor

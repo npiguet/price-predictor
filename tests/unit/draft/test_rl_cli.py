@@ -61,3 +61,15 @@ def test_resume_precedence_cli_over_resumed_over_default() -> None:
     assert config.lr == 2e-4                       # CLI override
     assert config.gae_lambda == 0.9               # inherited
     assert config.value_weight == 1.0             # dataclass default (neither set)
+
+
+def test_cards_path_flag_is_accepted_and_resolved() -> None:
+    from pathlib import Path
+
+    args = _args([
+        "--checkpoint", "ref.pt", "--learner-agents", "gen1",
+        "--rollout-temperature", "1.0",
+        "--cards-path", "output/cardsfolder-512",
+    ])
+    config = _resolve_train_agent_rl_config(args, None)
+    assert config.cards_path == Path("output/cardsfolder-512")

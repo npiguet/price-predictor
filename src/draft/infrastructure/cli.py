@@ -338,6 +338,10 @@ def _build_train_draft_agent_rl_parser(subparsers) -> None:
              "(repeatable); never the policy gradient.",
     )
     parser.add_argument(
+        "--cards-path", default=None,
+        help=".npz embedding cache (default: output/cardsfolder/). Resumable.",
+    )
+    parser.add_argument(
         "--learner-agents", default=None,
         help="Comma-separated whitelist of mix labels whose seats feed the policy "
              "gradient (the generation's own label). Required. Resumable.",

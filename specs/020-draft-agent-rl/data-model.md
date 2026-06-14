@@ -95,10 +95,13 @@ for `draft`), with the `0·-inf` NaN-gradient guards. `π_ref` is a frozen forwa
 
 ## 5. Behaviour-anomaly summary (FR-009 / SC-004; research D6)
 
-Per run, over learner picks: `mean_behaviour_logprob` and
-`frac_below_floor = fraction with π_ref,T(a_t) < _PROB_FLOOR`. Logged once;
-if `frac_below_floor > _ANOMALY_THRESHOLD`, a prominent "corpus may be
-off-policy for this checkpoint/temperature" warning is emitted. Never aborts.
+Per run, over a **seeded 1% subset of learner picks** (floored at
+`_ANOMALY_SAMPLE_FLOOR` learner picks for stability on small corpora — it's a
+gross-mispairing probe, not a full-corpus pass): `mean_behaviour_logprob` and
+`frac_below_floor = fraction with π_ref,T(a_t) < _PROB_FLOOR`. Logged once as
+`sampled n/N learner picks …`; if `frac_below_floor > _ANOMALY_FRACTION`, a
+prominent "corpus may be off-policy for this checkpoint/temperature" warning is
+emitted. Never aborts.
 
 ## 6. Checkpoint RL metadata (extends `DraftAgentStore`)
 
