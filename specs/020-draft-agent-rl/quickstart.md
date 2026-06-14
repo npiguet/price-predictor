@@ -1,0 +1,135 @@
+# Quickstart: Draft Agent RL Self-Play (Generation 2)
+
+**Feature**: 020-draft-agent-rl | **Date**: 2026-06-13
+
+One **cycle** advances the agent one generation (gen-1 → gen-2, then gen-2 →
+gen-3, …). It is operator-driven: the only new code is the RL trainer
+(`train-draft-agent-rl`); generation and evaluation are existing commands run
+with the right parameters, and promotion is your manual judgment (spec US2/US3).
+
+Prerequisites (already in place from gen-1 / live-play):
+- A trained reference checkpoint `πₖ` (gen-1 = `models/draft/agent/<gen1>.pt`,
+  or the current champion).
+- `output/cardsfolder/` populated with `.npz` embeddings (`sealed encode-cards`
+  with the same encoder the agent was trained on).
+- A frozen scorer + picker for deck labeling, and a built Forge checkout.
+
+Throughout, replace `<…>` and pick a set or omit `--set` for mixed sets.
+
+---
+
+## Step 1 — Freeze the reference
+
+Pick the checkpoint to improve and keep its path stable for the cycle:
+
+```bash
+PIK=models/draft/agent/<champion>.pt    # gen-1 the first cycle
+```
+
+## Step 2 — Generate the on-policy training corpus (sample mode)
+
+`πₖ` pilots learner seats against Forge and a random-bot minority, sampling for
+exploration, seeded for reproducibility. Name the file per cycle so the on-policy
+pairing is unambiguous (operator-convention provenance — no schema change):
+
+```bash
+python -m draft generate-draft-data \
+    --n-drafts 5000 \
+    --agent-checkpoint gen-k=$PIK \
+    --agent-mix "gen-k:6,forge-full:1,forge-r100:1" \
+    --pick-mode sample --temperature 1.0 --seed 42 \
+    --output-path output/draft/drafts-genK.jsonl
+```
+
+- `gen-k` is the **learner label** (passed to the trainer's `--learner-agents`).
+- The `forge-r100` slice is the retained random-bot minority for low-end critic
+  coverage (spec FR-029); keep it every cycle.
+- Note the `--temperature` you used — the trainer needs the **same** value.
+
+## Step 3 — Train the next generation (the only new code)
+
+```bash
+python -m draft train-draft-agent-rl \
+    --checkpoint $PIK \
+    --drafts-path output/draft/drafts-genK.jsonl \
+    --learner-agents gen-k \
+    --rollout-temperature 1.0 \
+    --gae-lambda 0.95 --kl-coef 0.1 --entropy-coef 0.01 \
+    [--critic-corpus output/draft/drafts-genK-1.jsonl ...]
+```
+
+- `--rollout-temperature` **must match** Step 2's `--temperature` (research D4).
+- Optionally pass earlier cycles' corpora as `--critic-corpus` for low-end / bad-region
+  critic coverage — they feed the **critic only**, never the policy gradient
+  (spec FR-013).
+- Watch the log: the loss decomposition (`policy/value/entropy/kl`), the held-out
+  **RL objective** (the best-checkpoint metric), and the one-time
+  **behaviour-anomaly summary**. A loud "corpus may be off-policy" warning means
+  the checkpoint/temperature don't match the corpus — fix the pairing and rerun
+  (the run does not auto-reject).
+- Output: a candidate `πₖ₊₁` at `models/draft/agent/{timestamp}.pt` (+ `latest.pt`),
+  carrying RL metadata (generation index, reference id, hyper-params).
+
+```bash
+CAND=models/draft/agent/<new-timestamp>.pt
+```
+
+## Step 4 — Evaluate on the cross-generation yardstick (greedy, single shared run)
+
+One fixed-mix run, **greedy** (`--pick-mode argmax`), co-seating every generation
+being compared + Forge + a random bot, so all face the same opponent
+distribution (the confound cancels — spec FR-022/FR-023):
+
+```bash
+python -m draft generate-draft-data \
+    --n-drafts 3000 \
+    --agent-checkpoint cand=$CAND \
+    --agent-checkpoint gen-k=$PIK \
+    --agent-mix "cand:1,gen-k:1,forge-full:1,forge-r100:1" \
+    --pick-mode argmax \
+    --output-path output/draft/yardstick-genK.jsonl
+```
+
+Read each agent's mean `deck_score` (run once per label):
+
+```bash
+python -m draft analyze-generated-decks --drafts-path output/draft/yardstick-genK.jsonl --agent cand
+python -m draft analyze-generated-decks --drafts-path output/draft/yardstick-genK.jsonl --agent gen-k
+python -m draft analyze-generated-decks --drafts-path output/draft/yardstick-genK.jsonl --agent forge-full
+```
+
+The `deck_score` mean/median/n summary prints above each composition report.
+
+## Step 5 — Promote (manual judgment)
+
+Compare the per-agent means. **You decide** (the system does not auto-promote,
+spec FR-025): if `cand`'s mean beats `gen-k`'s convincingly relative to
+run-to-run noise — and ideally beats `forge-full` — promote it:
+
+```bash
+cp $CAND models/draft/agent/champion.pt   # your champion convention
+```
+
+Otherwise keep the incumbent and adjust (more drafts in Step 2, schedule via
+`--kl-coef`/`--entropy-coef`, `--gae-lambda`, or `--epochs`/`--patience`) and
+rerun. Then start the next cycle from the new `$PIK`.
+
+(Composition drift across generations — creatures, colour, curve — is visible in
+the same `analyze-generated-decks` output; it is descriptive, not a gate.)
+
+---
+
+## Minimal single-train smoke (no full cycle)
+
+To exercise just the trainer on a tiny corpus generated by `πₖ`:
+
+```bash
+python -m draft train-draft-agent-rl \
+    --checkpoint $PIK --drafts-path <tiny-onpolicy>.jsonl \
+    --learner-agents gen-k --rollout-temperature 1.0 \
+    --epochs 1 --val-fraction 0.1
+```
+
+Expect: a loadable `{timestamp}.pt` with `rl_metadata`, a printed loss
+decomposition and behaviour-anomaly summary, and a non-increasing held-out RL
+objective over the run.
