@@ -496,6 +496,12 @@ def _critic_values(
     model.eval()
     start = time.monotonic()
     last_log = start
+    # Running MC-advantage approx (R_std − V) over picks processed so far, for the
+    # live progress line. It's the λ=1 form; the exact GAE(λ) summary is logged by
+    # the caller once the full forward is done. (Picks are length-sorted, so early
+    # lines are biased toward short/early-draft picks until the pass completes.)
+    adv_sum = adv_sumsq = 0.0
+    adv_n = adv_gt1 = adv_gt5 = 0
     with torch.no_grad():
         for s in range(0, n, batch_size):
             idxs = order[s:s + batch_size]
@@ -504,14 +510,25 @@ def _critic_values(
             vals = critic.cpu().numpy()  # one device→host transfer per batch
             for j, i in enumerate(idxs):
                 examples[i].value = float(vals[j])
+            rewards = np.asarray([examples[i].reward for i in idxs], dtype=np.float64)
+            approx = (rewards - mean) / std - vals.astype(np.float64)
+            adv_sum += float(approx.sum())
+            adv_sumsq += float((approx ** 2).sum())
+            adv_n += approx.size
+            abs_a = np.abs(approx)
+            adv_gt1 += int((abs_a > 0.1).sum())
+            adv_gt5 += int((abs_a > 0.5).sum())
             now = time.monotonic()
             if log_label is not None and now - last_log >= _STEP_LOG_INTERVAL:
                 done = min(s + batch_size, n)
                 rate = done / (now - start) if now > start else 0.0
                 eta = (n - done) / rate if rate > 0 else 0.0
+                a_mean = adv_sum / adv_n
+                a_std = math.sqrt(max(adv_sumsq / adv_n - a_mean ** 2, 0.0))
                 _log(
-                    f"  {log_label}: {done}/{n} picks "
-                    f"({rate:.0f}/s, ETA {_fmt_dur(eta)})"
+                    f"  {log_label}: {done}/{n} picks ({rate:.0f}/s, ETA "
+                    f"{_fmt_dur(eta)}) | adv≈ mean={a_mean:+.3f} std={a_std:.3f} "
+                    f"|A|>0.1={adv_gt1 / adv_n:.0%} |A|>0.5={adv_gt5 / adv_n:.0%}"
                 )
                 last_log = now
     model.train()
@@ -541,12 +558,26 @@ def _precompute_advantages(
     _log(f"{label}: critic forward over {len(flat)} learner picks...")
     t0 = time.monotonic()
     _critic_values(model, flat, table, mean, std, batch_size, device, log_label=label)
+    adv_chunks: list[np.ndarray] = []
     for traj in trajectories:
         values = np.asarray([ex.value for ex in traj], dtype=np.float64)
         reward_std = (traj[0].reward - mean) / std
         adv = gae_advantages(values, reward_std, gae_lambda, _GAMMA)
         for ex, a in zip(traj, adv):
             ex.advantage = float(a)
+        adv_chunks.append(adv)
+    # Advantage distribution = the learnable signal. std is the effective signal
+    # magnitude (in standardized-reward units); the |A|>t fractions show how many
+    # picks carry actionable signal. Near-zero std/fractions ⇒ little to learn at
+    # this rollout temperature (spec 020 diagnostics).
+    all_adv = np.concatenate(adv_chunks) if adv_chunks else np.zeros(0)
+    if all_adv.size:
+        abs_adv = np.abs(all_adv)
+        _log(
+            f"{label}: advantage mean={all_adv.mean():+.3f} std={all_adv.std():.3f} "
+            f"|A|>0.1={np.mean(abs_adv > 0.1):.1%} |A|>0.5={np.mean(abs_adv > 0.5):.1%} "
+            f"max|A|={abs_adv.max():.2f}"
+        )
     _log(f"{label}: done in {_fmt_dur(time.monotonic() - t0)}")
 
 
@@ -913,7 +944,7 @@ class TrainDraftAgentRLUseCase:
                     eta = (nb - step) / overall if overall > 0 else 0.0
                     _log(
                         f"  epoch {epoch} step {step}/{nb} "
-                        f"({step / nb * 100:.0f}%) total={float(out.total):.4f} "
+                        f"({step / nb * 100:.0f}%) total={float(out.total.detach()):.4f} "
                         f"ETA {_fmt_dur(eta)}"
                     )
                     last_log = now
