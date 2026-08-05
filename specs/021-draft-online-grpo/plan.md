@@ -13,7 +13,10 @@ whose learner seats are piloted by the live in-training policy, builds + scores
 every seat's deck to get the reward, takes **one minibatch pass** of the single
 term `−A·logπ_T(a|s)` over the learner picks, discards the batch, and drafts the
 next round with the updated weights. There is no critic term, GAE, KL anchor,
-entropy bonus, val split, or early stop.
+entropy bonus, or val split. Checkpoint selection and stopping are likewise not
+loss-driven: an advisory best checkpoint plus optional patience and plateau LR
+annealing all key off the in-loop anchor margin, and all are opt-in (research
+D16).
 
 The build is: the round loop + the update + four-axis per-round stdout
 diagnostics (reward signal, exploration, movement, live anchor margin), plus five
@@ -78,7 +81,9 @@ during `/speckit.clarify` is settled by D12.
   for the forced-learner-seat rule. PASS (planned).
 - **II. Simplicity First** — One new use case plus four additive extensions to
   existing components; no new abstraction invented for gen-3. The dropped gen-2
-  machinery (critic/GAE/KL/entropy/val-split/plateau) is simply absent, and no
+  machinery (critic/GAE/KL/entropy/val-split) is simply absent; the plateau
+  controller returns, but re-keyed to the anchor margin in rounds and reusing
+  `train_draft_agent._PlateauLR` rather than a parallel implementation (D16). No
   `--resume` is added (D13). PASS.
 - **III. Data Integrity** — Corpus schema unchanged and append-only via the
   existing partial-line-tolerant IO; failed builds excluded deterministically;
@@ -131,7 +136,7 @@ during `/speckit.clarify` is settled by D12.
   optional `locator` parameter instead of constructing its own; per-round
   embedding table built from cache hits; corpus handle opened once in append mode
   and appended per record (research D14).
-- **GPU placement** — *addressed*: learner model, the `prev_model` diagnostics
+- **GPU placement** — *addressed*: learner model, the `prev_model` and `init_model` diagnostics
   copy, frozen pick-service models, scorer and (optional) picker all move to CUDA
   when available; batches are collated onto the device.
 - **GPU batching** — *addressed*: the round's pass uses length-bucketed

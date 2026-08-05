@@ -38,9 +38,9 @@ the learner label when the independent draw produces none
 |---|---|---|
 | `-T`, `--rollout-temperature` | *(required, no default)* | Sampling temperature; **every** policy distribution (logπ, entropy, KL) uses it. Must be > 0. |
 | `--lr` | `1e-4` | AdamW learning rate. |
-| `--drafts-per-round` | `10` | Fresh drafts generated and trained on (one pass) per round. |
-| `--anchor-window` | `100` | Sliding window (drafts) backing the anchor margin. |
-| `--snapshot-every` | `25` | Rounds between timestamped checkpoint snapshots (`latest.pt` is written every round). |
+| `--drafts-per-round` | `10` | Fresh drafts generated and trained on (one pass) per round. Larger rounds raise margin precision and cut its lag in rounds, at the same drafts/hour. |
+| `--anchor-window` | `100` | Sliding window (drafts) backing the anchor margin. Divided by `--drafts-per-round`, it is the window length in rounds — which bounds every run-control knob below. |
+| `--snapshot-every` | `25` | Rounds between timestamped checkpoint snapshots (`latest.pt` every round; `best_*.pt` on each new best). |
 | `--max-rounds` | *(none)* | Optional round budget; omitted ⇒ runs until Ctrl-C. |
 | `--set` | *(none)* | Restrict every draft to one set; else a random sealed-legal set per draft. |
 | `--output-path` | `output/draft/drafts.jsonl` | Corpus appended with every generated draft (shared file, clarified 2026-08-05). |
@@ -50,16 +50,25 @@ the learner label when the independent draw produces none
 | `--warmup-steps` | `200` | Linear LR ramp over the first N optimizer steps of the run, then constant. |
 | `--max-consecutive-faults` | `5` | Abort after this many consecutive pick-fault-abandoned drafts. |
 
+### Run control (all opt-in; disabled by default — spec FR-033…FR-035)
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--patience` | *(none; disabled)* | Stop after N consecutive rounds with no new best anchor margin. Must exceed `--anchor-window / --drafts-per-round`. |
+| `--lr-decay-patience` | *(none; disabled)* | Rounds without a new best before the LR is annealed. Must satisfy `window_rounds < N < --patience` (the upper bound only when `--patience` is armed). |
+| `--lr-decay-factor` | `0.1` | LR multiplier per decay. |
+| `--min-lr` | `lr × 1e-3` | Annealing floor. An armed `--patience` can only fire here, since each decay resets the shared stall counter. |
+
 **Not offered** (spec FR-006 / Out of Scope): `--value-weight`, `--gae-lambda`,
-`--kl-coef`, `--entropy-coef` and any coefficient schedule, `--val-fraction`,
-`--patience`, `--epochs`, `--lr-decay-*`, `--resume`, `--pick-mode` (rollouts are
-always sampled), `--num-workers` (one resident worker suffices).
+`--kl-coef`, `--entropy-coef` and any **loss-coefficient** schedule,
+`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (rollouts are always
+sampled), `--num-workers` (one resident worker suffices).
 
 ## Exit codes
 
 | Code | Condition |
 |---|---|
-| `0` | `--max-rounds` reached, or Ctrl-C after a clean shutdown (final summary printed) |
+| `0` | `--max-rounds` reached, the armed `--patience` stall stop firing, or Ctrl-C after a clean shutdown (final summary printed) |
 | `1` | `--max-consecutive-faults` consecutive abandoned drafts |
 | `2` | Startup validation failure (data-model § 1.1), missing file, bad flag value |
 | `6` | Checkpoint architecture error (`DraftAgentArchitectureError`) |
@@ -83,7 +92,8 @@ Online GRPO run <run_id>: generation 1 -> 2
   reward    : scorer models/sealed/scorer/latest.pt | build-method greedy
   rollout   : T=2.0 | drafts/round=10 | set=BLB | seed=42 (Forge-side rollouts unseeded)
   optimiser : lr=1e-04 batch=32 clip=1.0 warmup=200 steps
-  runtime   : device cuda | embedding width 528 | anchor window 100 drafts
+  run ctrl  : patience 30 rounds | lr decay x0.1 after 15 rounds, floor 1e-07
+  runtime   : device cuda | embedding width 528 | anchor window 100 drafts (10 rounds, ~5-round lag)
   outputs   : corpus output/draft/drafts.jsonl (append) | checkpoints models/draft/agent/ (snapshot every 25 rounds)
 ```
 
@@ -100,7 +110,7 @@ gen-2 checkpoint prints `generation 2 -> 3`.
 round 12 | drafts 10 (120) | picks 1789 (2 seats dropped) | gen 74s train 38s | R +0.118+-1.842 | |A|<0.1 18% | ppl 2.41 | KL 0.0042 | margin +0.372
   reward   : learner seats=41 R mean=+0.118 std=1.842 | A std=1.000 |A|<0.1=18.2% |A|>0.5=61.0% max|A|=2.31
   explore  : H=0.881 ppl=2.413 off-argmax=31.4%   (band: ppl 2-3 / off-argmax 25-40%)
-  movement : mean logpi=-1.204 policy_loss=-0.0153 grad_norm=0.83 KL(prev||new)=0.00421
+  movement : mean logpi=-1.204 policy_loss=-0.0153 grad_norm=0.83 KL(prev||new)=0.00421 KL(init||new)=0.0842 lr=1.0e-04
   progress : anchor margin=+0.372 | gen-3=6.412 gen-1=6.040 forge-r30=5.101 forge-r100=3.884 | window=100 drafts
 ```
 
@@ -111,8 +121,12 @@ Required properties (SC-003, SC-004):
   readable.
 - `explore` carries entropy, perplexity and the off-argmax rate → collapse
   (`ppl → 1`, `off-argmax → 0`) is readable.
-- `movement` carries the pre-clip gradient norm and the KL to the previous
-  round's policy → an over-large step is readable.
+- `movement` carries the pre-clip gradient norm, **both** KLs — to the previous
+  round and to the run's warm start — and the current learning rate. An
+  over-large step is readable from `KL(prev||new)`; a step size too small to move
+  the policy at all is readable only from `KL(init||new)` staying flat, since
+  small consistent steps accumulate and a near-zero per-round KL does not imply a
+  stationary policy. Both remain readable once annealing starts moving the LR.
 - `progress` carries the margin, every label's raw windowed mean, and the window
   size → progress/no-progress is readable without pausing training.
 
@@ -127,8 +141,11 @@ round 12 | drafts 10 (120) | skipped (no signal): 1 surviving learner reward | m
 
 - Worker restart, abandoned draft, and pick-fault lines are inherited verbatim
   from the live-play supervisor.
-- Checkpoint writes: `saved models/draft/agent/latest.pt (round 12)` and, on the
-  snapshot cadence, `snapshot models/draft/agent/20260805_141233.pt (round 25)`.
+- Checkpoint writes: `saved models/draft/agent/latest.pt (round 12)`; on the
+  snapshot cadence, `snapshot models/draft/agent/20260805_141233.pt (round 25)`;
+  and on each new best,
+  `best models/draft/agent/best_20260805_141233.pt (round 12, margin +0.372)`.
+- LR decay: `LR decay #1 -> 1.00e-05 after 15 rounds without a new best margin`.
 
 ### 4. Final summary (FR-019) — on `--max-rounds`, Ctrl-C, or fault abort
 
@@ -136,8 +153,12 @@ round 12 | drafts 10 (120) | skipped (no signal): 1 surviving learner reward | m
 Done after 137 rounds | 1370 drafts | 24451 learner picks | 4h12m
   latest checkpoint : models/draft/agent/latest.pt
   final snapshot    : models/draft/agent/20260805_181940.pt
+  best checkpoint   : models/draft/agent/best_20260805_172204.pt
   best anchor margin: +0.514 at round 108 (current +0.489)
 ```
+
+When the anchor window never filled, the last two lines report that no best was
+recorded rather than naming a checkpoint chosen on partial evidence (FR-033).
 
 ## Behavioural contract
 
@@ -147,11 +168,18 @@ Done after 137 rounds | 1370 drafts | 24451 learner picks | 4h12m
 2. **One resident worker** — the Forge JVM starts once per run and is driven every
    round; a crash restarts it and the run continues (FR-005).
 3. **Continuity** — optimizer state and the LR schedule live in memory for the
-   whole run; a single warmup at the start. Checkpoints are snapshots, not
+   whole run; a single warmup at the start, then constant unless plateau
+   annealing moves it (FR-035). A decay changes the schedule only: warmup is not
+   re-run and the optimiser moments are not reset. Checkpoints are snapshots, not
    training state (FR-025, FR-026).
 4. **Frozen anchor** — the anchor label's service is never updated and never
    re-bound during a run (FR-021).
-5. **No automatic stop** — no held-out loss, no best-checkpoint selection, no
-   early stop. Stopping and promotion are operator judgments (FR-026, FR-030).
+5. **No automatic stop by default** — there is no held-out loss, and nothing
+   stops the run unless the operator arms `--patience`. Promotion is always an
+   operator judgment on the yardstick (FR-026, FR-030, FR-034).
+5b. **Best selection is advisory** — `best_*.pt` is written on each new anchor
+   margin best once the window is full, and never before. It nominates a
+   candidate; the recorded best margin is an optimistic maximum and is not a
+   measurement (FR-033). Annealing never rolls back to it (FR-035).
 6. **Ctrl-C** — finishes the in-flight round's bookkeeping, writes a final
    snapshot, prints the final summary, terminates the worker, exits `0`.

@@ -82,6 +82,7 @@ checkpoint that beats its base (and Forge) on that yardstick.
    │            ▼  πₖ → πₖ₊₁   (optimizer + LR stay in RAM;         │
    │                 push πₖ₊₁ into the learner pick service)       │
    │   print round diagnostics (§ 6)  +  save latest.pt            │
+   │      (+ best_*.pt on a new best anchor margin — § 6.1)         │
    └───────────────────────────────────────────────────────────────┘
             │  repeat: next round's learner seats are piloted by πₖ₊₁
             ▼
@@ -155,8 +156,11 @@ Rules:
 - **Continuity** — optimiser + LR schedule live in memory across rounds (one
   warmup at run start); checkpoints are for snapshot/recovery only, not to carry
   training state.
-- **Stop** — runs until Ctrl-C or `--max-rounds`; no automatic stop, no
-  held-out-loss early-stopping (§ 6).
+- **Stop** — runs until Ctrl-C or `--max-rounds`. There is no held-out-loss guard.
+  `--patience` (off by default) adds an opt-in stop on a stalled anchor margin
+  (§ 6.1); with it unset the loop never stops itself. When LR decay is also on
+  (§ 6.2) a stall anneals the LR before it stops the run, so an opt-in stop fires
+  only at the LR floor.
 - **Frozen anchor** — the anchor stays fixed for the whole run; never swapped to a
   later generation or "previous round".
 - **Worker crash** — a crashed worker JVM is restarted (startup paid once more)
@@ -172,7 +176,7 @@ no-progress, and collapse from the log alone:
 |------|---------|---------|
 | **Reward** | pod-relative reward mean/std; advantage spread + fraction near-zero (`abs(A) < 0.1`) | reward not discriminating picks → advantages → 0 (nothing learned) |
 | **Exploration** | entropy, perplexity `exp(H)`, off-argmax rate | perplexity → 1 / off-argmax → 0 / entropy → 0 = exploration collapse |
-| **Movement** | mean `logπ`, mean policy-loss term, gradient norm (pre-clip), KL-to-previous-round | step too large for the round size → large per-round KL |
+| **Movement** | mean `logπ`, mean policy-loss term, gradient norm (pre-clip), KL-to-previous-round, KL-to-run-start, current LR | step too large for the round size → large per-round KL; a step size that is doing nothing at all → flat KL-to-run-start |
 | **Progress** | the anchor margin + raw component means (learner / anchor / Forge) + window size | whether the learner is pulling away from the fixed reference |
 
 **Anchor margin** — the live progress signal:
@@ -188,16 +192,126 @@ anchor_margin = mean(learner deck_score) − mean(frozen-anchor deck_score)   ov
 - Guideline exploration band: perplexity ≈ 2–3 / off-argmax ≈ 25–40 %; watch it
   across rounds (entropy decays even at fixed `T`).
 
+**The two KLs** — the movement axis reports both, because one round's step and a
+run's cumulative travel are different questions and a step size can fail in
+either direction:
+
+| | Measures | Reads wrong when |
+|---|---|---|
+| `KL(π_{k} ‖ π_{k+1})` | this round's step | large / erratic ⇒ the step is too big for the round size |
+| `KL(π_0 ‖ π_{k})` | total distance from the run's warm start | flat ⇒ the LR is too small to move the policy at all |
+
+Neither alone is sufficient. A per-round KL near zero does **not** prove the
+policy is standing still: small steps taken in a consistent direction accumulate,
+and only the distance from `π_0` shows it. Conversely a healthy per-round KL with
+a cumulative KL that has stopped growing means the steps are cancelling rather
+than compounding. `π_0` here is the learner's own warm-start checkpoint, not the
+anchor — the two coincide only when `--learner` and `--frozen` name the same file.
+
 Also printed:
 
 - a consolidated round-summary line (round index; draft + learner-pick counts;
   generation + training wall-clock; dropped-seat count; headline figures);
-- a startup echo of the resolved config + validation results;
+- a startup echo of the resolved config + validation results, including the
+  derived window geometry (§ 6.1) — window length in rounds and the implied lag;
 - a final summary at run end / interrupt (rounds, total drafts, latest checkpoint,
-  best anchor margin and when).
+  best-checkpoint path, best anchor margin and when).
 
-A plateau in the anchor margin triggers a yardstick check (§ 7) — not an auto-stop
-and not the promotion decision.
+A plateau in the anchor margin triggers a yardstick check (§ 7) — it is not the
+promotion decision, and it stops the run only if `--patience` is set (§ 6.1).
+
+## 6.1 Window geometry, best checkpoint, and patience
+
+The anchor margin is both the live progress read and the quantity that selects
+the best checkpoint, so its sampling properties are part of the contract.
+
+**Window geometry.** The margin is averaged over `--anchor-window` drafts, which
+spans `--anchor-window / --drafts-per-round` rounds. Two consequences follow, and
+both are reported at startup:
+
+| Property | Consequence |
+|---|---|
+| Precision | Standard error falls with the window's draft count. Learner and anchor seats share pods, so set-power variance cancels — it is a paired comparison. |
+| Lag | The margin trails the current policy by about **half the window, measured in rounds**. A margin peak at round `k` means the policy peaked near round `k − ½·window_rounds`. |
+
+Lag is governed by the window's length *in rounds*, not in drafts, so a larger
+`--drafts-per-round` buys precision and low lag together. Rounds are also better
+conditioned when larger (more learner seats per standardisation).
+
+**Best checkpoint.** The run tracks the best anchor margin and writes
+`best_{timestamp}.pt` on each new best (§ 9). Two rules keep the selection honest:
+
+- **Window-full guard** — no best is recorded until the window holds a full
+  `--anchor-window` drafts. Before that the margin is computed over fewer drafts
+  and an early lucky round would otherwise pin `best` for the whole run. A run
+  that ends before the window fills reports no best rather than a spurious one.
+- **Selection is optimistic** — `best` is a maximum over a correlated series, so
+  it overstates the true peak. It selects a checkpoint; it is not an unbiased
+  estimate of that checkpoint's strength. The yardstick (§ 7) remains the
+  measurement.
+
+Because of the lag, periodic snapshots (`--snapshot-every`) stay useful even with
+`best_*.pt`: the genuinely best policy may sit a few rounds *before* the recorded
+best, and a snapshot is how it is recoverable.
+
+**Patience.** `--patience N` (unset ⇒ disabled) stops the run after `N`
+consecutive rounds with no new best margin, writing the final snapshot and summary
+like any other termination (§ 5). It is a convenience for unattended runs, not a
+quality verdict — promotion still goes through the yardstick.
+
+`N` MUST exceed the window length in rounds (`--anchor-window /
+--drafts-per-round`), or the run fails fast: a genuine improvement needs a full
+window to propagate into the margin, so a shorter patience can stop before the
+evidence arrives.
+
+**The stall counter.** Patience and LR decay (§ 6.2) share one counter: rounds
+since the last new best anchor margin. It starts once the first best is recorded
+(i.e. once the window fills), resets on every new best, and resets again on each
+LR decay.
+
+## 6.2 LR decay on plateau
+
+A stalled margin is treated first as a step-size problem and only then as a
+stopping condition — the gen-1 trainer's plateau-annealing convention, in rounds.
+
+`--lr-decay-patience N` (unset ⇒ disabled) arms it. When the stall counter
+(§ 6.1) reaches `N`, the learning rate is multiplied by `--lr-decay-factor` and
+the counter resets, giving the smaller step a fresh window to find a new best.
+Decays continue while the next one would stay at or above `--min-lr`; at the floor
+no further decay happens.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--lr-decay-patience` | _(none; disabled)_ | Rounds without a new best margin before the LR is annealed. |
+| `--lr-decay-factor` | `0.1` | Multiplier applied per decay. |
+| `--min-lr` | `lr × 1e-3` | Floor; no decay is taken that would land below it. |
+
+Rules:
+
+- **Decay pre-empts stopping.** Because each decay resets the counter, an armed
+  `--patience` cannot fire until the LR floor is reached — so an unattended run
+  anneals its way down before it gives up, rather than stopping at the first
+  plateau.
+- **Ordering.** `anchor_window / drafts_per_round < --lr-decay-patience <
+  --patience`, else fail fast. The lower bound is § 6.1's: annealing on evidence
+  the margin has not had time to show is just noise-chasing. The upper bound is
+  what makes the previous rule hold.
+- **Independent of `--patience`.** LR decay may be armed with stopping disabled:
+  the run then anneals to the floor and keeps training until Ctrl-C.
+- **Schedule composition.** The decay multiplies the post-warmup constant LR.
+  Warmup is not re-run and the optimiser's moments are not reset — a decay is a
+  schedule change, not a restart.
+- **No rollback.** Decay continues from the current weights; it never reloads
+  `best_*.pt`. The margin's best is an optimistic maximum (§ 6.1), so returning to
+  it repeatedly would chase selection noise rather than progress.
+- **Not restored across runs.** The decay count is recorded in the checkpoint as
+  provenance (§ 9), but gen-3 has no `--resume`: restarting from a snapshot
+  deliberately re-runs warmup and resets both the optimiser moments and the decay
+  position.
+
+The current LR is printed on the movement axis (§ 6) beside the gradient norm and
+KL, and each decay is logged as it happens — step size, its effect, and the
+response to it stay on one screen.
 
 # 7. Yardstick + promotion
 
@@ -242,10 +356,14 @@ per-round `generate-draft-data` subprocess.
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--rollout-temperature` / `-T` | _(required; no default)_ | Sample temperature; all policy distributions (logπ, entropy) use it. Positive, or fail fast. |
-| `--lr` | _(tunable)_ | Step size. |
-| `--drafts-per-round` | `10` | Fresh drafts generated + trained on (one pass) per round. |
-| `--anchor-window` | `~100` | Sliding window (drafts) for the anchor margin. |
-| `--snapshot-every` | _(N rounds)_ | Cadence of timestamped snapshots (besides per-round `latest.pt`). |
+| `--lr` | _(tunable)_ | Step size. Base value for the warmup ramp and for any plateau annealing (§ 6.2). |
+| `--drafts-per-round` | `10` | Fresh drafts generated + trained on (one pass) per round. Larger rounds raise margin precision, cut the margin's lag in rounds, and condition the advantage better, at the same drafts/hour (§ 6.1). |
+| `--anchor-window` | `~100` | Sliding window (drafts) for the anchor margin. Sets both its precision and — divided by `--drafts-per-round` — its lag (§ 6.1). |
+| `--patience` | _(none; disabled)_ | Stop after N consecutive rounds with no new best anchor margin. Must exceed `--anchor-window / --drafts-per-round`, else fail fast (§ 6.1). |
+| `--lr-decay-patience` | _(none; disabled)_ | Rounds without a new best margin before the LR is annealed. Must sit between the window length in rounds and `--patience` (§ 6.2). |
+| `--lr-decay-factor` | `0.1` | Multiplier per decay. |
+| `--min-lr` | `lr × 1e-3` | Annealing floor; stopping (if armed) fires only here. |
+| `--snapshot-every` | _(N rounds)_ | Cadence of timestamped snapshots (besides per-round `latest.pt` and `best_*.pt` on each new best). |
 | `--max-rounds` | _(none; until Ctrl-C)_ | Optional round budget. |
 | `--set` | _(none; random set per draft)_ | Restrict rollouts to one set. |
 | `--output-path` | `output/draft/drafts.jsonl` | Corpus every generated draft is appended to (shared file, always opened in append mode). |
@@ -255,7 +373,9 @@ per-round `generate-draft-data` subprocess.
 | `--batch-size`, `--max-grad-norm` | _(gen-1 defaults; fixed)_ | Batch stays within the 8 GB VRAM budget. |
 
 No `--gae-lambda` / `--kl-coef` / `--entropy-coef` / `--value-weight` — those
-pieces are dropped.
+pieces are dropped, and with them gen-2's val-keyed *coefficient* schedules: there
+are no loss-term coefficients left to schedule. The LR schedule (warmup, and
+plateau annealing under § 6.2) is a separate thing and is kept.
 
 ## 8.1 Agent categories — `--learner`, `--frozen`, `--anchor`, `--mix`
 
@@ -324,10 +444,19 @@ label. Any consistent label set works as long as the validation rules hold.
 - **Corpora** — the unchanged `drafts.jsonl` (live-play § 7); no schema or
   provenance change. The loop appends each round's drafts (for post-hoc
   margin/composition); training uses each batch once, then discards it.
-- **Checkpoints** — `models/draft/agent/{timestamp}.pt` (snapshots) + `latest.pt`
-  (every round), in the gen-1 format (trunk + policy + critic + recency/context
+- **Checkpoints** — three kinds under `models/draft/agent/`:
+
+  | File | Written | Purpose |
+  |------|---------|---------|
+  | `latest.pt` | every round | Current policy; overwritten. Tools defaulting to it pick up the in-progress agent mid-run. |
+  | `best_{timestamp}.pt` | on each new best anchor margin (§ 6.1) | The selection candidate. Not written before the window fills. |
+  | `{timestamp}.pt` | every `--snapshot-every` rounds, and once at run end / interrupt | Periodic recovery, and the way to reach a policy a few rounds *before* the recorded best (§ 6.1 lag). |
+
+  All three use the gen-1 format (trunk + policy + critic + recency/context
   tables, `config`, round counters) plus gen-3 `rl_metadata`: generation index,
   base-checkpoint identity, `algorithm=online-grpo`, and `lr` /
-  `rollout_temperature` / `drafts_per_round`. The critic head is carried unchanged
-  (untrained, unused); no critic / GAE / KL / entropy params; no encoder weights
-  (Phase A).
+  `rollout_temperature` / `drafts_per_round`, plus the decay count reached (§ 6.2)
+  as provenance — it records how far a run annealed, and is not restored, since
+  there is no `--resume`. The critic head is carried unchanged (untrained,
+  unused); no critic / GAE / KL / entropy params; no encoder weights (Phase A).
+  No checkpoint carries a held-out loss — there is none.

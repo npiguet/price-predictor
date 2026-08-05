@@ -61,11 +61,18 @@ round 12 | drafts 10 (120) | picks 1789 (2 seats dropped) | gen 74s train 38s | 
 | `margin` rising over rounds | Working. | Keep going. |
 | `margin` flat, `\|A\|<0.1` climbing toward 100% | The reward isn't discriminating picks — nothing to learn. | Not a temperature problem. Pause and run the yardstick; consider more drafts per round. |
 | `ppl` sagging toward 1, `off-argmax` toward 0 | Exploration collapse — the policy only ever samples its argmax, so the top pick can never be displaced. | Raise `-T` and restart from the latest checkpoint. |
-| `KL(prev\|\|new)` large / erratic, `grad_norm` spiking | The step is too big for the round size. | Lower `--lr` (or raise `--drafts-per-round`). |
+| `KL(prev\|\|new)` large / erratic, `grad_norm` spiking | The step is too big for the round size. | Lower `--lr` (or raise `--drafts-per-round`). Watch `lr` on the same line once annealing is armed. |
+| `KL(init\|\|new)` flat across many rounds | The step is too small to move the policy at all — whatever `KL(prev\|\|new)` says. | Raise `--lr`. Check this before concluding a run has plateaued: a stalled margin at a frozen policy is not a plateau. |
 | `skipped (no signal)` rounds | Fewer than two surviving learner rewards, or zero variance. | Rare; if frequent, raise `--drafts-per-round` or check for failed builds. |
 
 Entropy decays across rounds even at fixed `-T`, so watch the `explore` curve for
 the whole run, not just round 0.
+
+The two KLs answer different questions and you need both when sizing `--lr`:
+`KL(prev||new)` is this round's step, `KL(init||new)` is how far the policy has
+travelled from its warm start. A near-zero per-round KL does *not* mean the policy
+is standing still — small steps in a consistent direction accumulate — so read
+the cumulative one before deciding a run is stuck.
 
 ## Step 3 — Pause on a plateau
 
@@ -81,13 +88,35 @@ Done after 137 rounds | 1370 drafts | 24451 learner picks | 4h12m
 ```
 
 ```bash
-CAND=models/draft/agent/20260805_181940.pt
+CAND=models/draft/agent/best_20260805_172204.pt
 BASE=models/draft/agent/gen1/latest.pt
 ```
 
 Note that `models/draft/agent/latest.pt` tracked the in-progress gen-3 during the
-run — pin the timestamped snapshot, not `latest.pt`, when you want a stable
-candidate.
+run — pin `best_*.pt` (or a timestamped snapshot), not `latest.pt`, when you want
+a stable candidate.
+
+`best_*.pt` is the run's own nomination: the checkpoint at the highest anchor
+margin. Two things to remember about it. The margin **lags** the policy by about
+half the anchor window (in rounds), so the genuinely best policy may sit a few
+rounds *earlier* — that is what the periodic snapshots are for, and it is worth
+yardsticking the snapshot either side of it if the run was moving fast. And the
+recorded best margin is a maximum over a noisy series, so it reads high; the
+yardstick in Step 4 is the measurement, not that number.
+
+### Optional: let the run manage itself
+
+```bash
+    --patience 30 --lr-decay-patience 15 --lr-decay-factor 0.1
+```
+
+Both are off by default. Armed, a stalled margin first anneals the LR (which
+resets the stall counter) and only stops the run once the LR reaches `--min-lr` —
+the same pattern that extracted extra quality from gen-1 after its first plateau.
+Both must exceed the anchor window measured in rounds
+(`--anchor-window / --drafts-per-round`), and `--lr-decay-patience` must be below
+`--patience`; the command rejects anything else at startup. The startup echo
+prints the window's length in rounds so you can size them.
 
 ## Step 4 — Cross-generation yardstick (unchanged from gen-2; no new code)
 

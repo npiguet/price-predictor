@@ -99,9 +99,12 @@ repointed at the shared module in the same task.
 **Still deferred** (unchanged standing decision from specs 017/018/020): the
 whole training-loop scaffold is *not* extracted. Each trainer's
 loss/metric/dataset bodies genuinely diverge, and gen-3's loop diverges the most
-(no val split, no early stop, no epochs — rounds interleaved with generation).
+(no val split, no epochs, and its stopping/annealing key off an in-loop margin
+rather than a held-out loss — rounds interleaved with generation).
 `_make_scheduler` / `_PlateauLR` / `_select_device` continue to be imported from
-`train_draft_agent`, as `train_draft_agent_rl` already does.
+`train_draft_agent`, as `train_draft_agent_rl` already does — and D16's annealing
+imports that same `_PlateauLR` rather than growing a second copy, which is
+precisely the reuse this deferral assumes.
 
 ## Technical decisions
 
@@ -264,6 +267,10 @@ diagnostic (D9) exists to surface, and `--lr` is the lever.
 
 ### D9 — All exploration + movement diagnostics from one post-update no-grad pass
 
+**Extended 2026-08-05 by D17**, which adds a third resident model (`π_0`) to the
+same sweep for the cumulative KL. The sweep remains a single batched `no_grad`
+pass; the model count below reads "two" for the original scope.
+
 **Decision**: Keep a second resident `DraftAgentModel` (`prev_model`). Before the
 update, `prev_model.load_state_dict(model.state_dict())` — so `prev_model` **is**
 πₖ, the policy that generated the round. After the update, run one batched
@@ -275,6 +282,7 @@ accumulate:
 | `H(πₖ)`, `exp(H)` | `prev_model` | exploration (FR-015) |
 | off-argmax rate: `recorded action ≠ argmax(πₖ)` | `prev_model` | exploration (FR-015) |
 | `mean log πₖ(a)` | `prev_model` | movement (FR-016) |
+| `KL(π₀ ‖ πₖ₊₁)` | `init_model` + learner (D17) | movement (FR-016) |
 | `KL(πₖ ‖ πₖ₊₁)` per pick | both | movement (FR-016) |
 
 Gradient norm comes free from the per-group clip's return value (pre-clip),
@@ -306,7 +314,12 @@ requiring a pause or a second command). A ~100-draft window over a ~30 % anchor
 share gives ~240 anchor decks, so the windowed mean is precise. The same figure
 is recomputable post-hoc via `analyze-generated-decks --agent <each>` (FR-020).
 
-### D11 — Checkpointing: `latest.pt` every round, snapshots on a cadence, no guard
+### D11 — Checkpointing: `latest.pt` every round, snapshots on a cadence, plus an advisory best
+
+**Amended 2026-08-05** — see D16 for the best-checkpoint / patience / annealing
+additions. The original decision below stands for `latest.pt` and the snapshot
+cadence; "no guard" now means specifically *no held-out-loss guard*.
+
 
 **Decision**: `DraftAgentStore.save_checkpoint` to `models/draft/agent/latest.pt`
 every round and to `models/draft/agent/{timestamp}.pt` every `--snapshot-every`
@@ -403,7 +416,7 @@ optional, so the warmup length would silently change with an unrelated flag.
   locator=None)` parameter (D14); per-round embedding table built from cache
   hits; the corpus handle is opened once (append mode) and appended per record.
   **Addressed.**
-- **GPU placement** — learner model, `prev_model`, frozen pick-service models,
+- **GPU placement** — learner model, `prev_model`, `init_model` (D17), frozen pick-service models,
   scorer, and (when used) picker all move to CUDA when available; batches are
   collated onto the device (`_collate` pattern). **Addressed.**
 - **GPU batching** — the round's pass is length-bucketed minibatches; the
@@ -419,3 +432,77 @@ optional, so the warmup length would silently change with an unrelated flag.
 - No optimization beyond this checklist is proposed (Principle II); the obvious
   candidate — parallel Forge workers — is explicitly unnecessary here (drafts
   play no games; spec Assumptions).
+
+## D16 — Best checkpoint, patience, and plateau annealing (added 2026-08-05)
+
+**Decision**: the anchor margin selects an advisory best checkpoint
+(`best_{timestamp}.pt`) and drives two opt-in run-control knobs — `--patience`
+and `--lr-decay-patience`/`--lr-decay-factor`/`--min-lr` — mirroring
+`train_draft_agent`'s `_PlateauLR` convention with **rounds** as the unit. One
+shared stall counter (rounds since the last new best) feeds both; a decay resets
+it, so an armed patience can only fire at `--min-lr`.
+
+**Rationale**: the first gen-3 run showed the failure this closes. The margin
+peaked mid-run and the run then wandered well below it, but no checkpoint at the
+peak survived — `latest.pt` had been overwritten and the snapshot cadence had not
+yet fired. Annealing is the same lever that extracted extra quality from gen-1
+after its first plateau.
+
+**Three consequences forced by the margin's statistics** (data-model § 7.1),
+which is what makes this more than a copy of the gen-1 code:
+
+1. **Window-full guard.** The margin is only meaningful once the window is
+   populated; without the guard an early round computed over a partly-filled
+   window can pin `best` for the whole run.
+2. **Lower bound on both patiences.** The margin lags the policy by ≈ half the
+   window in rounds, so any knob keyed to "no new best for N rounds" must have
+   `N > window_rounds` or it fires before the evidence can arrive. Combined with
+   gen-1's `lr_decay_patience < patience`, the ordering is
+   `window_rounds < lr_decay_patience < patience`.
+3. **No rollback on decay.** Gen-1 anneals without reloading its best, and gen-3
+   must too — more strongly, since its selection statistic is an optimistic
+   maximum over a noisy series. Reloading `best_*.pt` on each decay would chase
+   selection noise rather than progress.
+
+**Alternatives rejected**: (a) *window = drafts-per-round* to remove the lag — it
+makes every round an independent draw, which maximises max-selection bias exactly
+where it hurts; raising `--drafts-per-round` and keeping a multi-round window
+improves precision and lag together instead. (b) *Restore-best-then-decay* —
+see (3). (c) *Patience on by default* — it would change the spec's "no automatic
+stop" default contract for every existing invocation; opt-in preserves it.
+
+**Not restored across runs**: the decay count is written to `rl_metadata` as
+provenance but never read back, consistent with D13's no-`--resume` decision.
+
+## D17 — Cumulative KL from a third resident model (added 2026-08-05)
+
+**Decision**: keep a third resident `DraftAgentModel` holding `π_0` — the
+learner's warm-start weights, frozen for the run — and report
+`KL(π_0 ‖ π_{k+1})` on the movement axis beside the existing per-round
+`KL(π_k ‖ π_{k+1})`. It is computed in the **same** batched `no_grad` sweep
+(D9), as one extra forward per batch.
+
+**Rationale**: per-round KL cannot distinguish "the policy is standing still"
+from "the policy is creeping steadily". Displacement from small steps taken in a
+consistent direction adds up, and KL grows with the square of that displacement,
+so a per-round KL that rounds to zero can still correspond to material cumulative
+travel. A second gen-3 run at `lr=1e-6` showed exactly this ambiguity: per-round
+KL sat at 2e-5 for 84 rounds and every other movement figure was flat, yet
+whether the policy had drifted meaningfully in aggregate was not answerable from
+the log. `KL(π_0 ‖ π_k)` answers it in one number, which is the figure LR
+calibration actually needs.
+
+**Why a dedicated model rather than the anchor's service**: `π_0` is the
+*learner's* warm start. It equals the anchor only when `--learner` and
+`--frozen` name the same file — the quickstart's recommended setup, but not
+required (§ 8.1 documents basing off gen-2 while anchoring to gen-1). Borrowing
+the anchor would make the figure silently wrong in that case, and detecting
+sameness by path string is fragile.
+
+**Cost**: one more model resident on the device (~3× the agent's weight
+footprint in total, well inside the 8 GB budget) and one more forward per sweep
+batch. No second pass and no per-pick work — Principle VIII unaffected.
+
+**Alternative rejected**: holding `π_0` on the host and moving it to the device
+per round. It saves a few hundred MB of VRAM that is not scarce here, in exchange
+for a transfer every round and more lifecycle code.

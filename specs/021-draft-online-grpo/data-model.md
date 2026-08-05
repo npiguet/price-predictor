@@ -30,6 +30,10 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
 | `drafts_per_round` | `int` | `10` | fresh drafts generated + trained on per round |
 | `anchor_window` | `int` | `100` | sliding window (drafts) for the anchor margin |
 | `snapshot_every` | `int` | `25` | rounds between timestamped snapshots |
+| `patience` | `int \| None` | `None` | opt-in stall stop, in rounds (FR-034) |
+| `lr_decay_patience` | `int \| None` | `None` | opt-in plateau annealing, in rounds (FR-035) |
+| `lr_decay_factor` | `float` | `0.1` | LR multiplier per decay |
+| `min_lr` | `float \| None` | `None` ⇒ `lr × 1e-3` | annealing floor |
 | `max_rounds` | `int \| None` | `None` | optional budget; `None` ⇒ until interrupt |
 | `set_code` | `str \| None` | `None` | restrict rollouts to one set |
 | `batch_size` | `int` | `32` | fixed-and-forget; the 8 GB VRAM budget |
@@ -40,9 +44,13 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
 | `max_consecutive_faults` | `int` | `5` | inherited pick-fault auto-abort |
 
 **Absent by design** (spec FR-006, Out of Scope): `--value-weight`,
-`--gae-lambda`, `--kl-coef`, `--entropy-coef`, any coefficient-decay knob,
-`--val-fraction`, `--patience`, `--epochs`, `--lr-decay-*`, `--resume`,
-`--pick-mode` (always `sample`).
+`--gae-lambda`, `--kl-coef`, `--entropy-coef`, any **loss-coefficient** decay knob,
+`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (always `sample`).
+
+`patience` and the `lr_decay_*` trio are **run-control** knobs, not learning
+knobs: all default to disabled, so the default surface matches the original
+"three tunable knobs" contract (FR-006). They key off the anchor margin, never a
+held-out loss — none exists.
 
 ### 1.1 Startup validation (FR-024) — all before any update, exit nonzero
 
@@ -59,6 +67,13 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
    every frozen checkpoint.
 8. `drafts_per_round ≥ 1`, `anchor_window ≥ 1`, `batch_size ≥ 1`,
    `snapshot_every ≥ 1`, `max_rounds` (if given) `≥ 1`.
+9. Run-control ordering, where `window_rounds = ceil(anchor_window /
+   drafts_per_round)`. Each armed knob must clear the window, and annealing must
+   clear before stopping does:
+   - `patience`, if given: `patience > window_rounds`.
+   - `lr_decay_patience`, if given: `lr_decay_patience > window_rounds`, and
+     `lr_decay_patience < patience` when `patience` is also given.
+   - `0 < lr_decay_factor < 1`; `min_lr`, if given, `> 0` and `≤ lr`.
 
 ## 2. `RoundBatch`
 
@@ -143,12 +158,22 @@ pre-update weights `π_k` (research D9).
 | identity | `index`, `drafts`, `total_drafts`, `learner_seats`, `dropped_seats`, `learner_picks`, `gen_seconds`, `train_seconds`, `skipped` | round bookkeeping |
 | reward | `reward_mean`, `reward_std`, `adv_std`, `adv_near_zero_frac` (`\|A\|<0.1`), `adv_large_frac` (`\|A\|>0.5`), `adv_absmax` | §4 |
 | exploration | `entropy`, `perplexity` = `exp(entropy)`, `off_argmax_rate` | `π_k` forward |
-| movement | `mean_logp` (of taken actions under `π_k`), `policy_loss` (mean over the round's steps), `grad_norm` (pre-clip, mean over steps), `kl_prev_new` = `KL(π_k ‖ π_{k+1})` | steps + `π_k`/`π_{k+1}` forward |
+| movement | `mean_logp` (of taken actions under `π_k`), `policy_loss` (mean over the round's steps), `grad_norm` (pre-clip, mean over steps), `kl_prev_new` = `KL(π_k ‖ π_{k+1})`, `kl_init_new` = `KL(π_0 ‖ π_{k+1})`, `lr` (current, post-annealing) | steps + `π_0`/`π_k`/`π_{k+1}` forward |
 | progress | `anchor_margin`, `label_means: dict[str, float]`, `window_drafts` | §7 |
 
 `off_argmax_rate` = fraction of learner picks whose recorded (sampled) action is
 not `argmax π_k` over the same `PACK` set — exact, because both come from the
 same reconstructed state.
+
+**Three resident models.** The post-update sweep forwards `π_0` (a frozen copy of
+the learner's warm-start weights, held for the whole run), `π_k` (`prev_model`,
+refreshed from the learner before each update) and `π_{k+1}` (the learner). All
+three are `eval()`-mode and on the training device; `π_0` and `π_k` never take a
+gradient. This is a third `DraftAgentModel` on the device — ~3× the agent's
+weight footprint, comfortably inside the 8 GB budget — and one extra forward per
+sweep batch, not a second pass. `π_0` cannot be borrowed from the anchor's pick
+service: the anchor is a different checkpoint whenever `--learner` and `--frozen`
+differ, which the CLI permits.
 
 ## 7. `AnchorWindow`
 
@@ -159,12 +184,33 @@ Sliding-window progress state (spec FR-017, FR-021).
 | `window` | `deque[dict[str, list[float]]]` | `maxlen = anchor_window`; one entry per draft: label → that draft's non-`None` `deck_score`s |
 | `anchor_label` | `str` | fixed for the whole run (FR-021) |
 | `learner_label` | `str` | fixed for the whole run |
+| `best_margin` / `best_round` | `float \| None`, `int \| None` | best observed margin and its round (FR-019, FR-033) |
+| `rounds_since_best` | `int` | the **stall counter** shared by patience and annealing (FR-035) |
 
 - `label_mean(label)` = mean of every score for `label` across the window.
 - `margin` = `label_mean(learner) − label_mean(anchor)`; `None` until both labels
   have at least one scored seat in the window.
 - `window_drafts` = `len(window)`.
-- Best margin and its round index are tracked for the final summary (FR-019).
+- **Window-full guard** (FR-033): a best is recorded only once
+  `window_drafts == anchor_window`. Before that the margin is still *printed* (it
+  is the live progress read) but cannot set `best_*`, so an early round computed
+  over a partly-filled window can never pin the run's best.
+- **Stall counter**: starts at the first recorded best, resets to 0 on each new
+  best and on each LR decay; otherwise increments once per round. It is the sole
+  input to both `--patience` (FR-034) and `--lr-decay-patience` (FR-035).
+
+### 7.1 Sampling properties (normative — FR-033)
+
+| Property | Statement |
+|---|---|
+| Span | The margin covers `anchor_window` drafts, i.e. `anchor_window / drafts_per_round` rounds. |
+| Precision | Standard error falls with the window's draft count; learner and anchor seats share pods, so set-power variance cancels (a paired comparison). |
+| Lag | The margin trails the current policy by ≈ half its span **in rounds**. A margin peak at round `k` implies a policy peak near `k − ½·window_rounds`. |
+| Optimism | `best_margin` is a maximum over a correlated series, so it overstates the peak. It selects a checkpoint; it does not measure one. |
+
+Lag is governed by window length in *rounds*, so a larger `drafts_per_round`
+improves precision and lag together. This is why periodic snapshots remain
+required even with `best_*.pt`: the better policy may sit a few rounds earlier.
 
 ## 8. Checkpoint payload (spec FR-027, FR-028)
 
@@ -186,11 +232,17 @@ rl_metadata = {
     "generation": base_generation + 1,       # base rl_metadata["generation"] or 1 (gen-1)
     "base_checkpoint": str(learner_checkpoint),
     "algorithm": "online-grpo",
-    "lr": lr,
+    "lr": lr,                                # the BASE lr, not the annealed value
     "rollout_temperature": rollout_temperature,
     "drafts_per_round": drafts_per_round,
+    "lr_decay_count": lr_decay_count,        # provenance only — never restored
 }
 ```
+
+`lr_decay_count` records how far the run annealed (effective LR =
+`lr × lr_decay_factor ** lr_decay_count`). It is **not** read back: gen-3 has no
+`--resume`, so restarting from a snapshot re-runs warmup and resets both the
+optimiser moments and the decay position (research D13).
 
 `generation` is the **lineage counter**, independent of the `--learner` mix
 label: a run labeled `gen-3` in the mix but warm-started from a gen-1 base writes
@@ -200,9 +252,13 @@ training generations deep the weights are.
 No critic/GAE/KL/entropy hyper-parameters are stored (they do not exist); no
 encoder weights (Phase A).
 
-Paths: `models/draft/agent/latest.pt` every round;
-`models/draft/agent/{timestamp}.pt` every `snapshot_every` rounds and once at
-run end/interrupt.
+Paths, all under `models/draft/agent/`:
+
+| File | Written | Purpose |
+|---|---|---|
+| `latest.pt` | every round | current policy; overwritten |
+| `best_{timestamp}.pt` | on each new best margin, once the window is full (FR-033) | the selection candidate |
+| `{timestamp}.pt` | every `snapshot_every` rounds, and once at run end/interrupt | recovery, and reaching a policy a few rounds *before* the recorded best (§ 7.1 lag) |
 
 ## 9. Java worker input (research D2)
 
