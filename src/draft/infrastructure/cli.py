@@ -193,8 +193,28 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--snapshot-every", type=int, default=25, dest="snapshot_every",
-        help="Rounds between timestamped snapshots; latest.pt is written every "
-             "round (default: 25).",
+        help="Rounds between timestamped snapshots; latest.pt every round and "
+             "best_*.pt on each new best margin (default: 25).",
+    )
+    parser.add_argument(
+        "--patience", type=int, default=None,
+        help="Stop after N consecutive rounds with no new best anchor margin. "
+             "Off by default. Must exceed --anchor-window / --drafts-per-round.",
+    )
+    parser.add_argument(
+        "--lr-decay-patience", type=int, default=None, dest="lr_decay_patience",
+        help="Anneal the LR after N rounds without a new best margin, resetting "
+             "the stall counter so a decay pre-empts --patience. Off by default. "
+             "Must sit between the window in rounds and --patience.",
+    )
+    parser.add_argument(
+        "--lr-decay-factor", type=float, default=0.1, dest="lr_decay_factor",
+        help="LR multiplier per plateau decay (default: 0.1).",
+    )
+    parser.add_argument(
+        "--min-lr", type=float, default=None, dest="min_lr",
+        help="Annealing floor (default: lr * 1e-3); an armed --patience only "
+             "fires here.",
     )
     parser.add_argument(
         "--max-rounds", type=int, default=None, dest="max_rounds",
@@ -861,6 +881,10 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         drafts_per_round=args.drafts_per_round,
         anchor_window=args.anchor_window,
         snapshot_every=args.snapshot_every,
+        patience=args.patience,
+        lr_decay_patience=args.lr_decay_patience,
+        lr_decay_factor=args.lr_decay_factor,
+        min_lr=args.min_lr,
         max_rounds=args.max_rounds,
         set_code=args.set_code,
         batch_size=args.batch_size,

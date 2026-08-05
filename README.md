@@ -879,11 +879,34 @@ Every round prints four diagnostic axes plus a consolidated summary line, so
 progress, stagnation and collapse are all readable from the run log alone:
 **reward** (reward mean/std, advantage spread, near-zero fraction → "nothing to
 learn"), **explore** (entropy, perplexity, off-argmax rate → collapse toward
-`ppl → 1`), **movement** (mean logπ, policy loss, pre-clip gradient norm,
-KL-to-previous-round → an over-large step), and **progress** (the live anchor
-margin over a sliding `--anchor-window` of drafts, plus every label's raw mean).
+`ppl → 1`), **movement** (mean logπ, policy loss, pre-clip gradient norm, *two* KLs and the
+current LR), and **progress** (the live anchor margin over a sliding
+`--anchor-window` of drafts, plus every label's raw mean). The two KLs answer
+different questions: `KL(prev||new)` is this round's step — large or erratic means
+the step is too big — while `KL(init||new)` is the total distance from the run's
+warm start, and a flat one means the LR is too small to move the policy at all.
+Neither implies the other, since small steps in a consistent direction accumulate.
 A degenerate round (fewer than two surviving learner rewards, or zero variance)
 is a safe no-op logged as `skipped (no signal)`.
+
+Three checkpoint kinds land under `models/draft/agent/`: `latest.pt` every round,
+`best_{timestamp}.pt` on each new best anchor margin, and `{timestamp}.pt` on the
+`--snapshot-every` cadence plus once at run end. The best is **advisory** — it is
+a maximum over a correlated series, so it reads high, and because the margin
+trails the policy by about half the anchor window (in rounds) the genuinely best
+weights may sit a few rounds earlier, which is what the periodic snapshots are
+for. No best is recorded until the window is full, so an early lucky round cannot
+pin it.
+
+Two opt-in run-control knobs, both off by default: `--patience N` stops after N
+rounds with no new best margin, and `--lr-decay-patience N` anneals the LR by
+`--lr-decay-factor` (0.1) down to `--min-lr` (`lr·1e-3`) instead. They share one
+stall counter and a decay resets it, so with both armed a run anneals its way
+down and only stops at the LR floor — the pattern that extracted extra quality
+from gen-1. Each must exceed the anchor window measured in rounds
+(`--anchor-window / --drafts-per-round`) and annealing must trigger before
+stopping, or the command fails fast; the startup echo prints the window's length
+in rounds and its implied lag so you can size them.
 
 Two operational notes. The `-Ddraft.required.agent` property that guarantees
 every pod carries a learner seat is new, so the **fat JAR must be rebuilt**

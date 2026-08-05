@@ -267,13 +267,121 @@ def test_width_mismatch_exits_two(
 @pytest.mark.parametrize(
     "flag",
     ["--resume", "--value-weight", "--gae-lambda", "--kl-coef", "--entropy-coef",
-     "--val-fraction", "--patience", "--epochs", "--lr-decay-patience",
-     "--pick-mode"],
+     "--val-fraction", "--epochs", "--pick-mode"],
 )
 def test_gen2_knobs_are_not_registered(flag: str) -> None:
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["train-draft-agent-online", flag, "1"])
+
+
+# --------------------------------------------------------------------------- #
+# Run control: patience + LR annealing (data-model § 1.1 rule 9, FR-034/FR-035)
+# --------------------------------------------------------------------------- #
+# At the defaults --anchor-window 100 / --drafts-per-round 10, window_rounds = 10,
+# so every armed knob must exceed 10 and lr-decay-patience must be below patience.
+
+def test_run_control_is_disabled_by_default() -> None:
+    args = build_parser().parse_args([
+        "train-draft-agent-online", "--learner", "gen-3=x.pt", "-T", "2.0",
+    ])
+    assert args.patience is None
+    assert args.lr_decay_patience is None
+    assert args.lr_decay_factor == 0.1
+    assert args.min_lr is None
+
+
+def test_absent_run_control_flags_leave_startup_unchanged(
+    ckpt: Path, scorer: Path,
+) -> None:
+    """The opt-in default surface must reach execute exactly as before."""
+    with pytest.raises(_Sentinel):
+        _run(_argv(ckpt, scorer))
+
+
+def test_patience_above_the_window_in_rounds_is_accepted(
+    ckpt: Path, scorer: Path,
+) -> None:
+    with pytest.raises(_Sentinel):
+        _run(_argv(ckpt, scorer, **{"--patience": "30"}))
+
+
+@pytest.mark.parametrize("value", ["10", "5", "1"])
+def test_patience_at_or_below_the_window_in_rounds_is_rejected(
+    ckpt: Path, scorer: Path, value: str, capsys,
+) -> None:
+    assert _run(_argv(ckpt, scorer, **{"--patience": value})) == 2
+    err = capsys.readouterr().err.lower()
+    assert "patience" in err and "window" in err
+
+
+def test_the_window_bound_follows_drafts_per_round(
+    ckpt: Path, scorer: Path,
+) -> None:
+    """Bigger rounds shrink the window in rounds, so a smaller patience is legal."""
+    argv = _argv(ckpt, scorer, **{
+        "--drafts-per-round": "50", "--anchor-window": "200", "--patience": "6",
+    })
+    with pytest.raises(_Sentinel):   # window_rounds = 4, so 6 clears it
+        _run(argv)
+
+    argv = _argv(ckpt, scorer, **{
+        "--drafts-per-round": "50", "--anchor-window": "200", "--patience": "3",
+    })
+    assert _run(argv) == 2
+
+
+def test_lr_decay_patience_must_also_exceed_the_window(
+    ckpt: Path, scorer: Path, capsys,
+) -> None:
+    argv = _argv(ckpt, scorer, **{"--lr-decay-patience": "8"})
+    assert _run(argv) == 2
+    assert "window" in capsys.readouterr().err.lower()
+
+
+def test_lr_decay_patience_must_be_below_patience(
+    ckpt: Path, scorer: Path, capsys,
+) -> None:
+    argv = _argv(ckpt, scorer, **{"--patience": "20", "--lr-decay-patience": "20"})
+    assert _run(argv) == 2
+    err = capsys.readouterr().err.lower()
+    assert "lr-decay-patience" in err and "patience" in err
+
+
+def test_annealing_is_legal_with_stopping_disabled(
+    ckpt: Path, scorer: Path,
+) -> None:
+    """Anneal to the floor and keep running — a supported combination (FR-035)."""
+    with pytest.raises(_Sentinel):
+        _run(_argv(ckpt, scorer, **{"--lr-decay-patience": "15"}))
+
+
+def test_both_armed_in_the_right_order_is_accepted(
+    ckpt: Path, scorer: Path,
+) -> None:
+    argv = _argv(ckpt, scorer, **{"--patience": "30", "--lr-decay-patience": "15"})
+    with pytest.raises(_Sentinel):
+        _run(argv)
+
+
+@pytest.mark.parametrize("value", ["0", "1", "1.5", "-0.1"])
+def test_lr_decay_factor_must_be_a_proper_fraction(
+    ckpt: Path, scorer: Path, value: str,
+) -> None:
+    argv = _argv(ckpt, scorer, **{
+        "--lr-decay-patience": "15", "--lr-decay-factor": value,
+    })
+    assert _run(argv) == 2
+
+
+@pytest.mark.parametrize("value", ["0", "-1e-6", "1e-3"])
+def test_min_lr_must_be_positive_and_not_above_lr(
+    ckpt: Path, scorer: Path, value: str,
+) -> None:
+    argv = _argv(ckpt, scorer, **{
+        "--lr": "1e-4", "--lr-decay-patience": "15", "--min-lr": value,
+    })
+    assert _run(argv) == 2
 
 
 def test_the_three_tunable_knobs_are_registered() -> None:

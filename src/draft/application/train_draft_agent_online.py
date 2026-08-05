@@ -125,6 +125,14 @@ class TrainDraftAgentOnlineConfig:
     drafts_per_round: int = 10
     anchor_window: int = 100
     snapshot_every: int = 25
+    # Run control (FR-034/FR-035) — all opt-in. These govern when a run stops or
+    # anneals rather than how it learns, so the default surface stays the three
+    # tunable learning knobs (FR-006). They key off the anchor margin, never a
+    # held-out loss; none exists.
+    patience: int | None = None
+    lr_decay_patience: int | None = None
+    lr_decay_factor: float = 0.1
+    min_lr: float | None = None
     max_rounds: int | None = None
     set_code: str | None = None
     batch_size: int = 32
@@ -315,7 +323,56 @@ def validate_config(config: TrainDraftAgentOnlineConfig) -> str:
         raise OnlineConfigError(
             f"--max-rounds must be >= 1 when given, got {config.max_rounds}"
         )
+
+    # Rule 9 — run-control ordering. Both knobs key off "rounds since the last
+    # new best margin", and the margin needs a full window to reflect an
+    # improvement, so each must clear the window; annealing must clear before
+    # stopping does, or a decay could never pre-empt a stop.
+    rounds = window_rounds(config)
+    if config.patience is not None and config.patience <= rounds:
+        raise OnlineConfigError(
+            f"--patience ({config.patience}) must be greater than the anchor "
+            f"window measured in rounds ({rounds} = ceil({config.anchor_window} "
+            f"/ {config.drafts_per_round})); a shorter patience would stop the "
+            "run before an improvement could reach the margin"
+        )
+    if config.lr_decay_patience is not None:
+        if config.lr_decay_patience <= rounds:
+            raise OnlineConfigError(
+                f"--lr-decay-patience ({config.lr_decay_patience}) must be "
+                f"greater than the anchor window measured in rounds ({rounds}); "
+                "annealing on evidence the margin has not had time to show is "
+                "just noise-chasing"
+            )
+        if config.patience is not None and config.lr_decay_patience >= config.patience:
+            raise OnlineConfigError(
+                f"--lr-decay-patience ({config.lr_decay_patience}) must be < "
+                f"--patience ({config.patience}) so a decay pre-empts the stop "
+                "and the run only gives up at the LR floor"
+            )
+        if not 0.0 < config.lr_decay_factor < 1.0:
+            raise OnlineConfigError(
+                f"--lr-decay-factor must be in (0, 1), got {config.lr_decay_factor}"
+            )
+        if config.min_lr is not None and not 0.0 < config.min_lr <= config.lr:
+            raise OnlineConfigError(
+                f"--min-lr must be > 0 and <= --lr ({config.lr}), got {config.min_lr}"
+            )
     return anchor
+
+
+def window_rounds(config: TrainDraftAgentOnlineConfig) -> int:
+    """How many rounds the anchor window spans — the bound on both patiences.
+
+    Also the basis of the margin's ~half-window lag (data-model § 7.1), which is
+    why it is echoed at startup.
+    """
+    return max(1, math.ceil(config.anchor_window / config.drafts_per_round))
+
+
+def resolve_min_lr(lr: float, min_lr: float | None) -> float:
+    """The annealing floor, defaulting to ``lr × 1e-3`` as the gen-1 trainer does."""
+    return min_lr if min_lr is not None else lr * 1e-3
 
 
 # --------------------------------------------------------------------------- #
@@ -649,6 +706,7 @@ class SweepDiagnostics:
     off_argmax_rate: float = 0.0
     mean_logp: float = 0.0
     kl_prev_new: float = 0.0
+    kl_init_new: float = 0.0
 
 
 def diagnostics_sweep(
@@ -660,15 +718,23 @@ def diagnostics_sweep(
     batch_size: int,
     temperature: float,
     device: torch.device,
+    init_model: DraftAgentModel | None = None,
 ) -> SweepDiagnostics:
-    """One batched ``no_grad`` sweep over the round's picks forwarding both models.
+    """One batched ``no_grad`` sweep over the round's picks forwarding each model.
 
     ``prev_model`` holds πₖ — the exact policy that generated the round — so the
     entropy, perplexity and off-argmax rate are exact rather than blurred across
     a pass whose weights were moving. The same sweep yields ``KL(πₖ ‖ πₖ₊₁)``,
     which no pre-update measurement could.
 
-    **Both models must be in ``eval()``**: with dropout active these figures
+    ``init_model`` holds π₀, the run's warm start, and adds ``KL(π₀ ‖ πₖ₊₁)`` —
+    how far the policy has travelled in total. It answers a different question
+    from the per-round KL and neither implies the other: small steps taken in a
+    consistent direction accumulate, so a per-round KL that rounds to zero does
+    **not** establish that the policy is stationary (research D17). Omitted, that
+    figure is reported as 0.
+
+    **Every model must be in ``eval()``**: with dropout active these figures
     measure noise rather than the policy. The caller owns mode, since it also
     owns the update that precedes this call.
     """
@@ -679,6 +745,7 @@ def diagnostics_sweep(
     entropy_sum = 0.0
     logp_sum = 0.0
     kl_sum = 0.0
+    kl_init_sum = 0.0
     off_argmax = 0
     with torch.no_grad():
         for start in range(0, n, batch_size):
@@ -700,6 +767,13 @@ def diagnostics_sweep(
             kl_sum += float(
                 kl_divergence(prev_scaled, new_scaled, batch.pack_mask).sum()
             )
+            if init_model is not None:
+                init_logits, _ = _forward(init_model, batch)
+                kl_init_sum += float(
+                    kl_divergence(
+                        init_logits / temperature, new_scaled, batch.pack_mask,
+                    ).sum()
+                )
 
     entropy = entropy_sum / n
     return SweepDiagnostics(
@@ -708,6 +782,7 @@ def diagnostics_sweep(
         off_argmax_rate=off_argmax / n,
         mean_logp=logp_sum / n,
         kl_prev_new=kl_sum / n,
+        kl_init_new=kl_init_sum / n,
     )
 
 
@@ -725,10 +800,15 @@ class AnchorWindow:
 
     def __init__(self, maxlen: int, learner_label: str, anchor_label: str) -> None:
         self._window: deque[dict[str, list[float]]] = deque(maxlen=maxlen)
+        self._maxlen = maxlen
         self.learner_label = learner_label
         self.anchor_label = anchor_label
         self.best_margin: float | None = None
         self.best_round: int | None = None
+        # The stall counter shared by --patience and --lr-decay-patience
+        # (FR-035). It only starts once a best exists, i.e. once the window is
+        # full — before that there is nothing to be stalled against.
+        self.rounds_since_best = 0
 
     def add(self, record: DraftRecord) -> None:
         """Append one draft's scored seats, evicting the oldest when full."""
@@ -773,14 +853,41 @@ class AnchorWindow:
             return None
         return learner - anchor
 
-    def observe_round(self, round_index: int) -> None:
-        """Record this round's margin as the new best if it is."""
+    @property
+    def is_full(self) -> bool:
+        """Whether the window holds a full ``anchor_window`` drafts (FR-033)."""
+        return len(self._window) >= self._maxlen
+
+    def observe_round(self, round_index: int) -> bool:
+        """Record this round's margin as the new best if it is; return whether it was.
+
+        **Window-full guard** (FR-033): nothing is recorded until the window is
+        full. A margin over a partly-filled window is computed from fewer drafts
+        and is correspondingly noisy — without the guard an early lucky round
+        would pin the run's best for its whole length. The margin is still
+        *printed* throughout; it just cannot win.
+        """
+        if not self.is_full:
+            return False
         margin = self.margin
         if margin is None:
-            return
+            return False
         if self.best_margin is None or margin > self.best_margin:
             self.best_margin = margin
             self.best_round = round_index
+            self.rounds_since_best = 0
+            return True
+        self.rounds_since_best += 1
+        return False
+
+    def note_lr_decay(self) -> None:
+        """Reset the stall counter after an LR decay (FR-035's cooldown).
+
+        This is what lets annealing pre-empt stopping: with the counter reset on
+        every decay, an armed ``--patience`` cannot fire until no further decay
+        is possible, i.e. at the LR floor.
+        """
+        self.rounds_since_best = 0
 
 
 # --------------------------------------------------------------------------- #
@@ -868,6 +975,7 @@ class RoundDiagnostics:
     sweep: SweepDiagnostics = field(default_factory=SweepDiagnostics)
     policy_loss: float = 0.0
     grad_norm: float = 0.0
+    lr: float = 0.0
     anchor_margin: float | None = None
     label_means: dict[str, float] = field(default_factory=dict)
     window_drafts: int = 0
@@ -936,7 +1044,9 @@ def format_round_lines(diag: RoundDiagnostics) -> list[str]:
             f"  movement : mean logpi={sweep.mean_logp:.3f} "
             f"policy_loss={diag.policy_loss:+.4f} "
             f"grad_norm={diag.grad_norm:.2f} "
-            f"KL(prev||new)={sweep.kl_prev_new:.5f}"
+            f"KL(prev||new)={sweep.kl_prev_new:.5f} "
+            f"KL(init||new)={sweep.kl_init_new:.5f} "
+            f"lr={diag.lr:.1e}"
         ),
         (
             f"  progress : anchor margin={_fmt_margin(diag.anchor_margin)} | "
@@ -944,6 +1054,20 @@ def format_round_lines(diag: RoundDiagnostics) -> list[str]:
             f"window={diag.window_drafts} drafts"
         ),
     ]
+
+
+def _format_run_control(config: TrainDraftAgentOnlineConfig) -> str:
+    """The opt-in stop/anneal settings, or a plain statement that neither is on."""
+    parts: list[str] = []
+    if config.patience is not None:
+        parts.append(f"patience {config.patience} rounds")
+    if config.lr_decay_patience is not None:
+        floor = resolve_min_lr(config.lr, config.min_lr)
+        parts.append(
+            f"lr decay x{config.lr_decay_factor} after "
+            f"{config.lr_decay_patience} rounds, floor {floor:.1e}"
+        )
+    return " | ".join(parts) if parts else "no automatic stop, no LR annealing"
 
 
 def format_startup_echo(
@@ -964,6 +1088,7 @@ def format_startup_echo(
     """
     from draft.application.agent_mix import format_agent_mix
 
+    rounds = window_rounds(config)
     lines = [
         f"Online GRPO run {run_id}: generation {generation} -> {generation + 1}",
         f"  learner   : {config.learner_label} <- {config.learner_checkpoint}",
@@ -987,9 +1112,11 @@ def format_startup_echo(
             f"  optimiser : lr={config.lr:.0e} batch={config.batch_size} "
             f"clip={config.max_grad_norm} warmup={config.warmup_steps} steps"
         ),
+        f"  run ctrl  : {_format_run_control(config)}",
         (
             f"  runtime   : device {device} | embedding width {embedding_dim} | "
-            f"anchor window {config.anchor_window} drafts"
+            f"anchor window {config.anchor_window} drafts "
+            f"({rounds} rounds, ~{rounds / 2:.0f}-round lag)"
         ),
         (
             f"  outputs   : corpus {config.output_path} (append) | "
@@ -1008,9 +1135,10 @@ def format_final_summary(
     elapsed: float,
     latest_path: Path,
     snapshot_path: Path | None,
+    best_path: Path | None,
     window: AnchorWindow,
 ) -> list[str]:
-    """The FR-019 closing block, printed on every one of the three exit paths."""
+    """The FR-019 closing block, printed on every termination path."""
     lines = [
         f"Done after {rounds} rounds | {total_drafts} drafts | "
         f"{learner_picks} learner picks | {_fmt_dur(elapsed)}",
@@ -1018,9 +1146,18 @@ def format_final_summary(
     ]
     if snapshot_path is not None:
         lines.append(f"  final snapshot    : {snapshot_path}")
-    if window.best_margin is None:
-        lines.append("  best anchor margin: n/a (never defined during the run)")
+    if best_path is None:
+        # Either the window never filled, or the margin was never defined. Say
+        # so rather than naming a checkpoint chosen on partial evidence (FR-033).
+        lines.append(
+            "  best checkpoint   : none recorded "
+            f"(anchor window never filled: {window.window_drafts} drafts)"
+            if not window.is_full
+            else "  best checkpoint   : none recorded (margin never defined)"
+        )
+        lines.append("  best anchor margin: n/a")
     else:
+        lines.append(f"  best checkpoint   : {best_path}")
         lines.append(
             f"  best anchor margin: {window.best_margin:+.3f} at round "
             f"{window.best_round} (current {_fmt_margin(window.margin)})"
@@ -1051,9 +1188,17 @@ def base_generation(rl_metadata: dict[str, Any] | None) -> int:
 
 
 def build_rl_metadata(
-    config: TrainDraftAgentOnlineConfig, generation: int,
+    config: TrainDraftAgentOnlineConfig, generation: int, lr_decay_count: int = 0,
 ) -> dict[str, Any]:
-    """Gen-3's self-describing metadata — no critic/GAE/KL/entropy knobs exist."""
+    """Gen-3's self-describing metadata — no critic/GAE/KL/entropy knobs exist.
+
+    ``lr`` is the **base** rate, not the annealed value; ``lr_decay_count``
+    records how far the run annealed (effective LR =
+    ``lr × lr_decay_factor ** lr_decay_count``). The count is provenance only and
+    is never read back — gen-3 has no ``--resume``, so restarting from a snapshot
+    deliberately re-runs warmup and resets both the moments and the decay
+    position (research D13).
+    """
     return {
         "generation": generation + 1,
         "base_checkpoint": str(config.learner_checkpoint),
@@ -1061,6 +1206,7 @@ def build_rl_metadata(
         "lr": config.lr,
         "rollout_temperature": config.rollout_temperature,
         "drafts_per_round": config.drafts_per_round,
+        "lr_decay_count": lr_decay_count,
     }
 
 
@@ -1073,6 +1219,7 @@ def _write_checkpoint(
     generation: int,
     round_index: int,
     path: Path,
+    lr_decay_count: int = 0,
 ) -> None:
     """Write one gen-1-format checkpoint carrying the critic head unchanged.
 
@@ -1090,7 +1237,8 @@ def _write_checkpoint(
         critic_mean=base.critic_mean,
         critic_std=base.critic_std,
         train_config=_stringify(asdict(config)),
-        rl_metadata=build_rl_metadata(config, generation),
+        lr_decay_count=lr_decay_count,
+        rl_metadata=build_rl_metadata(config, generation, lr_decay_count),
     )
 
 
@@ -1120,7 +1268,12 @@ class TrainDraftAgentOnlineUseCase:
             GenerateDraftDataSupervisor,
             build_labeler,
         )
-        from draft.application.train_draft_agent import _make_scheduler, _select_device
+        from draft.application.train_draft_agent import (
+            _make_scheduler,
+            _maybe_decay,
+            _PlateauLR,
+            _select_device,
+        )
         from draft.infrastructure.draft_record_io import append_record
         from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
@@ -1146,6 +1299,15 @@ class TrainDraftAgentOnlineUseCase:
         prev_model.eval()
         for parameter in prev_model.parameters():
             parameter.requires_grad_(False)
+        # π₀ for the cumulative-KL diagnostic: the learner's own warm start,
+        # frozen for the whole run. Not the anchor — that is a different
+        # checkpoint whenever --learner and --frozen differ (research D17).
+        init_model = DraftAgentModel(base.config)
+        init_model.load_state_dict(base.model_state_dict)
+        init_model.to(device)
+        init_model.eval()
+        for parameter in init_model.parameters():
+            parameter.requires_grad_(False)
 
         # One memoizing locator for the labeler, every pick service, and the
         # trainer, so each card's .npz is decompressed once for the whole run.
@@ -1161,9 +1323,18 @@ class TrainDraftAgentOnlineUseCase:
         # round, so the LR schedule and optimizer moments are continuous across
         # rounds (FR-025). An online run has no total step count, so the ramp is
         # expressed in optimizer steps rather than a fraction of a horizon (D15).
+        # The plateau controller folds its multiplier into the same warmup
+        # lambda, so a decay scales the post-warmup constant without re-running
+        # the ramp (FR-035). Constructed even when annealing is disabled — with
+        # no decay ever taken its multiplier stays 1.0.
+        plateau = _PlateauLR(
+            base_lr=config.lr,
+            factor=config.lr_decay_factor,
+            min_lr=resolve_min_lr(config.lr, config.min_lr),
+        )
         scheduler = _make_scheduler(
             optimizer, total_steps=config.warmup_steps, warmup_frac=1.0,
-            controller=None,
+            controller=plateau,
         )
 
         gen_config = self._generation_config(config, temperature)
@@ -1207,6 +1378,8 @@ class TrainDraftAgentOnlineUseCase:
         total_drafts = 0
         total_picks = 0
         snapshot_path: Path | None = None
+        best_path: Path | None = None
+        stop_reason: str | None = None
         start_time = time.monotonic()
         # Append-only, never "w": output/draft/drafts.jsonl is the canonical
         # shared corpus and truncating it would destroy the gen-1 / live-play
@@ -1266,10 +1439,12 @@ class TrainDraftAgentOnlineUseCase:
                             batch_size=config.batch_size,
                             temperature=temperature,
                             device=device,
+                            init_model=init_model,
                         )
                     diag.train_seconds = time.monotonic() - train_start
+                    diag.lr = plateau.current_lr()
 
-                    window.observe_round(rounds)
+                    is_best = window.observe_round(rounds)
                     diag.anchor_margin = window.margin
                     diag.label_means = window.label_means()
                     diag.window_drafts = window.window_drafts
@@ -1279,13 +1454,48 @@ class TrainDraftAgentOnlineUseCase:
                     rounds += 1
                     _write_checkpoint(
                         store, model, optimizer, config, base, generation,
-                        rounds, latest_path,
+                        rounds, latest_path, plateau.decay_count,
                     )
                     _log(f"saved {latest_path} (round {rounds - 1})")
+                    if is_best:
+                        best_path = self._write_best(
+                            store, model, optimizer, config, base, generation,
+                            rounds, plateau.decay_count,
+                            round_index=rounds - 1, margin=window.best_margin,
+                        )
                     if rounds % config.snapshot_every == 0:
                         snapshot_path = self._snapshot(
-                            store, model, optimizer, config, base, generation, rounds,
+                            store, model, optimizer, config, base, generation,
+                            rounds, plateau.decay_count,
                         )
+
+                    # A stalled margin anneals before it stops: the decay resets
+                    # the shared counter, so patience can only fire at the floor
+                    # (FR-035). Both knobs are None unless the operator armed them.
+                    new_lr = _maybe_decay(
+                        window.rounds_since_best, config.lr_decay_patience, plateau,
+                    )
+                    if new_lr is not None:
+                        _log(
+                            f"LR decay #{plateau.decay_count} -> {new_lr:.2e} after "
+                            f"{config.lr_decay_patience} rounds without a new best "
+                            "margin"
+                        )
+                        window.note_lr_decay()
+                    elif (
+                        config.patience is not None
+                        and window.rounds_since_best >= config.patience
+                    ):
+                        stop_reason = (
+                            f"no new best anchor margin for {config.patience} rounds"
+                            + (
+                                f" at the LR floor ({plateau.current_lr():.2e})"
+                                if config.lr_decay_patience is not None else ""
+                            )
+                        )
+                        _log(f"Stopping: {stop_reason}")
+                        break
+
                     if supervisor._shutdown.is_set():
                         break
             finally:
@@ -1293,11 +1503,12 @@ class TrainDraftAgentOnlineUseCase:
 
         snapshot_path = self._snapshot(
             store, model, optimizer, config, base, generation, rounds,
+            plateau.decay_count,
         )
         for line in format_final_summary(
             rounds=rounds, total_drafts=total_drafts, learner_picks=total_picks,
             elapsed=time.monotonic() - start_time, latest_path=latest_path,
-            snapshot_path=snapshot_path, window=window,
+            snapshot_path=snapshot_path, best_path=best_path, window=window,
         ):
             _log(line)
         return rounds
@@ -1367,12 +1578,42 @@ class TrainDraftAgentOnlineUseCase:
         base: Any,
         generation: int,
         rounds: int,
+        lr_decay_count: int = 0,
     ) -> Path:
         path = CHECKPOINT_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
         _write_checkpoint(
             store, model, optimizer, config, base, generation, rounds, path,
+            lr_decay_count,
         )
         _log(f"snapshot {path} (round {rounds})")
+        return path
+
+    @staticmethod
+    def _write_best(
+        store: DraftAgentStore,
+        model: DraftAgentModel,
+        optimizer: torch.optim.Optimizer,
+        config: TrainDraftAgentOnlineConfig,
+        base: Any,
+        generation: int,
+        rounds: int,
+        lr_decay_count: int,
+        *,
+        round_index: int,
+        margin: float | None,
+    ) -> Path:
+        """Write ``best_{timestamp}.pt`` for a new best anchor margin (FR-033).
+
+        A fresh file per best rather than one rolling ``best.pt``: the margin
+        lags the policy by about half the window, so the genuinely best weights
+        may be a few rounds earlier and the history is worth keeping.
+        """
+        path = CHECKPOINT_DIR / f"best_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pt"
+        _write_checkpoint(
+            store, model, optimizer, config, base, generation, rounds, path,
+            lr_decay_count,
+        )
+        _log(f"best {path} (round {round_index}, margin {_fmt_margin(margin)})")
         return path
 
 

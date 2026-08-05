@@ -225,8 +225,32 @@ def test_latest_checkpoint_is_a_loadable_gen3_agent(run) -> None:
 
 def test_a_run_end_snapshot_is_written(run) -> None:
     _, _, _, checkpoint_dir, _ = run
-    snapshots = [p for p in checkpoint_dir.glob("*.pt") if p.name != "latest.pt"]
+    snapshots = [
+        p for p in checkpoint_dir.glob("*.pt")
+        if p.name != "latest.pt" and not p.name.startswith("best_")
+    ]
     assert snapshots, "a timestamped snapshot is written at run end"
+
+
+def test_no_best_checkpoint_when_the_window_never_fills(run) -> None:
+    """Two rounds of 2 drafts cannot fill a 100-draft window (FR-033, SC-009)."""
+    _, out, _, checkpoint_dir, _ = run
+    assert not list(checkpoint_dir.glob("best_*.pt"))
+    assert "best anchor margin: n/a" in out or "none recorded" in out
+
+
+def test_movement_line_carries_both_kls_and_the_lr(run) -> None:
+    _, out, _, _, _ = run
+    assert out.count("KL(prev||new)=") == 2
+    assert out.count("KL(init||new)=") == 2
+    assert out.count("lr=") >= 2
+
+
+def test_startup_echo_reports_the_window_geometry(run) -> None:
+    """The operator sees the window's length in rounds and its lag (§ 6.1)."""
+    _, out, _, _, _ = run
+    assert "anchor window" in out
+    assert "rounds," in out and "lag)" in out
 
 
 def test_corpus_grows_by_drafts_per_round_times_rounds(run) -> None:
@@ -246,6 +270,53 @@ def test_round_two_trained_on_drafts_generated_after_round_one(run) -> None:
     assert round_one.isdisjoint(round_two)
     # Round 1's checkpoint write is logged before round 2's block starts.
     assert out.index("saved") < out.index("round 1 |")
+
+
+def test_best_checkpoint_is_written_once_the_window_fills(
+    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
+    monkeypatch: pytest.MonkeyPatch, capsys,
+) -> None:
+    """With anchor_window == drafts_per_round the window fills on round 0."""
+    checkpoint_dir = tmp_path / "models"
+    monkeypatch.setattr(online, "CHECKPOINT_DIR", checkpoint_dir)
+    labeler = _VaryingLabeler()
+    monkeypatch.setattr(
+        "draft.application.generate_draft_data.build_labeler",
+        lambda config, *, locator=None: labeler,
+    )
+    monkeypatch.setattr(
+        "draft.application.generate_draft_data.GenerateDraftDataSupervisor."
+        "_default_launch_worker",
+        lambda self, external_labels: (
+            lambda: _FakeProc([_transcript(f"b{i}") for i in range(8)])
+        ),
+    )
+
+    corpus = tmp_path / "drafts.jsonl"
+    corpus.write_text("", encoding="utf-8")
+    TrainDraftAgentOnlineUseCase().execute(TrainDraftAgentOnlineConfig(
+        learner_label=LEARNER,
+        learner_checkpoint=base_checkpoint,
+        frozen={ANCHOR: base_checkpoint},
+        mix=[(LEARNER, 5), (ANCHOR, 3)],
+        scorer_checkpoint=base_checkpoint,
+        cards_path=cards_path,
+        rollout_temperature=2.0,
+        drafts_per_round=DRAFTS_PER_ROUND,
+        anchor_window=DRAFTS_PER_ROUND,   # fills on the very first round
+        snapshot_every=100,
+        max_rounds=2,
+        batch_size=8,
+        output_path=corpus,
+    ))
+    out = capsys.readouterr().out
+
+    bests = list(checkpoint_dir.glob("best_*.pt"))
+    assert bests, "a best checkpoint is written once the window is full"
+    ckpt = DraftAgentStore().load_checkpoint(bests[0])
+    assert ckpt.rl_metadata["algorithm"] == "online-grpo"
+    assert "best checkpoint   :" in out
+    assert "best models" in out or "best " in out
 
 
 def test_the_corpus_is_appended_never_truncated(
