@@ -61,8 +61,9 @@ the learner label when the independent draw produces none
 
 **Not offered** (spec FR-006 / Out of Scope): `--value-weight`, `--gae-lambda`,
 `--kl-coef`, `--entropy-coef` and any **loss-coefficient** schedule,
-`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (rollouts are always
-sampled), `--num-workers` (one resident worker suffices).
+`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (fixed per category —
+the learner samples at `-T`, frozen agents play argmax; research D5),
+`--num-workers` (one resident worker suffices).
 
 ## Exit codes
 

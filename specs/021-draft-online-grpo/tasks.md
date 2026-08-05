@@ -142,7 +142,7 @@ margin plus each label's windowed mean.
 - [X] T040 [P] [US2] Forward the property from `DraftWorkerConnector.start` in `src/draft/infrastructure/draft_worker_connector.py` (L29, `system_properties` built at L57–L61): new optional `required_agent: str | None = None` keyword adding `draft.required.agent` to `system_properties`; omit the entry when None so existing callers are unchanged. T036(c) supplies the caller and T042 supplies the value — all three links are needed for FR-003
 - [X] T041 [US2] Implement `AnchorWindow` in `src/draft/application/train_draft_agent_online.py` per data-model § 7 — a `deque(maxlen=anchor_window)` fed one entry per arriving record, `label_mean`, `margin`, `window_drafts`, and best-margin tracking; the anchor label is bound once at startup and never re-bound (FR-021)
 - [X] T042 [US2] Implement `TrainDraftAgentOnlineUseCase.execute` in `src/draft/application/train_draft_agent_online.py`:
-  - Build **one** `ConvertedCardLocator` and pass it to both `generate_draft_data.build_labeler(config, locator=…)` and `AgentRegistry.build(…, locator=…)` (`--frozen` paths as `agent_checkpoints`, `{learner_label: AgentPickService.from_model(...)}` as `preloaded`, `pick_mode="sample"` at `-T` for every model seat per research D5).
+  - Build **one** `ConvertedCardLocator` and pass it to both `generate_draft_data.build_labeler(config, locator=…)` and `AgentRegistry.build(…, locator=…)` (`--frozen` paths as `agent_checkpoints`, `{learner_label: AgentPickService.from_model(...)}` as `preloaded`, `pick_mode="sample"` at `-T` for every model seat per research D5). **Superseded by Phase 8** (T072): D5 was rewritten so only the learner samples — frozen agents play argmax and every service is passed via `preloaded`.
   - Construct the `GenerateDraftDataConfig` the supervisor needs from the resolved online config, setting every field **explicitly** rather than relying on its defaults (`GenerateDraftDataConfig.build_method` defaults to `"picker"`; gen-3's default is `"greedy"`): `build_method`, `picker_checkpoint`, `scorer_checkpoint`, `cards_path`, `agent_mix`, `agent_checkpoints`, `set_code`, `seed`, `max_consecutive_faults`, `pick_mode="sample"`, `temperature=T`, and **`required_agent=learner_label`** (T036(c) → T040 → the JVM property); then instantiate `GenerateDraftDataSupervisor` with the shared labeler + registry.
   - Open the corpus once in **`"a"` mode**, line-buffered — never `"w"`: `output/draft/drafts.jsonl` is the canonical shared corpus and truncating it destroys the gen-1/live-play data (FR-020).
   - Launch `iter_records` once, then per round pull `--drafts-per-round` records with `model.eval()`, append each record as it arrives, feed the anchor window, switch to `model.train()` for the US1 update, and continue until `--max-rounds` or interrupt (FR-005, FR-012, FR-020, FR-029, FR-031, research D1/D2/D14).
@@ -312,6 +312,25 @@ checkpoint cadence all exist).
 - [X] T069 Update `README.md` + `CLAUDE.md` for the three artifact kinds and the opt-in run-control knobs; re-run the full gate (`pytest`, `ruff check src/ tests/`, `cd forge-connector && mvn test`)
 
 **Checkpoint**: a stalled run anneals before it stops, the peak is recoverable, and every knob is off unless asked for
+
+---
+
+## Phase 8: Frozen agents play argmax (added 2026-08-05)
+
+**Purpose**: FR-004 / FR-021 / FR-021a per the rewritten research D5. Sampling
+the frozen agents does not merely offset the margin — because a draft allocates
+one fixed pool of cards, a frozen agent's noised pick is *passed downstream* to
+its podmates, so the learner is fed cards a properly-playing agent would have
+kept. Only the learner samples; frozen agents play their best.
+
+- [ ] T070 [P] Registry tests in `tests/unit/draft/test_agent_registry.py`: `AgentRegistry.build` with an empty `agent_checkpoints` and every service supplied via `preloaded` validates labels and runs the geometry checks exactly as the path-loading route does, and the per-service `pick_mode` each was constructed with is preserved (the `build`-level `pick_mode` argument must not override a preloaded service) — the mechanism D5 relies on
+- [ ] T071 [P] Pick-mode wiring tests in `tests/unit/draft/test_online_cli.py` (or a new `test_online_pick_modes.py`): the use case builds the learner service at `pick_mode="sample"` with `temperature == rollout_temperature`, every `--frozen` service at `pick_mode="argmax"`, and passes all of them through `preloaded` with `agent_checkpoints` empty (FR-004, research D5)
+- [ ] T072 Change `TrainDraftAgentOnlineUseCase.execute` in `src/draft/application/train_draft_agent_online.py`: construct one `AgentPickService` per `--frozen` label at `pick_mode="argmax"` (temperature irrelevant there), merge with the learner's `sample`/`T` service, and pass the union as `preloaded` to `AgentRegistry.build` with `agent_checkpoints={}`. No `AgentRegistry` change is needed — `preloaded` (T038) already accepts arbitrarily-configured services
+- [ ] T073 Extend the startup echo's `rollout` line to state the split explicitly — e.g. `T=3.0 (learner samples; frozen play argmax)` — so a log alone shows which regime produced its margins (FR-013, contract § 1)
+- [ ] T074 Update the integration smoke test `tests/integration/test_train_draft_agent_online_smoke.py` for the new wiring, and document in `README.md` + `CLAUDE.md` that only the learner samples, that the margin therefore opens negative, and that margins do not compare across a change of `-T` / `--mix` / pick modes (FR-021a)
+- [ ] T075 Re-run the full gate (`pytest`, `ruff check src/ tests/`); no Java change is involved
+
+**Checkpoint**: the training field plays at full strength, the margin's zero point is documented rather than assumed, and the first run under the new regime establishes the new scale
 
 ---
 

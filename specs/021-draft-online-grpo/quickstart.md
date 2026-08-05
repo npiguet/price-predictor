@@ -59,6 +59,7 @@ round 12 | drafts 10 (120) | picks 1789 (2 seats dropped) | gen 74s train 38s | 
 | What you see | What it means | What to do |
 |---|---|---|
 | `margin` rising over rounds | Working. | Keep going. |
+| `margin` negative early | Expected, not a fault. The learner samples at `-T` while the anchor plays argmax, so you start in the hole by the learner's sampling handicap — round 0 tells you how deep. Crossing zero means the learner has genuinely overtaken a properly-playing anchor. | Keep going. |
 | `margin` flat, `\|A\|<0.1` climbing toward 100% | The reward isn't discriminating picks — nothing to learn. | Not a temperature problem. Pause and run the yardstick; consider more drafts per round. |
 | `ppl` sagging toward 1, `off-argmax` toward 0 | Exploration collapse — the policy only ever samples its argmax, so the top pick can never be displaced. | Raise `-T` and restart from the latest checkpoint. |
 | `KL(prev\|\|new)` large / erratic, `grad_norm` spiking | The step is too big for the round size. | Lower `--lr` (or raise `--drafts-per-round`). Watch `lr` on the same line once annealing is armed. |

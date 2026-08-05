@@ -196,18 +196,71 @@ agent, or the learner", instead of a second validation path in the trainer.
 Avoids loading the learner checkpoint twice (once into the trainer, once into a
 throwaway service).
 
-### D5 — Every model-piloted seat samples at the same `-T`
+### D5 — The learner samples at `-T`; frozen agents play argmax
 
-**Decision**: The learner *and* the frozen agents are served in `pick_mode="sample"`
-at `--rollout-temperature`. There is no per-category pick-mode flag.
+**Superseded the original "every model-piloted seat samples" decision on
+2026-08-05.** The reasoning below replaces it; the original is preserved at the
+end for the record.
 
-**Rationale**: (a) FR-004 requires the learner's rollouts to be sampled at `T`;
-(b) an anchor evaluated at argmax while the learner is sampled would put a fixed
-sampling handicap on only one side of the margin — like-for-like sampling makes
-`mean(learner) − mean(anchor)` a comparison of two policies under identical
-conditions; (c) it matches `AgentRegistry.build`'s existing one-mode-for-all-services
-signature. The anchor's absolute level is irrelevant — FR-021 only requires it not
-to move, and it does not.
+**Decision**: The learner is served in `pick_mode="sample"` at
+`--rollout-temperature`. Every **frozen** agent is served in
+`pick_mode="argmax"` — its best play. Forge built-ins are unaffected either way
+(their randomisation is Java-side and independent of `-T`).
+
+**Rationale**: drafting is a zero-sum allocation of a fixed pool of cards, so an
+opponent's mistake is not a private penalty — it is a **transfer**. When a
+sampled frozen agent takes the wrong card, the card it should have taken stays in
+the pack and flows downstream. Two things follow, and the original decision
+counted only the first:
+
+1. the frozen agent's own pool degrades, lowering its score; and
+2. **its podmates, including the learner, receive cards a properly-playing agent
+   would have kept.**
+
+So sampling the frozen agents does not merely mis-scale the margin: it makes the
+training environment easy in exactly the dimension drafting is about — what
+wheels, and what is still there when the pack comes back. At `-T 3.0` a frozen
+agent sits near 35 % off-argmax, and with a mix like `gen3:3,gen1:5,…` half the
+pod is a competent agent donating cards on purpose. The learner is then optimised
+against a field that does not exist at evaluation time, where every agent plays
+argmax (§ 7 yardstick).
+
+**Why the original "like-for-like" argument does not hold**: it observed that an
+argmax anchor puts a sampling handicap on only one side of the margin. True, but
+that argument only concerns the margin's **zero point**, which round 0 measures
+directly and for free (learner and anchor start from identical weights). It
+bought a convenient zero at the cost of a distorted training environment — a bad
+trade. Its third reason, matching `AgentRegistry.build`'s one-mode-for-all
+signature, is implementation convenience and is not binding: the `preloaded`
+parameter (D4) already accepts arbitrarily-configured services.
+
+**Consequences that are now normative** (data-model § 7.1):
+
+- The margin **no longer starts at ~0**. At round 0 the learner carries its
+  sampling handicap while the anchor carries none *and* stops donating cards, so
+  the margin opens clearly negative. Round 0 measures that offset exactly.
+- The margin **amplifies**. Because seats compete for the same cards, a learner
+  that improves also starves its podmates: learner up *and* anchor down. The
+  measured margin moves at roughly twice the underlying skill gap. This is a
+  property of any co-seated comparison and the § 7 yardstick shares it — which
+  keeps the two instruments consistent, but means neither is an absolute measure
+  of "how much better".
+- Margins are **not comparable across this change**, nor across a change of `-T`
+  or of `--mix`.
+
+**Implementation**: no `AgentRegistry` change. The trainer constructs the frozen
+services itself at `pick_mode="argmax"` and passes every service — learner at
+`sample`/`T`, frozen at `argmax` — through `preloaded`, leaving
+`agent_checkpoints` empty. Label validation and the geometry checks already cover
+preloaded labels (D4).
+
+**Superseded original (2026-08-05)**: "The learner *and* the frozen agents are
+served in `pick_mode="sample"` at `--rollout-temperature`… like-for-like sampling
+makes `mean(learner) − mean(anchor)` a comparison of two policies under identical
+conditions… The anchor's absolute level is irrelevant — FR-021 only requires it
+not to move, and it does not." The last clause is the error: the anchor's
+*level* is indeed irrelevant, but its *play* is not, because its play determines
+what the learner is passed.
 
 ### D6 — Training states are rebuilt from the finished record, not captured at pick time
 

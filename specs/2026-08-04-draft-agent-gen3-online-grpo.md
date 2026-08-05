@@ -140,10 +140,11 @@ worker and binds two pick services: the learner label to the live in-training
 policy (`--learner`, updated every round) and the anchor label to a frozen agent
 (`--frozen` / `--anchor`, never updated). Each round:
 
-1. **Generate** — drive the resident worker for `--drafts-per-round` fresh drafts
-   (`--pick-mode sample`, temperature `T`). The current policy pilots the learner
-   seats; frozen + Forge/random seats pilot the rest (`--mix`). Each seat's pool is
-   built (`--build-method`) and scored (`--scorer-checkpoint`) → `deck_score`.
+1. **Generate** — drive the resident worker for `--drafts-per-round` fresh drafts.
+   The current policy pilots the learner seats, **sampled at `T`**; frozen agents
+   pilot theirs at **argmax**; Forge/random seats fill the rest (`--mix`, § 8.1).
+   Each seat's pool is built (`--build-method`) and scored
+   (`--scorer-checkpoint`) → `deck_score`.
 2. **Update** — one-pass GRPO over the learner picks (§ 4): πₖ → πₖ₊₁.
 3. **Swap** — push πₖ₊₁ into the learner pick service (frozen services untouched).
 4. **Log + save** — print diagnostics (§ 6), write `latest.pt` (+ periodic
@@ -185,8 +186,20 @@ no-progress, and collapse from the log alone:
 anchor_margin = mean(learner deck_score) − mean(frozen-anchor deck_score)   over the last --anchor-window drafts
 ```
 
-- Anchor frozen ⇒ an absolute progress curve (climbs, then plateaus);
-  `learner − Forge` comes free.
+- Anchor frozen ⇒ a progress curve against a fixed point (climbs, then
+  plateaus); `learner − Forge` comes free.
+- **It does not start at zero.** The learner samples at `T`, the anchor plays
+  argmax (§ 8.1), so the margin opens negative by the learner's sampling
+  handicap. Round 0 measures that offset exactly — learner and anchor begin from
+  identical weights — and crossing zero means the learner has genuinely overtaken
+  a properly-playing anchor.
+- **It amplifies.** Seats compete for one pool of cards, so a learner that
+  improves also takes cards its podmates would have had: the learner rises *and*
+  the anchor falls. The margin moves at roughly twice the underlying skill gap.
+  The yardstick (§ 7) co-seats too and shares this, so the two agree — but
+  neither is an absolute measure of how much better one agent is.
+- **It is not comparable across runs** that change `-T`, `--mix`, or the § 8.1
+  pick modes. Each such change starts a new scale.
 - Computed from `deck_score`s already in hand — no extra command; also
   recomputable post-hoc via `analyze-generated-decks`.
 - Guideline exploration band: perplexity ≈ 2–3 / off-argmax ≈ 25–40 %; watch it
@@ -381,11 +394,20 @@ plateau annealing under § 6.2) is a separate thing and is kept.
 
 A mix label names a kind of seat. Every label is exactly one of three categories:
 
-| Category | Flag | Notes |
-|----------|------|-------|
-| **Forge-piloted** | _(none)_ | Built-ins `forge-full` (pure Forge AI), `forge-r30` / `forge-r100` (30 % / 100 % of picks made uniformly random). Just name them in `--mix`. |
-| **Frozen** | `--frozen NAME=PATH` (repeatable) | Untrained reference bound to a checkpoint; the gen-1 anchor is one. `--anchor` picks which is the margin baseline (defaults to the sole frozen agent). |
-| **Learner** | `--learner NAME=PATH` (exactly one) | The policy being trained; weights held in memory, updated each round. One learner only. |
+| Category | Flag | Plays at | Notes |
+|----------|------|----------|-------|
+| **Forge-piloted** | _(none)_ | Forge's own logic | Built-ins `forge-full` (pure Forge AI), `forge-r30` / `forge-r100` (30 % / 100 % of picks made uniformly random). Just name them in `--mix`. Their randomisation is internal to Forge and unaffected by `T`. |
+| **Frozen** | `--frozen NAME=PATH` (repeatable) | **argmax** | Untrained reference bound to a checkpoint; the gen-1 anchor is one. `--anchor` picks which is the margin baseline (defaults to the sole frozen agent). |
+| **Learner** | `--learner NAME=PATH` (exactly one) | **sampled at `T`** | The policy being trained; weights held in memory, updated each round. One learner only. |
+
+**Why only the learner samples.** Sampling is the learner's sole exploration
+mechanism, so it must. A frozen agent must not, because a draft allocates one
+fixed pool of cards: a card an agent wrongly declines does not vanish, it flows
+downstream to its podmates. A sampled frozen agent therefore **hands the learner
+cards a properly-playing agent would have kept**, making the training field weak
+in precisely the dimension drafting is about — what wheels, and what is still
+there when the pack comes back — and unlike the evaluation field (§ 7), where
+every agent plays argmax.
 
 `--mix "label:weight,…"` — each of the pod's seats is drawn independently from this
 categorical (weights are relative, not exact counts).

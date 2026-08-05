@@ -55,9 +55,16 @@ an optional `preloaded: dict[str, AgentPickService]`. Preloaded labels count as
 (`config.packs == PACKS`, `config.P ≥ pack_size` when known). The online trainer
 passes `{learner_label: live_service}` and `--frozen` as `agent_checkpoints`.
 
-All model-piloted seats (learner **and** frozen) are served in
-`pick_mode="sample"` at `--rollout-temperature`, so the anchor margin compares two
-policies under identical sampling conditions (research D5).
+The two model-piloted categories are served in **different** pick modes
+(research D5): the learner in `pick_mode="sample"` at `--rollout-temperature`,
+since sampling is its only exploration mechanism; every frozen agent in
+`pick_mode="argmax"`, its best play. A sampled frozen agent would pass downstream
+the cards it wrongly declined, feeding the learner a field that plays worse than
+it can — a training-environment distortion, not merely a margin offset.
+
+The online trainer therefore builds **all** services itself and passes them via
+`preloaded`, leaving `agent_checkpoints` empty; `AgentRegistry.build`'s single
+`pick_mode` argument is not used to configure them.
 
 ## 3. Java worker: `-Ddraft.required.agent`
 
