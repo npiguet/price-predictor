@@ -1,0 +1,150 @@
+# CLI contract: `python -m draft train-draft-agent-online`
+
+**Feature**: 021-draft-online-grpo | Authority:
+[`specs/2026-08-04-draft-agent-gen3-online-grpo.md`](../../2026-08-04-draft-agent-gen3-online-grpo.md) § 8,
+[spec.md](../spec.md) FR-001…FR-029.
+
+Runs the online, critic-free GRPO loop in one process: generate
+`--drafts-per-round` fresh drafts from the current policy → one pass of
+`−A·logπ_T(a|s)` → discard → regenerate. Runs until `--max-rounds` or Ctrl-C.
+
+## Flags
+
+### Agent wiring (three categories — spec FR-003)
+
+| Flag | Type | Default | Meaning |
+|---|---|---|---|
+| `--learner NAME=PATH` | `LABEL=PATH` | *(required, exactly one)* | The agent under training. `NAME` is its mix label; `PATH` warm-starts the policy at round 0. Its weights update every round, in memory. A bare `PATH` is **not** accepted — the label is load-bearing. |
+| `--frozen NAME=PATH` | repeatable `LABEL=PATH` | *(none)* | An untrained reference bound to a checkpoint (e.g. the gen-1 anchor). Never enters the gradient. |
+| `--anchor NAME` | `LABEL` | sole `--frozen` label | Which frozen label is the anchor-margin baseline. Required only when more than one `--frozen` is given. |
+| `--mix "label:weight,…"` | mix spec | `gen-3:5,gen-1:3,forge-r30:1,forge-r100:1` | Per-seat categorical over learner + frozen + Forge built-ins (`forge-full`, `forge-r30`, `forge-r100`). Weights are relative. |
+
+Every generated pod carries **≥1 learner seat**: the worker forces one seat to
+the learner label when the independent draw produces none
+([rollout-stream.md](rollout-stream.md)).
+
+### Deck building & reward (same meaning as `generate-draft-data`)
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--scorer-checkpoint` | `models/sealed/scorer/latest.pt` | Frozen scorer → each seat's `deck_score` = the reward. Must exist. |
+| `--build-method {greedy,picker}` | `greedy` | Pool → deck before scoring. |
+| `--picker-checkpoint` | `models/sealed/picker/latest.pt` | Used only with `--build-method picker`; must exist then. |
+| `--cards-path` | `output/cardsfolder/` | `.npz` embedding cache; fixes the model/scorer input width. |
+
+### Rollout & optimisation
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `-T`, `--rollout-temperature` | *(required, no default)* | Sampling temperature; **every** policy distribution (logπ, entropy, KL) uses it. Must be > 0. |
+| `--lr` | `1e-4` | AdamW learning rate. |
+| `--drafts-per-round` | `10` | Fresh drafts generated and trained on (one pass) per round. |
+| `--anchor-window` | `100` | Sliding window (drafts) backing the anchor margin. |
+| `--snapshot-every` | `25` | Rounds between timestamped checkpoint snapshots (`latest.pt` is written every round). |
+| `--max-rounds` | *(none)* | Optional round budget; omitted ⇒ runs until Ctrl-C. |
+| `--set` | *(none)* | Restrict every draft to one set; else a random sealed-legal set per draft. |
+| `--output-path` | `output/draft/drafts.jsonl` | Corpus appended with every generated draft (shared file, clarified 2026-08-05). |
+| `--seed` | `42` | Torch/numpy init, batch shuffling, pick-sampling RNG. Forge-side randomness is **not** seeded. |
+| `--batch-size` | `32` | States per gradient step; fixed-and-forget (8 GB VRAM budget). |
+| `--max-grad-norm` | `1.0` | Per-parameter-group gradient-norm cap. |
+| `--warmup-steps` | `200` | Linear LR ramp over the first N optimizer steps of the run, then constant. |
+| `--max-consecutive-faults` | `5` | Abort after this many consecutive pick-fault-abandoned drafts. |
+
+**Not offered** (spec FR-006 / Out of Scope): `--value-weight`, `--gae-lambda`,
+`--kl-coef`, `--entropy-coef` and any coefficient schedule, `--val-fraction`,
+`--patience`, `--epochs`, `--lr-decay-*`, `--resume`, `--pick-mode` (rollouts are
+always sampled), `--num-workers` (one resident worker suffices).
+
+## Exit codes
+
+| Code | Condition |
+|---|---|
+| `0` | `--max-rounds` reached, or Ctrl-C after a clean shutdown (final summary printed) |
+| `1` | `--max-consecutive-faults` consecutive abandoned drafts |
+| `2` | Startup validation failure (data-model § 1.1), missing file, bad flag value |
+| `6` | Checkpoint architecture error (`DraftAgentArchitectureError`) |
+| `130` | Interrupted before the loop started |
+
+All validation runs **before** the Forge worker launches and before any update
+(spec FR-024, SC-006).
+
+## stdout contract
+
+Timestamped `[YYYY-MM-DD HH:MM:SS] ` prefix on every line (the project's
+`_log`). Lines are flushed as they are written so `... | tee run.log` is live.
+
+### 1. Startup echo (FR-013) — once, before the worker launches
+
+```
+Online GRPO run <run_id>: generation 2 -> 3
+  learner   : gen-3 <- models/draft/agent/gen1/latest.pt
+  frozen    : gen-1 <- models/draft/agent/gen1/latest.pt  (anchor)
+  mix       : gen-3:5,gen-1:3,forge-r30:1,forge-r100:1  (>=1 learner seat forced)
+  reward    : scorer models/sealed/scorer/latest.pt | build-method greedy
+  rollout   : T=2.0 | drafts/round=10 | set=BLB | seed=42
+  optimiser : lr=1e-04 batch=32 clip=1.0 warmup=200 steps
+  runtime   : device cuda | embedding width 528 | anchor window 100 drafts
+  outputs   : corpus output/draft/drafts.jsonl | checkpoints models/draft/agent/ (snapshot every 25 rounds)
+```
+
+### 2. Per-round block (FR-014…FR-018) — one summary line + four detail lines
+
+```
+round 12 | drafts 10 (120) | picks 1789 (2 seats dropped) | gen 74s train 38s | R +0.118+-1.842 | |A|<0.1 18% | ppl 2.41 | KL 0.0042 | margin +0.372
+  reward   : learner seats=41 R mean=+0.118 std=1.842 | A std=1.000 |A|<0.1=18.2% |A|>0.5=61.0% max|A|=2.31
+  explore  : H=0.881 ppl=2.413 off-argmax=31.4%   (band: ppl 2-3 / off-argmax 25-40%)
+  movement : mean logpi=-1.204 policy_loss=-0.0153 grad_norm=0.83 KL(prev||new)=0.00421
+  progress : anchor margin=+0.372 | gen-3=6.412 gen-1=6.040 forge-r30=5.101 forge-r100=3.884 | window=100 drafts
+```
+
+Required properties (SC-003, SC-004):
+
+- Exactly one summary line and four detail lines per round, every round.
+- `reward` carries the near-zero-advantage fraction → "nothing to learn" is
+  readable.
+- `explore` carries entropy, perplexity and the off-argmax rate → collapse
+  (`ppl → 1`, `off-argmax → 0`) is readable.
+- `movement` carries the pre-clip gradient norm and the KL to the previous
+  round's policy → an over-large step is readable.
+- `progress` carries the margin, every label's raw windowed mean, and the window
+  size → progress/no-progress is readable without pausing training.
+
+A degenerate round replaces the four detail lines with one line and takes no
+optimizer step (FR-023):
+
+```
+round 12 | drafts 10 (120) | skipped (no signal): 1 surviving learner reward | margin +0.372
+```
+
+### 3. Incidental lines
+
+- Worker restart, abandoned draft, and pick-fault lines are inherited verbatim
+  from the live-play supervisor.
+- Checkpoint writes: `saved models/draft/agent/latest.pt (round 12)` and, on the
+  snapshot cadence, `snapshot models/draft/agent/20260805_141233.pt (round 25)`.
+
+### 4. Final summary (FR-019) — on `--max-rounds`, Ctrl-C, or fault abort
+
+```
+Done after 137 rounds | 1370 drafts | 24451 learner picks | 4h12m
+  latest checkpoint : models/draft/agent/latest.pt
+  final snapshot    : models/draft/agent/20260805_181940.pt
+  best anchor margin: +0.514 at round 108 (current +0.489)
+```
+
+## Behavioural contract
+
+1. **On-policy by construction** — the learner seats of round *k* are piloted by
+   the weights that round *k*'s pass updates; the batch is used once and dropped
+   (FR-011, FR-012, SC-008).
+2. **One resident worker** — the Forge JVM starts once per run and is driven every
+   round; a crash restarts it and the run continues (FR-005).
+3. **Continuity** — optimizer state and the LR schedule live in memory for the
+   whole run; a single warmup at the start. Checkpoints are snapshots, not
+   training state (FR-025, FR-026).
+4. **Frozen anchor** — the anchor label's service is never updated and never
+   re-bound during a run (FR-021).
+5. **No automatic stop** — no held-out loss, no best-checkpoint selection, no
+   early stop. Stopping and promotion are operator judgments (FR-026, FR-030).
+6. **Ctrl-C** — finishes the in-flight round's bookkeeping, writes a final
+   snapshot, prints the final summary, terminates the worker, exits `0`.
