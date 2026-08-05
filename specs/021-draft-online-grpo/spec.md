@@ -32,6 +32,11 @@ repeated here.
 
 - Q: How is the streaming generate→train→repeat loop driven? → A: A single dedicated in-process online-training command owns the whole loop — it invokes the existing generation path in-process each round, applies the one-pass GRPO update, and holds the optimiser state, LR schedule, and checkpoint continuity in memory across rounds.
 
+### Session 2026-08-05
+
+- Q: Where is the streaming self-play corpus written on disk? → A: Appended to the shared `output/draft/drafts.jsonl` (the same file gen-1 / live-play use); sample-mode online rollouts mix into the canonical corpus by design.
+- Q: Where are gen-3 checkpoints written? → A: The shared `models/draft/agent/` with a shared `latest.pt`, exactly like gen-1/gen-2; `latest.pt` tracks the in-progress gen-3 during a run (tools defaulting to `latest.pt` pick up the in-progress agent).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Apply one online GRPO update from a fresh self-play batch (Priority: P1)
@@ -163,7 +168,7 @@ diagnostics MUST at minimum cover four axes each round: **reward signal**,
 - **FR-017**: Each round MUST compute and log the **anchor margin** live — mean deck-quality of the gen-3 (learner) seats minus mean deck-quality of the frozen-reference seats, over a sliding recent-drafts window — alongside the raw component means (learner, frozen gen-1 anchor, and Forge field) and the window size / draft count backing them. This is the round-over-round absolute-progress signal and MUST NOT require pausing training or a separate command to read.
 - **FR-018**: Each round MUST log a single consolidated **round-summary line** (round index, drafts and learner-pick counts this round, generation + training wall-clock for the round, and the headline figures from FR-014–FR-017) so the whole run's trajectory is scannable from one column of stdout. The detailed per-axis lines (FR-014–FR-017) accompany it.
 - **FR-019**: At run end or on operator interrupt the system MUST log a **final summary**: rounds completed, total drafts generated, the latest checkpoint path, and the best anchor margin observed and the round it occurred at.
-- **FR-020**: The streaming self-play corpus MUST also accumulate on disk in the unchanged corpus schema, so the same anchor margin (and full deck-composition detail) can be recomputed post-hoc by the existing per-agent deck-composition analysis. The live FR-017 log is the in-loop signal; the on-disk corpus is the authoritative/detailed read.
+- **FR-020**: The streaming self-play corpus MUST also accumulate on disk in the unchanged corpus schema, **appended to the shared `output/draft/drafts.jsonl`** (the same corpus file gen-1 / live-play use), so the same anchor margin (and full deck-composition detail) can be recomputed post-hoc by the existing per-agent deck-composition analysis. The live FR-017 log is the in-loop signal; the on-disk corpus is the authoritative/detailed read. (Sample-mode online rollouts mixing into the canonical corpus is accepted — clarified 2026-08-05.)
 - **FR-021**: The frozen reference used for the anchor margin MUST stay fixed for the whole run (never swapped to a later generation or to "previous round").
 
 **Failure handling & integrity**
@@ -177,7 +182,7 @@ diagnostics MUST at minimum cover four axes each round: **reward signal**,
 - **FR-025**: Optimisation MUST reuse the gen-1/gen-2 trainer conventions (adaptive optimiser with per-group gradient-norm clipping, linear-warmup-then-constant learning rate, fixed batch size within the 8 GB VRAM budget). The optimiser state and learning-rate schedule MUST be continuous across rounds (a single warmup at the start of the run, then constant), not reset per round. The per-round gradient norm (pre-clip) MUST be included in the round's movement diagnostics (FR-016).
 - **FR-026**: The online loop MUST NOT use a held-out-loss best-checkpoint / early-stop guard. It MUST persist a "latest" checkpoint each round plus periodic timestamped snapshots; checkpoint selection and stopping are the operator's judgment, driven by the live anchor margin (FR-017) and the external yardstick (FR-030).
 - **FR-027**: The next checkpoint MUST be written in the gen-1 agent checkpoint format (trunk + policy + critic + recency/context tables, config, round/epoch counters) plus gen-3 RL metadata: the generation index, the base-checkpoint identity, the algorithm tag (`online-grpo`), and the RL hyper-parameters (learning rate, rollout temperature, drafts-per-round). The critic head is carried unchanged; no critic, GAE, KL, or entropy hyper-parameters are stored. Encoder weights are not trained or stored (Phase A).
-- **FR-028**: Checkpoints MUST be written to the existing agent checkpoint location, producing both timestamped files and a "latest" pointer, consistent with gen-1/gen-2.
+- **FR-028**: Checkpoints MUST be written to the existing agent checkpoint location — the shared `models/draft/agent/` — producing both timestamped files and a shared `latest.pt` pointer, consistent with gen-1/gen-2. `latest.pt` is rewritten every round, so during a run it tracks the in-progress gen-3 (tools defaulting to `latest.pt` pick up the in-progress agent — accepted, clarified 2026-08-05).
 
 **Loop orchestration**
 
