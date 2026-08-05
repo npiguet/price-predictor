@@ -16,14 +16,17 @@ next round with the updated weights. There is no critic term, GAE, KL anchor,
 entropy bonus, val split, or early stop.
 
 The build is: the round loop + the update + four-axis per-round stdout
-diagnostics (reward signal, exploration, movement, live anchor margin), plus four
+diagnostics (reward signal, exploration, movement, live anchor margin), plus five
 small named extensions to existing components —
 `GenerateDraftDataSupervisor.iter_records()` (the resident-worker record stream),
 `AgentPickService.from_model()` (learner seats served by the live model),
-`AgentRegistry.build(preloaded=…)`, and a `-Ddraft.required.agent` property in the
-Java worker that guarantees ≥1 learner seat per pod. Model, typed-token state,
-corpus schema, checkpoint format, deck labeler, scorer, and the cross-generation
-yardstick are reused unchanged.
+`AgentRegistry.build(preloaded=…)`, `build_labeler(…, locator=…)` (so one
+memoizing card locator serves the whole run), and a `-Ddraft.required.agent`
+property in the Java worker — plumbed end-to-end through a
+`GenerateDraftDataConfig.required_agent` field and the existing launcher — that
+guarantees ≥1 learner seat per pod. Model, typed-token state, corpus schema,
+checkpoint format, deck labeler, scorer, and the cross-generation yardstick are
+reused unchanged.
 
 ## Technical Context
 
@@ -124,8 +127,10 @@ during `/speckit.clarify` is settled by D12.
 
 - **I/O batching & caching** — *addressed*: one memoizing `ConvertedCardLocator`
   shared by the deck labeler, all pick services, and the trainer, so each card's
-  `.npz` is decompressed once per run; per-round embedding table built from cache
-  hits; corpus handle opened once and appended per record (research D14).
+  `.npz` is decompressed once per run — which is why `build_labeler` gains an
+  optional `locator` parameter instead of constructing its own; per-round
+  embedding table built from cache hits; corpus handle opened once in append mode
+  and appended per record (research D14).
 - **GPU placement** — *addressed*: learner model, the `prev_model` diagnostics
   copy, frozen pick-service models, scorer and (optional) picker all move to CUDA
   when available; batches are collated onto the device.
@@ -172,7 +177,8 @@ src/draft/
 ├── application/
 │   ├── train_draft_agent_online.py   # NEW — config, round loader, GRPO update, loop, diagnostics
 │   ├── draft_training_common.py      # NEW — extracted leave_one_out_rewards + length_bucketed_batches
-│   ├── generate_draft_data.py        # EXTENDED — iter_records() generator; run() consumes it
+│   ├── generate_draft_data.py        # EXTENDED — iter_records() generator (run() consumes it);
+│   │                                 #   build_labeler(locator=…); config.required_agent forwarded
 │   ├── agent_pick_service.py         # EXTENDED — AgentPickService.from_model(...)
 │   ├── agent_registry.py             # EXTENDED — AgentRegistry.build(..., preloaded=...)
 │   ├── draft_pick_states.py          # REUSED unchanged (per-pick typed-token walk)

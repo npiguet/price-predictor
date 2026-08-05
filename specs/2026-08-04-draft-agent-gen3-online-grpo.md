@@ -248,7 +248,11 @@ per-round `generate-draft-data` subprocess.
 | `--snapshot-every` | _(N rounds)_ | Cadence of timestamped snapshots (besides per-round `latest.pt`). |
 | `--max-rounds` | _(none; until Ctrl-C)_ | Optional round budget. |
 | `--set` | _(none; random set per draft)_ | Restrict rollouts to one set. |
-| `--batch-size`, `--max-grad-norm`, `--warmup-frac` | _(gen-1 defaults; fixed)_ | Batch stays within the 8 GB VRAM budget; one warmup at run start. |
+| `--output-path` | `output/draft/drafts.jsonl` | Corpus every generated draft is appended to (shared file, always opened in append mode). |
+| `--seed` | `42` | Torch/numpy init, per-round batch shuffling, pick-sampling RNG. Forge-side rollout randomness is not seeded. |
+| `--max-consecutive-faults` | `5` | Inherited pick-fault abort: this many consecutive abandoned drafts ends the run nonzero. |
+| `--warmup-steps` | `200` | Linear LR ramp over the first N optimizer steps of the **run**, then constant. An online run has no total step count, so the ramp is expressed in steps, not a fraction. |
+| `--batch-size`, `--max-grad-norm` | _(gen-1 defaults; fixed)_ | Batch stays within the 8 GB VRAM budget. |
 
 No `--gae-lambda` / `--kl-coef` / `--entropy-coef` / `--value-weight` — those
 pieces are dropped.

@@ -151,6 +151,15 @@ The pod would already have been drafted and (worse) the eight decks built and
 scored before we could tell — and FR-003 requires such a pod never be played.
 It would also silently distort the realised mix.
 
+**Plumbing** (the whole chain, so no link is left dangling):
+`GenerateDraftDataConfig` gains an optional `required_agent: str | None = None`;
+`GenerateDraftDataSupervisor._default_launch_worker`
+(`generate_draft_data.py:535`) forwards it to
+`DraftWorkerConnector.start(required_agent=…)`, which adds the property only when
+non-`None`; the online trainer sets it to the learner label on the config it
+builds. Existing callers pass nothing and keep byte-for-byte behaviour. The Java
+change alone is inert — the launch site is what arms it.
+
 **Cost**: the fat JAR must be rebuilt (`cd forge-connector && mvn package
 -DskipTests`) before the first gen-3 run; called out in quickstart.md.
 
@@ -206,10 +215,12 @@ records as taken — which for a model seat *is* the policy's own choice.
 
 **Rationale**: reuses the walk that is already pinned by the gen-1 equivalence
 test, keeps zero new state-reconstruction code, and needs no plumbing from the
-pick service into the trainer. Correctness of the on-policy gradient is
-preserved because the update runs immediately after the round with no
-intervening weight change: `log π` recomputed at update time is exactly `log π`
-at sampling time.
+pick service into the trainer. The recomputed `log π` matches the sampling-time
+`log π` exactly for the round's **first** minibatch — the update runs immediately
+after the round with no intervening weight change, and both forwards evaluate the
+same eval-mode model at the same `T`. Later minibatches within the pass see
+already-stepped weights; that within-pass drift is D8's accepted trade-off and is
+exactly what the KL-to-previous-round diagnostic (D9) exists to size.
 
 **Alternative rejected**: capturing states/logits inside `AgentPickService` and
 threading them out. Correct but couples a shared inference module to the
@@ -354,6 +365,15 @@ decompressed at most once per run (the locator memoizes by name). The per-round
 example table is built only over the cards appearing in *that* round (a few
 hundred rows), from locator cache hits.
 
+Sharing is not free today: `build_labeler` constructs its own locator internally
+(`generate_draft_data.py:347`), as does `GenerateDraftDataSupervisor._build_registry`
+(`:527`). So `build_labeler` takes an optional `locator` parameter —
+`build_labeler(config, *, locator=None)`, falling back to constructing one when
+absent so existing callers are unchanged — and the online trainer passes its own
+instance to the labeler and to `AgentRegistry.build(locator=…)` (which already
+accepts one). Without that parameter the "one locator" claim is not achievable
+and every card is decompressed twice.
+
 **Rationale**: satisfies Principle VIII's load-once/caching item without carrying
 a monotonically growing table (and its per-round re-`stack`) across a run that is
 meant to run for hours.
@@ -379,8 +399,9 @@ optional, so the warmup length would silently change with an unrelated flag.
 ## Performance Review (Principle VIII)
 
 - **I/O batching & caching** — one shared memoizing `ConvertedCardLocator` for
-  labeler + pick services + trainer (D14); per-round embedding table built from
-  cache hits; the corpus handle is opened once and appended per record.
+  labeler + pick services + trainer, which requires the `build_labeler(...,
+  locator=None)` parameter (D14); per-round embedding table built from cache
+  hits; the corpus handle is opened once (append mode) and appended per record.
   **Addressed.**
 - **GPU placement** — learner model, `prev_model`, frozen pick-service models,
   scorer, and (when used) picker all move to CUDA when available; batches are

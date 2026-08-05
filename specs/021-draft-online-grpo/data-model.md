@@ -36,7 +36,7 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
 | `max_grad_norm` | `float` | `1.0` | per-group clip |
 | `warmup_steps` | `int` | `200` | one LR ramp at run start, then constant (research D15) |
 | `seed` | `int` | `42` | torch/numpy init, batch shuffling, pick-sampling RNG (research D12) |
-| `output_path` | `Path` | `output/draft/drafts.jsonl` | shared corpus, appended (clarified 2026-08-05) |
+| `output_path` | `Path` | `output/draft/drafts.jsonl` | shared corpus; the handle is opened **`"a"` unconditionally**, line-buffered, once per run — never `"w"`, which would truncate the canonical corpus (clarified 2026-08-05) |
 | `max_consecutive_faults` | `int` | `5` | inherited pick-fault auto-abort |
 
 **Absent by design** (spec FR-006, Out of Scope): `--value-weight`,
@@ -116,9 +116,10 @@ A_i      = (R_i − mean(R over the round's learner seats)) / std(R over the rou
 - A learner seat whose pod has **no other** non-failed seat has an undefined
   leave-one-out baseline ⇒ excluded (counts toward `dropped_seats`).
 - **Degenerate round** (FR-023): fewer than 2 surviving learner rewards, or
-  `std < 1e-8` ⇒ the round is a **no-op** — no optimizer step, no checkpoint
-  advance — logged as `skipped (no signal)`. Records and the anchor window are
-  still updated.
+  `std < 1e-8` ⇒ the round is a **no-op** — no optimizer step, so the weights do
+  not move — logged as `skipped (no signal)`. The per-round `latest.pt` write,
+  the corpus append, and the anchor-window update all still happen; the
+  checkpoint is simply content-identical to the previous round's.
 
 ## 5. Loss (spec FR-010)
 
@@ -191,6 +192,11 @@ rl_metadata = {
 }
 ```
 
+`generation` is the **lineage counter**, independent of the `--learner` mix
+label: a run labeled `gen-3` in the mix but warm-started from a gen-1 base writes
+`generation: 2`. The label names a kind of seat; the counter records how many
+training generations deep the weights are.
+
 No critic/GAE/KL/entropy hyper-parameters are stored (they do not exist); no
 encoder weights (Phase A).
 
@@ -207,3 +213,12 @@ run end/interrupt.
 Set by `DraftWorkerConnector.start(required_agent=…)` to the learner label; it is
 the mechanism behind spec FR-003's "every generated draft has at least one
 learner seat".
+
+The value reaches the connector through the existing launcher rather than a
+bespoke one: `GenerateDraftDataConfig` gains an optional
+`required_agent: str | None = None` field (default `None` ⇒ today's behaviour
+byte-for-byte), `GenerateDraftDataSupervisor._default_launch_worker` forwards it
+into `DraftWorkerConnector.start`, and the online trainer sets it to
+`learner_label` on the config it hands the supervisor. Without that last step the
+property is never set and learner-free pods are played, so it is part of the
+FR-003 chain, not an optimisation.

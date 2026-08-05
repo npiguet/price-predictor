@@ -76,16 +76,23 @@ Timestamped `[YYYY-MM-DD HH:MM:SS] ` prefix on every line (the project's
 ### 1. Startup echo (FR-013) — once, before the worker launches
 
 ```
-Online GRPO run <run_id>: generation 2 -> 3
+Online GRPO run <run_id>: generation 1 -> 2
   learner   : gen-3 <- models/draft/agent/gen1/latest.pt
   frozen    : gen-1 <- models/draft/agent/gen1/latest.pt  (anchor)
   mix       : gen-3:5,gen-1:3,forge-r30:1,forge-r100:1  (>=1 learner seat forced)
   reward    : scorer models/sealed/scorer/latest.pt | build-method greedy
-  rollout   : T=2.0 | drafts/round=10 | set=BLB | seed=42
+  rollout   : T=2.0 | drafts/round=10 | set=BLB | seed=42 (Forge-side rollouts unseeded)
   optimiser : lr=1e-04 batch=32 clip=1.0 warmup=200 steps
   runtime   : device cuda | embedding width 528 | anchor window 100 drafts
-  outputs   : corpus output/draft/drafts.jsonl | checkpoints models/draft/agent/ (snapshot every 25 rounds)
+  outputs   : corpus output/draft/drafts.jsonl (append) | checkpoints models/draft/agent/ (snapshot every 25 rounds)
 ```
+
+The `generation N -> N+1` figure is the **lineage counter** written to
+`rl_metadata["generation"]` — `base_checkpoint's generation (1 when the base has
+no rl_metadata) + 1`, exactly as the gen-2 trainer computes it. It is independent
+of the `--learner` mix label: the run above is labeled `gen-3` in the mix but
+warm-starts from a gen-1 base, so its counter is `2`. Basing the same run off a
+gen-2 checkpoint prints `generation 2 -> 3`.
 
 ### 2. Per-round block (FR-014…FR-018) — one summary line + four detail lines
 
