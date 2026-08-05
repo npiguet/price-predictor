@@ -875,6 +875,24 @@ the margin is measured against (defaulting to the sole frozen label). A frozen
 anchor is required and must stay fixed for the whole campaign — the moment it
 moves, the margin stops meaning "improvement over a fixed point".
 
+**Only the learner samples.** It draws at `-T` because sampling is its sole
+exploration mechanism; every `--frozen` agent plays **argmax**, its best. That
+matters more than a scoring convention: a draft allocates one fixed pool of
+cards, so a card a frozen agent wrongly declines flows downstream to its
+podmates. A sampled field would hand the learner cards a properly-playing agent
+would have kept, making training weak in exactly the dimension drafting is about.
+Forge built-ins are unaffected — their randomisation is internal to Forge.
+
+Two consequences follow, and both are expected rather than faults. The margin
+**opens negative**, because the learner carries a sampling handicap the anchor
+does not; round 0 measures that offset exactly, since the two start from
+identical weights, and crossing zero means the learner has genuinely overtaken a
+properly-playing anchor. And the margin **amplifies**: seats compete for one pool,
+so an improving learner also starves its podmates, and the margin moves at
+roughly twice the underlying skill gap. The yardstick co-seats too and shares
+this, so the instruments agree — but neither is an absolute measure, and margins
+do not compare across a change of `-T`, `--mix`, or pick modes.
+
 Every round prints four diagnostic axes plus a consolidated summary line, so
 progress, stagnation and collapse are all readable from the run log alone:
 **reward** (reward mean/std, advantage spread, near-zero fraction → "nothing to

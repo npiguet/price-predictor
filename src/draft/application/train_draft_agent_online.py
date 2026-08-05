@@ -1103,7 +1103,8 @@ def format_startup_echo(
         f"  mix       : {format_agent_mix(config.mix)}  (>=1 learner seat forced)",
         reward,
         (
-            f"  rollout   : T={config.rollout_temperature} | "
+            f"  rollout   : T={config.rollout_temperature} "
+            "(learner samples; frozen play argmax) | "
             f"drafts/round={config.drafts_per_round} | "
             f"set={config.set_code or 'random'} | seed={config.seed} "
             "(Forge-side rollouts unseeded)"
@@ -1339,19 +1340,32 @@ class TrainDraftAgentOnlineUseCase:
 
         gen_config = self._generation_config(config, temperature)
         labeler = build_labeler(gen_config, locator=locator)
-        learner_service = AgentPickService.from_model(
+        # Per-category pick modes (research D5). The learner samples at T —
+        # sampling is its only exploration mechanism. Every frozen agent plays
+        # argmax, its best: a draft allocates one fixed pool of cards, so a card
+        # a frozen agent wrongly declines does not vanish, it flows downstream to
+        # its podmates. Sampling the frozen field would hand the learner cards a
+        # properly-playing agent would have kept, making the training field weak
+        # in exactly the dimension drafting is about — and unlike the evaluation
+        # field, where every agent plays argmax.
+        services = {
+            label: AgentPickService(
+                path, locator, device=device, pick_mode="argmax",
+            )
+            for label, path in sorted(config.frozen.items())
+        }
+        services[config.learner_label] = AgentPickService.from_model(
             model, base.config, locator, device=device,
             pick_mode="sample", temperature=temperature, seed=config.seed,
         )
+        # Every service is preloaded, so `build`'s single pick_mode never applies;
+        # it still validates the labels and geometry-checks all of them (D4).
         registry = AgentRegistry.build(
-            dict(config.frozen),
+            {},
             {label for label, _ in config.mix},
             locator=locator,
-            pick_mode="sample",
-            temperature=temperature,
-            seed=config.seed,
             device=device,
-            preloaded={config.learner_label: learner_service},
+            preloaded=services,
         )
         supervisor = GenerateDraftDataSupervisor(
             gen_config, labeler=labeler, registry=registry,

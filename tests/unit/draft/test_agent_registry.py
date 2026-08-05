@@ -163,3 +163,52 @@ def test_omitting_preloaded_is_unchanged(tmp_path) -> None:
         {"a": ckpt}, {"forge-full", "a"}, locator=_FakeLocator(),
     )
     assert registry.external_labels == frozenset({"a"})
+
+
+def test_build_level_pick_mode_never_overrides_a_preloaded_service() -> None:
+    """The property spec 021's D5 rests on: per-category pick modes.
+
+    The online trainer serves the learner at ``sample``/T and frozen agents at
+    ``argmax``, and expresses that by handing every service to ``preloaded``.
+    That only works if ``build`` leaves preloaded services exactly as given.
+    """
+    from draft.application.agent_pick_service import AgentPickService
+
+    config = DraftAgentConfig(embedding_dim=EMB_DIM, packs=3, P=15, n_layers=1, n_heads=1)
+    model = DraftAgentModel(config)
+    model.eval()
+    learner = AgentPickService.from_model(
+        model, config, _FakeLocator(), device=torch.device("cpu"),
+        pick_mode="sample", temperature=3.0, seed=42,
+    )
+    frozen = AgentPickService.from_model(
+        model, config, _FakeLocator(), device=torch.device("cpu"),
+        pick_mode="argmax",
+    )
+
+    registry = AgentRegistry.build(
+        {},                                   # nothing loaded from a path
+        {"gen-3", "gen-1", "forge-full"},
+        locator=_FakeLocator(),
+        pick_mode="sample", temperature=99.0, seed=7,   # must all be ignored
+        preloaded={"gen-3": learner, "gen-1": frozen},
+    )
+
+    assert registry._services["gen-3"] is learner
+    assert registry._services["gen-1"] is frozen
+    assert learner._pick_mode == "sample" and learner._temperature == 3.0
+    assert frozen._pick_mode == "argmax"
+
+
+def test_an_all_preloaded_build_still_validates_labels_and_geometry() -> None:
+    """With agent_checkpoints empty, the usual checks must still apply."""
+    with pytest.raises(AgentRegistryError, match="rival"):
+        AgentRegistry.build(
+            {}, {"gen-3", "rival"}, locator=_FakeLocator(),
+            preloaded={"gen-3": _preloaded_service()},
+        )
+    with pytest.raises(AgentRegistryError, match="packs"):
+        AgentRegistry.build(
+            {}, {"gen-3"}, locator=_FakeLocator(),
+            preloaded={"gen-3": _preloaded_service(packs=2)},
+        )
