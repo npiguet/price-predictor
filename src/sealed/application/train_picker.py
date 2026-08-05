@@ -33,6 +33,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+from price_predictor.infrastructure.torch_training import (
+    clip_per_group,
+    kl_divergence,
+    policy_entropy,
+)
 from sealed.domain.card_embedding_layout import (
     COLOR_FLAGS,
     FEATURE_COUNT,
@@ -357,42 +362,6 @@ def _plackett_luce_log_prob(
     return log_prob
 
 
-def _masked_log_softmax(logits: torch.Tensor, pool_mask: torch.Tensor) -> torch.Tensor:
-    return torch.log_softmax(logits.masked_fill(~pool_mask, float("-inf")), dim=-1)
-
-
-def _policy_entropy(logits: torch.Tensor, pool_mask: torch.Tensor) -> torch.Tensor:
-    """Per-pool entropy of the picker's softmax over valid positions (B,).
-
-    Masked positions have ``logp = -inf`` and ``p = 0``. Computing ``p * logp``
-    there is ``0 * -inf = NaN``; ``torch.where`` would mask the NaN out of the
-    forward value but autograd still backpropagates NaN through the discarded
-    branch. Zeroing the ``-inf`` log-probs *before* the product keeps both the
-    value and the gradient finite (the contribution is genuinely 0 there).
-    """
-    logp = _masked_log_softmax(logits, pool_mask)
-    p = logp.exp()
-    safe_logp = logp.masked_fill(~pool_mask, 0.0)
-    return -(p * safe_logp).sum(dim=-1)
-
-
-def _kl_penalty(
-    logits: torch.Tensor, ref_logits: torch.Tensor, pool_mask: torch.Tensor,
-) -> torch.Tensor:
-    """Mean per-pool KL(picker || reference) over valid positions (FR-025).
-
-    Same ``0 * -inf`` / NaN-gradient trap as ``_policy_entropy``: at masked
-    positions ``logp - logq`` is ``-inf - -inf = NaN``. Zero the per-position
-    log-ratio before weighting by ``p`` (which is 0 there anyway).
-    """
-    logp = _masked_log_softmax(logits, pool_mask)
-    logq = _masked_log_softmax(ref_logits, pool_mask)
-    p = logp.exp()
-    log_ratio = (logp - logq).masked_fill(~pool_mask, 0.0)
-    kl = (p * log_ratio).sum(dim=-1)
-    return kl.mean()
-
-
 class _EntropySchedule:
     """Val-reward-driven entropy-coefficient decay (FR-016).
 
@@ -709,14 +678,6 @@ def _build_optimizer(
     return torch.optim.AdamW(groups)
 
 
-def _clip_per_group(optimizer: torch.optim.Optimizer, *, max_norm: float) -> float:
-    norm = 0.0
-    for group in optimizer.param_groups:
-        pre = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=max_norm)
-        norm = max(norm, float(pre))
-    return norm
-
-
 def _move_optimizer_state(optimizer: torch.optim.Optimizer, device: torch.device) -> None:
     for state in optimizer.state.values():
         for k, v in state.items():
@@ -984,7 +945,7 @@ class TrainPickerUseCase:
             scaled_bs, pick_indices, picked_mask,
         ).view(b, config.n_samples)
 
-        entropy = _policy_entropy(logits, pool_mask)
+        entropy = policy_entropy(logits, pool_mask)
         losses = _compute_losses(
             rewards, log_prob, entropy, aux_pred,
             entropy_coef, config.aux_weight, config.normalize_advantage,
@@ -996,13 +957,13 @@ class TrainPickerUseCase:
         if reference is not None:
             with torch.no_grad():
                 ref_logits, _ = reference(pool_cards, pool_mask)
-            kl = _kl_penalty(logits, ref_logits, pool_mask)
+            kl = kl_divergence(logits, ref_logits, pool_mask).mean()
             total = total + config.kl_coef * kl
             kl_value = float(kl)
 
         optimizer.zero_grad()
         total.backward()
-        _clip_per_group(optimizer, max_norm=config.max_grad_norm)
+        clip_per_group(optimizer, max_norm=config.max_grad_norm)
         optimizer.step()
 
         return (

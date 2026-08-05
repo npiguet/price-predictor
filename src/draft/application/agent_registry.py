@@ -75,15 +75,30 @@ class AgentRegistry:
         seed: int | None = None,
         pack_size: int | None = None,
         device=None,
+        preloaded: dict[str, AgentPickService] | None = None,
     ) -> "AgentRegistry":
         """Validate labels + geometry and construct one service per bound label.
 
         ``mix_labels`` is every label in ``--agent-mix``; each must be a Forge
         built-in or a bound checkpoint (FR-011). ``pack_size`` (when known, e.g.
         ``--set`` runs) checks each checkpoint's ``P`` (FR-012).
+
+        ``preloaded`` supplies already-constructed services (the online
+        trainer's live-model learner). Those labels count as **bound** for label
+        validation and go through the same geometry checks, so there is still
+        exactly one place that owns "every mix label is a built-in, a frozen
+        agent, or the learner".
         """
+        preloaded = dict(preloaded or {})
+        clash = sorted(set(preloaded) & set(agent_checkpoints))
+        if clash:
+            raise AgentRegistryError(
+                f"label(s) {', '.join(clash)} bound both to a checkpoint path "
+                "and to a preloaded service"
+            )
+        bound = set(agent_checkpoints) | set(preloaded)
         for label in mix_labels:
-            if label not in FORGE_BUILTINS and label not in agent_checkpoints:
+            if label not in FORGE_BUILTINS and label not in bound:
                 raise AgentRegistryError(
                     f"mix label {label!r} is neither a Forge built-in "
                     f"({', '.join(sorted(FORGE_BUILTINS))}) nor bound via "
@@ -93,10 +108,12 @@ class AgentRegistry:
         for label, path in agent_checkpoints.items():
             if not path.exists():
                 raise AgentRegistryError(f"checkpoint for label {label!r} not found: {path}")
-            service = AgentPickService(
+            services[label] = AgentPickService(
                 path, locator, device=device,
                 pick_mode=pick_mode, temperature=temperature, seed=seed,
             )
+        services.update(preloaded)
+        for label, service in services.items():
             config = service.config
             if config.packs != PACKS:
                 raise AgentRegistryError(
@@ -108,7 +125,6 @@ class AgentRegistry:
                     f"checkpoint {label!r} capacity P={config.P} is smaller than the "
                     f"live pack size {pack_size}"
                 )
-            services[label] = service
         return cls(services)
 
     def pick(self, request) -> str:

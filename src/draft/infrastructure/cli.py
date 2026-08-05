@@ -80,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     _build_generate_draft_data_parser(subparsers)
     _build_train_draft_agent_parser(subparsers)
     _build_train_draft_agent_rl_parser(subparsers)
+    _build_train_draft_agent_online_parser(subparsers)
     _build_validate_builder_parser(subparsers)
     _build_analyze_generated_decks_parser(subparsers)
     return parser
@@ -114,6 +115,122 @@ def _build_analyze_generated_decks_parser(subparsers) -> None:
     parser.add_argument(
         "--no-rarity", action="store_true",
         help="Skip the rarity-distribution section (no MTGJSON load).",
+    )
+
+
+_ONLINE_DEFAULT_MIX = "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1"
+
+
+def _build_train_draft_agent_online_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "train-draft-agent-online",
+        help=(
+            "Online self-play GRPO fine-tuning (gen-3): generate fresh drafts "
+            "from the current policy, take one critic-free "
+            "-A*logpi_T(a|s) pass over them, discard, regenerate"
+        ),
+    )
+    parser.set_defaults(func=run_train_draft_agent_online)
+
+    # -- Agent wiring (FR-003) -------------------------------------------------
+    parser.add_argument(
+        "--learner", action="append", default=None, metavar="LABEL=PATH",
+        help="The agent under training (required, exactly one). LABEL is its mix "
+             "label; PATH warm-starts the policy at round 0. A bare PATH is not "
+             "accepted — the label is load-bearing.",
+    )
+    parser.add_argument(
+        "--frozen", action="append", default=None, metavar="LABEL=PATH",
+        help="An untrained reference bound to a checkpoint (repeatable), e.g. the "
+             "gen-1 anchor. Never enters the gradient.",
+    )
+    parser.add_argument(
+        "--anchor", default=None, metavar="LABEL",
+        help="Which --frozen label is the anchor-margin baseline. Required only "
+             "when more than one --frozen is given.",
+    )
+    parser.add_argument(
+        "--mix", default=_ONLINE_DEFAULT_MIX, metavar="LABEL:WEIGHT,...",
+        help=f"Per-seat categorical over learner + frozen + Forge built-ins "
+             f"(default: {_ONLINE_DEFAULT_MIX}).",
+    )
+
+    # -- Deck building & reward (same meaning as generate-draft-data) ----------
+    parser.add_argument(
+        "--scorer-checkpoint", default="models/sealed/scorer/latest.pt",
+        help="Frozen scorer producing each seat's deck_score (the reward). Must exist.",
+    )
+    parser.add_argument(
+        "--build-method", choices=("greedy", "picker"), default="greedy",
+        help="Pool -> deck before scoring (default: greedy).",
+    )
+    parser.add_argument(
+        "--picker-checkpoint", default="models/sealed/picker/latest.pt",
+        help="Used only with --build-method picker; must exist then.",
+    )
+    parser.add_argument(
+        "--cards-path", default="output/cardsfolder/",
+        help=".npz embedding cache; fixes the model/scorer input width.",
+    )
+
+    # -- Rollout & optimisation ------------------------------------------------
+    parser.add_argument(
+        "-T", "--rollout-temperature", type=float, default=None,
+        dest="rollout_temperature",
+        help="Sampling temperature; EVERY policy distribution (logpi, entropy, "
+             "KL) uses it. Required, no default, must be > 0.",
+    )
+    parser.add_argument(
+        "--lr", type=float, default=1e-4, help="AdamW learning rate (default: 1e-4).",
+    )
+    parser.add_argument(
+        "--drafts-per-round", type=int, default=10, dest="drafts_per_round",
+        help="Fresh drafts generated and trained on (one pass) per round (default: 10).",
+    )
+    parser.add_argument(
+        "--anchor-window", type=int, default=100, dest="anchor_window",
+        help="Sliding window (drafts) backing the anchor margin (default: 100).",
+    )
+    parser.add_argument(
+        "--snapshot-every", type=int, default=25, dest="snapshot_every",
+        help="Rounds between timestamped snapshots; latest.pt is written every "
+             "round (default: 25).",
+    )
+    parser.add_argument(
+        "--max-rounds", type=int, default=None, dest="max_rounds",
+        help="Optional round budget; omitted => runs until Ctrl-C.",
+    )
+    parser.add_argument(
+        "--set", dest="set_code", default=None,
+        help="Restrict every draft to one set; else a random sealed-legal set per draft.",
+    )
+    parser.add_argument(
+        "--output-path", default="output/draft/drafts.jsonl", dest="output_path",
+        help="Corpus appended with every generated draft (shared file).",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Torch/numpy init, batch shuffling, pick-sampling RNG. Forge-side "
+             "randomness is NOT seeded (default: 42).",
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=32, dest="batch_size",
+        help="States per gradient step (default: 32).",
+    )
+    parser.add_argument(
+        "--max-grad-norm", type=float, default=1.0, dest="max_grad_norm",
+        help="Per-parameter-group gradient-norm cap (default: 1.0).",
+    )
+    parser.add_argument(
+        "--warmup-steps", type=int, default=200, dest="warmup_steps",
+        help="Linear LR ramp over the first N optimizer steps of the run, then "
+             "constant (default: 200).",
+    )
+    parser.add_argument(
+        "--max-consecutive-faults", type=int, default=5,
+        dest="max_consecutive_faults",
+        help="Abort after this many consecutive pick-fault-abandoned drafts "
+             "(default: 5).",
     )
 
 
@@ -701,6 +818,81 @@ def run_train_draft_agent_rl(args: argparse.Namespace) -> int:
         print("\nInterrupted.", file=sys.stderr)
         return 130
     except (FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def run_train_draft_agent_online(args: argparse.Namespace) -> int:
+    """Execute the train-draft-agent-online command (spec 021)."""
+    from draft.application.agent_mix import AgentMixError, parse_agent_mix
+    from draft.application.agent_registry import AgentRegistryError
+    from draft.application.generate_draft_data import MaxConsecutiveFaultsError
+    from draft.application.train_draft_agent_online import (
+        OnlineConfigError,
+        TrainDraftAgentOnlineConfig,
+        TrainDraftAgentOnlineUseCase,
+        parse_frozen_specs,
+        parse_learner_spec,
+        validate_config,
+    )
+    from draft.domain.draft_agent_model import DraftAgentArchitectureError
+
+    try:
+        learner_label, learner_checkpoint = parse_learner_spec(args.learner)
+        frozen = parse_frozen_specs(args.frozen)
+        mix = parse_agent_mix(args.mix)
+    except (OnlineConfigError, AgentMixError, AgentRegistryError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    config = TrainDraftAgentOnlineConfig(
+        learner_label=learner_label,
+        learner_checkpoint=learner_checkpoint,
+        frozen=frozen,
+        anchor=args.anchor,
+        mix=mix,
+        scorer_checkpoint=Path(args.scorer_checkpoint),
+        build_method=args.build_method,
+        picker_checkpoint=Path(args.picker_checkpoint),
+        cards_path=Path(args.cards_path),
+        rollout_temperature=args.rollout_temperature,
+        lr=args.lr,
+        drafts_per_round=args.drafts_per_round,
+        anchor_window=args.anchor_window,
+        snapshot_every=args.snapshot_every,
+        max_rounds=args.max_rounds,
+        set_code=args.set_code,
+        batch_size=args.batch_size,
+        max_grad_norm=args.max_grad_norm,
+        warmup_steps=args.warmup_steps,
+        seed=args.seed,
+        output_path=Path(args.output_path),
+        max_consecutive_faults=args.max_consecutive_faults,
+    )
+
+    # Every rule runs before the Forge worker launches and before any update
+    # (FR-024, SC-006); execute() re-runs it so the use case is safe standalone.
+    try:
+        validate_config(config)
+    except OnlineConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        TrainDraftAgentOnlineUseCase().execute(config)
+    except DraftAgentArchitectureError as exc:  # a ValueError subclass — catch first
+        print(f"Error: {exc}", file=sys.stderr)
+        return 6
+    except MaxConsecutiveFaultsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        # The loop installs SIGINT handlers and shuts down cleanly, printing the
+        # final summary; reaching here means the interrupt landed during startup.
+        print("\nInterrupted.", file=sys.stderr)
+        return 130
+    except (AgentRegistryError, AgentMixError, FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     return 0

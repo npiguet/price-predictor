@@ -27,6 +27,10 @@ import torch
 import torch.nn.functional as F
 
 from draft.application.draft_pick_states import iter_seat_pick_states
+from draft.application.draft_training_common import (
+    leave_one_out_rewards,
+    length_bucketed_batches,
+)
 from draft.domain.draft_agent_model import (
     DraftAgentConfig,
     DraftAgentModel,
@@ -35,6 +39,7 @@ from draft.domain.draft_geometry import DraftGeometry, DraftRecord
 from draft.domain.draft_state import TYPE_PACK
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 from draft.infrastructure.draft_record_io import read_records
+from price_predictor.infrastructure.torch_training import masked_log_softmax
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 RANDOM_SEED = 42  # hardcoded (FR-035): governs init, the draft-disjoint split.
@@ -121,20 +126,6 @@ class DraftExample:
         return int(self.card_idx.shape[0])
 
 
-def _leave_one_out_rewards(record: DraftRecord) -> list[float | None]:
-    """Per-seat ``deck_score − mean(other non-failed deck_scores)`` (FR-032)."""
-    scores = [s.deck_score for s in record.seats]
-    rewards: list[float | None] = []
-    for i, score in enumerate(scores):
-        if score is None:
-            rewards.append(None)
-            continue
-        others = [s for j, s in enumerate(scores) if j != i and s is not None]
-        mean_others = sum(others) / len(others) if others else 0.0
-        rewards.append(score - mean_others)
-    return rewards
-
-
 class _Loader:
     """Builds ``DraftExample`` objects from a corpus, dropping missing-``.npz`` picks."""
 
@@ -191,7 +182,7 @@ class _Loader:
             geo = DraftGeometry.from_record(record)
             self.max_packs = max(self.max_packs, geo.packs)
             self.max_pack_size = max(self.max_pack_size, geo.pack_size)
-            rewards = _leave_one_out_rewards(record)
+            rewards = leave_one_out_rewards(record)
             for seat_idx, seat in enumerate(record.seats):
                 whitelisted = seat.agent in self._whitelist
                 critic_active = rewards[seat_idx] is not None
@@ -281,32 +272,6 @@ def split_draft_disjoint(
     val = [ex for ex in examples if ex.draft_index in val_ids]
     train = [ex for ex in examples if ex.draft_index not in val_ids]
     return train, val
-
-
-_BUCKET_MULTIPLIER = 50  # megabatch = bucket_multiplier * batch_size examples
-
-
-def length_bucketed_batches(
-    examples: list[DraftExample], batch_size: int, rng: random.Random,
-) -> list[list[DraftExample]]:
-    """Group similar-length examples into batches; reshuffle batch order per call.
-
-    Examples are shuffled, partitioned into megabatches, sorted by token count
-    *within* each megabatch, cut into batches, and the batch order is shuffled.
-    So each batch holds near-equal-length examples (little padding wasted on
-    masks) while still varying composition and order across epochs.
-    """
-    order = list(examples)
-    rng.shuffle(order)
-    mega = batch_size * _BUCKET_MULTIPLIER
-    batches: list[list[DraftExample]] = []
-    for start in range(0, len(order), mega):
-        chunk = order[start:start + mega]
-        chunk.sort(key=lambda ex: ex.n_tokens)
-        for b in range(0, len(chunk), batch_size):
-            batches.append(chunk[b:b + batch_size])
-    rng.shuffle(batches)
-    return batches
 
 
 def critic_standardization(train: list[DraftExample]) -> tuple[float, float]:
@@ -411,10 +376,6 @@ def _collate(
 # Forward / loss
 # --------------------------------------------------------------------------- #
 
-def _masked_log_softmax(logits: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    return torch.log_softmax(logits.masked_fill(~mask, float("-inf")), dim=-1)
-
-
 @dataclass
 class _LossOut:
     total: torch.Tensor
@@ -434,7 +395,7 @@ def _compute_loss(
 
     imitation = torch.zeros((), device=device)
     if bool(batch.imitation_active.any()):
-        logp = _masked_log_softmax(policy_logits, batch.pack_mask)  # (B, N)
+        logp = masked_log_softmax(policy_logits, batch.pack_mask)  # (B, N)
         idx = batch.target_token.clamp(min=0).unsqueeze(1)
         nll = -logp.gather(1, idx).squeeze(1)  # (B,)
         active = batch.imitation_active

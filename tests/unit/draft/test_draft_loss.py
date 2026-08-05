@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from draft.application.train_draft_agent import (
-    _leave_one_out_rewards,
-    _Loader,
-    critic_standardization,
-)
+from draft.application.draft_training_common import leave_one_out_rewards
+from draft.application.train_draft_agent import _Loader, critic_standardization
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
 
 
@@ -40,7 +37,7 @@ def _record() -> DraftRecord:
 
 
 def test_leave_one_out_excludes_failed_seats() -> None:
-    rewards = _leave_one_out_rewards(_record())
+    rewards = leave_one_out_rewards(_record())
     assert rewards[0] == 10.0 - (6.0 + 2.0) / 2  # 6.0
     assert rewards[1] == 6.0 - (10.0 + 2.0) / 2  # 0.0
     assert rewards[2] is None                    # failed build, no critic

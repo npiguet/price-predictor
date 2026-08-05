@@ -837,6 +837,15 @@ python -m draft generate-draft-data --n-drafts 3000 --pick-mode argmax \
   --agent-mix cand:1,gen-k:1,forge-full:1,forge-r100:1 \
   --output-path output/draft/yardstick-genK.jsonl
 
+# 5. gen-3: online self-play GRPO — one command owns generate→update→discard→repeat
+python -m draft train-draft-agent-online \
+  --learner gen-3=models/draft/agent/<champion>.pt \
+  --frozen  gen-1=models/draft/agent/<champion>.pt \
+  --mix "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1" \
+  --build-method greedy -T 2.0 --lr 1e-4 --drafts-per-round 10 --set BLB \
+  2>&1 | tee output/draft/gen3-run.log
+#   then pause on a margin plateau and run the SAME step-4c yardstick + analysis
+
 # (any time) inspect one agent's decks: deck-score + composition stats
 python -m draft analyze-generated-decks --agent draft-agent   # then --agent forge-full to compare
 ```
@@ -852,6 +861,43 @@ evaluate→promote loop are operator runbooks over existing commands (no new cod
 promotion is a manual judgment. Pairing a corpus to its generating checkpoint is
 by operator convention (e.g. the `drafts-genK.jsonl` filename) — the trainer only
 **warns** on an apparent mismatch, never rejects.
+
+Gen-3 (`train-draft-agent-online`) replaces that manual cycle with one
+long-running in-process loop: each round it generates `--drafts-per-round` fresh
+drafts whose learner seats are piloted by the **live in-training policy**, takes
+one pass of the single critic-free term `−A·logπ_T(a|s)` over those seats' picks,
+discards the batch, and drafts the next round with the updated weights. There is
+no critic term, GAE, KL anchor, entropy bonus, validation split, or early stop —
+the operator tunes exactly three knobs (`--lr`, `-T`, `--drafts-per-round`).
+`--learner LABEL=PATH` (exactly one, label required) is the agent under training;
+`--frozen LABEL=PATH` binds untrained references, and `--anchor` picks which one
+the margin is measured against (defaulting to the sole frozen label). A frozen
+anchor is required and must stay fixed for the whole campaign — the moment it
+moves, the margin stops meaning "improvement over a fixed point".
+
+Every round prints four diagnostic axes plus a consolidated summary line, so
+progress, stagnation and collapse are all readable from the run log alone:
+**reward** (reward mean/std, advantage spread, near-zero fraction → "nothing to
+learn"), **explore** (entropy, perplexity, off-argmax rate → collapse toward
+`ppl → 1`), **movement** (mean logπ, policy loss, pre-clip gradient norm,
+KL-to-previous-round → an over-large step), and **progress** (the live anchor
+margin over a sliding `--anchor-window` of drafts, plus every label's raw mean).
+A degenerate round (fewer than two surviving learner rewards, or zero variance)
+is a safe no-op logged as `skipped (no signal)`.
+
+Two operational notes. The `-Ddraft.required.agent` property that guarantees
+every pod carries a learner seat is new, so the **fat JAR must be rebuilt**
+(`cd forge-connector && mvn package -DskipTests`) before the first gen-3 run.
+And `models/draft/agent/latest.pt` is rewritten every round, so during a run it
+tracks the in-progress gen-3 — pin a timestamped snapshot, not `latest.pt`, when
+you want a stable candidate. Stopping and promotion stay operator judgments:
+there is no `--resume` (point `--learner` at the last snapshot and restart, which
+intentionally re-runs the LR warmup), and the cross-generation yardstick is the
+unchanged gen-2 procedure above — a greedy fixed-mix co-seated
+`generate-draft-data --pick-mode argmax` run, then one
+`analyze-generated-decks --agent <label>` per agent to read each generation's
+mean `deck_score` on one shared absolute scale. See
+`specs/021-draft-online-grpo/quickstart.md` for the full runbook.
 
 A draft-agent checkpoint can **pilot live seats**: bind a mix label to a
 checkpoint with `--agent-checkpoint LABEL=PATH` (repeatable; bare `PATH` ⇒ label

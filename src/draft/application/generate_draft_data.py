@@ -23,7 +23,7 @@ import signal
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -103,6 +103,10 @@ class GenerateDraftDataConfig:
     temperature: float = 1.0
     seed: int | None = None
     max_consecutive_faults: int = 5
+    # When set, the worker forces one seat of every pod to this label if the
+    # independent per-seat mix draw produced none (spec 021 FR-003). ``None``
+    # leaves sampling byte-for-byte as it was.
+    required_agent: str | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -335,8 +339,17 @@ def assemble_record(
 # Concrete labelers (build over torch; no Forge dependency)
 # --------------------------------------------------------------------------- #
 
-def build_labeler(config: GenerateDraftDataConfig) -> DeckLabeler:
-    """Construct the picker or greedy labeler from frozen checkpoints (FR-007/8)."""
+def build_labeler(
+    config: GenerateDraftDataConfig, *, locator=None,
+) -> DeckLabeler:
+    """Construct the picker or greedy labeler from frozen checkpoints (FR-007/8).
+
+    ``locator`` lets a caller supply its own :class:`ConvertedCardLocator` so one
+    memoizing instance serves the labeler, the pick services, and (for the online
+    trainer) the training loader — decompressing each card's ``.npz`` once per
+    run instead of once per consumer. Omitted, the labeler builds its own, which
+    is what every one-shot caller wants.
+    """
     import torch
 
     from sealed.domain.scorer_model import SetTransformerScorer
@@ -344,7 +357,8 @@ def build_labeler(config: GenerateDraftDataConfig) -> DeckLabeler:
     from sealed.infrastructure.scorer_store import ScorerStore
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    locator = ConvertedCardLocator(config.cards_path)
+    if locator is None:
+        locator = ConvertedCardLocator(config.cards_path)
 
     scorer_ckpt = ScorerStore().load_checkpoint(config.scorer_checkpoint)
     scorer = SetTransformerScorer(scorer_ckpt.config)
@@ -539,10 +553,17 @@ class GenerateDraftDataSupervisor:
         mix = format_agent_mix(self._config.agent_mix)
         run_id = self._run_id
 
+        required_agent = self._config.required_agent
+
         def launch() -> Any:
+            kwargs: dict[str, Any] = {}
+            if required_agent is not None:
+                # Only pass it when set, so existing callers launch exactly the
+                # command line they always did.
+                kwargs["required_agent"] = required_agent
             return connector.start(
                 agent_mix=mix, set_code=self._config.set_code,
-                external_agents=external_labels, run_id=run_id,
+                external_agents=external_labels, run_id=run_id, **kwargs,
             )
 
         return launch
@@ -605,6 +626,63 @@ class GenerateDraftDataSupervisor:
 
     RATE_WINDOW_SECONDS = 20  # rolling window for the reported drafts/min
 
+    def iter_records(
+        self, launch: Callable[[], Any], labeler: DeckLabeler,
+    ) -> Iterator[DraftRecord]:
+        """Yield fully assembled, labeled draft records — endlessly.
+
+        Launches a worker on the first ``next()``, keeps it alive across yields,
+        and relaunches it on exit (crash or stdin EOF). Between pulls the
+        generator is **suspended** and the worker stays resident: that suspension
+        is the resident-worker mechanism the online loop needs (spec 021 FR-005),
+        with no separate pause call and no per-round JVM startup.
+
+        Back-pressure is safe by construction. The pick protocol is strictly
+        synchronous, so as soon as the consumer stops reading, the worker blocks
+        on stdin at the next model seat's pick — it can neither run ahead nor
+        fill the pipe. It also means no draft straddles a weight swap: every
+        learner pick of a draft is answered by one policy version.
+
+        Nothing is written to disk here — the consumer owns persistence, the
+        record count, and any stopping condition. ``close()`` (or garbage
+        collection) runs the ``finally`` that terminates the worker.
+        """
+        from price_predictor.infrastructure.forge_jvm import kill_process_tree
+
+        while not self._shutdown.is_set():
+            proc = launch()
+            exited_cleanly = False
+            try:
+                for line in proc.stdout:
+                    if self._shutdown.is_set():
+                        break
+                    # Live pick side-channel (only when model seats are bound).
+                    if self._registry is not None:
+                        if self._route_pick_line(line, proc):
+                            continue  # answered a request / logged an abandonment
+                    transcript = parse_sentinel_line(line)
+                    if transcript is None:
+                        continue
+                    try:
+                        record = assemble_record(transcript, self._run_id, labeler)
+                    except Exception as exc:  # malformed transcript — skip, keep going
+                        _log(f"Skipping unparseable transcript: {exc}")
+                        continue
+                    # A completed draft resets the consecutive-fault counter and
+                    # discards that draft's trackers (FR-016).
+                    self._consecutive_faults = 0
+                    if self._registry is not None:
+                        self._registry.reset_draft(record.draft_id)
+                    yield record
+                exited_cleanly = True
+            except _WorkerRestart:
+                pass  # terminate + relaunch below (gen-1 crash path)
+            finally:
+                self._terminate(proc, kill_process_tree)
+            if not self._shutdown.is_set():
+                reason = "exited" if exited_cleanly else "crashed"
+                _log(f"Worker {reason} (code {self._returncode(proc)}); restarting...")
+
     def _supervise(
         self,
         launch: Callable[[], Any],
@@ -615,9 +693,8 @@ class GenerateDraftDataSupervisor:
         start_count: int,
         start_time: float,
     ) -> int:
+        """Consume :meth:`iter_records` until ``target`` records exist on disk."""
         from collections import deque
-
-        from price_predictor.infrastructure.forge_jvm import kill_process_tree
 
         # (monotonic time, count) samples for the rolling-window rate.
         samples: deque[tuple[float, int]] = deque([(start_time, count)])
@@ -638,51 +715,26 @@ class GenerateDraftDataSupervisor:
             interval = now - old_t
             return (current - old_c) / interval * 60 if interval > 0 else 0.0
 
-        while count < target and not self._shutdown.is_set():
-            proc = launch()
-            try:
-                for line in proc.stdout:
-                    if self._shutdown.is_set():
-                        break
-                    # Live pick side-channel (only when model seats are bound).
-                    if self._registry is not None:
-                        if self._route_pick_line(line, proc):
-                            continue  # answered a request / logged an abandonment
-                    transcript = parse_sentinel_line(line)
-                    if transcript is None:
-                        continue
-                    try:
-                        record = assemble_record(transcript, self._run_id, labeler)
-                    except Exception as exc:  # malformed transcript — skip, keep going
-                        _log(f"Skipping unparseable transcript: {exc}")
-                        continue
-                    append_record(out, record)
-                    count += 1
-                    # A completed draft resets the consecutive-fault counter and
-                    # discards that draft's trackers (FR-016).
-                    self._consecutive_faults = 0
-                    if self._registry is not None:
-                        self._registry.reset_draft(record.draft_id)
-                    produced = count - start_count
-                    # First draft confirms the pipeline is alive; then every
-                    # STATUS_EVERY drafts report throughput + ETA.
-                    if produced == 1 or count % self.STATUS_EVERY == 0:
-                        now = time.monotonic()
-                        _log(_progress_line(
-                            count, target, windowed_rate(now, count),
-                            now - start_time,
-                        ))
-                    if count >= target:
-                        break
-            except _WorkerRestart:
-                pass  # terminate + relaunch below (gen-1 crash path)
-            finally:
-                self._terminate(proc, kill_process_tree)
-            if count < target and not self._shutdown.is_set():
-                _log(
-                    f"Worker exited (code {self._returncode(proc)}) at "
-                    f"{count}/{target}; restarting..."
-                )
+        if count >= target:
+            return count
+        records = self.iter_records(launch, labeler)
+        try:
+            for record in records:
+                append_record(out, record)
+                count += 1
+                produced = count - start_count
+                # First draft confirms the pipeline is alive; then every
+                # STATUS_EVERY drafts report throughput + ETA.
+                if produced == 1 or count % self.STATUS_EVERY == 0:
+                    now = time.monotonic()
+                    _log(_progress_line(
+                        count, target, windowed_rate(now, count),
+                        now - start_time,
+                    ))
+                if count >= target:
+                    break
+        finally:
+            records.close()
         return count
 
     def _route_pick_line(self, line: str, proc: Any) -> bool:

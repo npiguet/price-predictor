@@ -8,15 +8,14 @@ import numpy as np
 import pytest
 import torch
 
+from price_predictor.infrastructure.torch_training import kl_divergence, policy_entropy
 from sealed.application.train_picker import (
     RANDOM_SEED,
     PreparedPool,
     TrainPickerConfig,
     _compute_losses,
     _EntropySchedule,
-    _kl_penalty,
     _plackett_luce_log_prob,
-    _policy_entropy,
     _sample_decks,
     _should_stop,
     _shuffle_train,
@@ -283,14 +282,14 @@ class TestKL:
     def test_zero_when_identical(self):
         logits = torch.randn(2, 6)
         pool_mask = torch.ones(2, 6, dtype=torch.bool)
-        kl = _kl_penalty(logits, logits.clone(), pool_mask)
+        kl = kl_divergence(logits, logits.clone(), pool_mask).mean()
         assert kl.item() == pytest.approx(0.0, abs=1e-6)
 
     def test_positive_when_different(self):
         a = torch.tensor([[3.0, 0.0, 0.0]])
         b = torch.tensor([[0.0, 0.0, 3.0]])
         pool_mask = torch.ones(1, 3, dtype=torch.bool)
-        assert _kl_penalty(a, b, pool_mask).item() > 0.0
+        assert kl_divergence(a, b, pool_mask).mean().item() > 0.0
 
     def test_gradient_finite_with_padding(self):
         # Masked positions make logp - logq = -inf - -inf = nan; the backward
@@ -301,7 +300,7 @@ class TestKL:
             [[True, True, True, False, False, False],
              [True, True, True, True, False, False]],
         )
-        _kl_penalty(logits, ref, pool_mask).backward()
+        kl_divergence(logits, ref, pool_mask).mean().backward()
         assert torch.isfinite(logits.grad).all()
 
 
@@ -310,8 +309,8 @@ class TestEntropyMasking:
         logits = torch.tensor([[1.0, 2.0, 100.0]])
         full = torch.ones(1, 3, dtype=torch.bool)
         masked = torch.tensor([[True, True, False]])
-        ent_full = _policy_entropy(logits, full)
-        ent_masked = _policy_entropy(logits, masked)
+        ent_full = policy_entropy(logits, full)
+        ent_masked = policy_entropy(logits, masked)
         # Dropping the high-logit padded position changes the entropy and keeps
         # it finite (no nan from -inf * 0).
         assert torch.isfinite(ent_masked).all()
@@ -327,7 +326,7 @@ class TestEntropyMasking:
             [[True, True, True, False, False, False],
              [True, True, True, True, False, False]],
         )
-        _policy_entropy(logits, pool_mask).sum().backward()
+        policy_entropy(logits, pool_mask).sum().backward()
         assert torch.isfinite(logits.grad).all()
 
 

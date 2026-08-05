@@ -33,6 +33,7 @@ class DraftWorkerConnector:
         set_code: str | None = None,
         external_agents: frozenset[str] | set[str] | None = None,
         run_id: str | None = None,
+        required_agent: str | None = None,
         log_dir: Path = Path("output/draft"),
         xmx: str = "1200m",
     ) -> subprocess.Popen[str]:
@@ -48,6 +49,11 @@ class DraftWorkerConnector:
                 (``-Ddraft.external.agents``). Empty/None ⇒ byte-for-byte gen-1
                 behavior (no requests are ever emitted, SC-004).
             run_id: supervisor run id; names the per-run stderr log file.
+            required_agent: when given, the worker overwrites one uniformly-chosen
+                seat with this label if the independent per-seat mix draw produced
+                none (``-Ddraft.required.agent``), guaranteeing every played pod
+                carries at least one such seat (spec 021 FR-003). None ⇒ sampling
+                is byte-for-byte unchanged.
             log_dir: directory for the per-run worker stderr log (FR-015).
             xmx: JVM max heap.
 
@@ -59,6 +65,8 @@ class DraftWorkerConnector:
             system_properties["draft.set"] = set_code
         if external_agents:
             system_properties["draft.external.agents"] = ",".join(sorted(external_agents))
+        if required_agent:
+            system_properties["draft.required.agent"] = required_agent
 
         cmd = build_jvm_command(
             main_class=_MAIN_CLASS,

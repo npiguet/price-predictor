@@ -37,6 +37,10 @@ import torch
 import torch.nn.functional as F
 
 from draft.application.draft_pick_states import iter_seat_pick_states
+from draft.application.draft_training_common import (
+    leave_one_out_rewards,
+    length_bucketed_batches,
+)
 from draft.application.rl_advantage import gae_advantages
 from draft.application.train_draft_agent import (
     _make_scheduler,
@@ -50,6 +54,11 @@ from draft.domain.draft_geometry import DraftGeometry, DraftRecord
 from draft.domain.draft_state import TYPE_PACK
 from draft.infrastructure.draft_agent_store import DraftAgentStore
 from draft.infrastructure.draft_record_io import read_records
+from price_predictor.infrastructure.torch_training import (
+    kl_divergence,
+    masked_log_softmax,
+    policy_entropy,
+)
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
 RANDOM_SEED = 42  # hardcoded; governs init and the draft-disjoint split.
@@ -58,7 +67,6 @@ _PROB_FLOOR = 1e-4  # behaviour prob below this counts as an anomaly (D6).
 _ANOMALY_FRACTION = 0.05  # warn if more than this fraction of learner picks anomalous.
 _ANOMALY_SAMPLE_FRACTION = 0.01  # behaviour check scans only a 1% subset (D6 is a
 _ANOMALY_SAMPLE_FLOOR = 2000      # gross-mispairing probe, not a full-corpus pass)…
-_BUCKET_MULTIPLIER = 50  # megabatch = bucket_multiplier * batch_size examples.
 _MISSING_WARN_CAP = 20
 _STEP_LOG_INTERVAL = 15.0
 
@@ -141,19 +149,6 @@ class RLExample:
         return int(self.card_idx.shape[0])
 
 
-def _leave_one_out_rewards(record: DraftRecord) -> list[float | None]:
-    """Per-seat ``deck_score − mean(other non-failed deck_scores)`` (FR-010)."""
-    scores = [s.deck_score for s in record.seats]
-    rewards: list[float | None] = []
-    for i, score in enumerate(scores):
-        if score is None:
-            rewards.append(None)
-            continue
-        others = [s for j, s in enumerate(scores) if j != i and s is not None]
-        rewards.append(score - (sum(others) / len(others) if others else 0.0))
-    return rewards
-
-
 class _Loader:
     """Builds ``RLExample``s + per-learner-seat trajectories from corpora.
 
@@ -225,7 +220,7 @@ class _Loader:
             geo = DraftGeometry.from_record(record)
             self.max_packs = max(self.max_packs, geo.packs)
             self.max_pack_size = max(self.max_pack_size, geo.pack_size)
-            rewards = _leave_one_out_rewards(record)
+            rewards = leave_one_out_rewards(record)
             for seat_idx, seat in enumerate(record.seats):
                 reward = rewards[seat_idx]
                 if reward is None:
@@ -270,51 +265,6 @@ def split_draft_disjoint(
     val_ids = set(ids[:n_val])
     train_ids = {i for i in ids if i not in val_ids}
     return train_ids, val_ids
-
-
-def length_bucketed_batches(
-    examples: list[RLExample], batch_size: int, rng: random.Random,
-) -> list[list[RLExample]]:
-    """Group similar-length examples into batches; reshuffle order per call."""
-    order = list(examples)
-    rng.shuffle(order)
-    mega = batch_size * _BUCKET_MULTIPLIER
-    batches: list[list[RLExample]] = []
-    for start in range(0, len(order), mega):
-        chunk = order[start:start + mega]
-        chunk.sort(key=lambda ex: ex.n_tokens)
-        for b in range(0, len(chunk), batch_size):
-            batches.append(chunk[b:b + batch_size])
-    rng.shuffle(batches)
-    return batches
-
-
-def _masked_log_softmax(logits: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    return torch.log_softmax(logits.masked_fill(~mask, float("-inf")), dim=-1)
-
-
-def _policy_entropy(logits: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-    """Per-row entropy over PACK positions (B,). NaN-gradient-guarded.
-
-    Copied from ``train_picker._policy_entropy``: zero the ``-inf`` log-probs
-    before the ``p·logp`` product so masked positions contribute 0 to both the
-    value and the gradient (``0·-inf`` would otherwise be NaN).
-    """
-    logp = _masked_log_softmax(logits, mask)
-    p = logp.exp()
-    safe_logp = logp.masked_fill(~mask, 0.0)
-    return -(p * safe_logp).sum(dim=-1)
-
-
-def _kl_divergence(
-    logits: torch.Tensor, ref_logits: torch.Tensor, mask: torch.Tensor,
-) -> torch.Tensor:
-    """Per-row KL(π ‖ π_ref) over PACK positions (B,). NaN-gradient-guarded."""
-    logp = _masked_log_softmax(logits, mask)
-    logq = _masked_log_softmax(ref_logits, mask)
-    p = logp.exp()
-    log_ratio = (logp - logq).masked_fill(~mask, 0.0)
-    return (p * log_ratio).sum(dim=-1)
 
 
 class _CoefSchedule:
@@ -455,15 +405,15 @@ def _compute_loss(
     kl = torch.zeros((), device=device)
     learner = batch.learner_active
     if bool(learner.any()):
-        logp = _masked_log_softmax(scaled, batch.pack_mask)  # (B, N)
+        logp = masked_log_softmax(scaled, batch.pack_mask)  # (B, N)
         idx = batch.action_token.clamp(min=0).unsqueeze(1)
         logp_action = logp.gather(1, idx).squeeze(1)  # (B,)
         adv = batch.advantage[learner]
         policy = -(adv * logp_action[learner]).mean()
-        entropy = _policy_entropy(scaled, batch.pack_mask)[learner].mean()
+        entropy = policy_entropy(scaled, batch.pack_mask)[learner].mean()
         with torch.no_grad():
             ref_logits, _ = _forward_logits_critic(reference, batch)
-        kl = _kl_divergence(scaled, ref_logits / temp, batch.pack_mask)[learner].mean()
+        kl = kl_divergence(scaled, ref_logits / temp, batch.pack_mask)[learner].mean()
 
     value = torch.zeros((), device=device)
     if bool(batch.critic_active.any()):
@@ -624,7 +574,7 @@ def _behaviour_anomaly_summary(
             chunk = [learner[i] for i in idxs]
             batch = _collate(chunk, table, mean, std, device)
             ref_logits, _ = _forward_logits_critic(reference, batch)
-            logp = _masked_log_softmax(ref_logits / temp, batch.pack_mask)
+            logp = masked_log_softmax(ref_logits / temp, batch.pack_mask)
             idx = batch.action_token.clamp(min=0).unsqueeze(1)
             logp_action = logp.gather(1, idx).squeeze(1).cpu().numpy()
             logp_sum += float(logp_action.sum())

@@ -51,21 +51,72 @@ class AgentPickService:
         from draft.domain.draft_agent_model import DraftAgentModel
         from draft.infrastructure.draft_agent_store import DraftAgentStore
 
+        ckpt = DraftAgentStore().load_checkpoint(checkpoint_path)
+        model = DraftAgentModel(ckpt.config)
+        model.load_state_dict(ckpt.model_state_dict)
+        # This constructor owns the model it just built, so it also owns its
+        # mode and placement (``from_model`` deliberately does not).
+        model.eval()
+        device = device or torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu"
+        )
+        model.to(device)
+        self._init(
+            model, ckpt.config, locator, device=device,
+            pick_mode=pick_mode, temperature=temperature, seed=seed,
+        )
+
+    @classmethod
+    def from_model(
+        cls,
+        model,
+        config,
+        locator,
+        *,
+        device,
+        pick_mode: str = "argmax",
+        temperature: float = 1.0,
+        seed: int | None = None,
+    ) -> "AgentPickService":
+        """Wrap an **already-constructed** model instead of loading a checkpoint.
+
+        The service holds the model by reference, so a weight update is visible
+        to the very next pick with no copy and no explicit push — which is how
+        the online trainer's learner seats are guaranteed to be piloted by the
+        current in-training policy (spec 021 FR-012).
+
+        The **caller owns the model**: this does not call ``.eval()``,
+        ``.train()``, or ``.to(device)``. The online trainer switches the model
+        to ``eval()`` for generation and ``train()`` for the update, and would
+        be fighting the service if the service touched mode too.
+        """
+        service = cls.__new__(cls)
+        service._init(
+            model, config, locator, device=device,
+            pick_mode=pick_mode, temperature=temperature, seed=seed,
+        )
+        return service
+
+    def _init(
+        self,
+        model,
+        config,
+        locator,
+        *,
+        device,
+        pick_mode: str,
+        temperature: float,
+        seed: int | None,
+    ) -> None:
+        import torch
+
         if pick_mode not in ("argmax", "sample"):
             raise ValueError(f"unknown pick mode {pick_mode!r}")
 
-        ckpt = DraftAgentStore().load_checkpoint(checkpoint_path)
-        self._config = ckpt.config
-        model = DraftAgentModel(ckpt.config)
-        model.load_state_dict(ckpt.model_state_dict)
-        model.eval()
-        self._device = device or torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
-        model.to(self._device)
-
         self._torch = torch
         self._model = model
+        self._config = config
+        self._device = device
         self._locator = locator
         self._pick_mode = pick_mode
         self._temperature = temperature

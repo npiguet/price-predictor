@@ -59,6 +59,12 @@ import java.util.UUID;
  *   <li>{@code -Ddraft.external.agents=<label,...>} — optional; the mix labels
  *       routed through the pick side-channel. Absent/empty ⇒ byte-for-byte
  *       gen-1 behavior (no pick requests are ever emitted, SC-004).</li>
+ *   <li>{@code -Ddraft.required.agent=<label>} — optional; after the per-seat
+ *       mix draw, if no seat carries this label one uniformly-chosen seat is
+ *       overwritten with it. Guarantees every played pod carries at least one
+ *       such seat (spec 021 FR-003) — a learner-free pod carries no on-policy
+ *       picks and must never be drafted. Absent/blank ⇒ sampling is unchanged
+ *       and the random stream is not touched.</li>
  * </ul>
  *
  * <p>The worker loops forever; the supervisor terminates it once it has enough
@@ -92,6 +98,7 @@ public class DraftWorkerMain {
         String setCode = System.getProperty("draft.set");  // null => random per draft
         Set<String> externalAgents = parseExternalAgents(
                 System.getProperty("draft.external.agents"));
+        String requiredAgent = System.getProperty("draft.required.agent");
         BufferedReader stdin = new BufferedReader(
                 new InputStreamReader(System.in, StandardCharsets.UTF_8));
 
@@ -124,7 +131,8 @@ public class DraftWorkerMain {
                         ? setCode
                         : eligibleSets.get(random.nextInt(eligibleSets.size()));
                 String line = generateDraft(
-                        context, draftSet, mix, random, out, stdin, externalAgents, draftId);
+                        context, draftSet, mix, random, out, stdin, externalAgents,
+                        draftId, requiredAgent);
                 if (line != null) {
                     out.println(line);
                     out.flush();
@@ -151,7 +159,38 @@ public class DraftWorkerMain {
     static String generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random) {
         return generateDraft(context, setCode, mix, random, null, null,
-                Collections.emptySet(), UUID.randomUUID().toString());
+                Collections.emptySet(), UUID.randomUUID().toString(), null);
+    }
+
+    /** Backward-compatible overload: no required-agent constraint. */
+    static String generateDraft(
+            BoosterDraft context, String setCode, AgentMix mix, Random random,
+            PrintStream out, BufferedReader stdin, Set<String> externalAgents,
+            String draftId) {
+        return generateDraft(context, setCode, mix, random, out, stdin,
+                externalAgents, draftId, null);
+    }
+
+    /**
+     * Overwrite one uniformly-chosen seat with {@code requiredAgent} when the
+     * per-seat draw produced none (spec 021 FR-003).
+     *
+     * <p>A no-op — and, deliberately, no draw from {@code random} at all — when
+     * the label is absent, blank, or already present, so a run without the
+     * property samples byte-for-byte as it always did. Mutates {@code agents} in
+     * place before any pick is made, so the emitted transcript's
+     * {@code seats[].agent} array always reflects the realised pod.
+     */
+    static void forceRequiredAgent(String[] agents, String requiredAgent, Random random) {
+        if (requiredAgent == null || requiredAgent.isBlank()) {
+            return;
+        }
+        for (String agent : agents) {
+            if (requiredAgent.equals(agent)) {
+                return;
+            }
+        }
+        agents[random.nextInt(agents.length)] = requiredAgent;
     }
 
     /**
@@ -163,7 +202,7 @@ public class DraftWorkerMain {
     static String generateDraft(
             BoosterDraft context, String setCode, AgentMix mix, Random random,
             PrintStream out, BufferedReader stdin, Set<String> externalAgents,
-            String draftId) {
+            String draftId, String requiredAgent) {
         SealedTemplate template = boosterTemplate(setCode);
         if (template == null) {
             return null;
@@ -193,6 +232,7 @@ public class DraftWorkerMain {
             players.add(new LimitedPlayerAI(s, context));
             agents[s] = mix.sample(random);
         }
+        forceRequiredAgent(agents, requiredAgent, random);
 
         List<List<String>> picksByBooster = new ArrayList<>(boosters.length);
         for (int k = 0; k < boosters.length; k++) {

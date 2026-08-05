@@ -492,7 +492,7 @@ class TestPerGroupClipping:
     (FR-008, FR-012)."""
 
     def test_each_group_clipped_at_configured_max_norm(self):
-        from sealed.application.train_scorer import _clip_per_group
+        from price_predictor.infrastructure.torch_training import clip_per_group
 
         scorer = SetTransformerScorer(ScorerConfig())
         encoder = CardPriceTransformerModel(_tiny_transformer_config())
@@ -510,7 +510,7 @@ class TestPerGroupClipping:
         encoder_pre = sum(p.grad.norm(2) ** 2 for p in encoder.parameters()) ** 0.5
 
         clip_at = 2.0
-        norms = _clip_per_group(optimizer, max_norm=clip_at)
+        norms = clip_per_group(optimizer, max_norm=clip_at)
         assert abs(norms["scorer"] - float(scorer_pre)) < 1e-3
         assert abs(norms["encoder"] - float(encoder_pre)) < 1e-3
 

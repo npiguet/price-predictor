@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 from price_predictor.domain.entities import TransformerConfig
 from price_predictor.domain.tokenizer import MtgTokenizer
+from price_predictor.infrastructure.torch_training import clip_per_group
 from price_predictor.infrastructure.transformer_model import CardPriceTransformerModel
 from sealed.domain.card_embedding_layout import FEATURE_COUNT
 from sealed.domain.scorer_model import ScorerConfig, SetTransformerScorer
@@ -681,7 +682,7 @@ def _train_one_epoch(ctx: _TrainingContext) -> EpochStats:
         weights = _compute_margin_weights(batch.margins, ctx.margin_weighting)
         loss = _pairwise_bce(score_winner, score_loser, weights)
         loss.backward()
-        per_batch = _clip_per_group(ctx.optimizer, max_norm=ctx.max_grad_norm)
+        per_batch = clip_per_group(ctx.optimizer, max_norm=ctx.max_grad_norm)
         for name, value in per_batch.items():
             norms_per_batch.setdefault(name, []).append(value)
         ctx.optimizer.step()
@@ -814,19 +815,6 @@ def _tokenize_card(
     )
 
 
-def _clip_per_group(
-    optimizer: torch.optim.Optimizer, *, max_norm: float,
-) -> dict[str, float]:
-    """Clip each parameter group at ``max_norm`` and return the pre-clip
-    L2 norms. The returned values are the diagnostic signal — post-clip
-    norms are bounded by ``max_norm`` and carry no shape information per
-    FR-012."""
-    norms: dict[str, float] = {}
-    for group in optimizer.param_groups:
-        name = group.get("name", "group")
-        pre_clip = torch.nn.utils.clip_grad_norm_(group["params"], max_norm=max_norm)
-        norms[name] = float(pre_clip)
-    return norms
 
 
 def _validate(
