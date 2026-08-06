@@ -196,16 +196,31 @@ agent, or the learner", instead of a second validation path in the trainer.
 Avoids loading the learner checkpoint twice (once into the trainer, once into a
 throwaway service).
 
-### D5 — The learner samples at `-T`; frozen agents play argmax
+### D5 — Per-label temperature: the learner samples, the field defaults to argmax
 
 **Superseded the original "every model-piloted seat samples" decision on
 2026-08-05.** The reasoning below replaces it; the original is preserved at the
 end for the record.
 
-**Decision**: The learner is served in `pick_mode="sample"` at
-`--rollout-temperature`. Every **frozen** agent is served in
-`pick_mode="argmax"` — its best play. Forge built-ins are unaffected either way
-(their randomisation is Java-side and independent of `-T`).
+**Decision**: temperature is set per label by `--agent-temp "LABEL=T,…"`, which
+replaces the single global `-T` outright. A label the map omits is served in
+`pick_mode="argmax"`; a label it names with `T > 0` is served in
+`pick_mode="sample"` at that `T`. The map must name the learner with a positive
+value — sampling is its sole exploration mechanism, and that same value is what
+every policy distribution in the loss is evaluated at, which is what keeps the
+update on-policy. Every **frozen** agent therefore plays argmax *by default*,
+which is the behaviour this decision originally mandated outright; naming one in
+the map is an opt-in experiment that trades field strength for pod diversity.
+Forge built-ins cannot be named at all (their randomisation is Java-side and no
+temperature applies) and doing so is a startup error.
+
+**Why per-label rather than a global flag** (2026-08-06): the argmax default
+preserves this decision's rationale exactly — an unadorned run behaves as before
+— while making the field's play an explicit, inspectable part of the run config
+instead of a constant baked into the trainer. Folding the learner's temperature
+into the same map keeps one source of truth: there is no second flag that could
+disagree with it and silently desync the rollout temperature from the loss
+temperature.
 
 **Rationale**: drafting is a zero-sum allocation of a fixed pool of cards, so an
 opponent's mistake is not a private penalty — it is a **transfer**. When a
@@ -219,7 +234,8 @@ counted only the first:
 
 So sampling the frozen agents does not merely mis-scale the margin: it makes the
 training environment easy in exactly the dimension drafting is about — what
-wheels, and what is still there when the pack comes back. At `-T 3.0` a frozen
+wheels, and what is still there when the pack comes back. At a temperature of
+`3.0` a frozen
 agent sits near 35 % off-argmax, and with a mix like `gen3:3,gen1:5,…` half the
 pod is a competent agent donating cards on purpose. The learner is then optimised
 against a field that does not exist at evaluation time, where every agent plays
@@ -249,12 +265,13 @@ parameter (D4) already accepts arbitrarily-configured services.
   toward. What the margin *is* relative to is the **field**: it must be reported
   with the `--mix` that produced it, exactly as a win rate is reported against a
   stated opposition. The § 7 yardstick co-seats on the same principle.
-- Margins are **not comparable across a change of field** — this change, `-T`, or
-  `--mix`.
+- Margins are **not comparable across a change of field** — this change,
+  `--agent-temp`, or `--mix`.
 
 **Implementation**: no `AgentRegistry` change. The trainer constructs the frozen
-services itself at `pick_mode="argmax"` and passes every service — learner at
-`sample`/`T`, frozen at `argmax` — through `preloaded`, leaving
+services itself at the mode its `--agent-temp` entry implies (`argmax` when
+absent, `sample`/`T` when present) and passes every service — the learner always
+at `sample`/`T` — through `preloaded`, leaving
 `agent_checkpoints` empty. Label validation and the geometry checks already cover
 preloaded labels (D4).
 
@@ -388,7 +405,7 @@ unchanged; `train_config` is the resolved run config; `rl_metadata` is
 ```python
 {"generation": base_generation + 1, "base_checkpoint": str(learner_path),
  "algorithm": "online-grpo", "lr": lr, "rollout_temperature": T,
- "drafts_per_round": n}
+ "agent_temperatures": dict(agent_temperatures), "drafts_per_round": n}
 ```
 
 `generation` is read from the base checkpoint's `rl_metadata["generation"]`

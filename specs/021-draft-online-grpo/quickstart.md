@@ -31,7 +31,7 @@ python -m draft train-draft-agent-online \
     --mix "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1" \
     --scorer-checkpoint models/sealed/scorer/latest.pt \
     --build-method greedy \
-    -T 2.0 --lr 1e-4 --drafts-per-round 10 --set BLB \
+    --agent-temp "gen-3=2.0" --lr 1e-4 --drafts-per-round 10 --set BLB \
     2>&1 | tee output/draft/gen3-run.log
 ```
 
@@ -40,7 +40,10 @@ python -m draft train-draft-agent-online \
   anchor does not, so the margin reads as improvement over a fixed point.
 - `--anchor` is omitted because there is exactly one `--frozen` label.
 - `--build-method greedy` matches the corpus the gen-1 agent was trained on.
-- `-T` is **required**. Start at `2.0` and check the exploration band in Step 2.
+- `--agent-temp` is **required** and must name the learner. Start the learner at
+  `2.0` and check the exploration band in Step 2. Every other label is omitted
+  here, so the frozen anchor and the Forge bots play argmax — the default, and
+  what you want unless you are deliberately experimenting with a sampled field.
 - Keep the log: it is the run's provenance record (round-by-round config +
   diagnostics), and `--seed` does not make Forge-side rollouts reproducible.
 
@@ -59,14 +62,14 @@ round 12 | drafts 10 (120) | picks 1789 (2 seats dropped) | gen 74s train 38s | 
 | What you see | What it means | What to do |
 |---|---|---|
 | `margin` rising over rounds | Working. | Keep going. |
-| `margin` negative early | Expected, not a fault. The learner samples at `-T` while the anchor plays argmax, so you start in the hole by the learner's sampling handicap — round 0 tells you how deep. Crossing zero means the learner has genuinely overtaken a properly-playing anchor. | Keep going. |
+| `margin` negative early | Expected, not a fault. The learner samples at its `--agent-temp` while the anchor plays argmax, so you start in the hole by the learner's sampling handicap — round 0 tells you how deep. Crossing zero means the learner has genuinely overtaken a properly-playing anchor. | Keep going. |
 | `margin` flat, `\|A\|<0.1` climbing toward 100% | The reward isn't discriminating picks — nothing to learn. | Not a temperature problem. Pause and run the yardstick; consider more drafts per round. |
-| `ppl` sagging toward 1, `off-argmax` toward 0 | Exploration collapse — the policy only ever samples its argmax, so the top pick can never be displaced. | Raise `-T` and restart from the latest checkpoint. |
+| `ppl` sagging toward 1, `off-argmax` toward 0 | Exploration collapse — the policy only ever samples its argmax, so the top pick can never be displaced. | Raise the learner's `--agent-temp` and restart from the latest checkpoint. |
 | `KL(prev\|\|new)` large / erratic, `grad_norm` spiking | The step is too big for the round size. | Lower `--lr` (or raise `--drafts-per-round`). Watch `lr` on the same line once annealing is armed. |
 | `KL(init\|\|new)` flat across many rounds | The step is too small to move the policy at all — whatever `KL(prev\|\|new)` says. | Raise `--lr`. Check this before concluding a run has plateaued: a stalled margin at a frozen policy is not a plateau. |
 | `skipped (no signal)` rounds | Fewer than two surviving learner rewards, or zero variance. | Rare; if frequent, raise `--drafts-per-round` or check for failed builds. |
 
-Entropy decays across rounds even at fixed `-T`, so watch the `explore` curve for
+Entropy decays across rounds even at a fixed learner temperature, so watch the `explore` curve for
 the whole run, not just round 0.
 
 The two KLs answer different questions and you need both when sizing `--lr`:
@@ -153,7 +156,7 @@ cp $CAND models/draft/agent/champion.pt
 ```
 
 Otherwise adjust and resume: point `--learner` at the last snapshot and restart
-the loop with the corrected knob (`-T`, `--lr`, or `--drafts-per-round`). There
+the loop with the corrected knob (`--agent-temp`, `--lr`, or `--drafts-per-round`). There
 is no `--resume`; a restart re-runs the LR warmup and resets the optimizer
 moments, which is intentional (research D13).
 

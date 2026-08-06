@@ -334,6 +334,31 @@ kept. Only the learner samples; frozen agents play their best.
 
 ---
 
+## Phase 9: Per-label temperature via `--agent-temp` (added 2026-08-06)
+
+**Purpose**: FR-004 / FR-024 / FR-027 per the amended research D5. Replace the
+single global `-T` with a per-label map `--agent-temp "LABEL=T,…"`. An omitted
+label plays argmax, so **the default behaviour is exactly Phase 8's** — the
+change makes the field's play an explicit part of the run config rather than a
+constant baked into the trainer, and lets the operator sample a `--frozen` label
+as a deliberate experiment. The learner must be named with a positive value: its
+temperature is also the one the loss is evaluated at, and folding both into one
+map removes any second flag that could disagree and silently desync them.
+
+- [ ] T076 [P] Parser tests in `tests/unit/draft/test_online_cli.py`: `"gen3=3,gen1=2"` → `{"gen3": 3.0, "gen1": 2.0}`; whitespace tolerated; a single entry works; duplicate label, empty label, empty/non-numeric value, and a trailing comma each exit 2 with a clear message
+- [ ] T077 [P] Validation tests in `tests/unit/draft/test_online_cli.py` (FR-024 rule 5, exit 2 each): `--agent-temp` omitted entirely; the map omits the learner label; the learner's value is `0` or negative; the map names a Forge built-in (`forge-full`); the map names a label that is neither the learner nor a `--frozen` label; any negative value. Each must fail **before** the worker launches, alongside the existing rules
+- [ ] T078 [P] Pick-mode wiring tests in `tests/unit/draft/test_online_pick_modes.py`: extend the Phase 8 fixture so an unnamed `--frozen` label still yields `_pick_mode == "argmax"` (the Phase 8 property, now the default) while a `--frozen` label named in the map yields `_pick_mode == "sample"` at its own temperature; the learner is always `sample` at its map value
+- [ ] T079 Replace the flag in `src/draft/infrastructure/cli.py`: drop `-T` / `--rollout-temperature`, add `--agent-temp` (required) with the comma-separated `LABEL=VALUE` parser. Reuse `parse_agent_checkpoints`'s `LABEL=…` splitting conventions and error style rather than inventing a second dialect (Principle VII)
+- [ ] T080 Change `TrainDraftAgentOnlineConfig` in `src/draft/application/train_draft_agent_online.py`: `agent_temperatures: dict[str, float]` becomes the stored field; `rollout_temperature` becomes a derived read of `agent_temperatures[learner_label]` so every existing loss/diagnostic use site keeps working unchanged. Add FR-024 rule 5 to the startup validation
+- [ ] T081 Build each service from its map entry in `execute`: `pick_mode="argmax"` when the label is absent, `pick_mode="sample"` at that `T` when present; the learner always `sample`. Still every service through `preloaded` with `agent_checkpoints={}` (Phase 8's mechanism is unchanged)
+- [ ] T082 Extend the startup echo's `rollout` line to print the resolved map — every label with its temperature or `argmax` — so a log alone identifies the field that produced its margins (FR-013, contract § 1)
+- [ ] T083 Write `agent_temperatures` into `rl_metadata` alongside the existing `rollout_temperature` (FR-027), so a checkpoint records the field it was trained against; `rollout_temperature` keeps its current meaning (the learner's own) for back-compatibility with gen-2-era readers
+- [ ] T084 Update the integration smoke test `tests/integration/test_train_draft_agent_online_smoke.py` for the new flag, and re-run the full gate (`pytest`, `ruff check src/ tests/`); no Java change is involved
+
+**Checkpoint**: the default run is byte-for-byte Phase 8, a sampled field is one flag away, and no configuration can desync the rollout temperature from the loss temperature
+
+---
+
 ## Notes
 
 - `[P]` = different files, no dependencies on incomplete tasks
@@ -344,3 +369,4 @@ kept. Only the learner samples; frozen agents play their best.
 - The `-Ddraft.required.agent` change means the fat JAR **must** be rebuilt (T047) before the first real gen-3 run
 - Two failure modes here are silent rather than loud, so they get explicit tasks and tests: an unset `required_agent` (learner-free pods play and are trained on as if valid — T036(c)/T042, tested in T030) and a corpus handle opened `"w"` (the canonical `drafts.jsonl` is truncated — T042)
 - **Phase 7** adds a third silent failure to guard: a best recorded on a partly-filled anchor window pins the run's best to an early lucky round (T055/T061). Its knobs are all opt-in, so T060–T068 must leave every Phase 1–6 test green untouched — T058 asserts that directly.
+- **Phase 9** adds a fourth: a temperature map that omits the learner, or that names a label with no policy behind it, would otherwise train at a default temperature nobody chose or silently ignore an entry the operator believed was applied. Both are startup errors (T077), never warnings. The phase is a flag swap, not a behaviour change — an `--agent-temp` naming only the learner reproduces Phase 8 exactly, which is what makes T078's argmax-by-default assertion the regression guard for the whole phase.

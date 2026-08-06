@@ -70,7 +70,7 @@ checkpoint that beats its base (and Forge) on that yardstick.
    ┌───────────────────────────────────────────────────────────────┐
    │  ROUND k   (worker stays resident — no JVM restart)            │
    │                                                                │
-   │   drive the resident worker → ~10 fresh drafts, sample T      │
+   │   drive the resident worker → ~10 fresh drafts (--agent-temp) │
    │      πₖ pilots the LEARNER seats; frozen + Forge bots the rest │
    │      each seat's pool → build (--build-method) → score         │
    │      (--scorer-checkpoint) → deck_score = reward              │
@@ -99,7 +99,7 @@ checkpoint that beats its base (and Forge) on that yardstick.
 # 4. The GRPO update contract
 
 Input each round: the current checkpoint and the fresh batch it just generated in
-sample mode at temperature `T`. Per learner seat, per pick `t` (a learner seat is
+sample mode at the learner's `--agent-temp`. Per learner seat, per pick `t` (a learner seat is
 one whose mix label is the `--learner` label; § 8):
 
 | Quantity | Definition |
@@ -141,8 +141,9 @@ policy (`--learner`, updated every round) and the anchor label to a frozen agent
 (`--frozen` / `--anchor`, never updated). Each round:
 
 1. **Generate** — drive the resident worker for `--drafts-per-round` fresh drafts.
-   The current policy pilots the learner seats, **sampled at `T`**; frozen agents
-   pilot theirs at **argmax**; Forge/random seats fill the rest (`--mix`, § 8.1).
+   The current policy pilots the learner seats, **sampled** at its `--agent-temp`;
+   frozen agents pilot theirs at **argmax** unless `--agent-temp` names them too;
+   Forge/random seats fill the rest (`--mix`, § 8.1).
    Each seat's pool is built (`--build-method`) and scored
    (`--scorer-checkpoint`) → `deck_score`.
 2. **Update** — one-pass GRPO over the learner picks (§ 4): πₖ → πₖ₊₁.
@@ -188,11 +189,14 @@ anchor_margin = mean(learner deck_score) − mean(frozen-anchor deck_score)   ov
 
 - Anchor frozen ⇒ a progress curve against a fixed point (climbs, then
   plateaus); `learner − Forge` comes free.
-- **It does not start at zero.** The learner samples at `T`, the anchor plays
-  argmax (§ 8.1), so the margin opens negative by the learner's sampling
-  handicap. Round 0 measures that offset exactly — learner and anchor begin from
-  identical weights — and crossing zero means the learner has genuinely overtaken
-  a properly-playing anchor.
+- **It does not start at zero.** The learner always samples; the anchor plays
+  argmax unless `--agent-temp` names it (§ 8.1). The margin therefore opens
+  negative by the *difference* between their sampling handicaps, and round 0
+  measures that offset exactly — learner and anchor begin from identical weights.
+  With the default argmax anchor the offset is the learner's own handicap, and
+  crossing zero means it has genuinely overtaken a properly-playing anchor. Give
+  the anchor a temperature and the offset shrinks, so zero stops carrying that
+  meaning; the round-0 reading is what defines the scale in either case.
 - **It is field-relative, and is never discounted.** Seats compete for one pool
   of cards, so a learner that improves also takes cards its podmates would have
   had: the learner rises *and* the anchor falls. That is the game, not
@@ -202,7 +206,8 @@ anchor_margin = mean(learner deck_score) − mean(frozen-anchor deck_score)   ov
   "standalone" figure underneath. The margin is the competitive result against a
   **stated field**, which is reported alongside it; the yardstick (§ 7) co-seats
   on the same principle and is read the same way.
-- **It is not comparable across a change of field** — `--mix`, `-T`, or the
+- **It is not comparable across a change of field** — `--mix`, `--agent-temp`,
+  or the
   § 8.1 pick modes. Each such change starts a new scale.
 - Computed from `deck_score`s already in hand — no extra command; also
   recomputable post-hoc via `analyze-generated-decks`.
@@ -372,7 +377,7 @@ per-round `generate-draft-data` subprocess.
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--rollout-temperature` / `-T` | _(required; no default)_ | Sample temperature; all policy distributions (logπ, entropy) use it. Positive, or fail fast. |
+| `--agent-temp "LABEL=T,…"` | _(required; no default)_ | Per-label sampling temperature; an omitted label plays **argmax** (`T = 0`). MUST name the `--learner`, whose value is also the temperature every policy distribution (logπ, entropy, KL) is evaluated at and so MUST be > 0. `--frozen` labels may be named to make them sample too (§ 8.1). Naming a Forge built-in, naming an unknown label, or a negative value fails fast. |
 | `--lr` | _(tunable)_ | Step size. Base value for the warmup ramp and for any plateau annealing (§ 6.2). |
 | `--drafts-per-round` | `10` | Fresh drafts generated + trained on (one pass) per round. Larger rounds raise margin precision, cut the margin's lag in rounds, and condition the advantage better, at the same drafts/hour (§ 6.1). |
 | `--anchor-window` | `~100` | Sliding window (drafts) for the anchor margin. Sets both its precision and — divided by `--drafts-per-round` — its lag (§ 6.1). |
@@ -401,17 +406,25 @@ A mix label names a kind of seat. Every label is exactly one of three categories
 | Category | Flag | Plays at | Notes |
 |----------|------|----------|-------|
 | **Forge-piloted** | _(none)_ | Forge's own logic | Built-ins `forge-full` (pure Forge AI), `forge-r30` / `forge-r100` (30 % / 100 % of picks made uniformly random). Just name them in `--mix`. Their randomisation is internal to Forge and unaffected by `T`. |
-| **Frozen** | `--frozen NAME=PATH` (repeatable) | **argmax** | Untrained reference bound to a checkpoint; the gen-1 anchor is one. `--anchor` picks which is the margin baseline (defaults to the sole frozen agent). |
-| **Learner** | `--learner NAME=PATH` (exactly one) | **sampled at `T`** | The policy being trained; weights held in memory, updated each round. One learner only. |
+| **Frozen** | `--frozen NAME=PATH` (repeatable) | **argmax**, unless `--agent-temp` names it | Untrained reference bound to a checkpoint; the gen-1 anchor is one. `--anchor` picks which is the margin baseline (defaults to the sole frozen agent). |
+| **Learner** | `--learner NAME=PATH` (exactly one) | **sampled** at its `--agent-temp` (required, > 0) | The policy being trained; weights held in memory, updated each round. One learner only. |
 
-**Why only the learner samples.** Sampling is the learner's sole exploration
-mechanism, so it must. A frozen agent must not, because a draft allocates one
-fixed pool of cards: a card an agent wrongly declines does not vanish, it flows
-downstream to its podmates. A sampled frozen agent therefore **hands the learner
-cards a properly-playing agent would have kept**, making the training field weak
-in precisely the dimension drafting is about — what wheels, and what is still
-there when the pack comes back — and unlike the evaluation field (§ 7), where
-every agent plays argmax.
+**Why the field defaults to argmax.** Sampling is the learner's sole exploration
+mechanism, so the learner must sample. The default for everyone else is argmax,
+because a draft allocates one fixed pool of cards: a card an agent wrongly
+declines does not vanish, it flows downstream to its podmates. A sampled frozen
+agent therefore **hands the learner cards a properly-playing agent would have
+kept**, making the training field weak in precisely the dimension drafting is
+about — what wheels, and what is still there when the pack comes back — and
+unlike the evaluation field (§ 7), where every agent plays argmax.
+
+`--agent-temp` nevertheless lets the operator sample any `--frozen` label, as a
+deliberate experiment rather than a default: a fully-argmax field is
+deterministic given a pool, so a little field temperature buys pod diversity at
+the cost of the weakening above. It changes the field, so it resets the margin's
+zero point (§ 8) and margins do not carry across it. Forge built-ins cannot be
+given a temperature at all — their randomisation is Java-side — and naming one
+is a startup error.
 
 `--mix "label:weight,…"` — each of the pod's seats is drawn independently from this
 categorical (weights are relative, not exact counts).
@@ -431,7 +444,9 @@ is played. A high learner weight makes this rare.
 - `--anchor` names a `--frozen` label in the mix (omit with a single `--frozen`);
 - the `--learner` `PATH` and `--scorer-checkpoint` exist (and `--picker-checkpoint`
   when `--build-method picker`); `--learner` architecture matches the `.npz` width;
-  `--rollout-temperature` is supplied and positive.
+  `--agent-temp` is supplied, names the `--learner` label with a positive value,
+  names no Forge built-in and no label outside `--learner` / `--frozen`, and
+  carries no negative value.
 
 ### Example — fine-tune gen-3 from gen-1, anchored to gen-1
 
@@ -443,7 +458,8 @@ python -m draft train-draft-agent-online \
   --mix      gen-3:5,gen-1:3,forge-r30:1,forge-r100:1 \   # ~50/30/10/10 per seat
   --scorer-checkpoint models/sealed/scorer/latest.pt \   # frozen scorer → deck_score = reward
   --build-method greedy \
-  -T 2.0  --lr 1e-4  --drafts-per-round 10  --set BLB
+  --agent-temp gen-3=2.0 \                                # frozen gen-1 unnamed ⇒ argmax
+  --lr 1e-4  --drafts-per-round 10  --set BLB
 ```
 
 The gen-1 checkpoint appears twice — as the learner's warm-start and as the frozen
@@ -459,7 +475,7 @@ python -m draft train-draft-agent-online \
   --mix      gen-3:5,gen-1:3,forge-r30:1,forge-r100:1 \
   --scorer-checkpoint models/sealed/scorer/latest.pt \
   --build-method greedy \
-  -T 2.0  --lr 1e-4  --drafts-per-round 10
+  --agent-temp gen-3=2.0 \n  --lr 1e-4  --drafts-per-round 10
 ```
 
 Only the `--learner` warm-start changes; `--anchor` defaults to the sole `--frozen`
@@ -481,7 +497,9 @@ label. Any consistent label set works as long as the validation rules hold.
   All three use the gen-1 format (trunk + policy + critic + recency/context
   tables, `config`, round counters) plus gen-3 `rl_metadata`: generation index,
   base-checkpoint identity, `algorithm=online-grpo`, and `lr` /
-  `rollout_temperature` / `drafts_per_round`, plus the decay count reached (§ 6.2)
+  `rollout_temperature` (the learner's own temperature) / `agent_temperatures`
+  (the whole `--agent-temp` map, so the field is reconstructable) /
+  `drafts_per_round`, plus the decay count reached (§ 6.2)
   as provenance — it records how far a run annealed, and is not restored, since
   there is no `--resume`. The critic head is carried unchanged (untrained,
   unused); no critic / GAE / KL / entropy params; no encoder weights (Phase A).

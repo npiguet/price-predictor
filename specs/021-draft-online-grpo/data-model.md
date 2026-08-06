@@ -25,7 +25,8 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
 | `build_method` | `"greedy" \| "picker"` | `"greedy"` | pool → deck before scoring |
 | `picker_checkpoint` | `Path` | `models/sealed/picker/latest.pt` | must exist only when `build_method == "picker"` |
 | `cards_path` | `Path` | `output/cardsfolder/` | `.npz` cache; fixes the model input width |
-| `rollout_temperature` | `float \| None` | `None` | **required, positive**; sampling *and* every policy distribution |
+| `agent_temperatures` | `dict[str, float] \| None` | `None` | **required**; per-label sampling temperature, omitted label ⇒ argmax (`0`). MUST name the learner with a positive value, MUST NOT name a Forge built-in or an unknown label, MUST carry no negative value. |
+| `rollout_temperature` | `float` | _derived_ | `agent_temperatures[learner_label]` — the learner's own temperature; sampling *and* every policy distribution use it |
 | `lr` | `float` | `1e-4` | AdamW |
 | `drafts_per_round` | `int` | `10` | fresh drafts generated + trained on per round |
 | `anchor_window` | `int` | `100` | sliding window (drafts) for the anchor margin |
@@ -45,8 +46,10 @@ echoed at startup (FR-013). Home: `draft/application/train_draft_agent_online.py
 
 **Absent by design** (spec FR-006, Out of Scope): `--value-weight`,
 `--gae-lambda`, `--kl-coef`, `--entropy-coef`, any **loss-coefficient** decay knob,
-`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (fixed per category:
-learner `sample` at `T`, frozen `argmax` — research D5).
+`--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (derived per label from
+`--agent-temp`: `sample` at `T` when named, `argmax` when omitted; the learner is
+always named — research D5), and `-T` / `--rollout-temperature` (replaced by
+`--agent-temp`).
 
 `patience` and the `lr_decay_*` trio are **run-control** knobs, not learning
 knobs: all default to disabled, so the default surface matches the original
@@ -60,7 +63,7 @@ held-out loss — none exists.
 3. Every `mix` label ∈ `FORGE_BUILTINS ∪ frozen ∪ {learner_label}`.
 4. `anchor` (explicit or defaulted) is a `frozen` label **and** appears in `mix`;
    ambiguous when `len(frozen) > 1` and `--anchor` is omitted → error.
-5. `rollout_temperature` supplied and `> 0`.
+5. `agent_temperatures` supplied; it names the learner label with a value `> 0`; every other key is a `--frozen` label (never a Forge built-in, never unknown); no value is negative.
 6. `scorer_checkpoint` exists; `picker_checkpoint` exists when
    `build_method == "picker"`.
 7. Learner checkpoint architecture matches the `.npz` cache width
@@ -210,7 +213,7 @@ Sliding-window progress state (spec FR-017, FR-021).
 | Optimism | `best_margin` is a maximum over a correlated series, so it overstates the peak. It selects a checkpoint; it does not measure one. |
 | Zero point | **Not 0.** The learner samples at `T` while the anchor plays argmax (FR-004), so the margin opens negative by the learner's sampling handicap. Round 0 measures it exactly — the two start from identical weights. |
 | Field-relativity | Seats compete for one pool of cards, so a learner that improves also takes cards its podmates would have had: learner up **and** anchor down. This is the game, not measurement inflation — denial is draft strategy, and the FR-009 reward is itself the pod-relative leave-one-out `deck_score`, so the objective pays for it directly. The margin is **never discounted**; there is no smaller "standalone" figure. It is the competitive result against a **stated field**, reported with its `--mix`. The FR-030 yardstick co-seats on the same principle. |
-| Comparability | Margins are **not comparable** across a change of field — `--mix`, `-T`, or the FR-004 pick modes. Each such change starts a new scale. |
+| Comparability | Margins are **not comparable** across a change of field — `--mix` or the FR-004 `--agent-temp` map (which subsumes pick modes: a label's mode is argmax iff the map omits it). Each such change starts a new scale. |
 
 Lag is governed by window length in *rounds*, so a larger `drafts_per_round`
 improves precision and lag together. This is why periodic snapshots remain
@@ -237,7 +240,8 @@ rl_metadata = {
     "base_checkpoint": str(learner_checkpoint),
     "algorithm": "online-grpo",
     "lr": lr,                                # the BASE lr, not the annealed value
-    "rollout_temperature": rollout_temperature,
+    "rollout_temperature": rollout_temperature,   # = agent_temperatures[learner_label]
+    "agent_temperatures": dict(agent_temperatures),
     "drafts_per_round": drafts_per_round,
     "lr_decay_count": lr_decay_count,        # provenance only — never restored
 }

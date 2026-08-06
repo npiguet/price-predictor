@@ -56,7 +56,7 @@ an optional `preloaded: dict[str, AgentPickService]`. Preloaded labels count as
 passes `{learner_label: live_service}` and `--frozen` as `agent_checkpoints`.
 
 The two model-piloted categories are served in **different** pick modes
-(research D5): the learner in `pick_mode="sample"` at `--rollout-temperature`,
+(research D5): the learner in `pick_mode="sample"` at its `--agent-temp` value,
 since sampling is its only exploration mechanism; every frozen agent in
 `pick_mode="argmax"`, its best play. A sampled frozen agent would pass downstream
 the cards it wrongly declined, feeding the learner a field that plays worse than

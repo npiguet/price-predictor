@@ -36,7 +36,7 @@ the learner label when the independent draw produces none
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `-T`, `--rollout-temperature` | *(required, no default)* | Sampling temperature; **every** policy distribution (logπ, entropy, KL) uses it. Must be > 0. |
+| `--agent-temp "LABEL=T,…"` | *(required, no default)* | Comma-separated per-label sampling temperatures. An omitted label plays argmax (`T = 0`). MUST name the `--learner` with a value > 0 — that value is also what **every** policy distribution (logπ, entropy, KL) is evaluated at. May name `--frozen` labels to sample them. Naming a Forge built-in or an unknown label, or any negative value, exits 2. |
 | `--lr` | `1e-4` | AdamW learning rate. |
 | `--drafts-per-round` | `10` | Fresh drafts generated and trained on (one pass) per round. Larger rounds raise margin precision and cut its lag in rounds, at the same drafts/hour. |
 | `--anchor-window` | `100` | Sliding window (drafts) backing the anchor margin. Divided by `--drafts-per-round`, it is the window length in rounds — which bounds every run-control knob below. |
@@ -62,7 +62,8 @@ the learner label when the independent draw produces none
 **Not offered** (spec FR-006 / Out of Scope): `--value-weight`, `--gae-lambda`,
 `--kl-coef`, `--entropy-coef` and any **loss-coefficient** schedule,
 `--val-fraction`, `--epochs`, `--resume`, `--pick-mode` (fixed per category —
-the learner samples at `-T`, frozen agents play argmax; research D5),
+the learner samples at its `--agent-temp`, every other label plays argmax unless
+the map names it; research D5),
 `--num-workers` (one resident worker suffices).
 
 ## Exit codes
