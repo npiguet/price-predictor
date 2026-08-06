@@ -239,14 +239,18 @@ parameter (D4) already accepts arbitrarily-configured services.
 - The margin **no longer starts at ~0**. At round 0 the learner carries its
   sampling handicap while the anchor carries none *and* stops donating cards, so
   the margin opens clearly negative. Round 0 measures that offset exactly.
-- The margin **amplifies**. Because seats compete for the same cards, a learner
-  that improves also starves its podmates: learner up *and* anchor down. The
-  measured margin moves at roughly twice the underlying skill gap. This is a
-  property of any co-seated comparison and the § 7 yardstick shares it — which
-  keeps the two instruments consistent, but means neither is an absolute measure
-  of "how much better".
-- Margins are **not comparable across this change**, nor across a change of `-T`
-  or of `--mix`.
+- The margin is **field-relative, and is not discounted**. Because seats compete
+  for the same cards, a learner that improves also takes cards its podmates would
+  have had: learner up *and* anchor down. This is the game rather than
+  measurement inflation — denial is a legitimate draft strategy, and the reward
+  is itself the pod-relative leave-one-out `deck_score`, so the objective pays for
+  denial directly; the measurement and the optimisation target are the same
+  quantity. There is consequently no smaller "standalone" figure to correct
+  toward. What the margin *is* relative to is the **field**: it must be reported
+  with the `--mix` that produced it, exactly as a win rate is reported against a
+  stated opposition. The § 7 yardstick co-seats on the same principle.
+- Margins are **not comparable across a change of field** — this change, `-T`, or
+  `--mix`.
 
 **Implementation**: no `AgentRegistry` change. The trainer constructs the frozen
 services itself at `pick_mode="argmax"` and passes every service — learner at

@@ -209,8 +209,8 @@ Sliding-window progress state (spec FR-017, FR-021).
 | Lag | The margin trails the current policy by ≈ half its span **in rounds**. A margin peak at round `k` implies a policy peak near `k − ½·window_rounds`. |
 | Optimism | `best_margin` is a maximum over a correlated series, so it overstates the peak. It selects a checkpoint; it does not measure one. |
 | Zero point | **Not 0.** The learner samples at `T` while the anchor plays argmax (FR-004), so the margin opens negative by the learner's sampling handicap. Round 0 measures it exactly — the two start from identical weights. |
-| Amplification | Seats compete for one pool of cards, so a learner that improves also starves its podmates: learner up **and** anchor down. The margin moves at ≈2× the underlying skill gap. The FR-030 yardstick co-seats too and shares this, so the instruments agree — but neither is an absolute measure. |
-| Comparability | Margins are **not comparable** across a change of `-T`, `--mix`, or the FR-004 pick modes. Each such change starts a new scale. |
+| Field-relativity | Seats compete for one pool of cards, so a learner that improves also takes cards its podmates would have had: learner up **and** anchor down. This is the game, not measurement inflation — denial is draft strategy, and the FR-009 reward is itself the pod-relative leave-one-out `deck_score`, so the objective pays for it directly. The margin is **never discounted**; there is no smaller "standalone" figure. It is the competitive result against a **stated field**, reported with its `--mix`. The FR-030 yardstick co-seats on the same principle. |
+| Comparability | Margins are **not comparable** across a change of field — `--mix`, `-T`, or the FR-004 pick modes. Each such change starts a new scale. |
 
 Lag is governed by window length in *rounds*, so a larger `drafts_per_round`
 improves precision and lag together. This is why periodic snapshots remain

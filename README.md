@@ -887,11 +887,14 @@ Two consequences follow, and both are expected rather than faults. The margin
 **opens negative**, because the learner carries a sampling handicap the anchor
 does not; round 0 measures that offset exactly, since the two start from
 identical weights, and crossing zero means the learner has genuinely overtaken a
-properly-playing anchor. And the margin **amplifies**: seats compete for one pool,
-so an improving learner also starves its podmates, and the margin moves at
-roughly twice the underlying skill gap. The yardstick co-seats too and shares
-this, so the instruments agree — but neither is an absolute measure, and margins
-do not compare across a change of `-T`, `--mix`, or pick modes.
+properly-playing anchor. And the margin is **field-relative**: seats compete for
+one pool, so an improving learner also takes cards its podmates would have had.
+That is the game, not measurement inflation — denial is draft strategy, and the
+reward is itself pod-relative (leave-one-out `deck_score`), so the objective pays
+for it directly. The margin is never discounted to some smaller "standalone"
+figure; it is the competitive result against a stated field, reported with that
+field. The yardstick co-seats on the same principle and is read the same way.
+Margins do not compare across a change of field — `--mix`, `-T`, or pick modes.
 
 Every round prints four diagnostic axes plus a consolidated summary line, so
 progress, stagnation and collapse are all readable from the run log alone:

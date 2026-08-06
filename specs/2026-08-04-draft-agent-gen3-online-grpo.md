@@ -193,13 +193,17 @@ anchor_margin = mean(learner deck_score) − mean(frozen-anchor deck_score)   ov
   handicap. Round 0 measures that offset exactly — learner and anchor begin from
   identical weights — and crossing zero means the learner has genuinely overtaken
   a properly-playing anchor.
-- **It amplifies.** Seats compete for one pool of cards, so a learner that
-  improves also takes cards its podmates would have had: the learner rises *and*
-  the anchor falls. The margin moves at roughly twice the underlying skill gap.
-  The yardstick (§ 7) co-seats too and shares this, so the two agree — but
-  neither is an absolute measure of how much better one agent is.
-- **It is not comparable across runs** that change `-T`, `--mix`, or the § 8.1
-  pick modes. Each such change starts a new scale.
+- **It is field-relative, and is never discounted.** Seats compete for one pool
+  of cards, so a learner that improves also takes cards its podmates would have
+  had: the learner rises *and* the anchor falls. That is the game, not
+  measurement inflation — an 8-seat pod allocates one shared pool, denial is a
+  legitimate draft strategy, and the reward is itself pod-relative (leave-one-out
+  `deck_score`), so the objective pays for it directly. There is no smaller
+  "standalone" figure underneath. The margin is the competitive result against a
+  **stated field**, which is reported alongside it; the yardstick (§ 7) co-seats
+  on the same principle and is read the same way.
+- **It is not comparable across a change of field** — `--mix`, `-T`, or the
+  § 8.1 pick modes. Each such change starts a new scale.
 - Computed from `deck_score`s already in hand — no extra command; also
   recomputable post-hoc via `analyze-generated-decks`.
 - Guideline exploration band: perplexity ≈ 2–3 / off-argmax ≈ 25–40 %; watch it
