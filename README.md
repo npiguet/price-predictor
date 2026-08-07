@@ -1,4 +1,4 @@
-REA# Price Predictor
+# Price Predictor
 
 Predicts Magic: The Gathering card EUR market prices from game-visible
 attributes (mana cost, card types, oracle text, power/toughness, keywords).
@@ -842,7 +842,8 @@ python -m draft train-draft-agent-online \
   --learner gen-3=models/draft/agent/<champion>.pt \
   --frozen  gen-1=models/draft/agent/<champion>.pt \
   --mix "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1" \
-  --build-method greedy -T 2.0 --lr 1e-4 --drafts-per-round 10 --set BLB \
+  --build-method greedy --agent-temp "gen-3=2.0" \
+  --lr 1e-4 --drafts-per-round 10 --set BLB \
   2>&1 | tee output/draft/gen3-run.log
 #   then pause on a margin plateau and run the SAME step-4c yardstick + analysis
 
@@ -868,20 +869,30 @@ drafts whose learner seats are piloted by the **live in-training policy**, takes
 one pass of the single critic-free term `−A·logπ_T(a|s)` over those seats' picks,
 discards the batch, and drafts the next round with the updated weights. There is
 no critic term, GAE, KL anchor, entropy bonus, validation split, or early stop —
-the operator tunes exactly three knobs (`--lr`, `-T`, `--drafts-per-round`).
+the operator tunes exactly three knobs (`--lr`, `--agent-temp`,
+`--drafts-per-round`).
 `--learner LABEL=PATH` (exactly one, label required) is the agent under training;
 `--frozen LABEL=PATH` binds untrained references, and `--anchor` picks which one
 the margin is measured against (defaulting to the sole frozen label). A frozen
 anchor is required and must stay fixed for the whole campaign — the moment it
 moves, the margin stops meaning "improvement over a fixed point".
 
-**Only the learner samples.** It draws at `-T` because sampling is its sole
-exploration mechanism; every `--frozen` agent plays **argmax**, its best. That
-matters more than a scoring convention: a draft allocates one fixed pool of
-cards, so a card a frozen agent wrongly declines flows downstream to its
-podmates. A sampled field would hand the learner cards a properly-playing agent
-would have kept, making training weak in exactly the dimension drafting is about.
-Forge built-ins are unaffected — their randomisation is internal to Forge.
+**Temperature is per label.** `--agent-temp "LABEL=T,…"` replaces a single
+global `-T`: a label it omits plays **argmax**, a label it names is sampled at
+that `T`. It must name the `--learner` with a positive value — sampling is the
+learner's sole exploration mechanism, and that same value is what every policy
+distribution in the loss is evaluated at, so one map keeps rollout and loss in
+lockstep. Forge built-ins cannot be named (their randomisation is internal to
+Forge) and naming one is a startup error.
+
+**The field defaults to argmax, and that default matters.** A draft allocates
+one fixed pool of cards, so a card a frozen agent wrongly declines flows
+downstream to its podmates. A sampled field hands the learner cards a
+properly-playing agent would have kept, making training weak in exactly the
+dimension drafting is about. Naming a `--frozen` label in `--agent-temp` is
+therefore a deliberate experiment — it buys pod diversity against a
+deterministic field, at the cost of that weakening, and it resets the margin's
+zero point.
 
 Two consequences follow, and both are expected rather than faults. The margin
 **opens negative**, because the learner carries a sampling handicap the anchor
@@ -894,7 +905,7 @@ reward is itself pod-relative (leave-one-out `deck_score`), so the objective pay
 for it directly. The margin is never discounted to some smaller "standalone"
 figure; it is the competitive result against a stated field, reported with that
 field. The yardstick co-seats on the same principle and is read the same way.
-Margins do not compare across a change of field — `--mix`, `-T`, or pick modes.
+Margins do not compare across a change of field — `--mix` or `--agent-temp`.
 
 Every round prints four diagnostic axes plus a consolidated summary line, so
 progress, stagnation and collapse are all readable from the run log alone:
