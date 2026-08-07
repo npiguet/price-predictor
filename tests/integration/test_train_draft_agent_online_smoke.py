@@ -157,7 +157,7 @@ def run(
         scorer_checkpoint=base_checkpoint,  # existence-checked only; labeler is stubbed
         build_method="greedy",
         cards_path=cards_path,
-        rollout_temperature=2.0,
+        agent_temperatures={LEARNER: 2.0},
         drafts_per_round=DRAFTS_PER_ROUND,
         anchor_window=100,
         snapshot_every=100,   # only the run-end snapshot fires
@@ -214,6 +214,9 @@ def test_latest_checkpoint_is_a_loadable_gen3_agent(run) -> None:
     assert ckpt.rl_metadata["algorithm"] == "online-grpo"
     assert ckpt.rl_metadata["generation"] == 2
     assert ckpt.rl_metadata["rollout_temperature"] == 2.0
+    # The whole field is recorded, not just the learner's own temperature, so a
+    # checkpoint states the conditions its margins were measured under (FR-027).
+    assert ckpt.rl_metadata["agent_temperatures"] == {LEARNER: 2.0}
     assert ckpt.rl_metadata["drafts_per_round"] == DRAFTS_PER_ROUND
     # No held-out metric exists, and the critic standardization is carried through.
     assert ckpt.best_val_loss == float("inf")
@@ -301,7 +304,7 @@ def test_best_checkpoint_is_written_once_the_window_fills(
         mix=[(LEARNER, 5), (ANCHOR, 3)],
         scorer_checkpoint=base_checkpoint,
         cards_path=cards_path,
-        rollout_temperature=2.0,
+        agent_temperatures={LEARNER: 2.0},
         drafts_per_round=DRAFTS_PER_ROUND,
         anchor_window=DRAFTS_PER_ROUND,   # fills on the very first round
         snapshot_every=100,
@@ -353,7 +356,7 @@ def test_the_corpus_is_appended_never_truncated(
         mix=[(LEARNER, 5), (ANCHOR, 3)],
         scorer_checkpoint=base_checkpoint,
         cards_path=cards_path,
-        rollout_temperature=2.0,
+        agent_temperatures={LEARNER: 2.0},
         drafts_per_round=DRAFTS_PER_ROUND,
         max_rounds=1,
         batch_size=8,

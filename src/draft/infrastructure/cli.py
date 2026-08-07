@@ -175,10 +175,12 @@ def _build_train_draft_agent_online_parser(subparsers) -> None:
 
     # -- Rollout & optimisation ------------------------------------------------
     parser.add_argument(
-        "-T", "--rollout-temperature", type=float, default=None,
-        dest="rollout_temperature",
-        help="Sampling temperature; EVERY policy distribution (logpi, entropy, "
-             "KL) uses it. Required, no default, must be > 0.",
+        "--agent-temp", default=None, dest="agent_temp", metavar="LABEL=T,...",
+        help="Per-label sampling temperature; an omitted label plays argmax. "
+             "Must name the --learner with a value > 0 -- that value is also "
+             "what EVERY policy distribution (logpi, entropy, KL) is evaluated "
+             "at. Naming a Forge built-in or an unbound label is an error. "
+             "Required, no default.",
     )
     parser.add_argument(
         "--lr", type=float, default=1e-4, help="AdamW learning rate (default: 1e-4).",
@@ -852,6 +854,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         OnlineConfigError,
         TrainDraftAgentOnlineConfig,
         TrainDraftAgentOnlineUseCase,
+        parse_agent_temperatures,
         parse_frozen_specs,
         parse_learner_spec,
         validate_config,
@@ -862,6 +865,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         learner_label, learner_checkpoint = parse_learner_spec(args.learner)
         frozen = parse_frozen_specs(args.frozen)
         mix = parse_agent_mix(args.mix)
+        agent_temperatures = parse_agent_temperatures(args.agent_temp)
     except (OnlineConfigError, AgentMixError, AgentRegistryError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
@@ -876,7 +880,7 @@ def run_train_draft_agent_online(args: argparse.Namespace) -> int:
         build_method=args.build_method,
         picker_checkpoint=Path(args.picker_checkpoint),
         cards_path=Path(args.cards_path),
-        rollout_temperature=args.rollout_temperature,
+        agent_temperatures=agent_temperatures,
         lr=args.lr,
         drafts_per_round=args.drafts_per_round,
         anchor_window=args.anchor_window,

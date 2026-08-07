@@ -87,7 +87,7 @@ _DEFAULT_MIX = "gen-3:5,gen-1:3,forge-r30:1,forge-r100:1"
 class TrainDraftAgentOnlineConfig:
     """Resolved inputs to the online GRPO loop (data-model §1).
 
-    ``learner_label``/``learner_checkpoint`` and ``rollout_temperature`` are
+    ``learner_label``/``learner_checkpoint`` and ``agent_temperatures`` are
     required; the dataclass defaults exist only so the CLI can construct and then
     validate (:func:`_validate_config`, data-model §1.1). Architecture is
     inherited from the learner checkpoint — there are no architecture flags.
@@ -96,10 +96,10 @@ class TrainDraftAgentOnlineConfig:
     exist here and must not be added: ``value_weight``, ``gae_lambda``,
     ``kl_coef``, ``entropy_coef`` and every coefficient-decay schedule,
     ``val_fraction``, ``patience``, ``epochs``, ``lr_decay_*``, ``resume``, and
-    ``pick_mode`` (rollouts are always sampled at ``rollout_temperature``). The
-    operator is expected to tune exactly three knobs — ``lr``,
-    ``rollout_temperature``, and ``drafts_per_round``; everything else carries a
-    fixed default.
+    ``pick_mode`` (each label's mode follows from ``agent_temperatures``: sample
+    where named, argmax where not). The operator is expected to tune exactly
+    three knobs — ``lr``, ``agent_temperatures``, and ``drafts_per_round``;
+    everything else carries a fixed default.
     """
 
     # Agent wiring (FR-002, FR-003)
@@ -120,7 +120,7 @@ class TrainDraftAgentOnlineConfig:
     cards_path: Path = field(default_factory=lambda: Path("output/cardsfolder/"))
 
     # Rollout & optimisation (FR-004, FR-006, FR-025)
-    rollout_temperature: float | None = None
+    agent_temperatures: dict[str, float] | None = None
     lr: float = 1e-4
     drafts_per_round: int = 10
     anchor_window: int = 100
@@ -145,6 +145,21 @@ class TrainDraftAgentOnlineConfig:
         default_factory=lambda: Path("output/draft/drafts.jsonl"),
     )
     max_consecutive_faults: int = 5
+
+    @property
+    def rollout_temperature(self) -> float | None:
+        """The learner's own temperature — derived, never separately settable.
+
+        Sampling and every policy distribution in the update (logπ, entropy, KL)
+        read this one value, so folding it into ``agent_temperatures`` removes
+        the second flag that could disagree and silently desync the rollout from
+        the loss. ``None`` only before validation, which requires the entry.
+        """
+        return (self.agent_temperatures or {}).get(self.learner_label)
+
+    def temperature_for(self, label: str) -> float:
+        """A label's sampling temperature; ``0.0`` (i.e. argmax) when unnamed."""
+        return float((self.agent_temperatures or {}).get(label, 0.0))
 
 
 # --------------------------------------------------------------------------- #
@@ -196,6 +211,42 @@ def parse_frozen_specs(specs: list[str] | None) -> dict[str, Path]:
             raise OnlineConfigError(f"duplicate --frozen label {label!r}")
         frozen[label] = Path(path_str)
     return frozen
+
+
+def parse_agent_temperatures(spec: str | None) -> dict[str, float]:
+    """Parse ``--agent-temp "LABEL=T,…"`` into a per-label sampling temperature.
+
+    Same ``LABEL=VALUE`` dialect as ``--learner`` / ``--frozen`` /
+    ``--agent-checkpoint``, comma-separated. A label the map omits plays argmax,
+    so the map is the *whole* statement of how the field plays — which is why an
+    empty or malformed entry is an error rather than a silently-skipped one.
+    """
+    if spec is None or not spec.strip():
+        raise OnlineConfigError(
+            "--agent-temp \"LABEL=T,…\" is required (no default): it names every "
+            "label that samples, and the learner's entry is also the temperature "
+            "the update's policy distributions are evaluated at"
+        )
+    temperatures: dict[str, float] = {}
+    for entry in spec.split(","):
+        label, sep, value_str = entry.partition("=")
+        label, value_str = label.strip(), value_str.strip()
+        if not sep or not label or not value_str:
+            raise OnlineConfigError(
+                f"--agent-temp entry {entry.strip()!r} must be 'LABEL=VALUE' "
+                f"(the whole map was {spec!r})"
+            )
+        try:
+            value = float(value_str)
+        except ValueError:
+            raise OnlineConfigError(
+                f"--agent-temp {label!r} temperature must be a number, got "
+                f"{value_str!r}"
+            ) from None
+        if label in temperatures:
+            raise OnlineConfigError(f"duplicate --agent-temp label {label!r}")
+        temperatures[label] = value
+    return temperatures
 
 
 def resolve_anchor(config: TrainDraftAgentOnlineConfig) -> str:
@@ -286,17 +337,49 @@ def validate_config(config: TrainDraftAgentOnlineConfig) -> str:
     # Rule 4 — the anchor resolves unambiguously to a frozen label in the mix.
     anchor = resolve_anchor(config)
 
-    # Rule 5 — the rollout temperature is supplied and positive.
-    if config.rollout_temperature is None:
+    # Rule 5 — the temperature map is supplied, names the learner with a positive
+    # value, and names nothing that has no policy behind it. Both omissions are
+    # silent failures otherwise: a missing learner entry would train at some
+    # default temperature nobody chose, and an entry for a Forge built-in (whose
+    # randomisation is internal) or an unbound label would be quietly ignored
+    # while the operator believed the field was sampling.
+    temperatures = config.agent_temperatures
+    if temperatures is None:
         raise OnlineConfigError(
-            "-T/--rollout-temperature is required (no default): it is both the "
-            "sampling temperature and the temperature every policy "
-            "distribution in the update is evaluated at"
+            "--agent-temp \"LABEL=T,…\" is required (no default): it is both the "
+            "per-label sampling temperature and — through the learner's entry — "
+            "the temperature every policy distribution in the update is "
+            "evaluated at"
         )
-    if config.rollout_temperature <= 0:
+    if config.learner_label not in temperatures:
         raise OnlineConfigError(
-            f"--rollout-temperature must be > 0, got {config.rollout_temperature}"
+            f"--agent-temp must name the learner {config.learner_label!r}: "
+            "sampling is its only exploration mechanism, and its temperature is "
+            "also the one the update's policy distributions are evaluated at"
         )
+    if temperatures[config.learner_label] <= 0:
+        raise OnlineConfigError(
+            f"--agent-temp {config.learner_label}="
+            f"{temperatures[config.learner_label]} must be > 0: the learner is "
+            "the one agent that cannot play argmax, since sampling is its only "
+            "exploration mechanism"
+        )
+    for label in sorted(temperatures):
+        if label in FORGE_BUILTINS:
+            raise OnlineConfigError(
+                f"--agent-temp cannot name the Forge built-in {label!r}: Forge "
+                "randomises internally and ignores any temperature set here"
+            )
+        if label != config.learner_label and label not in config.frozen:
+            raise OnlineConfigError(
+                f"--agent-temp label {label!r} is neither the learner nor a "
+                "--frozen agent, so nothing would apply it"
+            )
+        if temperatures[label] < 0:
+            raise OnlineConfigError(
+                f"--agent-temp {label}={temperatures[label]} must be >= 0 "
+                "(omit the label, or give it 0, to have it play argmax)"
+            )
 
     # Rule 6 — the reward inputs exist.
     if not config.scorer_checkpoint.exists():
@@ -1070,6 +1153,21 @@ def _format_run_control(config: TrainDraftAgentOnlineConfig) -> str:
     return " | ".join(parts) if parts else "no automatic stop, no LR annealing"
 
 
+def _format_agent_temperatures(config: TrainDraftAgentOnlineConfig) -> str:
+    """Every model label with its temperature, or ``argmax`` where unnamed.
+
+    Printed in full rather than as the raw ``--agent-temp`` string so a log alone
+    states how each agent played — margins are only comparable within one field
+    (data-model § 7.1), and the omitted labels are exactly the ones the raw flag
+    would not mention.
+    """
+    parts = []
+    for label in [config.learner_label, *sorted(config.frozen)]:
+        temperature = config.temperature_for(label)
+        parts.append(f"{label}={temperature}" if temperature > 0 else f"{label}=argmax")
+    return " ".join(parts)
+
+
 def format_startup_echo(
     config: TrainDraftAgentOnlineConfig,
     *,
@@ -1103,8 +1201,7 @@ def format_startup_echo(
         f"  mix       : {format_agent_mix(config.mix)}  (>=1 learner seat forced)",
         reward,
         (
-            f"  rollout   : T={config.rollout_temperature} "
-            "(learner samples; frozen play argmax) | "
+            f"  rollout   : T {_format_agent_temperatures(config)} | "
             f"drafts/round={config.drafts_per_round} | "
             f"set={config.set_code or 'random'} | seed={config.seed} "
             "(Forge-side rollouts unseeded)"
@@ -1205,7 +1302,11 @@ def build_rl_metadata(
         "base_checkpoint": str(config.learner_checkpoint),
         "algorithm": "online-grpo",
         "lr": config.lr,
+        # The learner's own, kept under its gen-2-era name for readers that
+        # expect a single scalar; the map beside it records the whole field, so
+        # a checkpoint states the conditions its margins were measured under.
         "rollout_temperature": config.rollout_temperature,
+        "agent_temperatures": dict(config.agent_temperatures or {}),
         "drafts_per_round": config.drafts_per_round,
         "lr_decay_count": lr_decay_count,
     }
@@ -1340,20 +1441,26 @@ class TrainDraftAgentOnlineUseCase:
 
         gen_config = self._generation_config(config, temperature)
         labeler = build_labeler(gen_config, locator=locator)
-        # Per-category pick modes (research D5). The learner samples at T —
-        # sampling is its only exploration mechanism. Every frozen agent plays
-        # argmax, its best: a draft allocates one fixed pool of cards, so a card
-        # a frozen agent wrongly declines does not vanish, it flows downstream to
-        # its podmates. Sampling the frozen field would hand the learner cards a
-        # properly-playing agent would have kept, making the training field weak
-        # in exactly the dimension drafting is about — and unlike the evaluation
-        # field, where every agent plays argmax.
-        services = {
-            label: AgentPickService(
-                path, locator, device=device, pick_mode="argmax",
+        # Per-label pick modes (research D5), read straight off --agent-temp: a
+        # label it names samples at that T, a label it omits plays argmax, its
+        # best. Argmax is the default because a draft allocates one fixed pool of
+        # cards, so a card a frozen agent wrongly declines does not vanish — it
+        # flows downstream to its podmates. A sampled field hands the learner
+        # cards a properly-playing agent would have kept, making the training
+        # field weak in exactly the dimension drafting is about, and unlike the
+        # evaluation field, where every agent plays argmax. Naming a frozen label
+        # anyway buys pod diversity at that price; the operator decides.
+        services = {}
+        for index, (label, path) in enumerate(sorted(config.frozen.items())):
+            frozen_temperature = config.temperature_for(label)
+            services[label] = AgentPickService(
+                path, locator, device=device,
+                pick_mode="sample" if frozen_temperature > 0 else "argmax",
+                temperature=frozen_temperature or 1.0,
+                # A distinct stream per sampled agent: sharing the learner's seed
+                # would couple the field's exploration to the learner's.
+                seed=config.seed + 1 + index if frozen_temperature > 0 else None,
             )
-            for label, path in sorted(config.frozen.items())
-        }
         services[config.learner_label] = AgentPickService.from_model(
             model, base.config, locator, device=device,
             pick_mode="sample", temperature=temperature, seed=config.seed,

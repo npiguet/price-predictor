@@ -1,9 +1,11 @@
-"""Per-category pick modes: the learner samples at -T, frozen agents play argmax.
+"""Per-label pick modes: a label named in ``--agent-temp`` samples, the rest argmax.
 
-Covers spec FR-004 / FR-021 and research D5. Sampling a frozen agent would not
-merely lower its own score — a draft allocates one fixed pool of cards, so a card
-it wrongly declines flows downstream to its podmates, the learner among them. A
-sampled field hands the learner cards a properly-playing agent would have kept.
+Covers spec FR-004 / FR-021 and research D5. Argmax is the *default* — the map
+has to name a frozen label to sample it — because sampling a frozen agent would
+not merely lower its own score: a draft allocates one fixed pool of cards, so a
+card it wrongly declines flows downstream to its podmates, the learner among
+them. A sampled field hands the learner cards a properly-playing agent would
+have kept. Naming one anyway is a deliberate experiment, so it is supported.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ EMB_DIM = 8
 LEARNER = "gen-3"
 ANCHOR = "gen-1"
 TEMPERATURE = 3.0
+FROZEN_TEMPERATURE = 1.5
 
 
 class _Captured(Exception):
@@ -59,10 +62,9 @@ def base_checkpoint(tmp_path: Path) -> Path:
     return path
 
 
-@pytest.fixture
-def registry_call(
+def _capture(
     tmp_path: Path, cards_path: Path, base_checkpoint: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, agent_temperatures: dict[str, float],
 ) -> dict:
     """Run ``execute`` up to ``AgentRegistry.build`` and capture its arguments."""
     monkeypatch.setattr(online, "CHECKPOINT_DIR", tmp_path / "models")
@@ -91,12 +93,35 @@ def registry_call(
         mix=[(LEARNER, 3), (ANCHOR, 5), ("gen-2", 1), ("forge-r100", 1)],
         scorer_checkpoint=base_checkpoint,
         cards_path=cards_path,
-        rollout_temperature=TEMPERATURE,
+        agent_temperatures=agent_temperatures,
         output_path=tmp_path / "drafts.jsonl",
     )
     with pytest.raises(_Captured):
         TrainDraftAgentOnlineUseCase().execute(config)
     return captured
+
+
+@pytest.fixture
+def registry_call(
+    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict:
+    """The default field: only the learner is named, so everything else is argmax."""
+    return _capture(
+        tmp_path, cards_path, base_checkpoint, monkeypatch, {LEARNER: TEMPERATURE},
+    )
+
+
+@pytest.fixture
+def sampled_field_call(
+    tmp_path: Path, cards_path: Path, base_checkpoint: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> dict:
+    """One frozen label is named too — the deliberate sampled-field experiment."""
+    return _capture(
+        tmp_path, cards_path, base_checkpoint, monkeypatch,
+        {LEARNER: TEMPERATURE, ANCHOR: FROZEN_TEMPERATURE},
+    )
 
 
 def test_every_service_is_supplied_preloaded(registry_call: dict) -> None:
@@ -111,9 +136,30 @@ def test_the_learner_samples_at_the_rollout_temperature(registry_call: dict) -> 
     assert learner._temperature == TEMPERATURE
 
 
-def test_every_frozen_agent_plays_argmax(registry_call: dict) -> None:
+def test_a_frozen_agent_the_map_omits_plays_argmax(registry_call: dict) -> None:
+    """The Phase 8 property, now the default — and the regression guard for it."""
     for label in (ANCHOR, "gen-2"):
         assert registry_call["preloaded"][label]._pick_mode == "argmax", label
+
+
+def test_a_frozen_agent_the_map_names_samples_at_its_own_temperature(
+    sampled_field_call: dict,
+) -> None:
+    anchor = sampled_field_call["preloaded"][ANCHOR]
+    assert anchor._pick_mode == "sample"
+    assert anchor._temperature == FROZEN_TEMPERATURE
+
+
+def test_an_unnamed_frozen_agent_is_unaffected_by_a_sampled_sibling(
+    sampled_field_call: dict,
+) -> None:
+    assert sampled_field_call["preloaded"]["gen-2"]._pick_mode == "argmax"
+
+
+def test_the_learner_samples_whatever_the_field_does(sampled_field_call: dict) -> None:
+    learner = sampled_field_call["preloaded"][LEARNER]
+    assert learner._pick_mode == "sample"
+    assert learner._temperature == TEMPERATURE
 
 
 def test_the_learner_service_wraps_the_live_model(registry_call: dict) -> None:

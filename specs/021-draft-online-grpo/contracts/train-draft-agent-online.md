@@ -92,7 +92,7 @@ Online GRPO run <run_id>: generation 1 -> 2
   frozen    : gen-1 <- models/draft/agent/gen1/latest.pt  (anchor)
   mix       : gen-3:5,gen-1:3,forge-r30:1,forge-r100:1  (>=1 learner seat forced)
   reward    : scorer models/sealed/scorer/latest.pt | build-method greedy
-  rollout   : T=2.0 | drafts/round=10 | set=BLB | seed=42 (Forge-side rollouts unseeded)
+  rollout   : T gen-3=2.0 gen-1=argmax | drafts/round=10 | set=BLB | seed=42 (Forge-side rollouts unseeded)
   optimiser : lr=1e-04 batch=32 clip=1.0 warmup=200 steps
   run ctrl  : patience 30 rounds | lr decay x0.1 after 15 rounds, floor 1e-07
   runtime   : device cuda | embedding width 528 | anchor window 100 drafts (10 rounds, ~5-round lag)
@@ -105,6 +105,11 @@ no rl_metadata) + 1`, exactly as the gen-2 trainer computes it. It is independen
 of the `--learner` mix label: the run above is labeled `gen-3` in the mix but
 warm-starts from a gen-1 base, so its counter is `2`. Basing the same run off a
 gen-2 checkpoint prints `generation 2 -> 3`.
+
+The `rollout` line prints the **resolved** temperature map — every model label
+with its temperature, or `argmax` where `--agent-temp` omits it — rather than the
+raw flag string. Margins are only comparable within one field, and the omitted
+labels are exactly the ones the raw flag would not mention.
 
 ### 2. Per-round block (FR-014…FR-018) — one summary line + four detail lines
 

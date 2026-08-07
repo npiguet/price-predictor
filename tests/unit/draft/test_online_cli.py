@@ -10,6 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from draft.application.train_draft_agent_online import (
+    OnlineConfigError,
+    parse_agent_temperatures,
+)
 from draft.infrastructure.cli import build_parser
 
 
@@ -38,7 +42,7 @@ def _argv(ckpt: Path, scorer: Path, **overrides: str | None) -> list[str]:
         "--frozen": f"gen-1={ckpt}",
         "--mix": "gen-3:5,gen-1:3,forge-r30:1",
         "--scorer-checkpoint": str(scorer),
-        "-T": "2.0",
+        "--agent-temp": "gen-3=2.0",
         "--max-rounds": "1",
     }
     base.update(overrides)
@@ -72,7 +76,10 @@ def _never_run(monkeypatch: pytest.MonkeyPatch):
 # --------------------------------------------------------------------------- #
 
 def test_missing_learner_is_rejected(scorer: Path, capsys) -> None:
-    argv = ["train-draft-agent-online", "--scorer-checkpoint", str(scorer), "-T", "2.0"]
+    argv = [
+        "train-draft-agent-online", "--scorer-checkpoint", str(scorer),
+        "--agent-temp", "gen-3=2.0",
+    ]
     assert _run(argv) == 2
     assert "learner" in capsys.readouterr().err.lower()
 
@@ -168,19 +175,103 @@ def test_no_frozen_agent_at_all_is_rejected(ckpt: Path, scorer: Path, capsys) ->
 
 
 # --------------------------------------------------------------------------- #
-# Temperature (rule 5)
+# Per-label temperature: the --agent-temp map (rule 5, FR-004)
 # --------------------------------------------------------------------------- #
 
-def test_missing_temperature_is_rejected(ckpt: Path, scorer: Path, capsys) -> None:
-    assert _run(_argv(ckpt, scorer, **{"-T": None})) == 2
-    assert "temperature" in capsys.readouterr().err.lower()
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("gen3=3,gen1=2", {"gen3": 3.0, "gen1": 2.0}),
+        ("gen3=2.5", {"gen3": 2.5}),
+        ("  gen3 = 3 ,  gen1=2  ", {"gen3": 3.0, "gen1": 2.0}),
+        ("gen3=0", {"gen3": 0.0}),
+    ],
+)
+def test_the_map_parses(spec: str, expected: dict[str, float]) -> None:
+    """Label=value pairs, whitespace-tolerant, in the --learner/--frozen dialect."""
+    assert parse_agent_temperatures(spec) == expected
+
+
+@pytest.mark.parametrize(
+    "spec",
+    [
+        "gen3=3,gen3=2",     # duplicate label
+        "=3",                # empty label
+        "gen3=",             # empty value
+        "gen3",              # no '=' at all
+        "gen3=hot",          # non-numeric value
+        "gen3=3,",           # trailing comma
+        ",gen3=3",           # leading comma
+        "",                  # empty string
+    ],
+)
+def test_malformed_maps_are_rejected(spec: str) -> None:
+    with pytest.raises(OnlineConfigError):
+        parse_agent_temperatures(spec)
+
+
+def test_a_malformed_map_exits_2(ckpt: Path, scorer: Path, capsys) -> None:
+    assert _run(_argv(ckpt, scorer, **{"--agent-temp": "gen-3"})) == 2
+    assert "agent-temp" in capsys.readouterr().err.lower()
+
+
+def test_the_map_is_required(ckpt: Path, scorer: Path, capsys) -> None:
+    """No default: the learner's temperature also fixes the loss's (FR-004)."""
+    assert _run(_argv(ckpt, scorer, **{"--agent-temp": None})) == 2
+    assert "agent-temp" in capsys.readouterr().err.lower()
+
+
+def test_a_map_omitting_the_learner_is_rejected(
+    ckpt: Path, scorer: Path, capsys,
+) -> None:
+    """Silently defaulting the learner would train at a temperature nobody chose."""
+    assert _run(_argv(ckpt, scorer, **{"--agent-temp": "gen-1=2.0"})) == 2
+    err = capsys.readouterr().err.lower()
+    assert "gen-3" in err and "agent-temp" in err
 
 
 @pytest.mark.parametrize("value", ["0", "-1.5"])
-def test_non_positive_temperature_is_rejected(
-    ckpt: Path, scorer: Path, value: str,
+def test_a_non_positive_learner_temperature_is_rejected(
+    ckpt: Path, scorer: Path, value: str, capsys,
 ) -> None:
-    assert _run(_argv(ckpt, scorer, **{"-T": value})) == 2
+    """Sampling is the learner's only exploration mechanism; argmax has none."""
+    assert _run(_argv(ckpt, scorer, **{"--agent-temp": f"gen-3={value}"})) == 2
+    assert "gen-3" in capsys.readouterr().err
+
+
+def test_naming_a_forge_builtin_is_rejected(ckpt: Path, scorer: Path, capsys) -> None:
+    """Forge randomises internally; an entry here would be silently ignored."""
+    argv = _argv(ckpt, scorer, **{"--agent-temp": "gen-3=2.0,forge-r30=1.0"})
+    assert _run(argv) == 2
+    assert "forge-r30" in capsys.readouterr().err
+
+
+def test_naming_an_unbound_label_is_rejected(ckpt: Path, scorer: Path, capsys) -> None:
+    argv = _argv(ckpt, scorer, **{"--agent-temp": "gen-3=2.0,mystery-bot=1.0"})
+    assert _run(argv) == 2
+    assert "mystery-bot" in capsys.readouterr().err
+
+
+def test_a_negative_frozen_temperature_is_rejected(
+    ckpt: Path, scorer: Path, capsys,
+) -> None:
+    argv = _argv(ckpt, scorer, **{"--agent-temp": "gen-3=2.0,gen-1=-1.0"})
+    assert _run(argv) == 2
+    assert "gen-1" in capsys.readouterr().err
+
+
+def test_naming_a_frozen_label_is_accepted(ckpt: Path, scorer: Path) -> None:
+    """Sampling the field is a deliberate experiment, not an error (research D5)."""
+    with pytest.raises(_Sentinel):
+        _run(_argv(ckpt, scorer, **{"--agent-temp": "gen-3=2.0,gen-1=1.0"}))
+
+
+@pytest.mark.parametrize("flag", ["-T", "--rollout-temperature"])
+def test_the_global_temperature_flag_is_gone(flag: str) -> None:
+    """One map is the only temperature source, so nothing can disagree with it."""
+    parser = build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["train-draft-agent-online", flag, "2.0"])
 
 
 # --------------------------------------------------------------------------- #
@@ -283,7 +374,8 @@ def test_gen2_knobs_are_not_registered(flag: str) -> None:
 
 def test_run_control_is_disabled_by_default() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt", "-T", "2.0",
+        "train-draft-agent-online", "--learner", "gen-3=x.pt",
+        "--agent-temp", "gen-3=2.0",
     ])
     assert args.patience is None
     assert args.lr_decay_patience is None
@@ -387,17 +479,18 @@ def test_min_lr_must_be_positive_and_not_above_lr(
 def test_the_three_tunable_knobs_are_registered() -> None:
     args = build_parser().parse_args([
         "train-draft-agent-online",
-        "--learner", "gen-3=x.pt", "-T", "1.5", "--lr", "5e-5",
+        "--learner", "gen-3=x.pt", "--agent-temp", "gen-3=1.5", "--lr", "5e-5",
         "--drafts-per-round", "20",
     ])
-    assert args.rollout_temperature == 1.5
+    assert args.agent_temp == "gen-3=1.5"
     assert args.lr == 5e-5
     assert args.drafts_per_round == 20
 
 
 def test_defaults_match_the_contract() -> None:
     args = build_parser().parse_args([
-        "train-draft-agent-online", "--learner", "gen-3=x.pt", "-T", "2.0",
+        "train-draft-agent-online", "--learner", "gen-3=x.pt",
+        "--agent-temp", "gen-3=2.0",
     ])
     assert args.lr == 1e-4
     assert args.drafts_per_round == 10
