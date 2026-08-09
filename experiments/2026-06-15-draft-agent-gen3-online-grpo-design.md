@@ -57,11 +57,14 @@ load-bearing. The freshness *is* the trust region. The whole gen-2 failure mode
 (stale-corpus reward-hacking, fragile decaying leash) cannot occur because there
 is no stale corpus.
 
-The cost of online is rollout generation, but in this project generation and
-training take **about the same wall-clock time** (an even split), and drafts are
-cheap (several per minute, ~180 learner examples each at a 50% learner seat mix).
-Regenerating every round is affordable, so the central objection to online —
-rollout cost — does not bind here.
+The cost of online is rollout generation, but drafts are cheap: several per minute,
+~180 learner examples each at a 50% learner seat mix. Regenerating every round is
+affordable, so the central objection to online — rollout cost — does not bind here.
+
+The runs put a number on that cost, and it is not the even split assumed when this
+was written. Generation is 81–86 % of each round, 44–58 s against 8–12 s of training
+at 10 drafts/round. Regenerating every round remains affordable. Speedup work belongs
+on the Forge side, and `--drafts-per-round` is close to free in training time.
 
 ### Why critic-free (GRPO) instead of actor-critic + GAE
 
@@ -156,8 +159,9 @@ Aim the sweep at:
 - **off-argmax sampling rate ≈ 25–40 %** (fraction of picks where the sampled
   card ≠ the argmax card).
 
-Sweep **`T ∈ {1.0, 1.5, 2.0, 2.5}`** and take the *lowest* `T` that reaches those
-bands — higher `T` than needed only adds gradient variance.
+Sweep `T` and take the lowest value that reaches those bands, since higher `T` than
+needed only adds gradient variance. The sweep proposed here, `T ∈ {1.0, 1.5, 2.0,
+2.5}`, was aimed too low: nothing below `T = 3` reaches the band on this policy.
 
 Two cheap diagnostics to add to the per-round log (both computed from rollout
 distributions we already have):
@@ -214,12 +218,28 @@ last ~100 drafts:
 anchor_margin = mean( gen-3-seat deck_score ) − mean( frozen-gen-1-seat deck_score )
 ```
 
-Because the anchor never moves, this margin is a genuine **absolute** progress
-curve — it climbs as gen-3 pulls away from its starting point and plateaus as the
-improvement saturates. (`gen-3 − forge-r30/-r100` margins come for free and read
-as absolute strength vs the gen-0 Forge baseline.) A ~100-draft window over a
-30–35 % anchor gives ~250+ frozen-anchor decks, so the windowed mean is precise,
-not coin-flip noise.
+Because the anchor never moves, this margin was expected to be a genuine absolute
+progress curve, climbing as gen-3 pulls away from its starting point and plateauing
+as the improvement saturates. A ~100-draft window over a 30–35 % anchor gives ~250+
+frozen-anchor decks, so the windowed mean is precise, not coin-flip noise.
+
+Frozen weights did not give a frozen baseline. Denial drags the whole field down as
+the learner improves: an improving learner takes cards its podmates would otherwise
+have had, so their decks get worse even though their weights never change. Windowed
+means over the 2026-08-08 run:
+
+| Label | round 9 | round 1268 |
+|---|---|---|
+| `gen3a`, the anchor | 1.665 | 1.308 |
+| `gen3c` | 1.625 | 0.417 |
+| `forge-full` | 1.115 | 0.764 |
+| `gen4`, the learner | 1.883 | 1.776 |
+
+The learner's own raw mean fell too, on a steeper fitted slope than the anchor's. So
+the margin is a competitive result against a stated field, not a measurement of
+absolute strength. A rising margin can mean pulling away from a field that is itself
+sinking. Whether the absolute decline is denial, the three learner seats competing
+for the same cards, or genuine degradation is unresolved and worth its own run.
 
 Two disciplines keep this valid:
 
@@ -232,10 +252,11 @@ Two disciplines keep this valid:
   (exploration among near-equal picks doesn't change the built 40-card deck), the
   live margin tracks the eventual yardstick closely.
 
-Treat a **plateau in the anchor margin** (over the last ~100 drafts) as the
-trigger to *pause and run the real argmax yardstick* — not as an automatic stop
-and not as the promotion decision. Plateaus in RL can be temporary shelves, and
-promotion is judged on the yardstick regardless.
+The trigger to pause and run the real argmax yardstick was meant to be a plateau in
+the anchor margin over the last ~100 drafts. The runs do not plateau, they peak and
+decline, so the trigger is a decline from a tracked best. Best-checkpoint selection
+and LR annealing now handle it. Either way it is not an automatic stop and not the
+promotion decision; promotion is judged on the yardstick regardless.
 
 Other in-run health signals to watch (cheap, no held-out val set needed):
 
@@ -282,20 +303,20 @@ gen-3`; the anchor seats serve purely as opponents and as this progress readout.
 
 ## Outcome / Result
 
-Gen-3 clears the objective gen-2 failed to move: every candidate taken to the
-yardstick beats both the frozen gen-1 it was fine-tuned from and `forge-full`,
-where gen-2 had tied Forge at 1.49. 
+Gen-3 clears the objective gen-2 failed to move. Every candidate taken to the
+yardstick beats both the frozen gen-1 it was fine-tuned from and `forge-full`. Gen-2
+had tied Forge at 1.49.
 
-- **Base / config:** learner and anchor both warm-started from the same gen-1
-  checkpoint; reward from the frozen sealed scorer with `--build-method greedy`;
-  10 drafts/round, batch 32, clip 1.0, 200 warmup steps, 100-draft anchor window,
-  random set, seed 42.
-- **Reward trend:** the raw reward is a weak progress read — it rose in three of
-  the four `lr 1e-5` runs and stayed flat (+0.29 → +0.28) in the fourth, as
-  expected of a pod-relative leave-one-out quantity when ~3 of 8 seats are
-  learners.
-- **Follow-ups:** best-checkpoint selection, patience and LR annealing (spec 021
-  phase 7), added in response to the peak-and-decline behaviour below.
+Config: learner and anchor both warm-started from the same gen-1 checkpoint; reward
+from the frozen sealed scorer with `--build-method greedy`; 10 drafts/round, batch 32,
+clip 1.0, 200 warmup steps, 100-draft anchor window, random set, seed 42.
+
+The raw reward turned out to be a weak progress read. It rose in three of the four
+`lr 1e-5` runs and stayed flat in the fourth. That is what a pod-relative
+leave-one-out quantity does when about 3 of 8 seats are learners.
+
+Best-checkpoint selection, patience and LR annealing (spec 021 phase 7) were added
+during the sweep, in response to the peak-and-decline behaviour below.
 
 ### The runs
 
@@ -311,47 +332,28 @@ Each yardstick is a separate 500-draft (4000-seat) argmax run under the fixed mi
 `gen3:2,gen1:1,forge-full:1`, giving ~2000 gen-3 decks and ~1000 per reference.
 Scores are mean (median).
 
-| Family | lr | T | Rounds | Best margin (round) | Final margin | gen-3 | gen-1 | forge-full | gen3 − gen1 |
-|---|---|---|---|---|---|---|---|---|---|
-| field at T | 1e-6 | 2.0 | 89 | +0.255 (r87) | +0.255 | — | — | — | — |
-| field at T | 1e-5 | 2.0 | 121 | +0.887 (r101) | +0.707 | 1.98 (2.08) | 1.25 (1.32) | 1.14 (1.21) | +0.73 |
-| field at T | 1e-5 | 3.0 | 28 | +0.504 (r27) | +0.504 | 1.76 (1.87) | 1.51 (1.62) | 1.31 (1.39) | +0.25 |
-| field at T | 1e-4 | 2.0 | 33 | +0.444 (r15) | +0.363 | — | — | — | — |
-| field at argmax | 1e-5 | 2.0 | 89 | +0.374 (r47) | +0.081 | 1.79 (1.92) | 1.41 (1.52) | 1.23 (1.40) | +0.38 |
-| field at argmax | 1e-5 | 3.0 | 199 | +0.439 (r179) | +0.114 | 1.73 (2.12) | 1.17 (1.31) | 1.02 (1.16) | +0.56 |
 
-Each yardsticked row used its run's best-margin checkpoint, except the field-at-T
-`T = 2` row, which predates best-checkpoint selection and used the nearest snapshot
-(round 105).
+| Family | lr | T | Rounds | Best margin (round) | Final margin | gen-3 (ys)  | gen-1 (ys)  | forge-full (ys) | gen3 − gen1 (ys) |
+|---|---|---|---|---|---|-------------|-------------|-----------------|------------------|
+| field at T | 1e-6 | 2.0 | 89 | +0.255 (r87) | +0.255 | —           | —           | —               | —                |
+| field at T | 1e-5 | 2.0 | 121 | +0.887 (r101) | +0.707 | 1.98 (2.08) | 1.25 (1.32) | 1.14 (1.21)     | +0.73            |
+| field at T | 1e-5 | 3.0 | 28 | +0.504 (r27) | +0.504 | 1.76 (1.87) | 1.51 (1.62) | 1.31 (1.39)     | +0.25            |
+| field at T | 1e-4 | 2.0 | 33 | +0.444 (r15) | +0.363 | —           | —           | —               | —                |
+| field at argmax | 1e-5 | 2.0 | 89 | +0.374 (r47) | +0.081 | 1.79 (1.92) | 1.41 (1.52) | 1.23 (1.40)     | +0.38            |
+| field at argmax | 1e-5 | 3.0 | 199 | +0.439 (r179) | +0.114 | 1.73 (2.12) | 1.17 (1.31) | 1.02 (1.16)     | +0.56            |
 
-Margins do not compare across the two families, which are different fields, and run
-lengths are not controlled: the field-at-T `T = 3` run was stopped while its margin
-was still climbing, so its yardstick figure is a lower bound. (A 7-round
-field-at-argmax probe on the field-at-T mix was discarded.) The yardstick columns
-compare only within a row — each is its own corpus over randomly drawn sets, and the
-level moves with the draw, the same frozen gen-1 spanning a range across the four
-corpora wider than several of the effects being measured. Within a corpus the agents
-share pods, so the comparison is paired, and ranking on `forge-full` instead of
-gen-1 gives the same order.
+Read the margin columns with three limits in mind. Margins do not compare across the
+two families, which trained against different fields. Run lengths are not controlled:
+the field-at-T `T = 3` run was stopped while its margin was still climbing, so its
+yardstick figure is a lower bound. And every yardsticked row used its run's
+best-margin checkpoint except field-at-T `T = 2`, which predates best-checkpoint
+selection and used the nearest snapshot, round 105.
 
-### Composition of the margin
-
-Every label's raw windowed mean is printed beside the margin, so the learner's rise
-and the anchor's fall separate. Measured from the first full window (r9) to each
-run's best round:
-
-| Family / run | learner r9 → best | anchor r9 → best | Δ learner | Δ anchor | anchor's share |
-|---|---|---|---|---|---|
-| field at T, lr 1e-5, T 2.0 | 1.58 → 2.13 | 1.57 → 1.24 | +0.55 | −0.33 | 37 % |
-| field at T, lr 1e-5, T 3.0 | 1.38 → 1.67 | 1.34 → 1.17 | +0.30 | −0.17 | 36 % |
-| field at T, lr 1e-4 | 1.61 → 1.86 | 1.50 → 1.42 | +0.25 | −0.08 | 24 % |
-| field at T, lr 1e-6 | 1.65 → 1.75 | 1.62 → 1.49 | +0.10 | −0.13 | 57 % |
-| field at argmax, lr 1e-5, T 2.0 | 1.53 → 1.92 | 1.81 → 1.54 | +0.39 | −0.27 | 41 % |
-| field at argmax, lr 1e-5, T 3.0 | 1.47 → 2.00 | 1.89 → 1.56 | +0.54 | −0.33 | 38 % |
-
-Across the four `lr 1e-5` runs the share is near-constant at about 60/40, and
-sampling the field does not change it. The two runs departing from that share are
-the two failed learning rates below.
+The `gen3 − gen1` column is the reliable ranking. Within a corpus the agents share
+pods, so the comparison is paired and pod luck cancels. The field is fixed, so the
+gen-3 checkpoint is the only variable. Set and booster luck averages out over 500
+drafts by the law of large numbers. Ranking on `forge-full` instead of gen-1 gives the
+same order.
 
 ### Exploration
 
@@ -364,12 +366,12 @@ the two failed learning rates below.
 | field at T, lr 1e-6 | 2.0 | 1.77 | 1.81 | 1.72 | 21.4 % | 22.3 % | 20.5 % | no — flat |
 | field at T, lr 1e-4 | 2.0 | 1.80 | 2.11 | 2.30 | 20.3 % | 29.3 % | 34.2 % | nominally, but thrashing (1.35–3.96) |
 
-`T = 2` starts below the band and declines further, bottoming at 9.1 % off-argmax
-in the field-at-T run; `T = 3` starts inside it, and the 199-round run was still
-inside it at round 198. The entropy decay predicted above at fixed `T` is thus
-present at `T = 2` and absent at `T = 3` over three hours. `T = 3` also ranks above
-`T = 2` within the field-at-argmax pair, though the best agent overall came from
-`T = 2` in the other family over more rounds.
+`T = 2` starts below the band and declines further, bottoming at 9.1 % off-argmax in
+the field-at-T run. `T = 3` starts inside the band, and the 199-round run was still
+inside it at round 198. So the entropy decay predicted above at fixed `T` is present
+at `T = 2` and absent at `T = 3` over three hours. `T = 3` also ranks above `T = 2`
+within the field-at-argmax pair. The best agent overall still came from `T = 2`, in
+the other family, over more rounds.
 
 ### Movement, and the learning-rate sweep
 
@@ -389,13 +391,13 @@ learner score barely moved over 89 rounds, and most of its small best margin cam
 from anchor drift. That margin is in any case a maximum over ~80 overlapping
 windows whose per-window standard error is on the order of 0.1.
 
-`lr 1e-4` was unstable — per-round KL two orders of magnitude above the `lr 1e-5`
-runs, with gradient norms and perplexity swinging in step — yet its margin reads
-healthy in the run table, peaking and ending well above zero. The component means
-show why that reading misleads: the learner's own score peaked near round 15 and
-then returned to its starting level, while the anchor kept falling. After round 15
-the margin was sustained by the field declining. That is a legitimate result
-against that field but not one the yardstick's field rewards, and the run was not
+`lr 1e-4` was unstable. Its per-round KL runs two orders of magnitude above the
+`lr 1e-5` runs, with gradient norms and perplexity swinging in step. Its margin
+nonetheless reads healthy in the run table, peaking and ending well above zero. The
+component means show why that reading misleads. The learner's own score peaked near
+round 15 and then returned to its starting level, while the anchor kept falling. After
+round 15 the margin was sustained by the field declining. That is a legitimate result
+against that field, but not one the yardstick's field rewards, and the run was not
 carried to a yardstick. The learner's raw windowed score, printed on the same
 `progress` line as the margin, separates the two cases.
 
@@ -413,10 +415,10 @@ From the yardstick corpora, where gen-3 and gen-1 share pods:
 | field at argmax, T 2.0 | 17.13 / 16.10 | 64.7 / 68.9 | 3.14 / 3.10 | 1.40 / 1.50 |
 | field at argmax, T 3.0 | 17.35 / 15.67 | 65.7 / 69.0 | 3.14 / 3.08 | 1.39 / 1.63 |
 
-Every gen-3 drafts more creatures than the gen-1 it came from, with slightly fewer
-rares and uncommons — on-colour commons in place of higher-rarity cards — and an
-unchanged curve. This is the objective as specified: Forge pilots creatures better
-than spells, and the scorer was fitted to Forge-piloted outcomes.
+Every gen-3 drafts more creatures than the gen-1 it came from, on an unchanged curve,
+with slightly fewer rares and uncommons: on-colour commons in place of higher-rarity
+cards. This is the objective as specified. Forge pilots creatures better than spells,
+and the scorer was fitted to Forge-piloted outcomes.
 
 Colour discipline is where the families separate, and they separate in opposite
 directions from the frozen gen-1 the learners started from. Counting distinct basic
@@ -435,23 +437,23 @@ the deviation grows with the number of learner picks trained on, so the field se
 the direction of the drift and training length sets its size.
 
 Going wide is not itself the fault. For three of the four candidates the wide decks
-comfortably outscore the references' wide decks, which is what going wide only when
-the pool supports it looks like. The field-at-argmax `T = 3` candidate inverts that
-as well: its wide decks score below those of the gen-1 seats beside it. It is going
-wide when the pool does not support it.
+comfortably outscore the references' wide decks. That is what going wide only when the
+pool supports it looks like. The field-at-argmax `T = 3` candidate inverts it: its
+wide decks score below those of the gen-1 seats beside it. It goes wide when the pool
+does not support it.
 
-Why that happens is answerable from the corpus rather than by conjecture, since the
-record preserves every pick and everything passed at it — see *What the pick record
-says* below.
+The record preserves every pick and everything passed at it, so why that happens is
+answerable from the corpus rather than by conjecture. See *What the pick record says*
+below.
 
 ### Mean against median
 
-The candidates differ in the shape of their score distribution, not only its level.
-A median above the mean means a left tail: a minority of bad decks pulling the
-average down while the median stays in the bulk. Splitting each candidate's gap
-into the part four- and five-colour mana bases account for — "drag", how much the
-mean would rise if those decks scored like the same policy's three-colour decks —
-and everything else:
+The candidates differ in the shape of their score distribution, not only its level. A
+median above the mean means a left tail: a minority of bad decks pulling the average
+down while the median stays in the bulk. The table below splits that gap in two. Drag
+is the part four- and five-colour mana bases account for, measured as how much the
+mean would rise if those decks scored like the same policy's three-colour decks. The
+residual is everything else.
 
 | Candidate | med − mean | wide-deck drag | residual | margin over gen-1, mean / median |
 |---|---|---|---|---|
@@ -461,11 +463,10 @@ and everything else:
 | field at argmax, T 3 | +0.38 | +0.283 | +0.101 | +0.56 / +0.81 |
 | *gen-1 and forge-full, all corpora* | +0.07 … +0.17 | +0.020 … +0.054 | +0.034 … +0.136 | — |
 
-Two separate things live in that gap. The residual is flat across all four
-candidates, and the references carry the same skew, so it belongs to `deck_score`
-itself: a sealed deck can be far *worse* than average — no playables, broken curve,
-colour-screwed — more easily than it can be far better. Nothing about the training
-explains it.
+Two separate things live in that gap. The residual is flat across all four candidates
+and the references carry the same skew, so it belongs to `deck_score` itself. A sealed
+deck can be far worse than average more easily than it can be far better: no
+playables, a broken curve, colour screw. Nothing about the training explains it.
 
 Everything that separates the families sits in the drag column, and subtracting it
 leaves the four candidates indistinguishable in shape. Bucketing every gen-3 deck by
@@ -482,40 +483,32 @@ made of:
 Each cell is the bucket's mean `deck_score`, with the share of that candidate's
 decks falling in it.
 
-Two factors multiply, and the `T = 3` argmax candidate is worse on both — 2.4× the
-tail size of the field-at-T candidates, and roughly four times the depth, its
-five-colour decks averaging −1.88 where every other candidate's average around
-+1.0. Its own two-colour decks are the best two-colour play in the sweep, which is
-why it leads on median margin while placing second on mean.
+Two factors multiply, and the `T = 3` argmax candidate is worse on both. It builds
+four- and five-colour decks 2.4× more often than the field-at-T candidates, and its
+wide decks are much worse than theirs. Its five-colour decks average −1.88, where
+every other candidate's average around +1.0. Its two-colour decks are the best
+two-colour play in the sweep, which is why it leads on median margin while placing
+second on mean.
 
-Removing the tail entirely — scoring each candidate's wide decks like its own
-three-colour decks — would put the field-at-T `T = 2` candidate at 2.00 and the
-field-at-argmax `T = 3` one at 2.01, or +0.75 and +0.84 against their respective
-anchors. On that basis the second would be ahead: its entire deficit is the 13 % of
-drafts where it loses the plot. The counterfactual is hypothetical, since a
-genuinely incoherent pool cannot be built into a good deck by any builder, so the
-drag is an upper bound on what is recoverable.
-
-That the sampled field is the one producing the tighter distribution partly inverts
-the expectation in § 8.1 of the spec: its weakness in the wheeling dimension acts as
-a regulariser and not only as a handicap.
+The checkpoints trained against the sampled fields are the ones with the better and
+tighter score distributions, which is not what the design expected. The pick record
+below is where a mechanism has to come from.
 
 ### What the pick record says
 
-The corpus stores every booster in pick order, so each seat's 45 picks — and every
-card it passed at each of them — reconstruct exactly. The question of *why* the
-colours drift is therefore answerable from the record rather than by conjecture.
-(Data extracted with `scripts/analyze_draft_lanes.py` and
-`scripts/analyze_pick_quality.py`.)
+The corpus stores every booster in pick order, so each seat's 45 picks reconstruct
+exactly, along with every card it passed at each of them. Why the colours drift is
+therefore answerable from the record rather than by conjecture. (Data extracted with
+`scripts/analyze_draft_lanes.py` and `scripts/analyze_pick_quality.py`.)
 
-Two readings per pick, both anchored on the seat's eventual top-2 colours: whether
-the pick was **off-lane**, and if so whether an on-colour card was **still in the
-pack** — whether the agent was forced or chose. Anchoring on the top two rather than
-on the finished deck's colours matters, since a five-colour deck would otherwise
-score as perfectly on-colour against itself.
+Each pick gets two readings, both anchored on the seat's eventual top-2 colours. Was
+the pick off-lane? And if it was, was an on-colour card still in the pack, meaning the
+agent chose rather than was forced? Anchoring on the top two rather than on the
+finished deck's colours matters, since a five-colour deck would otherwise score as
+perfectly on-colour against itself.
 
 Off-lane rate at picks 6–10 of pack 1, with the share of those picks that were
-voluntary in brackets:
+voluntary in brackets. 
 
 | Corpus | gen-3 | gen-1 | forge-full |
 |---|---|---|---|
@@ -524,78 +517,80 @@ voluntary in brackets:
 | field at argmax, T 2 | 12.3 % (56.7) | 9.5 % (35.8) | 10.8 % (44.8) |
 | field at argmax, T 3 | 14.6 % (63.3) | 9.6 % (48.9) | 10.9 % (57.8) |
 
-On the voluntary share the ordering holds in all four corpora: field-at-T gen-3
-below both references, field-at-argmax gen-3 above both. On the off-lane rate it
-holds in three, the exception being the field-at-T `T = 3` policy, which is level
-with gen-1 — the least-trained candidate of the four at ~30k learner picks, so it has
-barely moved off its ancestor at all. The pattern repeats in two further windows: at
-picks 1–5 for the off-lane rate (the `T = 3` argmax policy opens at 11.5 % against
-gen-1's 6.4 %) and at picks 11–15 for the voluntary share (14.5 % against 6.0 %).
+Take the two readings one at a time.
 
-The two cells where it does not appear are the ones where the game removes the
-choice, and they read as a control. At picks 11–15 all twelve agent-rows are
-off-lane 39–44 % of the time, because the pack is down to dregs; at picks 1–5 all of
-them are 86–97 % voluntary, because a fresh pack nearly always still holds something
-on-colour. The agents separate exactly where a decision exists and nowhere
-else.
+**Voluntary share (the bracketed number).** Both field-at-argmax candidates are above
+their gen1 and forge-full references. Both field-at-T candidates are below their references. 
+Training against a sampled field makes the agent *choose* to go off-lane less often 
+than its ancestors did; training against argmax makes it choose to go off-lane more often.
+This is somewhat counter-intuitive: a sampled field passes more good off-colour cards 
+downstream, so it ought to tempt the learner to splash *more*. The measurement says the reverse.
 
-The `forge-full` column earns its place here, because **gen-1 was trained by
-imitating `forge-full`**. Forge is the ancestral behaviour, and gen-1 had already
-tightened slightly on its teacher. Field at T continues that line; field at argmax
-reverses it and overshoots Forge itself.
+**Off-lane rate.** Both field-at-argmax candidates go off-lane more often than their gen1 and 
+forge-full references. Both field-at-T candidates go off-lane less often.
 
-Worth recording what the obvious guess would have been: a sampled field passes more
-good off-colour cards downstream, so it ought to tempt the learner to splash *more*.
-The measurement says the reverse.
+Picks 6–10 are tabled because they are the one window where both readings say
+something. At the start of a pack the voluntary share saturates: the pack is fresh and
+nearly always still holds something on-colour, so almost every off-lane pick is a
+choice, for every checkpoint alike. At the end of a pack the off-lane rate saturates
+the other way: the pack is down to dregs, so every checkpoint is off-lane close to
+half the time. At both ends the pack decides rather than the agent, and the
+checkpoints are indistinguishable.
 
-#### Hypothesis 1 — lane starvation. Falsified as behaviour, revived as cause.
+In each of those windows the reading that has *not* saturated splits the same way it
+does at picks 6–10. From the opening picks the argmax `T = 3` policy already goes
+off-lane at nearly twice gen-1's rate. Deep in the pack, where both are usually
+forced, it still turns down an available on-colour card more than twice as often as
+gen-1. The split runs the whole length of the pack, so it is not an artefact of the
+window we tabled.
 
-The first explanation we reached for. An argmax field takes the good cards in the
-learner's colours correctly and consistently, so the learner keeps facing packs with
-nothing playable on-colour, takes the off-colour card because it has to, and ends
-with a pool that never found a deep pair.
 
-As a description of the *trained* policy it is wrong. It predicts off-lane picks
-that are **forced**, and concentrated **late** in a pack once the on-colour cards are
-gone. The excess is voluntary — the `T = 3` argmax policy declines an available
-on-colour card in 63 % of its off-lane picks, against gen-1's 49 % — and it sits in
-the *early* picks, fading to nothing by picks 11–15. Even deep in a pack it declines
-an available on-colour card more than twice as often as gen-1 does. At the yardstick
-it is not being starved.
+#### Hypothesis 1 — lane starvation. Not what the policy does, but maybe what taught it.
 
-That test was mis-scoped, though, and the distinction matters: what the deployed
-policy *does* is a different question from what *taught* it. The yardstick field is
-identical for all four candidates by construction, so it cannot show a difference in
-starvation at all. The place the fields differed was training — and there starvation
-is entirely plausible.
+The hypothesis: an argmax field takes the good cards in the learner's colours
+consistently, so the learner keeps facing packs with nothing playable on-colour, takes
+the off-colour card because it has to, and ends with a pool that never found a deep
+pair.
+
+At the yardstick the `T = 3` argmax policy is choosing its off-lane picks, not being
+forced into them. It declines an available on-colour card in close to two thirds of
+its off-lane picks, where gen-1 declines in about half, and the excess sits early in
+the pack. Both policies decline far less often once the pack is down to dregs, but
+even there this one declines more than twice as often as gen-1. Starvation predicts
+the opposite on both counts: picks that are forced, and concentrated late once the
+on-colour cards are gone.
+
+The yardstick can only show what the deployed policy does, not what taught it, and
+starvation is a claim about training. The yardstick field is identical for all four
+candidates by construction, so it cannot show a difference in starvation at all. The fields
+differed during training, and there starvation is entirely plausible.
 
 - Under field at argmax the opponents play their best and take their colours
   correctly, while the learner samples at `T` and plays below its own best. Its
   in-training pools are poorer, and it sits in lane-starved positions far more often
   than it ever does at the yardstick.
-- In a starved position the only available pick *is* off-colour. That is not a
+- In a starved position the only available pick is off-colour. That is not a
   preference, it is the position.
-- The update cannot tell the two apart. The seat receives **one score for the whole
-  draft**, shared by all 45 picks, so when a draft finishes above the pod average
-  every pick in it is reinforced together — forced ones included. Nothing in the
-  gradient encodes "that pick was not a choice."
+- The update cannot tell the two apart. The seat receives one score for the whole
+  draft, shared by all 45 picks, so when a draft finishes above the pod average every
+  pick in it is reinforced together, forced ones included. Nothing in the gradient
+  encodes "that pick was not a choice."
 
-A policy can therefore acquire a general taste for off-colour cards from positions
-where it never had one, which is exactly the deployed behaviour measured above.
-Starvation is dead as a description of the agent and live as a candidate cause of
-it.
+That is a mechanism for the behaviour measured above. A policy can acquire a general
+taste for off-colour cards in positions where it never had a choice, then carry that
+taste into positions where it does.
 
-#### Hypothesis 2 — card power over lane fit. Falsified.
+#### Hypothesis 2 — card power over lane fit. It is not taking bombs.
 
-The natural replacement: it is taking bombs. Breaking colour is correct when the
-card is enough better than the on-colour alternative, and a policy trained against a
-strong field might sensibly learn to grab power and sort the colours out later.
+The hypothesis: it is taking bombs. Breaking colour is correct when the card is enough
+better than the on-colour alternative, and a policy trained against a strong field
+might sensibly learn to grab power and sort the colours out later.
 
-That predicts a **positive quality premium** — when the agent breaks colour, the card
-it takes should beat the best on-colour card it passed. Scoring every card by
-`shrunk_score_play` from the sealed win-rate labels (an independent measure, built
-from real game outcomes rather than from anyone's pick behaviour, covering 98 % of
-drafted card slots):
+That predicts a positive quality premium: when the agent breaks colour, the card it
+takes should beat the best on-colour card it passed. Every card is scored by
+`shrunk_score_play` from the sealed win-rate labels. That scale is independent of the
+question, being built from real game outcomes rather than from anyone's pick
+behaviour, and it covers 98 % of drafted card slots.
 
 | Corpus | took best card in pack, g3 / g1 / forge | mean off-lane premium | share of off-lane picks beating the on-colour option |
 |---|---|---|---|
@@ -604,135 +599,156 @@ drafted card slots):
 | field at argmax, T 2 | 22.8 / 20.0 / 19.5 % | +0.022 / +0.013 / +0.009 | 61.8 / 58.0 / 55.7 % |
 | field at argmax, T 3 | 28.5 / 21.7 / 21.2 % | +0.005 / +0.015 / +0.011 | 51.9 / 58.7 / 55.8 % |
 
-The `T = 3` argmax policy's off-lane picks carry no premium at all: 51.9 % of them
-beat the on-colour card they passed, which is close to a coin flip, and the median
-premium is +0.004. It is not taking bombs. Combining the two rates, it makes
-voluntary off-lane picks on about 9 % of its coloured picks against gen-1's 5 % —
-twice as many, for nothing. Repeating the measurement on an unrelated quality scale
-— pick rate when available, estimated from the frozen reference seats alone — puts
-the same figure at 50.9 %.
+The `T = 3` argmax policy breaks colour at a coin flip. Barely half its off-lane picks
+beat the on-colour card they passed, and the median premium is essentially zero. It
+makes voluntary off-lane picks about twice as often as gen-1 and gains nothing by
+them. A second, unrelated quality scale agrees: ranking cards by pick rate when
+available, estimated from the frozen reference seats alone, still leaves it at a coin
+flip.
 
-The three healthy gen-3 policies do the opposite, and beat both references: they
-break colour *more* selectively than gen-1 or Forge, at +0.016 to +0.024 premium and
-59–63 % above zero.
+The other three gen-3 policies break colour more selectively than either reference.
+Their off-lane picks beat the passed on-colour card about three times in five, at a
+larger premium than gen-1 or Forge manage.
 
-#### What survives
+The first column says the failure is narrow. The `T = 3` argmax policy takes the
+highest-win-rate card in the pack more often than any other agent in the sweep, its
+own references included. Its card evaluation is not damaged. What it has lost is the
+other half of a draft pick: how the card fits the pool it already holds.
 
-The same table that kills the second hypothesis points at a narrower reading. The
-`T = 3` argmax policy takes the highest-win-rate card in the pack **more** often than
-anything else here — 28.5 % against 19.5–21.7 % for every reference. Its card
-evaluation is not damaged; by that measure it is the best of the twelve. What it has
-lost is the other half of a draft pick: **how the card fits what is already in the
-pool**. It takes the best card when the best card happens to be on-colour and wanders
-when it is not — a coin-flip premium on its off-lane picks, a mana base that widens
-through the draft instead of converging, and a pool the builder can only assemble
-into a five-colour pile.
+#### Hypothesis 3 — a colour prior learned from Forge. Real, and not the family difference.
 
-Two mechanisms could produce that, and they are different claims:
+The hypothesis: Forge pilots green, black and white better than blue and red,
+because blue and red lean on instants and sorceries and Forge plays those worst.
+`deck_score` is fitted to Forge-piloted outcomes, so a policy trained on it should
+acquire a taste for those three colours, and that taste should show when it breaks
+lane.
 
-| Mechanism | What it says | What it predicts in the *training* rollouts |
-|---|---|---|
-| Starvation generalises | Forced off-colour picks are reinforced along with everything else in an above-average draft, and the taste transfers to unstarved positions | The learner's *forced* off-lane rate is far higher under field at argmax than under field at T |
-| The fit signal is too weak | Fit is learnable only if the accumulating pool predicts the final score; against a strong field the learner's pool is thin and fragmented, so it predicts poorly and the gradient falls back on the component that always predicts — card power | No forced-rate difference; instead a weaker correlation between pool coherence and final `deck_score` under the argmax field |
+The test compares, at each off-lane pick, the colour of the card taken against the
+colour mix of the off-lane cards available in that pack at that moment. The
+availability baseline carries the whole measurement. Off-lane is defined against the
+seat's own eventual top-2, so a seat in black-green can never make a black off-lane
+pick, and raw colour counts would only re-describe the lane distribution. Each pick
+contributes weight 1 to both sides, and gold cards split their weight across their
+colours.
 
-Either would also explain why the field-at-T policies came out *more* fit-aware than
-the references rather than merely no worse. Separating them takes one pass of
-`scripts/analyze_draft_lanes.py` over the training rollouts — which no longer exist,
-because the online trainer appends every run to the shared
-`output/draft/drafts.jsonl` and that file is gone. Keeping them is a gen-4 action.
+Mean per off-lane pick of (green-black-white taken − green-black-white available),
+with the learner picks each candidate trained on:
 
-A third factor is not a cause but an amplifier, and it cuts the other way. The
-learner is ~30 % of seats in training and 50 % at the yardstick, where four identical
-copies share a pod and contest the same colours as hard as it is possible to contest
-them. A policy that learned "move when your lane is cut" moves far more often there
-than it ever did in training, so the yardstick probably overstates this failure
-relative to a realistic pod. It applies equally to all four candidates, so it does
-not explain the family difference.
+| Corpus | gen-3 | gen-1 | forge-full | learner picks trained |
+|---|---|---|---|---|
+| field at T, T 2 | +2.90 pp | +0.27 | −0.58 | ~110k |
+| field at T, T 3 | +0.70 | −0.19 | −0.10 | ~30k |
+| field at argmax, T 2 | +1.73 | +0.40 | +0.61 | ~50k |
+| field at argmax, T 3 | +2.77 | +0.10 | −0.13 | ~195k |
 
-None of it was visible to the selection machinery. `best_*.pt` is chosen on the
-anchor margin, a windowed **mean**, which nets the wide-deck losses against the gains
-from that policy's excellent two-colour play — and at a 13 % tail the net was still
-positive. The checkpoint we yardsticked is round 179 of 199, so if colour discipline
-decays while the margin climbs, margin-based selection actively prefers the more
-degraded policy.
+Standard errors are 0.23–0.34 pp, so every gen-3 figure is many standard errors from
+zero and no reference figure is more than two.
 
-One further check needs no retraining at all: hide the accumulated pool from the
-state the model sees, and measure how much each checkpoint's pick changes. If
-fit-awareness is what differs, the field-at-argmax `T = 3` policy's picks should move
-least.
+Every gen-3 candidate leans towards green, black and white when it breaks lane.
+Neither reference leans at all: Forge and the agent that imitated it take whatever
+the pack offers. The size of the lean tracks how long a candidate trained, not which
+field it trained against — ordered by learner picks, the four run +0.70, +1.73,
++2.90, +2.77. Both families lean the same way. That is the opposite of the mana-base
+result above, where the field sets the direction of the drift and training length
+only sets its size.
 
-Two caveats stand over all of this. The mix changed together with the temperature
-scope, so a stronger field and a more deterministic field cannot be separated by
-these runs. And the greedy builder sits inside the measurement — a mana-aware builder
-might rescue some of these pools, which would narrow the gap without any change in
-drafting behaviour.
+The lean shows in the lanes as well. The most-trained candidate takes white in over
+half its seats and red in under a third, where the gen-1 seats in the same pods sit
+near 38 % and 45 %.
+
+None of this explains why the two families diverge, because all four candidates do
+it. The largest lean belongs to field at T, `T = 2` — the candidate with the
+narrowest mana bases and the best yardstick score. Colour lean and colour discipline
+move independently here, if anything in opposite directions.
+
+The lean is correct play against this opponent. Forge wins more with green, black and
+white, because blue and red lean on instants and sorceries and Forge plays those
+worst. `deck_score` measures Forge-piloted outcomes, so a policy that learns which
+colours win those games is doing exactly what it was asked. Against human opponents
+the same preference would be miscalibrated, but human opponents are not what this
+stack optimises for.
+
+Where the candidates part company is what they do with the preference off-lane. Three
+of them break colour towards these colours and earn a quality premium for it, by
+Hypothesis 2's table. The `T = 3` argmax policy breaks colour towards them and earns
+nothing: no premium, and a mana base that widens instead of converging. Its off-lane
+picks are not arbitrary, then, but colour-directed. When it strays, it strays towards
+white and green, rather than towards the card that was worth straying for.
 
 ### Field at T against field at argmax
 
-The spec's argument (§ 8.1) is that a sampled frozen agent passes downstream cards a
-properly-playing agent would have kept, weakening the training field in the
-dimension the yardstick tests; the predicted consequence is worse transfer. The runs
-do not show that. Field at T produced the best candidate on the yardstick's own
-metric, and the distribution-shape evidence above suggests the weakened field is
-doing useful work rather than only costing accuracy.
+The spec got this backwards (§ 8.1). Under field at T the frozen agents sample too, so
+they sometimes pass a good card they should have kept. The learner then trains against
+packs that a properly-playing field would never have handed it. The spec expected that
+to transfer badly. It transferred best: field at T produced the strongest candidate on
+the yardstick.
 
-The two choices trade off differently on measurement and on the policy they train:
+Each choice is better at a different thing. Field at argmax trains against a field
+that resembles the yardstick's, so its live margin predicts the yardstick result well.
+Field at T's margin runs well above what the yardstick later gives it, so a field-at-T
+run's quality cannot be read off its own log. Field at T drafts better, though:
+narrower mana bases, and more selective off-lane picks. That is the property worth
+optimising, so field at T is the method to keep for gen-4.
 
-| | Field at T | Field at argmax |
-|---|---|---|
-| Best margin vs yardstick margin | overshoots | tracks closely |
-| Training field | weak in the wheeling dimension | matches the evaluation field |
-| Wide mana bases (≥ 4 colours) | 5.5–6.4 % | 8.3–13.3 % |
-| Off-lane picks | more selective than the references | less selective; no quality premium at `T = 3` |
-| Score distribution | tight; no catastrophic tail | left tail, severe at `T = 3` |
+### The reward and the run-control metric are different numbers
 
-**Field at T is the training method to keep for gen-4.** It wins on the mean, which
-is both the yardstick metric and the quantity the GRPO reward optimises; it is
-within 0.05 of the leader on median margin; and its output carries no catastrophic
-tail, so the gain is uniform across pools rather than an average over "usually
-excellent, occasionally broken". The wide-deck rate is lower at both temperatures.
+The trainer maximises one number and run control keys off a different one. The reward
+is pod-relative leave-one-out: a seat's `deck_score` minus the mean of the other
+scored seats in its pod, the learner's own other seats included. The anchor margin is
+the learner's windowed mean minus one frozen label's, and best-checkpoint selection,
+`--lr-decay-patience` and `--patience` all key off it. So the trainer maximises "beat
+the pod" while selection asks "beat `gen3a`".
 
-The cost is accepted rather than solved: under field at T the live anchor margin
-overshoots the yardstick, so a run cannot be promoted on its log. Promotion stays on
-the argmax yardstick, as it already does.
+Over the 1269-round run of 2026-08-08 the candidates track each other closely and
+still disagree on which round to keep.
 
-### Corrections to the design above
+| Criterion | Selects | correlation with the anchor margin | noise |
+|---|---|---|---|
+| anchor margin against `gen3a`, the incumbent | round 312 | — | 0.059 |
+| field margin, all frozen labels pooled | round 653 | +0.91 | 0.056 |
+| windowed `R`, the reward itself | round 640 | +0.77 | 0.037 |
 
-- Generation and training are not an even split: generation is 81–86 % of each round
-  (44–58 s against 8–12 s at 10 drafts/round). Regenerating every round remains
-  affordable, but speedup work belongs on the Forge side, and `--drafts-per-round`
-  is close to free in training time.
-- The stopping trigger is not a plateau. These runs peak and decline, so the trigger
-  is a decline from a tracked best — what best-checkpoint selection and LR annealing
-  now handle.
-- The proposed sweep `T ∈ {1.0, 1.5, 2.0, 2.5}` is aimed too low: the target band is
-  not reached below `T = 3` on this policy.
+Noise is the standard deviation of the round-to-round change.
+
+Policy loss is not a third candidate, despite being the number the trainer descends.
+`R` is standardised within each round before it becomes the advantage, which bounds
+the loss by the spread of `logπ`. It therefore measures how spread out the policy is
+rather than how good it is: it correlates −0.85 with entropy, and +0.34 with the
+margin, which is the wrong sign for something being minimised.
+
+Decision: keep the anchor margin. The field margin is better motivated, because its
+baseline excludes the learner's own seats where the reward's includes them and
+attenuates any uniform gain. But it agrees with the incumbent at +0.91, the incumbent
+produced a promotable candidate, and no in-run metric can settle the 340-round
+disagreement in any case. The argmax yardstick owns that decision. Revisit if a
+yardstick run ranks a margin-selected checkpoint below one the field margin preferred.
+
+Read either number as relative, not absolute; see *Live progress signal* above for
+why the frozen field does not give a fixed baseline.
 
 ### Where this leaves gen-3
 
-The promotable candidate is the field-at-T `lr 1e-5`, `T = 2` run's round-105
-snapshot: the best mean margin of the four, a median margin within 0.05 of the best,
-and the tightest score distribution.
+Promote the field-at-T `lr 1e-5`, `T = 2` run's round-105 snapshot. It has the best
+mean margin of the four candidates, a median margin within 0.05 of the best, and the
+tightest score distribution.
 
-Two settings to carry into gen-4:
+Carry two settings into gen-4. Field at T is the training field, for the reasons
+above. The temperature is unsettled: `T = 3` is the only value that holds the
+exploration band, but it ran for just 28 rounds under field at T, and the `T = 2` run
+lost its band mid-run and still produced the best candidate. The band and the outcome
+disagree, so the question is open.
 
-- **Field at T** as the training field, per the section above.
-- **`T = 3`** is the temperature that holds the exploration band, but it was only
-  run for 28 rounds under field at T. The field-at-T `T = 2` run lost its
-  exploration band mid-run and still produced the best candidate, so the band and
-  the outcome disagree here and the question is open.
+Instrument two things that were missing this time. Both are cheap.
 
-And two things to instrument, both cheap and both missing this time:
-
-- **Keep each run's rollouts.** The trainer appends to the shared
-  `output/draft/drafts.jsonl`; give every run its own `--output-path` and retain the
-  file. Those records are the only view of what the learner was actually seeing while
-  it trained, and they are what would decide between the two candidate causes above.
-  Losing them cost the analysis that would otherwise have closed this out.
-- **Log the wide-mana-base rate per round** and read it beside the anchor margin.
-  It is the failure mode that separated the candidates, the margin nets it away, and
+- Keep each run's rollouts. The trainer appends to the shared
+  `output/draft/drafts.jsonl`; give every run its own `--output-path` and keep the
+  file. Those records are the only view of what the learner was seeing while it
+  trained, and they are what would decide between the two candidate causes of the
+  colour drift. Losing them cost the analysis that would have closed this out.
+- Log the wide-mana-base rate per round, and read it beside the anchor margin. It is
+  the failure mode that separated the candidates, the margin nets it away, and
   best-checkpoint selection is blind to it.
 
-The run that settles it: `lr 1e-5`, `T = 3`, field at T, on the field-at-T mix, at
-least 150 rounds, with `--patience` and `--lr-decay-patience` armed. That matches the
-incumbent on field, mix and round count and changes only the temperature.
+One run settles the open question: `lr 1e-5`, `T = 3`, field at T, on the field-at-T
+mix, at least 150 rounds, with `--patience` and `--lr-decay-patience` armed. It
+matches the incumbent on field, mix and round count, and changes only the temperature.

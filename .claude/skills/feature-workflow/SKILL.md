@@ -14,6 +14,23 @@ Three kinds of design document, each with a distinct audience, purpose, tone, an
 - **Format:** a fluent, discursive ADR. Prose is fine; explain reasoning, trade-offs, and the mechanism behind a result. Each design doc carries an **Outcome / Result** section to fill in once the experiment runs. Named `YYYY-MM-DD-<topic>-design.md` (design/plan) or `YYYY-MM-DD-<topic>.md` (results).
 - Convert relative dates to absolute. Link related docs.
 
+### Prose style
+
+Discursive does not mean dense. These docs get re-read months later by someone who no longer holds the run in their head, so write for a reader who is skimming and will stop at the first sentence that costs effort.
+
+- **Lead with the finding.** The first sentence of a paragraph states the conclusion. Corpus names, candidate labels, caveats and figures come after it. A reader who stops there should still have the result.
+- **One claim per sentence, in the order the reader would check it.** Short declarative sentences beat one sentence carrying three comparisons in subordinate clauses.
+- **Unpack a chain of reasoning into one sentence per step, in causal order.** An argument with four steps is four sentences, not one sentence with three subordinate clauses. "A sampled frozen agent passes downstream cards a properly-playing agent would have kept, which weakens the training field in the dimension the yardstick tests, and transfer suffers for it" asks the reader to hold three things at once; the same argument as four sentences asks nothing. A reader should be able to stop after any step and still be following.
+- **Use concrete nouns, not invented abstractions.** "What the two choices trade is run-control fidelity against colour discipline" names two things the reader has never met and cannot picture. "Field at argmax predicts the yardstick better; field at T drafts better" names what actually differs. If a phrase would need its own definition to be understood, write the thing it stands for.
+- **Say the direction, not the tally.** "Three corpora out of four" makes the reader count; "both argmax candidates go off-lane more often than the seats beside them" tells them what happened. Give the score only after the direction.
+- **Numbers live in tables; prose gets qualitative comparisons.** In the surrounding text prefer "nearly twice", "close to half the time", "the fewest in the sweep". Quote an exact figure in prose only when that specific figure is the point — a threshold, a sign flip, a value the argument turns on.
+- **Name a baseline the first time you lean on it.** Say what the reference columns are and how they were measured. Don't rely on possessives (`its references`) to carry a definition the reader has to reconstruct.
+- **Give each paragraph one job, and make consecutive paragraphs' relationship explicit.** If the second paragraph explains why the first is not an artefact, say so in its first clause.
+- **Drop the rhetorical scaffolding.** Em-dash asides, "the exception is…", "the same split", callbacks to a previous paragraph's phrasing — these read as style and cost the reader a lookup. Cut them and restate the thing.
+- **Don't sprinkle emphasis.** Bold and italics are not for words that feel important. Bolding *forced* and *late* in a sentence whose whole subject is those two properties adds nothing, and scattered markup teaches the reader to ignore it. Reserve emphasis for a contrast the sentence genuinely turns on, a few times per document at most; if a point needs weight, give it its own sentence instead of bolding a word.
+
+Plain is not casual. Sentences get short because each carries one step, not because the register drops. Keep the vocabulary technical and the tone level: cut conversational filler ("here's the thing", "it turns out", "its reasoning went like this"), don't narrate the writing as it happens, and don't slip into first-person cheerleading ("drafting better is what we want"). The target is a reader who never has to re-read a sentence, not one who is being talked to.
+
 ## `specs/YYYY-MM-DD-<name>.md` — root-level human-readable specs
 
 - **Audience:** the user, to track and understand what is being built.

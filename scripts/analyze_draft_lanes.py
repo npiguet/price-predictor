@@ -21,6 +21,15 @@ C. **Off-lane picks** — per pack and per pick window, the share of coloured
    voluntary one (declined an on-colour card), which is the distinction that
    tells a starved drafter from an undisciplined one.
 
+D. **Colour of off-lane picks** — when a seat breaks lane, which colour it
+   breaks into, measured against the colour mix of the off-lane cards actually
+   available in that pack at that pick. The availability baseline carries the
+   report: off-lane is defined against the seat's own top-2, so a black-green
+   seat can never make a black off-lane pick, and raw colour counts would only
+   re-describe the lane distribution. A lift above 1 means the agent takes that
+   colour more often than the supply of it predicts. Unlike C, D runs over every
+   pick rather than the three windows.
+
 Two windows carry no signal by construction and are useful as a control: at the
 last picks of a pack every agent is forced off-lane, and at the first picks
 every off-lane pick is voluntary because a full pack nearly always still holds
@@ -59,10 +68,22 @@ from draft_corpus_common import (
 
 DEFAULT_CARDS_PATH = Path("output/cardsfolder-512")
 WINDOWS = (("1-5", 1, 5), ("6-10", 6, 10), ("11-15", 11, 15))
+WUBRG = "WUBRG"
+LEAN_COLOURS = frozenset("GBW")
 
 
 def _pct(numerator: int, denominator: int) -> str:
     return f"{100 * numerator / denominator:5.1f}%" if denominator else "    -"
+
+
+def _mean_se(values: list[float]) -> tuple[float, float]:
+    """Sample mean and its standard error; ``(nan, nan)`` below two samples."""
+    n = len(values)
+    if n < 2:
+        return float("nan"), float("nan")
+    mean = sum(values) / n
+    variance = sum((v - mean) ** 2 for v in values) / (n - 1)
+    return mean, (variance / n) ** 0.5
 
 
 def analyze(
@@ -81,6 +102,9 @@ def analyze(
     voluntary: dict[str, dict[tuple[int, str], list[int]]] = defaultdict(
         lambda: defaultdict(lambda: [0, 0])
     )
+    lean_taken: dict[str, Counter] = defaultdict(Counter)
+    lean_avail: dict[str, Counter] = defaultdict(Counter)
+    lean_diff: dict[str, list[float]] = defaultdict(list)
     seats_seen: Counter = Counter()
 
     for record, geometry in read_records(path):
@@ -112,14 +136,39 @@ def analyze(
 
             for pack in range(1, geometry.packs + 1):
                 for pick in range(1, geometry.pack_size + 1):
+                    legal = geometry.legal_actions(record, index, pack, pick)
+                    taken_colours = colours(legal[0])
+                    if not taken_colours:
+                        continue
+
+                    # D runs over every pick, not only the three windows.
+                    if not taken_colours <= top2:
+                        options = [
+                            c for card in legal
+                            if (c := colours(card)) and not c <= top2
+                        ]
+                        if options:
+                            weight = 1.0 / len(options)
+                            for c in taken_colours:
+                                lean_taken[seat.agent][c] += 1.0 / len(taken_colours)
+                            for option in options:
+                                for c in option:
+                                    lean_avail[seat.agent][c] += weight / len(option)
+                            lean_diff[seat.agent].append(
+                                sum(1.0 for c in taken_colours if c in LEAN_COLOURS)
+                                / len(taken_colours)
+                                - sum(
+                                    weight
+                                    * sum(1.0 for c in option if c in LEAN_COLOURS)
+                                    / len(option)
+                                    for option in options
+                                )
+                            )
+
                     window = next(
                         (name for name, lo, hi in WINDOWS if lo <= pick <= hi), None
                     )
                     if window is None:
-                        continue
-                    legal = geometry.legal_actions(record, index, pack, pick)
-                    taken_colours = colours(legal[0])
-                    if not taken_colours:
                         continue
                     slot = off_lane[seat.agent][(pack, window)]
                     slot[1] += 1
@@ -183,6 +232,35 @@ def analyze(
             head = agent if pack == 1 else ""
             print(f"     {head:<12} {pack:<5} " + "  ".join(f"{c:>14}" for c in cells))
         print()
+
+    print("  D. colour of off-lane picks: share taken vs share available in the pack,")
+    print("     with the lift (taken/available). Availability is per decision, so a")
+    print("     15-card pack and a 2-card pack weigh the same.")
+    print(f"     {'agent':<12} " + "".join(f"{c:>15}" for c in WUBRG))
+    for agent in reported:
+        taken_total = sum(lean_taken[agent].values())
+        avail_total = sum(lean_avail[agent].values())
+        if not taken_total or not avail_total:
+            continue
+        cells = []
+        for colour in WUBRG:
+            took = lean_taken[agent][colour] / taken_total
+            supply = lean_avail[agent][colour] / avail_total
+            lift = f"{took / supply:4.2f}" if supply else "   -"
+            cells.append(f"{100 * took:4.1f}/{100 * supply:4.1f} {lift}")
+        print(f"     {agent:<12} " + "".join(f"{c:>15}" for c in cells))
+
+    print()
+    print(f"     lean towards {''.join(sorted(LEAN_COLOURS))}: mean(taken - available)")
+    print(f"     {'agent':<12} {'diff':>9} {'se':>7} {'z':>7} {'picks':>8}")
+    for agent in reported:
+        mean, se = _mean_se(lean_diff[agent])
+        if se != se:  # nan — too few off-lane picks to say anything
+            continue
+        z = mean / se if se else float("nan")
+        print(f"     {agent:<12} {100 * mean:+8.2f}pp {100 * se:6.2f} {z:7.1f} "
+              f"{len(lean_diff[agent]):8d}")
+    print()
 
 
 def main() -> None:
