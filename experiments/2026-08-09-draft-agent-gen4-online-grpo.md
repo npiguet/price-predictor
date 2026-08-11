@@ -80,12 +80,13 @@ gives +0.65, +0.63, +0.60 and +0.47. The levels differ by about 0.14 but the ord
 identical, which is what the comparison is for.
 
 The per-seat means that `analyze-generated-decks` prints understate all of this. Those pool
-every seat regardless of pod composition, and pod composition matters (*Why every frozen
-label declines*, below): a pod that happens to draw six gen-4 seats scores worse for
-everyone in it, and it contributes six seats to gen-4's mean against two to gen-1's. On
-`t2all_nodecay` the printed means give +1.09 where the pod-paired estimate gives +1.33. The
-ordering is unaffected, so gen-3's figures remain valid for ranking; the levels there are
-low for the same reason.
+every seat regardless of pod composition, and composition moves every score in the pod: a pod
+that happens to draw six gen-4 seats scores worse for everyone in it, and it contributes six
+seats to gen-4's mean against two to gen-1's. On `t2all_nodecay` the printed means give +1.09
+where the pod-paired estimate gives +1.33. The ordering is unaffected, so gen-3's figures
+remain valid for ranking; the levels there are low for the same reason. *Why every frozen
+label declines*, below, measures the effect and shows the bias tracking how asymmetric the mix
+is.
 
 ### What separates and what does not
 
@@ -320,14 +321,61 @@ Every extra gen-4 seat costs each reference seat about 0.20 and each gen-4 seat 
 monotonically over the whole range. Replacing a weak drafter with a strong one takes cards
 out of the packs that reach everyone else, and the pool that arrives is worse for it.
 
-That is the training-time decline, seen from a different angle. During a run the mix is fixed
-at three learner seats, but those seats get stronger, which is the same intervention as
-swapping a reference seat for a gen-4 one. `gen3a` falling 0.40 over the long run is the
-expected size of the effect, not evidence of anything else.
+The head-to-head corpora repeat the measurement against a much stronger displaced seat. Their
+mix is `gen4:1,gen3:1`, so the pod holds two labels and the gen-4 count fixes the whole
+composition.
 
-The final column adds something the training logs cannot show. The gap over gen-1 widens as
-the pod crowds, from +1.31 with one gen-4 seat to +1.53 with seven. Gen-4 loses less to
-competition than gen-1 does, so a strong field costs it less than it costs the reference.
+| gen-4 seats in the pod | gen-4 | gen-3 | gen-4 − gen-3 |
+|---|---|---|---|
+| 1 | +2.40 | +1.63 | +0.76 |
+| 2 | +2.06 | +1.51 | +0.55 |
+| 3 | +2.00 | +1.39 | +0.60 |
+| 4 | +1.85 | +1.29 | +0.56 |
+| 5 | +1.81 | +1.24 | +0.57 |
+| 6 | +1.74 | +1.12 | +0.62 |
+| 7 | +1.76 | +1.07 | +0.68 |
+
+Crowding costs about half as much here: 0.095 per seat against gen-3 where it was 0.20 against
+gen-1 and `forge-full`, and 0.075 for gen-4's own seats where it was 0.16. Nothing about the
+mechanism changed. What changed is the size of the upgrade each swapped seat represents.
+Displacing `forge-full` at +0.8 with gen-4 at +2.1 adds far more competition than displacing
+gen-3 at +1.3 with the same seat.
+
+Dividing one by the other makes that explicit, and the two corpus families agree to within
+4 %.
+
+| Family | seat swapped out | gen-4's lead over it | cost per extra gen-4 seat | ratio |
+|---|---|---|---|---|
+| `v-forge` | gen-1 | +1.28 | −0.201 | 0.157 |
+| `v-gen3` | gen-3 | +0.59 | −0.095 | 0.162 |
+
+A seat entering a pod costs each rival about a sixth of the amount by which it outclasses the
+seat it replaced. It costs its own kind about an eighth — 0.124 and 0.128 on the same two
+families — so a strong drafter is measurably more robust to a crowded pod than the field it
+beats. That difference is small next to the level, and only the `v-forge` table shows it as a
+visible widening of the gap.
+
+Two consequences follow. The first is the training-time decline, seen from a different angle.
+During a run the mix is fixed at three learner seats, but those seats get stronger, which is
+the same intervention as swapping a reference seat for a gen-4 one. `gen3a` falling 0.40 over
+the long run is the expected size of the effect rather than evidence of anything else.
+
+The second is the estimator bias flagged under *The yardstick*. Pooling seats without regard
+to composition weights gen-4's mean towards crowded pods, where every seat scores worse, while
+a reference label that is rarer in those pods is weighted towards uncrowded ones. The size of
+that bias should scale with how asymmetric the mix is, and it does.
+
+| Family | mix | reference | naive per-seat difference | pod-paired | bias |
+|---|---|---|---|---|---|
+| `v-forge` | `gen4:2,gen1:1,forge-full:1` | gen-1 | +1.119 | +1.284 | −0.164 |
+| `v-forge` | `gen4:2,gen1:1,forge-full:1` | `forge-full` | +1.249 | +1.449 | −0.199 |
+| `v-gen3` | `gen4:1,gen3:1` | gen-3 | +0.498 | +0.587 | −0.089 |
+
+The balanced mix halves the bias, because both labels are drawn into crowded pods equally
+often and most of the effect cancels. The 2:1:1 mix does not cancel, which is why the printed
+per-seat means understate every margin in the first table of this document. Any future
+yardstick that cares about levels rather than ordering should either run a balanced mix or
+report the pod-paired figure.
 
 ## Deck composition
 
@@ -682,3 +730,9 @@ pairings. Question 1 is the cheap one and questions 2 and 3 are not.
   both `score_play` and `played_rate`, so climbing the power axis produces that reading on its
   own. Residualising colour lift on power before measuring alignment would separate the two,
   and would say whether there is an unused axis in the encoder's supervision.
+- **Does the crowding ratio hold as a design rule?** Two corpus families put the cost to a
+  rival seat at about a sixth of the strength gap the entering seat introduces. If that holds,
+  the depression a training mix induces in its own frozen field is predictable from the
+  learner's lead before the run starts, and `--mix` becomes a knob with a known cost. Two
+  points are a coincidence away from nothing; a third family would settle it, and a gen-5
+  yardstick supplies one for free.
