@@ -124,7 +124,70 @@ files is therefore a mixture of checkpoints, and reports 4034 gen-4 seats where 
 can yield about 2000. Every figure in this document is computed from the correct `run_id`
 only. The other six corpora hold exactly their own run.
 
-## Temperature belongs to the field, not to the learner
+## `deck_score` does predict winning
+
+Every ranking in this document is a `deck_score` difference, and gen-3 carried the assumption
+that such differences turn into games won without ever testing it on drafted decks. They do,
+and at close to the rate the sealed pipeline showed.
+
+`python -m draft play-draft-games`
+([`../specs/2026-08-09-draft-game-evaluation.md`](../specs/2026-08-09-draft-game-evaluation.md),
+feature `022-draft-game-evaluation`) was run over the `t3learner_t2field` yardstick corpus:
+1001 best-of-seven matches in 2h14m on 12 workers, each pairing two seats of one recorded pod,
+mirrors excluded, with `--forge-native-fraction 0.5` diverting half the `forge-full` seats to
+Forge's own sealed builder. Pairing inside a pod controls set and pool quality by construction.
+Bo7 match win rate over all matches a label appeared in:
+
+| Label | matches | Bo1 | Bo7 |
+|---|---|---|---|
+| gen-4 | 767 | 65.4 % | 67.7 % |
+| gen-1 | 576 | 43.8 % | 43.4 % |
+| `forge-full` | 311 | 43.4 % | 40.5 % |
+| `forge-native` | 348 | 32.2 % | 30.5 % |
+
+The ordering is the yardstick's, on decks the scorer never saw played. Reading it against the
+score gaps measured in the same corpus turns that into a rate. Game win rate is the right
+column for calibration, since a Bo7 amplifies whatever per-game edge exists.
+
+| Matchup | score gap | game win rate | games | Bo7 match win rate | matches |
+|---|---|---|---|---|---|
+| gen-4 over `forge-full` | +1.384 | 60.6 % | 964 | 68.0 % | 178 |
+| gen-4 over gen-1 | +1.276 | 58.9 % | 2124 | 64.9 % | 393 |
+| gen-1 over `forge-full` | +0.105 | 53.2 % | 449 | 58.5 % | 82 |
+
+A line through the origin fits those three at 7.4 points of game win rate per unit of
+`deck_score`. The sealed pipeline's analogue, measured on sealed pools rather than draft pods,
+is about 7.8 points per unit. Two independently constructed pipelines agreeing within half a
+point on the exchange rate is stronger evidence than either alone.
+
+The third row carries almost none of that fit and should not be read as if it did. Its score
+gap is +0.105 against a standard error of 0.049, so it says two roughly equal decks win roughly
+equally often, which is consistent with the line without constraining its slope. The two
+informative rows imply 7.0 and 7.7 points per unit on their own.
+
+`forge-native` is the one label with no `deck_score` at all, being rebuilt from the pool at game
+time, and it supplies a clean read on the deck builder. Its seats and the `forge-full` seats
+are the same drafting agent on the same drafted pools, differing only in who assembles the 40
+cards. This project's picker and simulated-annealing builder beats Forge's own sealed builder
+68.6 % of matches head to head, on 51 matches with a cluster-robust standard error of 6.4
+points. Ten points of the gap between `forge-full` and `forge-native` in the first table is
+builder, not drafting.
+
+Two of this generation's readings survive contact with games. Creature count tracks winning
+inside every label — gen-4 wins 40.6 % of matches with 13 creatures or fewer and 72.3 % with 20
+or more — which is the direction the composition analysis assumed. And gen-4's win rate is flat
+across colours, 66.6 % to 67.6 % in each of WUBRG, where both references swing 6 to 8 points
+between their best and worst colour. A miscalibrated colour prior would show as gen-4 winning
+less in the colours it over-plays; it does not show, which is weak evidence for the prior being
+earned rather than a tic. It is not a test of whether the prior is optimal, since gen-4 chooses
+its own colours and never has to defend the choice.
+
+What this does not do is rank the four candidates. One checkpoint was played, and not the
+promotable one — `t3learner_t2field` is third of four on the yardstick, so 67.7 % is a lower
+bound on what the generation reaches rather than its headline. The exchange rate is what
+generalises, and it says the +0.23 that separates the best candidate from the worst is worth
+about 1.7 points of game win rate: real, and small enough that separating adjacent candidates
+on games alone would need thousands of matches.
 
 The three runs sharing a field decompose the temperature effect, because they change one
 temperature at a time and their checkpoints come from within 15 rounds of each other.
@@ -676,15 +739,16 @@ every run harder to read than it needed to be.
 Arm `--patience`. No run in this generation had a working stopping rule, and three of the four
 spent most of their wall-clock past their best round.
 
-The blocking problem is unchanged and is none of the above. Every metric available to the
-loop is a derivative of the same frozen `deck_score`, which is a scorer fitted to
-Forge-piloted outcomes. The anchor margin, the field margin, the reward and the yardstick are
-four views of one number, and nothing in the generation asked whether that number tracks
-winning games. Thirty-eight hours of training and six and a half hours of yardstick ran
-without playing one.
+The measurement gap gen-3 left open is closed, and the answer was the favourable one. Every
+metric available to the loop is a derivative of the same frozen `deck_score`, and 1001 played
+matches now say that number buys 7.4 points of game win rate per unit, agreeing with the
+sealed pipeline's 7.8 on a separately built corpus. Nothing above needs re-reading as a
+proxy result. What remains is that the exchange rate is shallow enough to make games an
+expensive way to compare candidates: the 0.23 separating the best from the worst is worth
+about 1.7 points of win rate, which is thousands of matches to resolve.
 
-One cheap partial escape appeared while checking Hypothesis 2, and it is worth taking before
-the games. Pick alignment against the `cards-win-rates.txt` labels is not a derivative of
+That makes cheap non-`deck_score` signals worth having anyway, and one appeared while checking
+Hypothesis 2. Pick alignment against the `cards-win-rates.txt` labels is not a derivative of
 `deck_score`. Both trace back to Forge-piloted games, but the scorer predicts a match outcome
 from a whole deck while these labels count per-card play and win events, so an agent cannot
 improve on one by construction of the other. Alignment is computable from any existing corpus
@@ -694,31 +758,22 @@ both to the checkpoint report, and if they keep agreeing with the yardstick over
 generation, they are a candidate run-control metric that the anchor margin has already failed
 to be.
 
-`python -m draft play-draft-games` closes that gap and is now built
-([`../specs/2026-08-09-draft-game-evaluation.md`](../specs/2026-08-09-draft-game-evaluation.md),
-feature `022-draft-game-evaluation`). It samples two seats from one recorded pod, plays a
-best-of-N match between their decks in Forge, and appends rows in the sealed match-outcome
-format to `output/draft/draft-games.txt`, which `scripts/analyze_winrates.py` tallies
-unchanged. Pairing inside a pod controls set and pool quality by construction, which is the
-largest nuisance factor removed for free.
+Two of the three questions the games were meant to answer are settled, and the remaining one
+is the expensive one.
 
-The eight corpora this document is built on are the input, and they are already on disk.
-Three questions are worth the games, in order.
+1. Does `deck_score` predict winning? Yes, at 7.4 points per unit. Settled.
+2. Does the colour prior survive contact with games? Gen-4 wins within a point of 67 % in every
+   colour, so nothing in its lean costs it games. Settled as far as an observational read can
+   settle it.
+3. Do the four candidates rank the same way on games as on score? Open. One checkpoint was
+   played, and matching the score ordering requires separating candidates 1.7 points apart.
 
-1. Does `deck_score` predict winning at all? Every ranking above rests on the assumption that
-   it does. The sealed pipeline's analogue — score delta predicting win-rate delta at
-   r ≈ 0.52, about 7.8 pp per unit score — says the answer is probably yes and worth
-   quantifying.
-2. Do the four candidates rank the same way on games as on score? The `v-gen3` corpora are
-   the cheapest test, being two labels in every pod.
-3. Does the colour prior survive contact with games? Gen-4 plays white nearly twice as often
-   as red. `analyze_winrates.py` already breaks win rate down by colour presence, so this
-   costs nothing extra.
-
-Sizing, so it is armed deliberately: a head-to-head win rate needs roughly `1.96/δ²` games
-for 80 % power at α = 0.05 — about 200 games to resolve 60/40, 800 for 55/45 and 2200 for
-53/47, before any inflation for the clustering that comes from reusing a deck across
-pairings. Question 1 is the cheap one and questions 2 and 3 are not.
+Sizing, so the third is armed deliberately: a head-to-head win rate needs roughly `1.96/δ²`
+games for 80 % power at α = 0.05 — about 200 games to resolve 60/40, 800 for 55/45 and 2200
+for 53/47, before any inflation for the clustering that comes from reusing a deck across
+pairings. Separating adjacent candidates sits past the right-hand end of that scale, so the
+`v-gen3` corpora — two labels in every pod, and a 0.6 gap rather than a 0.23 one — are the
+place to spend the time.
 
 ## Open questions
 
@@ -734,8 +789,13 @@ pairings. Question 1 is the cheap one and questions 2 and 3 are not.
   Nothing has tested below 2 under field at T, and gen-3's `lr 1e-6` run is not evidence
   because it did not train.
 - **Does the colour prior have a ceiling or a cost?** It saturated near +4 pp within this
-  generation. Whether that is the ceiling or the ceiling of `deck_score`'s ability to reward
-  it further is not answerable without games.
+  generation, and the games show no colour where gen-4 wins less. That rules out a cost it is
+  already paying, not one it would pay by leaning further, and it cannot say whether a policy
+  without the lean would do better. Forcing a candidate's colours at draft time and replaying
+  is the test.
+- **Does the builder gap hold up?** Forge's own sealed builder lost 68.6 % of matches to this
+  project's on identical drafted pools, on 51 matches. That is a large effect on a small
+  sample, and `--forge-native-fraction` makes replicating it nearly free on any corpus.
 - **Does `cast_lift` alignment keep tracking the yardstick?** It ordered four candidates
   correctly, which four candidates do one time in twenty-four by chance. Gen-5 supplies the
   replication, and it is free to compute on corpora that already exist.
