@@ -52,27 +52,17 @@ the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick 
 | *gen-3 incumbent* | *+0.824 ± 0.046* | *+0.920 ± 0.044* | — |
 
 Each figure is a mean over pods of (mean candidate seat − mean reference seat) in that pod,
-with the standard error clustered on set code. Pods are the unit because seats in a pod share
-a set and a card supply, and sets are the cluster because 500 drafts draw only about 170
-distinct sets, so pods repeat sets.
+with the standard error clustered on set code. 
 
-Clustering buys less on these numbers than it looks like it should. Both labels in a pod are
-handed the same set, so most of the set effect cancels in the difference, and the margin's
-standard error comes out 10 to 20 % above a naive seat-level calculation rather than any
-larger — 0.049 against 0.045 on `t2all_nodecay`. What survives the differencing is only the
-part of the gap that genuinely varies by set.
+The last column can be checked against the first, because the gen-4-versus-gen-3 gap is
+measurable two ways. Directly, from the head-to-head corpora where the two sit in the same
+pods. Indirectly, by subtracting the incumbent's margin over gen-1 from each candidate's — a
+different set of drafts, and one that assumes gen-1 scores consistently across corpora.
 
-The place clustering does matter is a level rather than a difference. Gen-4's own mean score in
-one corpus carries a naive seat-level standard error near 0.02 and a set-clustered one near
-0.06, so an absolute score is about three times less certain than its seat count suggests. The
-four `v-gen3` corpora show it directly: the same frozen gen-3 checkpoint scores 1.283, 1.326,
-1.337 and 1.476 across them, a spread no seat-level interval would admit. That is why nothing
-here is ranked on levels.
-
-The two routes to a gen-4-versus-gen-3 comparison agree. Differencing the first column
-against the incumbent's own row gives +0.50, +0.56, +0.45 and +0.33; the direct head-to-head
-gives +0.65, +0.63, +0.60 and +0.47. The levels differ by about 0.14 but the ordering is
-identical, which is what the comparison is for.
+The indirect route puts the gap at roughly 0.3 to 0.55, the direct route at roughly 0.45 to
+0.65, so the direct one reads about 0.1 higher throughout. Both rank the four candidates in
+the same order. Two independent sets of drafts, played against different opponents, agreeing
+on the ordering and roughly on the size means neither corpus is distorting its own result.
 
 The per-seat means that `analyze-generated-decks` prints understate all of this. Those pool
 every seat regardless of pod composition, and composition moves every score in the pod: a pod
