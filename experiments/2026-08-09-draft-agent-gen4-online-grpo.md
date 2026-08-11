@@ -69,23 +69,27 @@ on the ordering and roughly on the size means neither corpus is distorting its o
 `t3all_decay0.3` is the one candidate the yardstick can tell apart, trailing the other three by
 0.13 to 0.23 where the error bars run 0.04 to 0.07. The three above it sit inside their own
 uncertainty of each other, and both corpora give the same picture despite being drawn
-independently. Its weights are its round 58 rather than its own best round, so part of the
-deficit could be undertraining rather than temperature.
+independently.
 
 Gen-3's open temperature question is settled against the exploration band. The band pointed at
 `T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %, and running every
 agent there is the worst of the four settings tried. Training longer bought nothing either:
 `t2all_decay0.3` ran 312 rounds against `t2all_nodecay`'s 72 and finished level with it.
 
-### Two yardstick corpora hold more than their own run
+### The two `t2all_decay0.3` corpora were rebuilt before this was written
 
-The two `t2all_decay0.3` yardstick files are not what their names imply. Both accumulated
-earlier runs' records, because `output/draft/yardstick-drafts.jsonl` was reused without being
-cleared: the `v-forge` file holds 1000 records from two runs and the `v-gen3` file holds 1500
-from three. The `analyze-generated-decks` output captured in those two `-yardstick-*.log`
-files is therefore a mixture of checkpoints, and reports 4034 gen-4 seats where 500 drafts
-can yield about 2000. Every figure in this document is computed from the correct `run_id`
-only. The other six corpora hold exactly their own run.
+Both `t2all_decay0.3` yardstick files held more than their own run for a while.
+`output/draft/yardstick-drafts.jsonl` was the working path for every run and went uncleared
+across three consecutive ones, so each appended to what the last had left: the `v-forge` file
+ended up with 1000 records from two runs and the `v-gen3` file with 1500 from three. Their
+`analyze-generated-decks` output reported 4034 gen-4 seats where 500 drafts can yield about
+2000, pooling two different checkpoints under one label.
+
+Both files have since been stripped to their own `run_id` and their logs regenerated, and the
+regenerated figures match the ones here. Nothing was lost, because every stray record was a
+duplicate of one already held in its home file. The other six corpora only ever held their own
+run. Giving each run its own `--output-path` avoids the whole failure, and `--run-id` recovers
+from it after the fact.
 
 ## `deck_score` does predict winning
 
