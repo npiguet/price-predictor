@@ -16,9 +16,13 @@ Three kinds of design document, each with a distinct audience, purpose, tone, an
 
 ### Prose style
 
+**These rules are binding on every write to `experiments/*.md`, not advice to weigh.** They apply to a one-paragraph amendment as much as to a new document, to section headers as much as to body text, and to prose you are moving or lightly editing as much as to prose you are inventing. A section that already breaks them is not precedent — bring it into line while you are there. Before finishing any edit to one of these files, re-read what you wrote against the list below; the failure mode is writing naturally and never checking.
+
 Discursive does not mean dense. These docs get re-read months later by someone who no longer holds the run in their head, so write for a reader who is skimming and will stop at the first sentence that costs effort.
 
 - **Lead with the finding.** The first sentence of a paragraph states the conclusion. Corpus names, candidate labels, caveats and figures come after it. A reader who stops there should still have the result.
+- **Headers state the finding too, not the topic.** "What separates and what does not" and "On the exploration band" name a subject and make the reader read on to learn the answer. "Only the `T = 3` field separates from the rest" is the same header carrying the result. A table of contents built from the headers should read as a list of conclusions.
+- **Open a section with a sentence, not a table.** The table supports a claim that has already been made. A section whose first element is a table has made the reader derive the finding themselves.
 - **One claim per sentence, in the order the reader would check it.** Short declarative sentences beat one sentence carrying three comparisons in subordinate clauses.
 - **Unpack a chain of reasoning into one sentence per step, in causal order.** An argument with four steps is four sentences, not one sentence with three subordinate clauses. "A sampled frozen agent passes downstream cards a properly-playing agent would have kept, which weakens the training field in the dimension the yardstick tests, and transfer suffers for it" asks the reader to hold three things at once; the same argument as four sentences asks nothing. A reader should be able to stop after any step and still be following.
 - **Use concrete nouns, not invented abstractions.** "What the two choices trade is run-control fidelity against colour discipline" names two things the reader has never met and cannot picture. "Field at argmax predicts the yardstick better; field at T drafts better" names what actually differs. If a phrase would need its own definition to be understood, write the thing it stands for.

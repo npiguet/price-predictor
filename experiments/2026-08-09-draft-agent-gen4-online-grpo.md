@@ -64,16 +64,10 @@ The indirect route puts the gap at roughly 0.3 to 0.55, the direct route at roug
 the same order. Two independent sets of drafts, played against different opponents, agreeing
 on the ordering and roughly on the size means neither corpus is distorting its own result.
 
-The per-seat means that `analyze-generated-decks` prints understate all of this. Those pool
-every seat regardless of pod composition, and composition moves every score in the pod: a pod
-that happens to draw six gen-4 seats scores worse for everyone in it, and it contributes six
-seats to gen-4's mean against two to gen-1's. On `t2all_nodecay` the printed means give +1.09
-where the pod-paired estimate gives +1.33. The ordering is unaffected, so gen-3's figures
-remain valid for ranking; the levels there are low for the same reason. *Why every frozen
-label declines*, below, measures the effect and shows the bias scaling with the candidate's
-own strength — the stronger the candidate, the more the printed mean understates it.
+### Only the `T = 3` field separates from the rest
 
-### What separates and what does not
+Three of the four candidates are indistinguishable from one another. Every contrast that
+clears its own error bar involves `t3all_decay0.3`, which sits below all three.
 
 | Contrast | vs gen-1 | vs gen-3 |
 |---|---|---|
@@ -82,24 +76,26 @@ own strength — the stronger the candidate, the more the printed mean understat
 | `t3learner_t2field` − `t3all_decay0.3` | +0.13 ± 0.07 | +0.13 ± 0.05 |
 | `t2all_nodecay` − `t3all_decay0.3` | +0.18 ± 0.07 | +0.18 ± 0.04 |
 
-Only the contrasts involving `t3all_decay0.3` separate, and each is the same size in both
-corpora, which were drawn independently. The two `T = 2` runs and `t3learner_t2field` are a
-three-way tie. The narrowest of the four, `t3learner_t2field` against `t3all_decay0.3`,
-separates against gen-3 and falls just short against gen-1.
+Each contrast comes out the same size in both corpora. The two were drawn independently, so
+that agreement is a replication rather than a restatement. The closest call is
+`t3learner_t2field` over `t3all_decay0.3`, which clears the bar in the head-to-head corpus and
+just misses it against gen-1.
 
-Two conclusions follow directly. `T = 3` applied to every agent is the worst configuration
-tried, settling gen-3's open question against the exploration band: the band pointed at
-`T = 3` and the yardstick prefers `T = 2`. And the 22-hour run is not distinguishable from
-the 1h42m one. `t2all_decay0.3` trained 312 rounds to `t2all_nodecay`'s 72 and bought
-+0.05 ± 0.07 for it.
+Gen-3's open temperature question is settled, and the exploration band called it wrong. The
+band pointed at `T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %. The
+yardstick prefers `T = 2`. Running every agent at `T = 3` to stay inside the band is the worst
+of the four settings tried.
 
-The `t3all_decay0.3` conclusion carries one caveat, stated above: its yardsticked weights
-are round 58, not its run's round-208 best. Its deficit could in principle be undertraining
-rather than temperature. Two things argue against that reading. Its round count is within
-15 rounds of `t3learner_t2field`, which beats it in both corpora. And the in-run margin that
-would rank round 208 above round 58 is shown below to have no ranking power at all.
+Training longer bought nothing measurable. `t2all_decay0.3` ran 312 rounds against
+`t2all_nodecay`'s 72 and finished level with it on both corpora.
 
-### A note on the corpora
+One caveat sits under the temperature conclusion. The weights yardsticked for
+`t3all_decay0.3` are round 58 rather than its run's round-208 best, so its deficit could be
+undertraining instead. Two things argue against that. Its round count is within 15 rounds of
+`t3learner_t2field`, which beats it in both corpora. And the in-run margin that would rank
+round 208 above round 58 has no ranking power at all, which the next section measures.
+
+### Two yardstick corpora hold more than their own run
 
 The two `t2all_decay0.3` yardstick files are not what their names imply. Both accumulated
 earlier runs' records, because `output/draft/yardstick-drafts.jsonl` was reused without being
@@ -248,12 +244,12 @@ One incidental measurement supports the first row. In `t3learner_t2field` the le
 anchor hold identical weights and differ only in temperature, 3.0 against 2.0. Their round-0
 margin is −0.042, so running the same policy hotter barely moves the deck it produces.
 
-## What the in-run metrics did, and did not, tell us
+## No in-run metric ranks the checkpoints
 
 Four yardsticks now exist where the last generation had partial coverage, so the in-run
 metrics can be scored against them rather than trusted.
 
-### The anchor margin does not rank checkpoints
+### The anchor margin inverts the yardstick's order
 
 Ranking the three comparable runs by their best in-run margin gives `t2all_decay0.3`,
 `t3all_decay0.3`, `t3learner_t2field`. The yardstick gives `t2all_decay0.3`,
@@ -400,16 +396,15 @@ its worst run — the learner's own score fell and 85 % of its margin is the anc
 the pattern that disqualified gen-3's `lr 1e-4` — and it ties for best on the yardstick.
 `t3all_decay0.3` is its second-best and yardsticks last. Do not rank runs this way.
 
-## Why every frozen label declines
+## Crowding a pod with strong drafters costs every seat in it
 
 Gen-3 attributed the field's decline to denial, and left the size of the effect open. The
 yardstick corpora measure it directly, because `--agent-mix` is sampled independently per
 seat and pods therefore vary in how many gen-4 seats they contain.
 
-Gen-1 and `forge-full` are treated as one reference label throughout this section. *Which card
-axis the agent actually follows*, below, shows they weight every axis of card behaviour
-identically, and here they decline in step, gen-1 sitting about 0.1 above `forge-full` at every
-composition. Pooling them also makes both corpus families a two-label eight-seat pod at an even
+Gen-1 and `forge-full` are treated as one reference label throughout this section. The pick
+alignment measured further down finds they weight every axis of card behaviour identically, and
+here they decline in step, gen-1 sitting about 0.1 above `forge-full` at every composition. Pooling them also makes both corpus families a two-label eight-seat pod at an even
 split, so the gen-4 count fixes the whole composition and the two tables are read the same way.
 All four checkpoints are pooled; the two carry about 7900 and 8000 gen-4 seats.
 
@@ -491,7 +486,7 @@ pod-paired figure. Balancing the mix does not fix it, and the stronger the candi
 the naive number understates it, which is the wrong direction for a measurement whose whole
 job is to detect improvement.
 
-## Deck composition
+## More creatures, fewer rares, narrower mana bases
 
 From the four `v-forge` corpora, where gen-4 shares pods with both references.
 
@@ -663,7 +658,7 @@ measures Forge-piloted outcomes; a policy that learns which colours win those ga
 what it was asked. The finding to carry forward is the size and the ceiling, not a problem to
 fix.
 
-### Which card axis the agent actually follows
+### `cast_lift` is the axis gen-4 gained on
 
 Hypothesis 2 scores cards on `score_play` alone, and the encoder is trained on five axes
 ([`../specs/2026-05-03-card-winnability-pretraining.md`](../specs/2026-05-03-card-winnability-pretraining.md)),
@@ -734,7 +729,7 @@ card pairs well with the colours already committed to, and its label is construc
 the card's own quality baseline. Gen-4 has a strong preference over colours and no measurable
 preference over colour synergy.
 
-### What the hypotheses leave
+### Card-choice quality tracks the yardstick, colour does not
 
 Hypothesis 1's mechanism predicts each candidate's lane discipline from its field temperature
 and gets the direction right, but discipline does not track deck quality, so the reading gen-3
