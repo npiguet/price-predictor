@@ -66,34 +66,16 @@ on the ordering and roughly on the size means neither corpus is distorting its o
 
 ### Only the `T = 3` field separates from the rest
 
-Three of the four candidates are indistinguishable from one another. Every contrast that
-clears its own error bar involves `t3all_decay0.3`, which sits below all three.
+`t3all_decay0.3` is the one candidate the yardstick can tell apart, trailing the other three by
+0.13 to 0.23 where the error bars run 0.04 to 0.07. The three above it sit inside their own
+uncertainty of each other, and both corpora give the same picture despite being drawn
+independently. Its weights are its round 58 rather than its own best round, so part of the
+deficit could be undertraining rather than temperature.
 
-| Contrast | vs gen-1 | vs gen-3 |
-|---|---|---|
-| `t2all_decay0.3` − `t2all_nodecay` | +0.05 ± 0.07 | −0.01 ± 0.04 |
-| `t2all_nodecay` − `t3learner_t2field` | +0.05 ± 0.07 | +0.05 ± 0.05 |
-| `t3learner_t2field` − `t3all_decay0.3` | +0.13 ± 0.07 | +0.13 ± 0.05 |
-| `t2all_nodecay` − `t3all_decay0.3` | +0.18 ± 0.07 | +0.18 ± 0.04 |
-
-Each contrast comes out the same size in both corpora. The two were drawn independently, so
-that agreement is a replication rather than a restatement. The closest call is
-`t3learner_t2field` over `t3all_decay0.3`, which clears the bar in the head-to-head corpus and
-just misses it against gen-1.
-
-Gen-3's open temperature question is settled, and the exploration band called it wrong. The
-band pointed at `T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %. The
-yardstick prefers `T = 2`. Running every agent at `T = 3` to stay inside the band is the worst
-of the four settings tried.
-
-Training longer bought nothing measurable. `t2all_decay0.3` ran 312 rounds against
-`t2all_nodecay`'s 72 and finished level with it on both corpora.
-
-One caveat sits under the temperature conclusion. The weights yardsticked for
-`t3all_decay0.3` are round 58 rather than its run's round-208 best, so its deficit could be
-undertraining instead. Two things argue against that. Its round count is within 15 rounds of
-`t3learner_t2field`, which beats it in both corpora. And the in-run margin that would rank
-round 208 above round 58 has no ranking power at all, which the next section measures.
+Gen-3's open temperature question is settled against the exploration band. The band pointed at
+`T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %, and running every
+agent there is the worst of the four settings tried. Training longer bought nothing either:
+`t2all_decay0.3` ran 312 rounds against `t2all_nodecay`'s 72 and finished level with it.
 
 ### Two yardstick corpora hold more than their own run
 
