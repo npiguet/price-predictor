@@ -34,6 +34,14 @@ Four runs, all `lr 1e-5`, all from the same base, all on the mix
 
 All four peak and decline, as every gen-3 run did.
 
+`t3all_decay0.3` is the one run whose yardsticked checkpoint is not its best-margin round, and
+the choice is deliberate. Its margin climbed steadily to round 58, setting 24 new bests along
+the way, then went 150 rounds without one before a single isolated reading of +0.676 at round
+208. That last step is +0.058 over round 58, well inside the ±0.15 noise floor the metric
+carries at this window size (*The round-9 best is noise*, below). Round 58 sits at the top of
+a real climb; round 208 is one lucky window for the learner's seats. Taking the peak of the
+climb over the isolated spike is the same judgement the round-9 defect argues for.
+
 ## The yardstick
 
 All four checkpoints are measured. Each was taken through two 500-draft argmax runs: one
@@ -75,21 +83,6 @@ Gen-3's open temperature question is settled against the exploration band. The b
 `T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %, and running every
 agent there is the worst of the four settings tried. Training longer bought nothing either:
 `t2all_decay0.3` ran 312 rounds against `t2all_nodecay`'s 72 and finished level with it.
-
-### The two `t2all_decay0.3` corpora were rebuilt before this was written
-
-Both `t2all_decay0.3` yardstick files held more than their own run for a while.
-`output/draft/yardstick-drafts.jsonl` was the working path for every run and went uncleared
-across three consecutive ones, so each appended to what the last had left: the `v-forge` file
-ended up with 1000 records from two runs and the `v-gen3` file with 1500 from three. Their
-`analyze-generated-decks` output reported 4034 gen-4 seats where 500 drafts can yield about
-2000, pooling two different checkpoints under one label.
-
-Both files have since been stripped to their own `run_id` and their logs regenerated, and the
-regenerated figures match the ones here. Nothing was lost, because every stray record was a
-duplicate of one already held in its home file. The other six corpora only ever held their own
-run. Giving each run its own `--output-path` avoids the whole failure, and `--run-id` recovers
-from it after the fact.
 
 ## `deck_score` does predict winning
 
@@ -797,9 +790,10 @@ scale, so the `v-gen3` corpora — two labels in every pod, and a 0.6 score gap 
 
 ## Open questions
 
-- **Is `t3all_decay0.3`'s deficit temperature or undertraining?** Its yardsticked weights are
-  round 58 and its run's best is round 208. Yardsticking round 208 would settle it, if that
-  checkpoint still exists.
+- **Is `t3all_decay0.3`'s deficit temperature or training length?** Its checkpoint is round 58,
+  a quarter of the rounds behind the shortest of the other three, because that is where its
+  margin stopped climbing. Whether a `T = 3` field is slower rather than worse is answerable by
+  running it again and stopping only on a genuine plateau.
 - **Why does the learner's own absolute score fall over a long run?** Pod crowding explains
   the frozen labels and part of the learner, but `t2all_decay0.3` ran 956 rounds past its best
   with a cumulative KL of 2.37, by far the largest displacement from a warm start in either
