@@ -85,8 +85,8 @@ that happens to draw six gen-4 seats scores worse for everyone in it, and it con
 seats to gen-4's mean against two to gen-1's. On `t2all_nodecay` the printed means give +1.09
 where the pod-paired estimate gives +1.33. The ordering is unaffected, so gen-3's figures
 remain valid for ranking; the levels there are low for the same reason. *Why every frozen
-label declines*, below, measures the effect and shows the bias tracking how asymmetric the mix
-is.
+label declines*, below, measures the effect and shows the bias scaling with the candidate's
+own strength — the stronger the candidate, the more the printed mean understates it.
 
 ### What separates and what does not
 
@@ -304,28 +304,26 @@ the pattern that disqualified gen-3's `lr 1e-4` — and it ties for best on the 
 
 Gen-3 attributed the field's decline to denial, and left the size of the effect open. The
 yardstick corpora measure it directly, because `--agent-mix` is sampled independently per
-seat and pods therefore vary in how many gen-4 seats they contain. Pooling all four corpora,
-about 8000 gen-4 seats and 8000 reference seats:
+seat and pods therefore vary in how many gen-4 seats they contain.
 
-| gen-4 seats in the pod | gen-4 | gen-1 | forge-full | gen-4 − gen-1 |
-|---|---|---|---|---|
-| 1 | +2.77 | +1.45 | +1.43 | +1.31 |
-| 2 | +2.49 | +1.22 | +1.10 | +1.27 |
-| 3 | +2.33 | +1.11 | +0.96 | +1.22 |
-| 4 | +2.17 | +0.86 | +0.74 | +1.31 |
-| 5 | +2.05 | +0.70 | +0.56 | +1.36 |
-| 6 | +1.89 | +0.47 | +0.28 | +1.42 |
-| 7 | +1.62 | +0.09 | +0.31 | +1.53 |
+Gen-1 and `forge-full` are treated as one reference label throughout this section. *Which card
+axis the agent actually follows*, below, shows they weight every axis of card behaviour
+identically, and here they decline in step, gen-1 sitting about 0.1 above `forge-full` at every
+composition. Pooling them also makes both corpus families a two-label eight-seat pod at an even
+split, so the gen-4 count fixes the whole composition and the two tables are read the same way.
+All four checkpoints are pooled; the two carry about 7900 and 8000 gen-4 seats.
 
-Every extra gen-4 seat costs each reference seat about 0.20 and each gen-4 seat about 0.16,
-monotonically over the whole range. Replacing a weak drafter with a strong one takes cards
-out of the packs that reach everyone else, and the pool that arrives is worse for it.
+| gen-4 seats in the pod | gen-4 | gen-1 + `forge-full` | gap |
+|---|---|---|---|
+| 1 | +2.77 | +1.44 | +1.33 |
+| 2 | +2.49 | +1.16 | +1.32 |
+| 3 | +2.33 | +1.04 | +1.30 |
+| 4 | +2.17 | +0.80 | +1.37 |
+| 5 | +2.05 | +0.63 | +1.43 |
+| 6 | +1.89 | +0.38 | +1.52 |
+| 7 | +1.62 | +0.19 | +1.43 |
 
-The head-to-head corpora repeat the measurement against a much stronger displaced seat. Their
-mix is `gen4:1,gen3:1`, so the pod holds two labels and the gen-4 count fixes the whole
-composition.
-
-| gen-4 seats in the pod | gen-4 | gen-3 | gen-4 − gen-3 |
+| gen-4 seats in the pod | gen-4 | gen-3 | gap |
 |---|---|---|---|
 | 1 | +2.40 | +1.63 | +0.76 |
 | 2 | +2.06 | +1.51 | +0.55 |
@@ -335,47 +333,63 @@ composition.
 | 6 | +1.74 | +1.12 | +0.62 |
 | 7 | +1.76 | +1.07 | +0.68 |
 
-Crowding costs about half as much here: 0.095 per seat against gen-3 where it was 0.20 against
-gen-1 and `forge-full`, and 0.075 for gen-4's own seats where it was 0.16. Nothing about the
-mechanism changed. What changed is the size of the upgrade each swapped seat represents.
-Displacing `forge-full` at +0.8 with gen-4 at +2.1 adds far more competition than displacing
-gen-3 at +1.3 with the same seat.
+Both fall monotonically, and neither label escapes: crowding a pod with strong drafters takes
+cards out of the packs that reach everyone in it, gen-4 seats included.
 
-Dividing one by the other makes that explicit, and the two corpus families agree to within
-4 %.
+Crowding costs less against gen-3 than against the Forge-like reference — 0.095 per seat where
+it was 0.205, and 0.075 for gen-4's own seats where it was 0.159. Nothing about the mechanism
+differs between the two. What differs is the size of the upgrade each swapped seat represents.
+Displacing a reference seat at +0.8 with gen-4 at +2.2 adds far more competition than
+displacing gen-3 at +1.3 with the same seat.
 
-| Family | seat swapped out | gen-4's lead over it | cost per extra gen-4 seat | ratio |
-|---|---|---|---|---|
-| `v-forge` | gen-1 | +1.28 | −0.201 | 0.157 |
-| `v-gen3` | gen-3 | +0.59 | −0.095 | 0.162 |
+Dividing the cost by the gap makes that explicit, and the two families agree to within a tenth
+of each other on both rows.
 
-A seat entering a pod costs each rival about a sixth of the amount by which it outclasses the
-seat it replaced. It costs its own kind about an eighth — 0.124 and 0.128 on the same two
-families — so a strong drafter is measurably more robust to a crowded pod than the field it
-beats. That difference is small next to the level, and only the `v-forge` table shows it as a
-visible widening of the gap.
+| Family | seat displaced | gen-4's lead over it | cost to a rival seat | ratio | cost to a gen-4 seat | ratio |
+|---|---|---|---|---|---|---|
+| `v-forge` | gen-1 + `forge-full` | +1.377 | −0.205 | 0.149 | −0.159 | 0.116 |
+| `v-gen3` | gen-3 | +0.587 | −0.095 | 0.162 | −0.075 | 0.128 |
+
+A seat entering a pod costs each rival roughly a sixth of the amount by which it outclasses
+the seat it replaced, and its own kind roughly an eighth. The gap between those two numbers is
+the interesting part: a strong drafter is measurably more robust to a crowded pod than the
+field it beats, which is why the gap column widens as the pod fills. Two families are two
+points, so read the ratio as a regularity worth testing rather than a constant.
 
 Two consequences follow. The first is the training-time decline, seen from a different angle.
 During a run the mix is fixed at three learner seats, but those seats get stronger, which is
 the same intervention as swapping a reference seat for a gen-4 one. `gen3a` falling 0.40 over
 the long run is the expected size of the effect rather than evidence of anything else.
 
-The second is the estimator bias flagged under *The yardstick*. Pooling seats without regard
-to composition weights gen-4's mean towards crowded pods, where every seat scores worse, while
-a reference label that is rarer in those pods is weighted towards uncrowded ones. The size of
-that bias should scale with how asymmetric the mix is, and it does.
+The second is the estimator bias flagged under *The yardstick*. Pooling seats without regard to
+composition weights gen-4's mean towards crowded pods, where every seat scores worse, and
+weights the reference's mean towards uncrowded ones, because a pod with more gen-4 seats has
+fewer reference seats to contribute. Both displacements push the difference down.
 
-| Family | mix | reference | naive per-seat difference | pod-paired | bias |
-|---|---|---|---|---|---|
-| `v-forge` | `gen4:2,gen1:1,forge-full:1` | gen-1 | +1.119 | +1.284 | −0.164 |
-| `v-forge` | `gen4:2,gen1:1,forge-full:1` | `forge-full` | +1.249 | +1.449 | −0.199 |
-| `v-gen3` | `gen4:1,gen3:1` | gen-3 | +0.498 | +0.587 | −0.089 |
+| Family | naive per-seat difference | pod-paired | bias | predicted |
+|---|---|---|---|---|
+| `v-forge` | +1.184 | +1.377 | −0.193 | −0.191 |
+| `v-gen3` | +0.498 | +0.587 | −0.089 | −0.084 |
 
-The balanced mix halves the bias, because both labels are drawn into crowded pods equally
-often and most of the effect cancels. The 2:1:1 mix does not cancel, which is why the printed
-per-seat means understate every margin in the first table of this document. Any future
-yardstick that cares about levels rather than ordering should either run a balanced mix or
-report the pod-paired figure.
+The prediction is the size the two slopes imply. Writing `k` for the number of gen-4 seats in a
+pod, `s₄` and `s_ref` for the two slopes, and `S` for the pod size, the size-biased weighting
+shifts each mean by its covariance with the seat count, giving
+
+```
+bias ≈ s₄ · Var(k)/E[k]  +  s_ref · Var(k)/(S − E[k])
+```
+
+which lands within 0.005 of the observed bias on both families. So the bias is set by the
+crowding slopes, and the slopes scale with the strength gap, so the bias scales with it too:
+it is 14 % of the gap on one family and 15 % on the other. Mix balance is not what drives it.
+Both families here are evenly split and their biases differ by a factor of two, and measuring
+`v-forge` against gen-1 alone — a quarter of the pod against gen-4's half — gives −0.164,
+no worse than the even split does.
+
+The practical form of that: a yardstick reporting levels rather than ordering should use the
+pod-paired figure. Balancing the mix does not fix it, and the stronger the candidate the more
+the naive number understates it, which is the wrong direction for a measurement whose whole
+job is to detect improvement.
 
 ## Deck composition
 
