@@ -6,7 +6,6 @@ import statistics
 from datetime import datetime
 from pathlib import Path
 
-
 PATH = Path("output/sealed/match-outcomes.txt")
 CHUNK_SIZE = 100  # matches per trend bucket
 

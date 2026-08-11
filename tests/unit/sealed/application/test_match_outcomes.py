@@ -367,3 +367,30 @@ class TestSupervisorBestOf:
 
         kwargs = fake_connector.start.call_args.kwargs
         assert kwargs.get("best_of") == 17
+
+
+class TestSupervisorStatusLineFormat:
+    """Regression guard for the extraction onto ForgeWorkerPool.
+
+    The draft game-evaluation command reports progress by sharing this pool, and
+    its spec requires the line to stay identical to this command's. A change here
+    silently changes both, so the exact shape is asserted rather than inferred.
+    """
+
+    def test_status_line_is_unchanged_by_the_extraction(self, tmp_path, capsys):
+        output_file = tmp_path / "match-outcomes.txt"
+        output_file.write_text("a\nb\nc\nd\n", encoding="utf-8")
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=12, output_path=output_file, best_of=3,
+        )
+
+        supervisor._pool._report_status(0.0, 60.0, 0, 0.0)
+
+        line = capsys.readouterr().out.strip()
+        assert line == "[60s] 4 matches completed | 4.0 matches/min | 0/12 workers alive"
+
+    def test_status_interval_still_sixty_seconds(self, tmp_path):
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=tmp_path / "out.txt", best_of=3,
+        )
+        assert supervisor.STATUS_INTERVAL == 60

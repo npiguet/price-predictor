@@ -44,10 +44,10 @@ def _build_grid(d_models: list[int], n_layers: list[int], n_heads: list[int]) ->
                     f"d_model={d} is not divisible by n_heads={h}. "
                     f"Choose a d_model that is a multiple of {h}."
                 )
-            for l in n_layers:
+            for layers in n_layers:
                 combos.append({
                     "d_model": d,
-                    "n_layers": l,
+                    "n_layers": layers,
                     "n_heads": h,
                     "ff_dim": 4 * d,
                 })

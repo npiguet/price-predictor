@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import signal
 import subprocess
 import threading
-import time
 import uuid
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import kill_process_tree
+from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 from sealed.infrastructure.match_worker_connector import (
     DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
@@ -22,9 +20,13 @@ class MatchOutcomeSupervisor:
     Spawns worker_count workers, monitors each in a dedicated thread, restarts
     crashed workers, reports status every 60 seconds, and handles clean shutdown
     on SIGINT/SIGTERM.
+
+    Those mechanics live in :class:`ForgeWorkerPool` and are shared with
+    ``draft play-draft-games``; this class owns what is sealed-specific — the run
+    id and the worker command's side-deck arguments.
     """
 
-    STATUS_INTERVAL = 60  # seconds between status reports
+    STATUS_INTERVAL = ForgeWorkerPool.STATUS_INTERVAL  # seconds between status reports
 
     def __init__(
         self,
@@ -42,11 +44,14 @@ class MatchOutcomeSupervisor:
         self._side_b_decks_path = side_b_decks_path
         self._side_b_decks_weight = side_b_decks_weight
         self._run_id = str(uuid.uuid4())
-        self._shutdown_event = threading.Event()
-        self._processes: list[subprocess.Popen] = []
-        self._start_times: dict[subprocess.Popen, float] = {}
-        self._processes_lock = threading.Lock()
         self._connector = MatchWorkerConnector()
+        # The lambda re-reads self._start_worker per spawn so tests (and any
+        # caller) can patch it after construction.
+        self._pool = ForgeWorkerPool(
+            worker_count=worker_count,
+            spawn_worker=lambda worker_id: self._start_worker(worker_id),
+            output_path=output_path,
+        )
 
     @property
     def run_id(self) -> str:
@@ -55,50 +60,7 @@ class MatchOutcomeSupervisor:
 
     def run(self) -> None:
         """Start all workers and block until shutdown."""
-        self._output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
-
-        print(f"Starting {self._worker_count} workers...")
-
-        monitor_threads = []
-        for i in range(self._worker_count):
-            t = threading.Thread(target=self._monitor_worker, args=(i,), daemon=True)
-            t.start()
-            monitor_threads.append(t)
-
-        self._supervisor_loop()
-
-        for t in monitor_threads:
-            t.join(timeout=10)
-
-        print("Done.")
-
-    def _monitor_worker(self, worker_id: int) -> None:
-        """Monitor one worker, restarting it on crash until shutdown."""
-        while not self._shutdown_event.is_set():
-            try:
-                proc = self._start_worker(worker_id)
-                with self._processes_lock:
-                    self._processes.append(proc)
-                    self._start_times[proc] = time.monotonic()
-
-                proc.wait()
-
-                with self._processes_lock:
-                    if proc in self._processes:
-                        self._processes.remove(proc)
-                    self._start_times.pop(proc, None)
-
-                if self._shutdown_event.is_set():
-                    return
-
-                print(f"Worker {worker_id} exited (code {proc.returncode}), restarting...")
-
-            except Exception as exc:
-                if not self._shutdown_event.is_set():
-                    print(f"Monitor error for worker {worker_id}: {exc}")
+        self._pool.run()
 
     def _start_worker(self, worker_id: int) -> subprocess.Popen:
         """Start one Java worker subprocess. Worker stdout/stderr are discarded —
@@ -117,85 +79,27 @@ class MatchOutcomeSupervisor:
         print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc
 
-    def _supervisor_loop(self) -> None:
-        """Report status and recycle the oldest worker every STATUS_INTERVAL seconds."""
-        start_time = time.monotonic()
-        last_count = 0
-        last_time = start_time
+    # ── Pool state, exposed under the names this class published before the
+    # extraction so callers and tests keep working. ──────────────────────────
 
-        while not self._shutdown_event.is_set():
-            self._shutdown_event.wait(timeout=self.STATUS_INTERVAL)
-            if self._shutdown_event.is_set():
-                break
+    @property
+    def _processes(self) -> list[subprocess.Popen]:
+        return self._pool._processes
 
-            now = time.monotonic()
-            last_count, last_time = self._report_status(
-                start_time, now, last_count, last_time,
-            )
-            self._kill_oldest_worker()
+    @property
+    def _start_times(self) -> dict[subprocess.Popen, float]:
+        return self._pool._start_times
 
-        self._terminate_all()
-        print(f"Shutting down, terminating {self._worker_count} workers...")
+    @property
+    def _processes_lock(self) -> threading.Lock:
+        return self._pool._processes_lock
 
-    def _report_status(
-        self,
-        start_time: float,
-        now: float,
-        last_count: int,
-        last_time: float,
-    ) -> tuple[int, float]:
-        elapsed = now - start_time
-        interval = now - last_time
-
-        count = self._count_output_lines()
-        delta = count - last_count
-        rate = delta / interval * 60 if interval > 0 else 0.0
-
-        with self._processes_lock:
-            alive = sum(1 for p in self._processes if p.poll() is None)
-
-        print(
-            f"[{elapsed:.0f}s] {count} matches completed"
-            f" | {rate:.1f} matches/min"
-            f" | {alive}/{self._worker_count} workers alive"
-        )
-        return count, now
+    @property
+    def _shutdown_event(self) -> threading.Event:
+        return self._pool._shutdown_event
 
     def _kill_oldest_worker(self) -> None:
-        """Kill the longest-running worker so the monitor thread restarts it fresh.
-
-        Why: stale Forge JVMs slow down over time (memory pressure, classloader
-        churn). Recycling the oldest one each status interval keeps throughput
-        steady. Introduced in commit eda4505.
-        """
-        with self._processes_lock:
-            alive = [(p, t) for p, t in self._start_times.items() if p.poll() is None]
-            if not alive:
-                return
-            oldest_proc, oldest_time = min(alive, key=lambda x: x[1])
-            age = time.monotonic() - oldest_time
-
-        kill_process_tree(oldest_proc)
-        print(f"Recycled longest-running worker (PID {oldest_proc.pid}, age {age:.0f}s)")
-
-    def _terminate_all(self) -> None:
-        """Terminate all running worker processes."""
-        with self._processes_lock:
-            procs = list(self._processes)
-
-        for proc in procs:
-            kill_process_tree(proc)
-
-    def _handle_signal(self, signum, frame) -> None:
-        """Signal handler: set shutdown event to stop workers."""
-        self._shutdown_event.set()
+        self._pool._kill_oldest_worker()
 
     def _count_output_lines(self) -> int:
-        """Count lines in the output file (= number of completed matches)."""
-        if not self._output_path.exists():
-            return 0
-        try:
-            with open(self._output_path, "rb") as f:
-                return sum(1 for _ in f)
-        except OSError:
-            return 0
+        return self._pool.output_line_count()

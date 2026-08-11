@@ -19,7 +19,6 @@ from price_predictor.domain.entities import Card
 from price_predictor.infrastructure.converted_card_parser import parse_converted_file
 from sealed.infrastructure.converted_card_locator import ConvertedCardLocator
 
-
 DEFAULT_PATH = Path("output/sealed/match-outcomes.txt")
 DEFAULT_CARDS_PATH = Path("output/cardsfolder")
 BEST_OFS = [1, 3, 5, 7]  # match-length variants to simulate
