@@ -138,35 +138,56 @@ mirrors excluded, with `--forge-native-fraction 0.5` diverting half the `forge-f
 Forge's own sealed builder. Pairing inside a pod controls set and pool quality by construction.
 Bo7 match win rate over all matches a label appeared in:
 
-| Label | matches | Bo1 | Bo7 |
-|---|---|---|---|
-| gen-4 | 767 | 65.4 % | 67.7 % |
-| gen-1 | 576 | 43.8 % | 43.4 % |
-| `forge-full` | 311 | 43.4 % | 40.5 % |
-| `forge-native` | 348 | 32.2 % | 30.5 % |
+| Label | matches | game 1 | all games | Bo7 match |
+|---|---|---|---|---|
+| gen-4 | 767 | 65.4 % ± 1.7 | 60.9 % ± 1.0 | 67.7 % ± 1.8 |
+| gen-1 | 576 | 43.8 % ± 2.1 | 45.9 % ± 1.1 | 43.4 % ± 2.1 |
+| `forge-full` | 311 | 43.4 % ± 2.9 | 44.8 % ± 1.5 | 40.5 % ± 2.9 |
+| `forge-native` | 348 | 32.2 % ± 2.6 | 37.5 % ± 1.4 | 30.5 % ± 2.6 |
+
+Intervals are one cluster-robust standard error, clustered two ways, on the deck each side
+played. Pairings are drawn with replacement, so a strong deck can carry several matches and
+those outcomes are not independent; on the match column the correction is small, adding about
+a tenth of a point to the naive binomial figure, and on the all-games column it is larger
+because a match's games share both decks outright.
 
 The ordering is the yardstick's, on decks the scorer never saw played. Reading it against the
-score gaps measured in the same corpus turns that into a rate. Game win rate is the right
-column for calibration, since a Bo7 amplifies whatever per-game edge exists.
+score gaps measured in the same corpus turns that into a rate.
 
-| Matchup | score gap | game win rate | games | Bo7 match win rate | matches |
-|---|---|---|---|---|---|
-| gen-4 over `forge-native` | — | 65.1 % | 1027 | 73.0 % | 196 |
-| gen-4 over `forge-full` | +1.384 | 60.6 % | 964 | 68.0 % | 178 |
-| `forge-full` over `forge-native` | — | 59.9 % | 284 | 68.6 % | 51 |
-| gen-4 over gen-1 | +1.276 | 58.9 % | 2124 | 64.9 % | 393 |
-| gen-1 over `forge-native` | — | 58.9 % | 538 | 63.4 % | 101 |
-| gen-1 over `forge-full` | +0.105 | 53.2 % | 449 | 58.5 % | 82 |
+| Matchup | score gap | game 1 | all games | games | Bo7 match | matches |
+|---|---|---|---|---|---|---|
+| gen-4 over `forge-native` | — | 73.0 % ± 3.2 | 65.1 % ± 1.9 | 1027 | 73.0 % ± 3.4 | 196 |
+| gen-4 over `forge-full` | +1.384 | 64.6 % ± 3.6 | 60.6 % ± 1.9 | 964 | 68.0 % ± 3.6 | 178 |
+| gen-1 over `forge-native` | — | 63.4 % ± 4.8 | 58.9 % ± 2.7 | 538 | 63.4 % ± 4.9 | 101 |
+| gen-4 over gen-1 | +1.276 | 62.1 % ± 2.4 | 58.9 % ± 1.4 | 2124 | 64.9 % ± 2.5 | 393 |
+| `forge-full` over `forge-native` | — | 56.9 % ± 7.2 | 59.9 % ± 3.1 | 284 | 68.6 % ± 6.4 | 51 |
+| gen-1 over `forge-full` | +0.105 | 47.6 % ± 5.4 | 53.2 % ± 2.6 | 449 | 58.5 % ± 5.2 | 82 |
 
-A line through the origin fits the three scored rows at 7.4 points of game win rate per unit of
-`deck_score`. The sealed pipeline's analogue, measured on sealed pools rather than draft pods,
-is about 7.8 points per unit. Two independently constructed pipelines agreeing within half a
-point on the exchange rate is stronger evidence than either alone.
+Two per-game columns appear because they estimate slightly different things and the choice
+moves the answer. Within one matchup a race to four games is a stopping time, so by Wald's
+identity the share of games won is unbiased for the per-game probability no matter how the
+match ends. Across matchups it stops being unbiased: a lopsided pairing ends in four games and
+a close one runs to seven, so pooling all games weights close pairings more heavily and pulls
+the aggregate towards 50 %. Game 1 has no such weighting, every match contributing exactly one
+observation, and the die roll that decides who starts it is balanced across the corpus at 509
+to 492. Game 1 is the unbiased column and the all-games column is the precise one, by a factor
+of about two on the standard error.
 
-The last row carries almost none of that fit and should not be read as if it did. Its score
-gap is +0.105 against a standard error of 0.049, so it says two roughly equal decks win roughly
-equally often, which is consistent with the line without constraining its slope. The two
-informative rows imply 7.0 and 7.7 points per unit on their own.
+A line through the origin fits the three scored rows at 7.4 points per unit of `deck_score` on
+all games, and 10.0 on game 1. The sealed pipeline's analogue is about 7.8 points per unit,
+and it is computed over all games of Bo7 matches, so 7.4 is the like-for-like comparison. Two
+independently constructed pipelines agreeing within half a point on the exchange rate is
+stronger evidence than either alone. Read the true figure as somewhere in 7 to 10, and note
+that the gap between the two columns is itself informative: it is largest against
+`forge-native`, the label whose decks are most uneven in quality, which is exactly where
+length-weighting should bite hardest.
+
+The last row carries almost none of that fit under either column and should not be read as if
+it did. Its score gap is +0.105 against a standard error of 0.049, and its two per-game
+readings straddle 50 % — 47.6 % on game 1 and 53.2 % on all games, each within its own interval
+of an even split. Two nearly equal decks win about equally often, which is consistent with the
+line without constraining its slope. The two informative rows imply 7.0 and 7.7 points per unit
+on all games, 9.5 and 10.6 on game 1.
 
 `forge-native` is the one label with no `deck_score` at all, being rebuilt from the pool at game
 time, which is why its three rows are blank in that column. It supplies a clean read on the
@@ -178,11 +199,10 @@ standard error of 6.4 points. Ten points of the gap between `forge-full` and `fo
 the first table is builder rather than drafting.
 
 The builder effect is large enough to reorder the field. `forge-native` loses to every label
-including the one that drafted its own pool, and gen-4's widest game-win-rate margin over
-anything is its 65.1 % against it rather than its 60.6 % against the same agent building its
-own decks. Read the other way, gen-1 beats `forge-native` by the same 58.9 % that gen-4 beats
-gen-1 by, so swapping the deck builder is worth about as much here as a full generation of
-drafting improvement.
+including the one that drafted its own pool, and gen-4's widest margin over anything is against
+it rather than against the same agent building its own decks. Read the other way, gen-1 beats
+`forge-native` by about as much as gen-4 beats gen-1, on either per-game column: swapping the
+deck builder is worth roughly a full generation of drafting improvement.
 
 Two of this generation's readings survive contact with games. Creature count tracks winning
 inside every label — gen-4 wins 40.6 % of matches with 13 creatures or fewer and 72.3 % with 20
@@ -197,8 +217,9 @@ What this does not do is rank the four candidates. One checkpoint was played, an
 promotable one — `t3learner_t2field` is third of four on the yardstick, so 67.7 % is a lower
 bound on what the generation reaches rather than its headline. The exchange rate is what
 generalises, and it says the +0.23 that separates the best candidate from the worst is worth
-about 1.7 points of game win rate: real, and small enough that separating adjacent candidates
-on games alone would need thousands of matches.
+2 points of game win rate or so: real, and small enough that separating adjacent candidates on
+games alone would need thousands of matches. For scale, the ± column on the best-populated
+matchup in this run is 1.4 points on 2124 games.
 
 The three runs sharing a field decompose the temperature effect, because they change one
 temperature at a time and their checkpoints come from within 15 rounds of each other.
@@ -752,11 +773,11 @@ spent most of their wall-clock past their best round.
 
 The measurement gap gen-3 left open is closed, and the answer was the favourable one. Every
 metric available to the loop is a derivative of the same frozen `deck_score`, and 1001 played
-matches now say that number buys 7.4 points of game win rate per unit, agreeing with the
-sealed pipeline's 7.8 on a separately built corpus. Nothing above needs re-reading as a
-proxy result. What remains is that the exchange rate is shallow enough to make games an
-expensive way to compare candidates: the 0.23 separating the best from the worst is worth
-about 1.7 points of win rate, which is thousands of matches to resolve.
+matches now say that number buys 7 to 10 points of game win rate per unit, the like-for-like
+figure being 7.4 against the sealed pipeline's 7.8 on a separately built corpus. Nothing above
+needs re-reading as a proxy result. What remains is that the exchange rate is shallow enough to
+make games an expensive way to compare candidates: the 0.23 separating the best from the worst
+is worth about 2 points of win rate, which is thousands of matches to resolve.
 
 That makes cheap non-`deck_score` signals worth having anyway, and one appeared while checking
 Hypothesis 2. Pick alignment against the `cards-win-rates.txt` labels is not a derivative of
@@ -772,12 +793,13 @@ to be.
 Two of the three questions the games were meant to answer are settled, and the remaining one
 is the expensive one.
 
-1. Does `deck_score` predict winning? Yes, at 7.4 points per unit. Settled.
+1. Does `deck_score` predict winning? Yes, at 7 to 10 points of game win rate per unit.
+   Settled.
 2. Does the colour prior survive contact with games? Gen-4 wins within a point of 67 % in every
    colour, so nothing in its lean costs it games. Settled as far as an observational read can
    settle it.
 3. Do the four candidates rank the same way on games as on score? Open. One checkpoint was
-   played, and matching the score ordering requires separating candidates 1.7 points apart.
+   played, and matching the score ordering requires separating candidates about 2 points apart.
 
 Sizing, so the third is armed deliberately: a head-to-head win rate needs roughly `1.96/δ²`
 games for 80 % power at α = 0.05 — about 200 games to resolve 60/40, 800 for 55/45 and 2200
