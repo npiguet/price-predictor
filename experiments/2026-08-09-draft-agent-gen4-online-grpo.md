@@ -22,10 +22,8 @@ is noise*, below).
 
 ## The runs
 
-Four runs on 2026-08-07 to 2026-08-09, all `lr 1e-5`, all from the same base, all on the mix
-`gen4:3,gen3a:2,gen3c:1,gen1:1,forge-full:1` with `--anchor gen3a`. The per-label
-`--agent-temp` from spec 021 phase 9 makes the learner/field temperature split expressible
-for the first time, and the fourth run is the first to use it.
+Four runs, all `lr 1e-5`, all from the same base, all on the mix
+`gen4:3,gen3a:2,gen3c:1,gen1:1,forge-full:1` with `--anchor gen3a`. 
 
 | Run | learner T | field T | Rounds | Duration | Best margin (round) | Final margin | Checkpoint taken |
 |---|---|---|---|---|---|---|---|
@@ -34,31 +32,16 @@ for the first time, and the fourth run is the first to use it.
 | `t3all_decay0.3` | 3.0 | 3.0 | 568 | 9h54m | +0.676 (r208) | +0.206 | r58 |
 | `t3learner_t2field` | 3.0 | 2.0 | 177 | 4h07m | +0.391 (r68) | +0.002 | r68 |
 
-The checkpoint column is the round whose weights were kept and yardsticked, read from each
-file's `epoch` field. Three files hold their run's best-margin checkpoint. The
-`t3all_decay0.3` file does not: it holds round 58, whose margin was +0.618, and its run went
-on to a better round 208. That candidate is therefore the least-trained of the four as well
-as the only one not represented by its own best round.
-
-`t2all_nodecay` ran against a field that also contained a `gen3b` seat, so its in-run margins
-do not compare with the other three. Its yardstick figures do, being measured against a
-common field.
-
-All four peak and decline, as every gen-3 run did. Three end at less than half their best;
-the fourth ends at zero.
-
-Every run's rollouts were retained this time, one `-drafts.jsonl` per run — the
-instrumentation gen-3 asked for and lost. They are the input every hypothesis below needs.
+All four peak and decline, as every gen-3 run did.
 
 ## The yardstick
 
-All four checkpoints are now measured. Each was taken through two 500-draft argmax runs: one
+All four checkpoints are measured. Each was taken through two 500-draft argmax runs: one
 on the fixed mix `gen4:2,gen1:1,forge-full:1`, and one head-to-head against the promoted
 gen-3 incumbent on `gen4:1,gen3:1`.
 
 Every gen-4 candidate beats every reference by a wide margin, and every one of them beats
-the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick, recomputed
-on the same estimator, is included as the row to beat.
+the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick is included as the row to beat.
 
 | Checkpoint | vs gen-1 | vs `forge-full` | vs gen-3 incumbent |
 |---|---|---|---|
@@ -70,9 +53,21 @@ on the same estimator, is included as the row to beat.
 
 Each figure is a mean over pods of (mean candidate seat − mean reference seat) in that pod,
 with the standard error clustered on set code. Pods are the unit because seats in a pod share
-a set and a card supply; sets are the cluster because 500 drafts draw only about 170 distinct
-sets, so pods repeat sets and a seat-level standard error would be too narrow by roughly
-half.
+a set and a card supply, and sets are the cluster because 500 drafts draw only about 170
+distinct sets, so pods repeat sets.
+
+Clustering buys less on these numbers than it looks like it should. Both labels in a pod are
+handed the same set, so most of the set effect cancels in the difference, and the margin's
+standard error comes out 10 to 20 % above a naive seat-level calculation rather than any
+larger — 0.049 against 0.045 on `t2all_nodecay`. What survives the differencing is only the
+part of the gap that genuinely varies by set.
+
+The place clustering does matter is a level rather than a difference. Gen-4's own mean score in
+one corpus carries a naive seat-level standard error near 0.02 and a set-clustered one near
+0.06, so an absolute score is about three times less certain than its seat count suggests. The
+four `v-gen3` corpora show it directly: the same frozen gen-3 checkpoint scores 1.283, 1.326,
+1.337 and 1.476 across them, a spread no seat-level interval would admit. That is why nothing
+here is ranked on levels.
 
 The two routes to a gen-4-versus-gen-3 comparison agree. Differencing the first column
 against the incumbent's own row gives +0.50, +0.56, +0.45 and +0.33; the direct head-to-head
