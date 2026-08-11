@@ -151,27 +151,38 @@ column for calibration, since a Bo7 amplifies whatever per-game edge exists.
 
 | Matchup | score gap | game win rate | games | Bo7 match win rate | matches |
 |---|---|---|---|---|---|
+| gen-4 over `forge-native` | — | 65.1 % | 1027 | 73.0 % | 196 |
 | gen-4 over `forge-full` | +1.384 | 60.6 % | 964 | 68.0 % | 178 |
+| `forge-full` over `forge-native` | — | 59.9 % | 284 | 68.6 % | 51 |
 | gen-4 over gen-1 | +1.276 | 58.9 % | 2124 | 64.9 % | 393 |
+| gen-1 over `forge-native` | — | 58.9 % | 538 | 63.4 % | 101 |
 | gen-1 over `forge-full` | +0.105 | 53.2 % | 449 | 58.5 % | 82 |
 
-A line through the origin fits those three at 7.4 points of game win rate per unit of
+A line through the origin fits the three scored rows at 7.4 points of game win rate per unit of
 `deck_score`. The sealed pipeline's analogue, measured on sealed pools rather than draft pods,
 is about 7.8 points per unit. Two independently constructed pipelines agreeing within half a
 point on the exchange rate is stronger evidence than either alone.
 
-The third row carries almost none of that fit and should not be read as if it did. Its score
+The last row carries almost none of that fit and should not be read as if it did. Its score
 gap is +0.105 against a standard error of 0.049, so it says two roughly equal decks win roughly
 equally often, which is consistent with the line without constraining its slope. The two
 informative rows imply 7.0 and 7.7 points per unit on their own.
 
 `forge-native` is the one label with no `deck_score` at all, being rebuilt from the pool at game
-time, and it supplies a clean read on the deck builder. Its seats and the `forge-full` seats
-are the same drafting agent on the same drafted pools, differing only in who assembles the 40
-cards. This project's picker and simulated-annealing builder beats Forge's own sealed builder
-68.6 % of matches head to head, on 51 matches with a cluster-robust standard error of 6.4
-points. Ten points of the gap between `forge-full` and `forge-native` in the first table is
-builder, not drafting.
+time, which is why its three rows are blank in that column. It supplies a clean read on the
+deck builder in exchange. Its seats and the `forge-full` seats are the same drafting agent on
+the same drafted pools, differing only in who assembles the 40 cards, so the third row isolates
+the builder with drafting held fixed: this project's picker and simulated-annealing builder
+beats Forge's own sealed builder 68.6 % of matches, on 51 matches with a cluster-robust
+standard error of 6.4 points. Ten points of the gap between `forge-full` and `forge-native` in
+the first table is builder rather than drafting.
+
+The builder effect is large enough to reorder the field. `forge-native` loses to every label
+including the one that drafted its own pool, and gen-4's widest game-win-rate margin over
+anything is its 65.1 % against it rather than its 60.6 % against the same agent building its
+own decks. Read the other way, gen-1 beats `forge-native` by the same 58.9 % that gen-4 beats
+gen-1 by, so swapping the deck builder is worth about as much here as a full generation of
+drafting improvement.
 
 Two of this generation's readings survive contact with games. Creature count tracks winning
 inside every label — gen-4 wins 40.6 % of matches with 13 creatures or fewer and 72.3 % with 20
