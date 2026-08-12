@@ -14,9 +14,10 @@ import java.util.List;
  * Plays one drawn pairing and appends the result as a match-outcome row.
  *
  * <p>A {@code deck} seat plays the deck the corpus recorded for it. A
- * {@code pool} seat's deck is built by Forge's own sealed builder from its
- * drafted pool, so the same drafted cards can be compared under two builders.
- * Either way the row records the deck <em>as played</em>, never the pool.
+ * {@code pool} seat's deck is built from its drafted pool by the same builder Forge
+ * uses for a drafted pool, {@link forge.gamemodes.limited.BoosterDeckBuilder}, so the
+ * same drafted cards can be compared under two builders. Either way the row records
+ * the deck <em>as played</em>, never the pool.
  *
  * <p>Unlike {@link ValidationMatchPlayer} nothing here is positionally aligned
  * with an input file, so a pairing that throws simply writes no row — there is
@@ -77,12 +78,15 @@ public class DraftGamePlayer {
 
     /**
      * A {@code deck} seat plays what the corpus recorded; a {@code pool} seat's
-     * deck comes from Forge's own sealed builder.
+     * deck comes from Forge's own draft builder.
+     *
+     * <p>The pool arrives in pick order and must stay that way — {@code buildDrafted}
+     * replays it to recover the colours the seat committed to while drafting.
      */
     private Deck resolveDeck(SeatTableIndex.SeatEntry seat) {
         List<PaperCard> cards = resolveCards(seat.cardNames());
         if (seat.isPool()) {
-            return deckBuilder.buildStandard(cards);
+            return deckBuilder.buildDrafted(cards);
         }
         Deck deck = new Deck();
         CardPool main = deck.getOrCreate(DeckSection.Main);

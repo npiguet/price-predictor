@@ -8,6 +8,9 @@ import forge.card.mana.ManaCostShard;
 import forge.deck.CardPool;
 import forge.deck.Deck;
 import forge.deck.DeckSection;
+import forge.gamemodes.limited.BoosterDeckBuilder;
+import forge.gamemodes.limited.DeckColors;
+import forge.gamemodes.limited.DraftedColorCommitment;
 import forge.gamemodes.limited.SealedDeckBuilder;
 import forge.item.PaperCard;
 import forge.model.FModel;
@@ -87,6 +90,29 @@ public class DeckBuilder {
 
     Deck buildStandard(List<PaperCard> pool) {
         return new SealedDeckBuilder(new ArrayList<>(pool)).buildDeck();
+    }
+
+    /**
+     * Build a deck from a <em>drafted</em> pool the way Forge itself does.
+     *
+     * <p>Not interchangeable with {@link #buildStandard}. Both end up in the same
+     * {@code LimitedDeckBuilder}, but they differ in where the colour pair comes from, and a
+     * drafted pool is the case where that matters. {@code SealedDeckBuilder} re-derives colours
+     * from the top third of the ranked pool, which is right for a sealed pool nobody has made
+     * decisions about. A drafted pool was assembled by a drafter that committed to two colours
+     * early and let that commitment steer every later pick, so the pool only makes sense read
+     * against those colours — Forge passes them to {@link BoosterDeckBuilder} for exactly that
+     * reason ({@code LimitedPlayerAI.buildDeck}). Re-deriving them can land on a pair the pool
+     * was never drafted for, leaving too few on-colour playables and a deck padded out with
+     * basic lands.
+     *
+     * @param picksInPickOrder the seat's drafted cards, earliest pick first — the order is
+     *                         load-bearing, since the colour commitment is replayed from it
+     * @return the 40-card deck
+     */
+    Deck buildDrafted(List<PaperCard> picksInPickOrder) {
+        DeckColors colors = DraftedColorCommitment.replay(picksInPickOrder);
+        return new BoosterDeckBuilder(new ArrayList<>(picksInPickOrder), colors).buildDeck();
     }
 
     Deck buildWithSwaps(List<PaperCard> pool, int swapCount) {

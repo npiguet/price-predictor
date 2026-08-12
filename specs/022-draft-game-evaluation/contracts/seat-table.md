@@ -49,8 +49,10 @@ draft_id;set_code;label;kind;cards
 | `cards` | Pipe-separated Forge canonical card names, duplicates repeated |
 
 `kind = deck` means a finished 40-card deck, played as given. `kind = pool` means a seat's
-drafted pool, from which the worker builds a deck with Forge's own sealed builder before
-playing. Only diverted seats carry `pool`, and they always carry the label `forge-native`.
+drafted pool **in pick order**, from which the worker builds a deck with Forge's own draft
+builder before playing. Only diverted seats carry `pool`, and they always carry the label
+`forge-native`. Pick order is load-bearing for a `pool` row: the worker replays it to recover
+the colours the seat committed to while drafting.
 
 Card names may contain spaces, commas and apostrophes; they never contain `;` or `|`.
 
@@ -66,9 +68,10 @@ Load the table once, group seats by `draft_id`, then loop until killed:
 3. If their labels are equal and `include.mirrors` is false, discard and return to step 1.
    A pod whose seats all share one label is skipped, so this terminates.
 4. Resolve each side's cards through `FModel.getMagicDb()`. A `deck` side becomes that deck;
-   a `pool` side is passed to `DeckBuilder.buildStandard`, which is
-   `new SealedDeckBuilder(pool).buildDeck()`. That method is package-visible and this worker
-   shares its package, so nothing needs widening.
+   a `pool` side is passed to `DeckBuilder.buildDrafted`, which replays the picks into a
+   `DeckColors` and calls `new BoosterDeckBuilder(pool, colors).buildDeck()` — the builder and
+   the colour source Forge itself uses for a drafted pool. That method is package-visible and
+   this worker shares its package, so nothing needs widening.
 5. Play one best-of-`best.of` match with `GamePlayer`.
 6. Build a `MatchResult` — `timestamp` now, `runId` from `run.id`, `setCode` and the two
    labels from the seat lines, `games`/`play`/duration from the played match, and the two

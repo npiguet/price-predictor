@@ -854,7 +854,7 @@ python -m draft play-draft-games \
 #    ...then tally per agent with the existing sealed win-rate script
 python scripts/analyze_winrates.py output/draft/draft-games.txt
 #    separate the drafting from the deck building: rebuild half the Forge
-#    reference seats with Forge's own builder, reported as `forge-native`
+#    reference seats with Forge's own draft builder, reported as `forge-native`
 python -m draft play-draft-games --forge-native-fraction 0.5 --n-pairings 800
 
 # (any time) inspect one agent's decks: deck-score + composition stats
@@ -868,9 +868,9 @@ match-outcome format with each seat's agent label as its method tag — so
 `scripts/analyze_winrates.py` reports per-agent win rates and a head-to-head
 matrix over draft games with no change. Both decks coming from one pod holds pool
 and set quality constant inside every comparison. `--forge-native-fraction`
-diverts a share of `forge-full` seats to Forge's own sealed deck builder, working
-from the same drafted cards and reporting as `forge-native` — Forge end to end,
-where a plain `forge-full` seat drafted at full Forge strength but had its deck
+diverts a share of `forge-full` seats to Forge's own drafted-pool deck builder,
+working from the same drafted cards and reporting as `forge-native` — Forge end to
+end, where a plain `forge-full` seat drafted at full Forge strength but had its deck
 built by this project's picker/SA builder. That separates how
 well an agent **drafts** from how well its decks are **built**. Output goes to
 `output/draft/draft-games.txt`, deliberately not the sealed corpus: these are

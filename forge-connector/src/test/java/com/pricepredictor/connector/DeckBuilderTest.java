@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import forge.deck.Deck;
 import forge.item.PaperCard;
+import forge.model.FModel;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -78,6 +79,74 @@ class DeckBuilderTest {
         Deck deck = builder.buildStandard(pool);
 
         assertEquals(40, deck.getMain().countAll(), "Method 1 deck must be exactly 40 cards");
+    }
+
+    // ── Drafted pools ─────────────────────────────────────────────────────────
+
+    /**
+     * A drafted pool, approximated: 45 cards in pick order, opening with picks that
+     * commit the seat to a known colour pair.
+     */
+    private static List<PaperCard> draftedPool(String setCode, String... openingPicks) {
+        List<PaperCard> pool = new ArrayList<>();
+        for (String name : openingPicks) {
+            PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
+            assertNotNull(card, "test fixture card not found: " + name);
+            pool.add(card);
+        }
+        for (PaperCard card : realPool(setCode)) {
+            if (pool.size() >= 45) {
+                break;
+            }
+            pool.add(card);
+        }
+        return pool;
+    }
+
+    @Test
+    void buildDraftedProducesExactly40Cards() {
+        DeckBuilder builder = new DeckBuilder(new Random(42));
+
+        Deck deck = builder.buildDrafted(draftedPool("RVR", "Lightning Bolt", "Counterspell"));
+
+        assertEquals(40, deck.getMain().countAll(), "A drafted deck must be exactly 40 cards");
+    }
+
+    /**
+     * The regression this method exists for. {@code SealedDeckBuilder} would re-derive the
+     * colours from the finished pool and return the same deck for both orders; the drafted
+     * builder honours the commitment the pick order records, so disjoint opening pairs give
+     * different decks.
+     */
+    @Test
+    void buildDraftedFollowsThePickOrderNotJustThePoolContents() {
+        DeckBuilder builder = new DeckBuilder(new Random(42));
+
+        List<PaperCard> asWU = new ArrayList<>(draftedPool("RVR", "Wrath of God", "Counterspell"));
+        List<PaperCard> asBR = new ArrayList<>(asWU);
+        asBR.set(0, FModel.getMagicDb().getCommonCards().getCard("Lightning Bolt"));
+        asBR.set(1, FModel.getMagicDb().getCommonCards().getCard("Dark Ritual"));
+
+        Deck fromWU = builder.buildDrafted(asWU);
+        Deck fromBR = builder.buildDrafted(asBR);
+
+        assertNotEquals(
+                nonlandNames(fromWU),
+                nonlandNames(fromBR),
+                "Opening picks in disjoint colours must produce different decks — "
+                        + "the pool is otherwise identical, so only the commitment differs");
+    }
+
+    /** Sorted nonland card names of a deck, duplicates repeated. */
+    private static List<String> nonlandNames(Deck deck) {
+        List<String> names = new ArrayList<>();
+        for (PaperCard card : deck.getMain().toFlatList()) {
+            if (!card.getRules().getMainPart().getType().isLand()) {
+                names.add(card.getName());
+            }
+        }
+        Collections.sort(names);
+        return names;
     }
 
     // ── Method 2: 3 Swaps ─────────────────────────────────────────────────────

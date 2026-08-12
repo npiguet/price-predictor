@@ -64,16 +64,21 @@ The startup echo names the `run_id`s selected, or states that the whole corpus i
 # 5. Forge-native decks
 
 A seat's deck normally comes from the corpus. `--forge-native-fraction` diverts a share of
-the Forge reference seats to Forge's own sealed deck builder instead, so the same drafted
-cards can be compared under two builders.
+the Forge reference seats to Forge's own deck builder instead, so the same drafted cards can
+be compared under two builders.
 
 - `--forge-native-fraction` is a fraction between 0 and 1, default 0. At 0 the feature is
   inert and no seat is diverted.
 - Seats labelled `forge-full` are selected independently with that probability. Selection
   happens once per seat when the corpus is loaded, so a seat is diverted in every pairing it
   appears in or in none.
-- A diverted seat's deck is built by Forge's own sealed deck builder from the seat's drafted
-  pool, reconstructed from the record. The deck recorded in the corpus is not used.
+- A diverted seat's deck is built from the seat's drafted pool, reconstructed from the record
+  in pick order. The deck recorded in the corpus is not used.
+- The builder is the one Forge itself uses for a drafted pool: `BoosterDeckBuilder`, handed
+  the colour pair the seat committed to while drafting. That commitment is recovered by
+  replaying the seat's picks in order, which reproduces what Forge's drafting AI held. Forge's
+  sealed builder is not used here — it re-derives colours from the finished pool, which can
+  land on a pair the pool was never drafted for.
 - A diverted seat's label becomes `forge-native`. It is a distinct label everywhere: in the
   output rows, in mirror exclusion, and in the tally.
 - Because the labels differ, a pod holding both a diverted and an undiverted `forge-full`
