@@ -1,7 +1,11 @@
 package com.pricepredictor.connector;
 
+import forge.StaticData;
+import forge.card.CardEdition;
 import forge.gamemodes.limited.BoosterDraft;
 import forge.gamemodes.limited.LimitedPoolType;
+import forge.item.SealedTemplate;
+import forge.item.generation.UnOpenedProduct;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +33,61 @@ import static org.junit.jupiter.api.Assertions.*;
 @Tag("integration")
 @ExtendWith(ForgeExtension.class)
 class DraftWorkerMainTest {
+
+    /** Template draws used to decide whether a set's boosters are a fixed size. */
+    private static final int UNIFORMITY_PROBE_DRAWS = 400;
+
+    private static String uniformBoosterSet;
+
+    /**
+     * An eligible set whose Draft boosters always hold the same number of cards.
+     *
+     * <p>{@code generateDraft} returns null when its 24 boosters are not all one size,
+     * because the reconstruction geometry needs a fixed pack size. Some sets do not
+     * oblige: Secrets of Strixhaven yields a 13-card booster instead of 14 about 2 % of
+     * the time, which is a 38 % chance that a 24-booster draft is skipped. Those skips
+     * are correct — the worker loop just draws again — but a test that asserts a
+     * transcript from one attempt on such a set fails at that rate.
+     *
+     * <p>So the set is chosen rather than assumed. Taking {@code eligible.get(0)} binds
+     * the test to whichever set the Forge checkout added most recently, which is exactly
+     * where an irregular booster template is most likely to appear.
+     */
+    private static synchronized String uniformBoosterSet() {
+        if (uniformBoosterSet != null) {
+            return uniformBoosterSet;
+        }
+        List<String> eligible = MatchGenerator.computeEligibleSets();
+        assertFalse(eligible.isEmpty(), "expected at least one eligible sealed-legal set");
+        for (String code : eligible) {
+            CardEdition edition = StaticData.instance().getEditions().get(code);
+            SealedTemplate template =
+                    edition == null ? null : edition.getBoosterTemplate("Draft");
+            if (template == null) {
+                continue;
+            }
+            if (boosterSizeIsFixed(template)) {
+                uniformBoosterSet = code;
+                return uniformBoosterSet;
+            }
+        }
+        fail("no eligible set produced a fixed booster size over "
+                + UNIFORMITY_PROBE_DRAWS + " draws");
+        return null;
+    }
+
+    private static boolean boosterSizeIsFixed(SealedTemplate template) {
+        int size = -1;
+        for (int draw = 0; draw < UNIFORMITY_PROBE_DRAWS; draw++) {
+            int drawn = new UnOpenedProduct(template).get().size();
+            if (size == -1) {
+                size = drawn;
+            } else if (drawn != size) {
+                return false;
+            }
+        }
+        return size > 0;
+    }
 
     // ── Pure helpers ──────────────────────────────────────────────────────────
 
@@ -74,9 +133,7 @@ class DraftWorkerMainTest {
 
     @Test
     void generatesFullyDrainedEightSeatThreePackTranscript() {
-        List<String> eligible = MatchGenerator.computeEligibleSets();
-        assertFalse(eligible.isEmpty(), "expected at least one eligible sealed-legal set");
-        String setCode = eligible.get(0);
+        String setCode = uniformBoosterSet();
 
         BoosterDraft context = BoosterDraft.createDraft(LimitedPoolType.Full);
         DraftWorkerMain.AgentMix mix = DraftWorkerMain.AgentMix.parse("forge-full:1");
@@ -116,9 +173,7 @@ class DraftWorkerMainTest {
      */
     @Test
     void liveModelSeatDraftProducesTranscript() throws Exception {
-        List<String> eligible = MatchGenerator.computeEligibleSets();
-        assertFalse(eligible.isEmpty());
-        String setCode = eligible.get(0);
+        String setCode = uniformBoosterSet();
 
         // requests: worker `out` → responder; responses: responder → worker `stdin`.
         PipedInputStream reqIn = new PipedInputStream(1 << 16);
