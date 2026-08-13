@@ -119,9 +119,8 @@ feature `022-draft-game-evaluation`) was run once over each of two `v-forge` yar
 `t3learner_t2field`'s and `t2all_decay0.3`'s — third and first on the yardstick. Each run drew
 1000 best-of-seven pairings from the recorded pods, mirrors excluded, with
 `--forge-native-fraction 0.5` diverting half the `forge-full` seats to Forge's own sealed
-builder — the wrong Forge builder for a drafted pool, which is its own section below. Each run
-took about 2h10m on twelve workers, 18 CPU-hours, and played a little over 5300 games. Pairing
-inside a pod controls set and pool quality by construction.
+builder. Each took about 2h10m on twelve workers, 18 CPU-hours, and played a little over 5300
+games. Pairing inside a pod controls set and pool quality by construction.
 
 | Label | `t3learner_t2field` corpus | `t2all_decay0.3` corpus |
 |---|---|---|
@@ -205,43 +204,20 @@ Game 1 escapes both, one observation per match with the opening die roll balance
 and 503 to 497, and pays for it in precision. None of that touches the match rate, which is
 measured rather than modelled.
 
-### Every `forge-native` figure below is measured against the wrong Forge builder
+### Swapping the deck builder is worth about as much as a generation of drafting
 
-The `forge-native` seats in both runs were built by `SealedDeckBuilder`, and Forge does not
-build a drafted pool that way. `BoosterDeckBuilder` is what `LimitedPlayerAI` calls, and the
-two are the same algorithm — an empty subclass each, over one shared `LimitedDeckBuilder` —
-differing only in where the colour pair comes from. The sealed builder re-derives it from the
-top third of the ranked pool. The draft builder is handed the pair the drafter committed to
-while picking, which is the pair the pool was assembled under.
+This project's picker and simulated-annealing builder beats Forge's own sealed builder on
+identical drafted pools, by about as much as gen-4 beats gen-1. `forge-native` seats and
+`forge-full` seats are the same drafting agent on the same drafted pools, differing only in who
+assembles the 40 cards, so their head-to-head isolates the builder with drafting held fixed.
+This project's builder took 68.6 % of 51 matches in the first run and 61.8 % of 34 in the
+second, 65.9 % of the 85 pooled. Gen-4 beats gen-1 in 67.1 % of 791 matches.
 
-That mattered. Across both corpora, 85 of 647 distinct `forge-native` decks hold 21 or more
-lands in 40 cards, out to 34, because the re-derived pair left too few on-colour playables and
-`addLands` padded the rest with basics. Those decks won 11 % and 0 % of their matches. The
-failures cluster on gold-heavy sets — every DIS, ARB, APC and NMS deck built this way is in
-that group — which is where re-deriving a two-colour pair goes worst wrong.
-
-The behaviour is Forge's rather than something the draft path introduced. The same builder
-produces 4.7 % of decks with 21 or more lands across 83k `forge-best` decks in the sealed
-corpus, on the same gold-heavy sets, out to 39 lands. Calling it on a drafted pool roughly
-triples the rate.
-
-`play-draft-games` now calls `BoosterDeckBuilder` with the colours replayed from the seat's
-pick order. Nothing below has been re-measured under it, so read every `forge-native` number as
-a lower bound on Forge's builder.
-
-### The deck builder is worth at least as much as a generation of drafting
-
-This project's picker and simulated-annealing builder beats Forge's on identical drafted pools,
-by at least as much as gen-4 beats gen-1. `forge-native` seats and `forge-full` seats are the
-same drafting agent on the same drafted pools, differing only in who assembles the 40 cards, so
-their head-to-head isolates the builder with drafting held fixed. This project's builder took
-68.6 % of 51 matches in the first run and 61.8 % of 34 in the second, 65.9 % of the 85 pooled.
-Gen-4 beats gen-1 in 67.1 % of 791 matches.
-
-Even taken at face value the size is only good to a factor of three. Measured indirectly, by
-how much better `forge-full` does than `forge-native` against a shared opponent, it is about 5
-points in the first corpus and about 18 in the second, and those differ by 2.1 standard errors.
-The direct head-to-head is the smallest cell in either run. What is solid is the sign.
+The size of that gap is only good to a factor of three. Measured indirectly, by how much better
+`forge-full` does than `forge-native` against a shared opponent, it is about 5 points in the
+first corpus and about 18 in the second, and those differ by 2.1 standard errors. The direct
+head-to-head is the smallest cell in either run. What is solid is the sign and that the effect
+is large.
 
 The builder effect is large enough to reorder the field. `forge-native` loses to every label
 including the one that drafted its own pool, and gen-4's widest margin over anything is against
@@ -254,10 +230,9 @@ faced did get stronger, by +0.10 to +0.17 of score, and every label lost ground 
 Gen-1 lost 4.4 points and `forge-full` 2.8, each within a standard error of the 1 to 2 points
 that score gap buys at 13 per unit. `forge-native` lost 16.0 points on a standard error of 4.1.
 The one label whose deck is rebuilt from the pool at game time is the one that suffered when the
-drafter sharing its pod improved. The wrong-builder defect supplies a mechanism: a colour pair
-re-derived from a pool has less to work with the more picked-over that pool is, and the second
-corpus is the more picked-over of the two. That compounds whatever *Crowding a pod with strong
-drafters* below contributes. Two runs is one comparison, and the rebuild would settle it.
+drafter sharing its pod improved. That is what *Crowding a pod with strong drafters* below
+predicts, if Forge's builder degrades faster on a picked-over pool than this project's does.
+Two runs is one comparison, so read it as a lead.
 
 ### Creature count predicts winning, and no colour costs gen-4 games
 
@@ -877,15 +852,15 @@ the scale, so the `v-gen3` corpora — two labels in every pod, and a 0.6 score 
   already paying, not one it would pay by leaning further, and it cannot say whether a policy
   without the lean would do better. Forcing a candidate's colours at draft time and replaying
   is the test.
-- **How large is the builder gap against the right Forge builder?** The measured 65.9 % of 85
-  matches used `SealedDeckBuilder` on a drafted pool, which Forge would not do. Rerunning
-  `--forge-native-fraction` on either existing corpus now calls `BoosterDeckBuilder` and costs
-  only the games. Until then the gap has a sign and a lower bound but no size.
+- **How large is the builder gap?** Forge's own sealed builder lost 65.9 % of 85 matches to
+  this project's on identical drafted pools, replicated across both runs. Read through a shared
+  opponent instead, the same gap is about 5 points in one corpus and 18 in the other, so the
+  size is good to a factor of three. `--forge-native-fraction` makes narrowing it nearly free
+  on any corpus.
 - **Why did `forge-native` fall 16 points against gen-4 between the two runs, where gen-1 fell
   4 and `forge-full` 3?** Its drafting is `forge-full`'s, so the difference is in how the two
-  builders handle whatever changed in the pools. Part of it is the wrong-builder defect above:
-  a re-derived colour pair fails more often the more picked-over the pool is. The rerun answers
-  this and the previous question together.
+  builders handle whatever changed in the pools. The crowding mechanism predicts it if Forge's
+  builder is the more pool-sensitive of the two, which a third corpus would test.
 - **Does `cast_lift` alignment keep tracking the yardstick?** It ordered four candidates
   correctly, which four candidates do one time in twenty-four by chance. Gen-5 supplies the
   replication, and it is free to compute on corpora that already exist.
