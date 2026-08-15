@@ -214,19 +214,19 @@ The builder effect is large enough to reorder the field. `forge-native` loses to
 including the one that drafted its own pool, and gen-4's widest margin over anything is against
 it rather than against the same agent building its own decks.
 
-### Forge's builder fails when the committed colours run dry
+### Forge pads a tenth of its decks with basics rather than lowering its bar
 
 About a tenth of `forge-native` decks are not decks. Rebuilding all 615 of them from their
-pools, 65 hold 21 or more lands in 40 cards, out to 33 — Forge targets 22 spells and 18 lands,
-and when it cannot find 22 it fills the remainder with basics rather than lowering its bar. Those
-decks win 10 % of their matches and 0 % once past 25 lands, so they drag the label's average
-down by about four points on their own.
+pools, 65 hold 21 or more lands in 40 cards, out to 33. Forge targets 22 spells and 18 lands,
+and when it cannot find 22 it fills the remainder with basics rather than lowering its bar.
+Those decks win 10 % of their matches and 0 % once past 25 lands, so they drag the label's
+average down by about four points on their own.
 
 Two things starve the spell slots, and they account for three-quarters of the failures between
 them. The first is the colour commitment. Forge's drafter fixes two colours from its opening
 picks and lets that choice steer every later pick, and the deck builder is then handed the same
-pair. When the packs do not cooperate the pool ends up thin in exactly those colours, and every
-seat holding fewer than 22 on-colour playables built a land-heavy deck — 33 of the 65, without
+pair. When the packs do not cooperate the pool ends up thin in exactly those colours. Every seat
+holding fewer than 22 on-colour playables built a land-heavy deck, 33 of the 65, without
 exception. The second is that not every on-colour card counts: Forge strips cards its AI cannot
 use, refilling from the same shrinking pool. Land-heavy seats with an otherwise ample pool carry
 21.6 % of their on-colour cards flagged that way against 6.0 % for normal seats.
@@ -240,20 +240,44 @@ Subtracting the unusable cards gives an effective supply that predicts the failu
 | 22–25 | 101 | 10 (10 %) |
 | ≥ 26 | 439 | 5 (1 %) |
 
+That second mechanism comes from a split between what the drafter knows and what the builder
+enforces. Forge carries two flags for cards its AI handles badly. `RemAIDecks` marks cards it
+cannot play at all, and the drafter does see that one: `CardRanker` docks 20 points for it at
+pick time, and those cards go at mean pick 10.7 of 15. `RemRandomDecks` marks build-around cards
+that are only worth playing alongside their partners, and it appears nowhere in `CardRanker` or
+`LimitedPlayerAI`. The drafter is blind to it.
+
+The picks show the blindness directly. Mean pick position is 8.0 by construction, and setting
+the `RemAIDecks` cards aside, build-arounds go at 8.6 against 7.7 for everything else, less than
+one pick later. Forge drafts them on raw power at close to their natural rate.
+
+The discard is conditional, which is what makes this expensive. `checkRemRandomDeckCards` keeps
+a flagged card when its `DeckNeeds` or `DeckHints` partners are already in the deck and removes
+it otherwise, so the card is dead only when the support never arrived. A drafter that could see
+the flag would either commit early enough to collect the partners or leave the card alone. This
+one does neither, and discovers at build time that a fifth of its on-colour cards need friends
+who never came. That is the shape of the sets where this concentrates: Coldsnap and the Ravnica
+blocks are full of mechanically linked commons, ordinary with support and marginal without.
+
 The remaining 15 failures had ample effective supply and still came out short, so the mana-curve
 and rarity constraints inside the builder cost something too, but far less than supply does.
 
 Neither mechanism is a colour-derivation bug. The builder receives the pair the drafter actually
-committed to — replayed from pick order — and still fails at this rate. Handing it the pair
+committed to, replayed from pick order, and still fails at this rate. Handing it the pair
 derived from the finished pool instead, which is what a sealed builder does, raises the failure
-count from 65 to 81 on the same pools. The colour source is worth a fifth of the problem; the
+count from 65 to 81 on the same pools. The colour source is worth a fifth of the problem. The
 commitment itself is the rest.
 
 This bounds what `forge-native` measures. It is Forge end to end, so it is the honest baseline
 for the whole pipeline, but a tenth of its decks lose to arithmetic rather than to drafting.
-Read the builder gap as a property of Forge's sealed-deck code, not as a statement about how
-well Forge drafts — `forge-full`, which is the same drafting with this project's builder,
-already separates those two things.
+Read the builder gap as a property of Forge's limited deck-building code, not as a statement
+about how well Forge drafts.
+
+The blind spot itself belongs to the drafter, so it is in `forge-full`'s pools too, since the
+two labels draft identically and differ only in who builds. What differs is the response. This
+project's builder has no 22-spell target and no discard step, so a build-around whose partners
+never arrived costs it a slot rather than a land, and the scorer prices that slot for what it is
+worth. Forge turns the same card into a Mountain.
 
 ### Creature count predicts winning, and no colour costs gen-4 games
 
