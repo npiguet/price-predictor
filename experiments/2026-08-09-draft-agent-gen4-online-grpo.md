@@ -25,21 +25,21 @@ is noise*, below).
 Four runs, all `lr 1e-5`, all from the same base, all on the mix
 `gen4:3,gen3a:2,gen3c:1,gen1:1,forge-full:1` with `--anchor gen3a`. 
 
-| Run | learner T | field T | Rounds | Duration | Best margin (round) | Final margin | Checkpoint taken |
-|---|---|---|---|---|---|---|---|
-| `t2all_nodecay` | 2.0 | 2.0 | 83 | 1h42m | +0.546 (r72) | +0.379 | r72 |
-| `t2all_decay0.3` | 2.0 | 2.0 | 1268 | 22h39m | +0.831 (r312) | +0.468 | r312 |
-| `t3all_decay0.3` | 3.0 | 3.0 | 568 | 9h54m | +0.676 (r208) | +0.206 | r58 |
-| `t3learner_t2field` | 3.0 | 2.0 | 177 | 4h07m | +0.391 (r68) | +0.002 | r68 |
+| Run                 | learner T | field T | Rounds | Duration | Best margin (round) | Final margin | Checkpoint taken |
+|---------------------|-----------|---------|--------|----------|---------------------|--------------|------------------|
+| `t2all_nodecay`     | 2.0       | 2.0     | 83     | 1h42m    | +0.546 (r72)        | +0.379       | r72              |
+| `t2all_decay0.3`    | 2.0       | 2.0     | 1268   | 22h39m   | +0.831 (r312)       | +0.468       | r312             |
+| `t3all_decay0.3`    | 3.0       | 3.0     | 568    | 9h54m    | +0.676 (r208)       | +0.206       | r58              |
+| `t3learner_t2field` | 3.0       | 2.0     | 177    | 4h07m    | +0.391 (r68)        | +0.002       | r68              |
 
 All four peak and decline, as every gen-3 run did.
 
 `t3all_decay0.3` is the one run whose yardsticked checkpoint is not its best-margin round, and
 the choice is deliberate. Its margin climbed steadily to round 58, setting 24 new bests along
-the way, then went 150 rounds without one before a single isolated reading of +0.676 at round
-208. That last step is +0.058 over round 58, well inside the ±0.15 noise floor the metric
-carries at this window size (*The round-9 best is noise*, below). Round 58 sits at the top of
-a real climb; round 208 is one lucky window for the learner's seats.
+the way, then went 150 rounds without one before a single isolated reading of +0.676 at
+round 208. That last step is +0.058 over round 58, well inside the ±0.15 noise floor the
+metric carries at this window size (*The round-9 best is noise*, below). Round 58 sits at the
+top of a real climb; round 208 is one lucky window for the learner's seats.
 
 ## The yardstick
 
@@ -50,13 +50,13 @@ gen-3 incumbent on `gen4:1,gen3:1`.
 Every gen-4 candidate beats every reference by a wide margin, and every one of them beats
 the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick is included as the row to beat.
 
-| Checkpoint | vs gen-1 | vs `forge-full` | vs gen-3 incumbent |
-|---|---|---|---|
-| `t2all_decay0.3` | +1.380 ± 0.046 | +1.555 ± 0.052 | +0.634 ± 0.031 |
-| `t2all_nodecay` | +1.328 ± 0.049 | +1.519 ± 0.050 | +0.645 ± 0.031 |
-| `t3learner_t2field` | +1.276 ± 0.052 | +1.384 ± 0.045 | +0.600 ± 0.033 |
-| `t3all_decay0.3` | +1.152 ± 0.050 | +1.337 ± 0.056 | +0.467 ± 0.030 |
-| *gen-3 incumbent* | *+0.824 ± 0.046* | *+0.920 ± 0.044* | — |
+| Checkpoint          | vs gen-1         | vs `forge-full`  | vs gen-3 incumbent |
+|---------------------|------------------|------------------|--------------------|
+| `t2all_decay0.3`    | +1.380 ± 0.046   | +1.555 ± 0.052   | +0.634 ± 0.031     |
+| `t2all_nodecay`     | +1.328 ± 0.049   | +1.519 ± 0.050   | +0.645 ± 0.031     |
+| `t3learner_t2field` | +1.276 ± 0.052   | +1.384 ± 0.045   | +0.600 ± 0.033     |
+| `t3all_decay0.3`    | +1.152 ± 0.050   | +1.337 ± 0.056   | +0.467 ± 0.030     |
+| *gen-3 incumbent*   | *+0.824 ± 0.046* | *+0.920 ± 0.044* | —                  |
 
 Each figure is a mean over pods of (mean candidate seat − mean reference seat) in that pod,
 with the standard error clustered on set code. Clustering treats all the pods drafted from one
@@ -100,10 +100,10 @@ The whole of the `T = 3` deficit belongs to the field's temperature, and none of
 learner's. The three runs sharing a field decompose it, because they change one temperature at
 a time and their checkpoints come from within 15 rounds of each other.
 
-| Contrast | What changes | Effect vs gen-1 | Effect vs gen-3 |
-|---|---|---|---|
-| `t2all_nodecay` → `t3learner_t2field` | learner 2 → 3, field held at 2 | −0.05 ± 0.07 | −0.05 ± 0.05 |
-| `t3learner_t2field` → `t3all_decay0.3` | field 2 → 3, learner held at 3 | −0.13 ± 0.07 | −0.13 ± 0.05 |
+| Contrast                               | What changes                   | Effect vs gen-1 | Effect vs gen-3 |
+|----------------------------------------|--------------------------------|-----------------|-----------------|
+| `t2all_nodecay` → `t3learner_t2field`  | learner 2 → 3, field held at 2 | −0.05 ± 0.07    | −0.05 ± 0.05    |
+| `t3learner_t2field` → `t3all_decay0.3` | field 2 → 3, learner held at 3 | −0.13 ± 0.07    | −0.13 ± 0.05    |
 
 The mechanism is the one the gen-3 spec proposed and gen-3's results appeared to refute
 (§ 8.1). A field sampling at `T` sometimes passes a card it should have kept. The learner
@@ -132,12 +132,12 @@ feature `022-draft-game-evaluation`) was run once over each of two `v-forge` yar
 Each took about two hours on twelve workers, 17 CPU-hours, and played a little under 5400
 games. Pairing inside a pod controls set and pool quality by construction.
 
-| Label | `t3learner_t2field` corpus | `t2all_decay0.3` corpus |
-|---|---|---|
-| gen-4 | 73.5 % ± 1.7 (781) | 74.8 % ± 1.7 (810) |
-| `forge-full` | 41.0 % ± 2.9 (329) | 39.3 % ± 3.1 (298) |
-| gen-1 | 40.1 % ± 2.2 (581) | 36.2 % ± 2.3 (575) |
-| `forge-native` | 18.8 % ± 2.4 (309) | 21.8 % ± 2.4 (317) |
+| Label          | `t3learner_t2field` corpus | `t2all_decay0.3` corpus |
+|----------------|----------------------------|-------------------------|
+| gen-4          | 73.5 % ± 1.7 (781)         | 74.8 % ± 1.7 (810)      |
+| `forge-full`   | 41.0 % ± 2.9 (329)         | 39.3 % ± 3.1 (298)      |
+| gen-1          | 40.1 % ± 2.2 (581)         | 36.2 % ± 2.3 (575)      |
+| `forge-native` | 18.8 % ± 2.4 (309)         | 21.8 % ± 2.4 (317)      |
 
 Bo7 match win rate over every match the label appeared in, with the match count in brackets.
 Intervals are one cluster-robust standard error, clustered two ways on the deck each side
@@ -169,14 +169,14 @@ drawn from, so each row's two labels are compared inside the same pods. `forge-n
 absent because it has no `deck_score`, its deck being rebuilt from the pool at game time; its
 matchups are the subject of the next section.
 
-| Matchup | corpus | score gap | Bo7 match win rate | matches |
-|---|---|---|---|---|
-| gen-4 over `forge-full` | `t2all_decay0.3` | +1.555 | 71.2 % ± 3.9 | 177 |
-| gen-4 over `forge-full` | `t3learner_t2field` | +1.384 | 71.9 % ± 3.5 | 192 |
-| gen-4 over gen-1 | `t2all_decay0.3` | +1.380 | 72.4 % ± 2.4 | 421 |
-| gen-4 over gen-1 | `t3learner_t2field` | +1.276 | 69.1 % ± 2.5 | 418 |
-| gen-1 over `forge-full` | `t2all_decay0.3` | +0.197 | 52.9 % ± 5.8 | 85 |
-| gen-1 over `forge-full` | `t3learner_t2field` | +0.105 | 51.9 % ± 5.9 | 81 |
+| Matchup                 | corpus              | score gap | Bo7 match win rate | matches |
+|-------------------------|---------------------|-----------|--------------------|---------|
+| gen-4 over `forge-full` | `t2all_decay0.3`    | +1.555    | 71.2 % ± 3.9       | 177     |
+| gen-4 over `forge-full` | `t3learner_t2field` | +1.384    | 71.9 % ± 3.5       | 192     |
+| gen-4 over gen-1        | `t2all_decay0.3`    | +1.380    | 72.4 % ± 2.4       | 421     |
+| gen-4 over gen-1        | `t3learner_t2field` | +1.276    | 69.1 % ± 2.5       | 418     |
+| gen-1 over `forge-full` | `t2all_decay0.3`    | +0.197    | 52.9 % ± 5.8       | 85      |
+| gen-1 over `forge-full` | `t3learner_t2field` | +0.105    | 51.9 % ± 5.9       | 81      |
 
 A line through the origin fits all six rows at 15.1 points of Bo7 match win rate per unit of
 `deck_score`. Each corpus on its own gives 15.4 and 14.8, and the individual rows imply 13.6 to
@@ -244,11 +244,11 @@ use, refilling from the same shrinking pool. Land-heavy seats with an otherwise 
 Subtracting the unusable cards gives an effective supply that predicts the failure directly.
 
 | effective on-colour playables | seats | land-heavy |
-|---|---|---|
-| < 18 | 22 | 22 (100 %) |
-| 18–21 | 53 | 28 (53 %) |
-| 22–25 | 101 | 10 (10 %) |
-| ≥ 26 | 439 | 5 (1 %) |
+|-------------------------------|-------|------------|
+| < 18                          | 22    | 22 (100 %) |
+| 18–21                         | 53    | 28 (53 %)  |
+| 22–25                         | 101   | 10 (10 %)  |
+| ≥ 26                          | 439   | 5 (1 %)    |
 
 That second mechanism comes from a split between what the drafter knows and what the builder
 enforces. Forge carries two flags for cards its AI handles badly. `RemAIDecks` marks cards it
@@ -402,12 +402,12 @@ unlucky draw was affected — which is what a noise floor does.
 The obvious alternative to the margin is the quantity being optimised. It is worse, and the
 sign is the interesting part.
 
-| Run | corr(policy_loss, margin) | corr(policy_loss, H) |
-|---|---|---|
-| `t2all_nodecay` | +0.250 | −0.890 |
-| `t2all_decay0.3` | +0.333 | −0.845 |
-| `t3all_decay0.3` | +0.202 | −0.718 |
-| `t3learner_t2field` | +0.455 | −0.591 |
+| Run                 | corr(policy_loss, margin) | corr(policy_loss, H) |
+|---------------------|---------------------------|----------------------|
+| `t2all_nodecay`     | +0.250                    | −0.890               |
+| `t2all_decay0.3`    | +0.333                    | −0.845               |
+| `t3all_decay0.3`    | +0.202                    | −0.718               |
+| `t3learner_t2field` | +0.455                    | −0.591               |
 
 Positive against the margin in all four runs. Loss is a minimisation target, so a useful
 selector would correlate negatively. Over `t2all_decay0.3`, `argmin(loss)` is round 1193
@@ -430,13 +430,13 @@ natural and the answer is not visible in the loss curve.
 The margin is defended in the spec as improvement over a fixed point (FR-021). Fixed weights
 are not a fixed score. Over `t2all_decay0.3`, from the first full window to the end:
 
-| label | r9 | final | drift |
-|---|---|---|---|
-| gen4 (learner) | 1.87 | 1.78 | −0.09 |
-| gen3a (anchor) | 1.71 | 1.31 | −0.40 |
-| gen3c | 1.69 | 0.42 | −1.27 |
-| gen1 | 0.79 | 0.53 | −0.26 |
-| forge-full | 1.03 | 0.76 | −0.27 |
+| label          | r9   | final | drift |
+|----------------|------|-------|-------|
+| gen4 (learner) | 1.87 | 1.78  | −0.09 |
+| gen3a (anchor) | 1.71 | 1.31  | −0.40 |
+| gen3c          | 1.69 | 0.42  | −1.27 |
+| gen1           | 0.79 | 0.53  | −0.26 |
+| forge-full     | 1.03 | 0.76  | −0.27 |
 
 Every label falls, the learner included. The margin rises because the field falls faster.
 Both the anchor margin and any field-relative variant are therefore reporting "declined less
@@ -458,12 +458,12 @@ Gen-3 used the split between the learner's rise and the anchor's fall to separat
 learning from field decline, and disqualified its `lr 1e-4` run on that basis. Measured from
 the first full window to each run's best round:
 
-| Run | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
-|---|---|---|---|---|
-| `t2all_nodecay` | −0.12 | −0.71 | 85 % | +1.328 |
-| `t2all_decay0.3` | +0.28 | −0.33 | 54 % | +1.380 |
-| `t3all_decay0.3` | +0.37 | −0.28 | 43 % | +1.152 |
-| `t3learner_t2field` | +0.33 | −0.19 | 37 % | +1.276 |
+| Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
+|---------------------|-----------|----------|----------------|--------------------|
+| `t2all_nodecay`     | −0.12     | −0.71    | 85 %           | +1.328             |
+| `t2all_decay0.3`    | +0.28     | −0.33    | 54 %           | +1.380             |
+| `t3all_decay0.3`    | +0.37     | −0.28    | 43 %           | +1.152             |
+| `t3learner_t2field` | +0.33     | −0.19    | 37 %           | +1.276             |
 
 The heuristic ranks the four in exactly the order the yardstick reverses. `t2all_nodecay` is
 its worst run — the learner's own score fell and 85 % of its margin is the anchor collapsing,
@@ -482,25 +482,25 @@ here they decline in step, gen-1 sitting about 0.1 above `forge-full` at every c
 split, so the gen-4 count fixes the whole composition and the two tables are read the same way.
 All four checkpoints are pooled; the two carry about 7900 and 8000 gen-4 seats.
 
-| gen-4 seats in the pod | gen-4 | gen-1 + `forge-full` | gap |
-|---|---|---|---|
-| 1 | +2.77 | +1.44 | +1.33 |
-| 2 | +2.49 | +1.16 | +1.32 |
-| 3 | +2.33 | +1.04 | +1.30 |
-| 4 | +2.17 | +0.80 | +1.37 |
-| 5 | +2.05 | +0.63 | +1.43 |
-| 6 | +1.89 | +0.38 | +1.52 |
-| 7 | +1.62 | +0.19 | +1.43 |
+| gen-4 seats in the pod | gen-4 | gen-1 + `forge-full` | gap   |
+|------------------------|-------|----------------------|-------|
+| 1                      | +2.77 | +1.44                | +1.33 |
+| 2                      | +2.49 | +1.16                | +1.32 |
+| 3                      | +2.33 | +1.04                | +1.30 |
+| 4                      | +2.17 | +0.80                | +1.37 |
+| 5                      | +2.05 | +0.63                | +1.43 |
+| 6                      | +1.89 | +0.38                | +1.52 |
+| 7                      | +1.62 | +0.19                | +1.43 |
 
-| gen-4 seats in the pod | gen-4 | gen-3 | gap |
-|---|---|---|---|
-| 1 | +2.40 | +1.63 | +0.76 |
-| 2 | +2.06 | +1.51 | +0.55 |
-| 3 | +2.00 | +1.39 | +0.60 |
-| 4 | +1.85 | +1.29 | +0.56 |
-| 5 | +1.81 | +1.24 | +0.57 |
-| 6 | +1.74 | +1.12 | +0.62 |
-| 7 | +1.76 | +1.07 | +0.68 |
+| gen-4 seats in the pod | gen-4 | gen-3 | gap   |
+|------------------------|-------|-------|-------|
+| 1                      | +2.40 | +1.63 | +0.76 |
+| 2                      | +2.06 | +1.51 | +0.55 |
+| 3                      | +2.00 | +1.39 | +0.60 |
+| 4                      | +1.85 | +1.29 | +0.56 |
+| 5                      | +1.81 | +1.24 | +0.57 |
+| 6                      | +1.74 | +1.12 | +0.62 |
+| 7                      | +1.76 | +1.07 | +0.68 |
 
 Both fall monotonically, and neither label escapes: crowding a pod with strong drafters takes
 cards out of the packs that reach everyone in it, gen-4 seats included.
@@ -514,10 +514,10 @@ displacing gen-3 at +1.3 with the same seat.
 Dividing the cost by the gap makes that explicit, and the two families agree to within a tenth
 of each other on both rows.
 
-| Family | seat displaced | gen-4's lead over it | cost to a rival seat | ratio | cost to a gen-4 seat | ratio |
-|---|---|---|---|---|---|---|
-| `v-forge` | gen-1 + `forge-full` | +1.377 | −0.205 | 0.149 | −0.159 | 0.116 |
-| `v-gen3` | gen-3 | +0.587 | −0.095 | 0.162 | −0.075 | 0.128 |
+| Family    | seat displaced       | gen-4's lead over it | cost to a rival seat | ratio | cost to a gen-4 seat | ratio |
+|-----------|----------------------|----------------------|----------------------|-------|----------------------|-------|
+| `v-forge` | gen-1 + `forge-full` | +1.377               | −0.205               | 0.149 | −0.159               | 0.116 |
+| `v-gen3`  | gen-3                | +0.587               | −0.095               | 0.162 | −0.075               | 0.128 |
 
 A seat entering a pod costs each rival roughly a sixth of the amount by which it outclasses
 the seat it replaced, and its own kind roughly an eighth. The gap between those two numbers is
@@ -535,10 +535,10 @@ composition weights gen-4's mean towards crowded pods, where every seat scores w
 weights the reference's mean towards uncrowded ones, because a pod with more gen-4 seats has
 fewer reference seats to contribute. Both displacements push the difference down.
 
-| Family | naive per-seat difference | pod-paired | bias | predicted |
-|---|---|---|---|---|
-| `v-forge` | +1.184 | +1.377 | −0.193 | −0.191 |
-| `v-gen3` | +0.498 | +0.587 | −0.089 | −0.084 |
+| Family    | naive per-seat difference | pod-paired | bias   | predicted |
+|-----------|---------------------------|------------|--------|-----------|
+| `v-forge` | +1.184                    | +1.377     | −0.193 | −0.191    |
+| `v-gen3`  | +0.498                    | +0.587     | −0.089 | −0.084    |
 
 The prediction is the size the two slopes imply. Writing `k` for the number of gen-4 seats in a
 pod, `s₄` and `s_ref` for the two slopes, and `S` for the pod size, the size-biased weighting
@@ -564,13 +564,13 @@ job is to detect improvement.
 
 From the four `v-forge` corpora, where gen-4 shares pods with both references.
 
-| | `t2all_nodecay` | `t2all_decay0.3` | `t3all_decay0.3` | `t3learner_t2field` | gen-1 | forge-full |
-|---|---|---|---|---|---|---|
-| creatures | 18.01 | 18.19 | 17.79 | 17.91 | 15.22–15.28 | 15.09–15.16 |
-| avg mana value | 3.17 | 3.21 | 3.19 | 3.19 | 3.02–3.05 | 3.03–3.07 |
-| rares | 1.24 | 1.24 | 1.25 | 1.33 | 1.69–1.74 | 1.86–1.95 |
-| ≥ 4 basic land types | 4.5 % | 5.6 % | 4.7 % | 6.4 % | 7.0–9.8 % | 9.0–10.9 % |
-| score of those wide decks | +1.30 | +1.65 | +1.47 | +1.65 | −0.03…+0.28 | +0.03…+0.14 |
+|                           | `t2all_nodecay` | `t2all_decay0.3` | `t3all_decay0.3` | `t3learner_t2field` | gen-1       | forge-full  |
+|---------------------------|-----------------|------------------|------------------|---------------------|-------------|-------------|
+| creatures                 | 18.01           | 18.19            | 17.79            | 17.91               | 15.22–15.28 | 15.09–15.16 |
+| avg mana value            | 3.17            | 3.21             | 3.19             | 3.19                | 3.02–3.05   | 3.03–3.07   |
+| rares                     | 1.24            | 1.24             | 1.25             | 1.33                | 1.69–1.74   | 1.86–1.95   |
+| ≥ 4 basic land types      | 4.5 %           | 5.6 %            | 4.7 %            | 6.4 %               | 7.0–9.8 %   | 9.0–10.9 %  |
+| score of those wide decks | +1.30           | +1.65            | +1.47            | +1.65               | −0.03…+0.28 | +0.03…+0.14 |
 
 Reference columns give the range across the four corpora, each measured in the same pods as
 the candidate beside it.
@@ -620,13 +620,13 @@ Gen-4 varies field strength on a new axis. A field at `T = 3` misplays more than
 produce the least off-lane taste. It does, and by a wide margin. Off-lane rate at picks 6–10
 of pack 1, with the share of those picks made while an on-colour card was still in the pack:
 
-| Corpus | gen-4 | gen-1 | forge-full |
-|---|---|---|---|
-| `t2all_nodecay` | 11.9 % (49.7) | 9.5 % (46.0) | 11.7 % (57.7) |
-| `t2all_decay0.3` | 12.6 % (54.2) | 8.3 % (46.3) | 11.1 % (57.3) |
-| `t3all_decay0.3` | 8.6 % (34.0) | 9.9 % (49.0) | 12.9 % (58.4) |
-| `t3learner_t2field` | 12.0 % (48.9) | 9.8 % (49.6) | 12.2 % (51.7) |
-| *gen-3 incumbent* | *9.6 % (34.2)* | *10.8 % (45.4)* | *11.5 % (50.4)* |
+| Corpus              | gen-4          | gen-1           | forge-full      |
+|---------------------|----------------|-----------------|-----------------|
+| `t2all_nodecay`     | 11.9 % (49.7)  | 9.5 % (46.0)    | 11.7 % (57.7)   |
+| `t2all_decay0.3`    | 12.6 % (54.2)  | 8.3 % (46.3)    | 11.1 % (57.3)   |
+| `t3all_decay0.3`    | 8.6 % (34.0)   | 9.9 % (49.0)    | 12.9 % (58.4)   |
+| `t3learner_t2field` | 12.0 % (48.9)  | 9.8 % (49.6)    | 12.2 % (51.7)   |
+| *gen-3 incumbent*   | *9.6 % (34.2)* | *10.8 % (45.4)* | *11.5 % (50.4)* |
 
 The `T = 3` field candidate declines an available on-colour card in a third of its off-lane
 picks, where the others decline in about half, and it goes off-lane less often than the gen-1
@@ -658,15 +658,15 @@ alternative, so a healthy policy should show a positive quality premium on its v
 off-lane picks and a failing one should not. Cards are scored by `shrunk_score_play`, net
 winning influence on the play, which covers 98 % of drafted card slots.
 
-| Corpus | agent | best-card rate | mean premium | share above zero |
-|---|---|---|---|---|
-| `t2all_decay0.3` | gen-4 | 25.1 % | +0.0318 | 68.2 % |
-| `t3learner_t2field` | gen-4 | 24.4 % | +0.0287 | 66.2 % |
-| `t2all_nodecay` | gen-4 | 25.3 % | +0.0260 | 65.7 % |
-| `t3all_decay0.3` | gen-4 | 24.0 % | +0.0225 | 62.1 % |
-| gen-3 incumbent | gen-3 | 22.9 % | +0.0240 | 63.0 % |
-| gen-3, field at argmax, `T = 3` | gen-3 | 28.5 % | +0.0049 | 51.9 % |
-| *references, all corpora* | *gen-1 / forge-full* | *18.8–21.7 %* | *+0.007…+0.015* | *53.4–58.7 %* |
+| Corpus                          | agent                | best-card rate | mean premium    | share above zero |
+|---------------------------------|----------------------|----------------|-----------------|------------------|
+| `t2all_decay0.3`                | gen-4                | 25.1 %         | +0.0318         | 68.2 %           |
+| `t3learner_t2field`             | gen-4                | 24.4 %         | +0.0287         | 66.2 %           |
+| `t2all_nodecay`                 | gen-4                | 25.3 %         | +0.0260         | 65.7 %           |
+| `t3all_decay0.3`                | gen-4                | 24.0 %         | +0.0225         | 62.1 %           |
+| gen-3 incumbent                 | gen-3                | 22.9 %         | +0.0240         | 63.0 %           |
+| gen-3, field at argmax, `T = 3` | gen-3                | 28.5 %         | +0.0049         | 51.9 %           |
+| *references, all corpora*       | *gen-1 / forge-full* | *18.8–21.7 %*  | *+0.007…+0.015* | *53.4–58.7 %*    |
 
 Every gen-4 candidate breaks colour more selectively than either reference and more
 selectively than gen-3's incumbent, at a larger premium. Three of the four also beat the
@@ -703,12 +703,12 @@ of the off-lane cards available in that pack at that moment. Each pick contribut
 both sides, and gold cards split their weight across their colours. Mean per off-lane pick of
 (green-black-white taken − green-black-white available):
 
-| Corpus | gen-4 | gen-1 | forge-full | learner picks, this generation |
-|---|---|---|---|---|
-| `t3all_decay0.3` | +2.91 pp | −0.22 | −0.10 | ~75k |
-| `t3learner_t2field` | +3.61 | +0.23 | −0.78 | ~90k |
-| `t2all_nodecay` | +4.09 | −0.18 | +0.51 | ~95k |
-| `t2all_decay0.3` | +3.99 | −0.21 | −0.58 | ~405k |
+| Corpus              | gen-4    | gen-1 | forge-full | learner picks, this generation |
+|---------------------|----------|-------|------------|--------------------------------|
+| `t3all_decay0.3`    | +2.91 pp | −0.22 | −0.10      | ~75k                           |
+| `t3learner_t2field` | +3.61    | +0.23 | −0.78      | ~90k                           |
+| `t2all_nodecay`     | +4.09    | −0.18 | +0.51      | ~95k                           |
+| `t2all_decay0.3`    | +3.99    | −0.21 | −0.58      | ~405k                          |
 
 Standard errors are 0.23–0.33 pp, so every gen-4 figure is more than twelve standard errors
 from zero and no reference figure is more than two and a half. Gen-3's four candidates ran
@@ -746,13 +746,13 @@ the taken card pairs with the colours the seat committed to. The reference colum
 range each reference took across the five corpora, every one of them measured in the same pods
 as the candidates beside it.
 
-| Axis | `t2all_decay0.3` | `t2all_nodecay` | `t3learner_t2field` | `t3all_decay0.3` | gen-3 incumbent | gen-1 | forge-full |
-|---|---|---|---|---|---|---|---|
-| `score_play` | 0.703 | 0.688 | 0.684 | 0.679 | 0.662 | 0.603–0.610 | 0.593–0.610 |
-| `score_draw` | 0.698 | 0.685 | 0.683 | 0.675 | 0.659 | 0.601–0.606 | 0.592–0.607 |
-| `played_rate` | 0.643 | 0.653 | 0.644 | 0.636 | 0.632 | 0.587–0.589 | 0.573–0.583 |
-| `cast_lift` | 0.604 | 0.588 | 0.588 | 0.581 | 0.561 | 0.523–0.529 | 0.518–0.530 |
-| `color_lift` | 0.508 | 0.512 | 0.517 | 0.530 | 0.529 | 0.557–0.563 | 0.559–0.568 |
+| Axis          | `t2all_decay0.3` | `t2all_nodecay` | `t3learner_t2field` | `t3all_decay0.3` | gen-3 incumbent | gen-1       | forge-full  |
+|---------------|------------------|-----------------|---------------------|------------------|-----------------|-------------|-------------|
+| `score_play`  | 0.703            | 0.688           | 0.684               | 0.679            | 0.662           | 0.603–0.610 | 0.593–0.610 |
+| `score_draw`  | 0.698            | 0.685           | 0.683               | 0.675            | 0.659           | 0.601–0.606 | 0.592–0.607 |
+| `played_rate` | 0.643            | 0.653           | 0.644               | 0.636            | 0.632           | 0.587–0.589 | 0.573–0.583 |
+| `cast_lift`   | 0.604            | 0.588           | 0.588               | 0.581            | 0.561           | 0.523–0.529 | 0.518–0.530 |
+| `color_lift`  | 0.508            | 0.512           | 0.517               | 0.530            | 0.529           | 0.557–0.563 | 0.559–0.568 |
 
 Read down a column, not across a row. A noisier or more tied label regresses towards 0.5 on
 its own, so the axes are not on a common scale and `score_play` sitting above `cast_lift`
