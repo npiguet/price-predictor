@@ -59,18 +59,11 @@ the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick 
 | *gen-3 incumbent*   | *+0.824 ± 0.046* | *+0.920 ± 0.044* | —                  |
 
 Each figure is a mean over pods of (mean candidate seat − mean reference seat) in that pod,
-with the standard error clustered on set code. Clustering treats all the pods drafted from one
-set as a single unit: deviations from the overall mean are summed within a set before being
-squared, and independence is assumed only across sets. The naive standard error treats every
-pod as its own draw instead. That overstates the precision here, because a corpus samples a
+with the standard error clustered on set code. The naive un-clustered standard error treats every
+pod as its own draw. That overstates the precision here, because a corpus samples a
 random set per draft and most sets end up with several pods, and pods sharing a card pool move
 together. Whatever makes a candidate unusually strong or weak in one set applies to every pod
 drafted from it.
-
-Pairing inside the pod already removes the part of a set's character that lifts every seat
-equally, so clustering costs these margins far less than it would cost a raw seat mean. What is
-left for it to cover is the part pairing cannot reach: the sets where the candidate's edge is
-itself wider or narrower than usual.
 
 The last column can be checked against the first, because the gen-4-versus-gen-3 gap is
 measurable two ways. Directly, from the head-to-head corpora where the two sit in the same
@@ -593,6 +586,65 @@ drag is +0.011 to +0.022 against gen-3's incumbent at +0.015, and the residual, 
 +0.121, sits inside the +0.034 to +0.136 that gen-3 measured on its reference seats. That
 residual belongs to `deck_score` itself: a sealed deck can be far worse than average more
 easily than far better. Nothing about gen-4's training moved it.
+
+## Gen-4's margin depends on the set, and core sets are its weakest ground
+
+The set a pod drafts explains about a fifth of the variation in gen-4's margin over
+`forge-full`, and the pattern survives both checks that could have shown it to be sampling
+luck. The four `v-forge` corpora pool to 1778 pods over 181 sets, a median of ten pods each,
+with each checkpoint's own mean removed first so that only set variation remains.
+
+The between-set spread is about half the within-set spread, at an F of 3.2 on 180 and 1597
+degrees of freedom. That is the effect the yardstick's clustered standard errors exist to
+absorb, measured directly.
+
+Two checks say the ranking carries information. Scoring each set on two of the four checkpoints
+and again on the other two, the halves correlate at +0.49. Scoring against `forge-full` and
+against gen-1, different opponents drawn from the same pods, correlates at +0.68.
+
+Grouping sets by what kind of product they are gives the generalisation.
+
+| Edition type | sets | pods | mean margin |
+|--------------|------|------|-------------|
+| Draft        | 11   | 122  | +1.63       |
+| Reprint      | 15   | 166  | +1.62       |
+| Online       | 23   | 215  | +1.48       |
+| Expansion    | 106  | 1032 | +1.44       |
+| Core         | 22   | 205  | +1.29       |
+| Starter      | 3    | 33   | +1.12       |
+
+Gen-4 gains least where the cards are simplest. Core and starter sets are built to teach the
+game: flat power curves, few build-arounds, little that rewards knowing the format. There is
+less for a drafter to get right, so Forge's heuristics give up less. The widest margins are on
+curated products and small old expansions, where power is uneven and the themes are narrow.
+
+Individual sets are shrunk toward the grand mean before ranking, because taking the top five of
+181 on ten pods each would otherwise select for luck as much as for skill. Raw means are given
+beside the shrunk ones to show how much work the shrinkage does.
+
+| Set                        | Type      | Margin | Raw    | Pods |
+|----------------------------|-----------|--------|--------|------|
+| MB1 Mystery Booster        | Draft     | +2.37  | +2.59  | 19   |
+| PLS Planeshift             | Expansion | +2.36  | +3.04  | 6    |
+| KLR Kaladesh Remastered    | Online    | +2.13  | +2.39  | 12   |
+| DST Darksteel              | Expansion | +2.13  | +2.63  | 6    |
+| PCY Prophecy               | Expansion | +2.09  | +2.29  | 14   |
+| *… 175 sets between …*     |           |        |        |      |
+| 9ED Ninth Edition          | Core      | +0.91  | +0.64  | 9    |
+| M11 Magic 2011             | Core      | +0.87  | +0.65  | 12   |
+| KTK Khans of Tarkir        | Expansion | +0.85  | +0.63  | 12   |
+| FRF Fate Reforged          | Expansion | +0.71  | +0.46  | 13   |
+| 3ED Revised Edition        | Core      | +0.63  | +0.17  | 8    |
+
+The bottom of the table is core sets and the Khans block. The core sets follow from the
+edition-type reading. Khans and Fate Reforged do not, and are the one part of the ranking that
+asks for an explanation rather than supplying one.
+
+`forge-native` cannot be ranked this way at all. It carries no `deck_score`, so the only
+per-set measure available is games won, and the two played corpora supply 383 gen-4 versus
+`forge-native` matches spread over 142 sets. Under three matches a set puts the standard error
+on a per-set win rate above 20 points, which is wider than the entire effect being measured.
+Ranking sets by games needs a run that fixes the set rather than sampling it.
 
 ## The gen-3 hypotheses under gen-4
 
