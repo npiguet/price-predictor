@@ -618,9 +618,25 @@ game: flat power curves, few build-arounds, little that rewards knowing the form
 less for a drafter to get right, so Forge's heuristics give up less. The widest margins are on
 curated products and small old expansions, where power is uneven and the themes are narrow.
 
-Individual sets are shrunk toward the grand mean before ranking, because taking the top five of
-181 on ten pods each would otherwise select for luck as much as for skill. Raw means are given
-beside the shrunk ones to show how much work the shrinkage does.
+Individual sets are shrunk toward the grand mean before ranking. A set's own mean is a noisy
+estimate of its true margin, and the fewer pods it has the noisier it is, so ranking on raw
+means would put the sets with the luckiest small samples at both ends. Shrinkage replaces each
+set's mean with a weighted average of that mean and the grand mean, the weight being the share
+of the set's apparent deviation that the data can attribute to the set rather than to sampling:
+
+```
+weight = τ² / (τ² + σ²/n)
+```
+
+`τ²` is the between-set variance estimated above, `σ²` the within-set variance, and `n` the
+set's pod count. A set measured on many pods keeps most of its own mean. A set measured on few
+is pulled most of the way back to the middle, because at that sample size its deviation is as
+easily explained by luck. At the median ten pods the weight is about 0.7, so the ranking stays
+mostly the sets' own means and only the thinnest samples move far. This is the empirical-Bayes
+estimator, using the observed spread of set means to set how much to trust each one.
+
+Raw means are given beside the shrunk ones to show how much work it does. Planeshift is the
+clearest case: six pods, a raw margin of +3.04, and a shrunk one of +2.36.
 
 | Set                        | Type      | Margin | Raw    | Pods |
 |----------------------------|-----------|--------|--------|------|
