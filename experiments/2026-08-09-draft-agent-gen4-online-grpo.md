@@ -39,8 +39,7 @@ the choice is deliberate. Its margin climbed steadily to round 58, setting 24 ne
 the way, then went 150 rounds without one before a single isolated reading of +0.676 at round
 208. That last step is +0.058 over round 58, well inside the ±0.15 noise floor the metric
 carries at this window size (*The round-9 best is noise*, below). Round 58 sits at the top of
-a real climb; round 208 is one lucky window for the learner's seats. Taking the peak of the
-climb over the isolated spike is the same judgement the round-9 defect argues for.
+a real climb; round 208 is one lucky window for the learner's seats.
 
 ## The yardstick
 
@@ -60,7 +59,18 @@ the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick 
 | *gen-3 incumbent* | *+0.824 ± 0.046* | *+0.920 ± 0.044* | — |
 
 Each figure is a mean over pods of (mean candidate seat − mean reference seat) in that pod,
-with the standard error clustered on set code. 
+with the standard error clustered on set code. Clustering treats all the pods drafted from one
+set as a single unit: deviations from the overall mean are summed within a set before being
+squared, and independence is assumed only across sets. The naive standard error treats every
+pod as its own draw instead. That overstates the precision here, because a corpus samples a
+random set per draft and most sets end up with several pods, and pods sharing a card pool move
+together. Whatever makes a candidate unusually strong or weak in one set applies to every pod
+drafted from it.
+
+Pairing inside the pod already removes the part of a set's character that lifts every seat
+equally, so clustering costs these margins far less than it would cost a raw seat mean. What is
+left for it to cover is the part pairing cannot reach: the sets where the candidate's edge is
+itself wider or narrower than usual.
 
 The last column can be checked against the first, because the gen-4-versus-gen-3 gap is
 measurable two ways. Directly, from the head-to-head corpora where the two sit in the same
