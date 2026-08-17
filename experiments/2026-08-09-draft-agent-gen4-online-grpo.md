@@ -122,8 +122,6 @@ feature `022-draft-game-evaluation`) was run once over each of two `v-forge` yar
 `t3learner_t2field`'s and `t2all_decay0.3`'s — third and first on the yardstick. Each run drew
 1000 best-of-seven pairings from the recorded pods, mirrors excluded, with
 `--forge-native-fraction 0.5` diverting half the `forge-full` seats to Forge's own deck builder.
-Each took about two hours on twelve workers, 17 CPU-hours, and played a little under 5400
-games. Pairing inside a pod controls set and pool quality by construction.
 
 | Label          | `t3learner_t2field` corpus | `t2all_decay0.3` corpus |
 |----------------|----------------------------|-------------------------|
@@ -132,27 +130,15 @@ games. Pairing inside a pod controls set and pool quality by construction.
 | gen-1          | 40.1 % ± 2.2 (581)         | 36.2 % ± 2.3 (575)      |
 | `forge-native` | 18.8 % ± 2.4 (309)         | 21.8 % ± 2.4 (317)      |
 
-Bo7 match win rate over every match the label appeared in, with the match count in brackets.
-Intervals are one cluster-robust standard error, clustered two ways on the deck each side
-played. Pairings are drawn with replacement, so a strong deck can carry several matches and
-those outcomes are not independent. On the match column the correction is small, adding about
-a tenth of a point to the naive binomial figure; per game it is larger, because a match's games
-share both decks outright.
-
 The ordering is the yardstick's in both runs, on decks the scorer never saw played.
 
-Every figure in this section is a match rate rather than a game rate, because a single game
-turns on the shuffle as much as on the decks and a race to four averages most of that out. Both
-corpora measure how much. Replaying each match at shorter lengths from the games it actually
-played, the shorter winner disagrees with the Bo7 winner 26.4 % and 24.3 % of the time at Bo1,
-18.5 % and 16.2 % at Bo3, and 11.3 % and 10.4 % at Bo5. A quarter of single games are won by the
-deck that goes on to lose the match. Each extra pair of games cuts the remaining disagreement by
-roughly a third, so the Bo7 verdict is the one most likely to have found the stronger deck, and
-the residual near 11 % between Bo5 and Bo7 says even it is not the last word.
+Every figure in this section counts matches won, not individual games. Which deck wins a single
+game depends heavily on what each player happens to draw. A match only ends when one deck has
+won four games, so most of that luck averages out.
 
-The match rate is also the only reading that needs no assumptions: one observation per match,
-no modelling of what happens inside one. Per-game figures appear once below, to show why they
-are not used.
+Match rates also need no statistical assumptions. Each match contributes exactly one
+observation, and nothing has to be modelled about how the games inside it unfolded. Per-game
+figures appear once below, only to show why they are not used.
 
 ### A unit of `deck_score` buys about 15 points of match win rate
 
