@@ -136,10 +136,6 @@ Every figure in this section counts matches won, not individual games. Which dec
 game depends heavily on what each player happens to draw. A match only ends when one deck has
 won four games, so most of that luck averages out.
 
-Match rates also need no statistical assumptions. Each match contributes exactly one
-observation, and nothing has to be modelled about how the games inside it unfolded. Per-game
-figures appear once below, only to show why they are not used.
-
 ### A unit of `deck_score` buys about 15 points of match win rate
 
 Reading each matchup's Bo7 rate against the score gap measured in the same corpus turns the
@@ -161,47 +157,31 @@ A line through the origin fits all six rows at 15.1 points of Bo7 match win rate
 `deck_score`. Each corpus on its own gives 15.4 and 14.8, and the individual rows imply 13.6 to
 18.1.
 
-The symmetry assumption behind that line holds. Forcing the fit through the origin assumes two
-decks of equal score split their matches evenly, which only the low-gap rows have any power to
-contradict. Both supply one, at gaps of +0.105 and +0.197, and both land just above even at
-51.9 % and 52.9 %. Pooled, gen-1 takes 52.4 % of 166 matches at a match-weighted gap of +0.152,
-where the through-origin line predicts 52.3 %. Fitting slope and intercept together on all six
-rows gives 14.8 points per unit on an intercept of +0.3, so there is no offset to find.
+### Swapping the deck builder is worth about as much as a generation of drafting
 
-The sealed pipeline's calibration is the natural cross-check, and it agrees on sign but not on
-size or shape. Its fit is `wr_dlt(pp) ≈ +7.81 + 7.80 · score_dlt` across 48 pools at r = 0.52
-([`2026-05-13-gen3-initial-training.md`](2026-05-13-gen3-initial-training.md)), also on Bo7
-match win rate, but at pool level rather than matchup level and with an intercept as large as
-its slope. The draft-side fit has six points from two corpora and no intercept; the sealed one
-has 48 noisy points and a large one. A unit of score is worth roughly twice as much here as
-there. For drafted decks the figure to carry forward is 15 points per unit.
+Two seats can draft identically and still end up with different decks, because which 40 cards
+go in is decided after the draft ends. `forge-full` and `forge-native` are that pair. Both are
+Forge's drafting AI, and both work from the same drafted pools. They differ only in which
+program picks the 40 cards: this project's picker and simulated-annealing builder for
+`forge-full`, Forge's own builder for `forge-native`. Playing the two against each other
+therefore measures the builders and nothing else.
 
-The per-game figures are harder to interpret than they look, which is the other reason to lead
-with matches. Three ways of reading the same matches disagree. Taking gen-4 over gen-1: game 1
-gives 62.9 % and 64.6 %, pooling all games gives 61.1 % and 61.7 %, and inverting the Bo7 rate
-through a race-to-four model gives 59.0 % and 60.7 %. Each is biased differently, and both
-corpora order the three the way those biases predict. Within one matchup the all-games share is
-unbiased for the per-game probability, by Wald's identity on a stopping time, but across
-matchups a lopsided pairing ends in four games and a close one runs to seven, so pooling
-over-weights close pairings and pulls towards 50 %. Inverting the match rate assumes games
-within a match are independent draws at one probability, and the per-game probability varies
-across pairings, so Jensen's inequality drags the inverted figure below the true average.
-Game 1 escapes both, one observation per match with the opening die roll balanced 512 to 488
-and 491 to 509, and pays for it in precision. None of that touches the match rate, which is
-measured rather than modelled.
+This project's builder wins that matchup in both runs.
 
-### Swapping the deck builder is worth more than a generation of drafting
+| Corpus              | This project's builder wins | Matches |
+|---------------------|-----------------------------|---------|
+| `t3learner_t2field` | 75.0 %                      | 56      |
+| `t2all_decay0.3`    | 72.2 %                      | 36      |
+| Pooled              | 73.9 %                      | 92      |
 
-This project's picker and simulated-annealing builder beats Forge's own on identical drafted
-pools, by more than gen-4 beats gen-1. `forge-native` seats and `forge-full` seats are the same
-drafting agent on the same drafted pools, differing only in who assembles the 40 cards, so their
-head-to-head isolates the builder with drafting held fixed. This project's builder took 75.0 %
-of 56 matches in one corpus and 72.2 % of 36 in the other, 73.9 % of the 92 pooled. Gen-4 beats
-gen-1 in 70.8 % of 839 matches.
+Gen-4 wins 70.8 % of its 839 matches against gen-1, which is what one generation of drafting
+improvement is worth. That is close to the builder's 73.9 %, and 92 matches put an error bar of
+about 5 points on the builder figure, so the two cannot be told apart. Changing who builds the
+deck buys roughly what a generation of better drafting buys.
 
-The builder effect is large enough to reorder the field. `forge-native` loses to every label
-including the one that drafted its own pool, and gen-4's widest margin over anything is against
-it rather than against the same agent building its own decks.
+The builder also decides the bottom of the table. `forge-native` loses to every other label,
+including `forge-full`, which drafted the same pools with the same agent. Gen-4's largest
+margin over any label is against `forge-native` rather than against any drafting agent.
 
 ### Forge pads a tenth of its decks with basics rather than lowering its bar
 

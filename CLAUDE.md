@@ -90,4 +90,4 @@ Three kinds of design document, each with its own audience and location — keep
 - `specs/YYYY-MM-DD-<name>.md` — hand-written normative specs (WHAT, not WHY), timeless present tense.
 - `specs/NNN-name/` — spec-kit feature dirs (`spec.md` → `plan.md` → `research.md` → `tasks.md`) driving implementation.
 
-Load the **feature-workflow** skill before writing or amending any of them. Before starting non-trivial work in an area, read the relevant `spec.md` / `plan.md` / `research.md`.
+Load the **feature-workflow** skill before every edit to any of them, including a one-sentence reword — `experiments/*.md` carries a binding prose style that applies per edit, not just to new documents. Before starting non-trivial work in an area, read the relevant `spec.md` / `plan.md` / `research.md`.
