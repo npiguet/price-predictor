@@ -231,61 +231,18 @@ that.
 All four checkpoints now have a yardstick, so the metrics the training loop reports can be
 checked against it rather than trusted.
 
-### The anchor margin inverts the yardstick's order
-
-Ranked by their best in-run margin, the three comparable runs go `t2all_decay0.3`,
-`t3all_decay0.3`, `t3learner_t2field`. The yardstick puts the last two the other way round.
-Run control keys off the margin, and the margin gets wrong the one contrast the yardstick
-resolves cleanly.
-
-The margin is not useless. Every run's margin is positive and every run's candidate does beat
-the field. It carries no information about by how much.
-
-### The LR annealing decayed once and then silently stopped
-
-All three runs with annealing armed took exactly one decay, to 3.0e-6, and never moved again.
-`_PlateauLR.can_decay()` (`src/draft/application/train_draft_agent.py:463`) refuses a decay that
-would land below `min_lr` instead of clamping to it, and with `--lr-decay-factor 0.3` from
-`1e-5` the second step would be 9e-7, under the 1e-6 floor. The real floor is 3e-6 while the
-startup line advertises 1e-6.
-
-Nothing reported it, because `_maybe_decay` returns `None` both when it refuses a decay and when
-the run is simply not stalled. No run armed `--patience` either, so a run that could no longer
-anneal also could not stop: `t2all_decay0.3` spent its last 956 rounds with no new best, no
-decay and no exit.
-
-### The round-9 best is noise, and the noise floor is measurable
-
-Three of the four runs start with the learner and the anchor as the same checkpoint at the same
-temperature. Drafts are generated before the update, so round 0's come from two identical
-policies and the true margin there is exactly zero. Those three runs report −0.049, +0.781 and
-+0.136, which measures the metric's noise for free: a root-mean-square of 0.46 over a 10-draft
-window, so about ±0.15 once the 100-draft window fills.
-
-`t2all_decay0.3` drew the +0.781 and paid for it. Its margin fell monotonically from 0.781 to
-0.218 over the next nine rounds. That is not the learner getting worse, it is a cumulative mean
-returning from a lucky first ten drafts. The run pinned its best at round 9 at +0.218, inside
-one sigma of zero. The stall counter started there, rounds 10–29 never cleared it, and the one
-available decay fired at round 29 while the policy was still learning. The first genuine best
-came at round 70, and the run went on to +0.831.
-
-The guard meant to prevent this does not work. It waits for the window to hold 100 drafts, which
-excludes rounds 0–8 from reporting without excluding their drafts, and those are all of round
-9's window. The window is clean only from round 19. The other three runs drew round-9 windows of
-−0.042, +0.029 and −0.131 and cleared them within three rounds, so only the unlucky draw cost
-anything.
-
 ### Policy loss cannot select checkpoints
 
 The obvious alternative to the margin is the quantity being optimised. It is worse, and its
-sign is the interesting part.
+sign is the interesting part. Entropy below is the mean per-pick entropy of the sampling
+distribution, which the loop already logs on its `explore` line.
 
-| Run                 | corr(policy_loss, margin) | corr(policy_loss, H) |
-|---------------------|---------------------------|----------------------|
-| `t2all_nodecay`     | +0.250                    | −0.890               |
-| `t2all_decay0.3`    | +0.333                    | −0.845               |
-| `t3all_decay0.3`    | +0.202                    | −0.718               |
-| `t3learner_t2field` | +0.455                    | −0.591               |
+| Run                 | corr(policy_loss, margin) | corr(policy_loss, entropy) |
+|---------------------|---------------------------|----------------------------|
+| `t2all_nodecay`     | +0.250                    | −0.890                     |
+| `t2all_decay0.3`    | +0.333                    | −0.845                     |
+| `t3all_decay0.3`    | +0.202                    | −0.718                     |
+| `t3learner_t2field` | +0.455                    | −0.591                     |
 
 The correlation with the margin is positive in all four runs. Loss is minimised, so a useful
 selector would correlate negatively. Over `t2all_decay0.3` the lowest loss falls at round 1193,
