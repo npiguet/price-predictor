@@ -308,26 +308,19 @@ tail of unplayable wide decks pulled its mean well below its median
 ([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
 *Mean against median*).
 
-The same check on gen-4 splits each candidate's median-minus-mean gap into the part four- and
-five-colour decks account for and everything else. The wide-deck part runs +0.011 to +0.022,
-against gen-3's incumbent at +0.015. The remainder, +0.084 to +0.121, sits inside the +0.034 to
-+0.136 gen-3 measured on its own reference seats, so it belongs to `deck_score` rather than to
-any policy: a sealed deck can be far worse than average more easily than far better.
-
 ## Gen-4's margin depends on the set, and core sets are its weakest ground
 
 The set a pod drafts explains about a fifth of the variation in gen-4's margin over
-`forge-full`, and the pattern survives both checks that could have shown it to be sampling
-luck. The four `v-forge` corpora pool to 1778 pods over 181 sets, a median of ten pods each,
-with each checkpoint's own mean removed first so that only set variation remains.
+`forge-full`. Pooling the four `v-forge` corpora gives 1778 pods over 181 sets, a median of ten
+pods each. Each checkpoint's own mean is subtracted first, so what remains varies only by set.
 
-The between-set spread is about half the within-set spread, at an F of 3.2 on 180 and 1597
-degrees of freedom. That is the effect the yardstick's clustered standard errors exist to
-absorb, measured directly.
+Between-set spread is about half of within-set spread, at an F of 3.2 on 180 and 1597 degrees of
+freedom. This is the same effect the yardstick's set-clustered standard errors exist to absorb.
 
-Two checks say the ranking carries information. Scoring each set on two of the four checkpoints
-and again on the other two, the halves correlate at +0.49. Scoring against `forge-full` and
-against gen-1, different opponents drawn from the same pods, correlates at +0.68.
+Two checks show the ranking is not sampling luck. Scoring each set on two of the four
+checkpoints and again on the other two, the halves correlate at +0.49. Scoring against
+`forge-full` and against gen-1, which are different opponents drawn from the same pods,
+correlates at +0.68.
 
 Grouping sets by what kind of product they are gives the generalisation.
 
@@ -348,8 +341,8 @@ curated products and small old expansions, where power is uneven and the themes 
 Individual sets are shrunk toward the grand mean before ranking. A set's own mean is a noisy
 estimate of its true margin, and the fewer pods it has the noisier it is, so ranking on raw
 means would put the sets with the luckiest small samples at both ends. Shrinkage replaces each
-set's mean with a weighted average of that mean and the grand mean, the weight being the share
-of the set's apparent deviation that the data can attribute to the set rather than to sampling:
+set's mean with a weighted average of that mean and the grand mean. The weight is the share of
+the set's apparent deviation that the data can attribute to the set rather than to sampling:
 
 ```
 weight = τ² / (τ² + σ²/n)
@@ -365,7 +358,7 @@ estimator, using the observed spread of set means to set how much to trust each 
 Raw means are given beside the shrunk ones to show how much work it does. Planeshift is the
 clearest case: six pods, a raw margin of +3.04, and a shrunk one of +2.36.
 
-| Set                        | Type      | Margin | Raw    | Pods |
+| Set                        | Type      | Shrunk | Raw    | Pods |
 |----------------------------|-----------|--------|--------|------|
 | MB1 Mystery Booster        | Draft     | +2.37  | +2.59  | 19   |
 | PLS Planeshift             | Expansion | +2.36  | +3.04  | 6    |
@@ -379,15 +372,14 @@ clearest case: six pods, a raw margin of +3.04, and a shrunk one of +2.36.
 | FRF Fate Reforged          | Expansion | +0.71  | +0.46  | 13   |
 | 3ED Revised Edition        | Core      | +0.63  | +0.17  | 8    |
 
-The bottom of the table is core sets and the Khans block. The core sets follow from the
-edition-type reading. Khans and Fate Reforged do not, and are the one part of the ranking that
-asks for an explanation rather than supplying one.
+The bottom of the table is core sets, which the edition types already account for, plus Khans of
+Tarkir and Fate Reforged, which they do not. Why those two sit there is unexplained.
 
-`forge-native` cannot be ranked this way at all. It carries no `deck_score`, so the only
-per-set measure available is games won, and the two played corpora supply 383 gen-4 versus
-`forge-native` matches spread over 142 sets. Under three matches a set puts the standard error
-on a per-set win rate above 20 points, which is wider than the entire effect being measured.
-Ranking sets by games needs a run that fixes the set rather than sampling it.
+`forge-native` cannot be ranked this way. It carries no `deck_score`, so the only per-set
+measure available is games won. The two played corpora give 383 gen-4 versus `forge-native`
+matches spread over 142 sets. Under three matches a set puts the standard error on a per-set win
+rate above 20 points, wider than the whole effect. Ranking sets by games needs a run that fixes
+the set rather than sampling it.
 
 ## The gen-3 hypotheses under gen-4
 
