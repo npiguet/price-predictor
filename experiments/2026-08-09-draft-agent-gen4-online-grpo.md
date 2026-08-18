@@ -194,13 +194,11 @@ Two things leave Forge short of 22 spells. The first is the colour commitment: t
 fixes two colours early and the builder is handed the same pair, so a pool that ran dry in
 those colours has too little to play. Every seat holding fewer than 22 on-colour cards built a
 land-heavy deck, without exception. The second is that Forge discards cards its own AI handles
-badly. Land-heavy seats that did hold 22 on-colour cards carried more than three times the
-usual share of those.
-
-`forge-native` is still Forge end to end, so it stays the honest baseline for the pipeline. But
-a tenth of its decks lose because the builder ran out of spells rather than because the
-drafting was bad, so the builder gap says more about Forge's deck-building code than about how
-well Forge drafts.
+badly. These are build-around cards, flagged `RemRandomDecks`: the builder keeps one when the
+partners it needs are already in the deck and drops it when they never arrived. The drafter
+never reads that flag, so it takes such cards on raw power and only finds the hole at build
+time. Land-heavy seats that did hold 22 on-colour cards carried more than three times the usual
+share of them.
 
 ### Creature count predicts winning, and no colour costs gen-4 games
 
