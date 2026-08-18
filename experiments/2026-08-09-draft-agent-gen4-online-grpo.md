@@ -301,12 +301,18 @@ these four does that. Gen-4's advantage is in fact uniform across every width bu
 `t2all_nodecay`, +2.23 against +1.26 at two land types and +1.79 against +0.61 at three — so
 the mana base is a symptom of pool quality rather than the thing that differs.
 
-The failure mode that separated gen-3's two families is absent. Splitting each candidate's
-median-minus-mean gap into the part four- and five-colour decks account for and the rest, the
-drag is +0.011 to +0.022 against gen-3's incumbent at +0.015, and the residual, +0.084 to
-+0.121, sits inside the +0.034 to +0.136 that gen-3 measured on its reference seats. That
-residual belongs to `deck_score` itself: a sealed deck can be far worse than average more
-easily than far better. Nothing about gen-4's training moved it.
+No gen-4 candidate repeats the failure that separated gen-3's two families. One gen-3 candidate
+built four- and five-colour decks 2.4 times as often as the others and built them far worse:
+its five-colour decks averaged −1.88 where every other candidate's averaged about +1.0. That
+tail of unplayable wide decks pulled its mean well below its median
+([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
+*Mean against median*).
+
+The same check on gen-4 splits each candidate's median-minus-mean gap into the part four- and
+five-colour decks account for and everything else. The wide-deck part runs +0.011 to +0.022,
+against gen-3's incumbent at +0.015. The remainder, +0.084 to +0.121, sits inside the +0.034 to
++0.136 gen-3 measured on its own reference seats, so it belongs to `deck_score` rather than to
+any policy: a sealed deck can be far worse than average more easily than far better.
 
 ## Gen-4's margin depends on the set, and core sets are its weakest ground
 
