@@ -231,57 +231,14 @@ that.
 All four checkpoints now have a yardstick, so the metrics the training loop reports can be
 checked against it rather than trusted.
 
-### Policy loss cannot select checkpoints
-
-The obvious alternative to the margin is the quantity being optimised. It is worse, and its
-sign is the interesting part. Entropy below is the mean per-pick entropy of the sampling
-distribution, which the loop already logs on its `explore` line.
-
-| Run                 | corr(policy_loss, margin) | corr(policy_loss, entropy) |
-|---------------------|---------------------------|----------------------------|
-| `t2all_nodecay`     | +0.250                    | −0.890                     |
-| `t2all_decay0.3`    | +0.333                    | −0.845                     |
-| `t3all_decay0.3`    | +0.202                    | −0.718                     |
-| `t3learner_t2field` | +0.455                    | −0.591                     |
-
-The correlation with the margin is positive in all four runs. Loss is minimised, so a useful
-selector would correlate negatively. Over `t2all_decay0.3` the lowest loss falls at round 1193,
-where the margin is +0.152; the best margin is round 312 at +0.831.
-
-The reason is structural. `assign_advantages` standardises each round's rewards to mean 0 and
-standard deviation 1, so the loss `−mean(A·logπ)` reduces to `−Cov(A, logπ)`. That removes every
-trace of absolute performance, leaving something that tracks the policy's entropy instead: the
-second column above, and `r(loss, mean logπ) = +0.838` over the long run. A policy-gradient
-surrogate is built so its gradient is the REINFORCE gradient, with no claim on its own value.
-
-### The anchor is not a fixed reference either
-
-The spec defends the margin as improvement over a fixed point (FR-021), but fixed weights are
-not a fixed score. Over `t2all_decay0.3`, from the first full window to the end:
-
-| label          | r9   | final | drift |
-|----------------|------|-------|-------|
-| gen4 (learner) | 1.87 | 1.78  | −0.09 |
-| gen3a (anchor) | 1.71 | 1.31  | −0.40 |
-| gen3c          | 1.69 | 0.42  | −1.27 |
-| gen1           | 0.79 | 0.53  | −0.26 |
-| forge-full     | 1.03 | 0.76  | −0.27 |
-
-Every label falls, the learner included, and the margin rises only because the field falls
-faster. The anchor margin and every field-relative variant therefore report "declined less than
-the field" rather than "improved". That is why the learner's own windowed mean belongs on the
-`progress` line beside the margin, where it already is.
-
-Measuring the learner against the whole frozen field is the natural alternative, and it matches
-the pod-relative reward the policy optimises. It agrees closely with the anchor margin
-(`r = +0.914`), is slightly less noisy, and selects round 653 rather than 312. Keep the
-learner's own seats out of that baseline: with `gen4:3` in an eight-seat pod about 2 of 7
-baseline seats are the learner, so a uniform improvement δ registers as (5/7)δ.
-
 ### The margin decomposition heuristic is refuted
 
-Gen-3 split the margin into the learner's rise and the anchor's fall, read a large anchor share
-as field decline rather than learning, and disqualified its `lr 1e-4` run on that basis.
+Gen-3 used the split between the learner's own score and the anchor's to discount a margin that
+read healthy. Its `lr 1e-4` learner peaked near round 15 and fell back to its starting level
+while the anchor kept dropping, so the margin after that was the field declining rather than the
+learner improving
+([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
+*Movement, and the learning-rate sweep*). Used to rank runs instead, the same split fails.
 Measured from the first full window to each run's best round:
 
 | Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
