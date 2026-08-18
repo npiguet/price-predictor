@@ -222,10 +222,9 @@ plays the five colours equally often, and it does not: white appears in about th
 its decks and red in under a third. *Hypothesis 3* below measures that lean and explains where
 it comes from.
 
-Costing nothing is not the same as being well chosen. Gen-4's win rate spreads 2.5 and 6.3
-points across WUBRG in the two runs, `forge-full` 3.5 and 9.3, and gen-1 5.8 and 6.6, so an even
-spread across colours is not something gen-4 has and the field lacks. No run tests whether a
-different prior would win more, because gen-4 chooses its own colours in every draft.
+What the games cannot say is whether that lean is the best one available. Testing that would
+mean forcing gen-4 into colours it did not pick and seeing whether it wins more, and no run does
+that.
 
 ### The two played checkpoints finish in the yardstick's order
 
