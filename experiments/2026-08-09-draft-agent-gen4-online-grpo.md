@@ -228,16 +228,20 @@ that.
 
 ### The two played checkpoints finish in the yardstick's order
 
-Two of the four candidates have now been played, the first and the third, and they finish in
-that order against the same frozen gen-1 reference: 72.4 % ± 2.4 for `t2all_decay0.3` against
-69.1 % ± 2.5 for `t3learner_t2field`. The difference is 3.3 points on a standard error of 3.5,
-and the score gap between the two predicts 1.6. The direction is the yardstick's. The size is
-not resolved, and the two figures come from different corpora rather than shared pods.
+Two of the four candidates have been played: `t2all_decay0.3`, which the yardstick ranks first,
+and `t3learner_t2field`, which it ranks third. Both were measured against the same frozen gen-1
+seats. `t2all_decay0.3` won 72.4 % of its 421 matches and `t3learner_t2field` 69.1 % of its 418,
+so they came out in the yardstick's order.
 
-That is the expected outcome at this exchange rate. The +0.23 separating the best candidate
-from the worst is worth about 3 points of Bo7 match win rate, and the best-populated matchup in
-either run measures to ± 2.4 on 421 matches. Telling adjacent candidates apart needs several
-times the games these runs bought.
+The order is right but not established. The two differ by 3.3 points and the error on that
+difference is 3.5, so the games are equally consistent with the two being level. Their score
+gap predicts a difference of only 1.6 points. The two figures also come from different corpora,
+so they do not share pools.
+
+The precision needed is out of reach here. The whole spread from the best candidate to the
+worst is 0.23 of `deck_score`, which the exchange rate above puts at about 3 points of win rate,
+and the largest matchup in either run measures to ± 2.4. Separating adjacent candidates needs
+several times the games these runs bought.
 
 ## No in-run metric ranks the checkpoints
 
