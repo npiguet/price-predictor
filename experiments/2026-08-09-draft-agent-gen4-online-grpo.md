@@ -202,19 +202,25 @@ share of them.
 
 ### Creature count predicts winning, and no colour costs gen-4 games
 
-Creature count tracks winning across the whole corpus in both runs, 25.7 % of matches at 13
-creatures or fewer against 74.2 % at 20 or more in the first, and 26.2 % against 70.8 % in the
-second. It tracks inside every label including gen-4, which climbs from 50.0 % and 54.3 % in its
-creature-light decks to 79.5 % and 75.6 % in its creature-heavy ones. The direction the
-composition analysis assumed is the direction the games find.
+Decks with more creatures win more, in both runs and inside every label. The composition
+analysis assumed that direction and the games confirm it.
 
-Colour is the narrower reading. Gen-4's win rate varies by 2.5 points across WUBRG in the first
-run and 6.3 in the second, both inside what its per-colour sample sizes support, so no colour it
-plays costs it games. A miscalibrated colour prior would show as gen-4 winning less in the
-colours it over-plays, and it does not show. The references are no tighter — `forge-full` spans
-3.5 and 9.3 points, gen-1 5.8 and 6.6 — so this is not evidence that gen-4's colours are better
-chosen than the field's, only that none of them is a liability. Neither reading tests whether the
-prior is optimal, since gen-4 picks its own colours and never has to defend the choice.
+| Bo7 win rate                   | ≤ 13 creatures | ≥ 20 creatures |
+|--------------------------------|----------------|----------------|
+| all decks, `t3learner_t2field` | 25.7 %         | 74.2 %         |
+| all decks, `t2all_decay0.3`    | 26.2 %         | 70.8 %         |
+| gen-4, `t3learner_t2field`     | 50.0 %         | 79.5 %         |
+| gen-4, `t2all_decay0.3`        | 54.3 %         | 75.6 %         |
+
+Gen-4 wins at much the same rate whichever colours it plays, and that variation is within what
+its per-colour match counts support. A colour prior pushed too far would show up as gen-4
+winning less in the colours it plays most, and that does not happen.
+
+The prior therefore costs nothing, but it is not shown to be well chosen either. Gen-4's win
+rate spreads 2.5 and 6.3 points across WUBRG in the two runs, `forge-full` 3.5 and 9.3, and
+gen-1 5.8 and 6.6, so being flat across colours is not something gen-4 has and the field lacks.
+No run tests whether a different prior would do better, because gen-4 chooses its own colours in
+every draft.
 
 ### The two played checkpoints finish in the yardstick's order
 
