@@ -233,17 +233,16 @@ checked against it rather than trusted.
 
 ### The margin decomposition heuristic is refuted
 
-Gen-3 already had the reason this cannot work. Denial drags the whole field down as the learner
-improves, because an improving learner takes cards its podmates would otherwise have had
+Gen-3 stated the reason this cannot work and then used it anyway. Denial drags the whole field
+down as the learner improves, because an improving learner takes cards its podmates would
+otherwise have had, so a large anchor share is what a strong learner produces rather than
+evidence that a run learned little
 ([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
-*Live progress signal — the anchor margin*). It left the cause of the decline unresolved, and
-*Crowding a pod with strong drafters* below settles it. A large anchor share is therefore not
-evidence that a run learned little. It is what a strong learner produces.
-
-Gen-3 used the split anyway, to discount the healthy-looking margin of its unstable `lr 1e-4`
-run (*Movement, and the learning-rate sweep*). Applied to gen-4's four runs, measured from the
-first full window to each run's best round, it ranks them in exactly the order the yardstick
-reverses.
+*Live progress signal — the anchor margin*; *Crowding a pod with strong drafters* below measures
+the effect). Gen-3 left the cause of the decline unresolved and used the split regardless, to
+discount the healthy-looking margin of its unstable `lr 1e-4` run (*Movement, and the
+learning-rate sweep*). Gen-4's four runs settle it, measured from the first full window to each
+run's best round.
 
 | Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
 |---------------------|-----------|----------|----------------|--------------------|
