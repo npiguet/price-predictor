@@ -310,17 +310,23 @@ tail of unplayable wide decks pulled its mean well below its median
 
 ## Gen-4's margin depends on the set, and core sets are its weakest ground
 
-The set a pod drafts explains about a fifth of the variation in gen-4's margin over
-`forge-full`. Pooling the four `v-forge` corpora gives 1778 pods over 181 sets, a median of ten
-pods each. Each checkpoint's own mean is subtracted first, so what remains varies only by set.
+Every pod yields one number: the gap between gen-4's seats and `forge-full`'s seats in that pod.
+Those gaps vary a lot from pod to pod. About a fifth of that variance comes from which set the
+pod drafted, and the rest is pods of the same set differing from each other.
 
-Between-set spread is about half of within-set spread, at an F of 3.2 on 180 and 1597 degrees of
-freedom. This is the same effect the yardstick's set-clustered standard errors exist to absorb.
+The measurement pools the four `v-forge` corpora, giving 1778 pods over 181 sets, a median of
+ten pods per set. The corpora come from four checkpoints of different strength, so each is
+centred on its own mean first. Without that, a stronger checkpoint that happened to draw an
+unusual mix of sets would look like a set effect.
 
-Two checks show the ranking is not sampling luck. Scoring each set on two of the four
-checkpoints and again on the other two, the halves correlate at +0.49. Scoring against
-`forge-full` and against gen-1, which are different opponents drawn from the same pods,
-correlates at +0.68.
+The set effect is far larger than chance produces. An analysis of variance across the 181 sets
+gives F = 3.2 on 180 and 1597 degrees of freedom. This is the variation the yardstick's
+set-clustered standard errors account for.
+
+Two further checks say a per-set ranking repeats rather than reflecting one lucky draw.
+Splitting the four checkpoints into two pairs and scoring every set once per pair, the two
+scores correlate at +0.49. Scoring every set against `forge-full` and again against gen-1, which
+are different opponents sitting in the same pods, gives +0.68.
 
 Grouping sets by what kind of product they are gives the generalisation. The types are Forge's
 own, read off `CardEdition.getType()` rather than assigned here. Expansion is an ordinary
