@@ -226,105 +226,58 @@ What the games cannot say is whether that lean is the best one available. Testin
 mean forcing gen-4 into colours it did not pick and seeing whether it wins more, and no run does
 that.
 
-### The two played checkpoints finish in the yardstick's order
-
-Two of the four candidates have been played: `t2all_decay0.3`, which the yardstick ranks first,
-and `t3learner_t2field`, which it ranks third. Both were measured against the same frozen gen-1
-seats. `t2all_decay0.3` won 72.4 % of its 421 matches and `t3learner_t2field` 69.1 % of its 418,
-so they came out in the yardstick's order.
-
-The order is right but not established. The two differ by 3.3 points and the error on that
-difference is 3.5, so the games are equally consistent with the two being level. Their score
-gap predicts a difference of only 1.6 points. The two figures also come from different corpora,
-so they do not share pools.
-
-The precision needed is out of reach here. The whole spread from the best candidate to the
-worst is 0.23 of `deck_score`, which the exchange rate above puts at about 3 points of win rate,
-and the largest matchup in either run measures to ± 2.4. Separating adjacent candidates needs
-several times the games these runs bought.
-
 ## No in-run metric ranks the checkpoints
 
-Four yardsticks now exist where the last generation had partial coverage, so the in-run
-metrics can be scored against them rather than trusted.
+All four checkpoints now have a yardstick, so the metrics the training loop reports can be
+checked against it rather than trusted.
 
 ### The anchor margin inverts the yardstick's order
 
-Ranking the three comparable runs by their best in-run margin gives `t2all_decay0.3`,
-`t3all_decay0.3`, `t3learner_t2field`. The yardstick gives `t2all_decay0.3`,
-`t3learner_t2field`, `t3all_decay0.3`. The metric that run control keys off inverts the two
-runs it was asked to separate, and it does so on the one contrast that the yardstick resolves
-cleanly.
+Ranked by their best in-run margin, the three comparable runs go `t2all_decay0.3`,
+`t3all_decay0.3`, `t3learner_t2field`. The yardstick puts the last two the other way round.
+Run control keys off the margin, and the margin gets wrong the one contrast the yardstick
+resolves cleanly.
 
-The margin is not useless — every run's margin is positive and every run's candidate does
-beat the field. It carries no information about *how much*.
+The margin is not useless. Every run's margin is positive and every run's candidate does beat
+the field. It carries no information about by how much.
 
 ### The LR annealing decayed once and then silently stopped
 
-All three armed runs took exactly one decay, to 3.0e-6, and never moved again.
-`t2all_decay0.3` took its decay at round 29 and sat at 3.0e-6 for every round after it.
+All three runs with annealing armed took exactly one decay, to 3.0e-6, and never moved again.
+`_PlateauLR.can_decay()` (`src/draft/application/train_draft_agent.py:463`) refuses a decay that
+would land below `min_lr` instead of clamping to it, and with `--lr-decay-factor 0.3` from
+`1e-5` the second step would be 9e-7, under the 1e-6 floor. The real floor is 3e-6 while the
+startup line advertises 1e-6.
 
-The cause is arithmetic in `_PlateauLR.can_decay()`
-(`src/draft/application/train_draft_agent.py:463`), which refuses a decay that would land
-below `min_lr` rather than clamping to it:
-
-```
-return self.base_lr * self.factor ** (self.decay_count + 1) >= self.min_lr
-```
-
-With `--lr 1e-5 --lr-decay-factor 0.3 --min-lr 1e-6` the ladder is `1e-5 → 3e-6 → 9e-7`, and
-`9e-7 < 1e-6`, so the second decay is refused forever. The effective floor is 3e-6; the
-startup echo advertises 1.0e-06, which is unreachable. Every existing `_PlateauLR` test uses
-`factor = 0.1` with a floor an exact power of ten below the base, so the ladder always lands
-on the floor and the truncation never shows. `0.3` is the first factor used that does not
-divide the base-to-floor ratio evenly.
-
-Two things made it silent. `_maybe_decay` returning `None` is indistinguishable from "not
-stalled yet", so nothing logs the refusal. And `--patience` was armed in none of the four
-runs, so a run that can no longer anneal also cannot stop: `t2all_decay0.3` spent its last
-956 rounds with no new best, no further decay and no exit.
-
-The decay is applied to the live weights rather than to `best_*.pt`, so there is no rollback,
-no moment reset and no re-warmup. That is the right convention here, since the best it would
-roll back to is the noise described next.
+Nothing reported it, because `_maybe_decay` returns `None` both when it refuses a decay and when
+the run is simply not stalled. No run armed `--patience` either, so a run that could no longer
+anneal also could not stop: `t2all_decay0.3` spent its last 956 rounds with no new best, no
+decay and no exit.
 
 ### The round-9 best is noise, and the noise floor is measurable
 
-In three of the four runs the learner and the anchor are the same checkpoint at the same
-temperature. Generation precedes the update, so round 0's drafts come from two bit-identical
-policies and the true margin at round 0 is exactly zero. Those three runs report −0.049,
-+0.781 and +0.136.
+Three of the four runs start with the learner and the anchor as the same checkpoint at the same
+temperature. Drafts are generated before the update, so round 0's come from two identical
+policies and the true margin there is exactly zero. Those three runs report −0.049, +0.781 and
++0.136, which measures the metric's noise for free: a root-mean-square of 0.46 over a 10-draft
+window, so about ±0.15 once the 100-draft window fills.
 
-That is a free calibration of the metric. Three draws of a quantity whose true value is zero
-give a root-mean-square of 0.46 over a 10-draft window, so about ±0.15 once the 100-draft
-window fills. The +0.781 that `t2all_decay0.3` drew is the tail of that distribution, not a
-typical reading.
+`t2all_decay0.3` drew the +0.781 and paid for it. Its margin fell monotonically from 0.781 to
+0.218 over the next nine rounds. That is not the learner getting worse, it is a cumulative mean
+returning from a lucky first ten drafts. The run pinned its best at round 9 at +0.218, inside
+one sigma of zero. The stall counter started there, rounds 10–29 never cleared it, and the one
+available decay fired at round 29 while the policy was still learning. The first genuine best
+came at round 70, and the run went on to +0.831.
 
-It is also the run that paid for it. Its margin then falls monotonically — 0.781, 0.585,
-0.558, 0.412, 0.373, …, 0.218 — which is not the learner regressing but a cumulative mean
-regressing away from a lucky first ten drafts. The window fills at round 9, and the
-window-full guard admits it:
-
-```
-return len(self._window) >= self._maxlen
-```
-
-The guard's docstring says it prevents "an early lucky round" from pinning the run's best. It
-does not. Excluding rounds 0–8 does not exclude rounds 0–8's drafts, which are 100 % of round
-9's window. It filters the reporting round, not the contaminated data. The window holds no
-fill-period drafts at all only from round 19.
-
-The consequence is concrete. `t2all_decay0.3` pinned its best at round 9 at +0.218, inside one
-sigma of zero. The stall counter started there, rounds 10–29 ran at 0.00–0.18 and never
-cleared it, and the single available decay fired at round 29 while the policy was learning
-perfectly well. The first genuine best came at round 70, more than three times the decay
-patience later. The run went on to +0.831. The other three runs drew low round-9 windows
-(−0.042, +0.029, −0.131) and cleared them within three rounds, so only the run with the
-unlucky draw was affected — which is what a noise floor does.
+The guard meant to prevent this does not work. It waits for the window to hold 100 drafts, which
+excludes rounds 0–8 from reporting without excluding their drafts, and those are all of round
+9's window. The window is clean only from round 19. The other three runs drew round-9 windows of
+−0.042, +0.029 and −0.131 and cleared them within three rounds, so only the unlucky draw cost
+anything.
 
 ### Policy loss cannot select checkpoints
 
-The obvious alternative to the margin is the quantity being optimised. It is worse, and the
+The obvious alternative to the margin is the quantity being optimised. It is worse, and its
 sign is the interesting part.
 
 | Run                 | corr(policy_loss, margin) | corr(policy_loss, H) |
@@ -334,26 +287,20 @@ sign is the interesting part.
 | `t3all_decay0.3`    | +0.202                    | −0.718               |
 | `t3learner_t2field` | +0.455                    | −0.591               |
 
-Positive against the margin in all four runs. Loss is a minimisation target, so a useful
-selector would correlate negatively. Over `t2all_decay0.3`, `argmin(loss)` is round 1193
-(margin +0.152) where `argmax(margin)` is round 312 (+0.831).
+The correlation with the margin is positive in all four runs. Loss is minimised, so a useful
+selector would correlate negatively. Over `t2all_decay0.3` the lowest loss falls at round 1193,
+where the margin is +0.152; the best margin is round 312 at +0.831.
 
-The mechanism is structural. `assign_advantages` standardises each round's rewards to mean 0
-and std 1, and the loss is `−mean(A·logπ)`, so with `mean(A) = 0` it is `−Cov(A, logπ)`,
-bounded by `σ_logπ`. The per-round standardisation destroys all absolute performance
-information, and what remains is an entropy thermometer — the second column, and
-`r(loss, mean logπ) = +0.838` over the long run. Its apparent correlation with the margin is
-inherited second-hand from entropy. It also has no forward-looking content: correlation with
-the margin change at +5, +10 and +20 rounds is +0.06, −0.07 and −0.12.
-
-This is the standard property of a policy-gradient surrogate, built so its gradient is the
-REINFORCE gradient with no claim on its value. It is worth recording because the question is
-natural and the answer is not visible in the loss curve.
+The reason is structural. `assign_advantages` standardises each round's rewards to mean 0 and
+standard deviation 1, so the loss `−mean(A·logπ)` reduces to `−Cov(A, logπ)`. That removes every
+trace of absolute performance, leaving something that tracks the policy's entropy instead: the
+second column above, and `r(loss, mean logπ) = +0.838` over the long run. A policy-gradient
+surrogate is built so its gradient is the REINFORCE gradient, with no claim on its own value.
 
 ### The anchor is not a fixed reference either
 
-The margin is defended in the spec as improvement over a fixed point (FR-021). Fixed weights
-are not a fixed score. Over `t2all_decay0.3`, from the first full window to the end:
+The spec defends the margin as improvement over a fixed point (FR-021), but fixed weights are
+not a fixed score. Over `t2all_decay0.3`, from the first full window to the end:
 
 | label          | r9   | final | drift |
 |----------------|------|-------|-------|
@@ -363,25 +310,22 @@ are not a fixed score. Over `t2all_decay0.3`, from the first full window to the 
 | gen1           | 0.79 | 0.53  | −0.26 |
 | forge-full     | 1.03 | 0.76  | −0.27 |
 
-Every label falls, the learner included. The margin rises because the field falls faster.
-Both the anchor margin and any field-relative variant are therefore reporting "declined less
-than the field" rather than "improved" — which is why the learner's raw windowed mean belongs
-on the `progress` line beside the margin, where it already is.
+Every label falls, the learner included, and the margin rises only because the field falls
+faster. The anchor margin and every field-relative variant therefore report "declined less than
+the field" rather than "improved". That is why the learner's own windowed mean belongs on the
+`progress` line beside the margin, where it already is.
 
-The natural alternative to a single anchor is the learner against the whole frozen field,
-matching the pod-relative reward the policy actually optimises. The two agree closely
-(`r = +0.914`) but select different rounds, 312 against 653, and the field version is the
-less noisy (standard deviation of round-to-round change 0.056 against 0.059). One caveat if
-it is adopted: the logged `R` includes the learner's own other seats in its baseline, so with
-`gen4:3` in an eight-seat pod about 2 of 7 baseline seats are the learner and a uniform
-improvement δ registers as (5/7)δ. The non-self-referential form, learner against the frozen
-labels only, is the one to use.
+Measuring the learner against the whole frozen field is the natural alternative, and it matches
+the pod-relative reward the policy optimises. It agrees closely with the anchor margin
+(`r = +0.914`), is slightly less noisy, and selects round 653 rather than 312. Keep the
+learner's own seats out of that baseline: with `gen4:3` in an eight-seat pod about 2 of 7
+baseline seats are the learner, so a uniform improvement δ registers as (5/7)δ.
 
 ### The margin decomposition heuristic is refuted
 
-Gen-3 used the split between the learner's rise and the anchor's fall to separate real
-learning from field decline, and disqualified its `lr 1e-4` run on that basis. Measured from
-the first full window to each run's best round:
+Gen-3 split the margin into the learner's rise and the anchor's fall, read a large anchor share
+as field decline rather than learning, and disqualified its `lr 1e-4` run on that basis.
+Measured from the first full window to each run's best round:
 
 | Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
 |---------------------|-----------|----------|----------------|--------------------|
@@ -390,10 +334,10 @@ the first full window to each run's best round:
 | `t3all_decay0.3`    | +0.37     | −0.28    | 43 %           | +1.152             |
 | `t3learner_t2field` | +0.33     | −0.19    | 37 %           | +1.276             |
 
-The heuristic ranks the four in exactly the order the yardstick reverses. `t2all_nodecay` is
-its worst run — the learner's own score fell and 85 % of its margin is the anchor collapsing,
-the pattern that disqualified gen-3's `lr 1e-4` — and it ties for best on the yardstick.
-`t3all_decay0.3` is its second-best and yardsticks last. Do not rank runs this way.
+The heuristic ranks these four in exactly the order the yardstick reverses. `t2all_nodecay` is
+its worst run, with the learner's own score falling and 85 % of the margin coming from the
+anchor collapsing, and it ties for best on the yardstick. Do not rank runs this way.
+
 
 ## Crowding a pod with strong drafters costs every seat in it
 
