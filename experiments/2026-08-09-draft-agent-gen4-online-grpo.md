@@ -322,7 +322,13 @@ checkpoints and again on the other two, the halves correlate at +0.49. Scoring a
 `forge-full` and against gen-1, which are different opponents drawn from the same pods,
 correlates at +0.68.
 
-Grouping sets by what kind of product they are gives the generalisation.
+Grouping sets by what kind of product they are gives the generalisation. The types are Forge's
+own, read off `CardEdition.getType()` rather than assigned here. Expansion is an ordinary
+Standard-legal set and is most of the data. Draft means a set built as a standalone limited
+format, which here is Modern Horizons, Conspiracy, Commander Legends, Battlebond, Mystery
+Booster and Lord of the Rings. Reprint means a Masters-style product. Online means Arena and
+MTGO exclusives, mostly Alchemy sets and the Masters Editions. Starter is Portal and
+Starter 1999.
 
 | Edition type | sets | pods | mean margin |
 |--------------|------|------|-------------|
@@ -333,10 +339,14 @@ Grouping sets by what kind of product they are gives the generalisation.
 | Core         | 22   | 205  | +1.29       |
 | Starter      | 3    | 33   | +1.12       |
 
+Read the ends of that table rather than the ordering within them. Draft, Reprint and Online sit
+within 0.15 of each other on 11, 15 and 23 sets, which is too close and too thin to rank.
+
 Gen-4 gains least where the cards are simplest. Core and starter sets are built to teach the
 game: flat power curves, few build-arounds, little that rewards knowing the format. There is
-less for a drafter to get right, so Forge's heuristics give up less. The widest margins are on
-curated products and small old expansions, where power is uneven and the themes are narrow.
+less for a drafter to get right, so Forge's heuristics give up less. The three types at the top
+share the opposite property, since a set designed as its own limited format, a Masters reprint
+product and an Alchemy rebalance all carry sharper power differences than a Standard set does.
 
 Individual sets are shrunk toward the grand mean before ranking. A set's own mean is a noisy
 estimate of its true margin, and the fewer pods it has the noisier it is, so ranking on raw
