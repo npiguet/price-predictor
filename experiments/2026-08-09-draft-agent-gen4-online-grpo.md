@@ -226,46 +226,12 @@ What the games cannot say is whether that lean is the best one available. Testin
 mean forcing gen-4 into colours it did not pick and seeing whether it wins more, and no run does
 that.
 
-## No in-run metric ranks the checkpoints
-
-All four checkpoints now have a yardstick, so the metrics the training loop reports can be
-checked against it rather than trusted.
-
-### The margin decomposition heuristic is refuted
-
-Gen-3 stated the reason this cannot work and then used it anyway. Denial drags the whole field
-down as the learner improves, because an improving learner takes cards its podmates would
-otherwise have had, so a large anchor share is what a strong learner produces rather than
-evidence that a run learned little
-([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
-*Live progress signal — the anchor margin*; *Crowding a pod with strong drafters* below measures
-the effect). Gen-3 left the cause of the decline unresolved and used the split regardless, to
-discount the healthy-looking margin of its unstable `lr 1e-4` run (*Movement, and the
-learning-rate sweep*). Gen-4's four runs settle it, measured from the first full window to each
-run's best round.
-
-| Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
-|---------------------|-----------|----------|----------------|--------------------|
-| `t2all_nodecay`     | −0.12     | −0.71    | 85 %           | +1.328             |
-| `t2all_decay0.3`    | +0.28     | −0.33    | 54 %           | +1.380             |
-| `t3all_decay0.3`    | +0.37     | −0.28    | 43 %           | +1.152             |
-| `t3learner_t2field` | +0.33     | −0.19    | 37 %           | +1.276             |
-
-`t2all_nodecay` is the heuristic's worst run, with the learner's own score falling and 85 % of
-its margin coming from the anchor collapsing, and it ties for best on the yardstick. Do not rank
-runs this way.
-
 ## Crowding a pod with strong drafters costs every seat in it
 
-Gen-3 attributed the field's decline to denial, and left the size of the effect open. The
-yardstick corpora measure it directly, because `--agent-mix` is sampled independently per
-seat and pods therefore vary in how many gen-4 seats they contain.
-
-Gen-1 and `forge-full` are treated as one reference label throughout this section. The pick
-alignment measured further down finds they weight every axis of card behaviour identically, and
-here they decline in step, gen-1 sitting about 0.1 above `forge-full` at every composition. Pooling them also makes both corpus families a two-label eight-seat pod at an even
-split, so the gen-4 count fixes the whole composition and the two tables are read the same way.
-All four checkpoints are pooled; the two carry about 7900 and 8000 gen-4 seats.
+Gen-3 attributed the field's decline to denial and left the size of the effect open. The
+yardstick corpora measure it, because `--agent-mix` is sampled per seat, so pods vary in how
+many gen-4 seats they hold. All four checkpoints are pooled, about 7900 gen-4 seats per family.
+Gen-1 and `forge-full` are one label here, since they decline in step.
 
 | gen-4 seats in the pod | gen-4 | gen-1 + `forge-full` | gap   |
 |------------------------|-------|----------------------|-------|
@@ -287,63 +253,45 @@ All four checkpoints are pooled; the two carry about 7900 and 8000 gen-4 seats.
 | 6                      | +1.74 | +1.12 | +0.62 |
 | 7                      | +1.76 | +1.07 | +0.68 |
 
-Both fall monotonically, and neither label escapes: crowding a pod with strong drafters takes
-cards out of the packs that reach everyone in it, gen-4 seats included.
-
-Crowding costs less against gen-3 than against the Forge-like reference — 0.095 per seat where
-it was 0.205, and 0.075 for gen-4's own seats where it was 0.159. Nothing about the mechanism
-differs between the two. What differs is the size of the upgrade each swapped seat represents.
-Displacing a reference seat at +0.8 with gen-4 at +2.2 adds far more competition than
-displacing gen-3 at +1.3 with the same seat.
-
-Dividing the cost by the gap makes that explicit, and the two families agree to within a tenth
-of each other on both rows.
+Every label falls as the pod fills, gen-4's own seats included. Crowding costs less against
+gen-3 only because gen-3 is closer in strength: replacing a +0.8 reference seat with a +2.2
+gen-4 seat adds more competition than replacing gen-3 at +1.3. Dividing each cost by that
+strength gap makes the two families agree.
 
 | Family    | seat displaced       | gen-4's lead over it | cost to a rival seat | ratio | cost to a gen-4 seat | ratio |
 |-----------|----------------------|----------------------|----------------------|-------|----------------------|-------|
 | `v-forge` | gen-1 + `forge-full` | +1.377               | −0.205               | 0.149 | −0.159               | 0.116 |
 | `v-gen3`  | gen-3                | +0.587               | −0.095               | 0.162 | −0.075               | 0.128 |
 
-A seat entering a pod costs each rival roughly a sixth of the amount by which it outclasses
-the seat it replaced, and its own kind roughly an eighth. The gap between those two numbers is
-the interesting part: a strong drafter is measurably more robust to a crowded pod than the
-field it beats, which is why the gap column widens as the pod fills. Two families are two
-points, so read the ratio as a regularity worth testing rather than a constant.
+A seat entering a pod costs each rival about a sixth of the amount by which it outclasses the
+seat it replaced, and its own kind about an eighth. Gen-4 is therefore more robust to a crowded
+pod than the field it beats, which is why the gap column widens as the pod fills. Two families
+are two points, so treat the ratio as a regularity worth testing rather than a constant.
 
-Two consequences follow. The first is the training-time decline, seen from a different angle.
-During a run the mix is fixed at three learner seats, but those seats get stronger, which is
-the same intervention as swapping a reference seat for a gen-4 one. `gen3a` falling 0.40 over
-the long run is the expected size of the effect rather than evidence of anything else.
+This is the training-time decline seen from outside a run. A run's mix is fixed at three
+learner seats, but those seats get stronger, which is the same intervention as adding one, so
+`gen3a` falling 0.40 over the long run is expected rather than evidence of anything else.
 
-The second is the estimator bias flagged under *The yardstick*. Pooling seats without regard to
-composition weights gen-4's mean towards crowded pods, where every seat scores worse, and
-weights the reference's mean towards uncrowded ones, because a pod with more gen-4 seats has
-fewer reference seats to contribute. Both displacements push the difference down.
+It also explains the estimator bias flagged under *The yardstick*. Pooling seats without regard
+to composition weights gen-4's mean towards crowded pods, where every seat scores worse, and the
+reference's mean towards uncrowded ones. Both push the difference down.
 
 | Family    | naive per-seat difference | pod-paired | bias   | predicted |
 |-----------|---------------------------|------------|--------|-----------|
 | `v-forge` | +1.184                    | +1.377     | −0.193 | −0.191    |
 | `v-gen3`  | +0.498                    | +0.587     | −0.089 | −0.084    |
 
-The prediction is the size the two slopes imply. Writing `k` for the number of gen-4 seats in a
-pod, `s₄` and `s_ref` for the two slopes, and `S` for the pod size, the size-biased weighting
-shifts each mean by its covariance with the seat count, giving
+Writing `k` for the number of gen-4 seats in a pod, `s₄` and `s_ref` for the two slopes and `S`
+for the pod size, the size-biased weighting shifts each mean by its covariance with the seat
+count:
 
 ```
 bias ≈ s₄ · Var(k)/E[k]  +  s_ref · Var(k)/(S − E[k])
 ```
 
-which lands within 0.005 of the observed bias on both families. So the bias is set by the
-crowding slopes, and the slopes scale with the strength gap, so the bias scales with it too:
-it is 14 % of the gap on one family and 15 % on the other. Mix balance is not what drives it.
-Both families here are evenly split and their biases differ by a factor of two, and measuring
-`v-forge` against gen-1 alone — a quarter of the pod against gen-4's half — gives −0.164,
-no worse than the even split does.
-
-The practical form of that: a yardstick reporting levels rather than ordering should use the
-pod-paired figure. Balancing the mix does not fix it, and the stronger the candidate the more
-the naive number understates it, which is the wrong direction for a measurement whose whole
-job is to detect improvement.
+That lands within 0.005 of the observed bias on both families, and comes to 14 % and 15 % of the
+strength gap. A yardstick reporting levels rather than ordering should therefore use the
+pod-paired figure, and the stronger the candidate the more the naive number understates it.
 
 ## More creatures, fewer rares, narrower mana bases
 
