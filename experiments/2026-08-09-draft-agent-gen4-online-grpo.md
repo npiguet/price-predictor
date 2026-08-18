@@ -212,9 +212,14 @@ analysis assumed that direction and the games confirm it.
 | gen-4, `t3learner_t2field`     | 50.0 %         | 79.5 %         |
 | gen-4, `t2all_decay0.3`        | 54.3 %         | 75.6 %         |
 
-Gen-4 wins at much the same rate whichever colours it plays, and that variation is within what
-its per-colour match counts support. A colour prior pushed too far would show up as gen-4
-winning less in the colours it plays most, and that does not happen.
+Whichever colours a gen-4 deck plays, it wins at much the same rate, and that variation is
+within what its per-colour match counts support. A colour prior pushed too far would show up as
+gen-4 winning less in the colours it plays most, and that does not happen.
+
+These are rates conditional on a deck containing the colour. They are not evidence that gen-4
+plays the five colours equally often, and it does not: white appears in about three fifths of
+its decks and red in under a third. *Hypothesis 3* below measures that lean and explains where
+it comes from.
 
 The prior therefore costs nothing, but it is not shown to be well chosen either. Gen-4's win
 rate spreads 2.5 and 6.3 points across WUBRG in the two runs, `forge-full` 3.5 and 9.3, and
