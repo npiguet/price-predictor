@@ -233,13 +233,17 @@ checked against it rather than trusted.
 
 ### The margin decomposition heuristic is refuted
 
-Gen-3 used the split between the learner's own score and the anchor's to discount a margin that
-read healthy. Its `lr 1e-4` learner peaked near round 15 and fell back to its starting level
-while the anchor kept dropping, so the margin after that was the field declining rather than the
-learner improving
+Gen-3 already had the reason this cannot work. Denial drags the whole field down as the learner
+improves, because an improving learner takes cards its podmates would otherwise have had
 ([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
-*Movement, and the learning-rate sweep*). Used to rank runs instead, the same split fails.
-Measured from the first full window to each run's best round:
+*Live progress signal — the anchor margin*). It left the cause of the decline unresolved, and
+*Crowding a pod with strong drafters* below settles it. A large anchor share is therefore not
+evidence that a run learned little. It is what a strong learner produces.
+
+Gen-3 used the split anyway, to discount the healthy-looking margin of its unstable `lr 1e-4`
+run (*Movement, and the learning-rate sweep*). Applied to gen-4's four runs, measured from the
+first full window to each run's best round, it ranks them in exactly the order the yardstick
+reverses.
 
 | Run                 | Δ learner | Δ anchor | anchor's share | yardstick vs gen-1 |
 |---------------------|-----------|----------|----------------|--------------------|
@@ -248,10 +252,9 @@ Measured from the first full window to each run's best round:
 | `t3all_decay0.3`    | +0.37     | −0.28    | 43 %           | +1.152             |
 | `t3learner_t2field` | +0.33     | −0.19    | 37 %           | +1.276             |
 
-The heuristic ranks these four in exactly the order the yardstick reverses. `t2all_nodecay` is
-its worst run, with the learner's own score falling and 85 % of the margin coming from the
-anchor collapsing, and it ties for best on the yardstick. Do not rank runs this way.
-
+`t2all_nodecay` is the heuristic's worst run, with the learner's own score falling and 85 % of
+its margin coming from the anchor collapsing, and it ties for best on the yardstick. Do not rank
+runs this way.
 
 ## Crowding a pod with strong drafters costs every seat in it
 
