@@ -265,33 +265,40 @@ strength gap makes the two families agree.
 
 A seat entering a pod costs each rival about a sixth of the amount by which it outclasses the
 seat it replaced, and its own kind about an eighth. Gen-4 is therefore more robust to a crowded
-pod than the field it beats, which is why the gap column widens as the pod fills. Two families
-are two points, so treat the ratio as a regularity worth testing rather than a constant.
+pod than the field it beats, which is why the gap column widens as the pod fills. There are only 
+2 data points here, so while this claim must be taken with a grain of salt, it is still 
+interesting enough to deserve being discussed.
 
-This is the training-time decline seen from outside a run. A run's mix is fixed at three
-learner seats, but those seats get stronger, which is the same intervention as adding one, so
-`gen3a` falling 0.40 over the long run is expected rather than evidence of anything else.
+The same effect explains why the frozen labels lose ground during a training run. The number of
+learner seats never changes, it is three throughout, but the learner sitting in them gets
+stronger, and a stronger seat takes more cards from everyone else just as an extra seat would.
+`gen3a` losing 0.40 over the long run is that effect, not a sign that something went wrong.
 
-It also explains the estimator bias flagged under *The yardstick*. Pooling seats without regard
-to composition weights gen-4's mean towards crowded pods, where every seat scores worse, and the
-reference's mean towards uncrowded ones. Both push the difference down.
+It also biases the obvious way of computing a margin, which is to average every gen-4 seat,
+average every reference seat, and subtract. A pod with many gen-4 seats contributes many seats
+to the first average and few to the second. Gen-4's average therefore comes mostly from crowded
+pods, where every seat scores worse, and the reference's average mostly from emptier pods, where
+every seat scores better. Both shifts make the difference look smaller than it is.
 
 | Family    | naive per-seat difference | pod-paired | bias   | predicted |
 |-----------|---------------------------|------------|--------|-----------|
 | `v-forge` | +1.184                    | +1.377     | −0.193 | −0.191    |
 | `v-gen3`  | +0.498                    | +0.587     | −0.089 | −0.084    |
 
-Writing `k` for the number of gen-4 seats in a pod, `s₄` and `s_ref` for the two slopes and `S`
-for the pod size, the size-biased weighting shifts each mean by its covariance with the seat
-count:
+Comparing the two labels inside each pod first, then averaging those per-pod differences,
+avoids it. That is the pod-paired column, and the gap between the two columns is the bias.
+
+Crowding accounts for all of it. Writing `k` for the number of gen-4 seats in a pod, `s₄` and
+`s_ref` for the two slopes in the tables above, and `S` for the pod size:
 
 ```
 bias ≈ s₄ · Var(k)/E[k]  +  s_ref · Var(k)/(S − E[k])
 ```
 
-That lands within 0.005 of the observed bias on both families, and comes to 14 % and 15 % of the
-strength gap. A yardstick reporting levels rather than ordering should therefore use the
-pod-paired figure, and the stronger the candidate the more the naive number understates it.
+That comes within 0.005 of the measured bias in both families, so nothing beyond crowding is
+needed to explain it. It works out at 14 % and 15 % of the true gap, which means the stronger the
+candidate the more the naive average understates it. Any yardstick quoting levels rather than
+just an ordering should use the pod-paired figure.
 
 ## More creatures, fewer rares, narrower mana bases
 
