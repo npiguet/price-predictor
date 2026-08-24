@@ -397,31 +397,28 @@ matches spread over 142 sets. Under three matches a set puts the standard error 
 rate above 20 points, wider than the whole effect. Ranking sets by games needs a run that fixes
 the set rather than sampling it.
 
-## The gen-3 hypotheses under gen-4
-
-Gen-3 asked why its two families drifted in opposite directions on colour, and offered three
-explanations. All three are testable on gen-4's corpora. One reverses, one holds and turns out
-to rank the candidates, and one is confirmed but common to all of them.
-
-All of it runs on the same card-quality labels gen-3 used. `cards-win-rates.txt` is no longer
-under `output/sealed/`; the snapshot lives at
-`Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt`, and
-rerunning gen-3's two corpora against it reproduces its published table cell for cell, so the
-levels below are directly comparable across generations. That scale is built from real game
-outcomes rather than from anyone's pick behaviour, which is what makes it usable to judge an
-agent that has drifted away from the references.
+## The three gen-3 hypotheses survive, but only card judgement tracks quality
 
 ### Hypothesis 1 — lane starvation. Confirmed as a mechanism, refuted as a quality signal.
 
-The hypothesis: a field that plays its best takes the good cards in the learner's colours, so
-the learner keeps facing packs with nothing playable on-colour, takes the off-colour card
-because it has to, and acquires a general taste for off-colour cards from positions where it
-never had a choice.
+Lane starvation behaves exactly as gen-3 described it, and it predicts nothing about how good
+the resulting policy is.
+
+The hypothesis has four steps. A field that plays its best takes the good cards in the
+learner's colours. The learner then keeps facing packs with nothing playable on-colour. It
+takes the off-colour card because it has no alternative. From enough such positions it acquires
+a general taste for off-colour cards.
 
 Gen-4 varies field strength on a new axis. A field at `T = 3` misplays more than a field at
-`T = 2`, so it starves the learner less, and the hypothesis predicts the `T = 3` field should
-produce the least off-lane taste. It does, and by a wide margin. Off-lane rate at picks 6–10
-of pack 1, with the share of those picks made while an on-colour card was still in the pack:
+`T = 2`, so it starves the learner less. The hypothesis therefore predicts that the `T = 3`
+field produces the least off-lane taste. It does, by a wide margin.
+
+A pick is off-lane when the card taken falls outside the seat's own eventual top-2 colours. The
+first figure in each cell is the share of picks 6–10 of pack 1 that went off-lane. The figure in
+brackets is the share of those off-lane picks that were made while an on-colour card was still
+in the pack, so the higher it runs the more of the off-lane picks were chosen rather than
+forced. The columns are the three kinds of seat drafting in the same pods: the gen-4 candidate,
+and the gen-1 and `forge-full` references beside it.
 
 | Corpus              | gen-4          | gen-1           | forge-full      |
 |---------------------|----------------|-----------------|-----------------|
@@ -431,34 +428,36 @@ of pack 1, with the share of those picks made while an on-colour card was still 
 | `t3learner_t2field` | 12.0 % (48.9)  | 9.8 % (49.6)    | 12.2 % (51.7)   |
 | *gen-3 incumbent*   | *9.6 % (34.2)* | *10.8 % (45.4)* | *11.5 % (50.4)* |
 
-The `T = 3` field candidate declines an available on-colour card in a third of its off-lane
-picks, where the others decline in about half, and it goes off-lane less often than the gen-1
-seats beside it. It is the most lane-disciplined agent in the table by both readings. It is
-also the worst on the yardstick.
+`t3all_decay0.3` is the most lane-disciplined agent in the table by both readings. It declines
+an available on-colour card in a third of its off-lane picks, where the others decline in about
+half. It also goes off-lane less often than the gen-1 seats beside it. That agent is the worst
+of the four on the yardstick.
 
-The gen-4 candidates trained against a `T = 2` field went the other way. All three go off-lane
-more often than gen-1 and at least as often by choice, and all three left the incumbent's
+The three candidates trained against a `T = 2` field went the other way. All three go off-lane
+more often than gen-1, and at least as often by choice. All three also left the incumbent's
 position: gen-4 inherited a policy that declined on-colour cards a third of the time and moved
 it to about half, which is where the gen-1 and `forge-full` references have always sat.
 
-None of that is an artefact of gen-4's colour preferences. Off-lane is defined against a
-seat's own eventual top-2, so an agent with an unusual lane could face packs holding more
-off-lane cards and go off-lane more often without choosing anything. Measuring the supply
-directly at each decision, the share of available coloured cards outside the seat's top-2 is
-55–58 % for every agent in every corpus, and the ratio of off-lane picks to off-lane supply
-separates the agents exactly as the rate does. The differences are behaviour.
+The differences are behaviour, not supply. An agent with an unusual lane could face packs
+holding more cards outside its top-2 and go off-lane more often without choosing anything
+differently. Measured at each decision, the share of available coloured cards outside the seat's
+top-2 is 55–58 % for every agent in every corpus. The ratio of off-lane picks to off-lane supply
+separates the agents exactly as the raw rate does.
 
-So the mechanism is real and the reading gen-3 built on it is not. Off-lane rate rises and
-falls with field strength as predicted, and it does not track deck quality: gen-3 saw its bad
-candidate go off-lane most and inferred that going off-lane is the fault, while gen-4's best
-candidates go off-lane most and its most disciplined one places last. The discriminator has
-to come from the next two hypotheses.
+The mechanism is real and the reading gen-3 built on it is not. Off-lane rate rises and falls
+with field strength as predicted, and it does not track deck quality. Gen-3 saw its bad
+candidate go off-lane most and inferred that going off-lane is the fault. Under gen-4 the best
+candidates go off-lane most and the most disciplined one places last. The discriminator has to
+come from the next two hypotheses.
 
 ### Hypothesis 2 — card power over lane fit. Holds, and it ranks the candidates.
 
+Whether an agent breaks colour for a better card separates a healthy policy from a failed one,
+and it puts the four gen-4 candidates in nearly the yardstick's order.
+
 The hypothesis: breaking colour is correct when the card is enough better than the on-colour
-alternative, so a healthy policy should show a positive quality premium on its voluntary
-off-lane picks and a failing one should not. Cards are scored by `shrunk_score_play`, net
+alternative. A healthy policy should therefore show a positive quality premium on its voluntary
+off-lane picks, and a failing one should not. Cards are scored by `shrunk_score_play`, net
 winning influence on the play, which covers 98 % of drafted card slots.
 
 | Corpus                          | agent                | best-card rate | mean premium    | share above zero |
@@ -471,39 +470,42 @@ winning influence on the play, which covers 98 % of drafted card slots.
 | gen-3, field at argmax, `T = 3` | gen-3                | 28.5 %         | +0.0049         | 51.9 %           |
 | *references, all corpora*       | *gen-1 / forge-full* | *18.8–21.7 %*  | *+0.007…+0.015* | *53.4–58.7 %*    |
 
-Every gen-4 candidate breaks colour more selectively than either reference and more
-selectively than gen-3's incumbent, at a larger premium. Three of the four also beat the
-incumbent on the share above zero. Whatever gen-4 gained from training, it did not come at
-the cost of the judgement that separated gen-3's healthy candidates from its failed one.
+Every gen-4 candidate breaks colour more selectively than either reference and more selectively
+than gen-3's incumbent, and at a larger premium. Three of the four also beat the incumbent on
+the share above zero. Training did not cost gen-4 the judgement that separated gen-3's healthy
+candidates from its failed one.
 
-The last row is that failed candidate, whose wide decks averaged −1.88. It breaks colour at a
-coin flip and gains nothing, and it does so while taking the pack's highest-win-rate card more
-often than any other agent here. Gen-3 read that pair of facts as card evaluation intact and
-pool fit lost, and gen-4 gives the reading a control: gen-4's best-card rate sits below the
-failure's and its premium sits far above it, so the two columns are measuring different things
-and only the premium tracks quality.
+The bottom row is that failed candidate, the field-at-argmax run whose wide decks averaged
+−1.88. It breaks colour at a coin flip and gains nothing by it, while taking the pack's
+highest-win-rate card more often than any other agent in the table. Gen-3 read that pair of
+facts as card evaluation intact and pool fit lost. Gen-4 gives the reading a control: its
+best-card rate sits below the failure's and its premium sits far above it. The two columns
+measure different things, and only the premium tracks quality.
 
 The premium ranks the four candidates, which nothing else at the pick level does. Its ordering
-is `t2all_decay0.3`, `t3learner_t2field`, `t2all_nodecay`, `t3all_decay0.3`, and the share
-above zero gives the same order. `t3all_decay0.3` is last on both, matching the yardstick, and
-its 6.1-point deficit in share above zero against `t2all_decay0.3` carries a standard error of
-1.1 points. The middle two swap places against the yardstick, so read the ordering as
-identifying the loser rather than resolving the top.
+is `t2all_decay0.3`, `t3learner_t2field`, `t2all_nodecay`, `t3all_decay0.3`, and the share above
+zero gives the same order. `t3all_decay0.3` is last on both, matching the yardstick, and its
+6.1-point deficit in share above zero against `t2all_decay0.3` carries a standard error of 1.1
+points. The middle two swap places against the yardstick, so read the ordering as identifying
+the loser rather than resolving the top.
 
-This is the first pick-level measurement that agrees with the yardstick. The mechanism it
-suggests is that a field sampling at `T = 3` gives worse evidence about when breaking colour
-pays, and the resulting policy breaks colour slightly worse.
+This is the first pick-level measurement that agrees with the yardstick. It suggests a
+mechanism: a field sampling at `T = 3` gives worse evidence about when breaking colour pays, and
+the policy trained on that evidence breaks colour slightly worse.
 
 ### Hypothesis 3 — a colour prior learned from Forge. Confirmed and stronger.
 
-The hypothesis: Forge pilots green, black and white better than blue and red, because blue
-and red lean on instants and sorceries and Forge plays those worst. `deck_score` is fitted to
-Forge-piloted outcomes, so a policy trained on it should acquire a taste for those three
+Gen-4 leans towards green, black and white harder than any gen-3 candidate did, and the lean
+stops growing near +4 percentage points.
+
+The hypothesis: Forge pilots green, black and white better than blue and red, because blue and
+red lean on instants and sorceries and Forge plays those worst. `deck_score` is fitted to
+Forge-piloted outcomes. A policy trained on it should therefore acquire a taste for those three
 colours, and the taste should show when it breaks lane.
 
-The test compares, at each off-lane pick, the colour of the card taken against the colour mix
-of the off-lane cards available in that pack at that moment. Each pick contributes weight 1 to
-both sides, and gold cards split their weight across their colours. Mean per off-lane pick of
+The test compares, at each off-lane pick, the colour of the card taken against the colour mix of
+the off-lane cards available in that pack at that moment. Each pick contributes weight 1 to both
+sides, and gold cards split their weight across their colours. Mean per off-lane pick of
 (green-black-white taken − green-black-white available):
 
 | Corpus              | gen-4    | gen-1 | forge-full | learner picks, this generation |
@@ -513,220 +515,90 @@ both sides, and gold cards split their weight across their colours. Mean per off
 | `t2all_nodecay`     | +4.09    | −0.18 | +0.51      | ~95k                           |
 | `t2all_decay0.3`    | +3.99    | −0.21 | −0.58      | ~405k                          |
 
-Standard errors are 0.23–0.33 pp, so every gen-4 figure is more than twelve standard errors
-from zero and no reference figure is more than two and a half. Gen-3's four candidates ran
-+0.70 to +2.90 on the same measurement; all four gen-4 candidates exceed gen-3's largest.
+Standard errors are 0.23–0.33 pp. Every gen-4 figure is more than twelve standard errors from
+zero and no reference figure is more than two and a half. Gen-3's four candidates ran +0.70 to
++2.90 on the same measurement, so all four gen-4 candidates exceed gen-3's largest.
 
-The lean tracks cumulative training and then saturates. Ordered by learner picks the four run
-+2.91, +3.61, +4.09, +3.99, and the fourth trained four times as long as the third for
-nothing further. Gen-3 found the lean's size tracked training length rather than which field
-a candidate trained against; gen-4 reproduces that on all three temperature configurations and
-adds the ceiling, somewhere near +4 pp.
+The lean tracks cumulative training and then saturates. Ordered by learner picks it grows across
+the first three candidates and stops there, and the fourth trained four times as long as the
+third for nothing further. Gen-3 found the lean's size tracked training length rather than which
+field a candidate trained against. Gen-4 reproduces that on all three temperature configurations
+and adds the ceiling, somewhere near +4 pp.
 
-It shows in the decks, not just at the pick. Across the four corpora gen-4 plays white in
-59.8–63.4 % of its decks and red in 30.8–33.4 %, where the gen-1 and `forge-full` seats in the
-same pods sit at 45.9–49.9 % white and 52.6–56.0 % red. Blue follows red down, green and black
-follow white up. Two generations of self-play have turned a mild preference into a
-near-inversion of the reference colour distribution.
+The lean shows in the finished decks, not only at the pick. Share of decks playing each colour,
+across the four corpora:
 
-The lean is correct play against this opponent, and the same preference would be
-miscalibrated against a human. Forge wins more with green, black and white; `deck_score`
-measures Forge-piloted outcomes; a policy that learns which colours win those games is doing
-what it was asked. The finding to carry forward is the size and the ceiling, not a problem to
-fix.
+| Colour | gen-4       | gen-1 and `forge-full` seats in the same pods |
+|--------|-------------|-----------------------------------------------|
+| White  | 59.8–63.4 % | 45.9–49.9 %                                   |
+| Red    | 30.8–33.4 % | 52.6–56.0 %                                   |
+
+Blue follows red down, and green and black follow white up. Two generations of self-play have
+turned a mild preference into a near-inversion of the reference colour distribution.
+
+The lean is correct play against this opponent, and the same preference would be miscalibrated
+against a human. Forge wins more with green, black and white. `deck_score` measures
+Forge-piloted outcomes. A policy that learns which colours win those games is doing what it was
+asked. The finding to carry forward is the size and the ceiling, not a problem to fix.
 
 ### `cast_lift` is the axis gen-4 gained on
 
 Hypothesis 2 scores cards on `score_play` alone, and the encoder is trained on five axes
-([`../specs/2026-05-03-card-winnability-pretraining.md`](../specs/2026-05-03-card-winnability-pretraining.md)),
-so there is no reason the drafter's preferences should line up with that one. The test looks
-at every pick rather than only the off-lane ones, and asks where the taken card sat among the
-cards still in the pack under each axis, as a percentile. An agent indifferent to an axis
-scores 0.5; one that always takes the pack's maximum scores 1.0.
+([`../specs/2026-05-03-card-winnability-pretraining.md`](../specs/2026-05-03-card-winnability-pretraining.md)).
+This test covers every pick rather than only the off-lane ones. It asks where the taken card sat
+among the cards still in the pack under each axis, as a percentile. An agent indifferent to an
+axis scores 0.5; one that always takes the pack's maximum scores 1.0. `color_lift` is the mean
+of `color_lift_X` over the seat's eventual top-2 colours, so it measures how well the taken card
+pairs with the colours the seat committed to. The table below and every correlation quoted in
+this section come from `scripts/pick_metric_alignment.py`, run against the bo1
+`cards-win-rates.txt` fitted on about a million games.
 
-`color_lift` is the mean of `color_lift_X` over the seat's eventual top-2 colours: how well
-the taken card pairs with the colours the seat committed to. The reference columns give the
-range each reference took across the five corpora, every one of them measured in the same pods
-as the candidates beside it.
+Two filters restrict the measure to picks that were real choices, and both matter to the levels
+below. A card carries a label only with at least 20 in-deck observations. That threshold removes
+the basic lands, which fill a few per cent of booster slots and are taken at mean pick 14.6 of
+15, so no agent is choosing them. A pick is scored only if at least five cards left in the pack
+carry a label, which drops the tail of each pack where the choice is between two or three
+leftovers. Both cuts do the same job. A forced pick lands near the middle of the pack whatever
+the agent prefers, so leaving those picks in pulls every agent towards 0.5 and compresses the
+differences this table is about. Dropping both filters lowers the reference levels by about 0.05
+and shrinks the candidates' leads over them by a fifth or more.
 
-| Axis          | `t2all_decay0.3` | `t2all_nodecay` | `t3learner_t2field` | `t3all_decay0.3` | gen-3 incumbent | gen-1       | forge-full  |
-|---------------|------------------|-----------------|---------------------|------------------|-----------------|-------------|-------------|
-| `score_play`  | 0.703            | 0.688           | 0.684               | 0.679            | 0.662           | 0.603–0.610 | 0.593–0.610 |
-| `score_draw`  | 0.698            | 0.685           | 0.683               | 0.675            | 0.659           | 0.601–0.606 | 0.592–0.607 |
-| `played_rate` | 0.643            | 0.653           | 0.644               | 0.636            | 0.632           | 0.587–0.589 | 0.573–0.583 |
-| `cast_lift`   | 0.604            | 0.588           | 0.588               | 0.581            | 0.561           | 0.523–0.529 | 0.518–0.530 |
-| `color_lift`  | 0.508            | 0.512           | 0.517               | 0.530            | 0.529           | 0.557–0.563 | 0.559–0.568 |
+The reference columns give each reference's range across the five corpora, measured in the same
+pods as the candidates beside them. Each candidate cell gives its percentile, then in brackets
+its lead over the gen-3 incumbent's column and its lead over the gen-1 seats in its own corpus;
+only the second is paired within a corpus. The incumbent's own cell carries its paired lead over
+gen-1, measured the same way in its corpus.
 
-Read down a column, not across a row. A noisier or more tied label regresses towards 0.5 on
-its own, so the axes are not on a common scale and `score_play` sitting above `cast_lift`
-says as much about the two labels as about the agent. Comparing agents within an axis is
-safe, and that is what everything below does.
+| Axis          | `t2all_decay0.3`       | `t2all_nodecay`        | `t3learner_t2field`    | `t3all_decay0.3`       | gen-3 incumbent | gen-1       | forge-full  |
+|---------------|------------------------|------------------------|------------------------|------------------------|-----------------|-------------|-------------|
+| `score_play`  | 0.703 (+0.041, +0.100) | 0.688 (+0.026, +0.080) | 0.684 (+0.022, +0.078) | 0.679 (+0.017, +0.073) | 0.662 (+0.052)  | 0.603–0.610 | 0.593–0.610 |
+| `score_draw`  | 0.698 (+0.039, +0.097) | 0.685 (+0.026, +0.079) | 0.683 (+0.024, +0.082) | 0.675 (+0.016, +0.072) | 0.659 (+0.053)  | 0.601–0.606 | 0.592–0.607 |
+| `played_rate` | 0.643 (+0.011, +0.056) | 0.653 (+0.021, +0.064) | 0.644 (+0.012, +0.055) | 0.636 (+0.004, +0.047) | 0.632 (+0.050)  | 0.583–0.589 | 0.573–0.583 |
+| `cast_lift`   | 0.604 (+0.043, +0.079) | 0.588 (+0.027, +0.064) | 0.588 (+0.027, +0.062) | 0.581 (+0.020, +0.057) | 0.561 (+0.032)  | 0.523–0.529 | 0.518–0.530 |
+| `color_lift`  | 0.508 (−0.021, −0.053) | 0.512 (−0.017, −0.046) | 0.517 (−0.012, −0.046) | 0.530 (+0.001, −0.027) | 0.529 (−0.033)  | 0.557–0.563 | 0.559–0.568 |
 
-The two references are the same drafter on every axis. Gen-1 and `forge-full` agree to within
-0.01 on four of the five, and the one gap, `played_rate`, is 0.01 wide. Gen-1 was trained to
-imitate Forge, and the imitation reproduced not just Forge's picks but the weighting Forge
-puts on each axis of card behaviour. That makes the reference columns a single baseline rather
-than two, and it is why the gains quoted below are stated against gen-1 alone.
+Read down a column, not across a row. A noisier or more tied label regresses towards 0.5 on its
+own, so the axes are not on a common scale. Gen-1 and `forge-full` agree to within 0.01 on every
+axis, so the references are one baseline, and every trained agent sits above it on the four
+quality axes and below it on the colour axis. `score_play` and `score_draw` correlate at Spearman
+0.72 and every agent tracks them equally, so they are one finding rather than two.
 
-Every trained agent is above both references on the four quality axes and below both on the
-colour axis, so the shape of the departure is shared across two generations and four
-candidates. Raw winning influence is the axis the agents follow most closely in absolute
-terms, and `score_play` and `score_draw` are not independent evidence for that: they correlate
-at Spearman 0.72 over the card population, and every agent tracks them equally, so they are
-one finding.
+The generation's gain is on `cast_lift`, where gen-3's incumbent led gen-1 by +0.032 and gen-4
+leads by up to +0.079. `cast_lift` measures the effect of casting a card, net of the quality of
+the deck it was cast in. It scores a card that changes the game it is cast in above one that
+only appears in decks that were winning anyway. It correlates with `score_play` at 0.64, so most
+but not all of that movement is shared with raw power.
 
-The axis that separates gen-4 from gen-3 is `cast_lift`. Gen-3's incumbent led its references
-by +0.032 there and gen-4 leads by +0.057 to +0.079, roughly a doubling, where the gain on
-`played_rate` barely moved between the generations. `cast_lift` is the causal effect of
-actually casting a card, net of the quality of the deck it sat in — it is the axis that
-separates a card that swings games from one that rides along in decks that were winning
-anyway. It correlates with `score_play` at 0.64, so most but not all of that movement is
-shared with raw power. Gen-4 got better at taking cards that do something.
+Two axes order the four candidates as the yardstick does, `score_play` and `cast_lift`. On
+`cast_lift` only the paired figure resolves it, since `t2all_nodecay` and `t3learner_t2field`
+are tied on the raw percentile and separate against the seats they actually drafted alongside.
+Neither ordering carries much weight on its own. The middle two candidates sit 0.001 apart on
+`score_play` and 0.003 apart on `cast_lift`, against a standard error of 0.002 on both, so each
+ordering rests on a gap it cannot resolve. Four candidates ordering correctly by chance is a
+one-in-twenty-four event, so this is worth another generation's data rather than a conclusion.
 
-`cast_lift` is also the one axis whose ordering matches the yardstick across all four
-candidates. Differencing each candidate against the gen-1 seats in its own corpus gives
-+0.079, +0.065, +0.062 and +0.057, against yardstick margins of +1.380, +1.328, +1.276 and
-+1.152. The pairing is what resolves it: `t2all_nodecay` and `t3learner_t2field` both sit at
-0.588 in the table and separate only once each is read against the gen-1 seats it actually
-drafted alongside. Four candidates ordering correctly by chance is a one-in-twenty-four event,
-so this is worth another generation's data rather than a conclusion.
-
-On the colour axis three of the four gen-4 candidates sit further below their references than
-gen-3 did, and `t3all_decay0.3` is the exception in the direction its ranking would predict:
-it is the least improved on every quality axis and the least degraded on this one. Do not read
-any of it as gen-4 ignoring colour. The
-colour-lift labels correlate negatively with `score_play` (−0.13 to −0.28) and more strongly
-negatively with `played_rate` (−0.27 to −0.41), so an agent climbing the power axis is pushed
-down the colour axis mechanically. Whether anything is left after that confound is not
-answerable from this measurement.
-
-That axis is also not the colour prior of Hypothesis 3, which is worth keeping separate.
-Hypothesis 3 is about which of WUBRG the agent prefers. `color_lift` is about whether a given
-card pairs well with the colours already committed to, and its label is constructed to cancel
-the card's own quality baseline. Gen-4 has a strong preference over colours and no measurable
-preference over colour synergy.
-
-### Card-choice quality tracks the yardstick, colour does not
-
-Hypothesis 1's mechanism predicts each candidate's lane discipline from its field temperature
-and gets the direction right, but discipline does not track deck quality, so the reading gen-3
-built on it does not survive. Hypothesis 2 holds, separates a healthy policy from gen-3's
-failed one, and orders the four candidates with the loser in the right place. Hypothesis 3 is
-confirmed, stronger than in gen-3, and common to all four candidates, so it explains none of
-the spread between them.
-
-Two pick-level statistics therefore point the same way as the yardstick, both of them about
-the quality of a card choice rather than its colour: the off-lane premium and `cast_lift`
-alignment. Both say the `T = 3` field produced a policy that judges cards slightly worse. That
-is consistent with the account the temperature decomposition gives — a field sampling further
-from its best play gives worse evidence about which card was the right one — and it is the
-first evidence for that account measured on the finished policy rather than inferred from the
-training setup.
-
-## Where this leaves gen-4
-
-Promote `t2all_decay0.3` or `t2all_nodecay`. They are tied on both yardsticks, they lead the
-generation, and each beats the gen-3 incumbent by about +0.6 head-to-head. `t2all_decay0.3` is
-also the one candidate whose decks have been played in bulk, taking 74.8 % of 810 matches
-against a field of gen-1 and Forge seats. `t2all_nodecay` is the cheaper of the two by a factor
-of thirteen in wall-clock and reaches the same place on score, so prefer it unless a reason to
-prefer the longer run appears.
-
-Carry `T = 2` on the field into gen-5. The learner's own temperature is free to raise and
-`T = 3` on the learner alone costs nothing measurable, so the exploration band can be chased
-on the learner without paying for it on the field. That is the one setting gen-3 left open and
-it is now settled.
-
-Fix the three in-run defects. They did not change this generation's outcome, but they made
-every run harder to read than it needed to be.
-
-- Clamp `can_decay` to `min_lr` instead of truncating, and log when the floor is reached.
-- Delay best-tracking to `2 × anchor_window` drafts, and require a new best to clear a
-  `min_delta` on the order of the window's standard error. A run whose learner and anchor
-  share a warm start supplies that estimate for free at round 0.
-- Select on the learner against the frozen field rather than a single anchor, and keep the
-  learner's raw windowed mean beside it.
-
-Arm `--patience`. No run in this generation had a working stopping rule, and three of the four
-spent most of their wall-clock past their best round.
-
-The measurement gap gen-3 left open is closed, and the answer was the favourable one. Every
-metric available to the loop is a derivative of the same frozen `deck_score`, and 2000 played
-matches across two corpora now say that number buys about 15 points of Bo7 match win rate per
-unit, with no offset at zero. Nothing above needs re-reading as a proxy result. What remains is
-that the exchange rate is shallow enough to make games an expensive way to compare candidates:
-the 0.23 separating the best from the worst is worth about 3 points of match win rate, which is
-thousands of matches to resolve.
-
-That makes cheap non-`deck_score` signals worth having anyway, and one appeared while checking
-Hypothesis 2. Pick alignment against the `cards-win-rates.txt` labels is not a derivative of
-`deck_score`. Both trace back to Forge-piloted games, but the scorer predicts a match outcome
-from a whole deck while these labels count per-card play and win events, so an agent cannot
-improve on one by construction of the other. Alignment is computable from any existing corpus
-with no Forge time at all, it separated the four candidates in the same order as the
-yardstick, and the off-lane premium on the same labels put the loser in the same place. Add
-both to the checkpoint report, and if they keep agreeing with the yardstick over another
-generation, they are a candidate run-control metric that the anchor margin has already failed
-to be.
-
-Two of the three questions the games were meant to answer are settled, and the remaining one
-is the expensive one.
-
-1. Does `deck_score` predict winning? Yes, at about 15 points of Bo7 match win rate per unit,
-   fitted on six matchups across two corpora. Settled.
-2. Does the colour prior survive contact with games? Gen-4's win rate varies by 2.5 to 6.3
-   points across WUBRG, inside what its sample sizes support, so no colour it plays costs it
-   games. Settled as far as an observational read can settle it.
-3. Do the four candidates rank the same way on games as on score? Half open. The two played so
-   far finish in the yardstick's order, but 3.3 points apart on a standard error of 3.5.
-
-Sizing, so the third is armed deliberately: a head-to-head win rate needs roughly `1.96/δ²`
-matches for 80 % power at α = 0.05 — about 200 matches to resolve 60/40, 800 for 55/45 and
-2200 for 53/47, before any inflation for the clustering that comes from reusing a deck across
-pairings. Each run bought 1000 matches with about two hours of twelve workers, so those are
-hours rather than days. Separating adjacent candidates at 3 points sits past the right-hand end of
-the scale, so the `v-gen3` corpora — two labels in every pod, and a 0.6 score gap rather than a
-0.23 one — are the place to spend the time.
-
-## Open questions
-
-- **Is `t3all_decay0.3`'s deficit temperature or training length?** Its checkpoint is round 58,
-  a quarter of the rounds behind the shortest of the other three, because that is where its
-  margin stopped climbing. Whether a `T = 3` field is slower rather than worse is answerable by
-  running it again and stopping only on a genuine plateau.
-- **Why does the learner's own absolute score fall over a long run?** Pod crowding explains
-  the frozen labels and part of the learner, but `t2all_decay0.3` ran 956 rounds past its best
-  with a cumulative KL of 2.37, by far the largest displacement from a warm start in either
-  generation, and ended 0.36 below its own best margin. Whether those rounds damaged the
-  argmax policy is answerable by yardsticking its final snapshot against its round-312 best.
-- **Where is the field-temperature optimum?** Gen-4 brackets it between 2 and 3 from above.
-  Nothing has tested below 2 under field at T, and gen-3's `lr 1e-6` run is not evidence
-  because it did not train.
-- **Does the colour prior have a ceiling or a cost?** It saturated near +4 pp within this
-  generation, and the games show no colour where gen-4 wins less. That rules out a cost it is
-  already paying, not one it would pay by leaning further, and it cannot say whether a policy
-  without the lean would do better. Forcing a candidate's colours at draft time and replaying
-  is the test.
-- **How much of the builder gap survives removing the broken decks?** A tenth of `forge-native`
-  decks are land-heavy wrecks that win almost nothing, and they are worth about four points of
-  the label's average on their own. Whether Forge's builder is merely worse or mostly fine
-  outside that tail is answerable by re-tallying the existing corpora with those decks excluded,
-  at no Forge cost.
-- **Would relaxing the 22-spell target rescue the starved seats?** Forge pads to 40 with basics
-  rather than playing a 21st off-colour card or an 18th spell alongside 19 lands. A seat with
-  only 18 on-colour cards would plainly rather run 20 lands and two splashes. This is Forge's
-  code, so the test is a local patch to `LimitedDeckBuilder` rather than a change here.
-- **Does `cast_lift` alignment keep tracking the yardstick?** It ordered four candidates
-  correctly, which four candidates do one time in twenty-four by chance. Gen-5 supplies the
-  replication, and it is free to compute on corpora that already exist.
-- **Does the agent read colour synergy at all?** Every trained agent scores below its
-  references on `color_lift` alignment, but the colour-lift labels are anticorrelated with
-  both `score_play` and `played_rate`, so climbing the power axis produces that reading on its
-  own. Residualising colour lift on power before measuring alignment would separate the two,
-  and would say whether there is an unused axis in the encoder's supervision.
-- **Does the crowding ratio hold as a design rule?** Two corpus families put the cost to a
-  rival seat at about a sixth of the strength gap the entering seat introduces. If that holds,
-  the depression a training mix induces in its own frozen field is predictable from the
-  learner's lead before the run starts, and `--mix` becomes a knob with a known cost. Two
-  points are a coincidence away from nothing; a third family would settle it, and a gen-5
-  yardstick supplies one for free.
+The colour axis is confounded and settles nothing. Its labels correlate negatively with
+`score_play` (−0.13 to −0.28) and more strongly negatively with `played_rate` (−0.27 to −0.41),
+so an agent climbing the power axes is pushed down the colour axis mechanically. It is also not
+the colour prior of Hypothesis 3, which is about which of WUBRG the agent prefers, where
+`color_lift` asks whether a card pairs with the colours already committed to.
