@@ -517,15 +517,9 @@ Gen-4's most selective pack is its first. Gen-1 breaks colour least often of the
 ratio sits with Forge's, so it declines the good off-colour card about as readily as the bad
 one.
 
-What a break on a worse card costs is a card the seat never plays. Among these decisions a pick
-made inside the lane reaches the built deck about seven times in ten. One made outside it on a
-worse card reaches the deck 37 % of the time for Forge and 55 % for gen-4. Every seat's deck is
-assembled by the same frozen picker, so that difference belongs to the cards drafted rather than
-to the builder.
-
 The volume is far too small to explain the score gap. Forge makes 0.18 of these breaks per draft
 against gen-4's 0.11, and after the build that is a difference of 0.07 picks out of forty-five.
-Read the table as a signature of the judgement the premium already measures, not as a second
+Read these tables as a signature of the judgement the premium already measures, not as a second
 mechanism behind gen-4's decks.
 
 One limit. `shrunk_score_play` decides which card was better, and gen-4 follows that axis more
@@ -580,6 +574,73 @@ The lean is correct play against this opponent, and the same preference would be
 against a human. Forge wins more with green, black and white. `deck_score` measures
 Forge-piloted outcomes. A policy that learns which colours win those games is doing what it was
 asked. The finding to carry forward is the size and the ceiling, not a problem to fix.
+
+### Playing a forced pick marks a weak pool
+
+Playing a card the seat was forced to take marks a weak pool, and those picks are a fifth of the
+draft. Hypothesis 2 cannot see them. Its premium and its leave-lane table both require an
+on-colour card to have been available, so a pick made when nothing on-colour was left enters
+neither, which leaves 7.2 of gen-4's 45 picks outside both.
+
+Sometimes the pack still holds a card in the seat's colours and the seat passes it over.
+Sometimes nothing on-colour is left and the seat takes what remains. Only the first is a
+decision, and the two kinds hold different cards. Each cell below gives the mean
+`shrunk_score_play` of the card taken, then how often that card was the highest-scoring one in
+the pack.
+
+| Agent        | chosen: score / took best | forced: score / took best |
+|--------------|---------------------------|---------------------------|
+| `forge-full` | +0.0252 / 28.5 %          | −0.0105 / 36.3 %          |
+| `gen1`       | +0.0269 / 28.9 %          | −0.0108 / 36.1 %          |
+| `gen4`       | +0.0430 / 42.3 %          | −0.0063 / 40.2 %          |
+
+Forced picks outnumber chosen ones by more than three to one. A chosen off-lane card scores above
+the average drafted card for every agent, and a forced one below it. Gen-4's chosen cards are the
+strongest of the three, and it takes the pack's highest-scoring card on them half again as often
+as either reference. That is the premium once more, read off the card taken rather than off the
+gap it opened.
+
+Gen-4 plays more of the off-lane cards it chose than either reference, and fewer of the ones it
+was forced into.
+
+| Agent        | on lane | chosen off-lane | forced off-lane |
+|--------------|---------|-----------------|-----------------|
+| `forge-full` | 62.8 %  | 35.2 %          | 16.0 %          |
+| `gen1`       | 62.6 %  | 35.4 %          | 13.8 %          |
+| `gen4`       | 61.5 %  | 41.1 %          | 10.6 %          |
+
+All three play an on-lane pick at nearly the same rate, so the whole difference sits in the two
+off-lane columns. Every seat's deck is assembled by the same frozen picker, so this belongs to
+the cards drafted rather than to the builder.
+
+The forced column is mostly a mana-base effect. Forge builds 2.51 colours to gen-4's 2.38, and a
+wider deck can absorb a stray off-colour card. Among two-colour decks alone the three converge to
+between 2 and 3 %, and gen-4 no longer sits lowest. The chosen column is what survives that
+control, and gen-4 leads it.
+
+A card taken because nothing on-colour was left is one the seat never wanted. The builder fills
+the deck with the best 23 spells in the pool, so a forced card that makes the cut has been ranked
+above cards the seat chose deliberately. That marks the chosen cards as weak, without saying
+whether the weakness came from the picks or from the packs the seat was passed. Grouping seats by
+how many forced picks ended up in their deck, against their own pod's mean `deck_score`:
+
+| Agent        | played none | played one | played two or more |
+|--------------|-------------|------------|--------------------|
+| `forge-full` | −0.570      | −1.020     | −1.370             |
+| `gen1`       | −0.441      | −0.837     | −1.227             |
+| `gen4`       | +0.765      | +0.470     | +0.272             |
+
+The decline is monotone for all three agents and steep, at a quarter to four tenths of a point
+per forced pick played. The whole gen-3 to gen-4 step was about +0.6, so a seat that plays one of
+these sits about half a generation below one that plays none. Read the slopes rather than the
+levels, which differ only because the score is pod-relative and gen-4 outscores its pod
+throughout. The relationship is a marker rather than a cost the pick imposes.
+
+A forced pick costs the seat nothing, so the only question it poses is whether the best card left
+gets taken. The training reward is a seat's `deck_score` minus the mean of the other seats', so a
+card denied to a neighbour is worth a seventh of the same card played. That is a standing
+incentive to take the best card left, and none of the three follows it far. Gen-4 comes closest
+and still leaves the best card behind on three fifths of its forced picks.
 
 ### `cast_lift` is the axis gen-4 gained on
 
