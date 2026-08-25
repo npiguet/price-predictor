@@ -2,7 +2,7 @@
 
 ``--view by-pick`` (default) -- three panels over picks 1-45:
 
-  1  level -- score of the best deck buildable from the first t picks
+  1  level -- score of the deck the builder makes from the first t picks
   2  step  -- level(t) - level(t-1), the same seat against itself
   3  gap   -- gen-4's lead over each reference at the same prefix length
 
@@ -279,7 +279,7 @@ def view_by_pick(rows_f, ag_f, rows_g, ag_g, cap):
     ticks = [(t, str(t)) for t in (1, 5, 10, 15, 20, 25, 30, 35, 40, 45) if t <= cap]
     n = len(rows_f) + len(rows_g)
     return (panels, geom, (1, cap), ticks, "picks taken",
-            "Best deck buildable from the first t picks", [],
+            "The deck the builder makes from the first t picks", [],
             [(16, "pack 2"), (DECK, "deck size"), (31, "pack 3")])
 
 

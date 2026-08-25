@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 912" width="940" height="912" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="Best deck buildable from the first t picks">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 912" width="940" height="912" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="The deck the builder makes from the first t picks">
 <style>.ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}@media (prefers-color-scheme:dark){.bg{fill:#1a1a19}.t{fill:#ffffff}.t2{fill:#c3c2b7}.rule{stroke:#383835}.reg{fill:#232320}.sa1{stroke:#3987e5}.da1{fill:#3987e5}.sa2{stroke:#d95926}.da2{fill:#d95926}.sa3{stroke:#199e70}.da3{fill:#199e70}.sa4{stroke:#c98500}.da4{fill:#c98500}}</style>
 <rect class="bg" width="940" height="912" fill="#fcfcfb"/>
-<text x="62" y="28" class="t" fill="#0b0b0b" font-size="15" font-weight="600">Best deck buildable from the first t picks</text>
+<text x="62" y="28" class="t" fill="#0b0b0b" font-size="15" font-weight="600">The deck the builder makes from the first t picks</text>
 <text x="62" y="68" class="t2" fill="#52514e" font-size="12" font-weight="600">deck score</text>
 <line x1="62" y1="286.5" x2="810" y2="286.5" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.35"/>
 <text x="54" y="290.5" fill="#898781" font-size="11" text-anchor="end">-2.0</text>

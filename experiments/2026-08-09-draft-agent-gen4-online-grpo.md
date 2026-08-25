@@ -385,10 +385,10 @@ chooses 23 non-lands out of a growing pool, so a pick is worth something only wh
 the deck's current worst card. At exactly 23 the builder has no choice either, and the two paths
 agree to six decimal places on every seat tested, which is what licenses joining them.
 
-![Best deck buildable from the first t picks](2026-08-09-prefix-deck-value.png)
+![The deck the builder makes from the first t picks](2026-08-09-prefix-deck-value.png)
 
 Each pack has the same internal shape and its two halves do different work. The opening picks of
-pack 1 are the seat's bombs, so the buildable deck starts high, and it then falls for thirteen
+pack 1 are the seat's bombs, so the built deck starts high, and it then falls for thirteen
 picks because every card drafted must be played and each is worse than the last. Pack 2 opens
 with fresh cards and the fall reverses. Eight picks in, the pool passes 23 cards and the rule
 changes: the builder can discard, so the cards forced at the end of pack 1 stop counting against
@@ -417,11 +417,15 @@ Gen-4's raw gain per pick is accordingly the smallest of the four, +0.113 agains
 
 Three limits. Levels below pick 23 are not comparable across picks, because the set the scorer
 sees grows by one each time and it never saw a sub-23-card deck in training. The method measures
-the pool a seat accumulated, not the difficulty of the choices it faced. And the builder is not
-an optimiser: adding a card to a pool cannot lower the best deck obtainable from it, yet 15 % of
-the steps past pick 23 fall, half of them by more than 0.1 and one by 3.8. It is a picker
-network and a simulated-annealing pass, so it sometimes finds a worse deck from a larger pool.
-Read the curves for their shape rather than for any individual step.
+the pool a seat accumulated, not the difficulty of the choices it faced. And the curve is not an
+upper bound on the pool: it is the deck a frozen picker network builds, scored afterwards by a
+separate model the picker was never trained to maximise. At pick 24 the only decision is which
+one of 24 cards to cut, and the best of those 24 decks beats the picker's choice on 89 % of
+seats, by 0.42 — more than gen-4's whole lead over Forge. That slack is why 15 % of the steps
+past pick 23 fall at all, when adding a card cannot lower the true best deck. The fall rate
+peaks at 49.8 % on pick 24 and bottoms at 6.5 % on the pack-3 opener, where taking the new card
+is unambiguous. All three agents run through the same builder and lose to it at the same rate
+(15.2 / 15.3 / 14.8 %), so the gaps hold and the levels sit under what the pools would support. Read the curves for their shape rather than for any individual step.
 
 ## The three gen-3 hypotheses survive, but only card judgement tracks quality
 

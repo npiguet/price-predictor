@@ -1,4 +1,4 @@
-"""How does the best deck buildable from a seat's pool grow, pick by pick?
+"""How does the deck built from a seat's pool grow, pick by pick?
 
 Scores every prefix of a seat's drafted pool, so the whole draft can be read as
 a curve rather than a single end score. Two regimes, and they mean different
@@ -206,7 +206,7 @@ def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
     print("=" * 78)
     print(f"{title}   {len(rows)} seats over {len(raw_paths)} corpora")
     print("")
-    print("level = score of the best deck buildable from the first t picks.")
+    print("level = score of the deck the builder makes from the first t picks.")
     print("added = level(t) - level(t-1), the same seat against itself.")
     print("")
     print("Below 23 picks there is no deck to build: the pool IS the deck, so every card")
