@@ -1,102 +1,96 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 614" width="940" height="614" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="Gen-4's edge is in the middle, where a better card is hard but findable">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 602" width="940" height="602" font-family="ui-sans-serif,system-ui,Segoe UI,Helvetica,Arial,sans-serif" role="img" aria-label="Mean gain from one pick, by the deck score before it">
 <style>.ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}@media (prefers-color-scheme:dark){.bg{fill:#1a1a19}.t{fill:#ffffff}.t2{fill:#c3c2b7}.rule{stroke:#383835}.reg{fill:#232320}.sa1{stroke:#3987e5}.da1{fill:#3987e5}.sa2{stroke:#d95926}.da2{fill:#d95926}.sa3{stroke:#199e70}.da3{fill:#199e70}.sa4{stroke:#c98500}.da4{fill:#c98500}}</style>
-<rect class="bg" width="940" height="614" fill="#fcfcfb"/>
-<text x="62" y="28" class="t" fill="#0b0b0b" font-size="15" font-weight="600">Gen-4's edge is in the middle, where a better card is hard but findable</text>
-<text x="62" y="48" class="t2" fill="#52514e" font-size="11.5">Mean step over picks 24-45, by the deck score before the pick. 0.5-wide bins; below -3 the tail is too thin to read.</text>
-<text x="62" y="63" class="t2" fill="#52514e" font-size="11.5">Left of -1 a bad deck is easy to improve and every agent does it equally.</text>
-<text x="62" y="78" class="t2" fill="#52514e" font-size="11.5">Right of +3 nothing is left to add and no agent can find it. Between them gen-4 leads, and gen-3 by less.</text>
-<rect class="reg" x="62.0" y="140" width="240.4" height="396" fill="#f2f1ee"/>
-<text x="182.2" y="156" fill="#898781" font-size="10.5" text-anchor="middle">any card improves it</text>
-<rect class="reg" x="729.9" y="140" width="80.1" height="396" fill="#f2f1ee"/>
-<text x="769.9" y="156" fill="#898781" font-size="10.5" text-anchor="middle">nothing left</text>
-<text x="769.9" y="169" fill="#898781" font-size="10.5" text-anchor="middle">to add</text>
-<text x="62" y="110" class="t2" fill="#52514e" font-size="12" font-weight="600">mean gain from one pick</text>
-<line x1="62" y1="536.0" x2="810" y2="536.0" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.9"/>
-<text x="54" y="540.0" fill="#898781" font-size="11" text-anchor="end">+0.0</text>
-<line x1="62" y1="383.6" x2="810" y2="383.6" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.35"/>
-<text x="54" y="387.6" fill="#898781" font-size="11" text-anchor="end">+0.1</text>
-<line x1="62" y1="231.1" x2="810" y2="231.1" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.35"/>
-<text x="54" y="235.1" fill="#898781" font-size="11" text-anchor="end">+0.2</text>
-<path d="M88.7,193.9 L142.1,218.4 L195.6,246.9 L249.0,265.9 L302.4,307.1 L355.9,336.4 L409.3,355.0 L462.7,383.1 L516.1,414.9 L569.6,443.4 L623.0,464.3 L676.4,480.3 L729.9,497.8" class="ln sa1" stroke="#2a78d6"/>
-<circle cx="409.3" cy="355.0" r="6" fill="transparent"><title>forge-full at 0: +0.119</title></circle>
-<circle cx="462.7" cy="383.1" r="6" fill="transparent"><title>forge-full at 0.5: +0.100</title></circle>
-<circle cx="516.1" cy="414.9" r="6" fill="transparent"><title>forge-full at 1: +0.079</title></circle>
-<circle cx="195.6" cy="246.9" r="6" fill="transparent"><title>forge-full at -2: +0.190</title></circle>
-<circle cx="249.0" cy="265.9" r="6" fill="transparent"><title>forge-full at -1.5: +0.177</title></circle>
-<circle cx="302.4" cy="307.1" r="6" fill="transparent"><title>forge-full at -1: +0.150</title></circle>
-<circle cx="355.9" cy="336.4" r="6" fill="transparent"><title>forge-full at -0.5: +0.131</title></circle>
-<circle cx="142.1" cy="218.4" r="6" fill="transparent"><title>forge-full at -2.5: +0.208</title></circle>
-<circle cx="88.7" cy="193.9" r="6" fill="transparent"><title>forge-full at -3: +0.224</title></circle>
-<circle cx="569.6" cy="443.4" r="6" fill="transparent"><title>forge-full at 1.5: +0.061</title></circle>
-<circle cx="623.0" cy="464.3" r="6" fill="transparent"><title>forge-full at 2: +0.047</title></circle>
-<circle cx="676.4" cy="480.3" r="6" fill="transparent"><title>forge-full at 2.5: +0.037</title></circle>
-<circle cx="729.9" cy="497.8" r="6" fill="transparent"><title>forge-full at 3: +0.025</title></circle>
-<path d="M88.7,180.5 L142.1,208.3 L195.6,238.7 L249.0,269.6 L302.4,292.4 L355.9,332.8 L409.3,351.0 L462.7,368.2 L516.1,415.8 L569.6,442.7 L623.0,465.5 L676.4,486.7 L729.9,492.9" class="ln sa2" stroke="#eb6834"/>
-<circle cx="355.9" cy="332.8" r="6" fill="transparent"><title>gen1 at -0.5: +0.133</title></circle>
-<circle cx="409.3" cy="351.0" r="6" fill="transparent"><title>gen1 at 0: +0.121</title></circle>
-<circle cx="462.7" cy="368.2" r="6" fill="transparent"><title>gen1 at 0.5: +0.110</title></circle>
-<circle cx="516.1" cy="415.8" r="6" fill="transparent"><title>gen1 at 1: +0.079</title></circle>
-<circle cx="569.6" cy="442.7" r="6" fill="transparent"><title>gen1 at 1.5: +0.061</title></circle>
-<circle cx="88.7" cy="180.5" r="6" fill="transparent"><title>gen1 at -3: +0.233</title></circle>
-<circle cx="142.1" cy="208.3" r="6" fill="transparent"><title>gen1 at -2.5: +0.215</title></circle>
-<circle cx="249.0" cy="269.6" r="6" fill="transparent"><title>gen1 at -1.5: +0.175</title></circle>
-<circle cx="195.6" cy="238.7" r="6" fill="transparent"><title>gen1 at -2: +0.195</title></circle>
-<circle cx="302.4" cy="292.4" r="6" fill="transparent"><title>gen1 at -1: +0.160</title></circle>
-<circle cx="623.0" cy="465.5" r="6" fill="transparent"><title>gen1 at 2: +0.046</title></circle>
-<circle cx="676.4" cy="486.7" r="6" fill="transparent"><title>gen1 at 2.5: +0.032</title></circle>
-<circle cx="729.9" cy="492.9" r="6" fill="transparent"><title>gen1 at 3: +0.028</title></circle>
-<path d="M88.7,188.9 L142.1,216.8 L195.6,238.4 L249.0,264.4 L302.4,293.4 L355.9,313.3 L409.3,322.8 L462.7,351.4 L516.1,396.4 L569.6,430.9 L623.0,462.3 L676.4,484.0 L729.9,500.8 L783.3,512.1" class="ln sa4" stroke="#eda100"/>
-<circle cx="409.3" cy="322.8" r="6" fill="transparent"><title>gen3 at 0: +0.140</title></circle>
-<circle cx="462.7" cy="351.4" r="6" fill="transparent"><title>gen3 at 0.5: +0.121</title></circle>
-<circle cx="516.1" cy="396.4" r="6" fill="transparent"><title>gen3 at 1: +0.092</title></circle>
-<circle cx="569.6" cy="430.9" r="6" fill="transparent"><title>gen3 at 1.5: +0.069</title></circle>
-<circle cx="249.0" cy="264.4" r="6" fill="transparent"><title>gen3 at -1.5: +0.178</title></circle>
-<circle cx="195.6" cy="238.4" r="6" fill="transparent"><title>gen3 at -2: +0.195</title></circle>
-<circle cx="142.1" cy="216.8" r="6" fill="transparent"><title>gen3 at -2.5: +0.209</title></circle>
-<circle cx="302.4" cy="293.4" r="6" fill="transparent"><title>gen3 at -1: +0.159</title></circle>
-<circle cx="355.9" cy="313.3" r="6" fill="transparent"><title>gen3 at -0.5: +0.146</title></circle>
-<circle cx="623.0" cy="462.3" r="6" fill="transparent"><title>gen3 at 2: +0.048</title></circle>
-<circle cx="676.4" cy="484.0" r="6" fill="transparent"><title>gen3 at 2.5: +0.034</title></circle>
-<circle cx="729.9" cy="500.8" r="6" fill="transparent"><title>gen3 at 3: +0.023</title></circle>
-<circle cx="88.7" cy="188.9" r="6" fill="transparent"><title>gen3 at -3: +0.228</title></circle>
-<circle cx="783.3" cy="512.1" r="6" fill="transparent"><title>gen3 at 3.5: +0.016</title></circle>
-<path d="M88.7,169.3 L142.1,211.2 L195.6,235.2 L249.0,258.6 L302.4,293.4 L355.9,306.6 L409.3,305.8 L462.7,322.2 L516.1,360.5 L569.6,393.0 L623.0,435.4 L676.4,470.0 L729.9,494.4 L783.3,511.0" class="ln sa3" stroke="#1baf7a"/>
-<circle cx="676.4" cy="470.0" r="6" fill="transparent"><title>gen4 at 2.5: +0.043</title></circle>
-<circle cx="623.0" cy="435.4" r="6" fill="transparent"><title>gen4 at 2: +0.066</title></circle>
-<circle cx="729.9" cy="494.4" r="6" fill="transparent"><title>gen4 at 3: +0.027</title></circle>
-<circle cx="783.3" cy="511.0" r="6" fill="transparent"><title>gen4 at 3.5: +0.016</title></circle>
-<circle cx="569.6" cy="393.0" r="6" fill="transparent"><title>gen4 at 1.5: +0.094</title></circle>
-<circle cx="516.1" cy="360.5" r="6" fill="transparent"><title>gen4 at 1: +0.115</title></circle>
-<circle cx="302.4" cy="293.4" r="6" fill="transparent"><title>gen4 at -1: +0.159</title></circle>
-<circle cx="355.9" cy="306.6" r="6" fill="transparent"><title>gen4 at -0.5: +0.150</title></circle>
-<circle cx="409.3" cy="305.8" r="6" fill="transparent"><title>gen4 at 0: +0.151</title></circle>
-<circle cx="462.7" cy="322.2" r="6" fill="transparent"><title>gen4 at 0.5: +0.140</title></circle>
-<circle cx="195.6" cy="235.2" r="6" fill="transparent"><title>gen4 at -2: +0.197</title></circle>
-<circle cx="249.0" cy="258.6" r="6" fill="transparent"><title>gen4 at -1.5: +0.182</title></circle>
-<circle cx="142.1" cy="211.2" r="6" fill="transparent"><title>gen4 at -2.5: +0.213</title></circle>
-<circle cx="88.7" cy="169.3" r="6" fill="transparent"><title>gen4 at -3: +0.241</title></circle>
-<path d="M729.9,492.9 L810.0,492.9" fill="none" stroke="#eb6834" stroke-width="1" opacity="0.45"/>
-<circle cx="820.0" cy="492.9" r="3.5" class="da2" fill="#eb6834"/>
-<text x="828.0" y="496.9" class="t" fill="#0b0b0b" font-size="11.5">gen1</text>
-<path d="M729.9,497.8 L810.0,507.9" fill="none" stroke="#2a78d6" stroke-width="1" opacity="0.45"/>
-<circle cx="820.0" cy="507.9" r="3.5" class="da1" fill="#2a78d6"/>
-<text x="828.0" y="511.9" class="t" fill="#0b0b0b" font-size="11.5">forge-full</text>
-<path d="M783.3,511.0 L810.0,522.9" fill="none" stroke="#1baf7a" stroke-width="1" opacity="0.45"/>
-<circle cx="820.0" cy="522.9" r="3.5" class="da3" fill="#1baf7a"/>
-<text x="828.0" y="526.9" class="t" fill="#0b0b0b" font-size="11.5">gen4</text>
-<path d="M783.3,512.1 L810.0,537.9" fill="none" stroke="#eda100" stroke-width="1" opacity="0.45"/>
-<circle cx="820.0" cy="537.9" r="3.5" class="da4" fill="#eda100"/>
-<text x="828.0" y="541.9" class="t" fill="#0b0b0b" font-size="11.5">gen3</text>
-<line x1="62" y1="536" x2="810" y2="536" class="rule" stroke="#c3c2b7" stroke-width="1"/>
-<text x="88.7" y="554" fill="#898781" font-size="11" text-anchor="middle">-3</text>
-<text x="195.6" y="554" fill="#898781" font-size="11" text-anchor="middle">-2</text>
-<text x="302.4" y="554" fill="#898781" font-size="11" text-anchor="middle">-1</text>
-<text x="409.3" y="554" fill="#898781" font-size="11" text-anchor="middle">+0</text>
-<text x="516.1" y="554" fill="#898781" font-size="11" text-anchor="middle">+1</text>
-<text x="623.0" y="554" fill="#898781" font-size="11" text-anchor="middle">+2</text>
-<text x="729.9" y="554" fill="#898781" font-size="11" text-anchor="middle">+3</text>
-<text x="436.0" y="574" class="t2" fill="#52514e" font-size="12" text-anchor="middle">deck score before the pick</text>
-<g transform="translate(0,598)">
+<rect class="bg" width="940" height="602" fill="#fcfcfb"/>
+<text x="62" y="28" class="t" fill="#0b0b0b" font-size="15" font-weight="600">Mean gain from one pick, by the deck score before it</text>
+<rect class="reg" x="62.0" y="104" width="240.4" height="420" fill="#f2f1ee"/>
+<rect class="reg" x="729.9" y="104" width="80.1" height="420" fill="#f2f1ee"/>
+<text x="62" y="74" class="t2" fill="#52514e" font-size="12" font-weight="600"></text>
+<line x1="62" y1="524.0" x2="810" y2="524.0" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.9"/>
+<text x="54" y="528.0" fill="#898781" font-size="11" text-anchor="end">+0.0</text>
+<line x1="62" y1="362.3" x2="810" y2="362.3" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.35"/>
+<text x="54" y="366.3" fill="#898781" font-size="11" text-anchor="end">+0.1</text>
+<line x1="62" y1="200.6" x2="810" y2="200.6" class="rule" stroke="#c3c2b7" stroke-width="1" opacity="0.35"/>
+<text x="54" y="204.6" fill="#898781" font-size="11" text-anchor="end">+0.2</text>
+<path d="M88.7,161.1 L142.1,187.2 L195.6,217.4 L249.0,237.5 L302.4,281.2 L355.9,312.3 L409.3,332.0 L462.7,361.8 L516.1,395.6 L569.6,425.7 L623.0,447.9 L676.4,465.0 L729.9,483.5" class="ln sa1" stroke="#2a78d6"/>
+<circle cx="409.3" cy="332.0" r="6" fill="transparent"><title>forge-full at 0: +0.119</title></circle>
+<circle cx="462.7" cy="361.8" r="6" fill="transparent"><title>forge-full at 0.5: +0.100</title></circle>
+<circle cx="516.1" cy="395.6" r="6" fill="transparent"><title>forge-full at 1: +0.079</title></circle>
+<circle cx="195.6" cy="217.4" r="6" fill="transparent"><title>forge-full at -2: +0.190</title></circle>
+<circle cx="249.0" cy="237.5" r="6" fill="transparent"><title>forge-full at -1.5: +0.177</title></circle>
+<circle cx="302.4" cy="281.2" r="6" fill="transparent"><title>forge-full at -1: +0.150</title></circle>
+<circle cx="355.9" cy="312.3" r="6" fill="transparent"><title>forge-full at -0.5: +0.131</title></circle>
+<circle cx="142.1" cy="187.2" r="6" fill="transparent"><title>forge-full at -2.5: +0.208</title></circle>
+<circle cx="88.7" cy="161.1" r="6" fill="transparent"><title>forge-full at -3: +0.224</title></circle>
+<circle cx="569.6" cy="425.7" r="6" fill="transparent"><title>forge-full at 1.5: +0.061</title></circle>
+<circle cx="623.0" cy="447.9" r="6" fill="transparent"><title>forge-full at 2: +0.047</title></circle>
+<circle cx="676.4" cy="465.0" r="6" fill="transparent"><title>forge-full at 2.5: +0.037</title></circle>
+<circle cx="729.9" cy="483.5" r="6" fill="transparent"><title>forge-full at 3: +0.025</title></circle>
+<path d="M88.7,147.0 L142.1,176.5 L195.6,208.6 L249.0,241.5 L302.4,265.6 L355.9,308.5 L409.3,327.8 L462.7,346.0 L516.1,396.5 L569.6,425.0 L623.0,449.2 L676.4,471.7 L729.9,478.3" class="ln sa2" stroke="#eb6834"/>
+<circle cx="355.9" cy="308.5" r="6" fill="transparent"><title>gen1 at -0.5: +0.133</title></circle>
+<circle cx="409.3" cy="327.8" r="6" fill="transparent"><title>gen1 at 0: +0.121</title></circle>
+<circle cx="462.7" cy="346.0" r="6" fill="transparent"><title>gen1 at 0.5: +0.110</title></circle>
+<circle cx="516.1" cy="396.5" r="6" fill="transparent"><title>gen1 at 1: +0.079</title></circle>
+<circle cx="569.6" cy="425.0" r="6" fill="transparent"><title>gen1 at 1.5: +0.061</title></circle>
+<circle cx="88.7" cy="147.0" r="6" fill="transparent"><title>gen1 at -3: +0.233</title></circle>
+<circle cx="142.1" cy="176.5" r="6" fill="transparent"><title>gen1 at -2.5: +0.215</title></circle>
+<circle cx="249.0" cy="241.5" r="6" fill="transparent"><title>gen1 at -1.5: +0.175</title></circle>
+<circle cx="195.6" cy="208.6" r="6" fill="transparent"><title>gen1 at -2: +0.195</title></circle>
+<circle cx="302.4" cy="265.6" r="6" fill="transparent"><title>gen1 at -1: +0.160</title></circle>
+<circle cx="623.0" cy="449.2" r="6" fill="transparent"><title>gen1 at 2: +0.046</title></circle>
+<circle cx="676.4" cy="471.7" r="6" fill="transparent"><title>gen1 at 2.5: +0.032</title></circle>
+<circle cx="729.9" cy="478.3" r="6" fill="transparent"><title>gen1 at 3: +0.028</title></circle>
+<path d="M88.7,155.9 L142.1,185.4 L195.6,208.4 L249.0,235.9 L302.4,266.7 L355.9,287.8 L409.3,297.9 L462.7,328.2 L516.1,375.9 L569.6,412.5 L623.0,445.9 L676.4,468.8 L729.9,486.7 L783.3,498.7" class="ln sa4" stroke="#eda100"/>
+<circle cx="409.3" cy="297.9" r="6" fill="transparent"><title>gen3 at 0: +0.140</title></circle>
+<circle cx="462.7" cy="328.2" r="6" fill="transparent"><title>gen3 at 0.5: +0.121</title></circle>
+<circle cx="516.1" cy="375.9" r="6" fill="transparent"><title>gen3 at 1: +0.092</title></circle>
+<circle cx="569.6" cy="412.5" r="6" fill="transparent"><title>gen3 at 1.5: +0.069</title></circle>
+<circle cx="249.0" cy="235.9" r="6" fill="transparent"><title>gen3 at -1.5: +0.178</title></circle>
+<circle cx="195.6" cy="208.4" r="6" fill="transparent"><title>gen3 at -2: +0.195</title></circle>
+<circle cx="142.1" cy="185.4" r="6" fill="transparent"><title>gen3 at -2.5: +0.209</title></circle>
+<circle cx="302.4" cy="266.7" r="6" fill="transparent"><title>gen3 at -1: +0.159</title></circle>
+<circle cx="355.9" cy="287.8" r="6" fill="transparent"><title>gen3 at -0.5: +0.146</title></circle>
+<circle cx="623.0" cy="445.9" r="6" fill="transparent"><title>gen3 at 2: +0.048</title></circle>
+<circle cx="676.4" cy="468.8" r="6" fill="transparent"><title>gen3 at 2.5: +0.034</title></circle>
+<circle cx="729.9" cy="486.7" r="6" fill="transparent"><title>gen3 at 3: +0.023</title></circle>
+<circle cx="88.7" cy="155.9" r="6" fill="transparent"><title>gen3 at -3: +0.228</title></circle>
+<circle cx="783.3" cy="498.7" r="6" fill="transparent"><title>gen3 at 3.5: +0.016</title></circle>
+<path d="M88.7,135.1 L142.1,179.5 L195.6,204.9 L249.0,229.8 L302.4,266.6 L355.9,280.7 L409.3,279.9 L462.7,297.2 L516.1,337.9 L569.6,372.4 L623.0,417.3 L676.4,454.0 L729.9,479.9 L783.3,497.5" class="ln sa3" stroke="#1baf7a"/>
+<circle cx="676.4" cy="454.0" r="6" fill="transparent"><title>gen4 at 2.5: +0.043</title></circle>
+<circle cx="623.0" cy="417.3" r="6" fill="transparent"><title>gen4 at 2: +0.066</title></circle>
+<circle cx="729.9" cy="479.9" r="6" fill="transparent"><title>gen4 at 3: +0.027</title></circle>
+<circle cx="783.3" cy="497.5" r="6" fill="transparent"><title>gen4 at 3.5: +0.016</title></circle>
+<circle cx="569.6" cy="372.4" r="6" fill="transparent"><title>gen4 at 1.5: +0.094</title></circle>
+<circle cx="516.1" cy="337.9" r="6" fill="transparent"><title>gen4 at 1: +0.115</title></circle>
+<circle cx="302.4" cy="266.6" r="6" fill="transparent"><title>gen4 at -1: +0.159</title></circle>
+<circle cx="355.9" cy="280.7" r="6" fill="transparent"><title>gen4 at -0.5: +0.150</title></circle>
+<circle cx="409.3" cy="279.9" r="6" fill="transparent"><title>gen4 at 0: +0.151</title></circle>
+<circle cx="462.7" cy="297.2" r="6" fill="transparent"><title>gen4 at 0.5: +0.140</title></circle>
+<circle cx="195.6" cy="204.9" r="6" fill="transparent"><title>gen4 at -2: +0.197</title></circle>
+<circle cx="249.0" cy="229.8" r="6" fill="transparent"><title>gen4 at -1.5: +0.182</title></circle>
+<circle cx="142.1" cy="179.5" r="6" fill="transparent"><title>gen4 at -2.5: +0.213</title></circle>
+<circle cx="88.7" cy="135.1" r="6" fill="transparent"><title>gen4 at -3: +0.241</title></circle>
+<path d="M729.9,478.3 L810.0,478.3" fill="none" stroke="#eb6834" stroke-width="1" opacity="0.45"/>
+<circle cx="820.0" cy="478.3" r="3.5" class="da2" fill="#eb6834"/>
+<text x="828.0" y="482.3" class="t" fill="#0b0b0b" font-size="11.5">gen1</text>
+<path d="M729.9,483.5 L810.0,493.3" fill="none" stroke="#2a78d6" stroke-width="1" opacity="0.45"/>
+<circle cx="820.0" cy="493.3" r="3.5" class="da1" fill="#2a78d6"/>
+<text x="828.0" y="497.3" class="t" fill="#0b0b0b" font-size="11.5">forge-full</text>
+<path d="M783.3,497.5 L810.0,508.3" fill="none" stroke="#1baf7a" stroke-width="1" opacity="0.45"/>
+<circle cx="820.0" cy="508.3" r="3.5" class="da3" fill="#1baf7a"/>
+<text x="828.0" y="512.3" class="t" fill="#0b0b0b" font-size="11.5">gen4</text>
+<path d="M783.3,498.7 L810.0,523.3" fill="none" stroke="#eda100" stroke-width="1" opacity="0.45"/>
+<circle cx="820.0" cy="523.3" r="3.5" class="da4" fill="#eda100"/>
+<text x="828.0" y="527.3" class="t" fill="#0b0b0b" font-size="11.5">gen3</text>
+<line x1="62" y1="524" x2="810" y2="524" class="rule" stroke="#c3c2b7" stroke-width="1"/>
+<text x="88.7" y="542" fill="#898781" font-size="11" text-anchor="middle">-3</text>
+<text x="195.6" y="542" fill="#898781" font-size="11" text-anchor="middle">-2</text>
+<text x="302.4" y="542" fill="#898781" font-size="11" text-anchor="middle">-1</text>
+<text x="409.3" y="542" fill="#898781" font-size="11" text-anchor="middle">+0</text>
+<text x="516.1" y="542" fill="#898781" font-size="11" text-anchor="middle">+1</text>
+<text x="623.0" y="542" fill="#898781" font-size="11" text-anchor="middle">+2</text>
+<text x="729.9" y="542" fill="#898781" font-size="11" text-anchor="middle">+3</text>
+<text x="436.0" y="562" class="t2" fill="#52514e" font-size="12" text-anchor="middle">deck score before the pick</text>
+<g transform="translate(0,586)">
 <circle cx="66" cy="-4" r="4" class="da1" fill="#2a78d6"/>
 <text x="76" y="0" class="t2" fill="#52514e" font-size="11.5">forge-full</text>
 <circle cx="160.0" cy="-4" r="4" class="da2" fill="#eb6834"/>

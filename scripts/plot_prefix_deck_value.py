@@ -272,17 +272,14 @@ def view_by_pick(rows_f, ag_f, rows_g, ag_g, cap):
     four = [(a, f"a{COLOR[a][2]}", a) for a in ORDER]
     gaps = [(a, f"a{COLOR[a][2]}", f"vs {a}")
             for a in ("forge-full", "gen1", "gen3")]
-    panels = [("deck score (level)", level, four, False, False),
-              ("what the pick added", step, four, True, False),
-              ("gen-4's lead, paired inside each corpus", gap, gaps, True, True)]
-    geom = [(134, 246), (450, 140), (712, 150)]
+    panels = [("deck score", level, four, False, False),
+              ("gain from the pick", step, four, True, False),
+              ("gen-4's lead over each reference", gap, gaps, True, True)]
+    geom = [(98, 250), (416, 144), (682, 152)]
     ticks = [(t, str(t)) for t in (1, 5, 10, 15, 20, 25, 30, 35, 40, 45) if t <= cap]
     n = len(rows_f) + len(rows_g)
     return (panels, geom, (1, cap), ticks, "picks taken",
-            "The draft is decided in its first third",
-            [f"Best deck buildable from the first t picks; {n:,} seats.",
-             "Below 23 picks the pool is the deck, so levels there are not comparable across t.",
-             "gen3 sits in the v-gen3 corpora and the rest in v-forge; only panel 3 is paired."],
+            "Best deck buildable from the first t picks", [],
             [(16, "pack 2"), (DECK, "deck size"), (31, "pack 3")])
 
 
@@ -304,18 +301,12 @@ def view_by_level(rows_f, ag_f, rows_g, ag_g, cap):
     series = [(a, f"a{COLOR[a][2]}", a) for a in ORDER]
     ticks = [(v / 2, f"{v / 2:+.0f}") for v in range(int(lo_x * 2), int(hi_x * 2) + 1)
              if v % 2 == 0]
-    return ([("mean gain from one pick", data, series, True, True)],
-            [(140, 396)], (lo_x - 0.25, hi_x + 0.25), ticks,
+    return ([("", data, series, True, True)],
+            [(104, 420)], (lo_x - 0.25, hi_x + 0.25), ticks,
             "deck score before the pick",
-            "Gen-4's edge is in the middle, where a better card is hard but findable",
-            [f"Mean step over picks {DECK + 1}-{cap}, by the deck score before the pick. "
-             f"0.5-wide bins; below {LEVEL_FLOOR:+.0f} the tail is too thin to read.",
-             "Left of -1 a bad deck is easy to improve and every agent does it equally.",
-             "Right of +3 nothing is left to add and no agent can find it. Between them "
-             "gen-4 leads, and gen-3 by less."],
+            "Mean gain from one pick, by the deck score before it", [],
             [], None, None,
-            [(None, -1.0, 'any card improves it'),
-             (3.0, None, ('nothing left', 'to add'))])
+            [(None, -1.0, None), (3.0, None, None)])
 
 
 

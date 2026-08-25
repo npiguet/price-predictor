@@ -371,6 +371,53 @@ five-colour ones
 ([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
 *Mean against median*). *Hypothesis 2* below uses that run as a control.
 
+## Gen-4's lead is complete by pick seven
+
+Gen-4 is ahead of every reference after a single card, reaches its widest margin around pick 7,
+and spends the remaining 38 picks giving part of it back. Scoring every prefix of a seat's pool
+turns a draft into a curve rather than one end score
+(`scripts/analyze_prefix_deck_value.py`, charted by `scripts/plot_prefix_deck_value.py`).
+
+The measurement has two halves, joined at pick 23. Below 23 cards there is no deck to build, so
+the pool is scored directly and every card drafted must be played. From 23 on the builder
+chooses 23 non-lands out of a growing pool, so a pick is worth something only when it displaces
+the deck's current worst card. At exactly 23 the builder has no choice either, and the two paths
+agree to six decimal places on every seat tested, which is what licenses joining them.
+
+![Best deck buildable from the first t picks](2026-08-09-prefix-deck-value.png)
+
+Gen-4 leads `forge-full` by +1.79 after one pick, by +2.15 at pick 7 and by +1.33 at the end.
+The same shape holds against gen-1, and against gen-3 the whole curve is compressed into a third
+of the range but peaks and decays on the same schedule. Nothing any agent does after the first
+third of pack 1 widens a gap.
+
+The middle panel belongs to the packs rather than to the agents. A fresh pack is worth about ten
+late picks: pick 31 adds close to +0.4 for all four, against +0.06 at pick 30. The draft's
+other structural moment is the sign change at 23. Before it every step is negative,
+because a card that must be played dilutes the pool. After it none is, because a bad pick is
+simply not played.
+
+The lead erodes because a pick is worth whatever the deck it joins has left to gain.
+
+![Mean gain from one pick, by the deck score before it](2026-08-09-step-by-level.png)
+
+Plotting the gain against the score the pick started from splits the draft into three regimes,
+of which the chart shades the outer two. Left of −1 a bad deck is easy to improve and all four
+agents do it equally. Right of +3 there is nothing left to add and none of them finds it.
+Between them, where a better card is hard but not impossible to find, gen-4 leads every
+reference and gen-3 sits between it and the two weakest. That is the yardstick's ordering,
+reproduced at matched difficulty.
+
+Gen-4's raw gain per pick is the smallest of the four and its like-for-like gain is the largest,
+and both are consequences of where it drafts. It averages +0.113 a pick against Forge's +0.140
+only because it spends the late draft at scores where every agent gains little.
+
+Two limits. Levels below pick 23 are not comparable across picks, because the set the scorer
+sees grows by one each time and it never saw a sub-23-card deck in training; only comparisons
+between agents at the same pick hold there. And the method measures the pool a seat accumulated,
+not the difficulty of the choices it faced, so a seat in a weak pod collects a better pool
+without picking better.
+
 ## The three gen-3 hypotheses survive, but only card judgement tracks quality
 
 ### Hypothesis 1 — lane starvation. Confirmed as a mechanism, refuted as a quality signal.
