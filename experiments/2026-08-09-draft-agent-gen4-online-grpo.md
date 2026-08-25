@@ -493,6 +493,57 @@ This is the first pick-level measurement that agrees with the yardstick. It sugg
 mechanism: a field sampling at `T = 3` gives worse evidence about when breaking colour pays, and
 the policy trained on that evidence breaks colour slightly worse.
 
+Gen-4 leaves its lane for a better card about as readily as Forge, and for a worse card far less
+often. The premium scores the breaks an agent took. This scores the decision to break at all.
+
+The lane here is the one the seat had already committed to, not the one it finished in, because
+only the first explains a choice at the moment it was made. It is the top-2 colours of the cards
+the seat has picked so far. A pick is scored once the seat holds at least five coloured cards
+with at least two in its second colour, and skipped while its second and third colours are
+level. A decision counts only when the pack held both an on-lane and an off-lane card carrying a
+score label. Colourless cards are excluded, and a gold card counts as off-lane unless the lane
+covers every colour in it. The leave-lane rate is the share of those decisions where the card
+taken was off-lane. A seat needs five coloured cards before it has a lane at all, so picks 1–5
+of pack 1 rarely qualify and are left out.
+
+The ratio in brackets splits those same decisions by what was on offer. In one group the best
+off-lane card scores above the best on-lane card, in the other it scores below, both by more
+than 0.01. The ratio is the leave-lane rate in the first group over the rate in the second. An
+agent that ignores card quality when it decides whether to break scores 1.
+
+| Pack and picks      | `forge-full`  | `gen1`        | `gen4`        |
+|---------------------|---------------|---------------|---------------|
+| pack 1, picks 6–10  | 5.5 % (5.1×)  | 3.4 % (4.7×)  | 4.6 % (8.6×)  |
+| pack 1, picks 11–15 | 4.8 % (1.8×)  | 3.8 % (2.2×)  | 4.8 % (2.2×)  |
+| pack 2, picks 1–5   | 8.0 % (4.2×)  | 6.6 % (4.4×)  | 7.0 % (5.0×)  |
+| pack 2, picks 6–10  | 7.3 % (4.5×)  | 5.4 % (4.4×)  | 5.9 % (5.9×)  |
+| pack 2, picks 11–15 | 5.8 % (1.9×)  | 4.7 % (1.6×)  | 6.1 % (2.5×)  |
+| pack 3, picks 1–5   | 7.7 % (3.7×)  | 5.6 % (4.4×)  | 5.5 % (5.5×)  |
+| pack 3, picks 6–10  | 8.2 % (3.5×)  | 5.4 % (4.7×)  | 5.6 % (7.3×)  |
+| pack 3, picks 11–15 | 6.2 % (1.7×)  | 5.0 % (2.0×)  | 5.9 % (2.3×)  |
+
+Gen-4 has the highest ratio in every row but one, and its lead is largest in the middle of a
+pack. Early in a fresh pack the three sit closer together, because the best card in the pack is
+often the best card in any colour and every agent takes it. The last third of a pack is a floor
+rather than a behaviour: all three fall to between 1.6 and 2.5 there, since the leftovers are
+close in value and the gap the ratio is built on is mostly noise.
+
+Pooled over every scored decision, gen-4 leaves its lane on a worse card 1.9 % of the time
+against Forge's 3.0 %, and on a better card 9.0 % against Forge's 10.4 %. The whole of its
+advantage sits on the first number. Gen-4 is not quicker to take the off-colour bomb. It is
+slower to take the off-colour filler, and each one it declines is a pick that goes into the deck
+it is building.
+
+Forge loosens across the draft where gen-4 tightens. Between pack 2 and pack 3 at picks 6–10
+Forge's rate rises from 7.3 % to 8.2 % while its ratio falls from 4.5 to 3.5. Gen-4 moves the
+other way on both counts, to 5.6 % at 7.3. A seat that breaks colour in pack 3 has few picks
+left to make the new colour playable, so those are the breaks that most need a reason, and Forge
+gives them the weakest one.
+
+One limit. `shrunk_score_play` decides which card was better here, and gen-4 follows that axis
+more closely than either reference does, so part of the gap is agreement with the scoring label
+rather than better judgement.
+
 Gen-4 ends the draft in the colours that offered it the best cards. The references end up in
 colours that offered good cards and plentiful cards about equally.
 
