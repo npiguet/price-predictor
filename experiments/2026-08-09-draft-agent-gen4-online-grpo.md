@@ -460,7 +460,8 @@ off-colour filler far more.
 The hypothesis: breaking colour is correct when the card is enough better than the on-colour
 alternative. A healthy policy should therefore show a positive quality premium on its voluntary
 off-lane picks, and a failing one should not. Cards are scored by `shrunk_score_play`, net
-winning influence on the play, which covers 98 % of drafted card slots.
+winning influence on the play, which covers 98 % of drafted card slots. The table below comes
+from `scripts/analyze_pick_quality.py`.
 
 | Corpus                          | agent                | best-card rate | mean premium    | share above zero |
 |---------------------------------|----------------------|----------------|-----------------|------------------|
@@ -496,7 +497,8 @@ decisions where the card taken was off-lane. The columns split them by how the b
 scored against the best on-lane one, and the ratio divides the two rightmost columns by the two
 leftmost, so an agent that ignores card quality when it breaks scores 1. Only picks 1–10 count,
 since the leftovers at the end of a pack are too close in value for the comparison to carry
-anything.
+anything. This table and the two paragraphs after it come from
+`scripts/analyze_lane_discipline.py`.
 
 | Agent and pack        | much worse | worse | level | better | much better | ratio |
 |-----------------------|------------|-------|-------|--------|-------------|-------|
@@ -580,7 +582,8 @@ asked. The finding to carry forward is the size and the ceiling, not a problem t
 Playing a card the seat was forced to take marks a weak pool, and those picks are a fifth of the
 draft. Hypothesis 2 cannot see them. Its premium and its leave-lane table both require an
 on-colour card to have been available, so a pick made when nothing on-colour was left enters
-neither, which leaves 7.2 of gen-4's 45 picks outside both.
+neither, which leaves 7.2 of gen-4's 45 picks outside both. Every figure in this section comes
+from `scripts/analyze_lane_discipline.py`, run against the same bo1 `cards-win-rates.txt`.
 
 Sometimes the pack still holds a card in the seat's colours and the seat passes it over.
 Sometimes nothing on-colour is left and the seat takes what remains. Only the first is a
@@ -626,21 +629,22 @@ how many forced picks ended up in their deck, against their own pod's mean `deck
 
 | Agent        | played none | played one | played two or more |
 |--------------|-------------|------------|--------------------|
-| `forge-full` | −0.570      | −1.020     | −1.370             |
-| `gen1`       | −0.441      | −0.837     | −1.227             |
-| `gen4`       | +0.765      | +0.470     | +0.272             |
+| `forge-full` | −0.544      | −0.963     | −1.349             |
+| `gen1`       | −0.425      | −0.794     | −1.197             |
+| `gen4`       | +0.782      | +0.500     | +0.278             |
 
 The decline is monotone for all three agents and steep, at a quarter to four tenths of a point
 per forced pick played. The whole gen-3 to gen-4 step was about +0.6, so a seat that plays one of
 these sits about half a generation below one that plays none. Read the slopes rather than the
 levels, which differ only because the score is pod-relative and gen-4 outscores its pod
-throughout. The relationship is a marker rather than a cost the pick imposes.
+throughout.
 
-A forced pick costs the seat nothing, so the only question it poses is whether the best card left
-gets taken. The training reward is a seat's `deck_score` minus the mean of the other seats', so a
-card denied to a neighbour is worth a seventh of the same card played. That is a standing
-incentive to take the best card left, and none of the three follows it far. Gen-4 comes closest
-and still leaves the best card behind on three fifths of its forced picks.
+A forced pick that never reaches the deck costs the seat nothing, and about nine in ten of
+gen-4's never do. Taking the best card left pays either way. One that turns out playable goes
+into the deck. One that does not is still a good card the rest of the pod will not see, and the
+training reward is a seat's `deck_score` minus the mean of the other seats', so denying a
+neighbour is worth a seventh of playing the card yourself. None of the three follows that far.
+Gen-4 comes closest and still leaves the best card behind on three fifths of its forced picks.
 
 ### `cast_lift` is the axis gen-4 gained on
 
