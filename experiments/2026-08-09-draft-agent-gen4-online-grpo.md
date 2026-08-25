@@ -132,17 +132,16 @@ feature `022-draft-game-evaluation`) was run once over each of two `v-forge` yar
 
 The ordering is the yardstick's in both runs, on decks the scorer never saw played.
 
-Every figure in this section counts matches won, not individual games. Which deck wins a single
+Every figure from these runs counts matches won, not individual games. Which deck wins a single
 game depends heavily on what each player happens to draw. A match only ends when one deck has
 won four games, so most of that luck averages out.
-
-### A unit of `deck_score` buys about 15 points of match win rate
 
 Reading each matchup's Bo7 rate against the score gap measured in the same corpus turns the
 ordering into a rate. The gaps are pod-paired means from the yardstick corpus the matches were
 drawn from, so each row's two labels are compared inside the same pods. `forge-native` is
 absent because it has no `deck_score`, its deck being rebuilt from the pool at game time; its
-matchups are the subject of the next section.
+matchups are taken up in *Swapping the deck builder is worth about as much as a generation of
+drafting* below.
 
 | Matchup                 | corpus              | score gap | Bo7 match win rate | matches |
 |-------------------------|---------------------|-----------|--------------------|---------|
@@ -156,75 +155,6 @@ matchups are the subject of the next section.
 A line through the origin fits all six rows at 15.1 points of Bo7 match win rate per unit of
 `deck_score`. Each corpus on its own gives 15.4 and 14.8, and the individual rows imply 13.6 to
 18.1.
-
-### Swapping the deck builder is worth about as much as a generation of drafting
-
-Two seats can draft identically and still end up with different decks, because which 40 cards
-go in is decided after the draft ends. `forge-full` and `forge-native` are that pair. Both are
-Forge's drafting AI, and both work from the same drafted pools. They differ only in which
-program picks the 40 cards: this project's picker and simulated-annealing builder for
-`forge-full`, Forge's own builder for `forge-native`. Playing the two against each other
-therefore measures the builders and nothing else.
-
-This project's builder wins that matchup in both runs.
-
-| Corpus              | This project's builder wins | Matches |
-|---------------------|-----------------------------|---------|
-| `t3learner_t2field` | 75.0 %                      | 56      |
-| `t2all_decay0.3`    | 72.2 %                      | 36      |
-| Pooled              | 73.9 %                      | 92      |
-
-Gen-4 wins 70.8 % of its 839 matches against gen-1, which is what one generation of drafting
-improvement is worth. That is close to the builder's 73.9 %, and 92 matches put an error bar of
-about 5 points on the builder figure, so the two cannot be told apart. Changing who builds the
-deck buys roughly what a generation of better drafting buys.
-
-The builder also decides the bottom of the table. `forge-native` loses to every other label,
-including `forge-full`, which drafted the same pools with the same agent. Gen-4's largest
-margin over any label is against `forge-native` rather than against any drafting agent.
-
-### Forge pads a tenth of its decks with basics rather than lowering its bar
-
-About a tenth of `forge-native` decks are not decks. Of the 615 built across the two runs, 65
-hold 21 or more lands in 40 cards, out to 33. Forge picks 22 spells if it can and fills the
-rest of the deck with basic lands. Those decks win a tenth of their matches, and none at all
-past 25 lands, which costs `forge-native` around four points of win rate on its own.
-
-Two things leave Forge short of 22 spells. The first is the colour commitment: the drafter
-fixes two colours early and the builder is handed the same pair, so a pool that ran dry in
-those colours has too little to play. Every seat holding fewer than 22 on-colour cards built a
-land-heavy deck, without exception. The second is that Forge discards cards its own AI handles
-badly. These are build-around cards, flagged `RemRandomDecks`: the builder keeps one when the
-partners it needs are already in the deck and drops it when they never arrived. The drafter
-never reads that flag, so it takes such cards on raw power and only finds the hole at build
-time. Land-heavy seats that did hold 22 on-colour cards carried more than three times the usual
-share of them.
-
-### Creature count predicts winning, and no colour costs gen-4 games
-
-Decks with more creatures win more, in both runs and inside every label. The composition
-analysis assumed that direction and the games confirm it.
-
-| Bo7 win rate                   | ≤ 13 creatures | ≥ 20 creatures |
-|--------------------------------|----------------|----------------|
-| all decks, `t3learner_t2field` | 25.7 %         | 74.2 %         |
-| all decks, `t2all_decay0.3`    | 26.2 %         | 70.8 %         |
-| gen-4, `t3learner_t2field`     | 50.0 %         | 79.5 %         |
-| gen-4, `t2all_decay0.3`        | 54.3 %         | 75.6 %         |
-
-Gen-4's win rate is about the same in all five colours. The differences are small enough to be
-sampling noise, given how many matches each colour appears in. Its colour lean therefore costs
-it nothing. White is the colour it plays most, and it wins slightly more often in white than it
-does overall.
-
-These are rates conditional on a deck containing the colour. They are not evidence that gen-4
-plays the five colours equally often, and it does not: white appears in about three fifths of
-its decks and red in under a third. *Hypothesis 3* below measures that lean and explains where
-it comes from.
-
-What the games cannot say is whether that lean is the best one available. Testing that would
-mean forcing gen-4 into colours it did not pick and seeing whether it wins more, and no run does
-that.
 
 ## Crowding a pod with strong drafters costs every seat in it
 
@@ -273,40 +203,6 @@ The same effect explains why the frozen labels lose ground during a training run
 learner seats never changes, it is three throughout, but the learner sitting in them gets
 stronger, and a stronger seat takes more cards from everyone else just as an extra seat would.
 `gen3a` losing 0.40 over the long run is that effect, not a sign that something went wrong.
-
-## More creatures, fewer rares, narrower mana bases
-
-From the four `v-forge` corpora, where gen-4 shares pods with both references.
-
-|                           | `t2all_nodecay` | `t2all_decay0.3` | `t3all_decay0.3` | `t3learner_t2field` | gen-1       | forge-full  |
-|---------------------------|-----------------|------------------|------------------|---------------------|-------------|-------------|
-| creatures                 | 18.01           | 18.19            | 17.79            | 17.91               | 15.22–15.28 | 15.09–15.16 |
-| avg mana value            | 3.17            | 3.21             | 3.19             | 3.19                | 3.02–3.05   | 3.03–3.07   |
-| rares                     | 1.24            | 1.24             | 1.25             | 1.33                | 1.69–1.74   | 1.86–1.95   |
-| ≥ 4 basic land types      | 4.5 %           | 5.6 %            | 4.7 %            | 6.4 %               | 7.0–9.8 %   | 9.0–10.9 %  |
-| score of those wide decks | +1.30           | +1.65            | +1.47            | +1.65               | −0.03…+0.28 | +0.03…+0.14 |
-
-Reference columns give the range across the four corpora, each measured in the same pods as
-the candidate beside it.
-
-Both gen-3 trends continue: more creatures and fewer rares, on-colour commons in place of
-higher-rarity cards, at an essentially unchanged curve. Every candidate builds narrower mana
-bases than the gen-1 seats sitting in the same pods, where gen-3's incumbent led its
-references by 3.6 points and these lead by 1.4 to 4.1.
-
-The wide decks are the more informative row. When gen-4 does build four or five basic land
-types it scores between +1.30 and +1.65 there, where gen-1's wide decks score around zero.
-Going wide is not the failure; going wide when the pool does not support it is, and none of
-these four does that. Gen-4's advantage is in fact uniform across every width bucket — on
-`t2all_nodecay`, +2.23 against +1.26 at two land types and +1.79 against +0.61 at three — so
-the mana base is a symptom of pool quality rather than the thing that differs.
-
-No gen-4 candidate repeats the failure that separated gen-3's two families. One gen-3 candidate
-built four- and five-colour decks 2.4 times as often as the others and built them far worse:
-its five-colour decks averaged −1.88 where every other candidate's averaged about +1.0. That
-tail of unplayable wide decks pulled its mean well below its median
-([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
-*Mean against median*).
 
 ## Gen-4's margin depends on the set, and core sets are its weakest ground
 
@@ -396,6 +292,93 @@ measure available is games won. The two played corpora give 383 gen-4 versus `fo
 matches spread over 142 sets. Under three matches a set puts the standard error on a per-set win
 rate above 20 points, wider than the whole effect. Ranking sets by games needs a run that fixes
 the set rather than sampling it.
+
+## Swapping the deck builder is worth about as much as a generation of drafting
+
+Two seats can draft identically and still end up with different decks, because which 40 cards
+go in is decided after the draft ends. `forge-full` and `forge-native` are that pair. Both are
+Forge's drafting AI, and both work from the same drafted pools. They differ only in which
+program picks the 40 cards: this project's picker and simulated-annealing builder for
+`forge-full`, Forge's own builder for `forge-native`. Playing the two against each other
+therefore measures the builders and nothing else. The two `play-draft-games` runs put 92 of
+those matches on record.
+
+This project's builder wins that matchup in both of them.
+
+| Corpus              | This project's builder wins | Matches |
+|---------------------|-----------------------------|---------|
+| `t3learner_t2field` | 75.0 %                      | 56      |
+| `t2all_decay0.3`    | 72.2 %                      | 36      |
+| Pooled              | 73.9 %                      | 92      |
+
+Gen-4 wins 70.8 % of its 839 matches against gen-1, which is what one generation of drafting
+improvement is worth. That is close to the builder's 73.9 %, and 92 matches put an error bar of
+about 5 points on the builder figure, so the two cannot be told apart. Changing who builds the
+deck buys roughly what a generation of better drafting buys.
+
+The builder also decides the bottom of the table. `forge-native` loses to every other label,
+including `forge-full`, which drafted the same pools with the same agent. Gen-4's largest
+margin over any label is against `forge-native` rather than against any drafting agent.
+
+### Forge pads a tenth of its decks with basics rather than lowering its bar
+
+About a tenth of `forge-native` decks are not decks. Of the 615 built across the two runs, 65
+hold 21 or more lands in 40 cards, out to 33. Forge picks 22 spells if it can and fills the
+rest of the deck with basic lands. Those decks win a tenth of their matches, and none at all
+past 25 lands, which costs `forge-native` around four points of win rate on its own.
+
+Two things leave Forge short of 22 spells. The first is the colour commitment: the drafter
+fixes two colours early and the builder is handed the same pair, so a pool that ran dry in
+those colours has too little to play. Every seat holding fewer than 22 on-colour cards built a
+land-heavy deck, without exception. The second is that Forge discards cards its own AI handles
+badly. These are build-around cards, flagged `RemRandomDecks`: the builder keeps one when the
+partners it needs are already in the deck and drops it when they never arrived. The drafter
+never reads that flag, so it takes such cards on raw power and only finds the hole at build
+time. Land-heavy seats that did hold 22 on-colour cards carried more than three times the usual
+share of them.
+
+## More creatures, fewer rares, narrower mana bases
+
+Both gen-3 deck-shape trends continue, and the games back the creature count. From the four
+`v-forge` corpora, where gen-4 shares pods with both references.
+
+|                           | `t2all_nodecay` | `t2all_decay0.3` | `t3all_decay0.3` | `t3learner_t2field` | gen-1       | forge-full  |
+|---------------------------|-----------------|------------------|------------------|---------------------|-------------|-------------|
+| creatures                 | 18.01           | 18.19            | 17.79            | 17.91               | 15.22–15.28 | 15.09–15.16 |
+| avg mana value            | 3.17            | 3.21             | 3.19             | 3.19                | 3.02–3.05   | 3.03–3.07   |
+| rares                     | 1.24            | 1.24             | 1.25             | 1.33                | 1.69–1.74   | 1.86–1.95   |
+| ≥ 4 basic land types      | 4.5 %           | 5.6 %            | 4.7 %            | 6.4 %               | 7.0–9.8 %   | 9.0–10.9 %  |
+| score of those wide decks | +1.30           | +1.65            | +1.47            | +1.65               | −0.03…+0.28 | +0.03…+0.14 |
+
+Reference columns give the range across the four corpora, each measured in the same pods as
+the candidate beside it.
+
+Gen-4 builds more creatures and fewer rares than either reference, putting on-colour commons in
+place of higher-rarity cards at an essentially unchanged curve. Every candidate builds narrower
+mana bases than the gen-1 seats sitting in the same pods, where gen-3's incumbent led its
+references by 3.6 points and these lead by 1.4 to 4.1.
+
+Decks holding more creatures win more, in both played runs and inside every label.
+
+| Bo7 win rate                   | ≤ 13 creatures | ≥ 20 creatures |
+|--------------------------------|----------------|----------------|
+| all decks, `t3learner_t2field` | 25.7 %         | 74.2 %         |
+| all decks, `t2all_decay0.3`    | 26.2 %         | 70.8 %         |
+| gen-4, `t3learner_t2field`     | 50.0 %         | 79.5 %         |
+| gen-4, `t2all_decay0.3`        | 54.3 %         | 75.6 %         |
+
+The wide decks are the more informative row. When gen-4 does build four or five basic land
+types it scores between +1.30 and +1.65 there, where gen-1's wide decks score around zero.
+Going wide is not the failure; going wide when the pool does not support it is, and none of
+these four does that. Gen-4's advantage is in fact uniform across every width bucket — on
+`t2all_nodecay`, +2.23 against +1.26 at two land types and +1.79 against +0.61 at three — so
+the mana base is a symptom of pool quality rather than the thing that differs.
+
+No gen-4 candidate repeats the failure that separated gen-3's two families, where one candidate
+built four- and five-colour decks 2.4 times as often as the others and averaged −1.88 on its
+five-colour ones
+([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
+*Mean against median*). *Hypothesis 2* below uses that run as a control.
 
 ## The three gen-3 hypotheses survive, but only card judgement tracks quality
 
@@ -572,10 +555,19 @@ across the four corpora:
 Blue follows red down, and green and black follow white up. Two generations of self-play have
 turned a mild preference into a near-inversion of the reference colour distribution.
 
+The lean costs gen-4 nothing in games. Its Bo7 win rate is about the same in all five colours,
+and the differences are small enough to be sampling noise given how many matches each colour
+appears in. White is the colour it plays most, and it wins slightly more often in white than it
+does overall.
+
 The lean is correct play against this opponent, and the same preference would be miscalibrated
 against a human. Forge wins more with green, black and white. `deck_score` measures
 Forge-piloted outcomes. A policy that learns which colours win those games is doing what it was
 asked. The finding to carry forward is the size and the ceiling, not a problem to fix.
+
+What the games cannot say is whether this lean is the best one available. Testing that would
+mean forcing gen-4 into colours it did not pick and seeing whether it wins more, and no run
+does that.
 
 ### Playing a forced pick marks a weak pool
 
