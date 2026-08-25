@@ -1,6 +1,6 @@
 # Draft agent (gen-4) — online GRPO from the promoted gen-3 candidate
 
-## Context — what gen-3 left us with
+## Gen-3 settled the field, not the temperature
 
 Gen-3 closed with one setting to carry forward and one question left open
 ([`2026-06-15-draft-agent-gen3-online-grpo-design.md`](2026-06-15-draft-agent-gen3-online-grpo-design.md),
@@ -16,14 +16,12 @@ outcome disagreed.
 
 Gen-4 warm-starts every run from the promoted gen-3 candidate
 (`gen3/temperature-on-all-agents/lr1e-5_t2_20260805_221050.pt`) and uses it as the anchor as
-well. Learner and anchor being the same weights turns out to be the most useful measuring
-instrument in the generation, for reasons unrelated to why it was chosen (*The round-9 best
-is noise*, below).
+well.
 
-## The runs
+## All four runs peak and decline
 
-Four runs, all `lr 1e-5`, all from the same base, all on the mix
-`gen4:3,gen3a:2,gen3c:1,gen1:1,forge-full:1` with `--anchor gen3a`. 
+Every gen-3 run peaked and declined, and all four gen-4 runs do the same. They share `lr 1e-5`,
+the same base, and the mix `gen4:3,gen3a:2,gen3c:1,gen1:1,forge-full:1` with `--anchor gen3a`.
 
 | Run                 | learner T | field T | Rounds | Duration | Best margin (round) | Final margin | Checkpoint taken |
 |---------------------|-----------|---------|--------|----------|---------------------|--------------|------------------|
@@ -32,23 +30,21 @@ Four runs, all `lr 1e-5`, all from the same base, all on the mix
 | `t3all_decay0.3`    | 3.0       | 3.0     | 568    | 9h54m    | +0.676 (r208)       | +0.206       | r58              |
 | `t3learner_t2field` | 3.0       | 2.0     | 177    | 4h07m    | +0.391 (r68)        | +0.002       | r68              |
 
-All four peak and decline, as every gen-3 run did.
-
 `t3all_decay0.3` is the one run whose yardsticked checkpoint is not its best-margin round, and
 the choice is deliberate. Its margin climbed steadily to round 58, setting 24 new bests along
 the way, then went 150 rounds without one before a single isolated reading of +0.676 at
 round 208. That last step is +0.058 over round 58, well inside the ±0.15 noise floor the
-metric carries at this window size (*The round-9 best is noise*, below). Round 58 sits at the
-top of a real climb; round 208 is one lucky window for the learner's seats.
+metric carries at this window size. Round 58 sits at the top of a real climb; round 208 is one
+lucky window for the learner's seats.
 
-## The yardstick
+## Every gen-4 candidate beats every reference
 
 All four checkpoints are measured. Each was taken through two 500-draft argmax runs: one
 on the fixed mix `gen4:2,gen1:1,forge-full:1`, and one head-to-head against the promoted
 gen-3 incumbent on `gen4:1,gen3:1`.
 
-Every gen-4 candidate beats every reference by a wide margin, and every one of them beats
-the gen-3 incumbent it was fine-tuned from. The gen-3 incumbent's own yardstick is included as the row to beat.
+Every candidate also beats the gen-3 incumbent it was fine-tuned from, whose own yardstick is
+the row to beat.
 
 | Checkpoint          | vs gen-1         | vs `forge-full`  | vs gen-3 incumbent |
 |---------------------|------------------|------------------|--------------------|
@@ -83,9 +79,9 @@ uncertainty of each other, and both corpora give the same picture despite being 
 independently.
 
 Gen-3's open temperature question is settled against the exploration band. The band pointed at
-`T = 3`, the only value that holds perplexity 2–3 and off-argmax 25–40 %, and running every
-agent there is the worst of the four settings tried. Training longer bought nothing either:
-`t2all_decay0.3` ran 312 rounds against `t2all_nodecay`'s 72 and finished level with it.
+`T = 3`, and running every agent there is the worst of the four settings tried. Training longer
+bought nothing either: `t2all_decay0.3` ran 312 rounds against `t2all_nodecay`'s 72 and finished
+level with it.
 
 ## Raising the field's temperature costs; raising the learner's is free
 
@@ -195,9 +191,8 @@ strength gap makes the two families agree.
 
 A seat entering a pod costs each rival about a sixth of the amount by which it outclasses the
 seat it replaced, and its own kind about an eighth. Gen-4 is therefore more robust to a crowded
-pod than the field it beats, which is why the gap column widens as the pod fills. There are only 
-2 data points here, so while this claim must be taken with a grain of salt, it is still 
-interesting enough to deserve being discussed.
+pod than the field it beats, which is why the gap column widens as the pod fills. Two families
+support that ratio, so read it as a suggestion rather than a measurement.
 
 The same effect explains why the frozen labels lose ground during a training run. The number of
 learner seats never changes, it is three throughout, but the learner sitting in them gets
@@ -252,23 +247,19 @@ product and an Alchemy rebalance all carry sharper power differences than a Stan
 
 Individual sets are shrunk toward the grand mean before ranking. A set's own mean is a noisy
 estimate of its true margin, and the fewer pods it has the noisier it is, so ranking on raw
-means would put the sets with the luckiest small samples at both ends. Shrinkage replaces each
-set's mean with a weighted average of that mean and the grand mean. The weight is the share of
-the set's apparent deviation that the data can attribute to the set rather than to sampling:
+means would put the luckiest small samples at both ends. Shrinkage replaces each set's mean with
+a weighted average of that mean and the grand mean, weighted by the share of the set's apparent
+deviation the data can attribute to the set rather than to sampling:
 
 ```
 weight = τ² / (τ² + σ²/n)
 ```
 
 `τ²` is the between-set variance estimated above, `σ²` the within-set variance, and `n` the
-set's pod count. A set measured on many pods keeps most of its own mean. A set measured on few
-is pulled most of the way back to the middle, because at that sample size its deviation is as
-easily explained by luck. At the median ten pods the weight is about 0.7, so the ranking stays
-mostly the sets' own means and only the thinnest samples move far. This is the empirical-Bayes
-estimator, using the observed spread of set means to set how much to trust each one.
-
-Raw means are given beside the shrunk ones to show how much work it does. Planeshift is the
-clearest case: six pods, a raw margin of +3.04, and a shrunk one of +2.36.
+set's pod count. At the median ten pods the weight is about 0.7, so the ranking stays mostly the
+sets' own means and only the thinnest samples move far. This is the empirical-Bayes estimator.
+Raw means sit beside the shrunk ones to show how much work it does: Planeshift has six pods, a
+raw margin of +3.04 and a shrunk one of +2.36.
 
 | Set                        | Type      | Shrunk | Raw    | Pods |
 |----------------------------|-----------|--------|--------|------|
