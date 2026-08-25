@@ -493,6 +493,34 @@ This is the first pick-level measurement that agrees with the yardstick. It sugg
 mechanism: a field sampling at `T = 3` gives worse evidence about when breaking colour pays, and
 the policy trained on that evidence breaks colour slightly worse.
 
+Gen-4 ends the draft in the colours that offered it the best cards. The references end up in
+colours that offered good cards and plentiful cards about equally.
+
+The measurement runs over the first eight picks of pack 1. No pack has wheeled by then, so what
+a seat is shown has been thinned only by the opponents upstream of it. For each seat, rank the
+five colours twice: once by how many cards of that colour the seat was shown, once by how good
+the best few of those cards were. Each ranking names a leading pair of colours. Count how many
+of the seat's two eventual colours that pair caught, which is 0, 1 or 2. A seat whose colours
+owe nothing to what it was shown averages 0.8.
+
+| Colours ranked by               | gen-4 | gen-1 | `forge-full` |
+|---------------------------------|-------|-------|--------------|
+| quality of the best cards shown | 1.11  | 0.94  | 0.95         |
+| number of cards shown           | 0.88  | 0.92  | 0.92         |
+
+Gen-4 catches more than one of its two colours from the quality ranking. Both references catch
+fewer than one. On the count ranking the order reverses and gen-4 is the lowest of the three.
+Each reference scores about the same on both rankings, so neither of them favours one signal
+over the other. Every gen-4 candidate scores between 1.09 and 1.13 on the quality ranking, so
+this is not one run's habit.
+
+This is the off-lane premium one scale up. The premium says gen-4 breaks colour when the card
+is better. This says the same comparison decides the whole lane.
+
+One limit. An agent that always takes the best card in the pack accumulates cards in whatever
+colours held the best cards, without reading anything, and this measurement cannot tell that
+apart from choosing a lane.
+
 ### Hypothesis 3 — a colour prior learned from Forge. Confirmed and stronger.
 
 Gen-4 leans towards green, black and white harder than any gen-3 candidate did, and the lean
