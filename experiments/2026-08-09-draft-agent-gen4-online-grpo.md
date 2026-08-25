@@ -418,10 +418,10 @@ Gen-4's raw gain per pick is accordingly the smallest of the four, +0.113 agains
 Three limits. Levels below pick 23 are not comparable across picks, because the set the scorer
 sees grows by one each time and it never saw a sub-23-card deck in training. The method measures
 the pool a seat accumulated, not the difficulty of the choices it faced. And the builder is not
-an optimiser: adding a card to a pool cannot lower the best deck obtainable from it, yet 22 % of
-the steps past pick 23 fall, once by −3.8. It is a picker network and a simulated-annealing
-pass, so it sometimes finds a worse deck from a larger pool. Read the curves for their shape
-rather than for any individual step.
+an optimiser: adding a card to a pool cannot lower the best deck obtainable from it, yet 15 % of
+the steps past pick 23 fall, half of them by more than 0.1 and one by 3.8. It is a picker
+network and a simulated-annealing pass, so it sometimes finds a worse deck from a larger pool.
+Read the curves for their shape rather than for any individual step.
 
 ## The three gen-3 hypotheses survive, but only card judgement tracks quality
 
