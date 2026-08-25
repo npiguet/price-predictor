@@ -14,9 +14,12 @@ leave-one-out decks gives the true best deck exactly. Comparing it with what the
 builder returned separates a hard search from a builder that is not searching for
 this quantity at all.
 
-The builder is a frozen picker network followed by a simulated-annealing pass, and
-the scorer that grades its output is a separate model the picker was never trained
-to maximise, so nothing makes its output monotone in the pool.
+The two builders are alternatives, not stages. ``greedy`` is a simulated-annealing
+search that maximises the scorer directly, and is what every online-trained corpus
+used; ``picker`` is a one-shot network that was never retrained for draft pools and
+is scored afterwards by a model it does not optimise. Neither is exhaustive, so
+neither is monotone in the pool -- but they are not comparable to each other, and
+``--build-method`` must match the corpus or the levels mean nothing.
 
 Usage
 -----
@@ -127,7 +130,8 @@ def probe(corpus: Path, n_drafts: int, args) -> None:
     locator = ConvertedCardLocator(args.cards_path)
     labeler = build_labeler(GenerateDraftDataConfig(
         n_drafts=0, agent_mix=[], scorer_checkpoint=args.scorer,
-        picker_checkpoint=args.picker, cards_path=args.cards_path), locator=locator)
+        picker_checkpoint=args.picker, cards_path=args.cards_path,
+        build_method=args.build_method), locator=locator)
     ckpt = ScorerStore().load_checkpoint(args.scorer)
     scorer = SetTransformerScorer(ckpt.config)
     scorer.load_state_dict(ckpt.model_state_dict)
@@ -168,6 +172,8 @@ def main() -> None:
     ap.add_argument("--drafts", type=Path, help="corpus to probe")
     ap.add_argument("--n-drafts", type=int, default=60)
     ap.add_argument("--last-pick", type=int, default=45)
+    ap.add_argument("--build-method", choices=("greedy", "picker"), default="greedy",
+                    help="Pool -> deck before scoring; greedy is what every corpus used.")
     ap.add_argument("--cards-path", type=Path, default=Path("output/cardsfolder-512"))
     ap.add_argument("--scorer", type=Path, default=Path(
         "models/sealed/scorer/512-best_l6_h4_s4_ff2176_mlp512_lr1e-05_mwlog.pt"))

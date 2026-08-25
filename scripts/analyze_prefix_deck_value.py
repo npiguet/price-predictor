@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import statistics as st
 import sys
 import time
@@ -66,9 +67,16 @@ DECK = 23           # NONLAND_DECK_SIZE: at and above this the builder must choo
 AGENTS = ("forge-full", "gen1", "gen3", "gen4")
 
 
-def load_raw(path: Path) -> set[tuple[str, int, int]]:
-    """(draft_id, seat, n_picks) already scored by a previous run."""
+def _hms(seconds: float) -> str:
+    """Durations here run to tens of hours, so h:mm:ss beats bare seconds."""
+    seconds = int(max(seconds, 0))
+    return f"{seconds // 3600}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+
+
+def load_raw(path: Path, want: str = "greedy") -> set[tuple[str, int, int]]:
+    """(draft_id, seat, n_picks) already scored by a previous run, if by ``want``."""
     done: set[tuple[str, int, int]] = set()
+    methods: set[str] = set()
     if not path.exists():
         return done
     with path.open(encoding="utf-8") as fh:
@@ -81,6 +89,13 @@ def load_raw(path: Path) -> set[tuple[str, int, int]]:
             except json.JSONDecodeError:
                 continue        # a torn final line from an interrupted run
             done.add((r["draft_id"], r["seat"], r["n_picks"]))
+            methods.add(r.get("build_method", "picker"))
+    if len(methods) > 1:
+        raise SystemExit(f"{path} mixes builders {sorted(methods)}; scores are not comparable")
+    if methods and want not in methods:
+        raise SystemExit(
+            f"{path} was built with {methods.pop()!r} but --build-method is {want!r}. "
+            "Delete the file or pass the matching builder; the two are not comparable.")
     return done
 
 
@@ -97,6 +112,7 @@ def make_models(args):
     cfg = GenerateDraftDataConfig(
         n_drafts=0, agent_mix=[], scorer_checkpoint=args.scorer,
         picker_checkpoint=args.picker, cards_path=args.cards_path,
+        build_method=args.build_method,     # never leave this defaulted -- see --build-method
     )
     labeler = build_labeler(cfg, locator=locator)
     ckpt = ScorerStore().load_checkpoint(args.scorer)
@@ -110,7 +126,7 @@ def make_models(args):
 def build_missing(corpus: Path, raw_path: Path, args) -> None:
     from sealed.application.evaluate_scorer import score_decks
 
-    done = load_raw(raw_path)
+    done = load_raw(raw_path, args.build_method)
     early, late = [], []
     for record, geo in read_records(corpus):
         for i, seat in enumerate(record.seats):
@@ -125,6 +141,13 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
     if not early and not late:
         return
 
+    # GreedyDeckBuilder shuffles with the *global* stdlib RNG, which nothing in
+    # src/ ever seeds -- the online trainer seeds torch and numpy and keeps its own
+    # random.Random(seed) instance, so the corpora were built unseeded and their
+    # deck_scores are not reproducible. Seeding here makes THIS run repeatable; it
+    # does not recover the corpora's exact values, only the same distribution.
+    random.seed(args.seed)
+
     labeler, scorer, locator = make_models(args)
     raw_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.time()
@@ -132,11 +155,17 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
         def flush(chunk, scores):
             for (draft_id, seat, agent, t, _), score in zip(chunk, scores):
                 out.write(json.dumps({"draft_id": draft_id, "seat": seat, "agent": agent,
-                                      "n_picks": t, "deck_score": score}) + "\n")
+                                      "n_picks": t, "deck_score": score,
+                                      "build_method": args.build_method}) + "\n")
             out.flush()          # a kill mid-run costs one batch, not the run
 
         for label, jobs, batch in (("direct", early, args.score_batch),
                                    ("build", late, args.batch)):
+            if not jobs:
+                continue
+            # Time-based, not batch-based: greedy builds run at a few per second,
+            # so a fixed batch stride would go quiet for many minutes at a time.
+            phase_start = last_tick = time.time()
             for s in range(0, len(jobs), batch):
                 chunk = jobs[s:s + batch]
                 pools = [p for *_, p in chunk]
@@ -144,10 +173,16 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
                     flush(chunk, score_decks(scorer, pools, locator))
                 else:
                     flush(chunk, [sc for _, sc in labeler.build_and_score_many(pools)])
-                if s % (batch * 20) == 0 or s + len(chunk) == len(jobs):
-                    n = s + len(chunk)
-                    rate = n / max(time.time() - start, 1e-9)
-                    print(f"  {label} {n}/{len(jobs)}  {rate:.0f}/s", flush=True)
+                n = s + len(chunk)
+                now = time.time()
+                if now - last_tick >= args.progress_every or n == len(jobs):
+                    last_tick = now
+                    elapsed = now - phase_start
+                    rate = n / max(elapsed, 1e-9)
+                    eta = (len(jobs) - n) / rate if rate else 0.0
+                    print(f"  {label} {n}/{len(jobs)} ({100 * n / len(jobs):.1f} %)  "
+                          f"{rate:.1f}/s  elapsed {_hms(elapsed)}  eta {_hms(eta)}",
+                          flush=True)
 
 
 def report(raw_paths: list[Path], title: str, cap: int | None) -> None:
@@ -266,6 +301,15 @@ def main() -> None:
                     help="last pick in the main table; default is the modal pool length")
     ap.add_argument("--batch", type=int, default=96, help="pools per picker build")
     ap.add_argument("--score-batch", type=int, default=2048, help="pools per direct scoring")
+    ap.add_argument("--seed", type=int, default=42,
+                    help="seeds the builder's global RNG so the run is repeatable")
+    ap.add_argument("--progress-every", type=float, default=60.0,
+                    help="seconds between progress lines (default: 60)")
+    ap.add_argument("--build-method", choices=("greedy", "picker"), default="greedy",
+                    help="Pool -> deck before scoring. MUST match the builder that produced "
+                         "the corpus's deck_score, which for every online-trained corpus is "
+                         "greedy. GenerateDraftDataConfig defaults to picker, so leaving this "
+                         "unset silently measures a different pipeline.")
     ap.add_argument("--cards-path", type=Path, default=Path("output/cardsfolder-512"))
     ap.add_argument("--scorer", type=Path, default=Path(
         "models/sealed/scorer/512-best_l6_h4_s4_ff2176_mlp512_lr1e-05_mwlog.pt"))
