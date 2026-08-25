@@ -16,7 +16,7 @@ Three kinds of design document, each with a distinct audience, purpose, tone, an
 
 ### Prose style
 
-**These rules are binding on every write to `experiments/*.md`, not advice to weigh.** They apply to a one-paragraph amendment as much as to a new document, to section headers as much as to body text, and to prose you are moving or lightly editing as much as to prose you are inventing. A section that already breaks them is not precedent — bring it into line while you are there. Before finishing any edit to one of these files, re-read what you wrote against the list below; the failure mode is writing naturally and never checking.
+**These rules are binding on every write to `experiments/*.md`, not advice to weigh.** They apply to a one-paragraph amendment as much as to a new document, to section headers as much as to body text, and to prose you are moving or lightly editing as much as to prose you are inventing. A section that already breaks them is not precedent — bring it into line while you are there. Once the edit is written, check it with the second pass below.
 
 Discursive does not mean dense. These docs get re-read months later by someone who no longer holds the run in their head, so write for a reader who is skimming and will stop at the first sentence that costs effort.
 
@@ -38,6 +38,22 @@ Discursive does not mean dense. These docs get re-read months later by someone w
 - **Don't sprinkle emphasis.** Bold and italics are not for words that feel important. Bolding *forced* and *late* in a sentence whose whole subject is those two properties adds nothing, and scattered markup teaches the reader to ignore it. Reserve emphasis for a contrast the sentence genuinely turns on, a few times per document at most; if a point needs weight, give it its own sentence instead of bolding a word.
 
 Plain is not casual. Sentences get short because each carries one step, not because the register drops. Keep the vocabulary technical and the tone level: cut conversational filler ("here's the thing", "it turns out", "its reasoning went like this"), don't narrate the writing as it happens, and don't slip into first-person cheerleading ("drafting better is what we want"). The target is a reader who never has to re-read a sentence, not one who is being talked to.
+
+### The second pass
+
+**Writing to one of these files is not done when the text is written.** Re-read what you just wrote as a separate pass, against the rules above, before reporting the edit as finished. Drafting and checking are different activities, and the check does not happen on its own: the failure mode is writing naturally, seeing that it reads well, and never testing it against the list.
+
+Run the pass over what you changed rather than the whole document, and go looking for the things that most often survive a first draft:
+
+- **The first sentence of every paragraph.** Does it state the finding, or does it name a subject and make the reader read on to get the result?
+- **Every header you touched.** Same test.
+- **Every figure in the prose.** Is it already in a table the reader can see? Then cut it and give the direction instead.
+- **Every paragraph opening.** Does it start with "this", "that", "those" or a bare pronoun pointing back into the previous paragraph? Name the thing instead.
+- **Every sentence longer than two lines.** Split it, or confirm it carries one claim.
+- **Every word doing summary work in place of a mechanism** — "loosens", "tightens", "judgement", "the dynamic", "one scale up". Say what actually happens.
+- **Every claim against the table beneath it.** Does the table show what the sentence asserts, including any trend, symmetry or monotonicity the wording implies?
+
+The last check is not about style, and it is the one that catches errors rather than infelicities. A sentence that reads well and asserts a pattern the table does not contain is the most expensive thing you can leave behind. Do it anyway.
 
 ## `specs/YYYY-MM-DD-<name>.md` — root-level human-readable specs
 
