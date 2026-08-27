@@ -136,8 +136,14 @@ def build_missing(corpus: Path, raw_path: Path, args) -> None:
                     continue
                 job = (record.draft_id, i, seat.agent, t, pool[:t])
                 (late if t >= DECK else early).append(job)
-    print(f"{len(done)} prefixes already scored; {len(early)} to score directly, "
-          f"{len(late)} to build", flush=True)
+    # Spell out the split: "already scored" counts BOTH regimes, so on a resume it
+    # sits confusingly close to the build total and reads as though nothing resumed.
+    done_direct = sum(1 for _, _, t in done if t < DECK)
+    done_built = len(done) - done_direct
+    print(f"{len(done)} prefixes already scored "
+          f"({done_direct} direct + {done_built} built); "
+          f"remaining: {len(early)} to score directly, {len(late)} to build "
+          f"(of {done_built + len(late)} builds for this corpus)", flush=True)
     if not early and not late:
         return
 

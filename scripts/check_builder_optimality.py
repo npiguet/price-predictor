@@ -1,18 +1,25 @@
 """Is the prefix-deck-value curve an upper bound on the pool, or one builder's output?
 
-Adding a card to a pool cannot lower the *best* deck obtainable from it, yet 15 %
-of the steps past deck size in the prefix-deck-value data fall. This script asks
-why, and answers it in two parts.
+Adding a card to a pool cannot lower the *best* deck obtainable from it, yet
+6.6 % of the steps past deck size in the prefix-deck-value data fall. This script
+asks why, and answers it in two parts.
 
 ``--report`` reads the raw prefix scores and breaks the fall rate down by pick, by
 the level the step started from, and by agent, then asks whether a fall is undone
 by the next pick.
 
 ``--probe`` settles the cause at the one pick where the optimum is cheap to
-compute. At pick 24 the builder must keep 23 of 24 cards, so scoring all 24
-leave-one-out decks gives the true best deck exactly. Comparing it with what the
-builder returned separates a hard search from a builder that is not searching for
-this quantity at all.
+compute. At pick 24 the builder keeps 23 spells out of the pool, so enumerating
+every legal deck gives the true optimum exactly.
+
+Enumerate LEGAL decks, not leave-one-out over the raw pool. A legal deck is 23
+spells (by ``is_land_embedding``) plus any subset of the pool's drafted lands.
+Dropping one card of 24 instead yields 22-spell decks whenever the pool holds a
+land, and since ``score_decks`` strips only *basic* lands the scorer then sees a
+different number of cards than it does for the builder's own deck. That
+comparison inflates the apparent optimum by ~0.27 and is how an earlier pass
+wrongly concluded the builder was leaving 0.33 on the table. It is not: on the
+legal enumeration the builder is the argmax on 99 of 100 pools at pick 24.
 
 The two builders are alternatives, not stages. ``greedy`` is a simulated-annealing
 search that maximises the scorer directly, and is what every online-trained corpus
@@ -117,6 +124,28 @@ def report(raw_paths: list[Path], last: int) -> None:
           f"{100 * regained[0] / regained[1]:.1f} %  (n={regained[1]:,})")
 
 
+def _legal_decks(pool: list[str], locator, scorer) -> list[list[str]] | None:
+    """Every deck the builder could legally return: 23 spells + any land subset."""
+    import itertools
+
+    from sealed.application.deck_assembly import assemble_full_deck, load_pool_embeddings
+    from sealed.domain.greedy_deck_builder import GreedyDeckBuilder
+
+    embeddings, valid = load_pool_embeddings(pool, locator)
+    if len(valid) < DECK:
+        return None
+    spells, lands = GreedyDeckBuilder(scorer, embeddings)._partition_pool(valid)
+    if len(spells) < DECK:
+        return None            # builder falls back to the whole pool; not a choice
+    land_subsets = [list(c) for r in range(len(lands) + 1)
+                    for c in itertools.combinations(lands, r)]
+    spell_subsets = list(itertools.combinations(spells, DECK))
+    if len(spell_subsets) * len(land_subsets) > 40_000:
+        return None
+    return [assemble_full_deck([valid[i] for i in list(sp) + ld], locator)
+            for sp in spell_subsets for ld in land_subsets]
+
+
 def probe(corpus: Path, n_drafts: int, args) -> None:
     """At pick 24 the optimum is 24 decks away. Score them all and compare."""
     import torch
@@ -146,14 +175,15 @@ def probe(corpus: Path, n_drafts: int, args) -> None:
         for i in range(geo.pod_size):
             pools.append(seat_pool(record, geo, i)[:size])
 
+    pools = [p for p in pools if _legal_decks(p, locator, scorer) is not None]
     built = [sc for _deck, sc in labeler.build_and_score_many(pools)]
-    best = [max(score_decks(scorer, [p[:j] + p[j + 1:] for j in range(size)], locator))
+    best = [max(score_decks(scorer, _legal_decks(p, locator, scorer), locator))
             for p in pools]
     gap = [b - s for b, s in zip(best, built) if s is not None]
     kept = [s for s in built if s is not None]
 
     print("")
-    print(f"{len(gap)} seats at pick {size}, every one of the {size} leave-one-out decks scored")
+    print(f"{len(gap)} seats at pick {size}, every legal deck enumerated and scored")
     print("")
     print(f"the builder is beaten by the best of them: "
           f"{100 * sum(g > TOL for g in gap) / len(gap):.0f} % of seats")
