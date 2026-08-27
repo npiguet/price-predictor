@@ -417,17 +417,20 @@ pick evicts is better for gen-4 than for a reference, so the same incoming card 
 Gen-4's raw gain per pick is accordingly the smallest of the four, +0.123 against Forge's
 +0.151, while its like-for-like gain is the largest.
 
-Three limits. Levels below pick 23 are not comparable across picks, because the set the scorer
-sees grows by one each time and it never saw a sub-23-card deck in training. The method measures
-the pool a seat accumulated, not the difficulty of the choices it faced. And single steps are
-noisy: the builder hill-climbs from a random start, so rebuilding one pool twice returns a
-different deck as often as a fifth of the time, spread 0.045 at the 90th percentile. That is why
-6.6 % of steps past pick 23 fall when adding a card cannot lower the best deck a pool supports.
-Picks 24 to 26 are the exception at 24.8 %, and there the cause is arithmetic rather than
-search: a pool holding a drafted land has fewer than 23 spells, so the builder returns the whole
-pool instead of choosing and the scorer counts a different number of cards on either side of the
-step. Past pick 26 the rate is 3.7 %, the same for every agent. Read the curves for their shape,
-not for any individual step.
+Read these curves for their shape, not for any individual step. Three limits set that boundary.
+
+- Levels below pick 23 and steps up to pick 26 are not comparable across picks, because the
+  number of cards the scorer sees changes from one pick to the next. Below 23 the pool grows by
+  one each pick, and the scorer never saw a sub-23-card deck in training. At picks 24 to 26 a
+  pool holding a drafted land has fewer than 23 spells, so the builder returns the whole pool
+  instead of choosing 23 out of it. Steps fall at 24.8 % over those three picks against 3.7 %
+  after them.
+- Single steps are noisy. Adding a card to a pool cannot lower the best deck it supports, yet
+  6.6 % of steps past pick 23 fall. The builder hill-climbs from a random start, so rebuilding
+  one pool twice returns a different deck as often as a fifth of the time, which is enough to
+  produce them.
+- The curves measure the pool a seat accumulated, not the difficulty of the choices it faced. A
+  seat in a weak pod collects a better pool without picking better.
 
 ## The three gen-3 hypotheses survive, but only card judgement tracks quality
 
