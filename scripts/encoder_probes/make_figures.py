@@ -114,22 +114,14 @@ def fig_memorization():
     agg = pd.read_csv(OUT / "r1a_shuffle_r2_agg.csv")
     lines_destroyed = float(agg.loc[(agg["condition"] == "line_order")
                                     & (agg["head"] == "score_play"), "train_r2"].iloc[0])
-    p0 = {_f(r[0]): _f(r[7])
-          for r in _report_table(OUT / "p0_report.md", "min_n | classes")[1:]}
-    bound_lo, bound_hi = p0[0], p0[800]
-
     bars = [
-        ("its own training cards", r2["honest_r2_train"]),
-        ("training cards,\nline order destroyed", lines_destroyed),
-        ("cards it never saw", r2["honest_r2_val"]),
+        ("cards in the training set", r2["honest_r2_train"]),
+        ("training-set cards,\nline order destroyed", lines_destroyed),
+        ("cards in the validation set", r2["honest_r2_val"]),
     ]
     y = np.arange(len(bars))[::-1]
 
     fig, ax = plt.subplots(figsize=(7.0, 3.0))
-    ax.axvspan(bound_lo, bound_hi, color=GRAY, alpha=0.22, zorder=0)
-    ax.text((bound_lo + bound_hi) / 2, -0.32,
-            "prediction ceiling for unseen\ncards (identical twins)",
-            ha="center", va="bottom", fontsize=8, color="#555555", rotation=90)
     ax.set_ylim(-0.45, 2.5)
     for yi, (lab, v) in zip(y, bars):
         ax.barh(yi, v, height=0.6, color=BLUE, edgecolor="white",
@@ -138,8 +130,8 @@ def fig_memorization():
     ax.set_yticks(y, [b[0] for b in bars])
     ax.set_xlim(0, 1.0)
     ax.set_xlabel("share of the winnability label the encoder explains (R²)")
-    ax.set_title("Training cards are fit beyond the ceiling that binds unseen cards;\n"
-                 "destroying their line order collapses the stored part")
+    ax.set_title("The encoder overfits: validation-set accuracy is under half of\n"
+                 "training-set accuracy, and destroying line order collapses the stored part")
     save(fig, "memorization")
 
 
