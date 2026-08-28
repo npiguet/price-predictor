@@ -23,9 +23,17 @@ Three instruments recur. The saved checkpoint contains no regression heads, so r
 
 ## A card can earn a strong winnability label without ever changing a game
 
-A card's winnability label gives it credit for its deck's wins, whether or not the card caused them. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck; whether the deck wins is largely decided by the other 39 cards and by who built it. Three simpler quantities, called channels from here on, can be measured from the same game logs: w, how often decks containing the card win; m, how often the card gets cast; and d, how much more often it is cast in the games its decks win than in the games they lose. Combining them as m(2w−1) + d/2 reproduces every card's winnability label exactly. The channels are therefore not new information: they are the same number, computed in a way that keeps its ingredients apart.
+A card's winnability label gives it credit for its deck's wins, whether or not the card caused them. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck.
 
-Each channel carries a different kind of fact, and that is what the single number was hiding. The w channel is builder choice: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything. The m channel is castability. The d channel is the only one that measures the card changing games: it is positive when winners cast the card more often than losers did. The rest of the document reads every premium through this split, because a premium carried by w is inherited builder taste and only a premium carried by d is evidence the card changed games. The decomposition for the headline card classes:
+In any single game the outcome is mostly the other 39 cards' doing, but averaging fixes that. A card is observed across hundreds to thousands of games in many different decks against many different opponents (the median card has 738 in-deck games), so deck-mate and draw luck smooth out and the label is a precise estimate. What the averaging cannot remove is the systematic association: a card that strong builders like sits in strong decks game after game, and its label inherits their win rate no matter how many games are logged.
+
+Three simpler quantities, called channels from here on, can be measured from the same game logs, and combining them as m(2w−1) + d/2 reproduces every card's winnability label exactly. The channels are not new information: they are the same number, computed in a way that keeps its ingredients apart, and each one holds a different kind of fact.
+
+- w: how often decks containing the card win. The systematic inheritance lives here: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
+- m: how often the card gets cast. This channel is castability.
+- d: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
+
+The rest of the document reads every premium through this split, because a premium carried by w is inherited builder taste and only a premium carried by d is evidence the card changed games. The decomposition for the headline card classes:
 
 ![Channel decomposition of each card class's winnability-label premium](images/2026-08-28-encoder-channels.png)
 
