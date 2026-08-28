@@ -280,8 +280,85 @@ def sec_addrobust():
           f" n={hi.sum()} frac>0={100 * (d[hi] > 0).mean():.1f}%")
 
 
+def sec_colors():
+    """Splash economics in the gen4-512 builds: off-color vs main-color card
+    labels by deck color count, exact color-count census, and the 5-color
+    decks' set concentration and multicolor share."""
+    wr = pl.load_win_rates()
+    loc = pl.ConvertedCardLocator(pl.CARDS_PATH)
+    pip_cache: dict = {}
+
+    def pips(name):
+        if name not in pip_cache:
+            e = loc.load_embedding(name)
+            pip_cache[name] = None if e is None else e[-32:][1:6]
+        return pip_cache[name]
+
+    census: Counter = Counter()
+    sets5: Counter = Counter()
+    sets4: Counter = Counter()
+    gold5 = []
+    grp = defaultdict(lambda: {"main": [], "splash": [], "n_splash": []})
+    for _lbl, sc, cards in pl.read_generated_decks(
+            pl.YDATA / "decks" / "generated-decks-gen4-512.txt"):
+        nonbasic = [c for c in cards if c.lower() not in pl.BASIC_LAND_NAMES]
+        tot = np.zeros(5)
+        percard = {}
+        ok = True
+        for c in nonbasic:
+            p = pips(c)
+            if p is None:
+                ok = False
+                break
+            percard[c] = p
+            tot += p
+        if not ok:
+            continue
+        n = int((tot > 0).sum())
+        census[n] += 1
+        if n == 5:
+            sets5[sc] += 1
+            gold5.append(np.mean([(p > 0).sum() >= 2 for p in percard.values()]))
+        elif n == 4:
+            sets4[sc] += 1
+        if n < 2:
+            continue
+        primary = set(np.argsort(tot)[::-1][:2])
+        key = min(n, 4)
+        n_splash = 0
+        for c, p in percard.items():
+            cols = set(np.nonzero(p > 0)[0])
+            if not cols:
+                continue
+            q = (wr.get(c) or {}).get("shrunk_score_play")
+            if q is None:
+                continue
+            if cols <= primary:
+                grp[key]["main"].append(q)
+            else:
+                grp[key]["splash"].append(q)
+                n_splash += 1
+        grp[key]["n_splash"].append(n_splash)
+
+    print("color-count census:", dict(sorted(census.items())))
+    print(f"{'deck colors':12s} {'decks':>6s} {'main mean q':>12s} "
+          f"{'off-color mean q':>17s} {'off-color cards/deck':>21s}")
+    for k in sorted(grp):
+        s = grp[k]
+        sp = np.mean(s["splash"]) if s["splash"] else float("nan")
+        lbl = f"{k}" + ("+" if k == 4 else "")
+        print(f"{lbl:12s} {len(s['n_splash']):6d} {np.mean(s['main']):12.4f} "
+              f"{sp:17.4f} {np.mean(s['n_splash']):21.1f}")
+    print("5-color decks by set:", dict(sets5.most_common()))
+    if gold5:
+        print(f"mean multicolor-card share in 5-color decks: "
+              f"{100 * np.mean(gold5):.0f}%")
+    print("4-color decks, top sets:", dict(sets4.most_common(8)))
+
+
 SECTIONS = {"t0": sec_t0, "decks": sec_decks, "t2class": sec_t2class,
-            "t1color": sec_t1color, "addrobust": sec_addrobust}
+            "t1color": sec_t1color, "colors": sec_colors,
+            "addrobust": sec_addrobust}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()

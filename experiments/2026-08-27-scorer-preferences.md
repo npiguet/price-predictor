@@ -134,7 +134,23 @@ The first card of a new color costs three to four times what every further card 
 
 Color fixing is priced too, at about a tenth of the splash cost. In a 2×2 probe (splash spell, on-color dual land, both, neither) the dual offsets the splash penalty by +0.04 (t = 14): real color-fixing logic, small magnitude.
 
+The ladders compose into a decision rule. A new color enters the deck when the summed value gains of its cards, over the cards they displace, exceed the one-time color fee, less the fixing refund. The fee repeats for every additional color. The greedy search qualifies the rule: when several splash cards clear the fee only jointly, the first swap is score-negative on its own, and pure hill-climbing cannot take it. The simulated-annealing moves and color-pair restarts exist to cross exactly that valley.
+
 The deployed builds show the preference. gen4-512 builds 2 colors 34% of the time and 3 colors 58%, and it adapts to set structure: 2.2 mean colors on artifact-heavy Mirrodin sets, 4.0 on all-gold Alara Reborn (`post_hoc_slices.py`, section `decks`).
+
+The builds also carry the rule's signature: a color is added only for above-average cargo. In the gen4-512 builds, off-color cards hold higher win-rate labels than the main-color cards beside them, and the premium grows with color count:
+
+| deck colors | decks | main-color mean label | off-color mean label | off-color cards/deck |
+|---|---|---|---|---|
+| 2 | 3,400 | 0.046 | — | 0 |
+| 3 | 5,763 | 0.048 | 0.053 | 3.6 |
+| 4+ | 829 | 0.060 | 0.072 | 5.7 |
+
+*Source: `post_hoc_slices.py`, section `colors`.*
+
+Two readings follow from the table. Third colors are deep, not lone bombs: a 3-color deck carries between three and four off-color cards, because once one strong card has paid the color fee, backfilling the color with its ordinary playables costs only normal swap prices. And color creep happens in rich pools, not poor ones: 4-color decks hold higher main-color quality than 2-color decks, so the driver is surplus good material across colors rather than barren main colors. The comparison covers the cards the builder included; the best cards it left unused are not measured.
+
+Five colors is a fee the builder never volunteers to pay. 28 of 10,000 builds reach five colors, and they concentrate in multicolor-themed sets: Dissension, New Capenna, the Alara and Invasion blocks. About a fifth of their cards are natively multicolor, so a deck reaches "five colors" by pip arithmetic when its gold cards span the wheel, not by splashing five suites; hybrid pips count for both of their colors, inflating the tally further. The 4-color tier says the same — its most common set by far is all-gold Alara Reborn. Gen-2, whose encoder carried no castability signal, built 7.6% five-color decks and lost with them at 28.9%; the repeated fee is what removed them.
 
 ### Creature count: the optimum is 19–20, and too few is punished harder than too many
 
