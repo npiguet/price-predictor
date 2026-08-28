@@ -21,7 +21,7 @@ The method had three phases. Fifty-eight hypotheses were brainstormed, critiqued
 
 Three instruments recur. The saved checkpoint contains no regression heads, so ridge probes refit from the cached card embeddings to the shrunk labels stand in for them. A "fidelity" probe is fit on all cards and read off for predictions; an "honest" probe is fit only on the encoder's own 22,387 training cards (the seed-42 split reconstructed exactly) and used for any generalization claim. Counterfactual edits change one thing in a card's converted text, re-encode with the production checkpoint, and read the predicted-label change; the harness reproduces the cached embeddings bit-exactly. Every edit contrast is layout-matched, because line-order placebo edits alone move predictions by about 0.3 label SD. The ruler throughout is the label standard deviation: SD(shrunk_score_play) = 0.0618, SD(shrunk_played_rate) = 0.1247. Effects quoted without a unit are in score_play SDs.
 
-## The labels grade the builder before they grade the card
+## A label has three parts, and only one is about what the card does in a game
 
 A card's winnability label decomposes exactly into three channels, and only one of them is about the card's play. Writing w for the card's in-deck win rate, m for its average cast rate, and d for the cast-rate gap between won and lost games, the label satisfies score = m(2w−1) + d/2 identically. The w channel is set by which builders include the card: the four Forge build methods win between 26% and 60% of their games, a span worth about ±1.8 SD of label before any card property enters. The d channel, winners casting the card more often than losers, is the only within-deck evidence. The decomposition for the headline card classes:
 
