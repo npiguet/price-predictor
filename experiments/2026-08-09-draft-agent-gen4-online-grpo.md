@@ -27,9 +27,11 @@ built-in AI — it wins about three matches in four. How it drafts:
   and sorceries worst, blue and red lean on those most, so those colours win fewer of these
   games. A human opponent would punish the same lean.
 
-- **It values cards that swing games.** The largest single improvement over gen-3 is a
-  preference for cards that change the game they are cast in, over cards that merely appear in
-  decks that were winning anyway.
+- **Its tastes are its teacher's tastes.** Gen-4 learns by chasing scores from a deck-rating
+  model, and a companion study of that model
+  ([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md)) shows it prefers
+  exactly these shapes: creature counts near twenty, two or three colours, no premium for
+  rares. The played games are what confirms those tastes actually win under Forge's AI.
 
 - **Its edge comes early in each pack.** Gen-4 pulls ahead over the first half of packs 1
   and 2, where packs are fresh and choices are real. It gives some of that back in the
@@ -201,7 +203,10 @@ drafting* below.
 
 A line through the origin fits all six rows at 15.1 points of Bo7 match win rate per unit of
 `deck_score`. Each corpus on its own gives 15.4 and 14.8, and the individual rows imply 13.6 to
-18.1.
+18.1. The scorer study measures the same conversion independently, on sealed decks rather than
+drafted ones, and finds about 18 points per unit
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The ruler*). The two
+corpora agree on the order of the rate and differ modestly on its size.
 
 ## Crowding a pod with strong drafters costs every seat in it
 
@@ -296,6 +301,14 @@ less for a drafter to get right, so Forge's heuristics give up less. The three t
 share the opposite property, since a set designed as its own limited format, a Masters reprint
 product and an Alchemy rebalance all carry sharper power differences than a Standard set does.
 
+The scorer study supports the power-difference reading from the other side. The scorer is blind
+to synergy, paying no more for a payoff as its enablers enter the deck
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *Synergy is absent*),
+so the edge in draft-designed and reprint sets cannot come from drafting build-arounds and has
+to come from the power spread those sets carry. The same study's warning that scores are only
+comparable within a set does not touch this section, because every margin here is a gap between
+seats of the same pod, which any per-set score offset cancels out of.
+
 Individual sets are shrunk toward the grand mean before ranking. A set's own mean is a noisy
 estimate of its true margin, and the fewer pods it has the noisier it is, so ranking on raw
 means would put the luckiest small samples at both ends. Shrinkage replaces each set's mean with
@@ -358,6 +371,11 @@ improvement is worth. That is close to the builder's 73.9 %, and 92 matches put 
 about 5 points on the builder figure, so the two cannot be told apart. Changing who builds the
 deck buys roughly what a generation of better drafting buys.
 
+The winning builder holds a fixed 23 spells and under-plays nonbasic lands, because the scorer
+it climbs reads a 24th card as dilution
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *A 24th card is nearly
+always refused*).
+
 The builder also decides the bottom of the table. `forge-native` loses to every other label,
 including `forge-full`, which drafted the same pools with the same agent. Gen-4's largest
 margin over any label is against `forge-native` rather than against any drafting agent.
@@ -396,9 +414,18 @@ Reference columns give the range across the four corpora, each measured in the s
 the candidate beside it.
 
 Gen-4 builds more creatures and fewer rares than either reference, putting on-colour commons in
-place of higher-rarity cards at an essentially unchanged curve. Every candidate builds narrower
-mana bases than the gen-1 seats sitting in the same pods, where gen-3's incumbent led its
-references by 3.6 points and these lead by 1.4 to 4.1.
+place of higher-rarity cards while nudging the curve slightly up. Every candidate builds
+narrower mana bases than the gen-1 seats sitting in the same pods, where gen-3's incumbent led
+its references by 3.6 points and these lead by 1.4 to 4.1.
+
+Each of these shapes is a measured preference of the scorer the agent trains against
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *Shape*). The scorer's
+creature ladder peaks at 19–20 creatures, above even gen-4's build average, so the agent
+approaches the reward's optimum without reaching it. Its curve optimum of 3.2–3.3 mean mana
+value sits just above where gen-4 builds and further above the references. It pays no premium for rares
+over commons, and it charges a fee for each colour a deck plays. The shapes in the table are
+therefore the reward's taste learned, and the played games below are what shows that taste
+holds up under Forge piloting.
 
 Decks holding more creatures win more, in both played runs and inside every label.
 
@@ -472,7 +499,11 @@ Read these curves for their shape, not for any individual step. Three limits set
 
 - Levels below pick 23 and steps up to pick 26 are not comparable across picks, because the
   number of cards the scorer sees changes from one pick to the next. Below 23 the pool grows by
-  one each pick, and the scorer never saw a sub-23-card deck in training. At picks 24 to 26 a
+  one each pick, and the scorer never saw a sub-23-card deck in training. The scorer study
+  sharpens that caveat: the scorer's pooling is a plain mean, so it reads proportions rather
+  than counts, and a small pool is scored as if its mean composition filled a whole deck
+  ([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The scorer is a
+  mean pool*). At picks 24 to 26 a
   pool holding a drafted land has fewer than 23 spells, so the builder returns the whole pool
   instead of choosing 23 out of it. Steps fall at 24.8 % over those three picks against 3.7 %
   after them.
@@ -545,7 +576,11 @@ off-colour filler far more.
 
 The hypothesis: breaking colour is correct when the card is enough better than the on-colour
 alternative. A healthy policy should therefore show a positive quality premium on its voluntary
-off-lane picks, and a failing one should not. Cards are scored by `shrunk_score_play`, net
+off-lane picks, and a failing one should not. The reward prices exactly this trade: the scorer
+charges a one-time fee for each colour a deck plays, and a new colour pays off only when its
+cards' gains over the cards they displace exceed it
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *Color count*). A
+policy showing the premium is reproducing its reward's splash economics. Cards are scored by `shrunk_score_play`, net
 winning influence on the play, which covers 98 % of drafted card slots. The table below comes
 from `scripts/analyze_pick_quality.py`.
 
@@ -612,7 +647,10 @@ mechanism behind gen-4's decks.
 
 One limit. `shrunk_score_play` decides which card was better, and gen-4 follows that axis more
 closely than either reference, so part of the gap is agreement with the scoring label rather
-than better judgement. Gen-4's breaks on a worse card reach its deck more often than its breaks
+than better judgement. The circularity is real: the scorer's own card values track
+`shrunk_score_play` at Spearman 0.68
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The card ranking is
+learned winnability first*), so agreeing with the label is agreeing with the reward. Gen-4's breaks on a worse card reach its deck more often than its breaks
 on a better one, 55 % against 46 %, which is what mislabelled picks would look like.
 
 ### Hypothesis 3 — a colour prior learned from Forge. Confirmed and stronger.
@@ -624,6 +662,15 @@ The hypothesis: Forge pilots green, black and white better than blue and red, be
 red lean on instants and sorceries and Forge plays those worst. `deck_score` is fitted to
 Forge-piloted outcomes. A policy trained on it should therefore acquire a taste for those three
 colours, and the taste should show when it breaks lane.
+
+The scorer study has since verified the mechanism at card level. The scorer demotes removal,
+card draw and artifacts against human pick orders, pays a flying premium that grows with
+creature size, and gives instant-speed removal no premium over sorcery-speed, all tracing to
+the same piloting asymmetries
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The taste is the
+Forge-AI meta plus inherited human annotations*). It also refines where the taste comes from:
+40 % of the scorer's training decks were built from Forge's bundled human pick-order file, so
+the labels partially inherit human taste rather than reflecting AI play alone.
 
 The test compares, at each off-lane pick, the colour of the card taken against the colour mix of
 the off-lane cards available in that pack at that moment. Each pick contributes weight 1 to both
@@ -741,8 +788,10 @@ training reward is a seat's `deck_score` minus the mean of the other seats', so 
 neighbour is worth a seventh of playing the card yourself. None of the three follows that far.
 Gen-4 comes closest and still leaves the best card behind on three fifths of its forced picks.
 
-### `cast_lift` is the axis gen-4 gained on
+### The `cast_lift` lead is winnability tracked more closely, not a second axis
 
+Gen-4's largest percentile movement over gen-3 is on the `cast_lift` axis, and the scorer study
+reads that movement as `score_play` tracked more closely rather than a taste of its own.
 Hypothesis 2 scores cards on `score_play` alone, and the encoder is trained on five axes
 ([`../specs/2026-05-03-card-winnability-pretraining.md`](../specs/2026-05-03-card-winnability-pretraining.md)).
 This test covers every pick rather than only the off-lane ones. It asks where the taken card sat
@@ -783,11 +832,18 @@ axis, so the references are one baseline, and every trained agent sits above it 
 quality axes and below it on the colour axis. `score_play` and `score_draw` correlate at Spearman
 0.72 and every agent tracks them equally, so they are one finding rather than two.
 
-The generation's gain is on `cast_lift`, where gen-3's incumbent led gen-1 by +0.032 and gen-4
+The largest movement is on `cast_lift`, where gen-3's incumbent led gen-1 by +0.032 and gen-4
 leads by up to +0.079. `cast_lift` measures the effect of casting a card, net of the quality of
-the deck it was cast in. It scores a card that changes the game it is cast in above one that
-only appears in decks that were winning anyway. It correlates with `score_play` at 0.64, so most
-but not all of that movement is shared with raw power.
+the deck it was cast in, and it correlates with `score_play` at 0.64 in this data. The scorer
+study argues the shared part is close to the whole of it
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The scorer pulls
+hardest on the winnability axis*). Held at fixed winnability and played-rate, `cast_lift`
+explains almost none of the scorer's card values, and its apparent causal weight retraces the
+winnability direction. The label also carries a survivorship artifact: a cheap card goes uncast
+only in games that were already lost, which is how combat tricks hold the highest `cast_lift`
+of any class while the scorer ranks them lowest. The reward the policy trained on barely reads
+this axis on its own, so the reading that survives is that gen-4 tracks winnability more
+closely than gen-3 did, and `cast_lift` moves with it as a correlated label.
 
 Two axes order the four candidates as the yardstick does, `score_play` and `cast_lift`. On
 `cast_lift` only the paired figure resolves it, since `t2all_nodecay` and `t3learner_t2field`
@@ -801,4 +857,9 @@ The colour axis is confounded and settles nothing. Its labels correlate negative
 `score_play` (−0.13 to −0.28) and more strongly negatively with `played_rate` (−0.27 to −0.41),
 so an agent climbing the power axes is pushed down the colour axis mechanically. It is also not
 the colour prior of Hypothesis 3, which is about which of WUBRG the agent prefers, where
-`color_lift` asks whether a card pairs with the colours already committed to.
+`color_lift` asks whether a card pairs with the colours already committed to. The scorer study
+adds that the reward never reads these labels at all: colour affinity is missing from the text
+embedding's leading components, and the scorer takes colour from the deterministic pip counts
+instead ([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *Two numbers
+per card*). An agent trained on that reward climbs the axes the reward carries, and
+`color_lift` is not one of them.
