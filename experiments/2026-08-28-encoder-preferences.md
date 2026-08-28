@@ -25,11 +25,9 @@ Three instruments recur. The saved checkpoint contains no regression heads, so r
 
 A card's winnability label gives it credit for its deck's wins, whether or not the card caused them. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck.
 
-In any single game the outcome is mostly the other 39 cards' doing, but averaging fixes that. A card is observed across hundreds to thousands of games in many different decks against many different opponents (the median card has 738 in-deck games), so deck-mate and draw luck smooth out and the label is a precise estimate. What the averaging cannot remove is the systematic association: a card that strong builders like sits in strong decks game after game, and its label inherits their win rate no matter how many games are logged.
-
 Three simpler quantities, called channels from here on, can be measured from the same game logs, and combining them as m(2w−1) + d/2 reproduces every card's winnability label exactly. The channels are not new information: they are the same number, computed in a way that keeps its ingredients apart, and each one holds a different kind of fact.
 
-- w: how often decks containing the card win. The systematic inheritance lives here: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
+- w: how often decks containing the card win. Builder choice sets this: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
 - m: how often the card gets cast. This channel is castability.
 - d: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
 
