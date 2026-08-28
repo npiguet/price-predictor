@@ -4,7 +4,7 @@
 
 - The encoder's card ratings are faithful copies of its training labels, and the labels are only partly about the card. A card's winnability label mixes three things: which deck builders were willing to play the card, how often it got cast, and whether winners cast it more than losers. Only the last part is about what the card does in a game.
 - Half of what the encoder appears to know is memorized card identity. Its accuracy on validation cards is under half of its accuracy on the training set, and the memory is keyed to the card's text layout, not its words.
-- What generalizes is mostly a bag of words. Sixty percent of the encoder's transferable winnability knowledge survives shuffling every word in every card. A thin compositional layer sits on top: the word "flying" earns its premium only on an ability line of a creature, and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way, weakly.
+- The encoder reads words in context the way a transformer should: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But the reading is weakly calibrated: sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
 - The best keyword in Forge's eyes is flying, worth about 0.4 label standard deviations on its own, followed by deathtouch, haste, double strike, and lifelink. Hexproof, ward, and shroud are penalized even though the labels pay for them. Deathtouch plus trample is superadditive.
 - The best spell text is direct damage, then fight, exile, and destroy. Lockdown auras top all noncreature text. Sweepers, tap effects, and counterspells sit at the bottom, and a spell whose whole text is lifegain is the worst text the encoder knows.
 - Bodies beat effects. The same effect is worth about 0.6 standard deviations more stapled to a creature than printed on a sorcery. A mana dork is fine and a mana rock is bad for exactly this reason.
@@ -71,15 +71,17 @@ The stored key is the line layout more than the words. Swapping two ability line
 
 For the pipeline's stated purpose, scoring invented cards, the validation numbers are the honest ones: 37% of winnability, 61% of played rate. Comparing two versions of the same card stays safe, because the memorized part is the same on both sides and cancels in the difference. A single absolute score does not. An invented card must also be written in the converter's standard line order, because unusual layout moves a prediction more than most real content changes.
 
-## What transfers is mostly a bag of words, with thin composition on top
+## Composition is real and correctly signed; its defect is calibration, not direction
 
-Destroying word order leaves most of the transferable winnability knowledge intact. Refitting probes on embeddings of shuffled text and evaluating on validation cards:
+Word order carries a substantial share of what transfers: destroying it costs 40% of the encoder's validation-card winnability knowledge and 62% of its cast-frequency knowledge. Refitting probes on embeddings of shuffled text and evaluating on validation cards:
 
 ![Held-out R² surviving each level of text destruction](images/2026-08-28-encoder-shuffle.png)
 
 *Source: `r1a_shuffle.py`, two seeds averaged; rendered by `make_figures.py`.*
 
-The compositional layer is real but thin, and keyed to slots. On creatures whose only text is a flying line, the line is worth +0.52; the same word moved into a granted-ability spell line keeps 13% of that, and under "can't block creatures with flying" it turns negative. Scope and negation flips all move predictions the correct way, and all weakly: restricting "destroy target creature" to "you control" and inverting +N/+N to −N/−N each clear their placebo null by about 0.14 SD. Turning a Pacifism into a self-lockdown moves the prediction a third as much as swapping its two static lines does. The encoder reads layout more loudly than meaning.
+Where composition is tested directly, it behaves the way a transformer should. The word "flying" is priced by the role it plays: worth +0.52 as a creature's own static line, 13% of that inside a spell that merely grants it, and negative under "can't block creatures with flying", where it marks a drawback. Scope and negation flips also move predictions in the semantically correct direction: restricting "destroy target creature" to "you control" and inverting +N/+N to −N/−N each lower the prediction, clearing their placebo null by about 0.14 SD.
+
+The defect is that meaning and noise move the prediction by similar amounts. Turning a Pacifism into a self-lockdown, a full reversal of what the card does, moves the prediction a third as much as swapping its two static lines, which changes nothing at all. The correct sign of the composition responses says the machinery is there; their small size against the layout noise says it is weakly calibrated.
 
 Wordiness itself is priced. Appending any clause to a spell's line pays about +0.09 whatever it says, a drawback clause included; only on a creature's own triggered line does the sign channel work, where a self-sacrifice rider costs −0.20 and a +1/+1-counter rider pays +0.20. A cantrip rider nets exactly zero against a matched control, confirming the label-side null causally.
 
@@ -135,7 +137,7 @@ The eighteen ranked questions resolve into three clean falsifications — cast-l
 
 | ranked question | verdict | key evidence |
 |---|---|---|
-| R1 bag-of-words vs composition | both, quantified: 60% of transfer survives word shuffle; slot attribution index 0.13; negation read weakly, layout read loudly | `r1_*.py` |
+| R1 bag-of-words vs composition | both, quantified: composition correctly signed (flying priced by role, negation lowers) and carries 40% of winnability transfer; but layout placebos move predictions as much as meaning flips | `r1_*.py` |
 | R2 memorization | verified, larger than hypothesized: half the apparent knowledge; key is layout | `r2_*.py` |
 | R3 play/draw one axis | verified; a 1/25-size correctly-signed residue survives | `s_r3.py` |
 | R4 cast_lift redundant | falsified: unique ΔR² +0.16 on validation cards; the label stays | `s_r4.py` |
