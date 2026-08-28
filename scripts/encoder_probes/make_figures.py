@@ -117,7 +117,6 @@ def fig_memorization():
     p0 = {_f(r[0]): _f(r[7])
           for r in _report_table(OUT / "p0_report.md", "min_n | classes")[1:]}
     bound_lo, bound_hi = p0[0], p0[800]
-    rel = _f(_report_table(OUT / "l_report.md", "quantity | n cards")[1][3])
 
     bars = [
         ("its own training cards", r2["honest_r2_train"]),
@@ -128,11 +127,9 @@ def fig_memorization():
 
     fig, ax = plt.subplots(figsize=(7.0, 3.0))
     ax.axvspan(bound_lo, bound_hi, color=GRAY, alpha=0.22, zorder=0)
-    ax.text((bound_lo + bound_hi) / 2, -0.32, "most any text reader can\nexplain (identical twins)",
+    ax.text((bound_lo + bound_hi) / 2, -0.32,
+            "prediction ceiling for unseen\ncards (identical twins)",
             ha="center", va="bottom", fontsize=8, color="#555555", rotation=90)
-    ax.axvline(rel, color=GRAY, ls="--", lw=1.2)
-    ax.text(rel - 0.012, -0.32, "label repeatability ceiling",
-            ha="right", va="bottom", fontsize=8, color="#555555", rotation=90)
     ax.set_ylim(-0.45, 2.5)
     for yi, (lab, v) in zip(y, bars):
         ax.barh(yi, v, height=0.6, color=BLUE, edgecolor="white",
@@ -141,8 +138,8 @@ def fig_memorization():
     ax.set_yticks(y, [b[0] for b in bars])
     ax.set_xlim(0, 1.0)
     ax.set_xlabel("share of the winnability label the encoder explains (R²)")
-    ax.set_title("The encoder fits its training cards beyond what text can explain;\n"
-                 "destroying their line order collapses the memorized part")
+    ax.set_title("Training cards are fit beyond the ceiling that binds unseen cards;\n"
+                 "destroying their line order collapses the stored part")
     save(fig, "memorization")
 
 
