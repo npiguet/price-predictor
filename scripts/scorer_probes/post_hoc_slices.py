@@ -341,12 +341,17 @@ def sec_colors():
         grp[key]["n_splash"].append(n_splash)
 
     print("color-count census:", dict(sorted(census.items())))
+    rows = {}
     print(f"{'deck colors':12s} {'decks':>6s} {'main mean q':>12s} "
           f"{'off-color mean q':>17s} {'off-color cards/deck':>21s}")
     for k in sorted(grp):
         s = grp[k]
         sp = np.mean(s["splash"]) if s["splash"] else float("nan")
         lbl = f"{k}" + ("+" if k == 4 else "")
+        rows[lbl] = {"decks": len(s["n_splash"]),
+                     "main_q": float(np.mean(s["main"])),
+                     "splash_q": (None if not s["splash"] else float(sp)),
+                     "splash_cards": float(np.mean(s["n_splash"]))}
         print(f"{lbl:12s} {len(s['n_splash']):6d} {np.mean(s['main']):12.4f} "
               f"{sp:17.4f} {np.mean(s['n_splash']):21.1f}")
     print("5-color decks by set:", dict(sets5.most_common()))
@@ -354,6 +359,13 @@ def sec_colors():
         print(f"mean multicolor-card share in 5-color decks: "
               f"{100 * np.mean(gold5):.0f}%")
     print("4-color decks, top sets:", dict(sets4.most_common(8)))
+    import json
+    (OUT / "post_hoc_colors.json").write_text(json.dumps(
+        {"census": dict(sorted(census.items())), "by_colors": rows,
+         "sets5": dict(sets5.most_common()),
+         "gold_share_5c": (float(np.mean(gold5)) if gold5 else None),
+         "sets4_top": dict(sets4.most_common(8))}, indent=1), encoding="utf-8")
+    print("saved", OUT / "post_hoc_colors.json")
 
 
 SECTIONS = {"t0": sec_t0, "decks": sec_decks, "t2class": sec_t2class,

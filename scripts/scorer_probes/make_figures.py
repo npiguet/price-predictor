@@ -343,6 +343,61 @@ def fig_det_groups():
     save(fig, "det-groups")
 
 
+def fig_color_economics():
+    data = json.load(open(OUT / "post_hoc_colors.json"))["by_colors"]
+    tiers = ["2", "3", "4+"]
+    x = np.arange(len(tiers))
+    main = [data[t]["main_q"] for t in tiers]
+    splash = [data[t]["splash_q"] for t in tiers]
+
+    fig, ax = plt.subplots(figsize=(6.0, 3.8))
+    ax.bar(x - 0.19, main, 0.38, color=BLUE, label="main-color cards")
+    ax.bar([xi + 0.19 for xi, s in zip(x, splash) if s is not None],
+           [s for s in splash if s is not None], 0.38, color=ORANGE,
+           label="off-color cards")
+    for xi, (m, s, t) in enumerate(zip(main, splash, tiers)):
+        ax.text(xi - 0.19, m + 0.001, f"{m:.3f}", ha="center", fontsize=8)
+        if s is not None:
+            ax.text(xi + 0.19, s + 0.001, f"{s:.3f}", ha="center", fontsize=8)
+        ax.text(xi, -0.008, f"n={data[t]['decks']:,}", ha="center", fontsize=8,
+                color=GRAY)
+    ax.set_xticks(x, [t + " colors" for t in tiers])
+    ax.set_ylabel("mean win-rate label (shrunk_score_play)")
+    ax.set_ylim(-0.012, 0.085)
+    ax.set_title("A color is added only for better-than-average cards")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+    save(fig, "color-economics")
+
+
+
+def fig_land_adds():
+    import pandas as pd_local  # noqa: F401
+    df = pd.read_csv(OUT / "t1_add_deltas.csv")
+    sp = df[df.is_land == False]  # noqa: E712
+    groups = [
+        ("land producing the deck's colors", df[df.land_class == "on_color_land"]),
+        ("off-color land", df[df.land_class == "off_color_land"]),
+        ("colorless-producing land", df[df.land_class == "colorless_land"]),
+        ("on-color spell", sp[sp.on_color == True]),  # noqa: E712
+        ("off-color spell", sp[sp.on_color == False]),  # noqa: E712
+    ]
+    labels = [g[0] for g in groups][::-1]
+    vals = [g[1].delta_add.mean() for g in groups][::-1]
+    shares = [(g[1].delta_add > 0).mean() for g in groups][::-1]
+    cols = [BLUE if "land" in l else ORANGE for l in labels]
+
+    fig, ax = plt.subplots(figsize=(6.8, 3.4))
+    ax.barh(labels, vals, color=cols, height=0.6)
+    for i, (v, s) in enumerate(zip(vals, shares)):
+        ax.text(v - 0.012, i, f"{v:+.2f}  ({100 * s:.0f}% positive)",
+                va="center", ha="right", fontsize=8)
+    ax.axvline(0, color=GRAY, lw=0.8)
+    ax.set_xlim(-0.75, 0.1)
+    ax.set_xlabel("mean Δscore from adding the card to a built deck (400 contexts)")
+    ax.set_title("Lands are the least-refused addition, and land classes are\npriced correctly inside the size prior")
+    save(fig, "land-adds")
+
+
 def fig_synergy_dose():
     a = json.load(open(OUT / "t4_results.json"))["A_dose_response"]["dose_curve"]
     ks = sorted(int(k) for k in a)
@@ -374,6 +429,8 @@ if __name__ == "__main__":
     fig_det_groups()
     fig_builder_scores()
     fig_shape_ladders()
+    fig_color_economics()
+    fig_land_adds()
     fig_card_values()
     fig_synergy_dose()
     print("done ->", FIG)

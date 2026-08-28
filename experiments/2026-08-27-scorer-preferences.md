@@ -1,5 +1,18 @@
 # What the deck scorer prefers
 
+## The short version
+
+- The scorer likes creature-heavy decks in two or three colors: 19 or 20 creatures, with an average mana cost just above three.
+- A splash has to earn its place: a new color helps only when its cards are better than the cards they push out. A fourth color rarely clears that bar, and a fifth never does.
+- Cards are ranked mostly by how often they won games in training. Creatures come first, removal second, card draw and do-nothing artifacts last. The BREAD rule puts removal right after bombs; the scorer disagrees.
+- Flying is the ability it prizes most, and more so on big creatures. Expensive cards beat cheap ones, and only mythics get a rarity bonus.
+- It does not see synergies. A tribal payoff is worth the same with or without its tribe, and a second copy of a card is worth the same as the first.
+- Its taste comes from watching Forge's AI play itself. That AI attacks and blocks well, defends against fliers badly, and misplays instants; the scorer's likes and dislikes mirror those strengths and weaknesses.
+- Scores only mean something within a single set. One point of score is worth about 18 percentage points of match win rate.
+- Under the hood, the scorer boils every card down to a few learned numbers and averages them across the deck. Combos, exact counts, and which ability sits on which creature are invisible to it.
+
+## Method and subject
+
 This document records an interpretability study of the production sealed deck scorer: which deck properties raise its score, which lower it, and where those preferences come from. It is the evidence base for an article on what the scorer likes and dislikes when building from a sealed or draft pool.
 
 The method had three phases. Fifty hypotheses were brainstormed and critiqued by four independent Opus reviewers, one of which ran label-level regressions against Forge's bundled human draft rankings. The surviving hypotheses were ranked. A battery of inference-only probes then tested them: roughly half a million scorer forward passes, no training. Every probe lives in [`scripts/scorer_probes/`](../scripts/scorer_probes/README.md); each figure and table below names its script, and the numbers regenerate from the staged outputs in `output/scorer-probes/`.
@@ -18,115 +31,17 @@ Binning them by score margin gives a monotone calibration across all ten deciles
 
 *Source: `t7_artifacts.py`, probe C.*
 
-Two comparisons recur through the document. Held-out accuracy compares the scorer to the reality of played matches: the share of held-out matches in which the actual winner receives the higher score. Ranking agreement compares the scorer to another version of itself: both versions score the same pile of decks, and Spearman ρ measures how similar the two resulting orderings are, 1.0 for the identical order and 0 for an unrelated one. Played matches play no part in ranking agreement. In the ablations below, the other version is always the same checkpoint with part of its card input erased, judged against the full model.
+Two comparisons recur through the document. Held-out accuracy compares the scorer to the reality of played matches: the share of held-out matches in which the actual winner receives the higher score. Ranking agreement compares the scorer to another version of itself: both versions score the same pile of decks, and Spearman ρ measures how similar the two resulting orderings are, 1.0 for the identical order and 0 for an unrelated one. Played matches play no part in ranking agreement. In the ablations of the mechanism section, the other version is always the same checkpoint with part of its card input erased, judged against the full model.
 
 Held-out accuracy for the full model is 71.9%, at the Bo7 oracle ceiling of 0.72–0.78 estimated in [`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md). Accuracy per matchup runs from ~99% on gen-vs-random pairs down to ~60% on gen4-vs-gen5 and mirror pairs. Every Δscore below converts at roughly 18 winrate points per unit.
 
-## The scorer is a mean pool over a 2–4 number summary of each card
-
-### The pooling layer is a plain average, not learned attention
-
-The scorer's learned pooling seeds attend uniformly. Measured over 400 real decks, every seed and head spreads its attention within 0.6% of exactly uniform, and no seed specializes on lands or any card class. The deck vector is therefore the arithmetic mean of the card representations.
-
-Three invariances confirm the mean-pooling reading directly:
-
-| test | result |
-|---|---|
-| replicate the deck (every card ×2, ×3) | score changes by 0.0000 |
-| k identical copies of one card, k = 1…23 | score constant in k (mechanism demonstration) |
-| scale the pooled representation ×0.25 … ×4 | scores unchanged (ρ = 1.0000); LayerNorm strips magnitude |
-
-*Source: `t6_mechanism.py`, probes P2–P4.*
-
-The consequence is that the model reads proportions, never counts. Creature share, color mix, and average card quality are visible to it; "how many cards" is not, except through the fixed deck sizes of its training data.
-
-Inside the stack, card representations converge layer by layer: mean pairwise cosine rises from 0.19 at the input to 0.73 after layer 6. This over-smoothing is why multi-view pooling and hand-computed deck stats added nothing in the gen-2 sweeps ([`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md)): the architecture was already computing deck-level averages, and only deck-level averages.
-
-Uniform attention is better explained by the task than by a failed optimization. Three measurements support this reading. When the gen-2 sweep added explicit max-pool and mean-pool readouts alongside the learned pooling, validation accuracy did not change, so a non-uniform readout was available and carried no extra signal. The scorer reaches the Bo7 oracle ceiling with uniform attention, so a sharper mechanism had no headroom left. The quantities that predict a Bo7 outcome in this corpus are proportions: mean card winnability, creature share, color mix, curve mean. A uniform average is the correct operator for a proportion, not a degenerate one.
-
-A training-side contribution cannot be ruled out, because three properties of the setup favor uniform attention from the start. The pooling seeds initialize near zero, so attention is uniform at the first step. The over-smoothed card representations give the pooling layer near-identical keys, so the gradient toward sharper attention is near zero whatever the queries learn. Bo7 label noise makes any small benefit of selective pooling hard to detect. Two discriminating experiments are cheap and have not been run: training an otherwise-identical scorer with a fixed mean in place of the pooling layer, and running the same attention capture on the gen-1 through gen-3 checkpoints.
-
-Selective attention would matter only where deck value depends on extremes or pairings: a single bomb, a single unplayable card, a hole in the curve, a synergy pair. The corpus removes those signals before the scorer sees them. Bo7 aggregation averages out single-card extremes, and the Forge AI neither builds around nor pilots synergies. Attention still does necessary work in this model: the uniform mixing in the self-attention stack carries the deck context that the off-color penalty and splash thresholds below depend on. What never differentiated is selective attention, because a uniform broadcast was all the task required.
-
-### The card-text embedding carries the signal; the 32 deterministic features are nearly redundant
-
-Erasing per-card text costs nine points of held-out accuracy. Erasing the 32 deterministic features costs two. Each ablation replaces one block of every card's vector with its corpus mean and rescores all 4,708 held-out matches.
-
-![Held-out accuracy under representation ablations](images/2026-08-27-scorer-ablation.png)
-
-*Source: `t5_ablation.py`.*
-
-The ablation reverses the gen-2-era diagnosis. [`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md) hypothesized the scorer leaned almost entirely on the deterministic features, and its planned ablations were never run. On gen-4 the text embedding is the primary channel. Ranking agreement shows the same asymmetry. Erasing text scrambles the model's deck ordering (ρ 0.51 against the full model); erasing the deterministic features leaves it largely intact (ρ 0.85). The two metrics can come apart, because an edit can reorder decks that sit close together in quality without flipping any pair a match actually compares.
-
-Inside the deterministic features, the color pips are the one group the scorer clearly needs. The probe erases one feature group at a time, with the same mean-substitution design as the block-level ablation above. Two changes make the small per-group effects resolvable. The evaluation pool widens to 21,564 held-out matches, because the gen-4 round-robin corpus was generated 2026-05-19 through 2026-05-21, after the training cutoff, and joins the gen-5 file. Significance comes from the paired per-match difference against the full model, whose standard error is set by the prediction flip rate rather than the base accuracy.
-
-![Held-out accuracy change from erasing each deterministic-feature group](images/2026-08-27-scorer-det-groups.png)
-
-*Source: `t5b_det_groups.py`.*
-
-Erasing the six pip counts flips 14% of match predictions, the largest effect of any single group. The full mana-cost group accounts for two thirds of what all 32 features contribute. The color flags and the power/toughness/loyalty slots have small effects, distinguishable from zero (z ≈ −2.5 each). Mana value alone is marginal. Mana production and is_land contribute nothing, because the text embedding already knows what a card produces and whether it is a land. The single-group effects sum to approximately the all-32 effect, so the contribution decomposes additively across the groups, with nothing left to interactions.
-
-Which card carries which text vector barely matters. Permuting the text blocks across a deck's cards, keeping the bag of vectors intact, costs under half an accuracy point. The scorer scores the bag, not the binding. Any preference that requires knowing that this body carries that ability cannot survive this test.
-
-Telling a Forge deck from a scorer-built deck is entirely a text-embedding judgment. With text erased, forge-vs-gen pairs drop to coin-flip accuracy while every other pair type degrades far less.
-
-The same dependency explains the generation history: the aggregation barely changed from gen-2 to gen-4, and the gains came from the inputs. Gen-2's text dims came from the price-predictor encoder, whose training signal is card prices, a quantity dominated by collector value. Vectors like that carry no sealed card quality, so a mean over them can express deck shape and nothing else. The consequence was measured at the time: at matched deck shape, forge-best beat gen-2 by 8–17 winrate points ([`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md)). Gen-2's four null aggregation experiments — depth, dropout, multi-view pooling, hand-computed deck stats — all located the bottleneck upstream of the pooling.
-
-Replacing the encoder is what moved match play. Gen-3 swapped the price encoder for one trained from scratch on per-card winnability labels, distilled from about a million self-play games. The swap took gen-3 from losing the matched-shape comparisons to beating forge-best on 47 of 48 pools ([`2026-05-13-gen3-initial-training.md`](2026-05-13-gen3-initial-training.md)). Gen-4 widened the encoder from 256 to 512 dims, worth ~3.3σ over the 256-wide build in match play ([`2026-05-15-gen4-initial-training.md`](2026-05-15-gen4-initial-training.md)).
-
-The form of supervision mattered as much as the encoder. Phase B in the gen-2 era fine-tuned the price encoder against match outcomes and did not improve on the frozen baseline ([`2026-04-30-gen2-unfrozen-embeddings.md`](2026-04-30-gen2-unfrozen-embeddings.md)); a Bo7 match outcome is one noisy bit, too little signal to teach per-card quality through the scorer. Dense per-card labels from game logs are what succeeded. Across the whole lineage, the scorer was always a mean over per-card summaries, and every real gain came from improving what those summaries contain.
-
-### Two numbers per card explain almost everything the scorer reads from text
-
-Keeping only the top two principal components of every card's text vector reproduces the scorer's held-out accuracy. Four components saturate it. Ranking agreement with the full model keeps improving out to 256 components, so the remaining directions still shift scores; they just stop changing which deck of a held-out pair ranks higher.
-
-![Held-out accuracy and ranking agreement with the full model as the text block is truncated to k principal components](images/2026-08-27-scorer-pc-truncation.png)
-
-*Source: `make_text_pca.py` for the PCA; `t6_mechanism.py`, probe P1, for the truncation.*
-
-The encoder's card cloud is this compressible because it is low-rank to begin with: PC1 carries 55% of card-to-card variance, the top 8 carry 75%, and the participation ratio is 3.2. The gen-3 encoders measured the same way in [`2026-05-11-sealed-encoder-hparam-sweep.md`](2026-05-11-sealed-encoder-hparam-sweep.md) had the same shape.
-
-The two leading axes have measured meanings. Regressing the encoder's own training labels on the PC coordinates, over the 25,441 cards that carry every label, identifies PC1 as the played-rate axis and PC2 as the winnability axis. PC1 correlates +0.84 with the played-rate label and near zero with the quality labels; adding PC2 lifts the quality labels from near nothing to most of their variance. The score_draw curve coincides with the score_play curve: winning on the play and winning on the draw are one axis to the encoder.
-
-![R² of each encoder label on the top-k text principal components](images/2026-08-27-scorer-pc-labels.png)
-
-*Source: `make_text_pca.py`, label-regression section.*
-
-Color affinity is missing from the leading components: the color-lift labels stay low across the whole charted range. The color information the scorer needs arrives through the deterministic pips instead, which is why the pips are the one deterministic group whose erasure hurts (the per-group ablation above).
-
-Each card therefore reaches the scorer as a short list of meaningful numbers: castability and winnability from the text block, and its color pips from the deterministic features. The deck score is a shape-aware average of those summaries.
-
-### The scorer pulls hardest on the winnability axis
-
-Knowing which labels reach the scorer does not say how hard each one is used. Two measurements answer that, one associational and one causal. The associational measurement regresses the scorer's per-card values (`v_swap`, defined under Cards below) on the three label axes at once. In that regression, winnability carries about three times the weight of played-rate. Cast_lift adds nothing once the other two are held fixed (unique R² 0.003).
-
-The causal measurement perturbs one card inside a real deck and reads the score response. The perturbation step is the average change in a card's text vector that accompanies a one-standard-deviation increase of one label. Each step is applied to every card of 300 held-out decks, one card at a time, in both directions.
-
-![Associational and causal weight of each label axis in the scorer](images/2026-08-27-scorer-label-weights.png)
-
-*Source: `t5c_label_weights.py`.*
-
-The two measurements agree: improving one card by a standard deviation along the winnability axis moves the score about six times as much as along the played-rate axis. The tall causal cast_lift bar is overlap, not an independent weight. The labels correlate at 0.69, and the causal steps are not orthogonalized. The cast_lift step therefore largely retraces the winnability direction. The regression does hold the other axes fixed, and it puts cast_lift's own contribution near zero.
-
-The gray PC bars repeat the axis identities from the chart above. A PC2 step moves the score as much as the winnability step. A PC1 step moves it a quarter as much, although PC1 carries most of the embedding's variance. The encoder's loudest axis is not the axis the scorer uses most.
-
-On the ruler, a one-standard-deviation winnability improvement on a single card is worth roughly two winrate points.
-
-### Three quarters of the score range separates incoherent decks from coherent ones
-
-Of the 6.1 score units between the mean random-pile deck and the mean gen-5 deck, 4.6 lie below the forge-best baseline. Realistic candidate decks for one pool live on the remaining quarter of the range. Within that quarter the ordering is right: mean score by builder is strictly monotone in the builders' real match-play strength.
-
-![Mean score by deck builder, with the coherence and quality spans marked](images/2026-08-27-scorer-builder-scores.png)
-
-*Source: `t0_landscape.py`; cuts in `post_hoc_slices.py`, section `t0`.*
-
-## Shape: it wants 19 creatures, two or three colors, a 3.2 curve, and 18 lands
+## Shape: it wants 19 creatures, two or three colors, and a 3.2 curve
 
 Shape probes swap cards inside real decks and read the score response. Contexts are 250–800 decks sampled from 10,000 aligned pool/deck pairs. One baseline number recurs: swapping any chosen card for a card the builder rejected costs about −0.40, because chosen cards are simply better. Ladder effects are read against that baseline and against each ladder's own rung-to-rung marginals.
 
 ![Score response to creature count, curve, and off-color additions](images/2026-08-27-scorer-shape-ladders.png)
 
-*Source: `t3_ladders.py`; the spell-count probe is `t7_artifacts.py` B, the add-a-card probe `t1_meansum.py`.*
+*Source: `t3_ladders.py`; the add-a-card probe is `t1_meansum.py`.*
 
 ### Color count: the price is paid per color, and the first off-color card pays it
 
@@ -138,19 +53,15 @@ The ladders compose into a decision rule. A new color enters the deck when the s
 
 The deployed builds show the preference. gen4-512 builds 2 colors 34% of the time and 3 colors 58%, and it adapts to set structure: 2.2 mean colors on artifact-heavy Mirrodin sets, 4.0 on all-gold Alara Reborn (`post_hoc_slices.py`, section `decks`).
 
-The builds also carry the rule's signature: a color is added only for above-average cargo. In the gen4-512 builds, off-color cards hold higher win-rate labels than the main-color cards beside them, and the premium grows with color count:
+The builds also carry the rule's signature: a color is added only for cards better than the ones already in the deck. In the gen4-512 builds, off-color cards hold higher win-rate labels than the main-color cards beside them, and the premium grows with color count.
 
-| deck colors | decks | main-color mean label | off-color mean label | off-color cards/deck |
-|---|---|---|---|---|
-| 2 | 3,400 | 0.046 | — | 0 |
-| 3 | 5,763 | 0.048 | 0.053 | 3.6 |
-| 4+ | 829 | 0.060 | 0.072 | 5.7 |
+![Win-rate labels of main-color and off-color cards by deck color count](images/2026-08-27-scorer-color-economics.png)
 
 *Source: `post_hoc_slices.py`, section `colors`.*
 
-Two readings follow from the table. Third colors are deep, not lone bombs: a 3-color deck carries between three and four off-color cards, because once one strong card has paid the color fee, backfilling the color with its ordinary playables costs only normal swap prices. And color creep happens in rich pools, not poor ones: 4-color decks hold higher main-color quality than 2-color decks, so the driver is surplus good material across colors rather than barren main colors. The comparison covers the cards the builder included; the best cards it left unused are not measured.
+Two readings follow from the chart. Third colors are deep, not lone bombs: a 3-color deck carries between three and four off-color cards, and a 4-color deck nearly six, because once one strong card has paid the color fee, backfilling the color with its ordinary playables costs only normal swap prices. And color creep happens in rich pools, not poor ones: 4-color decks hold higher main-color quality than 2-color decks, so the driver is surplus good material across colors rather than barren main colors. The comparison covers the cards the builder included; the best cards it left unused are not measured.
 
-Five colors is a fee the builder never volunteers to pay. 28 of 10,000 builds reach five colors, and they concentrate in multicolor-themed sets: Dissension, New Capenna, the Alara and Invasion blocks. About a fifth of their cards are natively multicolor, so a deck reaches "five colors" by pip arithmetic when its gold cards span the wheel, not by splashing five suites; hybrid pips count for both of their colors, inflating the tally further. The 4-color tier says the same — its most common set by far is all-gold Alara Reborn. Gen-2, whose encoder carried no castability signal, built 7.6% five-color decks and lost with them at 28.9%; the repeated fee is what removed them.
+Five colors is a fee the builder never volunteers to pay. 28 of 10,000 builds reach five colors, and they concentrate in multicolor-themed sets: Dissension, New Capenna, the Alara and Invasion blocks. About a fifth of their cards are natively multicolor, so a deck reaches "five colors" by pip arithmetic when its gold cards jointly cover all five colors, not because cards from five colors were chosen one by one; hybrid pips count for both of their colors, inflating the tally further. The 4-color tier says the same — its most common set by far is all-gold Alara Reborn. Gen-2, whose encoder carried no castability signal, built 7.6% five-color decks and lost with them at 28.9%; the repeated fee is what removed them.
 
 ### Creature count: the optimum is 19–20, and too few is punished harder than too many
 
@@ -168,38 +79,17 @@ The deck-level optimum coexists with a card-level preference for expensive cards
 
 A mean-preserving spread, swapping two 3-drops for a 2-drop and a 4-drop or the reverse, moves the score less than a quality-matched control swap at the same mean (|Δ| lower by 0.07, t = 3.7). The scorer holds no opinion on curve smoothness, gaps, or bimodality at fixed mean. The "no 2-drops" alarm a human builder raises has no analogue in the model.
 
-### The scorer wants 22 spells and 18 lands, and the deployed builder cannot give them to it
+### A 24th card is nearly always refused; nonbasic lands are refused least
 
-Offered the same deck at 22, 23, or 24 spells, the scorer prefers 22 in 88% of decks. The controls split the preference into a count effect and a card-quality effect:
+Adding a 24th card to a built deck lowers the score in almost every case, and even the best on-color candidates are usually refused. Spell counts above 23 never occur in the training data, so the penalty is a count effect that card quality barely moderates. Lands escape the refusal most easily, and the land classes are ordered correctly inside it.
 
-| change to the 23-spell deck | mean Δscore | share improved |
-|---|---|---|
-| drop the worst-label spell → 22 spells, 18 lands | +0.08 | 89% |
-| drop a random spell → 22 spells (count-only control) | −0.00 | 53% |
-| add the best-label unused spell → 24 spells | −0.46 | 4% |
-| add a random spell → 24 spells (count-only control) | −0.44 | 1% |
-
-*Source: `t7_artifacts.py`, probe B; 800 aligned pool/deck pairs.*
-
-Going down to 22 spells is a pure quality gain: the count change itself is neutral, and dropping the worst card is an improvement on its own. Going up to 24 is a hard count penalty that the card's quality barely moderates, because spell counts above 23 never occur in the training data. The preference is not curve-conditional (correlation with deck mean MV: 0.01).
-
-The deployment mismatch is direct. `GreedyDeckBuilder` pins 23 spells by construction, so the scorer's 18-land opinion is unexpressible at build time.
-
-The same size prior governs nonbasic lands, with land classes correctly ordered inside it:
-
-| card added to a built deck | mean Δscore | share positive |
-|---|---|---|
-| land producing the deck's colors | −0.07 | 19% |
-| off-color land | −0.12 | 7% |
-| colorless-producing land | −0.12 | 4% |
-| on-color spell | −0.22 | 2.5% |
-| off-color spell | −0.52 | 0.4% |
+![Score change from adding one card of each class to a built deck](images/2026-08-27-scorer-land-adds.png)
 
 *Source: `t1_meansum.py`, 400 contexts; on/off-color split in `post_hoc_slices.py`, section `t1color`.*
 
 Lands are the least-refused addition, and on-color duals the least-refused lands, but most land adds still read as negative. That is why scorer-built decks carry 0.5 nonbasic lands on average where Forge's carry 1.1, and why 62% of gen4-512 decks run zero. The builder under-plays duals as a direct result: its 23-spell invariant forbids trading a spell for a land, and adding the land on top usually reads as dilution.
 
-## Cards: winnability first, creatures over removal over durdle
+## Cards: winnability first, creatures over removal over do-nothing spells
 
 Card-level values come from two probes that agree with each other (r = 0.78). The first is leave-one-out deltas inside 3,500 real decks. The second is a standardized swap-in value, `v_swap`: put the card into the median slot of up to eight fixed two-color Forge-built decks matching its colors. `v_swap` was measured for all 26,402 cards with 30+ game observations; it is on the same score scale as everything else, and 0 means "as good as the median card of a real deck".
 
@@ -226,7 +116,7 @@ The scorer demotes removal below generic bodies, where the human BREAD ordering 
 
 The mechanism is the Forge-AI meta the labels were earned in. The AI attacks and blocks competently but times instants and card advantage poorly, so bodies convert to wins and answers convert to card disadvantage. Instant-speed removal earns no premium over sorcery-speed (−0.10 both).
 
-The extremes of the card ranking tell the same story. The bottom is uniformly durdle artifacts and engines: Cloudstone Curio, Witch's Oven, Krark's Thumb. The top is 26 creatures out of 30 cards, mostly 4–6 MV flying and lifelink rares.
+The extremes of the card ranking tell the same story. The bottom is uniformly do-nothing artifacts and engines, cards that spend mana without affecting the board: Cloudstone Curio, Witch's Oven, Krark's Thumb. The top is 26 creatures out of 30 cards, mostly 4–6 MV flying and lifelink rares.
 
 ### Expensive cards are preferred at the margin, and the flying premium grows with size
 
@@ -280,9 +170,9 @@ The scorer does not pay more for a synergy payoff as its enablers enter the deck
 | matched − mismatched, paired | +0.006 ± 0.010 (p = 0.55) |
 | payoff standalone gap vs control at dose 0 | +0.011 ± 0.021 |
 
-Both the aggregate and the leakage control are null. Three on-mechanism enablers buy a payoff about a tenth of a winrate point over its control, indistinguishable from what off-mechanism cards of the same set buy. The mechanism results predicted this: a model that does not track which card carries which text has no substrate for card-pair reasoning. What the scorer calls synergy is what the encoder labels carry: per-card color affinity and the deck-shape terms.
+Both the aggregate and the mismatched-enabler control are null. Three on-mechanism enablers buy a payoff about a tenth of a winrate point over its control, indistinguishable from what off-mechanism cards of the same set buy. The mechanism section below predicts this: a model that does not track which card carries which text has no substrate for card-pair reasoning. What the scorer calls synergy is what the encoder labels carry: per-card color affinity and the deck-shape terms.
 
-The apparent exceptions mostly dissolve under the mismatched-arm control. Gray Merchant of Asphodel posts the largest matched Δdose (+0.42), but its mismatched arm posts +0.36: any decent same-set cards raise its marginal, which is deck drift, not devotion. One entry survives the control, Wingsteed Rider (matched +0.19, mismatched −0.15). Heroic's value is literally the density of spells that can target it, the kind of statistical property a bag-of-cards average can carry.
+The apparent exceptions mostly dissolve under the mismatched-arm control. Gray Merchant of Asphodel posts the largest matched Δdose (+0.42), but its mismatched arm posts +0.36: any decent same-set cards raise its marginal, so the gain comes from the deck improving around it, not from devotion. One entry survives the control, Wingsteed Rider (matched +0.19, mismatched −0.15). Heroic's value is literally the density of spells that can target it, the kind of statistical property a plain average over cards can carry.
 
 ### Duplicates are priced like distinct cards of the same quality
 
@@ -300,7 +190,13 @@ Stripping two removal spells from an average deck costs −0.07 net of matched c
 
 ### The meta is Forge-AI self-play, and its piloting asymmetries are the largest single influence
 
-Every preference above is a preference over decks as piloted by Forge's AI in Bo7 self-play. The AI's strengths and weaknesses explain the card-level profile: it handles combat math well and aerial defense badly, so bodies and fliers convert to wins; it times instants and card advantage poorly, so answers and draw do not. [`2026-05-13-gen3-initial-training.md`](2026-05-13-gen3-initial-training.md) established the asymmetry; every card-level probe here is consistent with it. The scorer optimizes the right objective for its deployment target and a measurably different objective from human Magic.
+Every preference above is a preference over decks as piloted by Forge's AI in Bo7 self-play. The piloting asymmetries — combat math handled well, aerial defense and instant timing badly — are what the category demotions and the flying premium of the Cards section trace back to. [`2026-05-13-gen3-initial-training.md`](2026-05-13-gen3-initial-training.md) established the asymmetry; every card-level probe here is consistent with it. The scorer optimizes the right objective for its deployment target and a measurably different objective from human Magic.
+
+### Scores are only comparable within a set
+
+Training pairs are always same-set, so the Bradley-Terry graph is disconnected across sets and per-set score offsets are unidentified. The offsets are large: Forge-built decks average −0.97 on Dissension and +2.13 on Double Masters, a spread of 3.1 units against a within-set deck spread of 0.93. Simple creature-dense sets land high; gold-heavy sets land low. A cross-set score comparison mixes set identity into deck quality roughly 3:1 and should never be used.
+
+*Source: `post_hoc_slices.py`, section `t0`.*
 
 ### Part of the card ranking is inherited human taste, and part of the blacklist is inherited too
 
@@ -309,12 +205,6 @@ Forge's own builder picks by a bundled human pick-order file, and 40% of the ori
 Forge's hand-written `AI:RemoveDeck` blacklist (4.7K cards its builder refuses to play) leaves a direct corpus footprint. Blacklisted cards show a played-rate label 0.15 below matched controls, against a quality-label difference of only −0.03. The scorer's dislike of those cards is annotation inheritance, not game evidence.
 
 *Source: `forge_hints.py` extraction; joins in `t7_artifacts.py`, probe D2.*
-
-### Scores are only comparable within a set
-
-Training pairs are always same-set, so the Bradley-Terry graph is disconnected across sets and per-set score offsets are unidentified. The offsets are large: Forge-built decks average −0.97 on Dissension and +2.13 on Double Masters, a spread of 3.1 units against a within-set deck spread of 0.93. Simple creature-dense sets land high; gold-heavy sets land low. A cross-set score comparison mixes set identity into deck quality roughly 3:1 and should never be used.
-
-*Source: `post_hoc_slices.py`, section `t0`.*
 
 ### The builder-family signature adds little once quality and shape are controlled
 
@@ -334,6 +224,104 @@ Three input-encoding faults were verified in code and then measured. X costs con
 
 *Source: `post_hoc_slices.py`, sections `t2class`, `t1color`, `decks`.*
 
+## The scorer is a mean pool over a 2–4 number summary of each card
+
+### The pooling layer is a plain average, not learned attention
+
+The scorer's learned pooling seeds attend uniformly. Measured over 400 real decks, every seed and head spreads its attention within 0.6% of exactly uniform, and no seed specializes on lands or any card class. The deck vector is therefore the arithmetic mean of the card representations.
+
+Three invariances confirm the mean-pooling reading directly:
+
+| test | result |
+|---|---|
+| replicate the deck (every card ×2, ×3) | score changes by 0.0000 |
+| k identical copies of one card, k = 1…23 | score constant in k (mechanism demonstration) |
+| scale the pooled representation ×0.25 … ×4 | scores unchanged (ρ = 1.0000); LayerNorm strips magnitude |
+
+*Source: `t6_mechanism.py`, probes P2–P4.*
+
+The consequence is that the model reads proportions, never counts. Creature share, color mix, and average card quality are visible to it; "how many cards" is not, except through the fixed deck sizes of its training data.
+
+Inside the stack, card representations converge layer by layer: mean pairwise cosine rises from 0.19 at the input to 0.73 after layer 6. The stack computes deck-level averages, and only deck-level averages.
+
+Uniform attention is better explained by the task than by a failed optimization. Three measurements support this reading. When the gen-2 sweep added explicit max-pool and mean-pool readouts alongside the learned pooling ([`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md)), validation accuracy did not change, so a non-uniform readout was available and carried no extra signal. The scorer reaches the Bo7 oracle ceiling with uniform attention, so a sharper mechanism had no headroom left. The quantities that predict a Bo7 outcome in this corpus are proportions: mean card winnability, creature share, color mix, curve mean. A uniform average is the correct operator for a proportion, not a degenerate one.
+
+A training-side contribution cannot be ruled out, because three properties of the setup favor uniform attention from the start. The pooling seeds initialize near zero, so attention is uniform at the first step. The over-smoothed card representations give the pooling layer near-identical keys, so the gradient toward sharper attention is near zero whatever the queries learn. Bo7 label noise makes any small benefit of selective pooling hard to detect. Two discriminating experiments are cheap and have not been run: training an otherwise-identical scorer with a fixed mean in place of the pooling layer, and running the same attention capture on the gen-1 through gen-3 checkpoints.
+
+Selective attention would matter only where deck value depends on extremes or pairings: a single bomb, a single unplayable card, a hole in the curve, a synergy pair. The corpus removes those signals before the scorer sees them. Bo7 aggregation averages out single-card extremes, and the Forge AI neither builds around nor pilots synergies. Attention still does necessary work in this model: the uniform mixing in the self-attention stack carries the deck context that the off-color penalty and splash thresholds above depend on. What never differentiated is selective attention, because a uniform broadcast was all the task required.
+
+### The card-text embedding carries the signal; the 32 deterministic features are nearly redundant
+
+Erasing per-card text costs nine points of held-out accuracy. Erasing the 32 deterministic features costs two. Each ablation replaces one block of every card's vector with its corpus mean and rescores all 4,708 held-out matches.
+
+![Held-out accuracy under representation ablations](images/2026-08-27-scorer-ablation.png)
+
+*Source: `t5_ablation.py`.*
+
+The ablation reverses the gen-2-era diagnosis. [`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md) hypothesized the scorer leaned almost entirely on the deterministic features, and its planned ablations were never run. On gen-4 the text embedding is the primary channel. Ranking agreement shows the same asymmetry. Erasing text scrambles the model's deck ordering (ρ 0.51 against the full model); erasing the deterministic features leaves it largely intact (ρ 0.85). The two metrics can come apart, because an edit can reorder decks that sit close together in quality without flipping any pair a match actually compares.
+
+Inside the deterministic features, the color pips are the one group the scorer clearly needs. The probe erases one feature group at a time, with the same mean-substitution design as the block-level ablation above. Two changes make the small per-group effects resolvable. The evaluation pool widens to 21,564 held-out matches, because the gen-4 round-robin corpus was generated 2026-05-19 through 2026-05-21, after the training cutoff, and joins the gen-5 file. Significance comes from the paired per-match difference against the full model, whose standard error is set by the prediction flip rate rather than the base accuracy.
+
+![Held-out accuracy change from erasing each deterministic-feature group](images/2026-08-27-scorer-det-groups.png)
+
+*Source: `t5b_det_groups.py`.*
+
+Erasing the six pip counts flips 14% of match predictions, the largest effect of any single group. The full mana-cost group accounts for two thirds of what all 32 features contribute. The color flags and the power/toughness/loyalty slots have small effects, distinguishable from zero (z ≈ −2.5 each). Mana value alone is marginal. Mana production and is_land contribute nothing, because the text embedding already knows what a card produces and whether it is a land. The single-group effects sum to approximately the all-32 effect, so the contribution decomposes additively across the groups, with nothing left to interactions.
+
+Which card carries which text vector barely matters. Permuting the text blocks across a deck's cards, so the deck keeps the same collection of vectors, costs under half an accuracy point. Any preference that requires knowing that this body carries that ability cannot survive this test.
+
+Telling a Forge deck from a scorer-built deck is entirely a text-embedding judgment. With text erased, forge-vs-gen pairs drop to coin-flip accuracy while every other pair type degrades far less.
+
+The same dependency explains the generation history: the aggregation barely changed from gen-2 to gen-4, and the gains came from the inputs. Gen-2's text dims came from the price-predictor encoder, whose training signal is card prices, a quantity dominated by collector value. Vectors like that carry no sealed card quality, so a mean over them can express deck shape and nothing else. The consequence was measured at the time: at matched deck shape, forge-best beat gen-2 by 8–17 winrate points ([`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md)). Gen-2's four null aggregation experiments — depth, dropout, multi-view pooling, hand-computed deck stats — all located the bottleneck upstream of the pooling.
+
+Replacing the encoder is what moved match play. Gen-3 swapped the price encoder for one trained from scratch on per-card winnability labels, distilled from about a million self-play games. The swap took gen-3 from losing the matched-shape comparisons to beating forge-best on 47 of 48 pools ([`2026-05-13-gen3-initial-training.md`](2026-05-13-gen3-initial-training.md)). Gen-4 widened the encoder from 256 to 512 dims, worth ~3.3σ over the 256-wide build in match play ([`2026-05-15-gen4-initial-training.md`](2026-05-15-gen4-initial-training.md)).
+
+The form of supervision mattered as much as the encoder. Phase B in the gen-2 era fine-tuned the price encoder against match outcomes and did not improve on the frozen baseline ([`2026-04-30-gen2-unfrozen-embeddings.md`](2026-04-30-gen2-unfrozen-embeddings.md)); a Bo7 match outcome is one noisy bit, too little signal to teach per-card quality through the scorer. Dense per-card labels from game logs are what succeeded. Across the whole lineage, the scorer was always a mean over per-card summaries, and every real gain came from improving what those summaries contain.
+
+### Two numbers per card explain almost everything the scorer reads from text
+
+Keeping only the top two principal components of every card's text vector reproduces the scorer's held-out accuracy. Four components saturate it. Ranking agreement with the full model keeps improving out to 256 components, so the remaining directions still shift scores; they just stop changing which deck of a held-out pair ranks higher.
+
+![Held-out accuracy and ranking agreement with the full model as the text block is truncated to k principal components](images/2026-08-27-scorer-pc-truncation.png)
+
+*Source: `make_text_pca.py` for the PCA; `t6_mechanism.py`, probe P1, for the truncation.*
+
+The encoder's card cloud is this compressible because it is low-rank to begin with: PC1 carries 55% of card-to-card variance, the top 8 carry 75%, and the participation ratio is 3.2. The gen-3 encoders measured the same way in [`2026-05-11-sealed-encoder-hparam-sweep.md`](2026-05-11-sealed-encoder-hparam-sweep.md) had the same shape.
+
+The two leading axes have measured meanings. Regressing the encoder's own training labels on the PC coordinates, over the 25,441 cards that carry every label, identifies PC1 as the played-rate axis and PC2 as the winnability axis. PC1 correlates +0.84 with the played-rate label and near zero with the quality labels; adding PC2 lifts the quality labels from near nothing to most of their variance. The score_draw curve coincides with the score_play curve: winning on the play and winning on the draw are one axis to the encoder.
+
+![R² of each encoder label on the top-k text principal components](images/2026-08-27-scorer-pc-labels.png)
+
+*Source: `make_text_pca.py`, label-regression section.*
+
+Color affinity is missing from the leading components: the color-lift labels stay low across the whole charted range. The color information the scorer needs arrives through the deterministic pips instead, which is why the pips are the one deterministic group whose erasure hurts (the per-group ablation above).
+
+Each card therefore reaches the scorer as a short list of meaningful numbers: castability and winnability from the text block, and its color pips from the deterministic features. The deck score is a shape-aware average of those summaries.
+
+### The scorer pulls hardest on the winnability axis
+
+Knowing which labels reach the scorer does not say how hard each one is used. Two measurements answer that, one associational and one causal. The associational measurement regresses the scorer's per-card values (`v_swap`, defined under Cards above) on the three label axes at once, winnability being the mean of the near-identical score_play and score_draw. In that regression, winnability carries about three times the weight of played-rate. Cast_lift adds nothing once the other two are held fixed (unique R² 0.003).
+
+The causal measurement perturbs one card inside a real deck and reads the score response. The perturbation step is the average change in a card's text vector that accompanies a one-standard-deviation increase of one label. Each step is applied to every card of 300 held-out decks, one card at a time, in both directions.
+
+![Associational and causal weight of each label axis in the scorer](images/2026-08-27-scorer-label-weights.png)
+
+*Source: `t5c_label_weights.py`.*
+
+The two measurements agree: improving one card by a standard deviation along the winnability axis moves the score about six times as much as along the played-rate axis. The tall causal cast_lift bar is overlap, not an independent weight. The labels correlate at 0.69, and the causal steps are not orthogonalized. The cast_lift step therefore largely retraces the winnability direction. The regression does hold the other axes fixed, and it puts cast_lift's own contribution near zero.
+
+The gray PC bars repeat the axis identities from the chart above. A PC2 step moves the score as much as the winnability step. A PC1 step moves it a quarter as much, although PC1 carries most of the embedding's variance. The encoder's loudest axis is not the axis the scorer uses most.
+
+On the ruler, a one-standard-deviation winnability improvement on a single card is worth roughly two winrate points.
+
+### Three quarters of the score range separates incoherent decks from coherent ones
+
+Of the 6.1 score units between the mean random-pile deck and the mean gen-5 deck, 4.6 lie below the forge-best baseline. Realistic candidate decks for one pool live on the remaining quarter of the range. Within that quarter the ordering is right: mean score by builder is strictly monotone in the builders' real match-play strength.
+
+![Mean score by deck builder, with the coherence and quality spans marked](images/2026-08-27-scorer-builder-scores.png)
+
+*Source: `t0_landscape.py`; cuts in `post_hoc_slices.py`, section `t0`.*
+
 ## Hypothesis verdicts
 
 The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the probe result matched or contradicted the hypothesis as sharpened after critique; "partial" means the mechanism held with a materially different magnitude or route. Evidence pointers name the probes of the inventory below.
@@ -349,7 +337,7 @@ The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the
 | R7 | mean-like pooling; below-average additions lower score | confirmed (mechanism exact) | T6 P2/P4 |
 | R8 | scorer under-plays nonbasic lands vs Forge | confirmed | T0 counts; T1 land adds |
 | R9 | counterspells undervalued | confirmed | T2 class slice |
-| R10 | card-draw/durdle penalized; lifegain/scry neutral | confirmed | T2 categories; labels E1/E5 |
+| R10 | card-draw/do-nothing cards penalized; lifegain/scry neutral | confirmed | T2 categories; labels E1/E5 |
 | R11 | removal priced at/below median creature | confirmed | T2 category means |
 | R12 | size over efficiency; stats-per-mana unrewarded | confirmed | T2 ((P+T)/MV corr ≈ 0.04) |
 | R13 | power > toughness at fixed stats | confirmed (label level) | E1 regression |
@@ -387,7 +375,7 @@ The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the
 | R45 | multi-face mis-encoding distorts value | mechanism real, effect not measurable | T1 slice |
 | R46 | mean-not-sum pooling | confirmed | T6 |
 | R47 | OOD degeneracy | confirmed as mechanism demo only | T6 P5 |
-| R48 | deck-size gradient | confirmed — anti-24th-card prior, pro-22-spell | T7-B; T1 |
+| R48 | deck-size gradient | confirmed — anti-24th-card prior | T1; T7-B |
 | R49 | high-n card memorization | untested (cost) | — |
 | R50 | snow-basics quirk | absent from builds | T0 check |
 
@@ -403,7 +391,7 @@ The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the
 | T2 marginal values | `t2_marginal_values.py`, `t2_analyze.py` | leave-one-out + fixed-context swap-in value for every observed card | 26,402 cards, ~235K forwards |
 | T3 ladders | `t3_ladders.py` | six controlled swap ladders (color, creature, curve, spread, splash, fixing) | 250 contexts, 7,127 decks |
 | T6 mechanism | `t6_mechanism.py` (+ `make_text_pca.py`) | PC-truncation, attention/over-smoothing capture, invariance checks, OOD envelope | 400 decks + 2,000 matches × 11 truncations |
-| T7 artifacts | `t7_artifacts.py` (+ `forge_hints.py`) | builder fingerprint, spell-count preference, calibration, sibling agreement, Forge-annotation joins | 800 pairs + 4,708 matches + 6,300 decks × 3 checkpoints |
+| T7 artifacts | `t7_artifacts.py` (+ `forge_hints.py`) | builder fingerprint, spell-count probe, calibration, sibling agreement, Forge-annotation joins | 800 pairs + 4,708 matches + 6,300 decks × 3 checkpoints |
 | T4 synergy | `t4_synergy.py` (+ `synergy_pairs.json`, `verify.py`) | dose-response super-additivity (57 curated triples × 8 contexts, matched + mismatched arms), duplicates ladder, removal-share ladder | 9,397 decks |
 
 The scripts live in [`scripts/scorer_probes/`](../scripts/scorer_probes/README.md); its README carries the run order and the full script-to-section map. Their outputs are kept in `output/scorer-probes/` and regenerate on rerun; they are the `t*_report.md`, `t*_results.json`, and CSV files this document's numbers come from. The figures regenerate with `make_figures.py`. Prose numbers with no dedicated probe script come from `post_hoc_slices.py`. The label-level numbers ("sd vs human pick order", the power/toughness and rarity regressions) come from `label_probe.py`, whose joined table feeds `human_rank_probe.py` and `rarity_probe.py`. Every probe is inference-only against the production checkpoint plus the `cardsfolder-512` embedding cache, the Y: corpus files, and `cards-win-rates.txt`.
