@@ -38,6 +38,7 @@ read-only), `output/cardsfolder-512/`,
 | `c6_spot.py`, `c7_labelside.py` | riders/timing spot checks; the counterfactual-vs-correlational split | `c_report.md` |
 | `q1_blocks.py`, `q2_attention.py` | pool-query specialization (none) | `q_report.md` |
 | `q3_decode.py` | "The embedding is a card description first…" — decodability table, {X} as one pip, integer collapse | `q_report.md` |
+| `make_figures.py` | renders the document's figures (channels, memorization, shuffle, keywords, spells, decode, integers) from the staged outputs | `experiments/images/2026-08-28-encoder-*.png/.svg` |
 
 ## Order for a from-scratch rerun
 

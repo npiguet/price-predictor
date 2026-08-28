@@ -25,18 +25,9 @@ Three instruments recur. The saved checkpoint contains no regression heads, so r
 
 A card's winnability label decomposes exactly into three channels, and only one of them is about the card's play. Writing w for the card's in-deck win rate, m for its average cast rate, and d for the cast-rate gap between won and lost games, the label satisfies score = m(2w−1) + d/2 identically. The w channel is set by which builders include the card: the four Forge build methods win between 26% and 60% of their games, a span worth about ±1.8 SD of label before any card property enters. The d channel, winners casting the card more often than losers, is the only within-deck evidence. The decomposition for the headline card classes:
 
-| feature | Δw | Δm | Δd | Δscore (SD) | dominant channel |
-|---|---|---|---|---|---|
-| flying | +0.017 | +0.006 | +0.040 | +0.48 | two-thirds d |
-| creature type | +0.050 | +0.070 | +0.034 | +0.63 | mixed |
-| MV 7+ (vs 0–2) | +0.010 | −0.149 | +0.058 | +0.61 | d, despite the castability cost |
-| unconditional removal | +0.037 | +0.026 | +0.019 | +0.47 | three-quarters w |
-| combat trick | −0.005 | −0.023 | +0.090 | +0.64 | entirely d |
-| mana rock | −0.022 | +0.054 | −0.043 | −0.79 | negative on both w and d |
-| sweeper | +0.033 | −0.072 | −0.072 | −0.29 | w and d contradict |
-| counterspell | −0.028 | −0.084 | −0.003 | −0.12 | w only |
+![Channel decomposition of each card class's label premium](images/2026-08-28-encoder-channels.png)
 
-Source: `l_mediation.py` / `l_analyze.py`, WLS with MV and type controls, n ≥ 50 per class.
+*Source: `l_mediation.py` / `l_analyze.py`, WLS with MV and type controls, n ≥ 50 per class; rendered by `make_figures.py`.*
 
 The channels separate builder taste from game evidence. Removal's premium is mostly that good builders pick it; a trick's premium is entirely that it gets cast in games its side was winning. Sweepers are the sharpest contradiction: builders include them and the games punish them. Recomputing every effect inside the forge-best-vs-forge-best mirror, where both sides' builder and opponent are held fixed, changes almost nothing, with one exception: the counterspell penalty vanishes there, so it is a builder-selection artifact rather than a card fact. The expensive-is-good gradient survives the mirror and every game-length stratification at full strength, so it is not the mana-development artifact the reviewers suspected.
 
@@ -56,16 +47,9 @@ The five color-lift heads mostly teach color identity plus an artifact. Reading 
 
 The encoder fits its training cards beyond what any text reader could. A probe fit on half the training cards scores more than twice as high on the other training half as on the encoder's held-out cards, and the probe's own overfit is negligible, so the entire gap is the encoder's. The sharpest single statement needs no variance extrapolation: the training-card residual SD (0.027) is below the label's own irreducible noise floor, measured from the 171 groups of cards whose name-stripped text is bit-identical and whose labels still differ (within-group SD 0.029 at high observation counts, 0.038 overall). Fitting tighter than identical-text twins disagree is memorization by definition.
 
-| quantity (score_play, R² against the label) | value |
-|---|---|
-| label reliability ceiling (split-half) | 0.84 |
-| encoder-train cards, honest probe | 0.80 |
-| text-explainable bound (identical-text groups) | 0.51–0.61 |
-| held-out cards, honest probe | 0.37 |
-| held-out cards, all words shuffled | 0.22 |
-| held-out cards, 135 nameable features, no encoder | 0.35 |
+![R² ladder from the reliability ceiling down to shuffled text](images/2026-08-28-encoder-memorization.png)
 
-Source: `r2_*.py`, `s_r18*.py`; equivalence classes in `p0_build.py`.
+*Source: `r2_*.py`, `s_r18*.py`; equivalence classes in `p0_build.py`; rendered by `make_figures.py`.*
 
 The memory key is layout, not vocabulary. Meaning-preserving edits that move lines disturb trained cards' predictions 20–56% more than matched held-out cards'; a token substitution disturbs both equally. Under line permutation the training-card fit collapses toward the held-out fit, which says the memorized component lives in line order.
 
@@ -75,14 +59,9 @@ For the pipeline's stated purpose, scoring hypothetical cards, the operative num
 
 Destroying word order leaves most of the transferable winnability knowledge intact. Refitting probes on embeddings of shuffled text and evaluating on held-out cards:
 
-| condition | score_play R² (share of intact) | played_rate R² (share) |
-|---|---|---|
-| intact text | 0.370 (100%) | 0.608 (100%) |
-| lines permuted, words intact | 0.275 (74%) | 0.372 (61%) |
-| words shuffled within lines | 0.269 (72%) | 0.286 (47%) |
-| all words shuffled | 0.224 (60%) | 0.231 (38%) |
+![Held-out R² surviving each level of text destruction](images/2026-08-28-encoder-shuffle.png)
 
-Source: `r1_shuffle.py`, two seeds averaged.
+*Source: `r1a_shuffle.py`, two seeds averaged; rendered by `make_figures.py`.*
 
 The compositional layer is real but thin, and keyed to slots. On creatures whose only text is a flying line, the line is worth +0.52; the same word moved into a granted-ability spell line keeps 13% of that, and under "can't block creatures with flying" it turns negative. Scope and negation flips all move predictions the correct way, and all weakly: restricting "destroy target creature" to "you control" and inverting +N/+N to −N/−N each clear their placebo null by about 0.14 SD, while turning a Pacifism into a self-lockdown costs a third as much as swapping its two static lines. The encoder reads layout more loudly than meaning.
 
@@ -90,49 +69,37 @@ Wordiness itself is priced. Appending any clause to a spell's line pays about +0
 
 ## The embedding is a card description first and a judgment second
 
-Every visible attribute decodes from the embedding better than any label the encoder was trained on. Linear decoders on held-out cards:
+Every attribute printed on the card decodes from the embedding better than any label the encoder was trained on. Linear decoders on held-out cards:
 
-| decoded attribute | R² or AUC | trained-label comparison |
-|---|---|---|
-| power + toughness | 0.76 | — |
-| mana value | 0.73 (±1 bin: 93%) | score_play 0.37 |
-| colored pip count | 0.71 | played_rate 0.61 |
-| is a creature | AUC 0.997 | cast_lift 0.47 |
-| first-printing year | 0.40 (residual 7.7 years) | — |
-| rare or mythic | AUC 0.87 | — |
+![Decodability of visible attributes against the trained-label ceilings](images/2026-08-28-encoder-decode.png)
 
-Source: `q3_decode.py`.
+*Source: `q3_decode.py`; rendered by `make_figures.py`.*
 
 Era and rarity are decodable even though nothing in the converted text names a set or a rarity. The encoder has learned design-language fingerprints strong enough to date a card within eight years and to separate rares from commons, without ever being asked to.
 
 Number tokens carry ordinal meaning only where they are common. Decoded power tracks printed power nearly exactly through 4, compresses above 5, and goes flat past 8; the counterfactual sweep agrees, with a 12/12 statline scoring the same as a 0/0. The {X} symbol is priced as exactly one generic pip, everywhere: the encoder knows X-spells are castable early and does not know they scale.
 
+![Counterfactual statline sweep and decoded power both collapse past 8](images/2026-08-28-encoder-integers.png)
+
+*Source: `c2_statlines.py` (left) and `q3_decode.py` (right); rendered by `make_figures.py`.*
+
 The 8-query attention pool did not specialize. Any single 64-dim query block recovers 95–96% of every label head's accuracy, all eight blocks' leading axes correlate above 0.97, and the attention profiles are near-uniform with no query attending to statlines or costs. The spec's intent of one query per card aspect did not materialize; the pool is a learned mean, matching what the scorer study found for the scorer's pooling one level up. The whole card cloud has an effective dimensionality near 3.
 
 ## Flying tops the keywords, direct damage tops the spells, and bodies beat effects
 
-Flying is the most valuable keyword under causal edits, and two independent edit designs agree on the whole order (Spearman 0.94). The scale comes from substituting keywords inside one static line across 2,913 base creatures and fitting an additive value to every pairwise contrast; the deletion column removes the keyword line from real carriers:
+Flying is the most valuable keyword under causal edits, and two independent edit designs agree on the whole order (Spearman 0.94). The scale comes from substituting keywords inside one static line across 2,913 base creatures and fitting an additive value to every pairwise contrast; the independent deletion design, which removes the keyword line from real carriers, gives larger absolute premiums (flying +0.40) in the same order. Where the blue and orange dots below separate, the encoder's edit response disagrees with the labels: haste, double strike, reach, and menace sit above their label values, and the protection keywords invert.
 
-| keyword | substitution scale | deletion premium | label-side check |
-|---|---|---|---|
-| flying | +0.27 | +0.40 | agrees (+0.37) |
-| deathtouch | +0.21 | +0.35 | agrees |
-| haste | +0.16 | +0.33 | overpriced (label −0.05) |
-| double strike | +0.14 | +0.31 | overpriced |
-| lifelink | +0.13 | +0.27 | agrees |
-| reach | +0.09 | — | overpriced |
-| first strike | +0.05 | — | agrees |
-| trample | −0.04 | — | agrees (label −0.11) |
-| vigilance | −0.05 | — | agrees |
-| shroud / ward / hexproof | −0.12 / −0.19 / −0.24 | — | inverted (labels pay +0.03…+0.10) |
-| flash | −0.15 | −0.10 | agrees |
-| defender | −0.24 | — | agrees |
+![Keyword values: counterfactual edits against matched label regressions](images/2026-08-28-encoder-keywords.png)
 
-Source: `c1_keywords.py`; label column from the matched correlational regression in `c7_labelside.py`.
+*Source: `c1_keywords.py`; label values from the matched correlational regression in `c7_labelside.py`; rendered by `make_figures.py`.*
 
 Two interaction results overturn the simple readings. The flying premium is not monotone in size: it peaks on mid-size bodies (P+T 5–8) and falls back on the largest, in both edit designs. And deathtouch plus trample is superadditive by +0.14 over the sum of its parts, an encoder-only claim since only four real cards carry both, but a clean one: the model prices the classic combo as a combo.
 
 The spell-effect ladder, all arms substituted into the same 200 base spells, spans three times the keyword scale. Direct damage to any target tops it, ahead of fight, exile, and destroy; conditional removal is discounted; bounce, card draw, and counterspells sit near zero or below; tap effects and sweepers are heavily negative, and a spell whose whole text is "you gain 4 life" is the single worst text measured, 1.2 SD below the pack. Two findings correct the scorer study's picture at the source: fight is not discounted in labels or encoder, so the builder's refusal of fight spells is a search-level behavior; and lockdown auras beat every removal template, with "can't attack or block" versus "can't block" differing by 0.77 SD on two words, the study's clearest piece of genuine composition.
+
+![The spell-effect ladder from burn down to lifegain](images/2026-08-28-encoder-spells.png)
+
+*Source: `c3_removal.py`, fifteen effect templates substituted into the same 200 base spells; rendered by `make_figures.py`.*
 
 Bodies beat effects by construction, not by accident of the word "artifact". A matched-shell battery puts the same effect on a sorcery and on an ETB creature: the body is worth +0.60 on average, acting as a floor under weak effects (lifegain gains +1.5 by getting a body) and a cap over strong ones (destroy-a-creature loses a little). The mana-ability case reproduces the corpus's starkest class gap at identical cost and text: a creature that taps for mana prices 0.33 above the same ability on an artifact. Mana rocks are not punished for being artifacts; they are punished for not being creatures.
 
