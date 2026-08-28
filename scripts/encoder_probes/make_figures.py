@@ -86,9 +86,9 @@ def fig_channels():
     y = np.arange(len(order))
 
     fig, ax = plt.subplots(figsize=(7.2, 5.2))
-    for vals, color, lab in ((w, BLUE, "builder selection (w)"),
+    for vals, color, lab in ((w, BLUE, "selection (w)"),
                              (m, GRAY, "castability (m)"),
-                             (d, ORANGE, "in-game contribution (d)")):
+                             (d, ORANGE, "contribution (d)")):
         v = vals[order]
         left = np.zeros(len(v))
         for other in (w, m, d):

@@ -25,13 +25,15 @@ Three instruments recur. The saved checkpoint contains no regression heads, so r
 
 A card's winnability label gives it credit for its deck's wins, whether or not the card caused them. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck.
 
-Three simpler quantities, called channels from here on, can be measured from the same game logs, and combining them as m(2w−1) + d/2 reproduces every card's winnability label exactly. The channels are not new information: they are the same number, computed in a way that keeps its ingredients apart, and each one holds a different kind of fact.
+Three simpler quantities, called channels from here on, can be measured from the same game logs, and each one holds a different kind of fact:
 
-- w: how often decks containing the card win. Builder choice sets this: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
-- m: how often the card gets cast. This channel is castability.
-- d: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
+- selection: how often decks containing the card win. Builder choice sets this: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
+- castability: how often the card gets cast.
+- contribution: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
 
-The rest of the document reads every premium through this split, because a premium carried by w is inherited builder taste and only a premium carried by d is evidence the card changed games. The decomposition for the headline card classes:
+Writing w for selection, m for castability, and d for contribution, the winnability label equals m(2w−1) + d/2 exactly. The channels are therefore not new information: they are the same number, computed in a way that keeps its ingredients apart.
+
+The rest of the document reads every premium through this split, because a premium carried by the selection channel is inherited builder taste and only a premium carried by the contribution channel is evidence the card changed games. The decomposition for the headline card classes:
 
 ![Channel decomposition of each card class's winnability-label premium](images/2026-08-28-encoder-channels.png)
 
@@ -39,7 +41,7 @@ The rest of the document reads every premium through this split, because a premi
 
 The headline premiums are composed very differently. Removal's premium is mostly that good builders pick it; a trick's premium is entirely that it gets cast in games its side was winning. Sweepers are the sharpest contradiction: builders include them and the games punish them. Recomputing every effect inside the forge-best-vs-forge-best mirror, where both sides' builder and opponent are held fixed, changes almost nothing. The counterspell penalty is the one effect that vanishes in the mirror: it is a builder-selection artifact, not a card fact. The expensive-is-good gradient survives the mirror and every game-length stratification at full strength, so it is not the mana-development artifact the reviewers suspected.
 
-Two annotation channels leak into the labels from outside the games. Cards on Forge's hand-written `AI:RemoveDeck` blacklist carry a 0.64 SD winnability deficit of which 78% is the w channel, and Forge's bundled human draft rank correlates with the winnability label almost entirely through w. Both are inherited taste, not game evidence, and the encoder can only partly see them: on held-out cards it over-predicts blacklisted cards by about a fifth of a SD. The text explains a third of the blacklist deficit; the other two thirds is invisible to a text reader.
+Two annotation channels leak into the labels from outside the games. Cards on Forge's hand-written `AI:RemoveDeck` blacklist carry a 0.64 SD winnability deficit of which 78% is the selection channel, and Forge's bundled human draft rank correlates with the winnability label almost entirely through selection. Both are inherited taste, not game evidence, and the encoder can only partly see them: on held-out cards it over-predicts blacklisted cards by about a fifth of a SD. The text explains a third of the blacklist deficit; the other two thirds is invisible to a text reader.
 
 For one class of cards, every label is corrupted at the source. The Java match worker never logs a face-down card: a face-down cast resolves to an empty name and is dropped, and turning face up fires no event the collector subscribes to (`PlayedCardCollector.java`; the in-code comment claiming the cast branch covers it is wrong). A morph creature that spends the whole game face down is recorded as never played, which is why morph creatures carry the largest played-rate collapse in the corpus. The encoder learned this corpus fact faithfully; the reading "Forge cannot play morph" is false.
 
@@ -47,7 +49,7 @@ For one class of cards, every label is corrupted at the source. The Java match w
 
 The play/draw split supervises one axis twice. The two labels correlate at 0.74, their difference has split-half reliability near 0.10, and the encoder collapses them further: predicted score_play and score_draw correlate at 0.95. A trace of the split survives, correctly signed: defenders, sweepers, and kicker cards measurably prefer the draw in both the labels and the predictions, and haste leans to the play, all at about a twenty-fifth of the main axis. The split bought almost nothing.
 
-The cast-lift head was expected to fall to the same argument and did not. At the label level cast_lift is nearly a re-expression of the d channel (r = 0.96 with d). No other head exposes d, though: predicting the cast-lift label on held-out cards from the score and played-rate heads plus mana value reaches R² 0.32, and adding the cast-lift head's own output lifts it to 0.48. Only a sixth of the head's probe direction lies in the span of the other heads. The head stays.
+The cast-lift head was expected to fall to the same argument and did not. At the label level cast_lift is nearly a re-expression of the contribution channel (r = 0.96 between the two). No other head exposes contribution, though: predicting the cast-lift label on held-out cards from the score and played-rate heads plus mana value reaches R² 0.32, and adding the cast-lift head's own output lifts it to 0.48. Only a sixth of the head's probe direction lies in the span of the other heads. The head stays.
 
 The five color-lift heads mostly teach color identity plus an artifact. Reading a card's color off its text is near-perfect (AUC 0.99), and the exact-zero diagonal pattern of the color-lift labels hands the heads a color-identity task that accounts for over half of their fit. The rest is a splash penalty whose magnitude tracks the card's quality and played rate rather than its pip count. That scaling is a shrinkage artifact. The with-color slice has a smaller denominator than the overall term at the same k, so a better card's off-color cells go negative in proportion to its own quality. A genuine allied-versus-enemy color structure exists in both labels and predictions, at about 1.5% of a color-lift SD. A gradient-boosted probe does no better than ridge on these heads, so the low ceiling reflects missing information rather than a linear probe's limits: the cross-color synergy the spec designed these heads to capture is not in them.
 
@@ -135,12 +137,12 @@ The eighteen ranked questions resolve into three clean falsifications — cast-l
 | R6 pool-query specialization | falsified: eight near-copies, attention ≈ mean pool | `q1`–`q2` |
 | R7 visible attributes decodable | verified, beyond expectation (era ±7.7 yr, rarity AUC 0.87); integer tokens collapse past 8 | `q3_decode.py`, `c2` |
 | R8 played_rate is an agency axis, not a cost axis | verified: cost is a seventh of the axis; five collapse classes are five orthogonal directions, not one | `s_r8*.py` |
-| R9 MV gradient a game-length artifact | falsified: survives every stratification; the premium is real d-channel | `l_analyze.py` |
+| R9 MV gradient a game-length artifact | falsified: survives every stratification; the premium sits in the contribution channel | `l_analyze.py` |
 | R10 flying strongest keyword, premium grows with size | half verified: strongest yes; size interaction is an inverted U | `c1` |
 | R10b deathtouch+trample superadditive | verified (encoder-level), +0.14 | `c1b` |
 | R11 power over toughness | verified, smaller than the uncontrolled estimate: +0.04/point, concentrated on small bodies | `c2` |
 | R12 removal ladder, lockdown on top | verified; fight/edict undiscounted, so the scorer's refusal is search-level | `c3` |
-| R13 tricks as survivorship | reframed: the trick premium is entirely the d channel, "cast while winning" | `l_analyze.py` |
+| R13 tricks as survivorship | reframed: the trick premium is entirely the contribution channel, "cast while winning" | `l_analyze.py` |
 | R14 mana production worst text, body-vs-spell master axis | verified causally: dork +0.33 over rock at identical text | `c4` |
 | R15 spell riders | cantrip rider exactly zero; drawbacks priced only on creature trigger lines; wordiness bonus +0.09 | `c6` |
 | R16 tribal nouns, taplands, types | noun premium real at a third of the label-side spread; removing "enters tapped" hurts (fixing beats speed); instant/sorcery type tokens interchangeable | `c5` |
@@ -153,7 +155,7 @@ The eighteen ranked questions resolve into three clean falsifications — cast-l
 - The color-lift heads need a redesign before they can teach affinity: match the shrinkage denominators so the artifact term cancels, or drop the family and keep color in the deterministic pips, which is where the scorer reads it anyway.
 - Fix the face-down logging hole in `PlayedCardCollector` before the next corpus is generated; morph-block sets are currently mislabeled at the source.
 - Layout sensitivity is a liability. Canonicalizing line order at tokenization time, or augmenting training with line permutations, would convert memorized layout capacity into text generalization.
-- The encoder's edge over hand-built features is played rate, not winnability. Work aimed at deck quality should either improve the winnability signal (more d-channel supervision, e.g. per-game cast records rather than per-card aggregates) or accept that a 135-feature table is currently an equal substitute on unseen cards.
+- The encoder's edge over hand-built features is played rate, not winnability. Work aimed at deck quality should either improve the winnability signal (more contribution-channel supervision, e.g. per-game cast records rather than per-card aggregates) or accept that a 135-feature table is currently an equal substitute on unseen cards.
 - Two data-hygiene fixes landed during the study: the stale `village_watch` filename correction and a locator prefix-match bug that silently resolved missing cards ("Undercity") to unrelated files; both affected the gen-4 training inputs marginally.
 
 ## Limitations
