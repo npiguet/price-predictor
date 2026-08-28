@@ -4,7 +4,7 @@
 
 - The encoder's card ratings are faithful copies of its training labels, and the labels are only partly about the card. A card's winnability label mixes three things: which deck builders were willing to play the card, how often it got cast, and whether winners cast it more than losers. Only the last part is about what the card does in a game.
 - Half of what the encoder appears to know is memorized card identity. Its accuracy on validation cards is under half of its accuracy on the training set, and the memory is keyed to the card's text layout, not its words.
-- The encoder reads words in context the way a transformer should: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But the reading is weakly calibrated: sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
+- The encoder reads words in context: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
 - The best keyword in Forge's eyes is flying, worth about 0.4 label standard deviations on its own, followed by deathtouch, haste, double strike, and lifelink. Hexproof, ward, and shroud are penalized even though the labels pay for them. Deathtouch plus trample is superadditive.
 - The best spell text is direct damage, then fight, exile, and destroy. Lockdown auras top all noncreature text. Sweepers, tap effects, and counterspells sit at the bottom, and a spell whose whole text is lifegain is the worst text the encoder knows.
 - Bodies beat effects. The same effect is worth about 0.6 standard deviations more stapled to a creature than printed on a sorcery. A mana dork is fine and a mana rock is bad for exactly this reason.
@@ -71,19 +71,19 @@ The stored key is the line layout more than the words. Swapping two ability line
 
 For the pipeline's stated purpose, scoring invented cards, the validation numbers are the honest ones: 37% of winnability, 61% of played rate. Comparing two versions of the same card stays safe, because the memorized part is the same on both sides and cancels in the difference. A single absolute score does not. An invented card must also be written in the converter's standard line order, because unusual layout moves a prediction more than most real content changes.
 
-## Composition is real and correctly signed; its defect is calibration, not direction
+## The encoder reads words in context, but meaningless edits move predictions as much as real ones
 
-Word order carries a substantial share of what transfers: destroying it costs 40% of the encoder's validation-card winnability knowledge and 62% of its cast-frequency knowledge. Refitting probes on embeddings of shuffled text and evaluating on validation cards:
+Word order carries a substantial share of the encoder's transferable knowledge: destroying it costs 40% of the validation-card winnability accuracy and 62% of the cast-frequency accuracy. The measurement shuffles each card's words, re-encodes the result, refits the probes on the shuffled embeddings, and scores them on validation cards:
 
-![Held-out R² surviving each level of text destruction](images/2026-08-28-encoder-shuffle.png)
+![Validation accuracy surviving each level of text destruction](images/2026-08-28-encoder-shuffle.png)
 
 *Source: `r1a_shuffle.py`, two seeds averaged; rendered by `make_figures.py`.*
 
-Where composition is tested directly, it behaves the way a transformer should. The word "flying" is priced by the role it plays: worth +0.52 as a creature's own static line, 13% of that inside a spell that merely grants it, and negative under "can't block creatures with flying", where it marks a drawback. Scope and negation flips also move predictions in the semantically correct direction: restricting "destroy target creature" to "you control" and inverting +N/+N to −N/−N each lower the prediction, clearing their placebo null by about 0.14 SD.
+Context is read correctly wherever a direct test was run. The word "flying" is priced by the role it plays: worth +0.52 as a creature's own static line, 13% of that inside a spell that merely grants it, and negative under "can't block creatures with flying", where it marks a drawback. Restricting "destroy target creature" to "you control" lowers the prediction, and so does flipping +N/+N to −N/−N, each by about 0.14 SD beyond what a meaning-free control edit moves.
 
-The defect is that meaning and noise move the prediction by similar amounts. Turning a Pacifism into a self-lockdown, a full reversal of what the card does, moves the prediction a third as much as swapping its two static lines, which changes nothing at all. The correct sign of the composition responses says the machinery is there; their small size against the layout noise says it is weakly calibrated.
+The response sizes are what is wrong: an edit that changes nothing moves the prediction about as much as an edit that inverts the card. Turning a Pacifism into a self-lockdown, a full reversal of what the card does, moves the prediction a third as much as swapping its two static lines, which changes nothing at all. Every context response points the right way; against the noise from meaningless edits, none stands out the way a real difference in card quality should.
 
-Wordiness itself is priced. Appending any clause to a spell's line pays about +0.09 whatever it says, a drawback clause included; only on a creature's own triggered line does the sign channel work, where a self-sacrifice rider costs −0.20 and a +1/+1-counter rider pays +0.20. A cantrip rider nets exactly zero against a matched control, confirming the label-side null causally.
+Appended riders are read on some lines and merely counted on others. A clause appended to a spell's line pays about +0.09 whatever it says, a drawback included. The same kind of rider on a creature's own triggered line is actually read: a self-sacrifice rider costs −0.20 and a +1/+1-counter rider pays +0.20. A cantrip rider nets exactly zero against a matched control, and the labels price cantrip riders at nothing, so there the encoder agrees with them.
 
 ## The embedding is a card description first and a judgment second
 
