@@ -1,0 +1,482 @@
+[
+  {
+    "set": "THS",
+    "payoff": "Wingsteed Rider",
+    "enablers": ["Gods Willing", "Battlewise Valor", "Ordeal of Heliod", "Dauntless Onslaught"],
+    "control": "Ephara's Warden",
+    "mechanism": "heroic payoff + cheap spells that target your own creature",
+    "strength": "strong"
+  },
+  {
+    "set": "THS",
+    "payoff": "Phalanx Leader",
+    "enablers": ["Gods Willing", "Battlewise Valor", "Dauntless Onslaught", "Ordeal of Heliod"],
+    "control": "Leonin Snarecaster",
+    "mechanism": "heroic payoff + cheap spells that target your own creature",
+    "strength": "strong"
+  },
+  {
+    "set": "THS",
+    "payoff": "Tormented Hero",
+    "enablers": ["Boon of Erebos", "Ordeal of Erebos", "Scourgemark"],
+    "control": "Fleshmad Steed",
+    "mechanism": "heroic payoff + cheap auras/tricks that target it",
+    "strength": "mild"
+  },
+  {
+    "set": "THS",
+    "payoff": "Gray Merchant of Asphodel",
+    "enablers": ["Disciple of Phenax", "Insatiable Harpy", "Keepsake Gorgon", "Baleful Eidolon"],
+    "control": "Loathsome Catoblepas",
+    "mechanism": "devotion payoff + permanents with heavy colored pips",
+    "strength": "strong"
+  },
+  {
+    "set": "M19",
+    "payoff": "Ajani's Pridemate",
+    "enablers": ["Ajani's Welcome", "Revitalize", "Daybreak Chaplain", "Herald of Faith"],
+    "control": "Militia Bugler",
+    "mechanism": "lifegain payoff + repeatable lifegain sources",
+    "strength": "strong"
+  },
+  {
+    "set": "M19",
+    "payoff": "Epicure of Blood",
+    "enablers": ["Ajani's Welcome", "Revitalize", "Daybreak Chaplain", "Lich's Caress"],
+    "control": "Bogstomper",
+    "mechanism": "lifegain payoff + repeatable lifegain sources",
+    "strength": "mild"
+  },
+  {
+    "set": "M19",
+    "payoff": "Ravenous Harpy",
+    "enablers": ["Reassembling Skeleton", "Stitcher's Supplier", "Diregraf Ghoul"],
+    "control": "Fell Specter",
+    "mechanism": "sacrifice outlet payoff + expendable/recursive creature fodder",
+    "strength": "mild"
+  },
+  {
+    "set": "M14",
+    "payoff": "Predatory Sliver",
+    "enablers": ["Manaweft Sliver", "Groundshaker Sliver", "Striking Sliver", "Sentinel Sliver"],
+    "control": "Advocate of the Beast",
+    "mechanism": "tribal lord + tribe members (Slivers)",
+    "strength": "strong"
+  },
+  {
+    "set": "M14",
+    "payoff": "Young Pyromancer",
+    "enablers": ["Shock", "Thunder Strike", "Chandra's Outrage", "Volcanic Geyser"],
+    "control": "Dragon Egg",
+    "mechanism": "spells-matter token maker + cheap instants/sorceries",
+    "strength": "strong"
+  },
+  {
+    "set": "ISD",
+    "payoff": "Spider Spawning",
+    "enablers": ["Armored Skaab", "Deranged Assistant", "Selhoff Occultist", "Mulch"],
+    "control": "Bramblecrush",
+    "mechanism": "graveyard-count payoff + self-mill",
+    "strength": "strong"
+  },
+  {
+    "set": "ISD",
+    "payoff": "Boneyard Wurm",
+    "enablers": ["Armored Skaab", "Deranged Assistant", "Mulch", "Selhoff Occultist"],
+    "control": "Hamlet Captain",
+    "mechanism": "graveyard-count P/T payoff + self-mill",
+    "strength": "strong"
+  },
+  {
+    "set": "ISD",
+    "payoff": "Makeshift Mauler",
+    "enablers": ["Armored Skaab", "Deranged Assistant", "Selhoff Occultist", "Forbidden Alchemy"],
+    "control": "Moon Heron",
+    "mechanism": "graveyard-as-cost payoff + self-mill",
+    "strength": "strong"
+  },
+  {
+    "set": "ISD",
+    "payoff": "Festerhide Boar",
+    "enablers": ["Prey Upon", "Brimstone Volley", "Geistflame", "Dead Weight"],
+    "control": "Orchard Spirit",
+    "mechanism": "morbid payoff + cheap removal that kills on your turn",
+    "strength": "mild"
+  },
+  {
+    "set": "XLN",
+    "payoff": "Bishop of the Bloodstained",
+    "enablers": ["Skymarch Bloodletter", "Vicious Conquistador", "Queen's Bay Soldier", "Queen's Commission"],
+    "control": "Lurking Chupacabra",
+    "mechanism": "tribal-count drain payoff + tribe members (Vampires)",
+    "strength": "strong"
+  },
+  {
+    "set": "XLN",
+    "payoff": "Deeproot Waters",
+    "enablers": ["Shaper Apprentice", "River Sneak", "Headwater Sentries", "Storm Sculptor"],
+    "control": "Chart a Course",
+    "mechanism": "tribal-cast payoff + tribe spells (Merfolk)",
+    "strength": "strong"
+  },
+  {
+    "set": "XLN",
+    "payoff": "Shaper Apprentice",
+    "enablers": ["River Sneak", "Headwater Sentries", "Storm Sculptor", "Tishana's Wayfinder"],
+    "control": "Sailor of Means",
+    "mechanism": "tribal-conditional creature + tribe members (Merfolk)",
+    "strength": "mild"
+  },
+  {
+    "set": "XLN",
+    "payoff": "Deadeye Plunderers",
+    "enablers": ["Sailor of Means", "Pirate's Prize", "Depths of Desire", "Contract Killing"],
+    "control": "Tempest Caller",
+    "mechanism": "artifact-count payoff + Treasure makers",
+    "strength": "strong"
+  },
+  {
+    "set": "ZNR",
+    "payoff": "Territorial Scythecat",
+    "enablers": ["Roiling Regrowth", "Vastwood Surge", "Scale the Heights"],
+    "control": "Murasa Brute",
+    "mechanism": "landfall payoff + extra land drops / land fetch",
+    "strength": "strong"
+  },
+  {
+    "set": "ZNR",
+    "payoff": "Malakir Blood-Priest",
+    "enablers": ["Nimana Skitter-Sneak", "Highborn Vampire", "Cascade Seer"],
+    "control": "Guul Draz Mucklord",
+    "mechanism": "party payoff + creatures covering the other party classes",
+    "strength": "strong"
+  },
+  {
+    "set": "ZNR",
+    "payoff": "Deadly Alliance",
+    "enablers": ["Nimana Skitter-Sneak", "Highborn Vampire", "Cascade Seer", "Malakir Blood-Priest"],
+    "control": "Blood Price",
+    "mechanism": "party cost-reduction payoff + creatures covering party classes",
+    "strength": "mild"
+  },
+  {
+    "set": "ZNR",
+    "payoff": "Emeria Captain",
+    "enablers": ["Kabira Outrider", "Acquisitions Expert", "Cascade Seer", "Attended Healer"],
+    "control": "Canyon Jerboa",
+    "mechanism": "party payoff + creatures covering all four party classes",
+    "strength": "strong"
+  },
+  {
+    "set": "ZNR",
+    "payoff": "Paired Tactician",
+    "enablers": ["Kabira Outrider", "Dauntless Survivor", "Highborn Vampire"],
+    "control": "Attended Healer",
+    "mechanism": "warriors-matter payoff + Warrior creatures",
+    "strength": "mild"
+  },
+  {
+    "set": "DOM",
+    "payoff": "Wizard's Lightning",
+    "enablers": ["Ghitu Lavarunner", "Ghitu Journeymage", "Ghitu Chronicler", "Firefist Adept"],
+    "control": "Fight with Fire",
+    "mechanism": "tribal cost-reduction payoff + tribe members (Wizards)",
+    "strength": "strong"
+  },
+  {
+    "set": "DOM",
+    "payoff": "Ghitu Journeymage",
+    "enablers": ["Ghitu Lavarunner", "Ghitu Chronicler", "Firefist Adept", "Tolarian Scholar"],
+    "control": "Keldon Overseer",
+    "mechanism": "tribal-conditional ETB payoff + tribe members (Wizards)",
+    "strength": "mild"
+  },
+  {
+    "set": "DOM",
+    "payoff": "Ghitu Lavarunner",
+    "enablers": ["Shivan Fire", "Fervent Strike", "Run Amok", "Radiating Lightning"],
+    "control": "Keldon Warcaller",
+    "mechanism": "spells-in-graveyard threshold + cheap instants/sorceries",
+    "strength": "mild"
+  },
+  {
+    "set": "DOM",
+    "payoff": "Champion of the Flame",
+    "enablers": ["Frenzied Rage", "Short Sword", "Jousting Lance", "Sorcerer's Wand"],
+    "control": "Goblin Warchief",
+    "mechanism": "voltron aura/equipment-count payoff + auras and equipment",
+    "strength": "strong"
+  },
+  {
+    "set": "SOM",
+    "payoff": "Auriok Sunchaser",
+    "enablers": ["Gold Myr", "Darksteel Axe", "Bladed Pinions", "Flight Spellbomb"],
+    "control": "Kemba's Skyguard",
+    "mechanism": "metalcraft (artifact-count) payoff + cheap artifacts",
+    "strength": "strong"
+  },
+  {
+    "set": "SOM",
+    "payoff": "Carapace Forger",
+    "enablers": ["Copper Myr", "Horizon Spellbomb", "Darksteel Axe", "Echo Circlet"],
+    "control": "Cystbearer",
+    "mechanism": "metalcraft (artifact-count) payoff + cheap artifacts",
+    "strength": "strong"
+  },
+  {
+    "set": "SOM",
+    "payoff": "Bleak Coven Vampires",
+    "enablers": ["Leaden Myr", "Darksteel Axe", "Bladed Pinions", "Flight Spellbomb"],
+    "control": "Blackcleave Goblin",
+    "mechanism": "metalcraft (artifact-count) payoff + cheap artifacts",
+    "strength": "strong"
+  },
+  {
+    "set": "SOM",
+    "payoff": "Sunspear Shikari",
+    "enablers": ["Darksteel Axe", "Bladed Pinions", "Barbed Battlegear", "Echo Circlet"],
+    "control": "Kemba's Skyguard",
+    "mechanism": "equipped-matters payoff + equipment",
+    "strength": "strong"
+  },
+  {
+    "set": "BFZ",
+    "payoff": "Ulamog's Nullifier",
+    "enablers": ["Benthic Infiltrator", "Culling Drone", "Mist Intruder", "Sludge Crawler"],
+    "control": "Windrider Patrol",
+    "mechanism": "processor payoff + ingest creatures that exile opponent cards",
+    "strength": "strong"
+  },
+  {
+    "set": "BFZ",
+    "payoff": "Murk Strider",
+    "enablers": ["Benthic Infiltrator", "Culling Drone", "Mist Intruder", "Sludge Crawler"],
+    "control": "Cloud Manta",
+    "mechanism": "processor payoff + ingest creatures that exile opponent cards",
+    "strength": "strong"
+  },
+  {
+    "set": "BFZ",
+    "payoff": "Mind Raker",
+    "enablers": ["Benthic Infiltrator", "Culling Drone", "Mist Intruder", "Sludge Crawler"],
+    "control": "Silent Skimmer",
+    "mechanism": "processor payoff + ingest creatures that exile opponent cards",
+    "strength": "strong"
+  },
+  {
+    "set": "BFZ",
+    "payoff": "Vile Aggregate",
+    "enablers": ["Eldrazi Skyspawner", "Incubator Drone", "Benthic Infiltrator", "Dominator Drone"],
+    "control": "Tunneling Geopede",
+    "mechanism": "colorless-creature-count payoff + devoid creatures and Eldrazi Scions",
+    "strength": "strong"
+  },
+  {
+    "set": "BFZ",
+    "payoff": "Dominator Drone",
+    "enablers": ["Eldrazi Skyspawner", "Incubator Drone", "Benthic Infiltrator", "Culling Drone"],
+    "control": "Nirkana Assassin",
+    "mechanism": "colorless-creature-conditional ETB + devoid creatures and Scions",
+    "strength": "mild"
+  },
+  {
+    "set": "KLD",
+    "payoff": "Longtusk Cub",
+    "enablers": ["Attune with Aether", "Sage of Shaila's Claim", "Servant of the Conduit", "Thriving Rhino"],
+    "control": "Ghirapur Guide",
+    "mechanism": "energy sink payoff + energy producers",
+    "strength": "strong"
+  },
+  {
+    "set": "KLD",
+    "payoff": "Aethertorch Renegade",
+    "enablers": ["Thriving Grubs", "Harnessed Lightning", "Spontaneous Artist", "Maulfist Doorbuster"],
+    "control": "Quicksmith Genius",
+    "mechanism": "energy sink payoff + energy producers",
+    "strength": "strong"
+  },
+  {
+    "set": "STX",
+    "payoff": "Eager First-Year",
+    "enablers": ["Beaming Defiance", "Guiding Voice", "Expel"],
+    "control": "Ageless Guardian",
+    "mechanism": "magecraft/prowess payoff + cheap instants and sorceries",
+    "strength": "mild"
+  },
+  {
+    "set": "GRN",
+    "payoff": "Garrison Sergeant",
+    "enablers": ["Boros Guildgate", "Izzet Guildgate", "Selesnya Guildgate", "Gateway Plaza"],
+    "control": "Hammer Dropper",
+    "mechanism": "Gate-count payoff + Gate lands",
+    "strength": "strong"
+  },
+  {
+    "set": "GRN",
+    "payoff": "Kraul Foragers",
+    "enablers": ["Glowspore Shaman", "Barrier of Bones", "Price of Fame", "Dimir Informant"],
+    "control": "Wild Ceratok",
+    "mechanism": "undergrowth (creature cards in graveyard) payoff + self-mill/surveil",
+    "strength": "mild"
+  },
+  {
+    "set": "GRN",
+    "payoff": "Dimir Spybug",
+    "enablers": ["Dimir Informant", "Notion Rain", "Thought Erasure", "Dazzling Lights"],
+    "control": "House Guildmage",
+    "mechanism": "+1/+1 counter payoff triggered by surveil + surveil sources",
+    "strength": "strong"
+  },
+  {
+    "set": "RNA",
+    "payoff": "Gatebreaker Ram",
+    "enablers": ["Gruul Guildgate", "Orzhov Guildgate", "Azorius Guildgate", "Gateway Plaza"],
+    "control": "Gruul Beastmaster",
+    "mechanism": "Gate-count payoff + Gate lands",
+    "strength": "strong"
+  },
+  {
+    "set": "RNA",
+    "payoff": "Gates Ablaze",
+    "enablers": ["Rakdos Guildgate", "Gruul Guildgate", "Simic Guildgate", "Gateway Plaza"],
+    "control": "Light Up the Stage",
+    "mechanism": "Gate-count sweeper + Gate lands",
+    "strength": "strong"
+  },
+  {
+    "set": "RNA",
+    "payoff": "Skewer the Critics",
+    "enablers": ["Footlight Fiend", "Ghor-Clan Wrecker", "Burning-Tree Vandal", "Carnival // Carnage"],
+    "control": "Act of Treason",
+    "mechanism": "spectacle cost reduction + cheap sources of early opponent life loss",
+    "strength": "mild"
+  },
+  {
+    "set": "ELD",
+    "payoff": "Cauldron Familiar",
+    "enablers": ["Witch's Oven", "Golden Egg", "Tempting Witch", "Bake into a Pie"],
+    "control": "Eye Collector",
+    "mechanism": "sacrifice-a-Food payoff + Food makers",
+    "strength": "strong"
+  },
+  {
+    "set": "ELD",
+    "payoff": "Bog Naughty",
+    "enablers": ["Golden Egg", "Tempting Witch", "Bake into a Pie", "Witch's Oven"],
+    "control": "Barrow Witches",
+    "mechanism": "sacrifice-a-Food removal engine + Food makers",
+    "strength": "strong"
+  },
+  {
+    "set": "ELD",
+    "payoff": "Maraleaf Rider",
+    "enablers": ["Golden Egg", "Curious Pair", "Giant Opportunity", "Witch's Oven"],
+    "control": "Sporecap Spider",
+    "mechanism": "sacrifice-a-Food payoff + Food makers",
+    "strength": "mild"
+  },
+  {
+    "set": "IKO",
+    "payoff": "Flourishing Fox",
+    "enablers": ["Coordinated Charge", "Splendor Mare", "Indatha Crystal", "Savai Crystal"],
+    "control": "Garrison Cat",
+    "mechanism": "cycling payoff + cards with cycling",
+    "strength": "strong"
+  },
+  {
+    "set": "IKO",
+    "payoff": "Drannith Stinger",
+    "enablers": ["Raking Claws", "Shredded Sails", "Go for Blood", "Savai Crystal"],
+    "control": "Frenzied Raptor",
+    "mechanism": "cycling payoff + cards with cycling",
+    "strength": "strong"
+  },
+  {
+    "set": "IKO",
+    "payoff": "Snare Tactician",
+    "enablers": ["Coordinated Charge", "Indatha Crystal", "Savai Crystal", "Drannith Healer"],
+    "control": "Helica Glider",
+    "mechanism": "cycling payoff + cards with cycling",
+    "strength": "strong"
+  },
+  {
+    "set": "AKH",
+    "payoff": "Nest of Scarabs",
+    "enablers": ["Splendid Agony", "Festering Mummy", "Soulstinger", "Baleful Ammit"],
+    "control": "Faith of the Devoted",
+    "mechanism": "-1/-1 counter payoff + sources that place -1/-1 counters",
+    "strength": "strong"
+  },
+  {
+    "set": "AKH",
+    "payoff": "Lord of the Accursed",
+    "enablers": ["Festering Mummy", "Miasmic Mummy", "Cursed Minotaur", "Blighted Bat"],
+    "control": "Baleful Ammit",
+    "mechanism": "tribal lord + tribe members (Zombies)",
+    "strength": "strong"
+  },
+  {
+    "set": "AKH",
+    "payoff": "Faith of the Devoted",
+    "enablers": ["Scarab Feast", "Hieroglyphic Illumination", "Dissenter's Deliverance", "Stinging Shot"],
+    "control": "Nest of Scarabs",
+    "mechanism": "cycling/discard payoff + cards with cycling",
+    "strength": "strong"
+  },
+  {
+    "set": "AKH",
+    "payoff": "Pitiless Vizier",
+    "enablers": ["Scarab Feast", "Hieroglyphic Illumination", "Dissenter's Deliverance", "Stinging Shot"],
+    "control": "Cursed Minotaur",
+    "mechanism": "cycling/discard payoff + cards with cycling",
+    "strength": "mild"
+  },
+  {
+    "set": "BLB",
+    "payoff": "Heartfire Hero",
+    "enablers": ["Might of the Meek", "Rabid Gnaw", "Raccoon Rallier"],
+    "control": "Brazen Collector",
+    "mechanism": "valiant payoff + cheap spells/abilities that target your own creature",
+    "strength": "strong"
+  },
+  {
+    "set": "BLB",
+    "payoff": "Coruscation Mage",
+    "enablers": ["Might of the Meek", "Playful Shove", "Blooming Blast", "Agate Assault"],
+    "control": "Flamecache Gecko",
+    "mechanism": "noncreature-spell payoff + cheap noncreature spells",
+    "strength": "mild"
+  },
+  {
+    "set": "WOE",
+    "payoff": "Candy Grapple",
+    "enablers": ["Sweettooth Witch", "Mintstrosity", "Conceited Witch", "Hopeless Nightmare"],
+    "control": "Feed the Cauldron",
+    "mechanism": "bargain payoff + sacrificeable Food/Role/enchantment tokens",
+    "strength": "mild"
+  },
+  {
+    "set": "WOE",
+    "payoff": "Warehouse Tabby",
+    "enablers": ["Conceited Witch", "Hopeless Nightmare", "Not Dead After All", "Eriette's Whisper"],
+    "control": "Barrow Naughty",
+    "mechanism": "enchantment-hits-graveyard payoff + Role token / sacrificial enchantment makers",
+    "strength": "mild"
+  },
+  {
+    "set": "KHM",
+    "payoff": "Skemfar Shadowsage",
+    "enablers": ["Elderfang Disciple", "Deathknell Berserker", "Koma's Faithful", "Duskwielder"],
+    "control": "Hailstorm Valkyrie",
+    "mechanism": "shared-creature-type count payoff + tribe members (Elves)",
+    "strength": "strong"
+  },
+  {
+    "set": "NEO",
+    "payoff": "Upriser Renegade",
+    "enablers": ["Rabbit Battery", "Bronzeplate Boar", "Ninja's Kunai", "Bronze Cudgels"],
+    "control": "Reinforced Ronin",
+    "mechanism": "modified-creature-count payoff + equipment that attach to your creatures",
+    "strength": "strong"
+  }
+]
