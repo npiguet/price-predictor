@@ -32,9 +32,10 @@ checkout at `../forge`.
 | `t2_marginal_values.py` + `t2_analyze.py` | all of "Card preferences" (v_swap, category/MV/flying/rarity tables, regressions) | `t2_card_values.csv`, `t2_report.md` |
 | `t4_synergy.py` | all of "Synergy and interactions" (dose-response ΔΔ, duplicates, removal ladder) | `t4_results.json`, `t4_report.md` |
 | `t7_artifacts.py` | "The ruler" calibration; builder fingerprint; 22/23/24-spell preference; sibling-checkpoint agreement; draft-rank and blacklist joins | `t7_results.json`, `t7_report.md` |
+| `t8_noncreature_mix.py` | "Half of every noncreature slot goes to removal…" and "Removal takes the plurality in every color but blue and green" — archetype take rates and quality-matched lift over the 10,000 aligned pool/deck pairs, overall, by removal subtype, by color, and by within-pool label rank (the depth check reconciling this with t4's flat removal-share ladder). `--audit N` lists the most-available cards still landing in the residual class | `t8_noncreature_mix.csv`, `t8_report.md` |
 | `forge_hints.py` | Forge `AI:RemoveDeck` + human draft-rank extraction (input to t7-D2) | `forge_hints.csv` |
 | `post_hoc_slices.py` | prose numbers with no t-script: within-set correlations, set offsets, dynamic range, nonbasic-land counts, gen4-512 color distribution, card-class slices (tricks/counterspells/planeswalkers/vehicles/X/hybrid), text-length null, on/off-color add decomposition, multi-face slice, splash economics + 5-color census, forge-best add robustness | stdout |
-| `make_figures.py` | renders the document's figures (calibration, ablation, PC-truncation, PC-label meanings, label weights, det groups, builder scores, shape ladders, color economics, land adds, card values, synergy dose) from the staged outputs | `experiments/images/2026-08-27-scorer-*.png/.svg` |
+| `make_figures.py` | renders the document's figures (calibration, ablation, PC-truncation, PC-label meanings, label weights, det groups, builder scores, shape ladders, color economics, land adds, card values, synergy dose, noncreature mix, noncreature colors) from the staged outputs | `experiments/images/2026-08-27-scorer-*.png/.svg` |
 | `label_probe.py` → `rarity_probe.py` / `human_rank_probe.py` | label-level numbers ("0.57 sd above human pick order", power-vs-toughness, rarity gradient) — run in that order (`labels_joined.csv` feeds the other two) | `labels_joined.csv`, stdout |
 | `synergy_pairs.json` + `verify.py` (+ `cardtool.py`, `dump.py`) | the curated 60-triple synergy dataset used by t4, with its validator and browsing helpers | — |
 
@@ -44,7 +45,8 @@ checkout at `../forge`.
 2. `make_text_pca.py` (t6 P1 reads the npz)
 3. `forge_hints.py` (t7-D2 reads its CSV)
 4. `t1_meansum.py`, `t2_marginal_values.py` → `t2_analyze.py`, `t3_ladders.py`,
-   `t4_synergy.py`, `t5_ablation.py`, `t5b_det_groups.py`, `t6_mechanism.py`, `t7_artifacts.py` — any order
+   `t4_synergy.py`, `t5_ablation.py`, `t5b_det_groups.py`, `t6_mechanism.py`, `t7_artifacts.py`,
+   `t8_noncreature_mix.py` — any order
 5. `post_hoc_slices.py`; label-level: `label_probe.py` → `rarity_probe.py`,
    `human_rank_probe.py`
 

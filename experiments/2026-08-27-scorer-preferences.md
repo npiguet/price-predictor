@@ -4,7 +4,8 @@
 
 - The scorer likes creature-heavy decks in two or three colors: 19 or 20 creatures, with an average mana cost just above three.
 - A splash has to earn its place: a new color helps only when its cards are better than the cards they push out. A fourth color rarely clears that bar, and a fifth never does.
-- Cards are ranked mostly by how often they won games in training. Creatures come first, removal second, card draw and do-nothing artifacts last. The BREAD rule puts removal right after bombs; the scorer disagrees.
+- Cards are ranked mostly by how often they won games in training. Creatures come first, removal second, card draw and do-nothing artifacts last. The BREAD rule puts removal right after bombs; the scorer puts it after every creature.
+- A deck has about five noncreature slots, and half of them go to removal that kills what it points at. Fight spells and sweepers are passed over, and so are combat tricks, fogs and graveyard recursion. Which archetype fills the rest depends on the color: red and black spend nearly everything on removal, blue splits four ways across bounce, draw, auras and counters, and green leads with auras. How much removal a deck ends up with is a separate question, and one it has no opinion on.
 - Flying is the ability it prizes most, and more so on big creatures. Expensive cards beat cheap ones, and only mythics get a rarity bonus.
 - It does not see synergies. A tribal payoff is worth the same with or without its tribe, and a second copy of a card is worth the same as the first.
 - Its taste comes from watching Forge's AI play itself. That AI attacks and blocks well, defends against fliers badly, and misplays instants; the scorer's likes and dislikes mirror those strengths and weaknesses.
@@ -153,6 +154,64 @@ Two rows contradict the hypotheses that motivated them. Combat tricks were predi
 
 Two hypothesized artifacts have no measurable effect. Vehicles carry a printed P/T in the deterministic features despite doing nothing uncrewed, yet they price low: the text-embedding labels carry the truth. A wordiness bias (long text as a power proxy) measures at a standardized +0.003, effectively zero.
 
+### Half of every noncreature slot goes to removal, and almost none of that removal is conditional
+
+A gen4-512 deck holds 17.9 creatures and 5.1 noncreature spells, and removal fills half of those five slots. The probe reads the 10,000 aligned pool/deck pairs, sorts every noncreature nonland card in each pool into one archetype by its rules text, and compares what each deck could cast with what it took. On-color creatures are taken at 63.7%, on-color noncreature spells at 22.8%.
+
+Two quantities separate a preference for an archetype from a preference for the cards that happen to carry it. The take rate is cards chosen over cards available, counted only over pool cards whose colors the deck plays. The lift divides that take rate by the rate predicted from the card's winnability label, mana value and color count alone. That prediction comes from strata measured over every eligible noncreature card, so lift 1.0 means the archetype is taken as often as any other noncreature card of the same quality and cost.
+
+![Take-rate lift and slot share for each noncreature archetype](images/2026-08-27-scorer-noncreature-mix.png)
+
+*Source: `t8_noncreature_mix.py`.*
+
+Only four archetypes are taken more often than their quality labels predict: removal, bounce, token makers, and auras and equipment. Planeswalkers land on par. Every other archetype falls below it.
+
+Combat tricks and fogs are the two the builder actively refuses. Tricks are taken at roughly a quarter of their predicted rate, despite being among the most abundant cards in the pools. Both measurements agree on tricks: `v_swap` prices them worst of any class in the table above, and only fogs are declined more often.
+
+Inside removal the preference is for answers that need nothing else to work:
+
+| removal subtype | available | take rate | lift |
+|---|---|---|---|
+| destroy or exile | 18,697 | 52.4% | 1.58 |
+| lockdown aura | 6,699 | 47.9% | 1.57 |
+| damage | 18,978 | 47.4% | 1.54 |
+| shrink (−X/−X) | 5,300 | 42.3% | 1.44 |
+| edict (opponent sacrifices) | 2,960 | 18.9% | 1.07 |
+| sweeper | 6,366 | 10.6% | 0.55 |
+| fight | 1,551 | 16.1% | 0.46 |
+
+Removal that names its target unconditionally sits about half again above par. Removal that needs a board state drops to par or below. A fight spell needs a creature already in play, an edict needs the opponent to hold only the creature worth killing, and a sweeper needs a battlefield worth clearing. Sweepers have a second reason to be refused: the deck casting them runs nearly 18 creatures of its own.
+
+Planeswalkers are the one archetype taken often without being preferred. They are chosen at 45.7%, a rate no archetype but token makers matches, and at par once their winnability labels are accounted for. The builder is taking the cards, not the card type. The class table above found parity too, against a different baseline: planeswalkers price level with mana-value-matched creatures.
+
+Two checks say the ranking is not an artifact of one measurement or a handful of sets. Joining the same archetype labels onto the `v_swap` values reproduces the same broad shape, with planeswalkers and token makers near the top and fogs last. The two orderings agree at Spearman 0.64 (p = 0.010, n = 15 families). That is an independent measurement, because `v_swap` swaps cards into fixed Forge decks and never watches the builder choose. Per set, removal's lift exceeds 1.0 in 91% of the 180 sets, and combat tricks' in 1% of the 162 sets that carry them.
+
+Removal loses to creatures and wins among noncreatures. `v_swap` says an average removal spell is worth less than an average creature, which is why creatures take more than three quarters of the spell slots. The take rates say that among the cards competing for the five slots creatures do not fill, removal wins by a wide margin. The BREAD divergence is therefore specific rather than general: the scorer ranks removal below bodies, not below every other noncreature card.
+
+Removal's edge does not fade as a deck accumulates removal. Ranking each pool's eligible removal by label, the best one lifts at 1.37 and the sixth at 1.63, while non-removal cards fall from 0.93 to 0.61 over the same ranks. The edge is per-card rather than a quota the deck fills, which is why the removal-share ladder below finds no optimum in a deck's total removal count.
+
+### Removal takes the plurality in every color but blue and green
+
+Red and black spend three quarters or more of their noncreature slots on removal, and blue spends barely one slot in eight. White is a removal color too, and it takes both removal and token makers above par. White's removal lift of 1.82 is the highest of any color. Blue is the only color whose slots split near-evenly, across card draw, bounce, auras and counterspells, with removal fifth. Green leads with auras and equipment, and gives combat tricks a larger share than any other color.
+
+![Composition of each color's noncreature deck slots](images/2026-08-27-scorer-noncreature-colors.png)
+
+*Source: `t8_noncreature_mix.py`, mono-colored cards only.*
+
+Colorless is where ramp earns its slot. Mana rocks lift at 1.51 and take a sixth of all colorless slots. Colored ramp is refused: green fixing lifts at 0.49, and red's own ramp was taken zero times out of 265 chances. The color fee measured in the color-count ladder applies to a ramp spell like any other card, so acceleration is worth a slot only when it commits no color.
+
+Green's noncreature spells are taken less often than any other color's, and the label-and-cost control does not remove the gap. Green mono-colored noncreature cards are taken at 16.2% against 21.0% to 29.1% for the other four, and at lift 0.64 against 1.06 to 1.14. The deficit sits inside removal rather than in green's mix of archetypes:
+
+| green removal | available | take rate | lift |
+|---|---|---|---|
+| damage | 1,943 | 36.4% | 0.90 |
+| destroy or exile | 1,631 | 9.6% | 0.53 |
+| fight | 1,303 | 18.3% | 0.49 |
+| sweeper | 1,328 | 3.5% | 0.18 |
+| edict | 302 | 1.7% | 0.13 |
+
+Every kind of removal green offers carries a condition, and none of the five clears par. Green's destroy-or-exile row looks unconditional and is not: 86% of the cards in it can only target a creature with flying or reach. The same class lifts at 1.87 in white and 0.53 in green. Only the targeting restriction separates the two.
+
 ## Synergy is absent; only density effects survive
 
 ### Pair synergy is absent: enabler density does not raise a payoff's value
@@ -180,9 +239,13 @@ The second and third copy of a card are worth what the first is worth. The probe
 
 *Source: `t4_synergy.py`, probe P-B.*
 
-### The removal-share opinion is weak: cutting below three hurts a little, stacking is free
+### The scorer has no opinion on how much removal a deck runs, only on which card fills a slot
 
-Stripping two removal spells from an average deck costs −0.07 net of matched control swaps. Adding one to three more costs nothing. Across base removal counts from 2 to 8 the net deltas stay within ±0.16 with no consistent interior optimum. The scorer holds creature count and curve strongly, and removal share barely at all. That is consistent with the card-level finding: removal is priced like a slightly-below-average body, not a scarce role to fill.
+The scorer barely distinguishes decks by how much removal they hold. Stripping two removal spells from an average deck costs −0.07 net of matched control swaps. Adding one to three more costs nothing. Across base removal counts from 2 to 8 the net deltas stay within ±0.17 with no consistent interior optimum. The scorer holds creature count and curve strongly, and removal count barely at all.
+
+Removal count and removal preference are different questions, and each probe answers one of them. This ladder moves the count inside a finished deck, and counts every removal effect including the creatures that carry one, so its base count of 4.23 removal cards is wider than the 2.6 noncreature removal spells an average deck holds. The take rates above ask instead which noncreature card wins a slot, and find removal preferred by about half again over label-matched alternatives. Both probes control on the same winnability label, so the difference between them is not in what they hold fixed.
+
+The preference is small per card and decisive in aggregate. A per-swap edge worth a few hundredths of a point barely moves the deck's score when stacked, which is the quantity this ladder reads. The same edge still wins most of the slot contests it enters, which is what the take rates read. Both agree with the card-level finding: removal is priced like a slightly-below-average body, and that is still better than the other noncreature cards competing for the slot.
 
 *Source: `t4_synergy.py`, probe P-C.*
 
@@ -324,4 +387,4 @@ Of the 6.1 score units between the mean random-pile deck and the mean gen-5 deck
 
 ## Limitations
 
-Card-level values are context-relative: `v_swap` comes from two-color Forge-built contexts, so a card's value in an archetype the corpus never builds is not measured. Shape ladders perturb decks built by a sibling scorer, so rung 0 sits at a local optimum and raw rung deltas include a chosen-vs-rejected quality baseline. Conclusions therefore rest on rung-to-rung marginals and controls, not raw deltas. Everything is a preference of this checkpoint under Forge-AI-piloted Bo7. None of it is a claim about human Magic except where explicitly compared to human pick orders. A few hypotheses from the study's ranked list remain untested: whether swap sensitivity is flat across deck slots, whether narrow situational cards are penalized through quality or through played-rate, and whether frequently-observed cards are memorized beyond what their text supports.
+Card-level values are context-relative: `v_swap` comes from two-color Forge-built contexts, so a card's value in an archetype the corpus never builds is not measured. The archetype take rates are the builder's revealed choice under greedy hill-climbing, so a preference the search cannot reach does not appear in them. Their archetype labels come from regexes over card text, and 5.9% of noncreature slots land in a residual class that audits as land auras, prison cards and do-nothing artifacts rather than as a missed archetype. Shape ladders perturb decks built by a sibling scorer, so rung 0 sits at a local optimum and raw rung deltas include a chosen-vs-rejected quality baseline. Conclusions therefore rest on rung-to-rung marginals and controls, not raw deltas. Everything is a preference of this checkpoint under Forge-AI-piloted Bo7. None of it is a claim about human Magic except where explicitly compared to human pick orders. A few hypotheses from the study's ranked list remain untested: whether swap sensitivity is flat across deck slots, whether narrow situational cards are penalized through quality or through played-rate, and whether frequently-observed cards are memorized beyond what their text supports.
