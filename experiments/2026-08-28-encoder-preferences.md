@@ -59,15 +59,17 @@ The nonzero values were meant to measure affinity: does the card win more when i
 
 ## Half of the encoder's knowledge is memorized card identity
 
-The encoder fits its training cards beyond what any text reader could. A probe fit on half the training cards scores more than twice as high on the other training half as on the encoder's held-out cards, and the probe's own overfit is negligible, so the entire gap is the encoder's. The sharpest single statement needs no variance extrapolation: the training-card residual SD (0.027) is below the winnability label's own irreducible noise floor, measured from the 171 groups of cards whose name-stripped text is bit-identical and whose winnability labels still differ (within-group SD 0.029 at high observation counts, 0.038 overall). Fitting tighter than identical-text twins disagree is memorization by definition.
+On the cards it trained on, the encoder explains 81% of the card-to-card variation in the winnability label; on the 5,596 cards held out of its training, 37%. The probe that reads these numbers out is not the cause: fit on one half of the training cards, it does just as well on the other half, so the gap comes from the embeddings themselves. The encoder gives its training cards embeddings that carry their labels, and gives unseen cards only what their text implies.
 
-![R² ladder from the reliability ceiling down to shuffled text](images/2026-08-28-encoder-memorization.png)
+The training-card fit is also tighter than reading text could ever be. The corpus contains 171 groups of functional reprints: cards whose rules text is identical word for word, with only the name differing. Identical text produces identical embeddings, so any text-based prediction must give such twins the same value, and their labels still differ, from the luck of the games behind them. How much the twins disagree therefore caps what text can explain, at 51–61% of the label variation. The encoder's fit on its training cards is above that cap, and its typical training-card error (0.027) is smaller than the twins' typical disagreement (0.029): it knows differences between its training cards that their text does not contain, which is memorization by definition.
 
-*Source: `r2_*.py`, `s_r18*.py`; equivalence classes in `p0_build.py`; rendered by `make_figures.py`.*
+![The encoder's fit on training cards, on shuffled training cards, and on unseen cards, against the text-explainable cap](images/2026-08-28-encoder-memorization.png)
 
-The memory key is layout, not vocabulary. Meaning-preserving edits that move lines disturb trained cards' predictions 20–56% more than matched held-out cards'; a token substitution disturbs both equally. Under line permutation the training-card fit collapses toward the held-out fit, which says the memorized component lives in line order.
+*Source: `r2a_memorization.py`; the line-shuffled bar from `r1a_shuffle.py`; the identical-text groups from `p0_build.py`; rendered by `make_figures.py`.*
 
-For the pipeline's stated purpose, scoring hypothetical cards, the operative numbers are the held-out ones: R² 0.37 for winnability and 0.61 for played rate. Paired counterfactual comparisons on one card cancel the memorized offset and remain safe. Absolute reads of a novel card do not, and a hypothetical card must be written in canonical converted-card layout, because non-canonical line order costs more than most real content edits.
+The memory is keyed to the card's line layout, not its words. Swapping two ability lines, which changes nothing about what a card does, disturbs trained cards' predictions 20–56% more than it disturbs unseen cards'; swapping a creature type for an equally common one disturbs both the same. And destroying line order collapses the training-card fit most of the way down to the unseen-card fit, as the middle bar of the figure shows.
+
+For the pipeline's stated purpose, scoring invented cards, the unseen-card numbers are the honest ones: 37% of winnability, 61% of played rate. Comparing two versions of the same card stays safe, because the memorized part is the same on both sides and cancels in the difference. A single absolute score does not. An invented card must also be written in the converter's standard line order, because unusual layout moves a prediction more than most real content changes.
 
 ## What transfers is mostly a bag of words, with thin composition on top
 
