@@ -31,7 +31,7 @@ Three simpler quantities, called channels from here on, can be measured from the
 - castability: how often the card gets cast.
 - contribution: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
 
-Writing w for selection, m for castability, and d for contribution, the winnability label equals m(2w−1) + d/2 exactly. The channels are therefore not new information: they are the same number, computed in a way that keeps its ingredients apart.
+The winnability label equals `castability × (2·selection − 1) + contribution/2` exactly. The channels are therefore not new information: they are the same number, computed in a way that keeps its ingredients apart.
 
 The rest of the document reads every premium through this split, because a premium carried by the selection channel is inherited builder taste and only a premium carried by the contribution channel is evidence the card changed games. The decomposition for the headline card classes:
 
