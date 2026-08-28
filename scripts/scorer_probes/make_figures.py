@@ -420,6 +420,86 @@ def fig_synergy_dose():
     save(fig, "synergy-dose")
 
 
+def _t8():
+    df = pd.read_csv(OUT / "t8_noncreature_mix.csv")
+    return df.assign(family=df.family.replace({"utility removal": "artifact/ench/land removal",
+                                               "buff": "aura / equipment"}))
+
+
+def fig_noncreature_mix():
+    df = _t8()
+    g = df.groupby("family").agg(avail=("avail", "sum"), taken=("taken", "sum"),
+                                 exp=("expected", "sum"))
+    g["lift"] = g.taken / g.exp
+    g["share"] = 100 * g.taken / g.taken.sum()
+    g = g[g.avail >= 800].sort_values("lift")
+    g.index = [f"{k}  (n={v:,})" for k, v in zip(g.index, g.avail)]
+    # three bands, so the colors say what the prose says: preferred, at par, refused
+    cols = [BLUE if v > 1.05 else GRAY if v >= 0.95 else ORANGE for v in g.lift]
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.8, 5.0), sharey=True,
+                             gridspec_kw={"width_ratios": [1.4, 1]})
+    ax = axes[0]
+    ax.barh(g.index, g.lift, color=cols, height=0.66)
+    for i, v in enumerate(g.lift):
+        ax.text(v + 0.03, i, f"{v:.2f}", va="center", fontsize=8)
+    ax.axvline(1.0, color=GRAY, lw=1, ls="--")
+    ax.set_xlim(0, 1.85)
+    ax.set_xlabel("take rate ÷ expectation from label, cost and color count\n"
+                  "(dashed line: taken as often as any card of the same quality)")
+    ax.set_title("Removal, bounce, token makers and auras clear par;\n"
+                 "combat tricks and fogs are refused")
+
+    ax = axes[1]
+    ax.barh(g.index, g.share, color=cols, height=0.66)   # same coding as the left panel
+    for i, v in enumerate(g.share):
+        ax.text(v + 0.8, i, f"{v:.1f}%", va="center", fontsize=8)
+    ax.set_xlim(0, 62)
+    ax.set_xlabel("share of the deck's noncreature slots")
+    ax.set_title("Half of every noncreature slot\ngoes to removal")
+    fig.subplots_adjust(wspace=0.05)
+    save(fig, "noncreature-mix")
+
+
+def fig_noncreature_colors():
+    df = _t8()
+    df = df[df.colors.str.len() <= 1]
+    piv = df.pivot_table(index="colors", columns="family", values="taken",
+                         aggfunc="sum").fillna(0)
+    piv = 100 * piv.div(piv.sum(axis=1), axis=0)
+    order = ["removal", "aura / equipment", "token maker", "card draw", "bounce",
+             "counterspell", "combat trick", "ramp / fixing"]
+    rest = piv.drop(columns=order).sum(axis=1)
+    piv = piv[order]
+    piv["everything else"] = rest
+    names = {"W": "White", "U": "Blue", "B": "Black", "R": "Red", "G": "Green",
+             "C": "Colorless"}
+    rows = ["W", "U", "B", "R", "G", "C"][::-1]
+    palette = [RED, GREEN, "#c9a227", BLUE, "#6fa8d6", "#8e7cc3", ORANGE,
+               "#a0714f", GRAY]
+
+    fig, ax = plt.subplots(figsize=(9.6, 4.4))
+    left = np.zeros(len(rows))
+    for col, color in zip(piv.columns, palette):
+        vals = piv.loc[rows, col].values
+        ax.barh(range(len(rows)), vals, left=left, color=color, height=0.68,
+                label=col, edgecolor="white", lw=0.6)
+        for i, (v, l0) in enumerate(zip(vals, left)):
+            if v >= 6.5:
+                ax.text(l0 + v / 2, i, f"{v:.0f}", ha="center", va="center",
+                        fontsize=8, color="white")
+        left += vals
+    ax.set_yticks(range(len(rows)), [names[r] for r in rows])
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("share of that color's noncreature deck slots (%)")
+    ax.set_title("Removal takes the plurality in every color but blue and green:\n"
+                 "red spends 82% of its noncreature slots there, blue 12%")
+    ax.legend(frameon=False, fontsize=8.5, ncol=5, loc="upper center",
+              bbox_to_anchor=(0.5, -0.16))
+    ax.grid(axis="y", visible=False)
+    save(fig, "noncreature-colors")
+
+
 if __name__ == "__main__":
     fig_calibration()
     fig_ablation()
@@ -433,4 +513,6 @@ if __name__ == "__main__":
     fig_land_adds()
     fig_card_values()
     fig_synergy_dose()
+    fig_noncreature_mix()
+    fig_noncreature_colors()
     print("done ->", FIG)
