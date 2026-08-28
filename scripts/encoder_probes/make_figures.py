@@ -155,8 +155,8 @@ def fig_shuffle():
     ax.set_yticks(y, cond_labels)
     ax.set_xlim(0, 112)
     ax.set_xlabel("held-out R², as a share of the intact-text R²")
-    ax.set_title("Most winnability knowledge survives destroying word order;\n"
-                 "played_rate is the order-sensitive head")
+    ax.set_title("Word order carries 40% of the transferable winnability knowledge\n"
+                 "and most of the cast-frequency knowledge")
     ax.legend(frameon=False, fontsize=9, loc="lower right")
     save(fig, "shuffle")
 
