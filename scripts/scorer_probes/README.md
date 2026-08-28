@@ -23,6 +23,7 @@ checkout at `../forge`.
 | `probe_lib.py` | shared harness (checkpoint load, batched scoring, corpus readers, card features, win-rate labels) | — |
 | `t0_landscape.py` | "Three quarters of the score range…"; builder means; inputs to T7-A | `t0_decks.csv` |
 | `t5_ablation.py` | "The card-text embedding carries the signal…" (ablation table, bag-of-text) | `t5_results.json` |
+| `t5b_det_groups.py` | per-group ablation of the 32 deterministic features (paired stats, both post-cutoff corpora) — "Inside the deterministic features…" | `t5b_results.json` |
 | `make_text_pca.py` | PC1/top-k variance shares; input for t6 P1 | `text_pca_512.npz` |
 | `t6_mechanism.py` | "The pooling layer is a plain average…", "Two numbers per card…", OOD envelope | `t6_report.md`, `t6_results.json` |
 | `t1_meansum.py` | add-a-card penalty; land-class deltas ("…wants 22 spells and 18 lands") | `t1_add_deltas.csv`, `t1_report.md` |
@@ -42,7 +43,7 @@ checkout at `../forge`.
 2. `make_text_pca.py` (t6 P1 reads the npz)
 3. `forge_hints.py` (t7-D2 reads its CSV)
 4. `t1_meansum.py`, `t2_marginal_values.py` → `t2_analyze.py`, `t3_ladders.py`,
-   `t4_synergy.py`, `t5_ablation.py`, `t6_mechanism.py`, `t7_artifacts.py` — any order
+   `t4_synergy.py`, `t5_ablation.py`, `t5b_det_groups.py`, `t6_mechanism.py`, `t7_artifacts.py` — any order
 5. `post_hoc_slices.py`; label-level: `label_probe.py` → `rarity_probe.py`,
    `human_rank_probe.py`
 

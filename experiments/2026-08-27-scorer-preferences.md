@@ -10,7 +10,7 @@ A probe outside the scorer's training distribution measures the network's arithm
 
 ## The ruler: one score unit is worth about 18 winrate points
 
-Score differences convert to win probability at a stable rate, measured on matches the scorer never trained on. The yardstick is 4,708 Bo7 matches: gen5-, gen4-, and Forge-built decks playing each other on same-set pools, Forge AI piloting, recorded in `match-outcomes-gen5-vs-gen4-forge.txt` eight days after the training cutoff. Every "held-out" number in this document is measured on these matches.
+Score differences convert to win probability at a stable rate, measured on matches the scorer never trained on. The yardstick is 4,708 Bo7 matches: gen5-, gen4-, and Forge-built decks playing each other on same-set pools, Forge AI piloting, recorded in `match-outcomes-gen5-vs-gen4-forge.txt` eight days after the training cutoff. Every "held-out" number in this document is measured on these matches, unless the probe names a wider pool.
 
 Binning them by score margin gives a monotone calibration across all ten deciles, and the fitted curve is in the figure. Its slope sits below 1.0, so the model's own training objective, `sigmoid(Δscore)`, is mildly overconfident.
 
@@ -18,7 +18,9 @@ Binning them by score margin gives a monotone calibration across all ten deciles
 
 *Source: `t7_artifacts.py`, probe C.*
 
-Held-out accuracy is 71.9%, at the Bo7 oracle ceiling of 0.72–0.78 estimated in [`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md). Accuracy per matchup runs from ~99% on gen-vs-random pairs down to ~60% on gen4-vs-gen5 and mirror pairs. Every Δscore below converts at roughly 18 winrate points per unit.
+Two comparisons recur through the document. Held-out accuracy compares the scorer to the reality of played matches: the share of held-out matches in which the actual winner receives the higher score. Ranking agreement compares the scorer to another version of itself: both versions score the same pile of decks, and Spearman ρ measures how similar the two resulting orderings are, 1.0 for the identical order and 0 for an unrelated one. Played matches play no part in ranking agreement. In the ablations below, the other version is always the same checkpoint with part of its card input erased, judged against the full model.
+
+Held-out accuracy for the full model is 71.9%, at the Bo7 oracle ceiling of 0.72–0.78 estimated in [`2026-04-26-gen2-initial-training.md`](2026-04-26-gen2-initial-training.md). Accuracy per matchup runs from ~99% on gen-vs-random pairs down to ~60% on gen4-vs-gen5 and mirror pairs. Every Δscore below converts at roughly 18 winrate points per unit.
 
 ## The scorer is a mean pool over a 2–4 number summary of each card
 
@@ -54,7 +56,15 @@ Erasing per-card text costs nine points of held-out accuracy. Erasing the 32 det
 
 *Source: `t5_ablation.py`.*
 
-The ablation reverses the gen-2-era diagnosis. [`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md) hypothesized the scorer leaned almost entirely on the deterministic features, and its planned ablations were never run. On gen-4 the text embedding is the primary channel. Ranking fidelity says the same: erasing text scrambles the scores (Spearman 0.51 against the full model), while erasing the deterministic features leaves them largely intact (0.85).
+The ablation reverses the gen-2-era diagnosis. [`2026-05-02-deterministic-feature-reliance.md`](2026-05-02-deterministic-feature-reliance.md) hypothesized the scorer leaned almost entirely on the deterministic features, and its planned ablations were never run. On gen-4 the text embedding is the primary channel. Ranking agreement shows the same asymmetry. Erasing text scrambles the model's deck ordering (ρ 0.51 against the full model); erasing the deterministic features leaves it largely intact (ρ 0.85). The two metrics can come apart, because an edit can reorder decks that sit close together in quality without flipping any pair a match actually compares.
+
+Inside the deterministic features, the color pips are the one group the scorer clearly needs. The probe erases one feature group at a time, with the same mean-substitution design as the block-level ablation above. Two changes make the small per-group effects resolvable. The evaluation pool widens to 21,564 held-out matches, because the gen-4 round-robin corpus was generated 2026-05-19 through 2026-05-21, after the training cutoff, and joins the gen-5 file. Significance comes from the paired per-match difference against the full model, whose standard error is set by the prediction flip rate rather than the base accuracy.
+
+![Held-out accuracy change from erasing each deterministic-feature group](images/2026-08-27-scorer-det-groups.png)
+
+*Source: `t5b_det_groups.py`.*
+
+Erasing the six pip counts flips 14% of match predictions, the largest effect of any single group. The full mana-cost group accounts for two thirds of what all 32 features contribute. The color flags and the power/toughness/loyalty slots have small effects, distinguishable from zero (z ≈ −2.5 each). Mana value alone is marginal. Mana production and is_land contribute nothing, because the text embedding already knows what a card produces and whether it is a land. The single-group effects sum to approximately the all-32 effect, so the contribution decomposes additively across the groups, with nothing left to interactions.
 
 Which card carries which text vector barely matters. Permuting the text blocks across a deck's cards, keeping the bag of vectors intact, costs under half an accuracy point. The scorer scores the bag, not the binding. Any preference that requires knowing that this body carries that ability cannot survive this test.
 
@@ -68,9 +78,9 @@ The form of supervision mattered as much as the encoder. Phase B in the gen-2 er
 
 ### Two numbers per card explain almost everything the scorer reads from text
 
-Keeping only the top two principal components of every card's text vector reproduces the scorer's held-out accuracy. Four components saturate it. Score fidelity keeps improving out to 256 components, so the remaining directions still shift scores; they just stop changing which deck of a pair ranks higher.
+Keeping only the top two principal components of every card's text vector reproduces the scorer's held-out accuracy. Four components saturate it. Ranking agreement with the full model keeps improving out to 256 components, so the remaining directions still shift scores; they just stop changing which deck of a held-out pair ranks higher.
 
-![Held-out accuracy and score fidelity as the text block is truncated to k principal components](images/2026-08-27-scorer-pc-truncation.png)
+![Held-out accuracy and ranking agreement with the full model as the text block is truncated to k principal components](images/2026-08-27-scorer-pc-truncation.png)
 
 *Source: `make_text_pca.py` for the PCA; `t6_mechanism.py`, probe P1, for the truncation.*
 
@@ -347,6 +357,7 @@ The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the
 |---|---|---|---|
 | T0 landscape | `t0_landscape.py` | scored every builder's decks from the match corpora, joined deck features | 42,525 decks |
 | T5 ablation | `t5_ablation.py` | block-ablated rescoring of all held-out matches | 8,658 decks × 5 conditions |
+| T5b det groups | `t5b_det_groups.py` | per-group ablation of the 32 deterministic features, paired per-match statistics | 21,564 matches × 9 conditions |
 | T1 add-a-card | `t1_meansum.py` | scored every remaining pool card added to built decks | 400 contexts, 16K forwards |
 | T2 marginal values | `t2_marginal_values.py`, `t2_analyze.py` | leave-one-out + fixed-context swap-in value for every observed card | 26,402 cards, ~235K forwards |
 | T3 ladders | `t3_ladders.py` | six controlled swap ladders (color, creature, curve, spread, splash, fixing) | 250 contexts, 7,127 decks |

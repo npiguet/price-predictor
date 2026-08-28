@@ -78,7 +78,7 @@ def fig_ablation():
     ax.axvline(0.5, color=RED, lw=1, ls=":")
     ax.text(0.501, -0.45, "coin flip", color=RED, fontsize=8)
     ax.set_xlim(0.45, 0.76)
-    ax.set_xlabel("held-out match-prediction accuracy (4,708 Bo7 matches)")
+    ax.set_xlabel("held-out accuracy (4,708 Bo7 matches)")
     ax.set_title("Erasing card text costs 9 points; erasing the 32 hand features costs 2")
     save(fig, "ablation")
 
@@ -91,8 +91,8 @@ def fig_pc_truncation():
     rho = [r["spearman_vs_full"] for r in rows]
 
     fig, ax = plt.subplots(figsize=(6.6, 4.0))
-    ax.plot(x, rho, "o-", color=ORANGE, label="score rank-fidelity vs full model (ρ)")
-    ax.plot(x, acc, "s-", color=BLUE, label="held-out match accuracy")
+    ax.plot(x, rho, "o-", color=ORANGE, label="ranking agreement with full model (ρ)")
+    ax.plot(x, acc, "s-", color=BLUE, label="held-out accuracy")
     ax.axhline(acc[-1], color=BLUE, lw=0.6, ls="--")
     ax.text(0.1, acc[-1] + 0.012, f"full model {acc[-1]:.3f}", color=BLUE, fontsize=8)
     ax.set_xticks(x, [str(k) for k in ks])
@@ -250,6 +250,40 @@ def fig_card_values():
     save(fig, "card-values")
 
 
+def fig_det_groups():
+    data = json.load(open(OUT / "t5b_results.json"))
+    rows = data["groups"]
+    subset_of_cost = {"color pips only", "mana value only"}
+    rows = sorted(rows, key=lambda r: r["d_acc"])
+
+    labels, vals, errs, cols = [], [], [], []
+    for r in rows:
+        name = r["group"]
+        label = f"{name}  [{r['n_features']}]"
+        if name in subset_of_cost:
+            label = "   └ " + label
+        labels.append(label)
+        vals.append(100 * r["d_acc"])
+        errs.append(200 * r["paired_se"])
+        if name == "all 32":
+            cols.append(ORANGE)
+        elif abs(r["z"]) >= 2:
+            cols.append(BLUE)
+        else:
+            cols.append(GRAY)
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    ax.barh(labels, vals, xerr=errs, color=cols, height=0.62,
+            error_kw=dict(lw=1, capsize=2.5, ecolor="#333333"))
+    for i, (v, e) in enumerate(zip(vals, errs)):
+        ax.text(min(v - e, 0) - 0.06, i, f"{v:+.2f}", va="center", ha="right", fontsize=8)
+    ax.axvline(0, color=GRAY, lw=0.8)
+    ax.set_xlabel("change in held-out accuracy when the group is erased (pp; bars ±2 paired SE)")
+    ax.set_title("Color pips carry most of the deterministic features' contribution")
+    ax.margins(x=0.12)
+    save(fig, "det-groups")
+
+
 def fig_synergy_dose():
     a = json.load(open(OUT / "t4_results.json"))["A_dose_response"]["dose_curve"]
     ks = sorted(int(k) for k in a)
@@ -276,6 +310,7 @@ if __name__ == "__main__":
     fig_calibration()
     fig_ablation()
     fig_pc_truncation()
+    fig_det_groups()
     fig_builder_scores()
     fig_shape_ladders()
     fig_card_values()
