@@ -250,6 +250,65 @@ def fig_card_values():
     save(fig, "card-values")
 
 
+def fig_pc_labels():
+    data = json.load(open(OUT / "text_pc_labels.json"))
+    ks = data["ks"]
+    x = np.arange(len(ks))
+    series = [("played_rate", data["r2"]["shrunk_played_rate"], BLUE, "o", "-"),
+              ("cast_lift", data["r2"]["shrunk_cast_lift"], GREEN, "^", "-"),
+              ("score_play", data["r2"]["shrunk_score_play"], ORANGE, "s", "-"),
+              ("score_draw", data["r2"]["shrunk_score_draw"], ORANGE, "v", "--"),
+              ("color_lift (avg of 5)", data["r2"]["color_lift_avg"], RED, "d", "-")]
+
+    fig, ax = plt.subplots(figsize=(6.6, 4.0))
+    for name, ys, colr, marker, ls in series:
+        ax.plot(x, ys, marker=marker, ls=ls, color=colr, label=name,
+                fillstyle="none" if ls == "--" else "full")
+    ax.set_xticks(x, [str(k) for k in ks])
+    ax.set_xlabel("top-k principal components of the text block")
+    ax.set_ylabel(f"R² of the label on the top-k PCs ({data['n_cards']:,} cards)")
+    ax.set_ylim(0, 0.9)
+    ax.set_title("PC1 is the played-rate axis, PC2 adds winnability;\ncolor affinity never arrives")
+    ax.legend(frameon=False, fontsize=9, loc="center right")
+    save(fig, "pc-labels")
+
+
+def fig_label_weights():
+    data = json.load(open(OUT / "t5c_results.json"))
+    axes_order = [("winnability", ORANGE), ("played_rate", BLUE), ("cast_lift", GREEN)]
+    key = {"winnability": "winnability", "played_rate": "shrunk_played_rate",
+           "cast_lift": "shrunk_cast_lift"}
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.6, 3.8))
+
+    betas = [data["assoc"]["beta"][key[n]] for n, _ in axes_order]
+    ax1.bar([n for n, _ in axes_order], betas, color=[c for _, c in axes_order],
+            width=0.55)
+    for i, v in enumerate(betas):
+        ax1.text(i, v + 0.015, f"{v:+.2f}", ha="center", fontsize=9)
+    ax1.set_ylabel("standardized β on card values")
+    ax1.set_ylim(0, 0.8)
+    ax1.set_title(f"association\n(joint regression, "
+                  f"{data['assoc']['n_cards']:,} cards)")
+
+    names2 = [n for n, _ in axes_order] + ["PC1", "PC2"]
+    cols2 = [c for _, c in axes_order] + [GRAY, GRAY]
+    caus = [data["causal"][n] for n in names2]
+    vals = [c["mean_dscore_per_sd"] for c in caus]
+    errs = [2 * c["se"] for c in caus]
+    ax2.bar(names2, vals, yerr=errs, color=cols2, width=0.55,
+            error_kw=dict(lw=1, capsize=3, ecolor="#333333"))
+    for i, (v, e) in enumerate(zip(vals, errs)):
+        ax2.text(i, v + e + 0.002, f"{v:+.3f}", ha="center", fontsize=8)
+    ax2.set_ylabel("Δscore per +1 sd on one card")
+    ax2.set_title(f"causal\n(text-direction perturbation, "
+                  f"{caus[0]['n_decks']} decks)")
+
+    fig.suptitle("The scorer pulls hardest on the winnability axis", y=1.04)
+    fig.tight_layout()
+    save(fig, "label-weights")
+
+
 def fig_det_groups():
     data = json.load(open(OUT / "t5b_results.json"))
     rows = data["groups"]
@@ -310,6 +369,8 @@ if __name__ == "__main__":
     fig_calibration()
     fig_ablation()
     fig_pc_truncation()
+    fig_pc_labels()
+    fig_label_weights()
     fig_det_groups()
     fig_builder_scores()
     fig_shape_ladders()

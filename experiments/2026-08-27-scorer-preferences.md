@@ -86,7 +86,31 @@ Keeping only the top two principal components of every card's text vector reprod
 
 The encoder's card cloud is this compressible because it is low-rank to begin with: PC1 carries 55% of card-to-card variance, the top 8 carry 75%, and the participation ratio is 3.2. The gen-3 encoders measured the same way in [`2026-05-11-sealed-encoder-hparam-sweep.md`](2026-05-11-sealed-encoder-hparam-sweep.md) had the same shape.
 
-Each card therefore reaches the scorer as a 2–4 number summary: roughly a winnability scalar, a castability axis, and color affinity. The deck score is a shape-aware average of those summaries.
+The two leading axes have measured meanings. Regressing the encoder's own training labels on the PC coordinates, over the 25,441 cards that carry every label, identifies PC1 as the played-rate axis and PC2 as the winnability axis. PC1 correlates +0.84 with the played-rate label and near zero with the quality labels; adding PC2 lifts the quality labels from near nothing to most of their variance. The score_draw curve coincides with the score_play curve: winning on the play and winning on the draw are one axis to the encoder.
+
+![R² of each encoder label on the top-k text principal components](images/2026-08-27-scorer-pc-labels.png)
+
+*Source: `make_text_pca.py`, label-regression section.*
+
+Color affinity is missing from the leading components: the color-lift labels stay low across the whole charted range. The color information the scorer needs arrives through the deterministic pips instead, which is why the pips are the one deterministic group whose erasure hurts (the per-group ablation above).
+
+Each card therefore reaches the scorer as a short list of meaningful numbers: castability and winnability from the text block, and its color pips from the deterministic features. The deck score is a shape-aware average of those summaries.
+
+### The scorer pulls hardest on the winnability axis
+
+Knowing which labels reach the scorer does not say how hard each one is used. Two measurements answer that, one associational and one causal. The associational measurement regresses the scorer's per-card values (`v_swap`, defined under Cards below) on the three label axes at once. In that regression, winnability carries about three times the weight of played-rate. Cast_lift adds nothing once the other two are held fixed (unique R² 0.003).
+
+The causal measurement perturbs one card inside a real deck and reads the score response. The perturbation step is the average change in a card's text vector that accompanies a one-standard-deviation increase of one label. Each step is applied to every card of 300 held-out decks, one card at a time, in both directions.
+
+![Associational and causal weight of each label axis in the scorer](images/2026-08-27-scorer-label-weights.png)
+
+*Source: `t5c_label_weights.py`.*
+
+The two measurements agree: improving one card by a standard deviation along the winnability axis moves the score about six times as much as along the played-rate axis. The tall causal cast_lift bar is overlap, not an independent weight. The labels correlate at 0.69, and the causal steps are not orthogonalized. The cast_lift step therefore largely retraces the winnability direction. The regression does hold the other axes fixed, and it puts cast_lift's own contribution near zero.
+
+The gray PC bars repeat the axis identities from the chart above. A PC2 step moves the score as much as the winnability step. A PC1 step moves it a quarter as much, although PC1 carries most of the embedding's variance. The encoder's loudest axis is not the axis the scorer uses most.
+
+On the ruler, a one-standard-deviation winnability improvement on a single card is worth roughly two winrate points.
 
 ### Three quarters of the score range separates incoherent decks from coherent ones
 
@@ -358,6 +382,7 @@ The fifty ranked hypotheses, with verdicts. "Confirmed" and "falsified" mean the
 | T0 landscape | `t0_landscape.py` | scored every builder's decks from the match corpora, joined deck features | 42,525 decks |
 | T5 ablation | `t5_ablation.py` | block-ablated rescoring of all held-out matches | 8,658 decks × 5 conditions |
 | T5b det groups | `t5b_det_groups.py` | per-group ablation of the 32 deterministic features, paired per-match statistics | 21,564 matches × 9 conditions |
+| T5c label weights | `t5c_label_weights.py` | associational + causal weighting of the encoder label axes in the scorer | 23,963 cards; 5 directions × 300 decks |
 | T1 add-a-card | `t1_meansum.py` | scored every remaining pool card added to built decks | 400 contexts, 16K forwards |
 | T2 marginal values | `t2_marginal_values.py`, `t2_analyze.py` | leave-one-out + fixed-context swap-in value for every observed card | 26,402 cards, ~235K forwards |
 | T3 ladders | `t3_ladders.py` | six controlled swap ladders (color, creature, curve, spread, splash, fixing) | 250 contexts, 7,127 decks |
