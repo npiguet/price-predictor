@@ -111,42 +111,38 @@ def fig_channels():
 
 def fig_memorization():
     r2 = json.load(open(OUT / "r2ab_summary.json"))["score_play"]
-    shuffled = pd.read_csv(OUT / "r1a_val_r2_table.csv", index_col=0).loc["score_play", "full"]
-    nameable = next(float(r[5]) for r in
-                    json.load(open(OUT / "s_r18b.json"))["same_split"]
-                    if r[0] == "score_play" and r[1] == "nameable features (GBM)")
+    agg = pd.read_csv(OUT / "r1a_shuffle_r2_agg.csv")
+    lines_destroyed = float(agg.loc[(agg["condition"] == "line_order")
+                                    & (agg["head"] == "score_play"), "train_r2"].iloc[0])
     p0 = {_f(r[0]): _f(r[7])
           for r in _report_table(OUT / "p0_report.md", "min_n | classes")[1:]}
     bound_lo, bound_hi = p0[0], p0[800]
     rel = _f(_report_table(OUT / "l_report.md", "quantity | n cards")[1][3])
 
     bars = [
-        ("label reliability ceiling (split-half)", rel, GRAY),
-        ("encoder, its own training cards", r2["honest_r2_train"], BLUE),
-        ("identical-text twin bound", bound_lo, GRAY),
-        ("encoder, held-out cards", r2["honest_r2_val"], BLUE),
-        ("135 nameable features, no encoder", nameable, ORANGE),
-        ("encoder, held-out + words shuffled", shuffled, BLUE),
+        ("its own training cards", r2["honest_r2_train"]),
+        ("training cards,\nline order destroyed", lines_destroyed),
+        ("cards it never saw", r2["honest_r2_val"]),
     ]
-    bars.sort(key=lambda b: -b[1])
     y = np.arange(len(bars))[::-1]
 
-    fig, ax = plt.subplots(figsize=(7.0, 3.4))
-    for yi, (lab, v, c) in zip(y, bars):
-        ax.barh(yi, v, height=0.62, color=c, edgecolor="white", linewidth=1.2)
-        extra = bound_hi - v if lab.startswith("identical-text") else 0
-        if extra:
-            ax.barh(yi, extra, left=v, height=0.62, color=GRAY, alpha=0.45,
-                    edgecolor="white", linewidth=1.2)
-            ax.text(bound_hi + 0.012, yi, f"{v:.2f}–{bound_hi:.2f}",
-                    va="center", fontsize=9)
-        else:
-            ax.text(v + 0.012, yi, f"{v:.2f}", va="center", fontsize=9)
+    fig, ax = plt.subplots(figsize=(7.0, 3.0))
+    ax.axvspan(bound_lo, bound_hi, color=GRAY, alpha=0.22, zorder=0)
+    ax.text((bound_lo + bound_hi) / 2, -0.32, "most any text reader can\nexplain (identical twins)",
+            ha="center", va="bottom", fontsize=8, color="#555555", rotation=90)
+    ax.axvline(rel, color=GRAY, ls="--", lw=1.2)
+    ax.text(rel - 0.012, -0.32, "label repeatability ceiling",
+            ha="right", va="bottom", fontsize=8, color="#555555", rotation=90)
+    ax.set_ylim(-0.45, 2.5)
+    for yi, (lab, v) in zip(y, bars):
+        ax.barh(yi, v, height=0.6, color=BLUE, edgecolor="white",
+                linewidth=1.2, zorder=2)
+        ax.text(v + 0.012, yi, f"{v:.2f}", va="center", fontsize=9)
     ax.set_yticks(y, [b[0] for b in bars])
     ax.set_xlim(0, 1.0)
-    ax.set_xlabel("R² against the score_play label")
-    ax.set_title("The train–val gap is memorization: the encoder fits its training\n"
-                 "cards past the identical-text twin bound")
+    ax.set_xlabel("share of the winnability label the encoder explains (R²)")
+    ax.set_title("The encoder fits its training cards beyond what text can explain;\n"
+                 "destroying their line order collapses the memorized part")
     save(fig, "memorization")
 
 
