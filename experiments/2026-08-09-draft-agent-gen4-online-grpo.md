@@ -1,5 +1,56 @@
 # Draft agent (gen-4) — online GRPO from the promoted gen-3 candidate
 
+## TL;DR — gen-4 drafts creature-heavy two-colour decks and wins about three matches in four
+
+Gen-4 is the strongest drafter this project has produced. It outscores every earlier agent on
+deck quality, and where its decks were actually played out — against gen-1 and against Forge's
+built-in AI — it wins about three matches in four. How it drafts:
+
+- **It drafts creature decks.** A typical gen-4 deck runs about 18 creatures where every other
+  drafter runs about 15. Creature count is one of the strongest predictors of winning in these
+  games: creature-dense decks win close to three times as often as creature-light ones.
+
+- **It passes on rares.** Gen-4 plays noticeably fewer rares than the other drafters. It takes
+  a solid on-colour common over a stronger-looking off-colour rare.
+
+- **It stays on two colours, but breaks for the right card.** Its mana bases are narrower than
+  the other drafters'. When it takes a card outside its colours, that card is almost always
+  much better than anything on-colour left in the pack: it takes the off-colour bomb about as
+  often as Forge does, and the off-colour filler at half Forge's rate or less. Knowing when a
+  card is worth breaking colour for separates good candidates from bad ones better than
+  staying on-colour does. The most rigidly on-colour candidate tested was the worst of the
+  four.
+
+- **It prefers white, green and black, and avoids blue and red.** White appears in well over
+  half its decks and red in roughly a third, nearly inverting the other drafters' colour
+  spread. The preference is learned, correct play against Forge's AI: Forge pilots instants
+  and sorceries worst, blue and red lean on those most, so those colours win fewer of these
+  games. A human opponent would punish the same lean.
+
+- **It values cards that swing games.** The largest single improvement over gen-3 is a
+  preference for cards that change the game they are cast in, over cards that merely appear in
+  decks that were winning anyway.
+
+- **Its edge comes early in each pack.** Gen-4 pulls ahead over the first half of packs 1
+  and 2, where packs are fresh and choices are real. It gives some of that back in the
+  picked-over second half of each pack, when every seat is mostly taking what is left. Pack 3
+  brings no recovery, because by then every pick can only replace a card already in the deck.
+
+- **Its edge depends on the set.** Gen-4 wins by the most in complex formats: Masters-style
+  reprints, Mystery Booster, and sets designed as their own limited environment. It wins by
+  the least in core and starter sets, whose flat power curves leave less for a good drafter to
+  get right.
+
+- **It does not hate-draft.** When a pack holds nothing in its colours, taking the best card
+  left would still pay by denying it to a neighbour, and gen-4, like every agent tested,
+  leaves that card behind on most such picks. About nine in ten of its forced picks never
+  reach its deck, and a forced pick that does make the cut marks a weak pool rather than a
+  good pick.
+
+- **Who builds the deck matters as much as who drafts it.** Swapping Forge's own deck builder
+  for this project's builder, on the same drafted pools, is worth about as much as a whole
+  generation of drafting improvement.
+
 ## Gen-3 settled the field, not the temperature
 
 Gen-3 closed with one setting to carry forward and one question left open
