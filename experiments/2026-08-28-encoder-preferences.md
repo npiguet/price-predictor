@@ -23,11 +23,11 @@ Three instruments recur. The saved checkpoint contains no regression heads, so r
 
 ## A card can earn a strong winnability label without ever changing a game
 
-A card's winnability label gives it credit for its deck's wins, whether or not the card caused them. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck.
+A game's win cannot be cleanly attributed to any single card, so the winnability label shares the credit for a win, and the blame for a loss, among every card the side cast. The label counts the games the card's deck won with the card cast, minus the games it lost with the card cast, over all games the card sat in a deck. A card therefore gets credit for its deck's wins whether or not it caused them.
 
 Three simpler quantities, called channels from here on, can be measured from the same game logs, and each one holds a different kind of fact:
 
-- selection: how often decks containing the card win. Builder choice sets this: the four Forge build methods win between 26% and 60% of their games, so which builders play a card moves its winnability label by about ±1.8 SD before the card itself does anything.
+- selection: how often decks containing the card win. Builder choice sets this: a card only the random builder plays is observed in decks that win 26% of their games, a card forge-best favors in decks that win 60%, and a deck's win rate flows into every card it contains. Which builders play a card therefore moves its winnability label by about ±1.8 SD before the card itself does anything.
 - castability: how often the card gets cast.
 - contribution: how much more often the card is cast in the games its decks win than in the games they lose. This is the only channel that measures the card changing games: it is positive when winners cast the card more often than losers did.
 
