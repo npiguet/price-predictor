@@ -32,6 +32,7 @@ checkout at `../forge`.
 | `t7_artifacts.py` | "The ruler" calibration; builder fingerprint; 22/23/24-spell preference; sibling-checkpoint agreement; draft-rank and blacklist joins | `t7_results.json`, `t7_report.md` |
 | `forge_hints.py` | Forge `AI:RemoveDeck` + human draft-rank extraction (input to t7-D2) | `forge_hints.csv` |
 | `post_hoc_slices.py` | prose numbers with no t-script: within-set correlations, set offsets, dynamic range, nonbasic-land counts, gen4-512 color distribution, card-class slices (tricks/counterspells/planeswalkers/vehicles/X/hybrid), text-length null, on/off-color add decomposition, multi-face slice, forge-best add robustness | stdout |
+| `make_figures.py` | renders the document's seven figures (calibration, ablation, PC-truncation, builder scores, shape ladders, card values, synergy dose) from the staged outputs | `experiments/images/2026-08-27-scorer-*.png/.svg` |
 | `label_probe.py` → `rarity_probe.py` / `human_rank_probe.py` | label-level numbers ("0.57 sd above human pick order", power-vs-toughness, rarity gradient) — run in that order (`labels_joined.csv` feeds the other two) | `labels_joined.csv`, stdout |
 | `synergy_pairs.json` + `verify.py` (+ `cardtool.py`, `dump.py`) | the curated 60-triple synergy dataset used by t4, with its validator and browsing helpers | — |
 

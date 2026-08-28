@@ -387,7 +387,7 @@ the deck's current worst card. It is the same hill-climbing pass that produced t
 exactly 23 the builder has no choice either, and the two paths agree to six decimal places on
 every seat tested, which is what licenses joining them.
 
-![The deck the builder makes from the first t picks](2026-08-09-prefix-deck-value.png)
+![The deck the builder makes from the first t picks](images/2026-08-09-prefix-deck-value.png)
 
 Each pack has the same internal shape and its two halves do different work. The opening picks of
 pack 1 are the seat's bombs, so the built deck starts high, and it then falls for thirteen
@@ -403,7 +403,7 @@ and the choice is closer to taking whatever is left.
 
 Pack 3 brings no recovery, and the reason is that by then every pick is a replacement.
 
-![Mean gain from one pick, by the deck score before it](2026-08-09-step-by-level.png)
+![Mean gain from one pick, by the deck score before it](images/2026-08-09-step-by-level.png)
 
 Plotting the gain against the score the pick started from splits the draft into three regimes,
 of which the chart shades the outer two. Left of −1 a bad deck is easy to improve and all four
