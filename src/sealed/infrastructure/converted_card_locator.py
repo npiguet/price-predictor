@@ -117,8 +117,30 @@ class ConvertedCardLocator:
         prefix = filename + "_"
         for fname, path in index.items():
             if fname.endswith(ext) and fname.startswith(prefix):
-                return path
+                if self._prefix_hit_agrees(path, filename):
+                    return path
         return None
+
+    def _prefix_hit_agrees(self, path: Path, filename: str) -> bool:
+        """Trust a prefix hit only when the file's own ``name:`` line does not
+        contradict the queried name. Multi-face files carry the front-face
+        name ("name: fire" in ``fire_ice.txt``), so front-face fallbacks pass;
+        a single-face file whose name merely extends the query ("Undercity" →
+        ``undercity_dire_rat.txt``) is rejected. Files without a readable
+        ``name:`` line are trusted as before.
+        """
+        txt = path if path.suffix == ".txt" else path.with_suffix(".txt")
+        try:
+            with open(txt, encoding="utf-8") as f:
+                for _ in range(4):
+                    line = f.readline()
+                    if not line:
+                        break
+                    if line.startswith("name:"):
+                        return sanitize_card_name(line[5:].strip()) == filename
+        except OSError:
+            pass
+        return True
 
     def _index_for(self, letter: str) -> dict[str, Path]:
         cached = self._letter_index.get(letter)

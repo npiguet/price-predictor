@@ -18,7 +18,9 @@ FILENAME_CORRECTIONS: dict[str, str] = {
     "2_mace": "p/+2_mace",
     "summon_chocomog": "summon_choco_mog",
     "streetwise_negotiator": "streetwise_negotiatior",
-    "village_watch": "scorned_villager_moonscarred_werewolf",
+    # Forge's filename for "Village Watch // Village Reavers" has a stray
+    # "er": "village_watcher_village_reavers.txt" (the name: line is correct).
+    "village_watch": "village_watcher_village_reavers",
     "summon_gf_cerberus": "summon_g_f_cerberus",
     "fallaji_archaeologist": "fallaji_archeologist",
     "pathfinding_axejaw": "pathfinding_exejaw",
