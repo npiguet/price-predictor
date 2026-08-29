@@ -236,30 +236,32 @@ def fig_decode():
     heads = [("score_play", 0.370), ("cast_lift", 0.469), ("played_rate", 0.608)]
 
     fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(8.6, 3.6), gridspec_kw={"width_ratios": [3, 2]})
+        1, 2, figsize=(8.6, 3.8), gridspec_kw={"width_ratios": [3, 2]})
     y = np.arange(len(r2))
     ax1.barh(y, r2["val_r2"], height=0.62, color=BLUE,
              edgecolor="white", linewidth=1.2)
-    for name, v in heads:
-        ax1.axvline(v, color=GRAY, lw=1.0, ls="--")
-        ax1.text(v, len(r2) - 0.1, f" {name}", rotation=90, va="top",
-                 fontsize=8, color=GRAY)
+    ax1.set_ylim(-0.6, len(r2) + 1.0)
+    for i, (name, v) in enumerate(heads):
+        ax1.axvline(v, color="#444444", lw=1.2, ls=(0, (4, 3)))
+        ax1.text(v, len(r2) - 0.05 + (0.55 if i % 2 else 0.0),
+                 name.replace("_", " "), ha="center", va="bottom",
+                 fontsize=7.5, color="#444444")
     ax1.set_yticks(y, r2["target"])
-    ax1.set_xlabel("decoding R² (held-out cards)")
-    ax1.set_title("visible attributes, vs the trained-label\nceilings (dashed)")
+    ax1.set_xlabel("decoding R² (validation cards)")
+    ax1.set_title("numeric attributes, against what the\ntrained labels reach (dashed)", pad=10)
 
     short = {"is a creature": "creature", "is a land": "land",
              "first printing rare or mythic": "rare or mythic"}
     y2 = np.arange(len(auc))
     ax2.barh(y2, auc["auc"], height=0.55, color=BLUE,
              edgecolor="white", linewidth=1.2)
-    ax2.axvline(0.5, color=GRAY, lw=1.0, ls="--")
+    ax2.axvline(0.5, color="#444444", lw=1.2, ls=(0, (4, 3)))
     ax2.set_yticks(y2, [short.get(t, t) for t in auc["target"]])
-    fig.subplots_adjust(wspace=0.42)
     ax2.set_xlim(0.4, 1.02)
     ax2.set_xlabel("decoding AUC")
-    ax2.set_title("binary attributes\n(0.5 = chance)")
-    fig.suptitle("The embedding describes the card better than it judges it", y=1.04)
+    ax2.set_title("binary attributes (0.5 = chance)", pad=10)
+    fig.subplots_adjust(wspace=0.42, top=0.82)
+    fig.suptitle("The embedding describes the card better than it judges it", y=0.99)
     save(fig, "decode")
 
 
