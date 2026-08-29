@@ -278,17 +278,19 @@ def fig_integers():
     ax1.axhline(0, color=GRAY, lw=0.8)
     ax1.set_xlabel("edited statline N/N on a fixed body")
     ax1.set_ylabel("predicted score_play Δ (label SD)")
-    ax1.set_title("counterfactual sweep: 12/12 prices like 0/0")
+    ax1.set_title("statline sweep: a 12/12 scores like a 0/0",
+                  fontsize=10, color="#333333", pad=10)
 
     ax2.plot([0, 12], [0, 12], ls="--", color=GRAY, lw=1.0, label="printed = decoded")
     ax2.plot(pw["printed"], pw["mean"], "-o", color=BLUE, ms=5,
              label="decoded from embedding")
     ax2.set_xlabel("printed power (real cards)")
     ax2.set_ylabel("decoded power")
-    ax2.set_title("decoding: flat past printed 8")
+    ax2.set_title("power read back from the embedding: flat past 8",
+                  fontsize=10, color="#333333", pad=10)
     ax2.legend(frameon=False, fontsize=9, loc="upper left")
-    fig.suptitle("Integer tokens carry ordinal meaning only where they are common",
-                 y=1.04)
+    fig.suptitle("Number tokens keep their order only where they are common",
+                 fontsize=13, y=1.06)
     save(fig, "integers")
 
 
