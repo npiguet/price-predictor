@@ -95,7 +95,7 @@ Every attribute printed on the card decodes from the embedding better than any l
 
 Era and rarity are decodable even though nothing in the converted text names a set or a rarity. The encoder has learned design-language fingerprints strong enough to date a card within eight years and to separate rares from commons, without ever being asked to.
 
-Number tokens carry ordinal meaning only where they are common. Decoded power tracks printed power nearly exactly through 4, compresses above 5, and goes flat past 8; the counterfactual sweep agrees, with a 12/12 statline scoring the same as a 0/0. The {X} symbol is priced as exactly one generic pip, everywhere: the encoder knows X-spells are castable early and does not know they scale.
+Number tokens carry ordinal meaning only where they are common. Decoded power tracks printed power nearly exactly through 4, compresses above 5, and goes flat past 8. A statline sweep agrees: rewriting thirty real creatures' power-toughness lines to N/N for every N from 0 to 12, re-encoding each variant, and reading the predicted winnability gives a curve that rises through the middle sizes and then collapses, until a 12/12 statline scores the same as a 0/0. The {X} symbol is priced as exactly one generic pip, everywhere: the encoder knows X-spells are castable early and does not know they scale.
 
 ![Counterfactual statline sweep and decoded power both collapse past 8](images/2026-08-28-encoder-integers.png)
 
