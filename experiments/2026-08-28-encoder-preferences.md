@@ -101,6 +101,10 @@ Number tokens carry ordinal meaning only where they are common. Decoded power tr
 
 *Source: `c2_statlines.py` (left) and `q3_decode.py` (right); rendered by `make_figures.py`.*
 
+The flat top is an absence of order, not a learned law of diminishing returns. The labels do diminish: mean winnability plateaus at printed power 5–6 and declines past 8, so training never paid the encoder to order the big numbers, and cards that big are also rare (85 creatures at power 8, 10 at power 12). But a diminishing-returns reading would keep a 12/12 at least as good as an 8/8, and the sweep prices it half an SD lower, back at the 0/0 level. The token embeddings show the real shape: on the number-line direction the integers 1 through 7 learn, every integer from 8 upward projects to roughly a four, in no consistent order.
+
+*Source: `q4_token_geometry.py`.*
+
 The 8-query attention pool did not specialize. Any single 64-dim query block recovers 95–96% of every label's prediction accuracy, all eight blocks' leading axes correlate above 0.97, and the attention profiles are near-uniform with no query attending to statlines or costs. The spec's intent of one query per card aspect did not materialize; the pool is a learned mean, matching what the scorer study found for the scorer's pooling one level up. The whole card cloud has an effective dimensionality near 3.
 
 ## Flying tops the keywords, direct damage tops the spells, and bodies beat effects
