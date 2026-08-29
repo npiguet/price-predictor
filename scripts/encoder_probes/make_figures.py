@@ -248,7 +248,8 @@ def fig_decode():
                  fontsize=7.5, color="#444444")
     ax1.set_yticks(y, r2["target"])
     ax1.set_xlabel("decoding R² (validation cards)")
-    ax1.set_title("numeric attributes, against what the\ntrained labels reach (dashed)", pad=10)
+    ax1.set_title("numeric attributes, against what the\ntrained labels reach (dashed)", pad=10,
+                  fontsize=10, color="#333333")
 
     short = {"is a creature": "creature", "is a land": "land",
              "first printing rare or mythic": "rare or mythic"}
@@ -259,9 +260,11 @@ def fig_decode():
     ax2.set_yticks(y2, [short.get(t, t) for t in auc["target"]])
     ax2.set_xlim(0.4, 1.02)
     ax2.set_xlabel("decoding AUC")
-    ax2.set_title("binary attributes (0.5 = chance)", pad=10)
-    fig.subplots_adjust(wspace=0.42, top=0.82)
-    fig.suptitle("The embedding describes the card better than it judges it", y=0.99)
+    ax2.set_title("binary attributes (0.5 = chance)", pad=10,
+                  fontsize=10, color="#333333")
+    fig.subplots_adjust(wspace=0.42, top=0.78)
+    fig.suptitle("The embedding describes the card better than it judges it",
+                 y=1.02, fontsize=13)
     save(fig, "decode")
 
 
