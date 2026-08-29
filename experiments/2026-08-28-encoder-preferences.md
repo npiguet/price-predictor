@@ -101,7 +101,7 @@ Number tokens carry ordinal meaning only where they are common. Decoded power tr
 
 *Source: `c2_statlines.py` (left) and `q3_decode.py` (right); rendered by `make_figures.py`.*
 
-The flat top is an absence of order, not a learned law of diminishing returns. The labels do diminish: mean winnability plateaus at printed power 5–6 and declines past 8, so training never paid the encoder to order the big numbers, and cards that big are also rare (85 creatures at power 8, 10 at power 12). But a diminishing-returns reading would keep a 12/12 at least as good as an 8/8, and the sweep prices it half an SD lower, back at the 0/0 level. The token embeddings show the real shape: on the number-line direction the integers 1 through 7 learn, every integer from 8 upward projects to roughly a four, in no consistent order.
+The flat top is an absence of order, not a learned law of diminishing returns. The labels do diminish: mean winnability plateaus at printed power 5–6 and declines past 8, so training never paid the encoder to order the big numbers, and cards that big are also rare (85 creatures at power 8, 10 at power 12). But the sweep changes only the statline, holding the card's cost and abilities fixed, and on an otherwise identical card the bigger body is an upgrade in essentially every game. A diminishing-returns reading would therefore keep the 12/12 at least as good as the 8/8; the sweep prices it half an SD lower, back at the 0/0 level. The token embeddings show the real shape: on the number-line direction the integers 1 through 7 learn, every integer from 8 upward projects to roughly a four, in no consistent order.
 
 *Source: `q4_token_geometry.py`.*
 
