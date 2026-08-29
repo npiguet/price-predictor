@@ -39,6 +39,8 @@ Three simpler quantities, called channels from here on, can be measured from the
 
 The winnability label equals `castability × (2·selection − 1) + contribution/2` exactly. The channels are therefore not new information: they are the same number, computed in a way that keeps its ingredients apart.
 
+One detail of the castability definition carries the identity. Castability averages the card's cast rate in won games and its cast rate in lost games, weighting the two equally rather than by how common wins are; that weighting is what makes the identity exact and keeps the contribution term free of selection. It also means castability slightly understates a strong card's true cast rate, because strong cards are cast more in wins and their decks win more often. The understatement is the product of those two deviations, both of which are bounded; for the top 1% of cards by label it is about two percentage points of cast rate.
+
 The rest of the document states its findings as premiums: a feature's premium is how much it moves the winnability label, measured against cards matched on cost and type, and a negative premium is a penalty. Every premium is read through this split, because a premium carried by the selection channel is inherited builder taste and only a premium carried by the contribution channel is evidence the card changed games. The decomposition for the headline card classes:
 
 ![Channel decomposition of each card class's winnability-label premium](images/2026-08-28-encoder-channels.png)
