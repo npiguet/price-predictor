@@ -109,7 +109,13 @@ The 8-query attention pool did not specialize. Any single 64-dim query block rec
 
 ## Flying tops the keywords, direct damage tops the spells, and any effect is worth more on a creature
 
-Flying is the most valuable keyword under counterfactual edits, and two independent edit designs agree on the whole keyword order (Spearman 0.94). The first design substitutes one keyword for another inside the same static line, across 2,913 base creatures, and fits each keyword a value from all the pairwise contrasts. The second design deletes the keyword line outright from the real cards that carry it. The deletion design gives larger values, in the same order. Where the figure separates an edit value from its label value, the encoder disagrees with its own training data: haste, double strike, reach, and menace read as better than their labels say, and the protection keywords are priced negative where the labels pay a premium.
+Flying is the most valuable keyword under counterfactual edits, and two independent edit designs agree on the whole keyword order (Spearman 0.94).
+
+The first design swaps keywords on the same card. Each of 2,913 base creatures carries one keyword in a static line; the probe replaces that keyword with each of the others in turn and re-encodes. The change in predicted winnability measures how much better one keyword is than the one it replaced. Each keyword then gets a single value on a common scale, chosen so that the differences between the values match the measured swap effects.
+
+The second design deletes keywords instead of swapping them. It takes the real cards that carry a keyword line, removes that line, and re-encodes; the drop in predicted winnability is the keyword's value. The deletion design gives larger values than the substitution design, in the same order.
+
+The figure also shows each keyword's label value: what carrying the keyword is worth in the winnability labels of real cards, estimated by a regression that controls for the rest of the card. A keyword whose edit value differs from its label value is one the encoder prices differently than the games did. Haste, double strike, reach, and menace read as better than their labels say. The protection keywords are priced negative where the labels pay a premium.
 
 ![Keyword values: counterfactual edits against matched label regressions](images/2026-08-28-encoder-keywords.png)
 
