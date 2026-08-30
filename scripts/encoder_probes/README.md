@@ -32,6 +32,7 @@ read-only), `output/cardsfolder-512/`,
 | `s_r18*.py` | the nameability curve; encoder vs 135-feature table | `s_report.md` |
 | `c1_keywords.py`, `c1b_interactions.py` | the keyword ladder, flying×size, deathtouch+trample | `c_report.md` |
 | `c8_kw_vanilla.py` | the label side of the keyword figure: keyword values vs vanilla creatures on one joint baseline (supersedes `c7_labelside.py`'s keyword family, whose keyword-count control benchmarked each keyword against the other keywords' flying-heavy mix), plus the per-keyword channel split | `c8_kw_vanilla.csv` |
+| `c9_kw_pairs.py` | the 120-pair keyword interaction matrix (layout-matched 2×2s with a fear control, both slot orders, double-centered); overturns c1b's deathtouch+trample bonus | `c9_kw_pairs.csv` |
 | `c2_statlines.py` | P−T gradient, N/N and cost sweeps, {X}, the color fee | `c_report.md` |
 | `c3_removal.py` | the spell-effect ladder and aura variants | `c_report.md` |
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c_report.md` |
