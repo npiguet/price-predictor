@@ -163,7 +163,7 @@ def fig_shuffle():
 
 def fig_keywords():
     scale = pd.read_csv(OUT / "c1_scale.csv").set_index("keyword")
-    div = pd.read_csv(OUT / "c_divergence_keywords.csv").set_index("keyword")
+    van = pd.read_csv(OUT / "c8_kw_vanilla.csv").set_index("keyword")
     kws = scale.index.tolist()
     kws.sort(key=lambda k: -scale.loc[k, "value_sp"])
     y = np.arange(len(kws))[::-1]
@@ -171,7 +171,7 @@ def fig_keywords():
     fig, ax = plt.subplots(figsize=(6.8, 5.4))
     for yi, k in zip(y, kws):
         enc = scale.loc[k, "value_sp"]
-        lab = div.loc[k, "label_c"]
+        lab = van.loc[k, "label_zero_mean"]
         ax.plot([enc, lab], [yi, yi], color=GRAY, lw=1.4, zorder=1)
         ax.errorbar(enc, yi, xerr=[[enc - scale.loc[k, "ci_lo"]],
                                    [scale.loc[k, "ci_hi"] - enc]],
@@ -179,11 +179,11 @@ def fig_keywords():
         ax.plot(lab, yi, "o", color=ORANGE, ms=6, zorder=2)
     ax.axvline(0, color=GRAY, lw=0.8)
     ax.set_yticks(y, kws)
-    ax.set_xlabel("keyword value (label SD)")
-    ax.set_title("The keyword scale: edits and labels agree on flying, deathtouch\n"
-                 "and lifelink, and invert on the protection keywords")
+    ax.set_xlabel("keyword value (label SD, both scales zero-mean)")
+    ax.set_title("Edits and labels agree on the keyword order;\n"
+                 "haste, flash and indestructible read better than they play")
     ax.plot([], [], "o", color=BLUE, label="encoder, counterfactual edit")
-    ax.plot([], [], "o", color=ORANGE, label="label, matched regression")
+    ax.plot([], [], "o", color=ORANGE, label="label, vs vanilla creatures")
     ax.legend(frameon=False, fontsize=9, loc="center right")
     save(fig, "keywords")
 
