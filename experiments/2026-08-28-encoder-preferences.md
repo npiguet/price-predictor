@@ -147,7 +147,7 @@ Keyword pairs are priced for how their rules fit together. The pair sweep adds e
 
 ![Keyword-pair interactions: rules that multiply price above the sum, rules that idle price below](images/2026-08-28-encoder-pairs.png)
 
-*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed; the chart shows the eight largest in each direction.*
+*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed; the chart shows the eight largest in each direction, with deathtouch + trample as a reference row.*
 
 The deathtouch-plus-trample bonus reported by the original 2×2 does not survive the full sweep. The original design measured the pair against vigilance and reach in its control slots, and most of its +0.14 was the controls' own interaction, chiefly vigilance with trample. Centered against all pairs, the classic combo prices barely above the sum of its parts.
 
