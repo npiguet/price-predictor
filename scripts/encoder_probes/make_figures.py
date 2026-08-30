@@ -268,6 +268,25 @@ def fig_decode():
     save(fig, "decode")
 
 
+def fig_pairs():
+    df = (pd.read_csv(OUT / "c9_kw_pairs.csv")
+            .sort_values("interaction_centered_sd"))
+    take = pd.concat([df.head(8), df.tail(8)])
+    labels = [f"{a} + {b}" for a, b in zip(take["kw_a"], take["kw_b"])]
+    vals = take["interaction_centered_sd"].to_numpy()
+    y = np.arange(len(take))
+
+    fig, ax = plt.subplots(figsize=(6.8, 4.8))
+    ax.barh(y, vals, color=[RED if v < 0 else BLUE for v in vals],
+            height=0.66, edgecolor="white", linewidth=1.2)
+    ax.axvline(0, color=GRAY, lw=0.8)
+    ax.set_yticks(y, labels)
+    ax.set_xlabel("pair-specific interaction (label SD)")
+    ax.set_title("Pairs whose rules multiply price above the sum of the parts;\n"
+                 "pairs where one rule idles the other price below")
+    save(fig, "pairs")
+
+
 def fig_integers():
     nn = pd.read_csv(OUT / "c2_nn_sweep.csv")
     pw = pd.read_csv(OUT / "q3_power_ladder.csv")
@@ -299,6 +318,7 @@ if __name__ == "__main__":
     fig_memorization()
     fig_shuffle()
     fig_keywords()
+    fig_pairs()
     fig_spells()
     fig_decode()
     fig_integers()
