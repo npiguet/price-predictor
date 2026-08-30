@@ -5,7 +5,7 @@
 - The encoder's card ratings are faithful copies of its training labels, and the labels are only partly about the card. A card's winnability label mixes three things: which deck builders were willing to play the card, how often it got cast, and whether winners cast it more than losers. Only the last part is about what the card does in a game.
 - Half of what the encoder appears to know is memorized card identity. Its accuracy on validation cards is under half of its accuracy on the training set, and the memory is keyed to the card's text layout, not its words.
 - The encoder reads words in context: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
-- The best keyword in Forge's eyes is flying, worth about 0.4 label standard deviations on its own, followed by deathtouch, haste, double strike, and lifelink. Against a vanilla creature the labels reward every combat keyword; the clear liabilities are defender and flash. Deathtouch plus trample is superadditive.
+- The best keyword in Forge's eyes is flying, worth about 0.4 label standard deviations on its own, followed by deathtouch, haste, double strike, and lifelink. Against a vanilla creature the labels reward every combat keyword; the clear liabilities are defender and flash. Keyword pairs are priced for how their rules fit together: an indestructible defender beats the sum of its parts, while haste on a defender and reach on a flier are penalized as wasted lines.
 - The best spell text is direct damage, then fight, exile, and destroy. Lockdown auras top all noncreature text. Sweepers, tap effects, and counterspells sit at the bottom, and a spell whose whole text is lifegain is the worst text the encoder knows.
 - Bodies beat effects. The same effect is worth about 0.6 standard deviations more stapled to a creature than printed on a sorcery. A mana dork is fine and a mana rock is bad for exactly this reason.
 - The encoder's loudest internal axis is not card quality but "will this card leave Forge's hand": lands and equipment at one end, morph, fogs, sweepers, and counterspells at the other. Mana cost explains only a seventh of that axis.
@@ -141,7 +141,26 @@ The figure also shows each keyword's label value: what carrying the keyword is w
 
 *Source: `c1_keywords.py`; label values from the vanilla-baseline joint regression in `c8_kw_vanilla.py`; rendered by `make_figures.py`.*
 
-The flying premium peaks on mid-size bodies (power plus toughness 5–8) and falls back on the largest, in both edit designs. Deathtouch and trample together are worth +0.14 more than the two keywords separately. Only four real cards carry both keywords, so no label value exists to check that bonus against; the encoder prices the classic combo as a combo on its own.
+The flying premium peaks on mid-size bodies (power plus toughness 5–8) and falls back on the largest, in both edit designs.
+
+Keyword pairs are priced for how their rules fit together. The pair sweep adds every pair of the sixteen keywords as two static lines to 150 mid-size keywordless creatures, reads the predicted winnability against single-keyword arms, and removes each keyword's average interaction so only the pair-specific part remains. The strongest synergies are pairs whose rules multiply: an indestructible, hexproofed, or shrouded defender is a wall that never dies, flash plus haste is an ambush that attacks the turn it appears, and double strike doubles what lifelink and deathtouch trigger on. The strongest redundancies are pairs where one rule idles the other: haste on a defender has nothing to speed up, and reach on a flier duplicates a block flying already makes. The pair-specific effects reach about half the size of a strong single keyword, and most pairs move the prediction beyond their confidence interval in one direction or the other. All of this is encoder-only: real cards carrying any given pair are too rare for a label-side check.
+
+| pair | pair-specific interaction (SD) |
+|---|---|
+| defender + indestructible | +0.09 |
+| defender + hexproof | +0.08 |
+| defender + shroud | +0.07 |
+| haste + flash | +0.06 |
+| lifelink + double strike | +0.04 |
+| deathtouch + double strike | +0.04 |
+| flying + reach | −0.06 |
+| vigilance + ward {2} | −0.06 |
+| haste + defender | −0.07 |
+| flash + ward {2} | −0.09 |
+
+*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed.*
+
+The deathtouch-plus-trample bonus reported by the original 2×2 does not survive the full sweep. The original design measured the pair against vigilance and reach in its control slots, and most of its +0.14 was the controls' own interaction, chiefly vigilance with trample. Centered against all pairs, the classic combo prices barely above the sum of its parts.
 
 Direct damage to any target tops the spell-effect ladder, and a spell whose whole text is "you gain 4 life" is the single worst text measured. The ladder writes fifteen different effect texts into the same 200 base spells, and it spans three times the keyword scale. Its shape is removal over card advantage: fight, exile, and destroy sit high, bounce, card draw, and counterspells sit near zero or below, and tap effects and sweepers are heavily negative.
 
@@ -179,7 +198,7 @@ The eighteen ranked questions resolve into three clean falsifications — cast-l
 | R8 played_rate is an agency axis, not a cost axis | verified: cost is a seventh of the axis; five collapse classes are five orthogonal directions, not one | `s_r8*.py` |
 | R9 MV gradient a game-length artifact | falsified: survives every stratification; the premium sits in the contribution channel | `l_analyze.py` |
 | R10 flying strongest keyword, premium grows with size | half verified: strongest yes; size interaction is an inverted U | `c1` |
-| R10b deathtouch+trample superadditive | verified (encoder-level), +0.14 | `c1b` |
+| R10b deathtouch+trample superadditive | overturned by the all-pairs sweep: the 2×2's +0.14 was mostly its controls' own interaction (vigilance with trample); centered, the pair is near zero. Pair pricing is real but lives elsewhere: defender+indestructible up, haste+defender and flying+reach down | `c1b`, `c9` |
 | R11 power over toughness | verified, smaller than the uncontrolled estimate: +0.04/point, concentrated on small bodies | `c2` |
 | R12 removal ladder, lockdown on top | verified; fight/edict undiscounted, so the scorer's refusal is search-level | `c3` |
 | R13 tricks as survivorship | reframed: the trick premium is entirely the contribution channel, "cast while winning" | `l_analyze.py` |
