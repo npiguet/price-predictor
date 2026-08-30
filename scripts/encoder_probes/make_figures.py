@@ -271,13 +271,18 @@ def fig_decode():
 def fig_pairs():
     df = (pd.read_csv(OUT / "c9_kw_pairs.csv")
             .sort_values("interaction_centered_sd"))
-    take = pd.concat([df.head(8), df.tail(8)])
+    dt = df[(df["kw_a"] == "deathtouch") & (df["kw_b"] == "trample")]
+    take = pd.concat([df.head(8), dt, df.tail(8)])
     labels = [f"{a} + {b}" for a, b in zip(take["kw_a"], take["kw_b"])]
+    ref_i = 8  # the deathtouch+trample reference row
+    labels[ref_i] += " (reference)"
     vals = take["interaction_centered_sd"].to_numpy()
     y = np.arange(len(take))
 
-    fig, ax = plt.subplots(figsize=(6.8, 4.8))
-    ax.barh(y, vals, color=[RED if v < 0 else BLUE for v in vals],
+    fig, ax = plt.subplots(figsize=(6.8, 5.0))
+    ax.barh(y, vals,
+            color=[GRAY if i == ref_i else (RED if v < 0 else BLUE)
+                   for i, v in enumerate(vals)],
             height=0.66, edgecolor="white", linewidth=1.2)
     ax.axvline(0, color=GRAY, lw=0.8)
     ax.set_yticks(y, labels)
