@@ -143,22 +143,11 @@ The figure also shows each keyword's label value: what carrying the keyword is w
 
 The flying premium peaks on mid-size bodies (power plus toughness 5–8) and falls back on the largest, in both edit designs.
 
-Keyword pairs are priced for how their rules fit together. The pair sweep adds every pair of the sixteen keywords as two static lines to 150 mid-size keywordless creatures, reads the predicted winnability against single-keyword arms, and removes each keyword's average interaction so only the pair-specific part remains. The strongest synergies are pairs whose rules multiply: an indestructible, hexproofed, or shrouded defender is a wall that never dies, flash plus haste is an ambush that attacks the turn it appears, and double strike doubles what lifelink and deathtouch trigger on. The strongest redundancies are pairs where one rule idles the other: haste on a defender has nothing to speed up, and reach on a flier duplicates a block flying already makes. The pair-specific effects reach about half the size of a strong single keyword, and most pairs move the prediction beyond their confidence interval in one direction or the other. All of this is encoder-only: real cards carrying any given pair are too rare for a label-side check.
+Keyword pairs are priced for how their rules fit together. The pair sweep adds every pair of the sixteen keywords as two static lines to 150 mid-size keywordless creatures, reads the predicted winnability against single-keyword arms, and removes each keyword's average interaction so only the pair-specific part remains. The strongest synergies are pairs whose rules multiply: an indestructible, hexproofed, or shrouded defender is a wall that never dies, flash plus haste is an ambush that attacks the turn it appears, and double strike doubles what lifelink and deathtouch trigger on. Among the largest penalties are pairs where one rule idles the other: haste on a defender has nothing to speed up, and reach on a flier duplicates a block flying already makes. The single largest penalty, flash with ward, fits no such story. The pair-specific effects reach about half the size of a strong single keyword, and most pairs move the prediction beyond their confidence interval in one direction or the other. All of this is encoder-only: real cards carrying any given pair are too rare for a label-side check.
 
-| pair | pair-specific interaction (SD) |
-|---|---|
-| defender + indestructible | +0.09 |
-| defender + hexproof | +0.08 |
-| defender + shroud | +0.07 |
-| haste + flash | +0.06 |
-| lifelink + double strike | +0.04 |
-| deathtouch + double strike | +0.04 |
-| flying + reach | −0.06 |
-| vigilance + ward {2} | −0.06 |
-| haste + defender | −0.07 |
-| flash + ward {2} | −0.09 |
+![Keyword-pair interactions: rules that multiply price above the sum, rules that idle price below](images/2026-08-28-encoder-pairs.png)
 
-*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed.*
+*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed; the chart shows the eight largest in each direction.*
 
 The deathtouch-plus-trample bonus reported by the original 2×2 does not survive the full sweep. The original design measured the pair against vigilance and reach in its control slots, and most of its +0.14 was the controls' own interaction, chiefly vigilance with trample. Centered against all pairs, the classic combo prices barely above the sum of its parts.
 
