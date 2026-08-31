@@ -127,6 +127,15 @@ The flat top of the sweep reflects missing number information, not a learned law
 
 The 8-query attention pool did not specialize. Any single 64-dim query block recovers 95–96% of every label's prediction accuracy, all eight blocks' leading axes correlate above 0.97, and the attention profiles are near-uniform with no query attending to statlines or costs. The spec's intent of one query per card aspect did not materialize; the pool is a learned mean, matching what the scorer study found for the scorer's pooling one level up. The whole card cloud has an effective dimensionality near 3.
 
+A hand-built table of 135 nameable features nearly matches the encoder's winnability judgment on validation cards; the encoder's clear advantage is played rate. The table lists mana value, card types, power and toughness, keyword and phrase flags, colored pips, ability-line counts, and era, rarity, and set. It feeds gradient-boosted trees, fit on the encoder's training cards and scored on its validation cards; the encoder's side of the comparison is the honest probe on the same split. Combining the embedding with the table improves on the embedding alone by almost nothing, so the table holds essentially nothing the encoder lacks. The reverse does not hold, and the missing part is concentrated in played rate.
+
+| head | 135-feature table (val R²) | encoder probe (val R²) |
+|---|---|---|
+| winnability | 0.349 | 0.370 |
+| played rate | 0.346 | 0.608 |
+
+*Source: `s_r18*.py`, both models fit on the encoder's training split and scored on its validation split.*
+
 ## Flying tops the keywords, direct damage tops the spells, and any effect is worth more on a creature
 
 Flying is the most valuable keyword under counterfactual edits, and two independent edit designs agree on the whole keyword order (Spearman 0.94).
@@ -170,32 +179,6 @@ Creature-type nouns carry real value, at a smaller scale than the label side sho
 The encoder's outputs are distributed like its labels while its response to an edit is a different function. Across the keyword battery, correlational effects computed on the encoder's predictions match the label-side effects at r = 0.97, and the counterfactual effects match them at r = 0.86 once both scales share the vanilla-creature baseline from `c8_kw_vanilla.py`. The residual table shows the same agreement: of 246 feature-label pairs tested for prediction-minus-label bias, ten clear the reporting bar, and seven of those are observation-count strata or the blacklist. The two genuine disagreements are planeswalkers (under-predicted by 0.14, loyalty text reads worse than it plays) and morph's played rate (over-predicted, the logging artifact resisting text explanation).
 
 Where the edit response diverges from the labels, the encoder misprices in both directions, and its generalization mode explains most of it. Haste reads a tenth of an SD better than it plays, and flash and indestructible read about a quarter better, above labels the games set low. Double strike reads worse than it plays, and hexproof is punished about twice as hard as its label. Lifegain text is punished at −1.2 where labels are neutral, and any appended clause pays the wordiness bonus. On validation cards the encoder's prediction sits closer to the mean label of a card's templating neighborhood than to the card's own label (β 0.59 versus 0.26), so a card is priced as the average of cards worded like it, and a keyword that plays unusually well or badly for how it reads is pulled toward how it reads.
-
-## The scorecard: three falsifications, and most confirmations needed a corrected mechanism
-
-The eighteen ranked questions resolve into three clean falsifications — cast-lift redundancy, pool-query specialization, and the game-length reading of the MV gradient — while the confirmed hypotheses mostly survived with a corrected magnitude or a different mechanism than the one proposed.
-
-| ranked question | verdict | key evidence |
-|---|---|---|
-| R1 bag-of-words vs composition | both, quantified: composition correctly signed (flying priced by role, negation lowers) and carries 40% of winnability transfer; but layout placebos move predictions as much as meaning flips | `r1_*.py` |
-| R2 memorization | verified, larger than hypothesized: half the apparent knowledge; key is layout | `r2_*.py` |
-| R3 play/draw one axis | verified; a 1/25-size correctly-signed residue survives | `s_r3.py` |
-| R4 cast_lift redundant | falsified: unique ΔR² +0.16 on validation cards; the label stays | `s_r4.py` |
-| R5 color labels = identity + artifact, no synergy | verified; allied/enemy structure exists at 1.5% of a SD | `s_r5.py` |
-| R6 pool-query specialization | falsified: eight near-copies, attention ≈ mean pool | `q1`–`q2` |
-| R7 visible attributes decodable | verified, beyond expectation (era ±7.7 yr, rarity AUC 0.87); integer tokens collapse past 8 | `q3_decode.py`, `c2` |
-| R8 played_rate is an agency axis, not a cost axis | verified: cost is a seventh of the axis; five collapse classes are five orthogonal directions, not one | `s_r8*.py` |
-| R9 MV gradient a game-length artifact | falsified: survives every stratification; the premium sits in the contribution channel | `l_analyze.py` |
-| R10 flying strongest keyword, premium grows with size | half verified: strongest yes; size interaction is an inverted U | `c1` |
-| R10b deathtouch+trample superadditive | overturned by the all-pairs sweep: the 2×2's +0.14 was mostly its controls' own interaction (vigilance with trample); centered, the pair is near zero. Pair pricing is real but lives elsewhere: defender+indestructible up, haste+defender and flying+reach down | `c1b`, `c9` |
-| R11 power over toughness | verified, smaller than the uncontrolled estimate: +0.04/point, concentrated on small bodies | `c2` |
-| R12 removal ladder, lockdown on top | verified; fight/edict undiscounted, so the scorer's refusal is search-level | `c3` |
-| R13 tricks as survivorship | reframed: the trick premium is entirely the contribution channel, "cast while winning" | `l_analyze.py` |
-| R14 mana production worst text, body-vs-spell master axis | verified causally: dork +0.33 over rock at identical text | `c4` |
-| R15 spell riders | cantrip rider exactly zero; drawbacks priced only on creature trigger lines; wordiness bonus +0.09 | `c6` |
-| R16 tribal nouns, taplands, types | noun premium real at a third of the label-side spread; removing "enters tapped" hurts (fixing beats speed); instant/sorcery type tokens interchangeable | `c5` |
-| R17 divergence table | near-empty: the encoder distills its labels almost without distortion; divergence lives in the edit response | `s_r17*.py` |
-| R18 nameability | 42% of the encoder's winnability taste reduces to 135 nameable features; a spreadsheet matches it on validation-card winnability, and loses by 0.26 R² on played rate | `s_r18*.py` |
 
 ## Consequences for the next encoder generation
 
