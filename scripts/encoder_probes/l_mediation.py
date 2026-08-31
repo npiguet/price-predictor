@@ -40,11 +40,7 @@ DEFAULT_CORPUS = Path(
     r"Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1"
     r"\cards-played-bo1-embedding.cleaned.txt"
 )
-DEFAULT_TABLE = Path(
-    r"C:\Users\nicol\AppData\Local\Temp\claude"
-    r"\C--Users-nicol-IdeaProjects-price-predictor"
-    r"\dc499b61-1d84-4345-b336-7fe0e34557a4\scratchpad\grounding\card_table.pkl"
-)
+DEFAULT_TABLE = OUT / "card_table.pkl"  # written by p0b_card_table.py
 
 N_LEN_BUCKETS = 5
 LEN_BUCKET_LABELS = ["0-4", "5-6", "7-8", "9-11", "12+"]
