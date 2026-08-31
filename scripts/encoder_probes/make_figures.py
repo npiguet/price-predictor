@@ -334,10 +334,10 @@ def fig_cost():
     act = pd.DataFrame(act)
 
     series = [
-        ("vanilla creature", dl[dl["class"] == "vanilla creature"], BLUE, -0.09),
-        ("creature with text", dl[dl["class"] == "creature with text"], ORANGE, -0.03),
-        ("noncreature spell", dl[dl["class"] == "noncreature spell"], RED, 0.03),
-        ("activated-ability cost", act, GRAY, 0.09),
+        ("vanilla creature", dl[dl["class"] == "vanilla creature"], BLUE),
+        ("creature with text", dl[dl["class"] == "creature with text"], ORANGE),
+        ("noncreature spell", dl[dl["class"] == "noncreature spell"], RED),
+        ("activated-ability cost", act, GRAY),
     ]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
     for ax, col, sub_title in (
@@ -345,16 +345,9 @@ def fig_cost():
              "winnability: creatures pay, spells are credited"),
             (ax2, "d_played_rate_sd",
              "played rate: the card's cost pays, the ability's does not")):
-        for label, df, color, off in series:
-            x = df["delta_mana"].to_numpy(float) + off
-            y = df[col].to_numpy(float)
-            if f"{'ds' if col.startswith('d_s') else 'dp'}_ci_lo" in df.columns:
-                pre = "ds" if col.startswith("d_s") else "dp"
-                ax.errorbar(x, y, yerr=[y - df[f"{pre}_ci_lo"], df[f"{pre}_ci_hi"] - y],
-                            fmt="-o", color=color, ms=4, lw=1.4, capsize=2,
-                            elinewidth=0.9, label=label)
-            else:
-                ax.plot(x, y, "-o", color=color, ms=4, lw=1.4, label=label)
+        for label, df, color in series:
+            ax.plot(df["delta_mana"], df[col], "-o", color=color, ms=4, lw=1.4,
+                    label=label)
         ax.axhline(0, color=GRAY, lw=0.8)
         ax.axvline(0, color=GRAY, lw=0.8, ls=":")
         ax.set_title(sub_title, fontsize=10, color="#333333", pad=10)
@@ -370,29 +363,24 @@ def fig_cost():
 
 def fig_pip_ladder():
     df = pd.read_csv(OUT / "c11_pip_ladder.csv")
-    # the five MTG colors carry their own identity; markers double-encode it
-    mtg = {"W": ("#b09a3e", "o"), "U": ("#2b6ea8", "s"), "B": ("#3a3a3a", "^"),
-           "R": ("#c05555", "D"), "G": ("#3e7d4f", "v")}
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
-    for ax, col, pre, sub_title in (
-            (ax1, "d_score_play_sd", "ds",
+    for ax, col, sub_title in (
+            (ax1, "d_score_play_sd",
              "winnability: the color premium stops at the second pip"),
-            (ax2, "d_played_rate_sd", "dp",
+            (ax2, "d_played_rate_sd",
              "played rate: each deeper pip costs more than the last")):
-        for i, (c, (hexc, mark)) in enumerate(mtg.items()):
-            sub = df[df["color"] == c]
-            x = sub["n_pips"].to_numpy(float) + (i - 2) * 0.03
-            y = sub[col].to_numpy(float)
-            ax.errorbar(x, y, yerr=[y - sub[f"{pre}_ci_lo"], sub[f"{pre}_ci_hi"] - y],
-                        fmt=f"-{mark}", color=hexc, ms=4.5, lw=1.4, capsize=2,
-                        elinewidth=0.9, label=c)
+        g = df.groupby("n_pips")[col]
+        x = np.array(sorted(df["n_pips"].unique()), dtype=float)
+        ax.fill_between(x, g.min(), g.max(), color=BLUE, alpha=0.18,
+                        label="range across the five colors")
+        ax.plot(x, g.mean(), "-o", color=BLUE, ms=5, lw=1.6, label="mean")
         ax.axhline(0, color=GRAY, lw=0.8)
         ax.axvline(1, color=GRAY, lw=0.8, ls=":")
         ax.set_xticks([0, 1, 2, 3])
         ax.set_xticklabels(["{3}", "{2}{C}\n(printed)", "{1}{C}{C}", "{C}{C}{C}"])
         ax.set_title(sub_title, fontsize=10, color="#333333", pad=10)
     ax1.set_ylabel("prediction Δ vs printed cost (label SD)")
-    ax1.legend(frameon=False, fontsize=9, ncol=2)
+    ax1.legend(frameon=False, fontsize=9)
     fig.supxlabel("color intensity of the same MV-3 cost", fontsize=10)
     fig.suptitle("The same MV-3 card at four color intensities: winnability "
                  "rewards commitment up to two pips,\nplayed rate charges every "
