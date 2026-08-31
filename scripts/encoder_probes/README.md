@@ -23,6 +23,7 @@ read-only), `output/cardsfolder-512/`,
 |---|---|---|
 | `probe_lib.py` | shared harness: checkpoint load + bit-exact re-encode, label↔text↔embedding join, seed-42 split reconstruction, fidelity/honest ridge probes, placebo edits, manifold gate, equivalence classes | — |
 | `p0_build.py` | builds/caches everything the harness serves; validation tables | `p0_report.md`, `join_table.pkl`, `probes_*.pkl`, `equivalence_classes.json` |
+| `p0b_card_table.py` | the per-card nameable-feature table (mana-cost breakdown, type/keyword/phrase flags, text-shape counts) joined to the labels; the feature source for the shared loaders and the 135-feature comparison in `s_r18.py` | `card_table.pkl` |
 | `l_mediation.py`, `l_extraflags.py`, `l_analyze.py` | "The labels grade the builder…" — the w/m/d channel decomposition, forge-best mirror, game-length strata, set offsets, play/draw noise floor, cast_lift anatomy, blacklist channel | `l_mediation_table.pkl`, `l_report.md` |
 | `r1_*.py` | "What transfers is mostly a bag of words…" — shuffle battery, line-attribution index, scope/negation flips | `r1r2_report.md` |
 | `r2_*.py` | "Half of the encoder's knowledge is memorized…" — half-probe design, equivalence-class bound, placebo brittleness | `r1r2_report.md` |
@@ -45,7 +46,7 @@ read-only), `output/cardsfolder-512/`,
 
 ## Order for a from-scratch rerun
 
-1. `p0_build.py` (everything imports its caches)
+1. `p0_build.py` (everything imports its caches), then `p0b_card_table.py` (the feature table the shared loaders merge in)
 2. `l_mediation.py` → `l_analyze.py` (CPU; label side)
 3. `r1_*` / `r2_*` (GPU), `s_*` (CPU) — independent of each other
 4. `c1`–`c7` (GPU), `q1`–`q3`

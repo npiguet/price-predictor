@@ -23,11 +23,7 @@ from sealed.infrastructure.converted_card_locator import (  # noqa: E402
 
 CARDS = REPO / "output" / "cardsfolder-512"
 OUT = REPO / "output" / "encoder-probes"
-TABLE = Path(
-    r"C:\Users\nicol\AppData\Local\Temp\claude"
-    r"\C--Users-nicol-IdeaProjects-price-predictor"
-    r"\dc499b61-1d84-4345-b336-7fe0e34557a4\scratchpad\grounding\card_table.pkl"
-)
+TABLE = OUT / "card_table.pkl"  # written by p0b_card_table.py
 
 EXTRA = {
     "ph_fog": [r"prevent all combat damage", r"prevent all damage that would be dealt"],

@@ -19,11 +19,7 @@ sys.path.insert(0, str(REPO / "scripts" / "encoder_probes"))
 import probe_lib as pl  # noqa: E402
 
 OUT = pl.SCRATCH
-GROUNDING = Path(
-    r"C:\Users\nicol\AppData\Local\Temp\claude"
-    r"\C--Users-nicol-IdeaProjects-price-predictor"
-    r"\dc499b61-1d84-4345-b336-7fe0e34557a4\scratchpad\grounding\card_table.pkl"
-)
+GROUNDING = OUT / "card_table.pkl"  # written by p0b_card_table.py
 
 SD = {
     "score_play": 0.0618,

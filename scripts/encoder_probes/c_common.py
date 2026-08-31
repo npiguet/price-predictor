@@ -32,11 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import probe_lib as pl  # noqa: E402
 
 SCRATCH = pl.SCRATCH
-CARD_TABLE = Path(
-    r"C:\Users\nicol\AppData\Local\Temp\claude"
-    r"\C--Users-nicol-IdeaProjects-price-predictor"
-    r"\dc499b61-1d84-4345-b336-7fe0e34557a4\scratchpad\grounding\card_table.pkl"
-)
+CARD_TABLE = SCRATCH / "card_table.pkl"  # written by p0b_card_table.py
 
 SD = {"score_play": 0.06181, "played_rate": 0.1247}
 MANIFOLD_GATE = 0.35325
