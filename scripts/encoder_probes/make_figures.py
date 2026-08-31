@@ -368,6 +368,38 @@ def fig_cost():
     save(fig, "cost")
 
 
+def fig_pip_ladder():
+    df = pd.read_csv(OUT / "c11_pip_ladder.csv")
+    # the five MTG colors carry their own identity; markers double-encode it
+    mtg = {"W": ("#b09a3e", "o"), "U": ("#2b6ea8", "s"), "B": ("#3a3a3a", "^"),
+           "R": ("#c05555", "D"), "G": ("#3e7d4f", "v")}
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
+    for ax, col, pre, sub_title in (
+            (ax1, "d_score_play_sd", "ds",
+             "winnability: the color premium stops at the second pip"),
+            (ax2, "d_played_rate_sd", "dp",
+             "played rate: each deeper pip costs more than the last")):
+        for i, (c, (hexc, mark)) in enumerate(mtg.items()):
+            sub = df[df["color"] == c]
+            x = sub["n_pips"].to_numpy(float) + (i - 2) * 0.03
+            y = sub[col].to_numpy(float)
+            ax.errorbar(x, y, yerr=[y - sub[f"{pre}_ci_lo"], sub[f"{pre}_ci_hi"] - y],
+                        fmt=f"-{mark}", color=hexc, ms=4.5, lw=1.4, capsize=2,
+                        elinewidth=0.9, label=c)
+        ax.axhline(0, color=GRAY, lw=0.8)
+        ax.axvline(1, color=GRAY, lw=0.8, ls=":")
+        ax.set_xticks([0, 1, 2, 3])
+        ax.set_xticklabels(["{3}", "{2}{C}\n(printed)", "{1}{C}{C}", "{C}{C}{C}"])
+        ax.set_title(sub_title, fontsize=10, color="#333333", pad=10)
+    ax1.set_ylabel("prediction Δ vs printed cost (label SD)")
+    ax1.legend(frameon=False, fontsize=9, ncol=2)
+    fig.supxlabel("color intensity of the same MV-3 cost", fontsize=10)
+    fig.suptitle("The same MV-3 card at four color intensities: winnability "
+                 "rewards commitment up to two pips,\nplayed rate charges every "
+                 "pip at a growing rate", fontsize=13, y=1.08)
+    save(fig, "pip-ladder")
+
+
 if __name__ == "__main__":
     fig_channels()
     fig_memorization()
@@ -378,3 +410,4 @@ if __name__ == "__main__":
     fig_decode()
     fig_integers()
     fig_cost()
+    fig_pip_ladder()
