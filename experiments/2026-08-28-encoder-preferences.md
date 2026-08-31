@@ -2,13 +2,13 @@
 
 ## The short version
 
-- The encoder's card ratings are faithful copies of its training labels, and the labels are only partly about the card. A card's winnability label mixes three things: which deck builders were willing to play the card, how often it got cast, and whether winners cast it more than losers. Only the last part is about what the card does in a game.
-- Half of what the encoder appears to know is memorized card identity. Its accuracy on validation cards is under half of its accuracy on the training set, and the memory is keyed to the card's text layout, not its words.
-- The encoder reads words in context: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
 - The best keyword in Forge's eyes is flying, worth about 0.4 label standard deviations on its own, followed by deathtouch, haste, double strike, and lifelink. Against a vanilla creature the labels reward every combat keyword; the clear liabilities are defender and flash. Keyword pairs are priced for how their rules fit together: an indestructible defender beats the sum of its parts, while haste on a defender and reach on a flier are penalized as wasted lines.
 - The best spell text is direct damage, then fight, exile, and destroy. Lockdown auras top all noncreature text. Sweepers, tap effects, and counterspells sit at the bottom, and a spell whose whole text is lifegain is the worst text the encoder knows.
 - Bodies beat effects. The same effect is worth about 0.6 standard deviations more stapled to a creature than printed on a sorcery. A mana dork is fine and a mana rock is bad for exactly this reason.
+- The encoder's card ratings are faithful copies of its training labels, and the labels are only partly about the card. A card's winnability label mixes three things: which deck builders were willing to play the card, how often it got cast, and whether winners cast it more than losers. Only the last part is about what the card does in a game.
 - The encoder's loudest internal axis is not card quality but "will this card leave Forge's hand": lands and equipment at one end, morph, fogs, sweepers, and counterspells at the other. Mana cost explains only a seventh of that axis.
+- Half of what the encoder appears to know is memorized card identity. Its accuracy on validation cards is under half of its accuracy on the training set, and the memory is keyed to the card's text layout, not its words.
+- The encoder reads words in context: "flying" is an upside on a creature's own ability line and a downside inside "can't block creatures with flying", and inverting a pump spell's sign or restricting removal to your own creatures moves the prediction the right way. But sixty percent of its transferable winnability knowledge survives shuffling every word, and layout changes that alter nothing move predictions as much as edits that invert meaning.
 - The embedding describes the card better than it judges it. Mana value, power, toughness, and card type are all decodable from it more accurately than any label it was trained on, and even the card's printing era and rarity are recoverable from wording alone.
 - A hand-built table of 135 nameable features nearly matches the encoder's winnability judgment on validation cards; the encoder's real advantage is in predicting cast frequency. The feature list itself is a product of this study, worked out by probing the encoder.
 - Two of the label groups turned out to be artifacts: the play/draw split is nearly all sampling noise, and the color-affinity labels mostly re-encode color identity plus a shrinkage artifact that punishes good cards. The cast-lift label carries real independent signal and should stay.
@@ -64,6 +64,44 @@ Recomputing every effect inside the forge-best-vs-forge-best mirror, where both 
 Two annotation channels leak into the labels from outside the games. Cards on Forge's hand-written `AI:RemoveDeck` blacklist carry a 0.64 SD winnability deficit of which 78% is the selection channel, and Forge's bundled human draft rank correlates with the winnability label almost entirely through selection. Both are inherited taste, not game evidence, and the encoder can only partly see them: on validation cards it over-predicts blacklisted cards by about a fifth of a SD. The text explains a third of the blacklist deficit; the other two thirds is invisible to a text reader.
 
 For one class of cards, every label is corrupted at the source. The Java match worker never logs a face-down card: a face-down cast resolves to an empty name and is dropped, and turning face up fires no event the collector subscribes to (`PlayedCardCollector.java`; the in-code comment claiming the cast branch covers it is wrong). A morph creature that spends the whole game face down is recorded as never played, which is why morph creatures carry the largest played-rate collapse in the corpus. The encoder learned this corpus fact faithfully; the reading "Forge cannot play morph" is false.
+
+## Flying tops the keywords, direct damage tops the spells, and any effect is worth more on a creature
+
+Flying is the most valuable keyword under counterfactual edits, and two independent edit designs agree on the whole keyword order (Spearman 0.94).
+
+The first design swaps keywords on the same card. Each of 2,913 base creatures carries one keyword in a static line; the probe replaces that keyword with each of the others in turn and re-encodes. The change in predicted winnability measures how much better one keyword is than the one it replaced. Each keyword then gets a single value on a common scale, chosen so that the differences between the values match the measured swap effects.
+
+The second design deletes keywords instead of swapping them. It takes the real cards that carry a keyword line, removes that line, and re-encodes; the drop in predicted winnability is the keyword's value. The deletion design gives larger values than the substitution design, in the same order.
+
+The figure also shows each keyword's label value: what carrying the keyword is worth in the winnability labels of real creatures, measured against keywordless creatures of the same cost and statline, then centered on the same zero as the edit scale. Against a vanilla creature, every combat keyword has a positive label value; haste, vigilance, first strike, and trample are each worth about a fifth of an SD. Only defender and flash have clearly negative label values. Haste's label value is almost entirely the contribution channel: haste creatures that get cast appear mostly in wins, while deckbuilders pick haste carriers no more often than other creatures. The edit and label orders agree (Spearman 0.87). Where they differ, the direction varies: the edit value for haste is a tenth of an SD above its label value, flash and indestructible are about a quarter above, double strike is below, and hexproof's edit penalty is about twice its label penalty.
+
+![Keyword values: counterfactual edits against vanilla-baseline label values](images/2026-08-28-encoder-keywords.png)
+
+*Source: `c1_keywords.py`; label values from the vanilla-baseline joint regression in `c8_kw_vanilla.py`; rendered by `make_figures.py`.*
+
+The flying premium peaks on mid-size bodies (power plus toughness 5–8) and falls back on the largest, in both edit designs.
+
+Keyword pairs are priced for how their rules fit together. The pair sweep adds every pair of the sixteen keywords as two static lines to 150 mid-size keywordless creatures, reads the predicted winnability against single-keyword arms, and removes each keyword's average interaction so only the pair-specific part remains. The strongest positive interactions are pairs where one keyword makes the other more useful: defender with indestructible, hexproof, or shroud (a blocker that is hard to remove keeps blocking), flash with haste (a creature cast at instant speed can attack immediately), and double strike with lifelink or deathtouch (double strike deals damage twice, so both abilities trigger twice). Among the largest negative interactions are pairs where one keyword cannot be used: a creature with defender cannot attack, so haste does nothing for it, and a creature with flying can already block fliers, so reach adds little. The largest negative interaction, flash with ward, has no such explanation. The pair-specific effects reach about half the size of a strong single keyword, and most pairs move the prediction beyond their confidence interval in one direction or the other. All of this is encoder-only: real cards carrying any given pair are too rare for a label-side check.
+
+![Keyword-pair interactions: rules that multiply price above the sum, rules that idle price below](images/2026-08-28-encoder-pairs.png)
+
+*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed; the chart shows the eight largest in each direction, with deathtouch + trample as a reference row.*
+
+Deathtouch plus trample, the classic keyword combo, is worth barely more than the two keywords separately. A pair's interaction is only defined relative to a reference: a 2×2 that measures a pair against two chosen control keywords includes the controls' own interactions in the result, and vigilance with trample alone contributes −0.09. Every value here is therefore centered against all 120 pairs.
+
+Direct damage to any target tops the spell-effect ladder, and a spell whose whole text is "you gain 4 life" is the single worst text measured. The ladder writes fifteen different effect texts into the same 200 base spells, and it spans three times the keyword scale. Removal ranks above card advantage: fight, exile, and destroy are high, bounce, card draw, and counterspells are near zero or below, and tap effects and sweepers are heavily negative.
+
+Two entries in the ladder revise findings from the scorer study. Fight is not discounted, in the labels or in the encoder, so the builder's refusal of fight spells is a search-level behavior. Lockdown auras beat every removal template. Inside the aura family, "enchanted creature can't attack or block" and "can't block" differ by 0.77 SD on two words: the clearest case in the study of two words moving a prediction by their meaning.
+
+![The spell-effect ladder from burn down to lifegain](images/2026-08-28-encoder-spells.png)
+
+*Source: `c3_removal.py`, fifteen effect templates substituted into the same 200 base spells; rendered by `make_figures.py`.*
+
+Any effect is worth more on a creature than on a spell. The probe writes the same effect twice: once as a sorcery, and once as a creature that performs the effect when it enters the battlefield. The creature version is worth +0.60 on average. Weak effects gain the most and the strongest can even lose: lifegain gains +1.5 by becoming a creature, while destroy-a-creature loses a little. The same design reproduces the corpus's largest class gap at identical cost and text: a creature that taps for mana scores 0.33 higher than an artifact with the same ability. Mana rocks are not penalized for the artifact type; they are penalized for lacking a creature body.
+
+Colored pips raise predicted winnability and lower predicted played rate, in both directions and in all five colors. Swapping a cost of {1}{W} to {W}{W} raises predicted winnability and cuts predicted played rate. Swapping {1}{W} to {2} does the reverse. This reproduces the scorer study's color economics at the single-card level.
+
+Creature-type nouns carry real value, at a smaller scale than the label side shows. Renaming a dragon to a lizard at identical statline and text costs −0.27. The noun ordering (angel, wurm, hydra at the top; goblin, wall, lizard at the bottom) matches the label-side ordering at a third of its spread. About two-thirds of the corpus dragon premium is therefore statline and text; one third is the word itself.
 
 ## The nine labels carry about three distinct signals
 
@@ -135,44 +173,6 @@ A hand-built table of 135 nameable features nearly matches the encoder's winnabi
 | played rate | 0.346 | 0.608 |
 
 *Source: `s_r18*.py`, both models fit on the encoder's training split and scored on its validation split.*
-
-## Flying tops the keywords, direct damage tops the spells, and any effect is worth more on a creature
-
-Flying is the most valuable keyword under counterfactual edits, and two independent edit designs agree on the whole keyword order (Spearman 0.94).
-
-The first design swaps keywords on the same card. Each of 2,913 base creatures carries one keyword in a static line; the probe replaces that keyword with each of the others in turn and re-encodes. The change in predicted winnability measures how much better one keyword is than the one it replaced. Each keyword then gets a single value on a common scale, chosen so that the differences between the values match the measured swap effects.
-
-The second design deletes keywords instead of swapping them. It takes the real cards that carry a keyword line, removes that line, and re-encodes; the drop in predicted winnability is the keyword's value. The deletion design gives larger values than the substitution design, in the same order.
-
-The figure also shows each keyword's label value: what carrying the keyword is worth in the winnability labels of real creatures, measured against keywordless creatures of the same cost and statline, then centered on the same zero as the edit scale. Against a vanilla creature, every combat keyword has a positive label value; haste, vigilance, first strike, and trample are each worth about a fifth of an SD. Only defender and flash have clearly negative label values. Haste's label value is almost entirely the contribution channel: haste creatures that get cast appear mostly in wins, while deckbuilders pick haste carriers no more often than other creatures. The edit and label orders agree (Spearman 0.87). Where they differ, the direction varies: the edit value for haste is a tenth of an SD above its label value, flash and indestructible are about a quarter above, double strike is below, and hexproof's edit penalty is about twice its label penalty.
-
-![Keyword values: counterfactual edits against vanilla-baseline label values](images/2026-08-28-encoder-keywords.png)
-
-*Source: `c1_keywords.py`; label values from the vanilla-baseline joint regression in `c8_kw_vanilla.py`; rendered by `make_figures.py`.*
-
-The flying premium peaks on mid-size bodies (power plus toughness 5–8) and falls back on the largest, in both edit designs.
-
-Keyword pairs are priced for how their rules fit together. The pair sweep adds every pair of the sixteen keywords as two static lines to 150 mid-size keywordless creatures, reads the predicted winnability against single-keyword arms, and removes each keyword's average interaction so only the pair-specific part remains. The strongest positive interactions are pairs where one keyword makes the other more useful: defender with indestructible, hexproof, or shroud (a blocker that is hard to remove keeps blocking), flash with haste (a creature cast at instant speed can attack immediately), and double strike with lifelink or deathtouch (double strike deals damage twice, so both abilities trigger twice). Among the largest negative interactions are pairs where one keyword cannot be used: a creature with defender cannot attack, so haste does nothing for it, and a creature with flying can already block fliers, so reach adds little. The largest negative interaction, flash with ward, has no such explanation. The pair-specific effects reach about half the size of a strong single keyword, and most pairs move the prediction beyond their confidence interval in one direction or the other. All of this is encoder-only: real cards carrying any given pair are too rare for a label-side check.
-
-![Keyword-pair interactions: rules that multiply price above the sum, rules that idle price below](images/2026-08-28-encoder-pairs.png)
-
-*Source: `c9_kw_pairs.py`, all 120 pairs, each keyword's mean interaction removed; the chart shows the eight largest in each direction, with deathtouch + trample as a reference row.*
-
-Deathtouch plus trample, the classic keyword combo, is worth barely more than the two keywords separately. A pair's interaction is only defined relative to a reference: a 2×2 that measures a pair against two chosen control keywords includes the controls' own interactions in the result, and vigilance with trample alone contributes −0.09. Every value here is therefore centered against all 120 pairs.
-
-Direct damage to any target tops the spell-effect ladder, and a spell whose whole text is "you gain 4 life" is the single worst text measured. The ladder writes fifteen different effect texts into the same 200 base spells, and it spans three times the keyword scale. Removal ranks above card advantage: fight, exile, and destroy are high, bounce, card draw, and counterspells are near zero or below, and tap effects and sweepers are heavily negative.
-
-Two entries in the ladder revise findings from the scorer study. Fight is not discounted, in the labels or in the encoder, so the builder's refusal of fight spells is a search-level behavior. Lockdown auras beat every removal template. Inside the aura family, "enchanted creature can't attack or block" and "can't block" differ by 0.77 SD on two words; that gap is the study's clearest piece of genuine composition.
-
-![The spell-effect ladder from burn down to lifegain](images/2026-08-28-encoder-spells.png)
-
-*Source: `c3_removal.py`, fifteen effect templates substituted into the same 200 base spells; rendered by `make_figures.py`.*
-
-Any effect is worth more on a creature than on a spell. The probe writes the same effect twice: once as a sorcery, and once as a creature that performs the effect when it enters the battlefield. The creature version is worth +0.60 on average. Weak effects gain the most and the strongest can even lose: lifegain gains +1.5 by becoming a creature, while destroy-a-creature loses a little. The same design reproduces the corpus's largest class gap at identical cost and text: a creature that taps for mana scores 0.33 higher than an artifact with the same ability. Mana rocks are not penalized for the artifact type; they are penalized for lacking a creature body.
-
-Colored pips raise predicted winnability and lower predicted played rate, in both directions and in all five colors. Swapping a cost of {1}{W} to {W}{W} raises predicted winnability and cuts predicted played rate. Swapping {1}{W} to {2} does the reverse. This reproduces the scorer study's color economics at the single-card level.
-
-Creature-type nouns carry real value, at a smaller scale than the label side shows. Renaming a dragon to a lizard at identical statline and text costs −0.27. The noun ordering (angel, wurm, hydra at the top; goblin, wall, lizard at the bottom) matches the label-side ordering at a third of its spread. About two-thirds of the corpus dragon premium is therefore statline and text; one third is the word itself.
 
 ## The encoder disagrees with its labels in the response, not in the ranking
 
