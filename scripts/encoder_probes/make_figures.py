@@ -318,6 +318,56 @@ def fig_integers():
     save(fig, "integers")
 
 
+def fig_cost():
+    dl = pd.read_csv(OUT / "c10_cost_deltas.csv")
+    ad = pd.read_csv(OUT / "c10_ability_deltas.csv")
+
+    # one combined activation-cost series (the two cost shapes behave alike)
+    act = []
+    for d, sub in ad.groupby("delta_mana"):
+        w = sub["n"].to_numpy(float)
+        act.append({
+            "delta_mana": d,
+            "d_score_play_sd": np.average(sub["d_score_play_sd"], weights=w),
+            "d_played_rate_sd": np.average(sub["d_played_rate_sd"], weights=w),
+        })
+    act = pd.DataFrame(act)
+
+    series = [
+        ("vanilla creature", dl[dl["class"] == "vanilla creature"], BLUE, -0.09),
+        ("creature with text", dl[dl["class"] == "creature with text"], ORANGE, -0.03),
+        ("noncreature spell", dl[dl["class"] == "noncreature spell"], RED, 0.03),
+        ("activated-ability cost", act, GRAY, 0.09),
+    ]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
+    for ax, col, sub_title in (
+            (ax1, "d_score_play_sd",
+             "winnability: creatures pay, spells are credited"),
+            (ax2, "d_played_rate_sd",
+             "played rate: the card's cost pays, the ability's does not")):
+        for label, df, color, off in series:
+            x = df["delta_mana"].to_numpy(float) + off
+            y = df[col].to_numpy(float)
+            if f"{'ds' if col.startswith('d_s') else 'dp'}_ci_lo" in df.columns:
+                pre = "ds" if col.startswith("d_s") else "dp"
+                ax.errorbar(x, y, yerr=[y - df[f"{pre}_ci_lo"], df[f"{pre}_ci_hi"] - y],
+                            fmt="-o", color=color, ms=4, lw=1.4, capsize=2,
+                            elinewidth=0.9, label=label)
+            else:
+                ax.plot(x, y, "-o", color=color, ms=4, lw=1.4, label=label)
+        ax.axhline(0, color=GRAY, lw=0.8)
+        ax.axvline(0, color=GRAY, lw=0.8, ls=":")
+        ax.set_title(sub_title, fontsize=10, color="#333333", pad=10)
+    fig.supxlabel("mana added to the printed cost (same card otherwise)",
+                  fontsize=10)
+    ax1.set_ylabel("prediction Δ (label SD)")
+    ax1.legend(frameon=False, fontsize=8.5, loc="lower left")
+    fig.suptitle("A dearer card reads harder to cast, but a dearer spell reads "
+                 "better to have;\nthe cost of an activated ability is read as "
+                 "free", fontsize=13, y=1.08)
+    save(fig, "cost")
+
+
 if __name__ == "__main__":
     fig_channels()
     fig_memorization()
@@ -327,3 +377,4 @@ if __name__ == "__main__":
     fig_spells()
     fig_decode()
     fig_integers()
+    fig_cost()
