@@ -391,6 +391,19 @@ def fig_pip_ladder():
     save(fig, "pip-ladder")
 
 
+def _hue_scale():
+    """Cold-to-warm map interpolated in HSV over the hue channel only.
+
+    Blue (240°) through yellow to red (0°) at fixed, slightly desaturated
+    S and V — an RGB blend of the same endpoints would gray out in the
+    middle; a pure hue sweep stays colorful throughout.
+    """
+    import colorsys
+    from matplotlib.colors import ListedColormap
+    hues = np.linspace(240 / 360, 0.0, 256)
+    return ListedColormap([colorsys.hsv_to_rgb(h, 0.45, 0.88) for h in hues])
+
+
 def fig_on_curve():
     df = pd.read_csv(OUT / "c12_on_curve.csv")
     powers = sorted(df["power"].unique())
@@ -406,7 +419,7 @@ def fig_on_curve():
             # preference — gray those cells out
             flat[pi, ti] = (s.max() - s.median()) < 0.10
     fig, ax = plt.subplots(figsize=(6.4, 4.6))
-    im = ax.imshow(np.ma.masked_where(flat, best), cmap="coolwarm",
+    im = ax.imshow(np.ma.masked_where(flat, best), cmap=_hue_scale(),
                    vmin=2, vmax=5, aspect="equal")
     ax.imshow(np.ma.masked_where(~flat, np.zeros_like(best)),
               cmap="gray", vmin=-1, vmax=1, alpha=0.25, aspect="equal")
