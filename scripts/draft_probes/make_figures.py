@@ -131,14 +131,13 @@ def fig_colour_chain() -> None:
 
 
 def fig_pick_order() -> None:
-    """Agreement of each generation's pick order with each outside ranking."""
+    """Agreement of each generation's pick order with the models below it."""
     sp = load("d2_pickorder.json")["part3_attribution"]["spearman"]
     x = np.arange(3)
-    lines = [("Forge's human pick order", "human_draft_rank", RED, "-"),
-             ("the scorer's card values", "scorer_v_swap", BLUE, "-"),
+    lines = [("the scorer's card values", "scorer_v_swap", BLUE, "-"),
              ("encoder PC2 (winnability)", "text_pc2", GREEN, "--"),
              ("encoder PC1 (played rate)", "text_pc1", ORANGE, "--")]
-    fig, ax = plt.subplots(figsize=(6.4, 4.0))
+    fig, ax = plt.subplots(figsize=(6.4, 3.8))
     for label, key, col, ls in lines:
         v = [sp[g][key]["spearman"] for g in GENS]
         ax.plot(x, v, ls, color=col, marker="o", lw=2.2, ms=7, label=label)
@@ -146,9 +145,11 @@ def fig_pick_order() -> None:
     ax.set_xticks(x)
     ax.set_xticklabels([GEN_LABEL[g] for g in GENS])
     ax.set_xlim(-0.15, 2.45)
+    ax.set_ylim(0.1, 0.78)
     ax.set_ylabel("Spearman with the first-pick card ranking")
-    ax.legend(frameon=False, fontsize=9, loc="center left")
-    ax.set_title("Every generation trades human pick order\nfor the reward's")
+    ax.legend(frameon=False, fontsize=9, loc="lower right")
+    ax.set_title("Every generation's pick order moves toward the two models\n"
+                 "underneath it")
     save(fig, "pick-order")
 
 
