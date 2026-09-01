@@ -409,37 +409,42 @@ def fig_on_curve():
     powers = sorted(df["power"].unique())
     toughs = sorted(df["toughness"].unique())
     best = np.full((len(powers), len(toughs)), np.nan)
-    flat = np.zeros((len(powers), len(toughs)), bool)
+    unprinted = np.zeros((len(powers), len(toughs)), bool)
     for pi, p in enumerate(powers):
         for ti, t in enumerate(toughs):
-            s = df[(df.power == p) & (df.toughness == t)].set_index("mv")[
-                "score_play_sd"]
+            cell = df[(df.power == p) & (df.toughness == t)]
+            # only mana values the game has actually printed for this
+            # statline are candidates; elsewhere the response is pure
+            # extrapolation
+            s = cell[cell["n_real"] >= 2].set_index("mv")["score_play_sd"]
+            if len(s) < 2:
+                unprinted[pi, ti] = True
+                continue
             best[pi, ti] = s.idxmax()
-            # a peak that barely clears the curve's median is noise, not a
-            # preference — gray those cells out
-            flat[pi, ti] = (s.max() - s.median()) < 0.10
-    fig, ax = plt.subplots(figsize=(6.4, 4.6))
-    im = ax.imshow(np.ma.masked_where(flat, best), cmap=_hue_scale(),
-                   vmin=2, vmax=5, aspect="equal")
-    ax.imshow(np.ma.masked_where(~flat, np.zeros_like(best)),
+    shown = np.ma.masked_where(unprinted, best)
+    fig, ax = plt.subplots(figsize=(7.8, 6.6))
+    im = ax.imshow(shown, cmap=_hue_scale(), vmin=np.nanmin(shown),
+                   vmax=np.nanmax(shown), aspect="equal")
+    ax.imshow(np.ma.masked_where(~unprinted, np.zeros_like(best)),
               cmap="gray", vmin=-1, vmax=1, alpha=0.25, aspect="equal")
     for pi in range(len(powers)):
         for ti in range(len(toughs)):
-            v = int(best[pi, ti])
-            if flat[pi, ti]:
-                ax.text(ti, pi, f"({v})", ha="center", va="center",
+            if unprinted[pi, ti]:
+                ax.text(ti, pi, "–", ha="center", va="center",
                         color="#999999", fontsize=10)
             else:
-                ax.text(ti, pi, str(v), ha="center", va="center",
-                        color="#222222", fontsize=12, fontweight="bold")
+                ax.text(ti, pi, str(int(best[pi, ti])), ha="center",
+                        va="center", color="#222222", fontsize=12,
+                        fontweight="bold")
     ax.set_xticks(range(len(toughs)), [str(t) for t in toughs])
     ax.set_yticks(range(len(powers)), [str(p) for p in powers])
     ax.set_xlabel("toughness")
     ax.set_ylabel("power")
     ax.grid(False)
     ax.set_title("The encoder's mana curve: best-read mana value per vanilla "
-                 "statline\n(gray: flat response, the best value is not "
-                 "meaningful)", fontsize=11, pad=12)
+                 "statline,\namong costs the game has printed for it "
+                 "(–: statline never printed at two or more costs)",
+                 fontsize=11, pad=12)
     fig.colorbar(im, ax=ax, shrink=0.8).set_label("best-read mana value")
     save(fig, "on-curve")
 
