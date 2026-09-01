@@ -363,8 +363,8 @@ def fig_cost():
 
 def fig_pip_ladder():
     df = pd.read_csv(OUT / "c11_pip_ladder.csv")
-    classes = [("creature", BLUE), ("noncreature spell", RED),
-               ("other permanent", GRAY)]
+    classes = [("vanilla creature", BLUE), ("creature with text", ORANGE),
+               ("noncreature spell", RED), ("other permanent", GRAY)]
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
     for ax, col, sub_title in (
             (ax1, "d_score_play_sd",
@@ -372,19 +372,18 @@ def fig_pip_ladder():
             (ax2, "d_played_rate_sd",
              "played rate: every pip pays, creatures pay most")):
         for cls, color in classes:
-            g = df[df["class"] == cls].groupby("n_pips")[col]
-            x = np.array(sorted(df["n_pips"].unique()), dtype=float)
-            ax.fill_between(x, g.min(), g.max(), color=color, alpha=0.15)
-            ax.plot(x, g.mean(), "-o", color=color, ms=5, lw=1.6, label=cls)
+            sub = df[(df["class"] == cls) & (df["color"] == "all")]
+            ax.plot(sub["n_pips"], sub[col], "-o", color=color, ms=5, lw=1.6,
+                    label=cls)
         ax.axhline(0, color=GRAY, lw=0.8)
         ax.axvline(1, color=GRAY, lw=0.8, ls=":")
         ax.set_xticks([0, 1, 2, 3])
-        ax.set_xticklabels(["{3}", "{2}{M}\n(printed)", "{1}{M}{M}", "{M}{M}{M}"])
+        ax.set_xticklabels(["{k+1}", "{k}{M}\n(printed)", "{k−1}\n{M}{M}",
+                            "{k−2}\n{M}{M}{M}"])
         ax.set_title(sub_title, fontsize=10, color="#333333", pad=10)
     ax1.set_ylabel("prediction Δ vs printed cost (label SD)")
-    ax1.legend(frameon=False, fontsize=9,
-               title="line: mean, band: range over colors", title_fontsize=8.5)
-    fig.supxlabel("color intensity of the same MV-3 cost "
+    ax1.legend(frameon=False, fontsize=9)
+    fig.supxlabel("color intensity at the card's own mana value "
                   "({M} = one fixed color W–G)", fontsize=10, y=-0.06)
     fig.suptitle("Deeper color at the same mana value is a cost on creatures "
                  "and a badge on spells;\nevery class pays a growing played-rate "
