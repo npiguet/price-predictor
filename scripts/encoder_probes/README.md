@@ -35,7 +35,8 @@ read-only), `output/cardsfolder-512/`,
 | `c8_kw_vanilla.py` | the label side of the keyword figure: keyword values vs vanilla creatures on one joint baseline (supersedes `c7_labelside.py`'s keyword family, whose keyword-count control benchmarked each keyword against the other keywords' flying-heavy mix), plus the per-keyword channel split | `c8_kw_vanilla.csv` |
 | `c9_kw_pairs.py` | the 120-pair keyword interaction matrix (layout-matched 2×2s with a fear control, both slot orders, double-centered); overturns c1b's deathtouch+trample bonus | `c9_kw_pairs.csv` |
 | `c10_cost_sweep.py` | the mana-cost section: generic-cost sweeps on both heads (card costs and activated-ability costs), the {T} contrasts, and the same-text-different-cost label families | `c10_*.csv` |
-| `c11_pip_ladder.py` | the pip-intensity ladder: real {2}{C} cards re-encoded at {3} / {2}{C} / {1}{C}{C} / {C}{C}{C}, both heads | `c11_pip_ladder.csv` |
+| `c11_pip_ladder.py` | the pip-intensity ladder: real {2}{M} cards re-encoded at {3} / {2}{M} / {1}{M}{M} / {M}{M}{M} ({M} = one fixed color), both heads, per card class | `c11_pip_ladder.csv` |
+| `c12_on_curve.py` | the encoder's mana curve: vanilla statlines P 0–5 × T 1–6 swept over MV 1–8, best-read cost per statline | `c12_on_curve.csv`, `c12_best_mv.csv` |
 | `c2_statlines.py` | P−T gradient, N/N and cost sweeps, {X}, the color fee | `c_report.md` |
 | `c3_removal.py` | the spell-effect ladder and aura variants | `c_report.md` |
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c_report.md` |
@@ -51,7 +52,7 @@ read-only), `output/cardsfolder-512/`,
 1. `p0_build.py` (everything imports its caches), then `p0b_card_table.py` (the feature table the shared loaders merge in)
 2. `l_mediation.py` → `l_analyze.py` (CPU; label side)
 3. `r1_*` / `r2_*` (GPU), `s_*` (CPU) — independent of each other
-4. `c1`–`c11` (GPU), `q1`–`q3`
+4. `c1`–`c12` (GPU), `q1`–`q3`
 
 Probes and predictions are checkpoint-specific: repointing
 `probe_lib`'s checkpoint path and rerunning `p0_build.py --force` is the
