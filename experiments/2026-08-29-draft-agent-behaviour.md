@@ -11,10 +11,14 @@
 - What it does read is which cards are its own. Relabelling its pool as cards
   others took — no card changed, no count changed — moves two picks in five, and
   that alone produces its two-colour discipline.
-- It has a standing colour preference. At the first pick of a draft, with nothing
-  known about the table, it already favours white and green and avoids red and
-  blue. Gen-1 has no such preference and if anything favours red, so this is the
-  reinforcement learning's doing.
+- Its standing colour preference is the scorer's, not its own. At the first pick,
+  with nothing known about the table, it already favours white and green and
+  avoids red and blue. The reward is the scorer's deck score, and that score pays
+  a two-colour white-green deck more than a standard deviation over a blue-red
+  one. Half of that survives controlling for the cards in the deck, and a premium
+  of the same size appears inside each agent's own decks, including the two
+  agents that draft red. Gen-4's opening ranking reproduces the reward's colour
+  order exactly; gen-1, which never saw that reward, does not.
 - It moved away from human pick order and toward its reward's, monotonically
   across the generations. It gives up ground on removal and card draw and gains it
   on creatures. On identical states, gen-1's pick sits higher in Forge's human
@@ -367,7 +371,8 @@ Gen-1 runs the other way on the two colours that separate the generations: red i
 its strongest colour and green its weakest, where gen-4 has them reversed. The
 preference the earlier study measured at off-lane picks is therefore a standing
 prior the agent brings to an empty board, and it is the reinforcement learning's
-rather than Forge's.
+rather than Forge's. That prior is the scorer's, and the next section shows the
+reward carrying it.
 
 Reading the same states as logits instead of argmax picks says the same thing
 about how far the two are apart. Gen-1's five colours span 0.28 logit units,
@@ -376,6 +381,76 @@ from white at +0.89 down to red at −1.61.
 
 One lean is inherited. Every generation discounts colourless cards by seven to
 ten points, gen-1 included, so that one is Forge's.
+
+## The lean is the scorer's, and the reward carries it to the policy
+
+Online GRPO carries exactly one signal, and that signal already leans. The
+reward is the scorer's deck score, made pod-relative by subtracting the mean of
+the other seats. Every seat in the corpus records both its finished deck and
+that score. Pricing each colour in the units the policy trained in therefore
+needs no model run, only a regression of the centred score on the deck's five
+colour shares. `d10_rewardcolour.py` does it over 3,989 seats in 500 pods.
+
+The reward pays more than its own standard deviation for a two-colour
+white-green deck over a two-colour blue-red one.
+
+| control for the deck's card quality | W | U | B | R | G | WG − UR |
+|---|---|---|---|---|---|---|
+| none | +0.78 | −0.41 | −0.11 | −0.93 | +0.46 | +1.29 |
+| the win-rate label | +0.41 | −0.07 | −0.04 | −0.72 | +0.31 | +0.75 |
+| the scorer's swap value | +0.32 | −0.14 | +0.29 | −0.71 | +0.13 | +0.65 |
+| both | +0.33 | −0.15 | +0.30 | −0.71 | +0.13 | +0.66 |
+
+Leave-one-out-centred deck score per unit of colour share. The reward's own
+standard deviation is 1.17, and every standard error is between 0.04 and 0.06.
+
+Better cards in those colours do not explain the premium. Colour is chosen
+rather than assigned, so a seat that finished in red may be a seat that was cut
+off and drafted a weak pool. Two card-quality yardsticks control for that, and
+they were built without reference to each other: the win-rate label the encoder
+trains on, and the scorer's own causal swap value from `t2_card_values.csv`.
+Each one roughly halves the gap. Neither closes it, and adding the second to the
+first buys nothing. Red keeps three-quarters of its penalty under both.
+
+The premium is also not gen-4's skill showing up as gen-4's colours. Gen-4 both
+scores higher than its podmates and drafts white-green, so a regression pooled
+over every seat can charge one to the other. Running it inside each drafting
+agent's own decks separates them. Gen-1 and `forge-full` draft red-heavy decks
+and gen-4 drafts white-green ones, so a premium of the same size in all three is
+not about who drafted the deck.
+
+| agent whose decks are read | W | U | B | R | G | WG − UR | its own W / R share |
+|---|---|---|---|---|---|---|---|
+| gen-4 | +0.74 | +0.50 | +0.55 | −0.09 | +0.55 | +0.44 | 0.27 / 0.12 |
+| gen-1 | +0.01 | −0.46 | +0.11 | −0.65 | −0.20 | +0.46 | 0.17 / 0.26 |
+| `forge-full` | −0.20 | −0.47 | +0.02 | −0.82 | −0.33 | +0.38 | 0.18 / 0.24 |
+
+Both card-quality controls in. The levels differ because gen-4's decks score
+higher; the white-green premium is what to read across the rows.
+
+The policy's opening colour ranking converges onto the reward's, colour for
+colour.
+
+| ranking | order | rank correlation with the reward |
+|---|---|---|
+| the reward | W > G > B > U > R | — |
+| gen-1 | W > R > G > B > U | +0.40 |
+| gen-3 | W > G > B > R > U | +0.90 |
+| gen-4 | W > G > B > U > R | +1.00 |
+| gen-4 sibling | W > G > B > R > U | +0.90 |
+
+Mean centred pack-1-pick-1 logit per colour. Gen-1's five colours span 0.28
+logit units, so its order is noise and its correlation is the number that
+matters. Gen-4 reproduces the reward's order across all five colours.
+
+The lean therefore sits one model upstream of where the previous section left
+it. Gen-4's colour preference is not something the reinforcement learning
+invented, and it is not Forge's. It is the scorer's, and the reward is how it
+reached the policy. What the drafter absorbed is how the scorer prices a
+finished deck rather than how it prices a card, because controlling for the
+scorer's own card values leaves half the premium standing. One limit is worth
+stating: both controls are card-level, so a deck-level property that tracks
+colour and neither yardstick captures would still sit inside these coefficients.
 
 ## The policy is the same on states it would never have reached
 
@@ -759,7 +834,7 @@ the one proposed, and four are what reinforcement learning actually taught.
 | H3 skill or trajectory | resolved as skill: policy distance is unchanged by whose states it is measured on | `d3_exchange.py` |
 | H4 it drafts for the built 23 | verified: the gen-4 − gen-1 residual grows with card quality and is twice as large on-lane | `d6_buildfilter.py` |
 | H5 colour commitment is a clock-dependent rule | refuted as a policy: it hardens, gen-1 hardens as much, and the pool's growing token share explains most of it | `d4_commitment.py` |
-| H6 the colour lean is an unconditional prior | verified, and it is the RL's: gen-1's lean runs the other way | `d2_pickorder.py` |
+| H6 the colour lean is an unconditional prior | verified, and traced to the scorer: the reward pays a white-green deck a full standard deviation over a blue-red one, and gen-4's opening ranking reproduces the reward's colour order exactly | `d2_pickorder.py`, `d10_rewardcolour.py` |
 | H7 it moved away from human pick order | verified: −0.135 Spearman, largest loss on removal | `d2_pickorder.py`, `d3_exchange.py` |
 | H8 it reads the table | **falsified**: erasing what others took moves it less than erasing noise | `d1_channels.py` |
 | H9 equal gradient produced equal change across picks | **falsified**: argmax divergence falls steeply across a pack, and still falls after the shrinking-pack control | `d3_exchange.py` |
@@ -773,10 +848,10 @@ the one proposed, and four are what reinforcement learning actually taught.
 
 What makes gen-4 a good drafter, then, is a shorter list than the hypotheses
 allowed for. It has a sharper card ranking, tuned to its reward rather than to
-human taste. It has a standing colour preference matched to which colours win
-under Forge's piloting. It spends its learned capacity on the cards that can
-reach a deck. And it knows which cards are already its own, which is enough to
-produce two-colour discipline without any rule about when to commit.
+human taste. It has a standing colour preference, taken from the scorer, matched
+to the colours its reward pays for. It spends its learned capacity on the cards
+that can reach a deck. And it knows which cards are already its own, which is
+enough to produce two-colour discipline without any rule about when to commit.
 
 What it does not have is the half of drafting that is about the other seven
 players. It cannot read a signal and it does not hate-draft. The one pod-level

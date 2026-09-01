@@ -43,6 +43,7 @@ scorer/encoder probe outputs (`output/scorer-probes/forge_hints.csv`,
 | `d7_contextprobe.py` | "What the CONTEXT token knows" — ridge probes on the trunk summary token for the seat's eventual colours and its final pod-relative reward | `d7_contextprobe.json` |
 | `d8_duplicates.py` | "A card already in the pool is worth more, not less" — a two-arm pool edit copying one of two colour- and logit-matched pack cards, with a dose ladder, a third-card placebo and an embedding-similarity split | `d8_duplicates.json` |
 | `d9_signatures.py` | "Which habits track strength, and which track training length" — the same metrics over six checkpoints of known yardstick margin and cumulative learner picks | `d9_signatures.json` |
+| `d10_rewardcolour.py` | "The lean is the scorer's, and the reward carries it to the policy" — the reward priced per unit of deck colour share, controlled for the deck's card quality by two independent yardsticks and repeated inside each drafting agent's own decks; corpus arithmetic only, no GPU | `d10_rewardcolour.json` |
 
 ## Replay fidelity
 
