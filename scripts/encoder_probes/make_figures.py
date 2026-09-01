@@ -287,8 +287,8 @@ def fig_pairs():
     ax.axvline(0, color=GRAY, lw=0.8)
     ax.set_yticks(y, labels)
     ax.set_xlabel("pair-specific interaction (label SD)")
-    ax.set_title("Pairs whose rules multiply price above the sum of the parts;\n"
-                 "pairs where one rule idles the other price below")
+    ax.set_title("Pairs whose rules work together read above the sum of the parts;\n"
+                 "pairs where one rule idles the other read below")
     save(fig, "pairs")
 
 
@@ -342,9 +342,9 @@ def fig_cost():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
     for ax, col, sub_title in (
             (ax1, "d_score_play_sd",
-             "winnability: creatures pay, spells are credited"),
+             "winnability: creatures read worse, spells read better"),
             (ax2, "d_played_rate_sd",
-             "played rate: the card's cost pays, the ability's does not")):
+             "played rate: the card's cost matters, the ability's does not")):
         for label, df, color in series:
             ax.plot(df["delta_mana"], df[col], "-o", color=color, ms=4, lw=1.4,
                     label=label)
@@ -368,9 +368,9 @@ def fig_pip_ladder():
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.2, 3.6), sharex=True)
     for ax, col, sub_title in (
             (ax1, "d_score_play_sd",
-             "winnability: creatures' premium stops, spells' keeps climbing"),
+             "winnability: creatures' gain stops, spells' keeps climbing"),
             (ax2, "d_played_rate_sd",
-             "played rate: every pip pays, creatures pay most")):
+             "played rate: falls with every pip, fastest for creatures")):
         for cls, color in classes:
             sub = df[(df["class"] == cls) & (df["color"] == "all")]
             ax.plot(sub["n_pips"], sub[col], "-o", color=color, ms=5, lw=1.6,
@@ -385,9 +385,9 @@ def fig_pip_ladder():
     ax1.legend(frameon=False, fontsize=9)
     fig.supxlabel("color intensity at the card's own mana value "
                   "({M} = one fixed color W–G)", fontsize=10, y=-0.06)
-    fig.suptitle("Deeper color at the same mana value is a cost on creatures "
-                 "and a badge on spells;\nevery class pays a growing played-rate "
-                 "fee per pip", fontsize=13, y=1.08)
+    fig.suptitle("Deeper color at the same mana value reads against creatures "
+                 "and for spells;\nplayed rate falls faster with each deeper pip "
+                 "in every class", fontsize=13, y=1.08)
     save(fig, "pip-ladder")
 
 
