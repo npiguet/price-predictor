@@ -413,10 +413,10 @@ def fig_on_curve():
     for pi, p in enumerate(powers):
         for ti, t in enumerate(toughs):
             cell = df[(df.power == p) & (df.toughness == t)]
-            # only mana values the game has actually printed for this
-            # statline are candidates; elsewhere the response is pure
-            # extrapolation
-            s = cell[cell["n_real"] >= 2].set_index("mv")["score_play_sd"]
+            # only mana values the game has printed on a real vanilla
+            # creature with this statline are candidates; elsewhere the
+            # response is pure extrapolation
+            s = cell[cell["n_real"] >= 1].set_index("mv")["score_play_sd"]
             if len(s) < 2:
                 unprinted[pi, ti] = True
                 continue
@@ -442,8 +442,8 @@ def fig_on_curve():
     ax.set_ylabel("power")
     ax.grid(False)
     ax.set_title("The encoder's mana curve: best-read mana value per vanilla "
-                 "statline,\namong costs the game has printed for it "
-                 "(–: statline never printed at two or more costs)",
+                 "statline,\namong costs printed on real vanilla creatures "
+                 "(–: fewer than two printed costs)",
                  fontsize=11, pad=12)
     fig.colorbar(im, ax=ax, shrink=0.8).set_label("best-read mana value")
     save(fig, "on-curve")
