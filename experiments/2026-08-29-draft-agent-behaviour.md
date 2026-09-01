@@ -15,10 +15,9 @@
   the self-play corpus the encoder and scorer were fitted to, and the reward
   carries that to the policy. The chain inverts at the bottom: the games rank blue
   worst, both models rank red worst.
-- It moved away from human pick order and toward its reward's, giving up ground
-  on removal and card draw and gaining it on creatures. By the one rating outside
-  this stack, gen-1's pick beats gen-4's on identical states, and about a quarter
-  of the move is drift rather than skill.
+- Its pick order moved onto its reward's, giving up ground on removal and card
+  draw and gaining it on creatures. Part of that move is drift: it continues in a
+  checkpoint that trained two and a half times as long and finished no stronger.
 - It prefers redundancy. A copy already in the pool raises that same card's value
   in the pack, most in gen-1. The reward is blind to duplicates, so nothing could
   have taught this in either direction.
@@ -71,7 +70,11 @@ Raredrafting cannot be a policy term. There is no rarity, no set code, no seat
 index and no pass direction anywhere in the state; the 32 deterministic features
 are a land flag, pips, colour flags, mana value, power, toughness, loyalty and
 mana production. Rarity reaches the model only through what a card's text
-implies.
+implies, which settles how gen-4 ends up with a third fewer rares in its decks
+than either reference
+([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
+*More creatures, fewer rares, narrower mana bases*): it is not declining rares,
+it is taking commons that read as strong.
 
 Denial is priced at `1/(pod_size − 1)`, or 0.143 per unit of harm to a rival, and
 the estimator cannot see it. One terminal pod-relative scalar is shared by all 45
@@ -113,8 +116,10 @@ cards outright.
 
 The pool is not read as an average. Replacing every pool card with the pool's own
 mean preserves that average, destroys the composition, and still moves one pick
-in seven. The scorer and the encoder both pool uniformly; the draft policy does
-not.
+in seven. That sets the policy apart from the two models under it, since the
+scorer is a mean pool over a short summary of each card
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The
+scorer is a mean pool over a 2–4 number summary of each card*).
 
 The counter in the `CONTEXT` token does almost nothing: rewriting its pack or
 pick number changes about one pick in two hundred. What temporal structure the
@@ -137,19 +142,18 @@ deviation from the fixed order than an empty one does. Within a pack it tracks
 how much choice is left, from about two thirds of first picks down to a third of
 picks 6 to 10 and back to effectively all of pick 15.
 
-The fixed order is no longer a human one. Forge ships a hand-written pick-order
-file which is exogenous to all three models and is itself a pick order rather
-than a card rating, so it is the right yardstick, and agreement with it falls at
-every generation.
+What the fixed order moved onto is the reward. Agreement with the scorer's card
+values nearly doubles across the lineage, and agreement with both of the
+encoder's text axes rises with it.
 
-![Spearman of each generation's first-pick ranking against Forge's human pick order, the scorer's card values, and the encoder's two text axes](images/2026-08-29-draft-pick-order.png)
+![Spearman of each generation's first-pick ranking against the scorer's card values and the encoder's two text axes](images/2026-08-29-draft-pick-order.png)
 
-Losing the human order and gaining the reward's are one trade. Of the variance in
-gen-1's pick order, 0.47 is uniquely explained by the human rank against 0.04 by
-the encoder's axes; by gen-4 the uniquely-human share has fallen to 0.15 and the
-uniquely-encoder share has tripled. The agent did not lose card judgement. It
-swapped whose judgement it was using, and paired on the same 3,770 cards the loss
-against the human order is −0.135 with a bootstrap interval of −0.152 to −0.118.
+The encoder's two axes are its first two text principal components, which
+separate how often a card gets played from how well it wins
+([`2026-08-28-encoder-preferences.md`](2026-08-28-encoder-preferences.md), *The
+embedding is a card description first and a judgment second*). Gen-1 already
+reads both of them, since it consumes the same card vectors; what the
+reinforcement learning added is weight on them.
 
 Where it gave ground is the category the scorer study predicted. Each column is
 that model's standardised first-pick value minus gen-1's, over a category:
@@ -167,7 +171,11 @@ to gen-1 — where BREAD puts removal second only to bombs. The scorer prices an
 average creature above an average removal spell
 ([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The
 category order is creatures, then removal*), and the policy has reproduced that
-ordering in its pick order.
+ordering at the pick. Gen-4's decks carry about three more creatures than either
+reference's
+([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
+*More creatures, fewer rares, narrower mana bases*); this is where those
+creatures are taken.
 
 ## The colour preference comes from Forge's games, not from the drafter
 
@@ -202,15 +210,18 @@ it. Neither does gen-4's skill wearing gen-4's colours: run inside each agent's
 own decks the premium is the same size in all three, +0.44 for gen-4 and +0.46
 for gen-1, though gen-1 drafts red-heavy decks and gen-4 white-green ones.
 
-The scorer did not invent it either. It was fitted to match outcomes and the
-encoder to per-card win rates from the same self-play games, and both corpora
-lean before any model touches them. Cards win 0.509 of their games in white and
-0.473 in blue in the encoder's win-rate table, over about 5,500 cards a colour
-past a 50-game floor. At the deck level, over 119,754 games in which each row's
-two sealed decks come from one set, a unit of white colour-share advantage is
-worth +0.053 of win probability and a unit of blue −0.049 — surviving
-build-method fixed effects, the same-builder subset, and Forge's human
-`draft_rank`, the only card rating in the project not fitted to this corpus.
+The scorer did not invent it either. Its taste is the Forge-AI meta, which the
+scorer study established in general
+([`2026-08-27-scorer-preferences.md`](2026-08-27-scorer-preferences.md), *The
+meta is Forge-AI self-play*); the colour ordering is that result made specific,
+and it is visible in the corpus before any model touches it. Cards win 0.509 of
+their games in white and 0.473 in blue in the encoder's win-rate table, over
+about 5,500 cards a colour past a 50-game floor. At the deck level, over 119,754
+games in which each row's two sealed decks come from one set, a unit of white
+colour-share advantage is worth +0.053 of win probability and a unit of blue
+−0.049. That survives build-method fixed effects, the same-builder subset, and a
+control for the deck's mean card quality under Forge's shipped `draft_rank`,
+which is used here because it is the one card rating not fitted to this corpus.
 
 ![Where each colour ranks in Forge's games, in the reward, and in each policy's first pick](images/2026-08-29-draft-colour-chain.png)
 
@@ -286,7 +297,7 @@ pool are compositional, so more of one colour is mechanically less of another. I
 confirms the sign and nothing more. The comparisons that carry weight are across
 pick numbers and generations, which hold the estimator fixed.
 
-## It picks differently, not better, by the one rating outside the stack
+## What it learned is a policy, not a memorised trajectory
 
 Whatever gen-4 learned, it applies on states it would never have reached. Two
 confounds ruin any comparison of drafters read off their own corpora: an agent
@@ -296,35 +307,15 @@ another policy actually faced removes both, and neither turns out to matter —
 argmax agreement between gen-1 and gen-4 is 0.693 on gen-4's states, 0.695 on
 gen-1's and 0.695 on `forge-full`'s, over 71,520 states in `d3_exchange.py`.
 
-On those states the two available card ratings disagree, monotonically and in
-opposite directions.
-
-| states | rated by | gen-1 | gen-3 | gen-4 |
-|---|---|---|---|---|
-| `forge-full` | `shrunk_score_play` | +0.0009 | +0.0049 | +0.0106 |
-| gen-4 | `shrunk_score_play` | −0.0091 | −0.0055 | 0 |
-| `forge-full` | human draft rank | −0.0074 | −0.0194 | −0.0280 |
-| gen-4 | human draft rank | +0.0286 | +0.0132 | 0 |
-
-Mean grade of the policy's card minus the grade of the card actually taken,
-paired per state, errors clustered on the draft; every entry is at least four
-standard errors from zero, and the zeros are structural.
-
-`shrunk_score_play` is not independent. It is the encoder's training label, the
+Grading those foreign picks settles nothing. The only card rating that could
+arbitrate is `shrunk_score_play`, and it cannot: it is the encoder's training
+label, the
 scorer's card values track it at Spearman 0.68, and gen-4's reward is built on
 both, so "gen-4 takes cards with higher `shrunk_score_play`" restates that the
-training worked. By the exogenous human pick order, gen-1's pick beats gen-4's on
-every state set including gen-4's own. Part of that is gen-1 imitating the ranker
-that rating came from — it agrees with Forge's own choice on 0.856 of
-`forge-full`'s states against gen-4's 0.659 — but not all, since gen-3 sits
-between them on both ratings while agreeing with Forge less than gen-1.
-
-Which rating is right is settled elsewhere and in gen-4's favour: its decks win
-about three matches in four when played out under Forge's AI
+training worked. That gen-4's direction is the winning one is established by
+played games instead
 ([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
-*`deck_score` does predict winning*). What the human rating adds is that the
-strength is specific to this opponent. A drafter 0.135 of Spearman from human
-pick order has not learned Magic; it has learned the game Forge's AI plays.
+*`deck_score` does predict winning*).
 
 ## The learning went where the reward could see it
 
@@ -338,20 +329,19 @@ the gen-4 minus gen-1 difference against the gen-4 sibling floor.
 
 | card's rank in its pack | \|gen-4 − gen-1\| | \|gen-4 − sibling\| | ratio | gen-4 − gen-1 |
 |---|---|---|---|---|
-| bottom fifth | 2.657 | 1.484 | 1.79 | +1.014 |
-| second fifth | 2.603 | 1.593 | 1.63 | +0.056 |
-| middle fifth | 3.027 | 1.808 | 1.67 | −0.233 |
-| fourth fifth | 3.583 | 1.950 | 1.84 | −0.405 |
-| top fifth | 4.365 | 2.029 | 2.15 | −0.618 |
+| bottom fifth | 2.815 | 1.539 | 1.83 | −0.636 |
+| second fifth | 2.943 | 1.597 | 1.84 | −0.882 |
+| middle fifth | 3.130 | 1.709 | 1.83 | −0.756 |
+| fourth fifth | 3.349 | 1.891 | 1.77 | +0.025 |
+| top fifth | 4.044 | 2.091 | 1.93 | +1.769 |
 
-Rank is by Forge's human pick order among the cards in that pack.
+Rank is by the win-rate label among the cards in that pack.
 
-The change grows with a card's quality and is largest on the top fifth of a pack,
-against a sibling floor less than half as large everywhere. The signed column is
-the pick-order divergence one level down: gen-4 raises the cards humans rank
-lowest in a pack and lowers the ones they rank highest, monotonically. Grading
-the same states by `shrunk_score_play` gives the mirror image, from −0.636 on the
-bottom fifth to +1.769 on the top.
+The signed column is the pick-order shift one level down: gen-4 raises the cards
+the win-rate label rates highest in a pack and lowers the rest. The absolute
+change also grows with a card's quality, but so does the sibling floor, and the
+ratio between them is flat down the pack. What separates learning from noise here
+is the colour split, not the quality split.
 
 The behavioural change is not spread evenly along a pack, though the weight
 change is. Gen-4 diverges from gen-1 most at the start of a pack and hardly at
@@ -396,8 +386,11 @@ reinforcement learning let decay.
 The corpus records who sat where and which way the packs moved; the state the
 model consumes records neither, which makes the seating a clean test bed.
 `d5_corpus.py` measures it over 16,000 seats in 2,000 drafts, clustered on the
-draft. A gen-4 seat scores 0.68 above its pod mean, and each additional gen-4
-seat costs every seat 0.176.
+draft, and reproduces the known crowding effect — every seat in a pod loses as
+gen-4 seats are added to it
+([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
+*Crowding a pod with strong drafters costs every seat in it*). Net of crowding,
+where a seat sits relative to gen-4 is what matters.
 
 | what changes | effect on the seat's pod-relative score |
 |---|---|
@@ -443,8 +436,11 @@ How far the policy moved in a round is close to independent of how much the roun
 had to teach, correlating with the round's reward standard deviation at only
 +0.211 ± 0.021. The policy therefore walks away from its warm start at a
 near-constant rate, tracking round number at +0.985 in the promoted run, which
-kept going for 956 rounds after its best margin and finished with that margin
-down by almost half. A fixed-step walk crosses a ridge and keeps going.
+kept going for 956 rounds after its best margin. A fixed-step walk crosses a
+ridge and keeps going, which is the mechanism behind a pattern gen-4's own record
+already documented
+([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
+*All four runs peak and decline*).
 
 That raises a question about every habit measured above. A behaviour that grows
 across the generations might be what made the agent stronger, or might be what
@@ -457,7 +453,7 @@ computes the same measurements on six checkpoints.
 | habit | `t2all_nodecay` | `t2all_decay0.3` | share of the gen-1-to-gen-4 range |
 |---|---|---|---|
 | ranking spread | 4.42 | 5.06 | a quarter gained |
-| agreement with human pick order | 0.690 | 0.658 | a quarter of the loss given up |
+| agreement with the scorer's card values | 0.736 | 0.697 | a tenth given back |
 | colour preference | +2.18 | +2.31 | a twentieth |
 
 The pair that separates training length from strength; 205,000 learner picks
@@ -465,11 +461,12 @@ against 515,000, for a yardstick margin of 1.328 against 1.380. Across all six
 checkpoints margin and training length correlate at 0.952, so no other contrast
 identifies anything.
 
-Two habits keep moving after the strength stops. The sharpening of the pick order
-and the drift away from human taste are therefore partly what the extra training
-did rather than what made the agent better. The colour preference is finished
-before that point, saturating near 200,000 learner picks — the same ceiling
-gen-4's own record found from the other direction
+Two habits keep moving after the strength stops, and one moves backwards. The
+pick order goes on sharpening. Agreement with the scorer's card values, which the
+whole lineage had been climbing, peaks at `t2all_nodecay` and gives ground. Both
+are what the extra training did rather than what made the agent better. The colour preference is finished before that point, saturating
+near 200,000 learner picks — the same ceiling gen-4's own record found from the
+other direction
 ([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
 *Hypothesis 3*). What the policy reads follows neither axis: blanking `POOL`
 changes 43 % to 47 % of picks in every checkpoint and blanking `TAKEN` 10 % to
@@ -482,13 +479,13 @@ changes 43 % to 47 % of picks in every checkpoint and blanking `TAKEN` 10 % to
 | H1 it reads its own pool and little else | verified, stronger than proposed: `TAKEN` sits below its own placebo in every pack | `d1` |
 | H2 it is largely a fixed pick order | verified: 49 % of picks against a chance floor of 22 % | `d2` |
 | H3 skill or trajectory | skill: policy distance is unchanged by whose states it is measured on | `d3` |
-| H4 it drafts for the built 23 | verified: the residual grows with card quality and doubles on-colour | `d6` |
+| H4 it drafts for the built 23 | verified on the colour split, which doubles the residual; the quality split does not clear its own noise floor | `d6` |
 | H5 commitment is a rule that tightens late | refuted as a policy: gen-1 hardens as much, and the pool's token share explains most of it | `d4` |
 | H6 the colour preference is an unconditional prior | verified, and traced past both models to the corpus | `d2`, `d10`, `d11` |
-| H7 it moved away from human pick order | verified: −0.135 Spearman, largest loss on removal | `d2`, `d3` |
+| H7 its pick order moved onto the reward's | verified: agreement with the scorer's card values nearly doubles, and removal is where it pays for it | `d2` |
 | H8 it reads the table | **falsified**: erasing what others took moves it less than erasing noise | `d1` |
 | H9 equal gradient produced equal change across picks | **falsified**: divergence falls across a pack even after the shrinking-pack control | `d3` |
-| H10 skill signatures versus drift signatures | verified, and it revises H7: the sharpening and a quarter of the move off human order continue after the strength stops | `d9` |
+| H10 skill signatures versus drift signatures | verified, and it revises H7: the sharpening continues after the strength stops, and agreement with the reward's card values starts going backwards | `d9` |
 | H11 denial calibrates the sensitivity floor | verified by arithmetic: incentive 0.143, resolution 0.014, hate-draft 0.004 | code |
 | H12 the wheel and adverse selection | near-absent: zeroing the recency tags changes 2.6 % of picks | `d1` |
 | H13 duplicate indifference | **falsified**, in the opposite direction: a copy in the pool raises the card's logit | `d8` |
@@ -497,11 +494,11 @@ changes 43 % to 47 % of picks in every checkpoint and blanking `TAKEN` 10 % to
 | H16 build-arounds | verified, modestly: 3.2 points of take rate below gen-1, at a quarter of the cost | `d5` |
 
 What makes gen-4 a good drafter is a shorter list than the hypotheses allowed
-for. It has a sharper pick order, tuned to its reward rather than to human taste.
-It has a colour preference that traces back to which colours win in Forge's own
-games. It spends its learned capacity on the cards that can reach a deck. And it
-knows which cards are already its own, which is enough to produce two-colour
-discipline without any rule about when to commit.
+for. It has a sharper pick order, tuned to its reward. It has a colour preference
+that traces back to which colours win in Forge's own games. It spends its learned
+capacity on the cards that can reach a deck. And it knows which cards are already
+its own, which is enough to produce two-colour discipline without any rule about
+when to commit.
 
 What it does not have is the half of drafting that is about the other seven
 players. It cannot read signals and it does not hate-draft. The one pod-level
@@ -515,10 +512,17 @@ learning only let them decay.
 
 ## Limitations
 
-Every number is a property of these checkpoints under Forge-AI play, and the
-human pick order is the only rating in the study exogenous to the stack. Where
-the two ratings disagree, this document reports the disagreement; the case that
-gen-4's direction is the winning one rests on played games measured elsewhere.
+No measurement here can say gen-4 picks *better*, only that it picks differently
+and in which direction. The encoder's win-rate label, the scorer's card values
+and the reward all descend from one self-play corpus, so agreement with any of
+them restates that the training worked. Forge's shipped pick-order file is the
+one rating outside that circle, and it is not used as an arbiter in this document
+because Forge's own drafter picks by it and loses about three matches in four to
+gen-4; it appears only as a control variable where a covariate uncorrelated with
+the win-rate corpus is needed. That gen-4's direction wins is established by
+played games elsewhere
+([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
+*`deck_score` does predict winning*), against the opponent it trained on.
 
 The interventions are causal on the model, not on the draft. Blanking a block or
 transplanting a pool measures how much the policy's output depends on an input,
