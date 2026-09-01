@@ -409,43 +409,28 @@ def fig_on_curve():
     powers = sorted(df["power"].unique())
     toughs = sorted(df["toughness"].unique())
     best = np.full((len(powers), len(toughs)), np.nan)
-    unprinted = np.zeros((len(powers), len(toughs)), bool)
     for pi, p in enumerate(powers):
         for ti, t in enumerate(toughs):
-            cell = df[(df.power == p) & (df.toughness == t)]
-            # only mana values the game has printed on a real vanilla
-            # creature with this statline are candidates; elsewhere the
-            # response is pure extrapolation
-            s = cell[cell["n_real"] >= 1].set_index("mv")["score_play_sd"]
-            if len(s) < 2:
-                unprinted[pi, ti] = True
-                continue
+            s = df[(df.power == p) & (df.toughness == t)].set_index("mv")[
+                "score_play_sd"]
             best[pi, ti] = s.idxmax()
-    shown = np.ma.masked_where(unprinted, best)
-    fig, ax = plt.subplots(figsize=(7.8, 6.6))
-    im = ax.imshow(shown, cmap=_hue_scale(), vmin=np.nanmin(shown),
-                   vmax=np.nanmax(shown), aspect="equal")
-    ax.imshow(np.ma.masked_where(~unprinted, np.zeros_like(best)),
-              cmap="gray", vmin=-1, vmax=1, alpha=0.25, aspect="equal")
+    fig, ax = plt.subplots(figsize=(4.4, 4.0))
+    im = ax.imshow(best, cmap=_hue_scale(), vmin=np.nanmin(best),
+                   vmax=np.nanmax(best), aspect="equal")
     for pi in range(len(powers)):
         for ti in range(len(toughs)):
-            if unprinted[pi, ti]:
-                ax.text(ti, pi, "–", ha="center", va="center",
-                        color="#999999", fontsize=10)
-            else:
-                ax.text(ti, pi, str(int(best[pi, ti])), ha="center",
-                        va="center", color="#222222", fontsize=12,
-                        fontweight="bold")
-    ax.set_xticks(range(len(toughs)), [str(t) for t in toughs])
-    ax.set_yticks(range(len(powers)), [str(p) for p in powers])
-    ax.set_xlabel("toughness")
-    ax.set_ylabel("power")
+            ax.text(ti, pi, str(int(best[pi, ti])), ha="center", va="center",
+                    color="#222222", fontsize=8)
+    ax.set_xticks(range(len(toughs)), [str(t) for t in toughs], fontsize=8)
+    ax.set_yticks(range(len(powers)), [str(p) for p in powers], fontsize=8)
+    ax.set_xlabel("toughness", fontsize=9)
+    ax.set_ylabel("power", fontsize=9)
     ax.grid(False)
-    ax.set_title("The encoder's mana curve: best-read mana value per vanilla "
-                 "statline,\namong costs printed on real vanilla creatures "
-                 "(–: fewer than two printed costs)",
-                 fontsize=11, pad=12)
-    fig.colorbar(im, ax=ax, shrink=0.8).set_label("best-read mana value")
+    ax.set_title("The encoder's mana curve:\nbest-read mana value per vanilla "
+                 "statline", fontsize=10, pad=8)
+    cb = fig.colorbar(im, ax=ax, shrink=0.75)
+    cb.set_label("best-read mana value", fontsize=9)
+    cb.ax.tick_params(labelsize=8)
     save(fig, "on-curve")
 
 

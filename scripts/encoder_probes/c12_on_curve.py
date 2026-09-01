@@ -6,19 +6,16 @@ kept, so mana value runs 1–10), and the winnability head is read at each
 step. The mana value that maximizes predicted winnability for a statline is
 the encoder's idea of that statline being on curve.
 
-Each (statline, mana value) cell also records how many real vanilla
-creatures in the corpus occupy it (``n_real``), so downstream consumers can
-restrict the argmax to combinations the game has actually printed as a
-vanilla card — the encoder's response elsewhere is pure extrapolation, and
-a cost printed only on text-carrying creatures is no precedent for a
-vanilla body.
+The best-value table is the unrestricted argmax over the full sweep; each
+(statline, mana value) cell also records how many real vanilla creatures
+occupy it (``n_real``), for readers who want to know which cells the game
+has actually printed.
 
 Vanilla here is strict: exactly the three core lines (mana cost, types,
 power toughness). The looser ``no ability lines`` test used elsewhere in
 the battery lets through cards whose converted text carries uncounted
 ``text:`` / ``alternate cost:`` / ``additional cost:`` lines (Myr Superion,
-Scornful Egotist, Bayou Groff), which are exactly the off-curve oddities
-this probe must not treat as vanilla precedent.
+Scornful Egotist, Bayou Groff).
 """
 
 from __future__ import annotations
@@ -38,7 +35,6 @@ from c2_statlines import PT_RE, set_pt  # noqa: E402
 
 SEED = 17
 N_BASES = 100
-MIN_REAL = 1
 CORE = ("mana cost:", "types:", "power toughness:")
 POWERS = list(range(0, 9))
 TOUGHS = list(range(1, 9))
@@ -115,12 +111,9 @@ def main() -> None:
     df = pd.DataFrame(rows)
     df.to_csv(cc.SCRATCH / "c12_on_curve.csv", index=False)
 
-    printed = df[df["n_real"] >= MIN_REAL]
-    best = (printed.loc[printed.groupby(["power", "toughness"])
-                        ["score_play_sd"].idxmax()]
+    best = (df.loc[df.groupby(["power", "toughness"])["score_play_sd"].idxmax()]
             .pivot(index="power", columns="toughness", values="mv"))
-    print(f"best MV by statline, argmax over cells with >= {MIN_REAL} real "
-          "vanilla creatures (rows P, cols T):", flush=True)
+    print("best MV by statline (rows P, cols T):", flush=True)
     print(best.to_string(), flush=True)
     best.to_csv(cc.SCRATCH / "c12_best_mv.csv")
 
