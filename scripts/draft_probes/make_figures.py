@@ -76,8 +76,11 @@ def fig_channels() -> None:
     ax.set_yticks(y)
     ax.set_yticklabels(labels, fontsize=8.5)
     ax.set_xlabel("share of picks that change")
-    ax.set_xlim(0, 0.70)
-    ax.legend(frameon=False, fontsize=9, loc="upper right")
+    ax.set_xlim(0, 0.56)
+    # Below the axes: the bars fill the plot area at every height, so any
+    # in-axes corner collides with one of them.
+    ax.legend(frameon=False, fontsize=9, loc="upper center", ncol=2,
+              bbox_to_anchor=(0.5, -0.14))
     ax.set_title("Erasing what the others took moves fewer picks than erasing "
                  "noise\nof the same size; only the seat's own pool clears its "
                  "placebo")
