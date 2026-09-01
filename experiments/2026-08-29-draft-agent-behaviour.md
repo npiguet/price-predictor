@@ -7,25 +7,23 @@
   carries that to the policy. The chain inverts at the bottom: the games rank blue
   worst, both models rank red worst.
 - **It cannot read signals.** Erasing what the other drafters took moves its
-  picks *less* than erasing the same number of random cards. Gen-1 is the same,
-  so this was never learned and never lost.
+  picks *less* than erasing the same number of random cards, and gen-1 is the
+  same, so this was never learned and never lost.
 - What it does read is which cards are its own. Relabelling its pool as cards
   others took — no card changed, no count changed — moves two picks in five, and
   that alone produces its two-colour discipline.
-- Gen-4 drafts from a sharper pick order, not from a better read of the table.
-  About half its picks are settled by a fixed card ranking that ignores the
-  board. That order moved onto its reward's, giving up ground on removal and card
-  draw and gaining it on creatures.
-- It prefers redundancy. A copy already in the pool raises that same card's value
-  in the pack, most in gen-1. The reward is blind to duplicates, so nothing could
-  have taught this in either direction.
+- It drafts from a sharper pick order rather than a better read of the table.
+  About half its picks are settled by a fixed ranking that ignores the board, and
+  that ranking moved onto its reward's: down on removal and card draw, up on
+  creatures.
+- It prefers redundancy, valuing a card it already owns above an equally good one
+  it does not. The reward is blind to duplicates, so this is inherited from Forge
+  rather than learned.
 - It starves the drafter it feeds, at about the cost of one more strong drafter
   in the pod. The agent cannot see seat order, so this follows from its taste
   rather than from a strategy.
-- Underneath: its learning went where the reward could see it, the change from
-  gen-1 being twice as large on cards in the seat's colours. Part of what looks
-  like learning is drift — the pick order goes on sharpening in a checkpoint that
-  trained two and a half times as long and finished no stronger.
+- Underneath, its learning went where the reward could see it, and part of what
+  looks like learning is drift that continues after the strength stops.
 
 ## Method
 
@@ -56,6 +54,15 @@ count**, because the policy head is invariant to a constant added across a state
 **Edits preserve token count**, because a deleted block changes how many tokens
 the trunk averages over; blocks are blanked by substituting a corpus-mean card
 vector and read against a random substitution of the same size.
+
+Every comparison between agents below is measured on shared states, which is what
+makes them comparisons of judgement rather than of luck. An agent with unusual
+colour preferences is passed different packs, and the states it reaches are
+produced by its own earlier picks; running each policy on the states another
+policy actually faced removes both confounds, and neither turns out to matter.
+Argmax agreement between gen-1 and gen-4 is 0.693 on gen-4's states, 0.695 on
+gen-1's and 0.695 on `forge-full`'s, over 71,520 states in `d3_exchange.py`.
+Whatever gen-4 learned, it applies on states it would never have reached.
 
 ## What it does at the table
 
@@ -244,6 +251,11 @@ costs more than an early one.
 The two-colour discipline in gen-4's finished decks is therefore inherited. What
 reinforcement learning changed is which colours it commits to, not how hard.
 
+The pull keeps growing, but which colours it pulls toward is settled inside the
+first booster. A ridge probe on the model's summary token names the two colours
+the seat will finish in by pick 10, at an AUC above 0.91, and barely improves over
+the remaining 35 picks.
+
 One caveat on the design: the natural placebo, the pull from colours the card
 does not have, comes out strongly negative everywhere, but colour shares within a
 pool are compositional, so more of one colour is mechanically less of another. It
@@ -332,9 +344,9 @@ other two. Gen-4 takes the build-arounds it can use.
 
 ## What is going on underneath
 
-The machinery behind the six: what the policy can see, whether what it learned
-generalises, where in a pack the training moved it, what its trunk represents,
-and how much of the whole lineage is drift.
+The machinery behind the six: what the policy can see, where in a pack the
+training moved it, what its trunk represents, and how much of the whole lineage
+is drift.
 
 ### Some of the strategies were never available to the policy
 
@@ -359,26 +371,6 @@ of a seat's picks and gen-3 and gen-4 together saw about 12,500 of them, which
 resolves nothing below roughly 0.014 per seat against a typical hate-draft's
 0.004. Measuring gen-4's denial as indistinguishable from zero is what the
 training setup predicts, not a shortcoming of the agent.
-
-### What it learned is a policy, not a memorised trajectory
-
-Whatever gen-4 learned, it applies on states it would never have reached. Two
-confounds ruin any comparison of drafters read off their own corpora: an agent
-with unusual colour preferences is passed different packs, and the states it
-reaches are produced by its own earlier picks. Running each policy on the states
-another policy actually faced removes both, and neither turns out to matter —
-argmax agreement between gen-1 and gen-4 is 0.693 on gen-4's states, 0.695 on
-gen-1's and 0.695 on `forge-full`'s, over 71,520 states in `d3_exchange.py`.
-
-Grading those foreign picks settles nothing. The only card rating that could
-arbitrate is `shrunk_score_play`, and it cannot: it is the encoder's training
-label, the
-scorer's card values track it at Spearman 0.68, and gen-4's reward is built on
-both, so "gen-4 takes cards with higher `shrunk_score_play`" restates that the
-training worked. That gen-4's direction is the winning one is established by
-played games instead
-([`2026-08-09-draft-agent-gen4-online-grpo.md`](2026-08-09-draft-agent-gen4-online-grpo.md),
-*`deck_score` does predict winning*).
 
 ### The learning went where the reward could see it
 
@@ -418,31 +410,27 @@ A shrinking pack raises agreement on its own, so the honest measure divides by
 what chance would give, and the fall survives it, correlating with pick index at
 −0.97. What governs the size of the change is how many cards are still in the
 pack, not how far into the draft the seat is; pack number barely matters. The
-weights themselves moved by about the same amount everywhere, between 1.6 and 2.4
-times the sibling floor over the first twelve picks of every pack. The same
-movement simply changes fewer picks once a pack is down to two or three cards.
+weights moved by about the same amount everywhere, between 1.6 and 2.4 times the
+sibling floor over the first twelve picks of every pack, and the same movement
+changes fewer picks once a pack is down to two or three cards.
 
-### The trunk knows the seat's colours by pick 10
+### Gen-1's trunk reads the final score better than gen-4's
 
 The model computes a summary of the draft that the deployed policy never reads.
 The trunk puts a `CONTEXT` token in front of the cards, the policy head reads only
 the `PACK` positions, and gen-3 and gen-4 carry their critic head untrained. A
 ridge probe on that token, fitted on a draft-disjoint split of 13,341 validation
-states, says what the trunk has worked out.
+states, recovers both the seat's eventual colours and its final pod-relative
+score.
 
 ![What a ridge probe recovers from the CONTEXT token across the draft](images/2026-08-29-draft-context.png)
 
-Commitment is settled early and represented well. By pick 10 the token identifies
-the two colours the seat will finish in at an AUC above 0.91 and barely moves over
-the remaining 35 picks, so whatever decides a seat's colours has happened inside
-the first booster.
-
 Reinforcement learning improved neither probe, and gen-1 reads the final score
-better than gen-4 over the whole second half of the draft. The cause is in the
-training: gen-1's critic head was trained by regression on exactly this
-pod-relative reward, while gen-3 and gen-4 carry that head frozen. The value
-representation in gen-4's trunk is an inheritance from the imitation phase that
-reinforcement learning let decay.
+better over the whole second half of the draft. The cause is in the training:
+gen-1's critic head was trained by regression on exactly this pod-relative
+reward, while gen-3 and gen-4 carry that head frozen. The value representation in
+gen-4's trunk is an inheritance from the imitation phase that reinforcement
+learning let decay.
 
 ### The training step was set by the clip, not by the signal
 
@@ -508,26 +496,21 @@ changes 43 % to 47 % of picks in every checkpoint and blanking `TAKEN` 10 % to
 | H11 denial calibrates the sensitivity floor | verified by arithmetic: incentive 0.143, resolution 0.014, hate-draft 0.004 | code |
 | H12 the wheel and adverse selection | near-absent: zeroing the recency tags changes 2.6 % of picks | `d1` |
 | H13 duplicate indifference | **falsified**, in the opposite direction: a copy in the pool raises the card's logit | `d8` |
-| H14 what the `CONTEXT` token carries | verified with a reversal: the seat's colours by pick 10, and gen-1 carries the score better | `d7` |
+| H14 what the `CONTEXT` token carries | verified with a reversal: the seat's colours by pick 10, and gen-1 reads the final score better | `d7` |
 | H15 the geometry it cannot see | verified: the upstream neighbour matters, the downstream one does not | `d5` |
 | H16 build-arounds | verified, modestly: 3.2 points of take rate below gen-1, at a quarter of the cost | `d5` |
 
-What makes gen-4 a good drafter is a shorter list than the hypotheses allowed
-for. It has a sharper pick order, tuned to its reward. It has a colour preference
-that traces back to which colours win in Forge's own games. It spends its learned
-capacity on the cards that can reach a deck. And it knows which cards are already
-its own, which is enough to produce two-colour discipline without any rule about
-when to commit.
+What gen-4 has is a sharper pick order tuned to its reward, a colour preference
+inherited from which colours win in Forge's games, and the knowledge of which
+cards are already its own — enough for two-colour discipline without any rule
+about when to commit. What it lacks is the half of drafting that is about the
+other seven players: it cannot read signals and it does not hate-draft, and the
+one pod-level effect it produces is a side effect of its taste.
 
-What it does not have is the half of drafting that is about the other seven
-players. It cannot read signals and it does not hate-draft. The one pod-level
-effect it produces, starving the seat it feeds, is a side effect of its taste.
-
-Two habits are Forge's and survive because nothing in the reward contradicts
-them: it prefers a card it already owns to an equally good one it does not, and
-it commits harder to its colours as the draft runs on. A reward computed on a
-finished deck is silent about both, so imitation set them and reinforcement
-learning only let them decay.
+Two of its habits are Forge's, kept because nothing in the reward contradicts
+them. A reward computed on a finished deck is silent about duplicates and about
+when a seat commits, so imitation set both and reinforcement learning only let
+them decay.
 
 ## Limitations
 
