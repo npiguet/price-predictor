@@ -391,6 +391,46 @@ def fig_pip_ladder():
     save(fig, "pip-ladder")
 
 
+def fig_on_curve():
+    df = pd.read_csv(OUT / "c12_on_curve.csv")
+    powers = sorted(df["power"].unique())
+    toughs = sorted(df["toughness"].unique())
+    best = np.full((len(powers), len(toughs)), np.nan)
+    flat = np.zeros((len(powers), len(toughs)), bool)
+    for pi, p in enumerate(powers):
+        for ti, t in enumerate(toughs):
+            s = df[(df.power == p) & (df.toughness == t)].set_index("mv")[
+                "score_play_sd"]
+            best[pi, ti] = s.idxmax()
+            # a peak that barely clears the curve's median is noise, not a
+            # preference — gray those cells out
+            flat[pi, ti] = (s.max() - s.median()) < 0.10
+    fig, ax = plt.subplots(figsize=(6.4, 4.6))
+    im = ax.imshow(np.ma.masked_where(flat, best), cmap="coolwarm",
+                   vmin=2, vmax=5, aspect="equal")
+    ax.imshow(np.ma.masked_where(~flat, np.zeros_like(best)),
+              cmap="gray", vmin=-1, vmax=1, alpha=0.25, aspect="equal")
+    for pi in range(len(powers)):
+        for ti in range(len(toughs)):
+            v = int(best[pi, ti])
+            if flat[pi, ti]:
+                ax.text(ti, pi, f"({v})", ha="center", va="center",
+                        color="#999999", fontsize=10)
+            else:
+                ax.text(ti, pi, str(v), ha="center", va="center",
+                        color="#222222", fontsize=12, fontweight="bold")
+    ax.set_xticks(range(len(toughs)), [str(t) for t in toughs])
+    ax.set_yticks(range(len(powers)), [str(p) for p in powers])
+    ax.set_xlabel("toughness")
+    ax.set_ylabel("power")
+    ax.grid(False)
+    ax.set_title("The encoder's mana curve: best-read mana value per vanilla "
+                 "statline\n(gray: flat response, the best value is not "
+                 "meaningful)", fontsize=11, pad=12)
+    fig.colorbar(im, ax=ax, shrink=0.8).set_label("best-read mana value")
+    save(fig, "on-curve")
+
+
 if __name__ == "__main__":
     fig_channels()
     fig_memorization()
@@ -402,3 +442,4 @@ if __name__ == "__main__":
     fig_integers()
     fig_cost()
     fig_pip_ladder()
+    fig_on_curve()

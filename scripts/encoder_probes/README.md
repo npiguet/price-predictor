@@ -36,7 +36,7 @@ read-only), `output/cardsfolder-512/`,
 | `c9_kw_pairs.py` | the 120-pair keyword interaction matrix (layout-matched 2×2s with a fear control, both slot orders, double-centered); overturns c1b's deathtouch+trample bonus | `c9_kw_pairs.csv` |
 | `c10_cost_sweep.py` | the mana-cost section: generic-cost sweeps on both heads (card costs and activated-ability costs), the {T} contrasts, and the same-text-different-cost label families | `c10_*.csv` |
 | `c11_pip_ladder.py` | the pip-intensity ladder: real single-pip {k}{M} cards (k 2–6, {M} = one fixed color) re-encoded at the four color intensities of their own MV, both heads, per card class | `c11_pip_ladder.csv` |
-| `c12_on_curve.py` | the encoder's mana curve: vanilla statlines P 0–5 × T 1–6 swept over MV 1–8, best-read cost per statline | `c12_on_curve.csv`, `c12_best_mv.csv` |
+| `c12_on_curve.py` | the encoder's mana curve figure: vanilla statlines P 0–5 × T 1–6 swept over MV 1–8, best-read cost per statline | `c12_on_curve.csv`, `c12_best_mv.csv` |
 | `c2_statlines.py` | P−T gradient, N/N and cost sweeps, {X}, the color fee | `c_report.md` |
 | `c3_removal.py` | the spell-effect ladder and aura variants | `c_report.md` |
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c_report.md` |
