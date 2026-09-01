@@ -382,21 +382,12 @@ choice of 23 spells decide what the training could ever have spoken about.
 `d6_buildfilter.py` runs three checkpoints on the same 36,036 states and reads
 the gen-4 minus gen-1 difference against the gen-4 sibling floor.
 
-| card's rank in its pack | \|gen-4 − gen-1\| | \|gen-4 − sibling\| | ratio | gen-4 − gen-1 |
-|---|---|---|---|---|
-| bottom fifth | 2.815 | 1.539 | 1.83 | −0.636 |
-| second fifth | 2.943 | 1.597 | 1.84 | −0.882 |
-| middle fifth | 3.130 | 1.709 | 1.83 | −0.756 |
-| fourth fifth | 3.349 | 1.891 | 1.77 | +0.025 |
-| top fifth | 4.044 | 2.091 | 1.93 | +1.769 |
-
-Rank is by the win-rate label among the cards in that pack.
-
-The signed column is the pick-order shift one level down: gen-4 raises the cards
-the win-rate label rates highest in a pack and lowers the rest. The absolute
-change also grows with a card's quality, but so does the sibling floor, and the
-ratio between them is flat down the pack. What separates learning from noise here
-is the colour split, not the quality split.
+Card quality does not separate learning from noise the way colour does. Ranking
+each pack's cards by the win-rate label, the change does grow from the bottom
+fifth to the top, but the sibling floor grows with it and the ratio between them
+stays near 1.8 all the way down. What the quality split shows instead is
+direction: gen-4 lowers the cards the label rates lowest and raises the ones it
+rates highest, from −0.64 in the bottom fifth to +1.77 in the top.
 
 The behavioural change is not spread evenly along a pack, though the weight
 change is. Gen-4 diverges from gen-1 most at the start of a pack and hardly at
