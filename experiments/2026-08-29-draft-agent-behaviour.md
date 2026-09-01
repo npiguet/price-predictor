@@ -11,14 +11,14 @@
 - What it does read is which cards are its own. Relabelling its pool as cards
   others took — no card changed, no count changed — moves two picks in five, and
   that alone produces its two-colour discipline.
-- Its standing colour preference is the scorer's, not its own. At the first pick,
+- Its standing colour preference comes from Forge's own games. At the first pick,
   with nothing known about the table, it already favours white and green and
-  avoids red and blue. The reward is the scorer's deck score, and that score pays
-  a two-colour white-green deck more than a standard deviation over a blue-red
-  one. Half of that survives controlling for the cards in the deck, and a premium
-  of the same size appears inside each agent's own decks, including the two
-  agents that draft red. Gen-4's opening ranking reproduces the reward's colour
-  order exactly; gen-1, which never saw that reward, does not.
+  avoids red and blue. White decks really do win more across the self-play corpus
+  the encoder and the scorer were fitted to, and that lean reaches the policy
+  through the reward: gen-4's opening ranking reproduces the reward's colour
+  order exactly. The transmission is not faithful at the bottom, where the games
+  rank blue the worst colour and both models rank red the worst. Gen-1 reads the
+  same card vectors but was never paid for a game result, and has no lean.
 - It moved away from human pick order and toward its reward's, monotonically
   across the generations. It gives up ground on removal and card draw and gains it
   on creatures. On identical states, gen-1's pick sits higher in Forge's human
@@ -445,12 +445,90 @@ matters. Gen-4 reproduces the reward's order across all five colours.
 
 The lean therefore sits one model upstream of where the previous section left
 it. Gen-4's colour preference is not something the reinforcement learning
-invented, and it is not Forge's. It is the scorer's, and the reward is how it
-reached the policy. What the drafter absorbed is how the scorer prices a
-finished deck rather than how it prices a card, because controlling for the
-scorer's own card values leaves half the premium standing. One limit is worth
-stating: both controls are card-level, so a deck-level property that tracks
-colour and neither yardstick captures would still sit inside these coefficients.
+invented. It came through the reward, which is the scorer's judgement of a
+finished deck. What the drafter absorbed is how the scorer prices a whole deck
+rather than how it prices a card, because controlling for the scorer's own card
+values leaves half the premium standing. One limit is worth stating: both
+controls are card-level, so a deck-level property that tracks colour and neither
+yardstick captures would still sit inside these coefficients.
+
+## The lean starts in Forge's own games, and the models invert its bottom half
+
+White decks really do win more when Forge plays them, so the scorer did not
+invent the lean either. The scorer was fitted to match outcomes, and the encoder
+to per-card win rates from those same self-play games. Both of those corpora can
+be read directly. `d11_winratecolour.py` does it, and neither level needs a
+model evaluated to answer the question.
+
+The card level already carries it, in the table the encoder trains on: games won
+and lost with the card in the deck, tallied over Forge's self-play.
+
+| | W | U | B | R | G | WG − UR |
+|---|---|---|---|---|---|---|
+| share of games won with the card in the deck | 0.509 | 0.473 | 0.498 | 0.488 | 0.498 | +0.023 |
+
+About 5,500 cards per colour clear the 50-game floor. Weighting cards equally
+instead of games moves every figure down by about three points and leaves white
+at the top and blue at the bottom.
+
+The deck level carries it too, and mirrors the previous section's regression with
+a played result in place of the scorer's estimate. That level is the corpus the
+scorer trains on. Each row is one game between two sealed decks built from the
+same set, so regressing the winner on the difference between the two decks'
+colour shares differences out the set, the format and the pairing.
+
+| control | W | U | B | R | G | WG − UR |
+|---|---|---|---|---|---|---|
+| none | +0.048 | −0.080 | +0.038 | −0.016 | +0.010 | +0.078 |
+| build-method pair | +0.061 | −0.058 | +0.012 | −0.025 | +0.009 | +0.076 |
+| + Forge's human draft rank | +0.053 | −0.049 | +0.010 | −0.025 | +0.011 | +0.068 |
+| same-method games only | +0.052 | −0.051 | +0.012 | −0.017 | +0.004 | +0.062 |
+
+Change in the probability that the first deck wins, per unit of colour-share
+advantage, over 119,754 games sampled across the corpus. Standard errors are
+0.006, and 0.010 in the last row.
+
+Neither the deck builder nor the cards explains it. Build method enters as a
+signed fixed effect per method pair, because `random` and `forge-best` decks
+differ in strength and could differ in colour. Restricting to the games where
+both decks came from the same builder gives the same answer. Card quality is
+controlled with Forge's bundled human `draft_rank`, which is the only grader in
+the project that was not itself fitted to this corpus. The win-rate label and
+the scorer's swap value were both fitted to it, so either one would have been
+circular here. The white-green premium survives all of that nearly intact.
+
+The same corpus explains why gen-1 is the one model without the lean. Gen-1 was
+distilled from Forge's `LimitedPlayerAI`, whose pick order is a hand-written
+heuristic over card attributes that was never fitted to a game result. Gen-1
+does read the encoder's card vectors, which were trained on these win rates, so
+the information reached it. What it never had is an objective that paid for
+using it.
+
+What propagates down the chain is the top of the corpus's colour order, and the
+bottom of it inverts.
+
+| ranking | order |
+|---|---|
+| the games | W > G > B > R > U |
+| the reward | W > G > B > U > R |
+| gen-4's opening pick | W > G > B > U > R |
+
+Deck-level games. Blue is the worst colour in the games by about three standard
+errors and the second-worst in the reward; red is the worst in the reward by
+about six and the second-worst in the games. The card-level table agrees with
+the deck-level one on white at the top and blue at the bottom.
+
+One difference between the two corpora could produce the swap by itself. The
+games are sealed decks built from random pools, and the reward was measured on
+drafted decks. Red may be worse in a drafted pool than in a sealed one, and
+nothing measured here separates that from a distortion introduced by the scorer.
+
+The chain therefore runs from Forge's game engine to the policy's first pick.
+Self-play games record that white decks win and blue decks lose. The encoder is
+trained on the per-card rates and the scorer on the match outcomes, so the
+reward the drafter maximises carries the lean without either model having
+invented it. What the reinforcement learning added is not the preference but the
+willingness to act on it at pick one.
 
 ## The policy is the same on states it would never have reached
 
@@ -834,7 +912,7 @@ the one proposed, and four are what reinforcement learning actually taught.
 | H3 skill or trajectory | resolved as skill: policy distance is unchanged by whose states it is measured on | `d3_exchange.py` |
 | H4 it drafts for the built 23 | verified: the gen-4 − gen-1 residual grows with card quality and is twice as large on-lane | `d6_buildfilter.py` |
 | H5 colour commitment is a clock-dependent rule | refuted as a policy: it hardens, gen-1 hardens as much, and the pool's growing token share explains most of it | `d4_commitment.py` |
-| H6 the colour lean is an unconditional prior | verified, and traced to the scorer: the reward pays a white-green deck a full standard deviation over a blue-red one, and gen-4's opening ranking reproduces the reward's colour order exactly | `d2_pickorder.py`, `d10_rewardcolour.py` |
+| H6 the colour lean is an unconditional prior | verified, and traced past both models to the corpus: white decks win more in Forge's self-play, the reward pays a white-green deck a full standard deviation over a blue-red one, and gen-4's opening ranking reproduces the reward's colour order exactly | `d2_pickorder.py`, `d10_rewardcolour.py`, `d11_winratecolour.py` |
 | H7 it moved away from human pick order | verified: −0.135 Spearman, largest loss on removal | `d2_pickorder.py`, `d3_exchange.py` |
 | H8 it reads the table | **falsified**: erasing what others took moves it less than erasing noise | `d1_channels.py` |
 | H9 equal gradient produced equal change across picks | **falsified**: argmax divergence falls steeply across a pack, and still falls after the shrinking-pack control | `d3_exchange.py` |
@@ -848,8 +926,8 @@ the one proposed, and four are what reinforcement learning actually taught.
 
 What makes gen-4 a good drafter, then, is a shorter list than the hypotheses
 allowed for. It has a sharper card ranking, tuned to its reward rather than to
-human taste. It has a standing colour preference, taken from the scorer, matched
-to the colours its reward pays for. It spends its learned capacity on the cards
+human taste. It has a standing colour preference that traces back to which
+colours win in Forge's own games. It spends its learned capacity on the cards
 that can reach a deck. And it knows which cards are already its own, which is
 enough to produce two-colour discipline without any rule about when to commit.
 

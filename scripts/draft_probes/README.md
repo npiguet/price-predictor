@@ -12,8 +12,10 @@ Run from the repo root: `python scripts/draft_probes/<script>.py`.
 External inputs: the yardstick corpora and checkpoints under
 `models/draft/agent/{gen1,gen3,gen4}/`, `output/cardsfolder-512/`, the staged
 scorer/encoder probe outputs (`output/scorer-probes/forge_hints.csv`,
-`t2_card_values.csv`, `text_pca_512.npz`), and the win-rate table at
-`Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\cards-win-rates.txt`.
+`t2_card_values.csv`, `text_pca_512.npz`), and two files under
+`Y:\Nicolas\mtg\mtg-models-data\sealed\training-data\matches-bo1\` —
+`cards-win-rates.txt` and, for `d11` only, the 1 GB sealed self-play corpus
+`match-outcomes-bo1-embedding.txt`. Both are read-only.
 
 ## Three rules the battery is built around
 
@@ -44,6 +46,7 @@ scorer/encoder probe outputs (`output/scorer-probes/forge_hints.csv`,
 | `d8_duplicates.py` | "A card already in the pool is worth more, not less" — a two-arm pool edit copying one of two colour- and logit-matched pack cards, with a dose ladder, a third-card placebo and an embedding-similarity split | `d8_duplicates.json` |
 | `d9_signatures.py` | "Which habits track strength, and which track training length" — the same metrics over six checkpoints of known yardstick margin and cumulative learner picks | `d9_signatures.json` |
 | `d10_rewardcolour.py` | "The lean is the scorer's, and the reward carries it to the policy" — the reward priced per unit of deck colour share, controlled for the deck's card quality by two independent yardsticks and repeated inside each drafting agent's own decks; corpus arithmetic only, no GPU | `d10_rewardcolour.json` |
+| `d11_winratecolour.py` | "The lean starts in Forge's own games, and the models invert its bottom half" — the same colour pricing on the sealed self-play corpus the encoder and scorer were fitted to, at the card level and at the deck level, against build-method fixed effects and Forge's exogenous human draft rank; reads `Y:` and needs no GPU | `d11_winratecolour.json` |
 
 ## Replay fidelity
 
