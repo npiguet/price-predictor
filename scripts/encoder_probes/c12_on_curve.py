@@ -6,10 +6,19 @@ kept, so mana value runs 1–10), and the winnability head is read at each
 step. The mana value that maximizes predicted winnability for a statline is
 the encoder's idea of that statline being on curve.
 
-Each (statline, mana value) cell also records how many real creatures in the
-corpus occupy it (``n_real``), so downstream consumers can restrict the
-argmax to combinations the game has actually printed — the encoder's
-response on never-printed combinations is pure extrapolation.
+Each (statline, mana value) cell also records how many real vanilla
+creatures in the corpus occupy it (``n_real``), so downstream consumers can
+restrict the argmax to combinations the game has actually printed as a
+vanilla card — the encoder's response elsewhere is pure extrapolation, and
+a cost printed only on text-carrying creatures is no precedent for a
+vanilla body.
+
+Vanilla here is strict: exactly the three core lines (mana cost, types,
+power toughness). The looser ``no ability lines`` test used elsewhere in
+the battery lets through cards whose converted text carries uncounted
+``text:`` / ``alternate cost:`` / ``additional cost:`` lines (Myr Superion,
+Scornful Egotist, Bayou Groff), which are exactly the off-curve oddities
+this probe must not treat as vanilla precedent.
 """
 
 from __future__ import annotations
@@ -29,7 +38,8 @@ from c2_statlines import PT_RE, set_pt  # noqa: E402
 
 SEED = 17
 N_BASES = 100
-MIN_REAL = 2
+MIN_REAL = 1
+CORE = ("mana cost:", "types:", "power toughness:")
 POWERS = list(range(0, 9))
 TOUGHS = list(range(1, 9))
 GENERIC = list(range(0, 10))
@@ -45,12 +55,22 @@ def main() -> None:
                        for s in stripped
                        for l in [next((x for x in cc.lines(s)
                                        if x.startswith("power toughness:")), "")]])
+    strict_vanilla = np.array([
+        len(ls := cc.lines(s)) == 3
+        and all(any(l.startswith(p) for l in ls) for p in CORE)
+        for s in stripped]) & is_crea & lit_pt
+    loose = is_crea & lit_pt & np.array(
+        [len(cc.ability_lines(s)) == 0 for s in stripped])
+    print(f"{int(strict_vanilla.sum())} strict-vanilla creatures "
+          f"({int((loose & ~strict_vanilla).sum())} looser no-ability cards "
+          "excluded for text:/alternate cost:/additional cost: lines)",
+          flush=True)
 
-    # how many real creatures (any text) occupy each (P, T, MV) cell
+    # how many real strict-vanilla creatures occupy each (P, T, MV) cell
     power = pd.to_numeric(j["power"], errors="coerce").to_numpy(float)
     tough = pd.to_numeric(j["toughness"], errors="coerce").to_numpy(float)
     n_real: Counter = Counter()
-    for r in np.flatnonzero(is_crea & lit_pt):
+    for r in np.flatnonzero(strict_vanilla):
         p = parsed[r]
         if p is None or not np.isfinite(power[r]) or not np.isfinite(tough[r]):
             continue
@@ -58,8 +78,7 @@ def main() -> None:
         n_real[(int(power[r]), int(tough[r]), int(mv))] += 1
 
     elig = np.flatnonzero(
-        is_crea & lit_pt
-        & np.array([len(cc.ability_lines(s)) == 0 for s in stripped])
+        strict_vanilla
         & np.array([p is not None and p[1] != "" for p in parsed]))
     rng = np.random.default_rng(SEED)
     if len(elig) > N_BASES:
@@ -101,7 +120,7 @@ def main() -> None:
                         ["score_play_sd"].idxmax()]
             .pivot(index="power", columns="toughness", values="mv"))
     print(f"best MV by statline, argmax over cells with >= {MIN_REAL} real "
-          "creatures (rows P, cols T):", flush=True)
+          "vanilla creatures (rows P, cols T):", flush=True)
     print(best.to_string(), flush=True)
     best.to_csv(cc.SCRATCH / "c12_best_mv.csv")
 
