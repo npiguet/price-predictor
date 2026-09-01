@@ -37,6 +37,7 @@ read-only), `output/cardsfolder-512/`,
 | `c10_cost_sweep.py` | the mana-cost section: generic-cost sweeps on both heads (card costs and activated-ability costs), the {T} contrasts, and the same-text-different-cost label families | `c10_*.csv` |
 | `c11_pip_ladder.py` | the pip-intensity ladder: real single-pip {k}{M} cards (k 2–6, {M} = one fixed color) re-encoded at the four color intensities of their own MV, both heads, per card class | `c11_pip_ladder.csv` |
 | `c12_on_curve.py` | the encoder's mana curve figure: vanilla statlines P 0–8 × T 1–8 swept over MV 1–10, best-read cost per statline | `c12_on_curve.csv`, `c12_best_mv.csv` |
+| `c13_lifegain_split.py` | the gain-life label split into sole-clause and rider populations; the label-side reference for the ladder's lifegain floor | `c13_lifegain_split.csv` |
 | `c2_statlines.py` | P−T gradient, N/N and cost sweeps, {X}, the color fee | `c_report.md` |
 | `c3_removal.py` | the spell-effect ladder and aura variants | `c_report.md` |
 | `c4_body_vs_spell.py` | body premium, dork-vs-rock | `c_report.md` |
@@ -52,7 +53,7 @@ read-only), `output/cardsfolder-512/`,
 1. `p0_build.py` (everything imports its caches), then `p0b_card_table.py` (the feature table the shared loaders merge in)
 2. `l_mediation.py` → `l_analyze.py` (CPU; label side)
 3. `r1_*` / `r2_*` (GPU), `s_*` (CPU) — independent of each other
-4. `c1`–`c12` (GPU), `q1`–`q3`
+4. `c1`–`c13` (GPU; `c13` is CPU-only), `q1`–`q3`
 
 Probes and predictions are checkpoint-specific: repointing
 `probe_lib`'s checkpoint path and rerunning `p0_build.py --force` is the
