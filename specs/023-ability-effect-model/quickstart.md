@@ -61,47 +61,66 @@ Run it as long as you would run it anyway — the instrumentation adds no simula
 ## 4. Train
 
 ```bash
-python -m effects train-effect-model
+python -m effects train-effect-model --withhold-keyword cascade
 ```
 
-Trains both transformers jointly from random init. Stage one has only two of the eight sampling
-classes, so the mixture renormalizes over what is present and the absent kinds' fields contribute no
-loss.
+`--withhold-keyword` holds one implemented keyword's token out of training so the zero-shot check in
+step 7 has something to measure; its occurrences are always expanded instead. Any implemented keyword
+outside gate 2's eight damage-step keywords works; `cascade` is just an example. Withholding one of
+the eight would degrade that keyword's own gate-2 verdict in the same run.
+
+Trains both transformers jointly from random init. Stage one has three of the eight sampling
+classes — `resolution-cost`, `resolution-effect`, and `combat` — so the mixture renormalizes over what
+is present and the absent kinds' fields contribute no loss.
 
 **Checks**: the checkpoint under `models/effects/effect-model/` records its held-out card list, its
 `game_id` set across both strata, and the vocabulary and keyword-definition paths plus their hashes.
 
 ## 5. Train the baselines
 
-Gate 1 needs `identity`; every record kind reports `state-only` as its floor. Both inherit the split
-so the comparison is honest:
+All four are needed at stage one, because every reported check except the three that wait for later
+stages runs now: gate 1 compares against `identity`, every record kind reports `state-only` as its
+floor, the average-effect control is `no-state`, and the taxonomy comparison is `taxonomy`. Each
+inherits the split so the comparison is honest:
 
 ```bash
-python -m effects train-effect-model --variant identity \
-    --split-from models/effects/effect-model/latest.pt
-python -m effects train-effect-model --variant state-only \
-    --split-from models/effects/effect-model/latest.pt
+for V in identity state-only no-state taxonomy; do
+  python -m effects train-effect-model --variant $V \
+      --split-from models/effects/effect-model/latest.pt
+done
 ```
 
 These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint.
+`--split-from` is required for a variant run — without it the run fails fast, rather than silently
+computing its own split and making the comparison meaningless.
 
 ## 6. Encode the cache
 
+The `e`-geometry checks (gate 3, the decodability battery, the ward canary, the scorer smoke test)
+read `full`, `no-state`, and `taxonomy`. `identity` and `state-only` are prediction baselines and
+need no cache, so encoding them is optional:
+
 ```bash
 python -m effects encode-abilities
-python -m effects encode-abilities --variant identity
+for V in no-state taxonomy; do
+  python -m effects encode-abilities --variant $V
+done
 ```
 
 **Checks**: `output/effects/abilities/cardsfolder/…` and `…/tokenscripts/…` mirror their source trees;
-each file is `(n_lines, e_dim)` and row-aligned with that source's sidecar. The `identity` run wrote
-`<name>.identity.npz` beside the shipping `<name>.npz` rather than replacing it.
+each file is `(n_lines, e_dim)` and row-aligned with that source's sidecar. Each variant run wrote
+`<name>.{variant}.npz` beside the shipping `<name>.npz` rather than replacing it. The `taxonomy`
+variant has no encoder, so its file is the taxonomy lookup emitted into the same row layout — every
+`e`-geometry check reads one file shape.
 
 ## 7. Evaluate
 
 ```bash
 python -m effects evaluate-effect-model \
     --variant-checkpoint identity=models/effects/effect-model/identity/latest.pt \
-    --variant-checkpoint state-only=models/effects/effect-model/state-only/latest.pt
+    --variant-checkpoint state-only=models/effects/effect-model/state-only/latest.pt \
+    --variant-checkpoint no-state=models/effects/effect-model/no-state/latest.pt \
+    --variant-checkpoint taxonomy=models/effects/effect-model/taxonomy/latest.pt
 ```
 
 Splits come from the checkpoint — never a flag, never recomputed.

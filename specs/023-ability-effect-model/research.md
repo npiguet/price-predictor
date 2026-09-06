@@ -33,12 +33,12 @@ required.
 | Supervising a pool of Forge JVM workers | `ForgeWorkerPool`, `build_forge_classpath`, `build_jvm_command`, `kill_process_tree` in `src/price_predictor/infrastructure/forge_jvm.py`; used by `sealed/application/match_outcomes.py` and `draft/application/play_draft_games.py` | **Reuse unchanged.** `collect-coverage` and `collect-variants` are the third and fourth supervisors. The abstraction was already extracted at the second instance; its printed status lines are a documented operator contract. |
 | Saving/loading torch checkpoints with dataclass configs | `save_checkpoint` / `load_checkpoint` in `src/price_predictor/infrastructure/torch_checkpoint.py`; used by `transformer_store`, `scorer_store`, `picker_store`, `draft_agent_store`, and the three draft trainers | **Reuse.** The effects checkpoint adds payload keys (held-out card list, `game_id` set, vocabulary and keyword-definition paths and hashes) but needs no new save/load machinery. |
 | Per-parameter-group gradient clipping | `clip_per_group` in `src/price_predictor/infrastructure/torch_training.py` | **Reuse.** The root spec mandates per-parameter-group max-norm 1.0, which is exactly this helper. |
-| Building a tokenizer vocabulary | `build_vocabulary` in `src/price_predictor/application/build_vocabulary.py`; wrapped by `sealed/application/build_vocab.py` with `_truncate_to_target_size` | **Wrap, mirroring sealed.** `effects build-vocab` is the third caller. It should call the shared utility and reuse sealed's truncation rather than re-deriving it — see the third-instance check. |
+| Building a tokenizer vocabulary | `build_vocabulary` in `src/price_predictor/application/build_vocabulary.py`; wrapped by `sealed/application/build_vocab.py`, whose `_truncate_to_target_size:39` does the size cap | **Wrap, mirroring sealed — but promote the truncation first.** `effects build-vocab` is the third caller and needs the same `--target-size` cap. Importing sealed's helper is not open to us: it is private, and FR-002 declares the whole `sealed` import surface as `manabase.compute_basic_lands`. Move `_truncate_to_target_size` into `price_predictor/application/build_vocabulary.py` — which `sealed/application/build_vocab.py:17` already imports from — and have both wrappers call it there. One implementation, no private cross-context access. |
 | Resolving a card name to files on disk | `ConvertedCardLocator` (above) | **Extend.** |
-| Card-disjoint validation splitting | `_split_cards` in `src/sealed/application/train_encoder.py:545` | **Reimplement, documented reason.** The discipline (card-level disjointness, never row-level) carries over, but the stratification key does not: sealed splits by `score_play` quartile, while the effects split takes cards by newest first printing until they cover ≥ 8% of the corpus. Sharing the function would mean parameterizing the very thing that differs. |
-| Ridge probe harness for the decodability battery | `scripts/scorer_probes/probe_lib.py` (`Probe`, `det_features`) | **Reuse.** The root spec cites this harness and its feature table by name. |
+| Card-disjoint validation splitting | `_split_cards` in `src/sealed/application/train_encoder.py:545` | **Reimplement, documented reason.** The discipline (card-level disjointness, never row-level) carries over, but neither the stratification key nor the exclusion rule does. Sealed splits by `score_play` quartile; the effects split takes cards by newest first printing until they cover ≥ 8% of the corpus, and then **excludes from training every game holding a record that names a held-out card** — a whole-game exclusion sealed has no analogue for, because a sealed card row is not correlated with a board the way effect records within one game are. Sharing the function would mean parameterizing the two things that differ. |
+| Ridge probe harness for the decodability battery | `scripts/encoder_probes/probe_lib.py` — `_ridge_solve:635`, `fit_probes:695`, `HeadProbe:609`, `ProbeSet:625` | **Extract, then reuse.** This is the harness [`experiments/2026-08-28-encoder-preferences.md`](../../experiments/2026-08-28-encoder-preferences.md) was run with, and `fit_probes` already takes an arbitrary embedding matrix, so the maths transfers. It cannot be imported where it sits: `scripts/` has no `__init__.py` and is outside `[tool.setuptools.packages.find] where = ["src"]`, no `src/` module imports from it today, and importing it runs module-scope side effects (`sys.path.insert`, `SCRATCH.mkdir`) plus hardcoded constants that are wrong here — a NAS path `Y:\…`, a pinned encoder checkpoint, and `output/cardsfolder-512`. Move `_ridge_solve` / `fit_probes` / `HeadProbe` / `ProbeSet` into `price_predictor/application/`, leaving the script as a caller. Not `scripts/scorer_probes/probe_lib.py`, which is the scorer-behaviour harness and contains no ridge regression. |
 | Rendering converted ability lines from runtime Forge traits | `RulesParser.parseScript` in `forge-connector/.../RulesParser.java:61` | **Extend, additive.** The parser already holds the runtime trait object it renders each line from, which is exactly the provenance the sidecar records. Writing the sidecar is a new output, not a change to the rendered text. |
-| Running instrumented Forge matches | `MatchWorkerMain` | **Extend.** Instrumentation sits behind `--effect-records`; absent the flag the worker is byte-for-byte the current one in behaviour. |
+| Running instrumented Forge matches | `MatchWorkerMain` | **Extend.** Instrumentation sits behind `--effect-records`; absent the flag the worker behaves exactly as it does today. |
 | Per-worker Java process launch from Python | `match_worker_connector.py`, `draft_worker_connector.py`, `pool_connector.py`, `evaluation_connector.py` | **Mirror.** Each Java main gets one thin connector; the effects collectors follow the same one-connector-per-main convention. |
 
 ### Convention alignment
@@ -70,8 +70,9 @@ effects record reader would be the fourth:
 
 - `src/sealed/infrastructure/pool_file_reader.py:88` — `count_complete_lines_and_truncate_partial`
 - `src/sealed/infrastructure/cards_played_reader.py:61` — tolerates a trailing partial line silently
-- `src/draft/infrastructure/draft_record_io.py:81` — whose own docstring says it "Mirrors the
-  partial-line tolerance of `sealed`'s `pool_file_reader` / `cards_played_reader`"
+- `src/draft/infrastructure/draft_record_io.py` — whose module docstring (lines 5-6) says it "Mirrors
+  the partial-line tolerance of `sealed`'s `pool_file_reader` / `cards_played_reader`"; the reader
+  itself is `read_records:80`
 
 That docstring is the codebase admitting the duplication. Principle VII requires extraction rather
 than a fourth copy. **Proposal**: extract the line-level primitive — iterate complete
@@ -111,7 +112,7 @@ one implementation; copying it would make the next feature a third instance.
 - **Alternatives considered**: baking the feature vector into the corpus (rejected explicitly by the
   design record, which cites the draft spec's having done exactly that).
 
-### Two Python entry points into Java, not one
+### Collection has two supervisors of its own, beside the sealed opt-in
 
 - **Decision**: instrumentation rides `sealed match-outcomes --effect-records`; `collect-coverage` and
   `collect-variants` are `effects` subcommands that spawn the same instrumented worker.
@@ -119,6 +120,22 @@ one implementation; copying it would make the next feature a third instance.
   giving the effects-only collectors their own supervisors and their own defaults.
 - **Alternatives considered**: a single `effects collect` with a mode flag (rejected — the sealed
   command already exists and its outputs must stay untouched, so the opt-in has to live there).
+
+### The split excludes whole games, not just held-out rows
+
+- **Decision**: after choosing held-out cards (newest first printing, until ≥ 8% of the cards under
+  `output/cardsfolder/`), **every game containing a record that names a held-out card is excluded from
+  training entirely**. Game-disjoint validation then takes 10% of the remaining games. Both strata's
+  `game_id` sets are recorded in the checkpoint.
+- **Rationale**: records from one game share a board, so a held-out card sitting in the context of a
+  training record leaks through its context role even when it is not the acting ability. Excluding the
+  row and keeping the game would make gate 1 — the shipping gate — score partly on cards the encoder
+  had already seen. This is what makes the card-disjoint number mean "deployment to an unseen set".
+- **Alternatives considered**: row-level exclusion (rejected — leaks through the context role, which is
+  precisely the loop the design record says trains each embedding from both directions); ability-
+  disjoint splitting (rejected in the design record — a held-out ability's `e` still receives gradient
+  through its context role and the text auxiliaries); naive set-disjoint splitting (rejected in the
+  design record — leaks through reprints).
 
 ### Degraded mode is a runtime detection, not a build flag
 

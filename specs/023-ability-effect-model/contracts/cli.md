@@ -36,7 +36,7 @@ implementation script, captured as text at the keyword factory, for the script-g
 
 Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in format or content.
 
-## `python -m effects collect-coverage`
+## `python -m effects collect-coverage` (stage two)
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -47,6 +47,18 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 | `--decks-per-round` | 500 | decks played as matches per round |
 | `--no-progress-rounds` | 3 | consecutive rounds without a new qualifying record before a card retires |
 | cap/budget flags | see below | |
+
+Behaviour the flags do not convey:
+
+- The castability consult **only ranks** slots. It never drops a card from deck building, because being
+  in a game is the precondition a stage-three intervention forks from.
+- A card is satisfied once `--target-records` records across every shard have it as the acting line's
+  host, an event subject, or a referenced ref. **Sitting on the battlefield in a snapshot does not
+  count**, and the unit is not resolution records specifically — a vanilla creature has no acting line.
+- The run ends when every card is satisfied or retired, and reports **two residues**: cards the consult
+  judged uncastable, and castable cards that never reached `--target-records`. Each retired card is
+  counted under its consult verdict. Both fall to stage-three interventions; SC-006 turns on this
+  report existing.
 
 ## `python -m effects collect-variants` (stage four)
 
@@ -79,7 +91,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--records-dir` | `output/effects/records/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--variant-scripts` | none (stage four: `output/effects/variant-scripts/`) |
-| `--split-from` | none (compute the split); **required for variant runs** |
+| `--split-from` | none (compute the split); **required for variant runs**. Inherits the source checkpoint's split *and* its vocabulary and keyword-definition paths |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--printings-path` | `resources/AllPrintings.json` |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
@@ -93,9 +105,14 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--kind-mix` | the eight-class mixture |
 | `--context-cache` / `--cache-refresh` | off / 500 |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
+| `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
+
+Best checkpoint is selected by card-disjoint validation loss. The split holds out cards by newest first
+printing until they cover ≥ 8% of `output/cardsfolder/`, then **excludes from training every game
+holding a record that names a held-out card**; game-disjoint validation takes 10% of what remains.
 
 Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 256 / 6 layers / 4 heads;
-`ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup; warmup over the first 5% of
+`ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup; linear warmup over the first 5% of
 `--epochs` × `--steps-per-epoch`; per-parameter-group gradient clip 1.0; seed 42.
 
 ## `python -m effects encode-abilities`
@@ -120,6 +137,9 @@ otherwise, beside rather than replacing the shipping cache.
 | `--variant-checkpoint NAME=PATH` | repeatable |
 | `--records-dir`, `--cards-folder`, `--variant-scripts` | the trainer's defaults |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
+
+The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
+records it alongside the split.
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or
