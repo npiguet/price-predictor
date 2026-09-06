@@ -19,6 +19,7 @@
         <junit.version>5.11.4</junit.version>
         <lombok.version>1.18.42</lombok.version>
         <forge.dir>${project.basedir}/../../forge</forge.dir>
+        <forge.version>2.0.15-SNAPSHOT</forge.version>
     </properties>
 
     <dependencies>
@@ -33,30 +34,30 @@
         <dependency>
             <groupId>forge</groupId>
             <artifactId>forge-game</artifactId>
-            <version>2.0.13-SNAPSHOT</version>
+            <version>${forge.version}</version>
             <scope>system</scope>
-            <systemPath>${forge.dir}/forge-game/target/forge-game-2.0.13-SNAPSHOT.jar</systemPath>
+            <systemPath>${forge.dir}/forge-game/target/forge-game-${forge.version}.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>forge</groupId>
             <artifactId>forge-core</artifactId>
-            <version>2.0.13-SNAPSHOT</version>
+            <version>${forge.version}</version>
             <scope>system</scope>
-            <systemPath>${forge.dir}/forge-core/target/forge-core-2.0.13-SNAPSHOT.jar</systemPath>
+            <systemPath>${forge.dir}/forge-core/target/forge-core-${forge.version}.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>forge</groupId>
             <artifactId>forge-gui</artifactId>
-            <version>2.0.13-SNAPSHOT</version>
+            <version>${forge.version}</version>
             <scope>system</scope>
-            <systemPath>${forge.dir}/forge-gui/target/forge-gui-2.0.13-SNAPSHOT.jar</systemPath>
+            <systemPath>${forge.dir}/forge-gui/target/forge-gui-${forge.version}.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>forge</groupId>
             <artifactId>forge-ai</artifactId>
-            <version>2.0.13-SNAPSHOT</version>
+            <version>${forge.version}</version>
             <scope>system</scope>
-            <systemPath>${forge.dir}/forge-ai/target/forge-ai-2.0.13-SNAPSHOT.jar</systemPath>
+            <systemPath>${forge.dir}/forge-ai/target/forge-ai-${forge.version}.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>com.esotericsoftware</groupId>
@@ -90,7 +91,7 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>3.14.0</version>
+            <version>3.18.0</version>
         </dependency>
         <dependency>
             <groupId>io.sentry</groupId>
@@ -129,12 +130,12 @@
         <dependency>
             <groupId>org.jupnp</groupId>
             <artifactId>org.jupnp</artifactId>
-            <version>3.0.3</version>
+            <version>3.0.5</version>
         </dependency>
         <dependency>
             <groupId>org.jupnp</groupId>
             <artifactId>org.jupnp.support</artifactId>
-            <version>3.0.3</version>
+            <version>3.0.5</version>
         </dependency>
         <dependency>
             <groupId>io.netty</groupId>

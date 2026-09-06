@@ -17,7 +17,15 @@ from collections.abc import Callable
 from pathlib import Path
 
 CONNECTOR_JAR_NAME = "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
-FORGE_VERSION = "2.0.13-SNAPSHOT"
+
+#: Fallback Forge version, used only when the built JAR cannot be found and so
+#: no version can be read off disk. `forge-connector/pom.xml` pins the real one
+#: in its `forge.version` property — Maven's `systemPath` cannot glob, so that
+#: pin has to be updated by hand on a Forge upgrade.
+FORGE_VERSION = "2.0.15-SNAPSHOT"
+
+#: Classifier suffixes Maven also emits into `target/`; never the module JAR.
+_NON_MODULE_JAR_SUFFIXES = ("-sources", "-javadoc", "-tests", "-jar-with-dependencies")
 
 
 def project_root() -> Path:
@@ -31,8 +39,22 @@ def forge_dir() -> Path:
 
 
 def forge_module_jar(module: str) -> Path:
-    """Return the path to a Forge module JAR (e.g. ``forge-game``)."""
-    return forge_dir() / module / "target" / f"{module}-{FORGE_VERSION}.jar"
+    """Return the path to a Forge module JAR (e.g. ``forge-game``).
+
+    The version is read off the built JAR rather than pinned here, so a Forge
+    upgrade needs no edit on the Python side. When no JAR is present the path
+    is constructed from ``FORGE_VERSION`` instead, leaving the resulting
+    classpath entry to fail at the JVM the way it always did.
+    """
+    target = forge_dir() / module / "target"
+    candidates = [
+        jar
+        for jar in sorted(target.glob(f"{module}-*.jar"))
+        if not jar.stem.endswith(_NON_MODULE_JAR_SUFFIXES)
+    ]
+    if candidates:
+        return candidates[-1]
+    return target / f"{module}-{FORGE_VERSION}.jar"
 
 
 def resolve_connector_jar() -> Path:

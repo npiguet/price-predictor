@@ -63,8 +63,14 @@ public record StandardKeyword(AbilityType type, String descriptionText) implemen
                         details = details.substring(innerColon + 1);
                     }
                     title = "Protection from " + details.toLowerCase();
+                } else {
+                    // The colon-free form ("K:Protection from white") is already oracle
+                    // text, so getOriginal() is the answer. getTitle() is not: Forge
+                    // splits the script line on its first space, leaving "from white" as
+                    // the type description, and Protection.getTitle() then prepends
+                    // "Protection from " to produce "Protection from from white".
+                    title = original;
                 }
-                // else: getOriginal() had no colon (shouldn't happen), leave title as-is
             }
         }
 

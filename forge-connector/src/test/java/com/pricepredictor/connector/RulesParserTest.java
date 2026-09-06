@@ -116,8 +116,10 @@ class RulesParserTest {
     @Test
     void protectionKeywordIncludesColor() {
         var statics = abilitiesOfType(face("a/animar_soul_of_elements.txt"), AbilityType.STATIC);
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from white")));
-        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from black")));
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from white")),
+                "expected 'protection from white' in: " + statics);
+        assertTrue(statics.stream().anyMatch(k -> k.descriptionText().contains("protection from black")),
+                "expected 'protection from black' in: " + statics);
     }
 
     @Test
