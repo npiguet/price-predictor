@@ -1,0 +1,135 @@
+# Contract: effect record schema
+
+**Feature**: `023-ability-effect-model`
+Authority: [`../../2026-09-05-ability-effect-model.md`](../../2026-09-05-ability-effect-model.md) § Corpus.
+
+This schema is **fixed before stage-one collection begins**. Later stages widen the corpus — new
+`kind` values become reachable, new snapshot tiers appear — but never redefine a field. That is what
+lets a stage-one corpus stay trainable alongside stage-four records.
+
+## File layout
+
+```
+output/effects/records/
+  {run_id}.{worker}.jsonl        one JSON record per line, append-only
+```
+
+Readers load every `*.jsonl` in the directory and skip a trailing partial (non-newline-terminated)
+final line — a JVM crash mid-write is expected, not exceptional.
+
+## Envelope
+
+```jsonc
+{
+  "record_id":      "3f2a…-uuid.4.10237",   // {run_id}.{worker}.{counter}
+  "run_id":         "3f2a…-uuid",
+  "timestamp":      "2026-09-06T15:31:12.152018Z",
+  "game_id":        "3f2a…-uuid.4.812",     // {run_id}.{worker}.{game counter}
+  "kind":           "resolution",           // resolution|rewrite|continuous|combat|trigger|playability
+  "moment":         "resolution",           // resolution kind only: activation|resolution
+  "subkind":        null,                   // playability kind only: decision|attackers|blockers
+  "link_id":        "…",                    // joins a resolution pair; absent where no partner
+  "mirror_of":      null,                   // fork records: the real record mirrored
+  "variant_of":     null,                   // synthetic records: the source card name
+  "mode":           "degraded",             // patched|degraded
+  "interventional": false,
+  "fork":           false,
+  "synthetic":      false,
+  "actor_player":   "P0",
+  "ability":        [ /* ProvenanceKey[] */ ],
+  "state":          { /* StateSnapshot */ },
+  "payload":        { /* per-kind */ }
+}
+```
+
+### Field rules
+
+| Field | Rule |
+|---|---|
+| `record_id` | unique across the run's shards; carries the worker index because workers count independently |
+| `game_id` | same construction; **the join key for a checkpoint's recorded split** |
+| `link_id` | absent on a half with no partner: a `fizzled`, `countered`, or `declined` cost record, or an interventional effect half |
+| `mirror_of` | set only when `fork = true` and a same-game real counterpart exists |
+| `variant_of` | set only when `synthetic = true` |
+| `ability` | absent where no single line acts (`combat`, `playability`); the chosen `option` line on modal resolutions; several keys where the rendered line merged several traits |
+| `mode`, `interventional`, `fork`, `synthetic` | **collection metadata; never model inputs** |
+
+### Flag signatures
+
+| Record | `kind` | `interventional` | `fork` |
+|---|---|---|---|
+| ordinary observation | any | false | false |
+| interventional resolution | `resolution` | true | true |
+| damage-step probe | `combat` | false | true |
+
+The probe's `interventional = false` is what distinguishes it from an intervention by flags alone.
+
+## State snapshot
+
+```jsonc
+"state": {
+  "global":  { "turn": 7, "phase": "…", "active": "P0", "priority": "P1",
+               "stack_size": 1, "combat_substep": null, "emblems": [] },
+  "players": [ { "id": "P0", "life": 14, "hand": 3, "library": 21, "graveyard": 9,
+                 "poison": 0, "energy": 0,
+                 "this_turn": { "creatures_died": 1, "spells_cast": 2, "lands_played": 1 },
+                 "floating_mana": {…}, "untapped_production": {…} } ],
+  "entities": [ { "id": "E12", "name": "…", "face": "…", "copy_source": null,
+                  "token_script_id": null, "zone": "battlefield", "controller": "P0",
+                  "types": {…}, "colors": [...], "mana_value": 3,
+                  "pt": { "base": [2,2], "boosts": [1,1], "counters": [0,0] },
+                  "tapped": false, "sick": false, "damage": 0, "counters": {…},
+                  "combat": {…}, "attached_to": null, "face_down": false,
+                  "granted": [ /* ProvenanceKey[] */ ],
+                  "stack_extras": null } ],
+  "refs":    { "targets": [...], "source": "E12", "modes": [...], "x": 3, "choices": {…} },
+  "pending_event": null
+}
+```
+
+**Rules**
+
+- Characteristics are computed (post-layer), never printed. Exception: a `continuous` record's snapshot
+  has the acting static's own contributions removed from every layer channel it wrote.
+- Inclusion tiers, in order: (1) referenced objects — every entity-valued ref appears as an entity in
+  whatever zone it sits, with that zone recorded; (2) core — global, battlefield, and command-zone
+  effect cards; (3) unreferenced stack; (4) unreferenced hand and graveyard. Tiers 1–2 from stage one,
+  3 from stage two, 4 from stage three. **An absent tier means uncollected, not empty.**
+- Perspective is not stored. Controllers are absolute; mine/opponent derives at training time from
+  `actor_player`.
+
+## Events
+
+```jsonc
+{ "type": "…", "subjects": ["E12"], "params": {…}, "duration": null, "attributed_to": "…" }
+```
+
+The type vocabulary is the union of Forge trigger types, bus events, and bracket diffs. The canonical
+member list and per-type field normalization live in `src/effects/domain/event_schema.py`. A checked-in
+completeness test maps every Forge effect API class to a covered type or an explicit exclusion.
+
+## Payloads
+
+| Kind / moment | Payload |
+|---|---|
+| `resolution` / `activation` | `{costs: {mana_by_color, tapped, life, sacrificed, discarded, exiled}, outcome}` where `outcome` ∈ `resolved` \| `fizzled` \| `partially_fizzled` \| `declined` \| `countered`. Only `resolved` and `partially_fizzled` have a linked effect half |
+| `resolution` / `resolution` | `{events: Event[]}`; attribution granularity is the sub-ability, root line as fallback |
+| `rewrite` | `{incoming: Event, outgoing: Event}` (parameter maps deep-copied at the hook) |
+| `continuous` | `{contributions: [{entity, pt_boost, keywords, types, colors, name}], board_hash}` — one record per stable board |
+| `combat` | `{attackers, blocks, assignment_choices, events: Event[]}` — one record per damage step |
+| `trigger` | `{event: Event, fired: bool}`; non-fired negatives drawn from same-event-type evaluations at ~1:1 |
+| `playability` / `decision` | `{candidates: [{ability, verdict: {can_play, affordable, has_legal_target}, legal_targets, cost_after_adjustment, responsible_static}]}` |
+| `playability` / `attackers` | `{legal_attackers, forbidden: [{entity, responsible_static}]}` |
+| `playability` / `blockers` | `{anchor_attacker, legal_blockers, forbidden: [{entity, responsible_static}], min_blockers}` |
+
+Verdicts are rules-level only. The AI's policy judgments ("another time", "life in danger") are never
+recorded.
+
+## Compatibility rules
+
+1. A field may be **added**; existing fields may not change meaning or type.
+2. A new `kind` or `subkind` value may be introduced; existing values may not be repurposed.
+3. A reader encountering an unknown `kind` skips the record rather than failing, so an older reader
+   survives a newer corpus.
+4. Snapshot tiers are additive; absence is uncollected.
+5. Nothing in this schema may become a model input that is listed above as collection metadata.
