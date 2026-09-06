@@ -51,7 +51,7 @@ The unit of training. One observed game event or decision point.
 |---|---|
 | `global` | turn, phase, active player, priority player, stack size, combat substep, command-zone emblems |
 | `players[]` | id, life, hand/library/graveyard sizes, poison, energy, this-turn counters, floating mana by colour, untapped production by colour |
-| `entities[]` | identity (name, face, copy-source, token-script id, zone, controller); computed characteristics (type line, colours, mana value, P/T decomposed into base / boosts / counters); board state (tapped, sickness, damage, counters, combat status, attached-to, face-down); granted abilities; stack extras (own targets, announced per-target amounts, up-to-N counts) |
+| `entities[]` | identity (name, face, copy-source, token-script id, zone, controller); computed characteristics (type line, colours, mana value, P/T decomposed into base / boosts / counters); board state (tapped, sickness, damage, counters, combat status, attached-to, face-down); granted abilities, split into `granted_attached` (provenance keys) and `granted_temporary` (change-table grants: provenance keys where they resolve to a line, bare keyword strings where they do not); stack extras (own targets, announced per-target amounts, up-to-N counts) |
 | `refs` | targets, source, chosen modes, X and announced values, resolution-time engine choices |
 | `pending_event` | `rewrite` and `trigger` only: reference to the payload's incoming event |
 
@@ -156,20 +156,28 @@ ability tokens drop at `--context-dropout`.
 
 ### Checkpoint
 
+The saved artifact keeps the encoder, the effect-head trunk, and the three output heads above; the
+MLM, script-API, and paired-encoding heads are training-only and are **filtered out at save time**.
+
 Beyond weights, a checkpoint records the artifacts needed to make a run reproducible and its gates
 honest: the held-out card list, the `game_id` set across both validation strata, the `--vocab-path` and
-`--keyword-definitions` paths, and content hashes of both files. `evaluate-effect-model` reads the
-split from here and never recomputes it, because the corpus grows between runs.
+`--keyword-definitions` paths, content hashes of both files, and the keyword withheld from training
+(or null). `evaluate-effect-model` reads all of it from here and recomputes none of it, because the
+corpus grows between runs and because the zero-shot check must measure the keyword the model was
+actually trained without, not one an operator remembers choosing.
 
 ## Validation rules
 
 | Rule | Enforced where |
 |---|---|
 | A trailing partial line in a shard is skipped, not an error | record reader |
-| A record referencing an ability whose sidecar line no longer exists fails loudly | training-time join |
 | An event attributed to an unmapped sub-ability link falls back to the root line | collector |
+| A trait deduplicated away maps to no line; its key is listed in the sidecar's `dropped_keys`, and a record naming it is kept with no line to join to | converter |
+| A record naming a provenance key in neither `lines` nor `dropped_keys` fails loudly (the sidecar does not describe the card the record was collected against) | training-time join |
+| The pooled-`e` scorer smoke test writes only into a scratch copy of the cards folder, never `output/cardsfolder/` | evaluator |
 | A fork whose copy-score check disagrees before perturbation is discarded, still counting against budget | collector |
 | Vocabulary or keyword-definition hash mismatch fails fast | every inference command |
 | A `--variant-checkpoint` whose split or hashes differ from `--checkpoint` fails fast | evaluator |
+| Every game holding a record that names a held-out card is excluded from training entirely | split derivation |
 | Records outside the checkpoint's recorded `game_id` set are ignored, never re-stratified | evaluator |
 | Coverage and variant matches never write `match-outcomes.txt` or `cards-played.txt` | collectors |

@@ -20,8 +20,11 @@ different things on the two sides. The stable key is **printed provenance**.
 ProvenanceKey = (script_file, face, trait_kind, index_within_kind)
 ```
 
-- `script_file` includes its tree — `cardsfolder/a/ajanis_pridemate.txt` vs
-  `tokenscripts/a/ajanis_pridemate.txt` — because the same filename occurs in more than one.
+- `script_file` includes its tree **and that tree's own layout**, which differ: `cardsfolder/` is
+  letter-keyed and `tokenscripts/` is flat, so Ajani's Pridemate is
+  `cardsfolder/a/ajanis_pridemate.txt` on one side and `tokenscripts/ajanis_pridemate.txt` on the
+  other. The key is the path as written, produced identically by the Java writer and the Python
+  reader — a mismatch is the fail-loudly case below.
 - `index_within_kind` is the index within that kind's slice of the face's raw trait list, not a
   global ordinal.
 
@@ -52,16 +55,25 @@ ProvenanceKey = (script_file, face, trait_kind, index_within_kind)
         { "start": 35, "end": 71, "role": "effect" }
       ]
     }
+  ],
+  "dropped_keys": [                          // traits that map to no rendered line
+    { "face": 0, "trait_kind": "static", "index_within_kind": 2 }
   ]
 }
 ```
+
+`dropped_keys` exists because the collector computes keys from runtime trait accessors, never from the
+sidecar. A trait the converter deduplicated away is still live at runtime and still produces a key, so
+without this list an expected dedup and a genuine corpus/sidecar mismatch would look identical at the
+join — and the mismatch is the one condition that must fail loudly.
 
 ## Rules
 
 | Rule | Consequence |
 |---|---|
 | A rendered line merged from several runtime traits carries **several** provenance keys | the join is many-to-one, never assumed one-to-one |
-| A trait whose line was deduplicated away maps to **no** line | a record naming it falls back per the rule below |
+| A trait whose line was deduplicated away maps to **no** line, and its key is listed in `dropped_keys` | expected, not an error. A record naming it is kept, and the record simply has no line to join to — it still supervises through its state and payload |
+| A record names a provenance key that is in neither `lines` nor `dropped_keys` | fail loudly — the sidecar does not describe the card the record was collected against, i.e. a reconversion between collection and training |
 | An event attributed to a sub-ability link absent from `sub_ability_links` falls back to the **root line** | attribution never drops an event |
 | `script_text` is the stage-four primary encoding surface | every command that encodes reads it here and needs no Forge-cardsfolder path of its own |
 | `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
@@ -77,7 +89,7 @@ Keys come from the trait accessors, verified present in Forge 2.0.15-SNAPSHOT
 | `getCardState()` | the printed face |
 | `isIntrinsic()` | printed vs granted |
 | `getKeyword()` | the originating keyword, where the trait came from one |
-| `getOriginalHost()` | the donor card for a granted trait |
+| `getOriginalHost()` | the card whose state hosts the trait. **For a granted trait this is the recipient, not the donor** — `CardTraitBase.getOriginalHost()` returns `getCardState().getCard()` — so it must not be used to key granted abilities; use the grantor accessors below |
 | `isCopiedTrait()` | copy detection |
 | `getGrantorStatic()` | **`SpellAbility` only**, and does not survive copies |
 

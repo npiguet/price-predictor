@@ -80,7 +80,9 @@ The probe's `interventional = false` is what distinguishes it from an interventi
                   "pt": { "base": [2,2], "boosts": [1,1], "counters": [0,0] },
                   "tapped": false, "sick": false, "damage": 0, "counters": {…},
                   "combat": {…}, "attached_to": null, "face_down": false,
-                  "granted": [ /* ProvenanceKey[] */ ],
+                  "granted_attached": [ /* ProvenanceKey[] */ ],
+                  "granted_temporary": { "keywords": ["flying"],
+                                         "abilities": [ /* ProvenanceKey[] */ ] },
                   "stack_extras": null } ],
   "refs":    { "targets": [...], "source": "E12", "modes": [...], "x": 3, "choices": {…} },
   "pending_event": null
@@ -97,6 +99,14 @@ The probe's `interventional = false` is what distinguishes it from an interventi
   3 from stage two, 4 from stage three. **An absent tier means uncollected, not empty.**
 - Perspective is not stored. Controllers are absolute; mine/opponent derives at training time from
   `actor_player`.
+- **The two grant sources are separate fields and must stay separate.** `granted_attached` holds
+  attachment-granted abilities as provenance keys; `granted_temporary` holds what the timestamped
+  change tables report, as provenance keys where a grant resolves to a printed line and as bare keyword
+  strings where it does not (`gains flying until end of turn` names no line). They cannot be merged,
+  because the model reads them differently: an entity's ability tokens are its printed and
+  attachment-granted lines only, while temporary grants ride the overlay — and gate 2's perturbation
+  removes a keyword from the ability token *or* from the temporarily-granted-keywords channel depending
+  on which one carries it.
 
 ## Events
 
@@ -129,7 +139,5 @@ recorded.
 
 1. A field may be **added**; existing fields may not change meaning or type.
 2. A new `kind` or `subkind` value may be introduced; existing values may not be repurposed.
-3. A reader encountering an unknown `kind` skips the record rather than failing, so an older reader
-   survives a newer corpus.
-4. Snapshot tiers are additive; absence is uncollected.
-5. Nothing in this schema may become a model input that is listed above as collection metadata.
+3. Snapshot tiers are additive; absence is uncollected.
+4. Nothing in this schema may become a model input that is listed above as collection metadata.
