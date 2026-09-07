@@ -36,6 +36,7 @@ class MatchOutcomeSupervisor:
         side_a_decks_path: Path | None = None,
         side_b_decks_path: Path | None = None,
         side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
+        effect_records_dir: Path | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
@@ -43,6 +44,9 @@ class MatchOutcomeSupervisor:
         self._side_a_decks_path = side_a_decks_path
         self._side_b_decks_path = side_b_decks_path
         self._side_b_decks_weight = side_b_decks_weight
+        # Absent, nothing about this run changes: no shard is opened and the
+        # two sealed corpora keep their exact format and content.
+        self._effect_records_dir = effect_records_dir
         self._run_id = str(uuid.uuid4())
         self._connector = MatchWorkerConnector()
         # The lambda re-reads self._start_worker per spawn so tests (and any
@@ -75,6 +79,8 @@ class MatchOutcomeSupervisor:
             side_a_decks_path=self._side_a_decks_path,
             side_b_decks_path=self._side_b_decks_path,
             side_b_decks_weight=self._side_b_decks_weight,
+            effect_records_dir=self._effect_records_dir,
+            worker_index=worker_id,
         )
         print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc

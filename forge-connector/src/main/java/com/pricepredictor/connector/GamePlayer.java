@@ -1,5 +1,7 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.BusBracketCollector;
+import com.pricepredictor.connector.effects.RecordShardWriter;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.GameRules;
@@ -21,6 +23,15 @@ public class GamePlayer {
     static final String LOBBY_NAME_B = "p2";
 
     private final int gamesPerMatch;
+
+    /**
+     * Where effect records go, or null when the run is not instrumented.
+     *
+     * <p>Absent, nothing changes: no collector is subscribed, no shard is
+     * opened, and the match writes exactly what it always did. That is what
+     * makes the instrumentation an opt-in rather than a mode.
+     */
+    private final RecordShardWriter effectRecords;
 
     /**
      * Per-game outcome: which side won, which side was on the play, and the
@@ -55,7 +66,18 @@ public class GamePlayer {
 
     /** Create a player with a configurable best-of-K match format. */
     public GamePlayer(int gamesPerMatch) {
+        this(gamesPerMatch, null);
+    }
+
+    /**
+     * Create a player that also collects effect records into {@code writer}.
+     *
+     * <p>The instrumentation costs no extra simulation: it rides matches that
+     * were going to be played anyway.
+     */
+    public GamePlayer(int gamesPerMatch, RecordShardWriter effectRecords) {
         this.gamesPerMatch = gamesPerMatch;
+        this.effectRecords = effectRecords;
     }
 
     /**
@@ -85,6 +107,13 @@ public class GamePlayer {
             var game = match.createGame();
             var collector = new PlayedCardCollector();
             game.subscribeToEvents(collector);
+            if (effectRecords != null) {
+                // One collector per game, with the game's own id: records join
+                // to a checkpoint's recorded split by game_id, so the id has to
+                // change when the game does.
+                game.subscribeToEvents(new BusBracketCollector(
+                        game, effectRecords, effectRecords.nextGameId()));
+            }
             match.startGame(game); // blocks until game is finished
 
             var winningLobby = game.getOutcome().getWinningLobbyPlayer();
