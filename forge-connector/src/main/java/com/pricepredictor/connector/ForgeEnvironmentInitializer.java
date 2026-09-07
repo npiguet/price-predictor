@@ -40,6 +40,13 @@ public class ForgeEnvironmentInitializer {
      * is a constant the engine resolves at class-init time. Staging is a copy,
      * so the variant tree stays the artifact the trainer and the encoder read.
      *
+     * <p>Every staged name is also registered with {@code VariantRegistry},
+     * which is what makes a variant's provenance keys name the
+     * {@code variant-scripts} tree rather than {@code cardsfolder}. Registration
+     * happens here because this is the last point at which the two are still
+     * distinguishable — after {@code FModel.initialize} a variant is an
+     * ordinary card.
+     *
      * @param extraCardSource an additional card-script directory, or null
      */
     public static synchronized void initialize(Path extraCardSource) {
@@ -49,6 +56,8 @@ public class ForgeEnvironmentInitializer {
         Path forgeGuiDir = forgeDir.resolve(GUI_SUBPATH);
 
         if (extraCardSource != null) {
+            com.pricepredictor.connector.effects.VariantRegistry
+                    .registerAll(extraCardSource);
             stageCustomCards(extraCardSource);
         }
 

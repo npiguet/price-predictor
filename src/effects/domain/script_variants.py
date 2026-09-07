@@ -166,5 +166,10 @@ def variant_name(card_name: str, index: int) -> str:
 
     Derived from the source card so ``variant_of`` and the file name agree, and
     suffixed so several variants of one card do not collide.
+
+    Suffixed with words rather than parentheses because Forge reads a
+    parenthesised suffix on a deck-list line as a set code, and because neither
+    filename sanitizer strips brackets — the file would be named
+    ``lightning_bolt_(variant_0).txt``.
     """
-    return f"{card_name} (variant {index})"
+    return f"{card_name} Variant {index}"

@@ -17,7 +17,10 @@ Three rules:
   different name, and the card-disjoint split would stop meaning what it says.
 - **A variant lives on the script surface only** and is never converted to
   prose. There is no oracle text for a card nobody printed, and writing one
-  would put text in the corpus no card has.
+  would put text in the corpus no card has. It still gets a sidecar — that is
+  the only thing a record can join against — written by the Java parser rather
+  than here, because a key's ``index_within_kind`` is the trait's position in
+  Forge's own runtime trait list.
 - **Variant matches write effect records only**, through the same records-only
   worker the coverage collector uses.
 """
@@ -30,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from effects.domain.script_variants import perturb, variant_name
+from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +140,11 @@ def generate_variants(
             continue
         perturbed, description = result
         name = variant_name(card_name, len(generated))
-        path = output_path / f"{_file_stem(source)}_v{len(generated)}.txt"
+        # The filename is the sanitized card name because that is what a
+        # provenance key resolves to: the runtime writes
+        # `variant-scripts/{sanitize(name)}.txt` and the reader looks for a
+        # sidecar at exactly that path.
+        path = output_path / f"{sanitize_card_name(name)}.txt"
         path.write_text(
             "\n".join(_rename(perturbed, name)) + "\n", encoding="utf-8",
         )
@@ -158,10 +166,6 @@ def _rename(lines: list[str], name: str) -> list[str]:
     ]
 
 
-def _file_stem(source: Path) -> str:
-    return source.stem
-
-
 def held_out_cards(split_from: Path | None) -> frozenset[str]:
     from effects.application.collect_coverage import load_held_out
 
@@ -172,6 +176,9 @@ def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.record_io import count_records
+    from effects.infrastructure.variant_sidecar_connector import (
+        VariantSidecarConnector,
+    )
 
     if not Path(config.forge_cards_path).is_dir():
         logger.error(
@@ -203,6 +210,16 @@ def run(config: CollectVariantsConfig) -> int:
     if not variants:
         logger.error("No script had a perturbable parameter")
         return 1
+
+    # A variant without a sidecar produces records nothing can join, and the
+    # join fails loudly, so this runs before the first game rather than after.
+    code = VariantSidecarConnector().run(Path(config.variant_scripts))
+    if code != 0:
+        logger.error(
+            "VariantSidecarMain exited %d; variant records would have no "
+            "sidecar to join against", code,
+        )
+        return code
 
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,

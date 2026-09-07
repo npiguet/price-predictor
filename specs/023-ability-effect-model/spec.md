@@ -226,7 +226,9 @@ loss.
   - from `price_predictor`: the tokenizer, `tokenizer_store` (the vocabulary file format both
     surfaces are written in and read back from), `build_vocabulary` and its target-size truncation,
     `forge_jvm` worker helpers, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`,
-    and `ridge_probes`;
+    `ridge_probes`, and `card_filenames.sanitize_card_name` (a variant script's filename is the path
+    its provenance key resolves to, and the Java `CardFilenames` mirrors this one sanitizer — a third
+    implementation would break the join without failing the build);
   - from `sealed.domain`: `manabase.compute_basic_lands`, `card_embedding_layout`;
   - from `sealed.infrastructure`: `ConvertedCardLocator`, `embedding_store`,
     `MatchWorkerConnector` (the effects collectors spawn the same Java worker main, so

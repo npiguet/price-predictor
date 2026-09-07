@@ -20,6 +20,10 @@ import pytest
 
 from effects.application.collect_variants import generate_variants
 from effects.infrastructure.record_io import read_records
+from effects.infrastructure.sidecar_io import read_sidecar, sidecar_path_for
+from effects.infrastructure.variant_sidecar_connector import (
+    VariantSidecarConnector,
+)
 from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
@@ -117,9 +121,37 @@ def test_a_variant_tree_holds_no_converted_text(tmp_path: Path) -> None:
 
     generate_variants(source, output, held_out=frozenset(), limit=3)
 
-    assert not list(output.glob("*.provenance.json"))
     for path in output.glob("*.txt"):
         text = path.read_text(encoding="utf-8")
         # A converted file starts with "name: " (lowercased); a Forge script
         # starts with "Name:".
         assert not text.startswith("name: ")
+
+
+def test_every_variant_script_gets_a_sidecar(tmp_path: Path) -> None:
+    """FR-056's other half. Without a sidecar a variant's records name a key
+    the reader cannot resolve, and the join fails loudly on a corpus that is in
+    fact correct — so the sidecar pass runs before the first game."""
+    _require_jar()
+    source = tmp_path / "cards"
+    source.mkdir()
+    (source / "test_bolt.txt").write_text(_BOLT, encoding="utf-8")
+    output = tmp_path / "variants"
+
+    variants = generate_variants(
+        source, output, held_out=frozenset(), limit=3,
+    )
+    assert variants
+
+    code = VariantSidecarConnector().run(output)
+    assert code == 0, "VariantSidecarMain failed"
+
+    for variant in variants:
+        sidecar_path = sidecar_path_for(variant.path)
+        assert sidecar_path.exists(), f"no sidecar for {variant.name}"
+        sidecar = read_sidecar(sidecar_path)
+        # The key the runtime writes is the path the reader resolves.
+        assert sidecar.script_file == (
+            f"variant-scripts/{variant.path.name}"
+        )
+        assert sidecar.lines, "a perturbed ability line produced no sidecar row"

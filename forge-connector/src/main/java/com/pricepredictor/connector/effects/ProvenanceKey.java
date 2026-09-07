@@ -180,9 +180,22 @@ public record ProvenanceKey(
         return List.copyOf(order);
     }
 
-    /** Which converted tree a live card's script came from. */
+    /**
+     * Which converted tree a live card's script came from.
+     *
+     * <p>A staged variant is an ordinary non-token card by the time Forge has
+     * loaded it, so the tree cannot be read off the card — it comes from the
+     * names {@link VariantRegistry} recorded at staging time. Without that a
+     * variant's records would be keyed under {@code cardsfolder/}, where no
+     * sidecar of that name exists, and the join would fail loudly on a corpus
+     * that is in fact correct.
+     */
     private static String treeOf(Card card) {
-        return card.isToken() ? SourceTree.TOKENSCRIPTS : SourceTree.CARDSFOLDER;
+        if (card.isToken()) return SourceTree.TOKENSCRIPTS;
+        if (VariantRegistry.isVariant(card.getName())) {
+            return SourceTree.VARIANT_SCRIPTS;
+        }
+        return SourceTree.CARDSFOLDER;
     }
 
     /** The JSON object form used inside a record's {@code ability} array. */

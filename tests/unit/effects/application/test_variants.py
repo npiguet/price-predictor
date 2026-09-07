@@ -203,10 +203,42 @@ class TestVariantGeneration:
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
         output = tmp_path / "variants"
         generate_variants(source, output, held_out=frozenset(), limit=5)
-        # The variant tree holds scripts only: no converted text, no sidecar
-        # written by the prose converter.
-        assert list(output.glob("*.txt"))
-        assert not list(output.glob("*.provenance.json"))
+        # The variant tree holds Forge source scripts. The sidecar beside them
+        # is written by the Java parser, not here.
+        for path in output.glob("*.txt"):
+            assert path.read_text(encoding="utf-8").startswith("Name:")
+
+    def test_a_variant_file_is_named_for_the_key_that_resolves_it(
+        self, tmp_path,
+    ):
+        """The runtime keys a variant as ``variant-scripts/{sanitized name}.txt``
+        and the reader looks for a sidecar at exactly that path, so a filename
+        derived from anything else makes every variant record unjoinable."""
+        from price_predictor.infrastructure.card_filenames import (
+            sanitize_card_name,
+        )
+
+        source = tmp_path / "cards"
+        source.mkdir()
+        self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)
+        variants = generate_variants(
+            source, tmp_path / "variants", held_out=frozenset(), limit=1,
+        )
+        assert variants
+        assert variants[0].path.name == (
+            f"{sanitize_card_name(variants[0].name)}.txt"
+        )
+
+    def test_a_variant_name_survives_sanitizing_without_punctuation(self):
+        """A parenthesised suffix reads as a set code on a Forge deck-list line
+        and survives both filename sanitizers verbatim."""
+        from price_predictor.infrastructure.card_filenames import (
+            sanitize_card_name,
+        )
+
+        stem = sanitize_card_name(variant_name("Lightning Bolt", 0))
+        assert stem == "lightning_bolt_variant_0"
+        assert "(" not in stem and ")" not in stem
 
     def test_the_limit_is_respected(self, tmp_path):
         source = tmp_path / "cards"
@@ -305,5 +337,5 @@ class TestPairingLoss:
 
 
 def test_variant_name_derives_from_its_source():
-    assert variant_name("Lightning Bolt", 0) == "Lightning Bolt (variant 0)"
+    assert variant_name("Lightning Bolt", 0) == "Lightning Bolt Variant 0"
     assert variant_name("Lightning Bolt", 1) != variant_name("Lightning Bolt", 0)
