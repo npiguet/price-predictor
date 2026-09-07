@@ -31,6 +31,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     "sealed.domain.card_embedding_layout": None,
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},
     "sealed.infrastructure.embedding_store": None,
+    "sealed.infrastructure.match_worker_connector": {"MatchWorkerConnector"},
 }
 
 _GOVERNED_PACKAGES = ("price_predictor", "sealed")

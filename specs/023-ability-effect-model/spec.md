@@ -228,7 +228,9 @@ loss.
     `forge_jvm` worker helpers, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`,
     and `ridge_probes`;
   - from `sealed.domain`: `manabase.compute_basic_lands`, `card_embedding_layout`;
-  - from `sealed.infrastructure`: `ConvertedCardLocator`, `embedding_store`;
+  - from `sealed.infrastructure`: `ConvertedCardLocator`, `embedding_store`,
+    `MatchWorkerConnector` (the effects collectors spawn the same Java worker main, so
+    rebuilding its system-property mapping here would be a second place for it to drift);
   - from `sealed.application`: nothing. `train-scorer` Phase A is re-run as a subprocess, not
     imported, so the two application layers stay disjoint.
 - **FR-003**: Java collectors, the `MatchWorkerMain` instrumentation behind `--effect-records`, and
