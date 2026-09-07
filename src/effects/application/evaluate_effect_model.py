@@ -545,7 +545,22 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         )
         variants[name] = loaded
 
+    from effects.application.geometry_checks import (
+        check_decodability,
+        check_nearest_neighbours,
+        check_umap,
+        check_variant_geometry,
+        check_ward,
+        load_cache,
+    )
+    from effects.infrastructure.record_io import read_records
+
     report = EvaluationReport()
+    cards_root = next(
+        (Path(f) for f in config.cards_folders if Path(f).name == "cardsfolder"),
+        Path(config.cards_folders[0]),
+    )
+    cached = load_cache(config.abilities_root, cards_root, variant="full")
 
     # ── gate 3: geometry, read off the cache ──
     vectors = unique_ability_vectors(config.abilities_root, "full")
@@ -567,12 +582,32 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         ))
 
     # ── gate 2: per keyword, routing only ──
+    scored = scored_records(read_records(config.records_dir), main.provenance)
     verdicts = [
-        evaluate_keyword(row, qualifying_records=0, agreeing_records=0)
+        evaluate_keyword(
+            row,
+            qualifying_records=count_qualifying(scored, row),
+            agreeing_records=0,
+        )
         for row in keyword_rows()
     ]
     report.keyword_verdicts = verdicts
     report.add(evaluate_gate_two(verdicts))
+
+    # ── e-geometry checks, all reported ──
+    report.add(check_ward(cached))
+    report.add(check_nearest_neighbours(cached, NEIGHBOUR_QUERIES))
+    report.add(check_umap(cached))
+    report.add(check_decodability(
+        cached, {}, DEFAULT_WIN_RATES,
+        held_out_cards=main.provenance.held_out_cards,
+    ))
+    for name in ("no-state", "taxonomy"):
+        report.add(check_variant_geometry(
+            cached,
+            load_cache(config.abilities_root, cards_root, variant=name),
+            name,
+        ))
 
     # ── checks whose records do not exist yet ──
     for name in STAGE_GATED_CHECKS:
@@ -590,3 +625,42 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
             "--withhold-keyword to give this check something to measure",
         ))
     return report
+
+
+#: Texts whose neighbours a reader can judge at a glance. Reported rather than
+#: scored: the point is for a person to see whether the neighbours of a removal
+#: spell are removal spells, which no metric asks.
+NEIGHBOUR_QUERIES: tuple[str, ...] = (
+    "destroy target creature",
+    "draw a card",
+    "deal 3 damage to any target",
+    "target creature gets +2/+2 until end of turn",
+)
+
+#: Where the sealed pipeline's per-card winnability labels live. The
+#: decodability battery skips when it is absent rather than failing: the labels
+#: are an operator's training data, not a repository artifact.
+DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
+
+
+def count_qualifying(records: list, row: DamageStepKeyword) -> int:
+    """Combat records in which the keyword's carrier is actually in combat.
+
+    A first approximation of ``row.qualifies_when``: the full predicate needs
+    the model's perturbed prediction, which the caller supplies. Counting here
+    is what lets the under-sampled verdict fire before any model has run.
+    """
+    from effects.domain.records import RecordKind
+
+    keyword = row.keyword
+    qualifying = 0
+    for record in records:
+        if record.kind is not RecordKind.COMBAT:
+            continue
+        for entity in record.state.entities:
+            if entity.combat is None:
+                continue
+            if keyword in entity.granted_temporary.keywords:
+                qualifying += 1
+                break
+    return qualifying
