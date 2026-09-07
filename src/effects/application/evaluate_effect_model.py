@@ -388,6 +388,47 @@ def skip_unavailable(name: str) -> CheckResult:
     )
 
 
+# ── the role-polarity probe (FR-116) ────────────────────────────────────
+
+
+def evaluate_role_polarity(
+    cost_position_sign: float | None, effect_position_sign: float | None,
+) -> CheckResult:
+    """Does ``{R}`` in a cost mean the opposite of ``{R}`` in an effect?
+
+    The narrowest possible test of the role embedding. The same mana symbol
+    appears on both sides of an activated ability, and the two mean opposite
+    things: paying ``{R}`` takes red mana out of the pool, producing ``{R}``
+    puts it in. A model that read the symbol without its role would predict the
+    same sign for both.
+
+    Needs mana records, so it waits for stage two: the cost half is observable
+    from stage one, but the effect half only exists once mana abilities are
+    collected.
+    """
+    if cost_position_sign is None or effect_position_sign is None:
+        return skip_unavailable("role-polarity")
+    values = {
+        "cost_position_mana_sign": cost_position_sign,
+        "effect_position_mana_sign": effect_position_sign,
+    }
+    if cost_position_sign < 0 < effect_position_sign:
+        return CheckResult(
+            "role-polarity", CheckStatus.REPORTED,
+            f"{{R}} in cost position predicts a mana decrease "
+            f"({cost_position_sign:+.3f}) and in effect position an increase "
+            f"({effect_position_sign:+.3f})",
+            values,
+        )
+    return CheckResult(
+        "role-polarity", CheckStatus.REPORTED,
+        f"{{R}} predicts the same direction in both positions "
+        f"(cost {cost_position_sign:+.3f}, effect {effect_position_sign:+.3f}) "
+        "— the role embedding is not separating them",
+        values,
+    )
+
+
 # ── the report ──────────────────────────────────────────────────────────
 
 
