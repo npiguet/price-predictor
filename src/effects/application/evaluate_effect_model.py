@@ -483,3 +483,110 @@ def scored_records(records, provenance) -> list:
 def keyword_rows() -> tuple[DamageStepKeyword, ...]:
     """Gate 2's table, so the evaluator and the report read one source."""
     return DAMAGE_STEP_KEYWORDS
+
+
+def unique_ability_vectors(abilities_root: Path, variant: str) -> np.ndarray:
+    """One vector per unique ability text, for gate 3 (FR-123).
+
+    Deduplicated by value: the corpus has ~38k unique texts across 66k lines,
+    and counting a reprinted line twice would make the space look more populated
+    than it is.
+    """
+    from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+
+    root = Path(abilities_root)
+    if not root.is_dir():
+        return np.zeros((0, 0), dtype=np.float32)
+    pattern = (
+        f"*{CACHE_SUFFIX}" if variant == "full" else f"*.{variant}{CACHE_SUFFIX}"
+    )
+    seen: dict[bytes, np.ndarray] = {}
+    for path in sorted(root.rglob(pattern)):
+        if variant == "full" and path.name.count(".") != 1:
+            continue
+        with np.load(path) as data:
+            matrix = data[ARRAY_KEY]
+        for row in matrix:
+            seen.setdefault(row.tobytes(), row)
+    if not seen:
+        return np.zeros((0, 0), dtype=np.float32)
+    return np.stack(list(seen.values()))
+
+
+def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
+    """Load the checkpoints, run every check, and report.
+
+    Splits come from ``--checkpoint`` and are never recomputed; a
+    ``--variant-checkpoint`` recording a different split fails fast here, before
+    any number is produced that would look comparable and not be.
+    """
+    from effects.infrastructure.effect_model_store import (
+        EffectModelStore,
+        require_same_split,
+        resolve_inference_paths,
+    )
+
+    main_path = Path(config.checkpoint)
+    main = EffectModelStore(main_path.parent).load(main_path)
+    vocab_path, keyword_path = resolve_inference_paths(
+        main.provenance,
+        vocab_path=config.vocab_path,
+        keyword_path=config.keyword_definitions,
+    )
+    main.provenance.verify_hashes(
+        vocab_path=vocab_path, keyword_path=keyword_path,
+    )
+
+    variants = {}
+    for name, path in config.variant_checkpoints.items():
+        loaded = EffectModelStore(Path(path).parent).load(Path(path))
+        require_same_split(
+            main, loaded, main_path=main_path, variant_path=Path(path),
+        )
+        variants[name] = loaded
+
+    report = EvaluationReport()
+
+    # ── gate 3: geometry, read off the cache ──
+    vectors = unique_ability_vectors(config.abilities_root, "full")
+    if vectors.shape[0] < 2:
+        report.add(CheckResult(
+            "gate-3", CheckStatus.SKIPPED,
+            f"no ability cache under {config.abilities_root}; run "
+            "encode-abilities first",
+        ))
+    else:
+        report.add(evaluate_gate_three(vectors))
+
+    # ── gate 1: needs the identity baseline ──
+    if "identity" not in variants:
+        report.add(CheckResult(
+            "gate-1", CheckStatus.SKIPPED,
+            "needs --variant-checkpoint identity=PATH: gate 1 is defined "
+            "against that baseline",
+        ))
+
+    # ── gate 2: per keyword, routing only ──
+    verdicts = [
+        evaluate_keyword(row, qualifying_records=0, agreeing_records=0)
+        for row in keyword_rows()
+    ]
+    report.keyword_verdicts = verdicts
+    report.add(evaluate_gate_two(verdicts))
+
+    # ── checks whose records do not exist yet ──
+    for name in STAGE_GATED_CHECKS:
+        report.add(skip_unavailable(name))
+
+    if main.provenance.withheld_keyword:
+        report.add(CheckResult(
+            "zero-shot-keyword", CheckStatus.REPORTED,
+            f"the checkpoint withheld {main.provenance.withheld_keyword!r}",
+        ))
+    else:
+        report.add(CheckResult(
+            "zero-shot-keyword", CheckStatus.SKIPPED,
+            "the checkpoint withheld no keyword; retrain with "
+            "--withhold-keyword to give this check something to measure",
+        ))
+    return report
