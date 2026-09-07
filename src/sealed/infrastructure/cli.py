@@ -1716,6 +1716,14 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         else DEFAULT_SIDE_B_DECKS_WEIGHT
     )
 
+    # Absent, the supervisor and its workers behave exactly as they do today:
+    # no shard is opened and match-outcomes.txt and cards-played.txt keep their
+    # format and content untouched (FR-030).
+    effect_records = getattr(args, "effect_records", None)
+    effect_records_dir = Path(effect_records) if effect_records else None
+    if effect_records_dir is not None:
+        print(f"Collecting effect records into {effect_records_dir}")
+
     supervisor = MatchOutcomeSupervisor(
         worker_count=args.workers,
         output_path=output_path,
@@ -1723,6 +1731,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         side_a_decks_path=side_a_decks,
         side_b_decks_path=side_b_decks,
         side_b_decks_weight=side_b_decks_weight,
+        effect_records_dir=effect_records_dir,
     )
 
     try:

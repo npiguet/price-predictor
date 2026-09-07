@@ -1,5 +1,8 @@
 package com.pricepredictor.connector;
 
+import com.pricepredictor.connector.effects.AttributionMode;
+import com.pricepredictor.connector.effects.RecordShardWriter;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -52,7 +55,28 @@ public class MatchWorkerMain {
             int bestOf,
             String sideADecksFile,
             String sideBDecksFile,
-            int sideBWeight) {}
+            int sideBWeight,
+            Path effectRecordsDir,
+            int workerIndex) {
+
+        /**
+         * Records-only: no sealed corpus is written at all.
+         *
+         * <p>The coverage and variant collectors reuse this worker, and they
+         * must never touch {@code match-outcomes.txt} or {@code cards-played.txt}
+         * — their decks are built for coverage, not for a fair self-play sample,
+         * and mixing them into the sealed corpus would corrupt the scorer's
+         * training data. The guard lives here rather than in the Python
+         * supervisor because it is this class that constructs the writers.
+         */
+        boolean recordsOnly() {
+            return outputFile == null;
+        }
+
+        boolean collectsEffectRecords() {
+            return effectRecordsDir != null;
+        }
+    }
 
     public static void main(String[] args) {
         WorkerConfig config = parseConfig();
@@ -67,8 +91,11 @@ public class MatchWorkerMain {
      */
     static WorkerConfig parseConfig() {
         String outputFileProp = System.getProperty("output.file");
-        if (outputFileProp == null) {
-            System.err.println("Error: -Doutput.file system property is required");
+        String effectRecordsProp = System.getProperty("effect.records.dir");
+        if (outputFileProp == null && effectRecordsProp == null) {
+            System.err.println(
+                    "Error: -Doutput.file is required unless -Deffect.records.dir"
+                            + " is set (records-only mode)");
             System.exit(2);
         }
 
@@ -96,9 +123,14 @@ public class MatchWorkerMain {
                 "side.b.decks.weight", DEFAULT_SIDE_B_WEIGHT,
                 v -> v >= 1, "must be >= 1");
 
+        int workerIndex = parseIntProp(
+                "effect.worker.index", 0, v -> v >= 0, "must be >= 0");
+
         return new WorkerConfig(
-                Path.of(outputFileProp), runId, bestOf,
-                sideAProp, sideBProp, sideBWeight);
+                outputFileProp == null ? null : Path.of(outputFileProp),
+                runId, bestOf, sideAProp, sideBProp, sideBWeight,
+                effectRecordsProp == null ? null : Path.of(effectRecordsProp),
+                workerIndex);
     }
 
     /**
@@ -145,20 +177,39 @@ public class MatchWorkerMain {
         GeneratedDecksIndex sideAIndex = loadIndex(config.sideADecksFile(), "side-A");
         GeneratedDecksIndex sideBIndex = loadIndex(config.sideBDecksFile(), "side-B");
 
-        MatchResultWriter writer = new MatchResultWriter(config.outputFile());
-        CardsPlayedWriter cardsPlayedWriter = new CardsPlayedWriter(
-                cardsPlayedPath(config.outputFile()));
+        // In records-only mode neither sealed writer is constructed at all —
+        // not constructed-and-unused, so there is no path by which a coverage
+        // or variant run can append to the sealed corpus.
+        MatchResultWriter writer = config.recordsOnly()
+                ? null : new MatchResultWriter(config.outputFile());
+        CardsPlayedWriter cardsPlayedWriter = config.recordsOnly()
+                ? null : new CardsPlayedWriter(cardsPlayedPath(config.outputFile()));
+
+        RecordShardWriter effectRecords = null;
+        if (config.collectsEffectRecords()) {
+            effectRecords = new RecordShardWriter(
+                    config.effectRecordsDir(), config.runId(), config.workerIndex());
+            System.out.println(
+                    "Effect records: " + effectRecords.path()
+                            + " [mode=" + AttributionMode.detect().wireValue() + "]");
+        }
+
         MatchGenerator generator = new MatchGenerator(
-                eligibleSets, new DeckBuilder(), new GamePlayer(config.bestOf()), config.runId(),
+                eligibleSets, new DeckBuilder(),
+                new GamePlayer(config.bestOf(), effectRecords), config.runId(),
                 sideAIndex, sideBIndex, config.sideBWeight());
 
         long count = 0;
         while (true) {
             try {
                 MatchGenerationResult result = generator.generateMatch();
-                writer.write(result.matchResult());
-                for (CardsPlayedRow row : result.cardsPlayedRows()) {
-                    cardsPlayedWriter.write(row);
+                if (writer != null) {
+                    writer.write(result.matchResult());
+                }
+                if (cardsPlayedWriter != null) {
+                    for (CardsPlayedRow row : result.cardsPlayedRows()) {
+                        cardsPlayedWriter.write(row);
+                    }
                 }
                 count++;
                 if (count % 10 == 0) {

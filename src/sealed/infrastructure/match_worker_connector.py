@@ -26,13 +26,15 @@ class MatchWorkerConnector:
 
     def start(
         self,
-        output_file: Path,
+        output_file: Path | None,
         run_id: str,
         best_of: int,
         log_file: IO[bytes] | None = None,
         side_a_decks_path: Path | None = None,
         side_b_decks_path: Path | None = None,
         side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
+        effect_records_dir: Path | None = None,
+        worker_index: int = 0,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -56,6 +58,14 @@ class MatchWorkerConnector:
                 relative to the Forge methods. Ignored when
                 ``side_b_decks_path`` is None. Passed as
                 ``-Dside.b.decks.weight=<int>``.
+            effect_records_dir: When provided, the worker also writes effect
+                records to a JSONL shard in this directory. The
+                instrumentation rides matches that were going to be played
+                anyway and costs no extra simulation. Absent, the worker
+                behaves exactly as it does today.
+            worker_index: This worker's index, which the shard filename and
+                every record id carry — workers count independently, so their
+                ids would otherwise collide across a run's shards.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -69,11 +79,21 @@ class MatchWorkerConnector:
                 f"best_of must be a positive odd integer, got: {best_of}"
             )
 
+        if output_file is None and effect_records_dir is None:
+            raise ValueError(
+                "the worker needs an output file, effect records, or both; "
+                "with neither it would play matches and record nothing"
+            )
+
         system_properties: dict[str, str] = {
-            "output.file": str(output_file),
             "match.run.id": run_id,
             "match.best.of": str(best_of),
         }
+        if output_file is not None:
+            system_properties["output.file"] = str(output_file)
+        if effect_records_dir is not None:
+            system_properties["effect.records.dir"] = str(effect_records_dir)
+            system_properties["effect.worker.index"] = str(worker_index)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:
