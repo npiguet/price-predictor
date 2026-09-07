@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.BusBracketCollector;
+import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
@@ -102,19 +103,39 @@ public class GamePlayer {
 
         List<GameOutcome> outcomes = new ArrayList<>();
         long startMillis = System.currentTimeMillis();
+        // Seeds the patched collectors' sampling, so a worker's games sample
+        // independently of one another rather than all alike.
+        long gameSeed = startMillis;
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
             var collector = new PlayedCardCollector();
             game.subscribeToEvents(collector);
+            PatchedCollectors patched = null;
             if (effectRecords != null) {
                 // One collector per game, with the game's own id: records join
                 // to a checkpoint's recorded split by game_id, so the id has to
-                // change when the game does.
+                // change when the game does. Both collectors share that id —
+                // they describe the same game.
+                String gameId = effectRecords.nextGameId();
                 game.subscribeToEvents(new BusBracketCollector(
-                        game, effectRecords, effectRecords.nextGameId()));
+                        game, effectRecords, gameId));
+                // The patched collectors reach the engine through static
+                // listeners, so they are installed for the life of one game and
+                // uninstalled after it. On a stock checkout install() finds no
+                // hook and the game plays exactly as it did before.
+                patched = new PatchedCollectors(
+                        game, effectRecords, gameId,
+                        PatchedCollectors.CollectionCaps.defaults(), gameSeed++);
+                patched.install();
             }
-            match.startGame(game); // blocks until game is finished
+            try {
+                match.startGame(game); // blocks until game is finished
+            } finally {
+                if (patched != null) {
+                    patched.close();
+                }
+            }
 
             var winningLobby = game.getOutcome().getWinningLobbyPlayer();
             if (winningLobby == null) {

@@ -2,10 +2,15 @@
 
 **Feature**: `023-ability-effect-model` | **Date**: 2026-09-06
 
-The operating procedure for the whole feature. Steps 1–7 are stage one end to end against a **stock,
-unpatched** Forge checkout: they produce the first `e` vectors and all three gate verdicts, and they
-are the acceptance path for User Story 1 in [spec.md](spec.md). [After stage one](#after-stage-one)
-covers the three later stages, each of which widens the corpus without invalidating what came before.
+The operating procedure for the whole feature. Steps 1–7 produce the first `e` vectors and all three
+gate verdicts, and are the acceptance path for User Story 1 in [spec.md](spec.md).
+[After stage one](#after-stage-one) covers the later stages, each of which widens the corpus without
+invalidating what came before.
+
+They run against a patched or a stock `../forge` alike. Applying
+[the engine patch](../../forge-connector/patches/) first is worth it — it is one `git am` and one
+rebuild, and it takes a run from three of the eight sampling classes to six — but nothing in the
+procedure requires it, and every step below says what changes either way.
 
 | Step | Command | Wall clock | Attended |
 |---|---|---|---|
@@ -24,9 +29,20 @@ pip install -e ".[dev]" --extra-index-url https://download.pytorch.org/whl/cu126
 cd forge-connector && mvn package -DskipTests   # fat JAR the workers run from
 ```
 
-Sibling `../forge` checkout built with `mvn install -DskipTests`. Nothing is patched at this stage.
-The JAR carries several mains the Python side spawns — `ConvertMain`, `KeywordDefinitionMain`,
-`VariantSidecarMain`, `CastabilityMain`, `MatchWorkerMain` — so rebuild it after any Java change.
+Sibling `../forge` checkout built with `mvn install -DskipTests`. The JAR carries several mains the
+Python side spawns — `ConvertMain`, `KeywordDefinitionMain`, `VariantSidecarMain`, `CastabilityMain`,
+`MatchWorkerMain` — so rebuild it after any Java change, and **after applying the engine patch**,
+because the worker links against the freshly installed Forge jars.
+
+Apply the patch first unless there is a reason not to:
+
+```bash
+cd ../forge
+git checkout -b effect-record-hooks
+git am ../price-predictor/forge-connector/patches/0001-*.patch
+mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests
+cd ../price-predictor/forge-connector && mvn package -DskipTests
+```
 
 ## 1. Convert, with sidecars and token scripts
 
@@ -79,10 +95,12 @@ it rides matches that were going to be played anyway — and the sealed corpora 
 so this doubles as a sealed self-play run. Ctrl-C to stop.
 
 **Checks**:
-- `output/effects/records/` fills with `{run_id}.{worker}.jsonl` shards holding `resolution` and
-  `combat` records, and no other kind.
-- Every record carries `"mode": "degraded"` — the workers probed for the patch hooks, found none, and
-  fell back to bracket attribution.
+- `output/effects/records/` fills with `{run_id}.{worker}.jsonl` shards.
+- Every record carries the same `mode`, and it is the one the checkout offers: `patched` after the
+  engine patch, `degraded` without it, printed by each worker at startup. A run cannot mix the two —
+  the mode is probed once per worker.
+- A `patched` run reaches `resolution`, `combat`, `playability`, `trigger` and `rewrite` — six of the
+  eight sampling classes. A `degraded` run reaches `resolution` and `combat` only, which is three.
 - `output/sealed/match-outcomes.txt` and `cards-played.txt` are unchanged in format and content by the
   flag's presence.
 - A first-strike combat produced two `combat` records, one per damage step.
@@ -103,9 +121,19 @@ arrive fastest, then deathtouch and lifelink, then infect, then double strike an
 Wither barely appears in sealed-legal sets at all — expect it to route on under-sampling however long
 the run goes, and read that as a property of the format rather than a model failure.
 
-Plan for a few hundred thousand records to put seven of the eight over the line. Per-keyword rates
-measured against a real corpus are in the design record's feasibility section; a corpus large enough
-for gate 2 is comfortably large enough for gate 1 and for the split.
+Size the run in **combat records**, not total ones. Combat records arrive at about the same rate
+either way, but a patched run's totals are dominated by playability records, so the same total record
+count carries a small fraction of the combat records a degraded one does. Roughly ten worker-hours of
+collection clears seven of the eight; per-keyword rates measured against a real corpus are in the
+design record's feasibility section. A corpus large enough for gate 2 is comfortably large enough for
+gate 1 and for the split.
+
+```bash
+# combat records so far, which is what gate 2 counts
+python -c "import sys;sys.path.insert(0,'src');from pathlib import Path;\
+from collections import Counter;from effects.infrastructure.record_io import read_records;\
+print(Counter(r.kind.value for r in read_records(Path('output/effects/records'))))"
+```
 
 ## 4. Train
 

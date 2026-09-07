@@ -1,10 +1,14 @@
-"""Stage-one collection against a real, unpatched Forge (T045).
+"""Collection against a real Forge (T045).
 
 Runs the instrumented worker for long enough to produce records, then checks the
-three things the stage-one acceptance path turns on: shards fill with
-``resolution`` and ``combat`` records, every record says ``degraded`` (nothing in
-``../forge`` was modified), and the two sealed corpora are untouched in format
-and content by the flag's presence.
+three things the acceptance path turns on: shards fill with ``resolution``
+records, every record agrees on one attribution mode, and the two sealed corpora
+are untouched in format and content by the flag's presence.
+
+The mode is asserted as consistent rather than as ``degraded``. The sibling
+checkout is patched or not independently of this repository, so a test that
+pins the value passes only until someone applies the patches and then fails with
+nothing wrong. ``test_effects_patched.py`` covers what a patched run must reach.
 
 Skips when the JAR is not built, so the fast suite and a checkout without Forge
 stay green.
@@ -68,7 +72,9 @@ def _run_worker(records_dir: Path, output_file: Path | None) -> list:
             process.kill()
 
 
-def test_collection_writes_records_in_degraded_mode(tmp_path: Path) -> None:
+def test_collection_writes_records_under_one_attribution_mode(
+    tmp_path: Path,
+) -> None:
     _require_jar()
     records_dir = tmp_path / "records"
     output_file = tmp_path / "match-outcomes.txt"
@@ -84,8 +90,12 @@ def test_collection_writes_records_in_degraded_mode(tmp_path: Path) -> None:
     kinds = {record.kind.value for record in records}
     assert "resolution" in kinds, f"no resolution records; saw {kinds}"
 
-    # Nothing in ../forge was modified, so every record must say so.
-    assert {record.mode.value for record in records} == {"degraded"}
+    # The mode is probed once per worker, so a run cannot mix the two: a corpus
+    # that did would be attributed two different ways with nothing saying where
+    # the boundary is.
+    modes = {record.mode.value for record in records}
+    assert len(modes) == 1, f"a single run reported both modes: {modes}"
+    assert modes <= {"degraded", "patched"}, modes
 
     # Ids carry the worker index and are unique across the shard.
     ids = [record.record_id for record in records]

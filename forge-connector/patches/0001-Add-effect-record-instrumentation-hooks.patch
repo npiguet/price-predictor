@@ -1,0 +1,324 @@
+From 84f22495735e8414a2d5d4bc419086dc21b80e68 Mon Sep 17 00:00:00 2001
+From: lordofthepigs <nicolas.piguet@gmail.com>
+Date: Mon, 7 Sep 2026 21:49:33 +0200
+Subject: [PATCH] Add effect-record instrumentation hooks
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Four hooks an external tool reads to record what each ability does when it
+resolves. Every one is inert unless something installs a listener or reads the
+pointer, and nothing in Forge does — the reader is a separate project that
+builds against stock Forge and reaches these reflectively.
+
+TriggerHandler gains a per-thread pointer to the trigger currently running.
+Without it an event that arrives while a trigger resolves is attributed to
+whatever else was on the stack, which is wrong exactly when two things resolve
+at once. It also gains a listener at the condition evaluation, called with both
+answers: a trigger that did not fire is what distinguishes the condition from
+the base rate, and it is notified below the mode check so the negatives are
+same-event-type candidates rather than every trigger in the game.
+
+ReplacementHandler gains a listener around executeReplacement, the one point
+every replacement passes through, called with the parameter map before and
+after. The map is deep-copied before the call because replacements mutate it in
+place; a shallow copy would show the outgoing values on both sides.
+
+AbilityUtils gains a per-thread pointer to the sub-ability currently resolving,
+so an outcome can be attributed to the clause that produced it rather than to
+the whole line. Restored rather than cleared on the way out, since a
+sub-ability can resolve another.
+
+AiController gains a listener called with the rules-level verdict for each
+candidate the AI evaluated — can-play, affordable, has-legal-target. Never the
+AI's policy judgment: that is its opinion rather than the game's rules.
+
+GameAction.destroy puts the causing ability in the Destroyed trigger's run
+parameters. It is in scope and was being dropped, so nothing downstream could
+name what destroyed the permanent.
+---
+ .../src/main/java/forge/ai/AiController.java  | 34 +++++++++++
+ .../src/main/java/forge/game/GameAction.java  |  6 ++
+ .../java/forge/game/ability/AbilityUtils.java | 32 ++++++++++
+ .../game/replacement/ReplacementHandler.java  | 54 ++++++++++++++++
+ .../forge/game/trigger/TriggerHandler.java    | 61 +++++++++++++++++++
+ 5 files changed, 187 insertions(+)
+
+diff --git a/forge-ai/src/main/java/forge/ai/AiController.java b/forge-ai/src/main/java/forge/ai/AiController.java
+index f4b491e887c..bb652206a2d 100644
+--- a/forge-ai/src/main/java/forge/ai/AiController.java
++++ b/forge-ai/src/main/java/forge/ai/AiController.java
+@@ -101,6 +101,30 @@ public class AiController {
+     private List<SpellAbility> skipped;
+     private volatile boolean timeoutReached;
+ 
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++
++    /**
++     * Notified with the rules-level verdict for each candidate the AI
++     * evaluated. Never with the AI's policy judgment: "another time" and "life
++     * in danger" are its opinion rather than the game's rules, and training on
++     * them would teach a model Forge's play style instead of Magic.
++     *
++     * <p>The listener must copy anything it keeps. A verdict may be abandoned
++     * mid-evaluation, and the legality check mutates the checked ability's
++     * targets, so holding the ability object is not safe.
++     */
++    public interface EffectRecordPlayabilityListener {
++        void onCandidate(SpellAbility candidate, boolean canPlay, boolean affordable,
++                boolean hasLegalTarget);
++    }
++
++    private static EffectRecordPlayabilityListener effectRecordPlayabilityListener;
++
++    public static void setEffectRecordPlayabilityListener(
++            final EffectRecordPlayabilityListener listener) {
++        effectRecordPlayabilityListener = listener;
++    }
++
+     public AiController(final Player computerPlayer, final Game game0) {
+         player = computerPlayer;
+         game = game0;
+@@ -852,6 +876,16 @@ public class AiController {
+         // this is the "heaviest" check, which also sets up targets, defines X, etc.
+         AiPlayDecision canPlay = canPlaySa(sa);
+ 
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // Rules-level answers only, recomputed here rather than read off the
++        // AI's decision above, which mixes in policy. Notified after canPlaySa
++        // because that is what sets up the targets the third answer reads.
++        if (effectRecordPlayabilityListener != null) {
++            effectRecordPlayabilityListener.onCandidate(sa, sa.canPlay(),
++                    ComputerUtilCost.canPayCost(sa, player, false),
++                    sa.getTargetRestrictions() == null || !sa.getTargets().isEmpty());
++        }
++
+         if (canPlay != AiPlayDecision.WillPlay) {
+             return canPlay;
+         }
+diff --git a/forge-game/src/main/java/forge/game/GameAction.java b/forge-game/src/main/java/forge/game/GameAction.java
+index 296475aa049..e082cf0913e 100644
+--- a/forge-game/src/main/java/forge/game/GameAction.java
++++ b/forge-game/src/main/java/forge/game/GameAction.java
+@@ -2159,6 +2159,12 @@ public class GameAction {
+ 
+         final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(c);
+         runParams.put(AbilityKey.Causer, activator);
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // The ability that caused the destruction is in scope here and was
++        // being dropped; a destroy record cannot name what destroyed the
++        // permanent without it. Placed before the caller's own params so an
++        // explicit Cause still wins.
++        runParams.put(AbilityKey.Cause, sa);
+         if (params != null) {
+             runParams.putAll(params);
+         }
+diff --git a/forge-game/src/main/java/forge/game/ability/AbilityUtils.java b/forge-game/src/main/java/forge/game/ability/AbilityUtils.java
+index aa35c2ffd71..4bc9074ea7a 100644
+--- a/forge-game/src/main/java/forge/game/ability/AbilityUtils.java
++++ b/forge-game/src/main/java/forge/game/ability/AbilityUtils.java
+@@ -1296,11 +1296,43 @@ public class AbilityUtils {
+     // BELOW ARE resolve() METHOD AND ITS DEPENDANTS, CONSIDER MOVING TO DEDICATED CLASS
+     //
+     /////////////////////////////////////////////////////////////////////////////////////
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++    //
++    // The sub-ability currently resolving on this thread, or null at the root.
++    // Read by effect-record collection to attribute an outcome to the clause
++    // that produced it rather than to the whole line: "put a counter" and
++    // "draw a card" are exactly the distinction the per-entity head learns.
++    private static final ThreadLocal<SpellAbility> EFFECT_RECORD_SUB_ABILITY = new ThreadLocal<>();
++
++    /** The sub-ability currently resolving on this thread, or null. */
++    public static SpellAbility getEffectRecordSubAbility() {
++        return EFFECT_RECORD_SUB_ABILITY.get();
++    }
++
++    private static void setEffectRecordSubAbility(final SpellAbility sa) {
++        if (sa == null) {
++            EFFECT_RECORD_SUB_ABILITY.remove();
++        } else {
++            EFFECT_RECORD_SUB_ABILITY.set(sa);
++        }
++    }
++
+     public static void resolve(final SpellAbility sa) {
+         if (sa == null) {
+             return;
+         }
++        // Restored rather than cleared: a sub-ability can resolve another, and
++        // clearing would lose the enclosing clause on the way back up.
++        final SpellAbility previous = EFFECT_RECORD_SUB_ABILITY.get();
++        setEffectRecordSubAbility(sa);
++        try {
++            resolveEffectRecordBody(sa);
++        } finally {
++            setEffectRecordSubAbility(previous);
++        }
++    }
+ 
++    private static void resolveEffectRecordBody(final SpellAbility sa) {
+         Player pl = sa.getActivatingPlayer();
+         final Game game = pl.getGame();
+ 
+diff --git a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java b/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
+index 4d9877fb55b..70178d3da1a 100644
+--- a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
++++ b/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
+@@ -58,6 +58,42 @@ public class ReplacementHandler {
+     // List of all replacement effect candidates for DamageDone event, in APNAP order
+     private final List<Map<ReplacementEffect, List<Map<AbilityKey, Object>>>> replaceDamageList = new ArrayList<>();
+ 
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++
++    /** Notified around every replacement execution. */
++    public interface EffectRecordListener {
++        void onReplacement(ReplacementEffect effect, Map<AbilityKey, Object> before,
++                Map<AbilityKey, Object> after);
++    }
++
++    private static EffectRecordListener effectRecordListener;
++
++    public static void setEffectRecordListener(final EffectRecordListener listener) {
++        effectRecordListener = listener;
++    }
++
++    /**
++     * Deep-copy of a run-parameter map, for the "before" side.
++     *
++     * <p>Replacements mutate the nested structures in place, so a shallow copy
++     * would leave both sides showing the outgoing values and every rewrite
++     * record would claim the effect changed nothing.
++     */
++    private static Map<AbilityKey, Object> deepCopyParams(final Map<AbilityKey, Object> params) {
++        final Map<AbilityKey, Object> copy = new EnumMap<>(AbilityKey.class);
++        for (final Map.Entry<AbilityKey, Object> entry : params.entrySet()) {
++            final Object value = entry.getValue();
++            if (value instanceof Map<?, ?> nested) {
++                copy.put(entry.getKey(), new LinkedHashMap<>(nested));
++            } else if (value instanceof Collection<?> nested) {
++                copy.put(entry.getKey(), new ArrayList<>(nested));
++            } else {
++                copy.put(entry.getKey(), value);
++            }
++        }
++        return copy;
++    }
++
+     /**
+      * ReplacementHandler.
+      * @param gameState
+@@ -285,6 +321,24 @@ public class ReplacementHandler {
+      *            the replacement effect to run
+      */
+     private ReplacementResult executeReplacement(final Map<AbilityKey, Object> runParams,
++        final ReplacementEffect replacementEffect, final Player decider) {
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // The one point every replacement passes through. The incoming map is
++        // deep-copied before the call because replacements mutate it in place;
++        // a shallow copy would show the outgoing values on both sides and
++        // every rewrite record would claim the effect changed nothing.
++        if (effectRecordListener == null) {
++            return executeReplacementInternal(runParams, replacementEffect, decider);
++        }
++        final Map<AbilityKey, Object> before = deepCopyParams(runParams);
++        try {
++            return executeReplacementInternal(runParams, replacementEffect, decider);
++        } finally {
++            effectRecordListener.onReplacement(replacementEffect, before, runParams);
++        }
++    }
++
++    private ReplacementResult executeReplacementInternal(final Map<AbilityKey, Object> runParams,
+         final ReplacementEffect replacementEffect, final Player decider) {
+         Card host = replacementEffect.getHostCard();
+         // AlternateState for OriginsPlaneswalker
+diff --git a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java b/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
+index a5298d71237..30127819b06 100644
+--- a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
++++ b/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
+@@ -51,6 +51,40 @@ public class TriggerHandler {
+     private final List<TriggerWaiting> waitingTriggers = new ArrayList<>();
+     private final Game game;
+ 
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++    //
++    // The trigger currently being run, per thread. Effect-record collection
++    // reads it to attribute an event to the trigger that produced it rather
++    // than to whatever happened to be resolving at the time. Null outside a
++    // trigger run. A plain static so the connector can read it reflectively
++    // and keep building against an unpatched checkout.
++    private static final ThreadLocal<Trigger> EFFECT_RECORD_CAUSE = new ThreadLocal<>();
++
++    /** The trigger currently running on this thread, or null. */
++    public static Trigger getEffectRecordCause() {
++        return EFFECT_RECORD_CAUSE.get();
++    }
++
++    /** Set by the handler around a trigger run; restored in a finally. */
++    public static void setEffectRecordCause(final Trigger trigger) {
++        if (trigger == null) {
++            EFFECT_RECORD_CAUSE.remove();
++        } else {
++            EFFECT_RECORD_CAUSE.set(trigger);
++        }
++    }
++
++    /** Notified for every evaluated trigger condition, fired or not. */
++    public interface EffectRecordTriggerListener {
++        void onConditionEvaluated(Trigger trigger, Map<AbilityKey, Object> runParams, boolean fired);
++    }
++
++    private static EffectRecordTriggerListener effectRecordTriggerListener;
++
++    public static void setEffectRecordTriggerListener(final EffectRecordTriggerListener listener) {
++        effectRecordTriggerListener = listener;
++    }
++
+     public TriggerHandler(final Game gameState) {
+         game = gameState;
+     }
+@@ -386,6 +420,19 @@ public class TriggerHandler {
+             return false; // Not the right mode.
+         }
+ 
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // Both answers are recorded, not just the firing one: a trigger record
++        // with fired = false is what teaches the condition rather than the base
++        // rate. Notified below the mode check so the negatives drawn are
++        // same-event-type candidates rather than every trigger in the game.
++        final boolean runnable = canRunTriggerInternal(regtrig, runParams);
++        if (effectRecordTriggerListener != null) {
++            effectRecordTriggerListener.onConditionEvaluated(regtrig, runParams, runnable);
++        }
++        return runnable;
++    }
++
++    private boolean canRunTriggerInternal(final Trigger regtrig, final Map<AbilityKey, Object> runParams) {
+         if (regtrig.isSuppressed()) {
+             return false; // Trigger removed by effect
+         }
+@@ -424,6 +471,20 @@ public class TriggerHandler {
+         runSingleTrigger(regtrig, runParams, null);
+     }
+     private void runSingleTrigger(final Trigger regtrig, final Map<AbilityKey, Object> runParams, Player controller) {
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // Restored rather than cleared: a trigger can fire during another
++        // trigger's run, and clearing would attribute the outer one's later
++        // events to nothing.
++        final Trigger previousCause = EFFECT_RECORD_CAUSE.get();
++        setEffectRecordCause(regtrig);
++        try {
++            runSingleTriggerBody(regtrig, runParams, controller);
++        } finally {
++            setEffectRecordCause(previousCause);
++        }
++    }
++
++    private void runSingleTriggerBody(final Trigger regtrig, final Map<AbilityKey, Object> runParams, Player controller) {
+         if (controller == null) {
+             controller = regtrig.getHostCard().getController();
+         }
+-- 
+2.34.1.windows.1
+
