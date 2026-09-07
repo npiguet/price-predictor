@@ -5,10 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 from sealed.infrastructure.converted_card_locator import (
     BASIC_LAND_NAMES,
+    SOURCE_TREE_LAYOUTS,
     ConvertedCardLocator,
 )
 
@@ -148,3 +150,83 @@ class TestLoadEmbedding:
 class TestBasicLandConstants:
     def test_lowercase_set_contents(self):
         assert BASIC_LAND_NAMES == {"plains", "island", "swamp", "mountain", "forest"}
+
+
+class TestSourceTrees:
+    """One filename names different files in different trees."""
+
+    def _two_trees(self, tmp_path: Path) -> tuple[Path, Path]:
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        (cards / "a" / "ajanis_pridemate.txt").write_text(
+            "name: Ajani's Pridemate\n", encoding="utf-8",
+        )
+        tokens = tmp_path / "tokenscripts"
+        tokens.mkdir(parents=True)
+        (tokens / "ajanis_pridemate.txt").write_text(
+            "name: Ajani's Pridemate\n", encoding="utf-8",
+        )
+        return cards, tokens
+
+    def test_the_three_trees_are_declared_with_their_layouts(self):
+        assert set(SOURCE_TREE_LAYOUTS) == {
+            "cardsfolder", "tokenscripts", "variant-scripts",
+        }
+        assert SOURCE_TREE_LAYOUTS["cardsfolder"] != SOURCE_TREE_LAYOUTS["tokenscripts"]
+
+    def test_cardsfolder_is_the_default_tree(self, tmp_path):
+        assert ConvertedCardLocator(tmp_path).tree == "cardsfolder"
+
+    def test_the_same_name_resolves_differently_per_tree(self, tmp_path):
+        cards, tokens = self._two_trees(tmp_path)
+        card_hit = ConvertedCardLocator(cards).text_path("Ajani's Pridemate")
+        token_hit = ConvertedCardLocator(
+            tokens, tree="tokenscripts",
+        ).text_path("Ajani's Pridemate")
+        assert card_hit.parent.name == "a"
+        assert token_hit.parent == tokens
+        assert card_hit != token_hit
+
+    def test_a_flat_tree_does_not_search_a_letter_directory(self, tmp_path):
+        _, tokens = self._two_trees(tmp_path)
+        (tokens / "a").mkdir()
+        locator = ConvertedCardLocator(tokens, tree="tokenscripts")
+        assert locator.text_path("Ajani's Pridemate") == (
+            tokens / "ajanis_pridemate.txt"
+        )
+
+    def test_a_letter_keyed_tree_does_not_find_a_flat_file(self, tmp_path):
+        _, tokens = self._two_trees(tmp_path)
+        # Same directory, read as if it were letter-keyed: nothing resolves.
+        assert ConvertedCardLocator(tokens).text_path("Ajani's Pridemate") is None
+
+    def test_script_file_carries_the_tree_and_the_trees_own_layout(self, tmp_path):
+        cards, tokens = self._two_trees(tmp_path)
+        assert ConvertedCardLocator(cards).script_file("Ajani's Pridemate") == (
+            "cardsfolder/a/ajanis_pridemate.txt"
+        )
+        assert ConvertedCardLocator(
+            tokens, tree="tokenscripts",
+        ).script_file("Ajani's Pridemate") == "tokenscripts/ajanis_pridemate.txt"
+
+    def test_script_file_is_none_for_an_unresolved_name(self, tmp_path):
+        cards, _ = self._two_trees(tmp_path)
+        assert ConvertedCardLocator(cards).script_file("Nonexistent") is None
+
+    def test_script_file_uses_forward_slashes_on_every_platform(self, tmp_path):
+        cards, _ = self._two_trees(tmp_path)
+        assert "\\" not in ConvertedCardLocator(cards).script_file(
+            "Ajani's Pridemate"
+        )
+
+    def test_an_unknown_tree_fails_at_construction(self, tmp_path):
+        with pytest.raises(ValueError, match="unknown converted source tree"):
+            ConvertedCardLocator(tmp_path, tree="cardsfolder-512")
+
+    def test_expected_path_follows_the_trees_layout(self, tmp_path):
+        letter = ConvertedCardLocator(tmp_path).expected_path("Serra Angel", ".txt")
+        flat = ConvertedCardLocator(
+            tmp_path, tree="variant-scripts",
+        ).expected_path("Serra Angel", ".txt")
+        assert letter == tmp_path / "s" / "serra_angel.txt"
+        assert flat == tmp_path / "serra_angel.txt"

@@ -1,0 +1,202 @@
+"""The provenance join (T036).
+
+Three cases and one alignment rule. The three cases are the whole contract: a
+key resolves, a key was deduplicated away, or the sidecar does not describe the
+card at all — and only the third may fail.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from effects.domain.provenance import (
+    ProvenanceKey,
+    ProvenanceSidecar,
+    RoleSpan,
+    SidecarLine,
+    SubAbilityLink,
+)
+from effects.infrastructure.sidecar_io import (
+    SidecarCache,
+    read_sidecar,
+    sidecar_from_dict,
+    sidecar_path_for,
+    sidecar_to_dict,
+    write_sidecar,
+)
+
+_SCRIPT = "cardsfolder/a/ajanis_pridemate.txt"
+_TRIGGER = ProvenanceKey(_SCRIPT, 0, "trigger", 0)
+_STATIC = ProvenanceKey(_SCRIPT, 0, "static", 0)
+_DROPPED = ProvenanceKey(_SCRIPT, 0, "static", 2)
+_ABSENT = ProvenanceKey(_SCRIPT, 0, "activated", 9)
+
+
+def _sidecar() -> ProvenanceSidecar:
+    """One card whose line 3 merged a trigger and a static, plus a dropped trait."""
+    return ProvenanceSidecar(
+        card="Ajani's Pridemate",
+        script_file=_SCRIPT,
+        lines=(
+            SidecarLine(
+                line_index=0, line_kind="keyword", provenance=(),
+                script_text="Flying",
+            ),
+            SidecarLine(
+                line_index=3,
+                line_kind="triggered",
+                provenance=(_TRIGGER, _STATIC),
+                sub_ability_links=(SubAbilityLink(path=(0,), label="DBPutCounter"),),
+                script_api_type="PutCounter",
+                script_param_keys=("Defined", "CounterType", "CounterNum"),
+                script_text=(
+                    "DB$ PutCounter | Defined$ Self | CounterType$ P1P1 | "
+                    "CounterNum$ 1"
+                ),
+                role_spans=(
+                    RoleSpan(0, 34, "trigger-condition"),
+                    RoleSpan(35, 71, "effect"),
+                ),
+            ),
+        ),
+        dropped_keys=(_DROPPED,),
+    )
+
+
+class TestTheThreeJoinCases:
+    def test_a_key_in_lines_resolves(self):
+        line = _sidecar().line_for(_TRIGGER)
+        assert line.line_kind == "triggered"
+
+    def test_a_dropped_key_resolves_to_no_line_and_does_not_raise(self):
+        """The converter deduplicated it; the trait is still live at runtime."""
+        assert _sidecar().line_for(_DROPPED) is None
+        assert _sidecar().row_for(_DROPPED) is None
+
+    def test_a_key_in_neither_fails_loudly(self):
+        with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
+            _sidecar().line_for(_ABSENT)
+
+    def test_the_failure_names_the_script_file_and_the_likely_cause(self):
+        with pytest.raises(KeyError) as excinfo:
+            _sidecar().line_for(_ABSENT)
+        assert _SCRIPT in str(excinfo.value)
+        assert "reconversion" in str(excinfo.value)
+
+
+class TestRowAlignment:
+    def test_row_i_is_the_ith_entry_of_lines(self):
+        assert _sidecar().row_for(_TRIGGER) == 1
+
+    def test_the_row_is_the_position_not_the_rendered_line_index(self):
+        """``line_index`` points into the .txt; the cache row is the array slot."""
+        sidecar = _sidecar()
+        assert sidecar.lines[1].line_index == 3
+        assert sidecar.row_for(_TRIGGER) == 1
+
+    def test_a_merged_line_carries_several_keys_that_share_one_row(self):
+        sidecar = _sidecar()
+        assert sidecar.row_for(_TRIGGER) == sidecar.row_for(_STATIC) == 1
+        assert len(sidecar.lines[1].provenance) == 2
+
+
+class TestSerialization:
+    def test_a_sidecar_round_trips(self):
+        sidecar = _sidecar()
+        assert sidecar_from_dict(sidecar_to_dict(sidecar)) == sidecar
+
+    def test_per_line_keys_omit_the_script_file(self):
+        data = sidecar_to_dict(_sidecar())
+        assert "script_file" not in data["lines"][1]["provenance"][0]
+        assert data["script_file"] == _SCRIPT
+
+    def test_a_read_key_carries_the_headers_script_file(self):
+        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
+        assert restored.lines[1].provenance[0].script_file == _SCRIPT
+
+    def test_dropped_keys_survive(self):
+        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
+        assert restored.dropped_keys == (_DROPPED,)
+
+    def test_role_spans_and_sub_ability_links_survive(self):
+        restored = sidecar_from_dict(sidecar_to_dict(_sidecar()))
+        line = restored.lines[1]
+        assert line.role_spans[0].role == "trigger-condition"
+        assert line.sub_ability_links[0].path == (0,)
+
+    def test_the_file_is_written_beside_the_converted_text(self, tmp_path):
+        txt = tmp_path / "a" / "ajanis_pridemate.txt"
+        path = sidecar_path_for(txt)
+        assert path.name == "ajanis_pridemate.provenance.json"
+        assert path.parent == txt.parent
+
+    def test_a_written_sidecar_reads_back(self, tmp_path):
+        path = sidecar_path_for(tmp_path / "a" / "ajanis_pridemate.txt")
+        write_sidecar(_sidecar(), path)
+        assert read_sidecar(path) == _sidecar()
+
+    def test_a_written_sidecar_is_valid_json(self, tmp_path):
+        path = sidecar_path_for(tmp_path / "x.txt")
+        write_sidecar(_sidecar(), path)
+        assert json.loads(path.read_text(encoding="utf-8"))["card"] == (
+            "Ajani's Pridemate"
+        )
+
+    def test_a_missing_sidecar_raises_rather_than_reading_as_empty(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            read_sidecar(tmp_path / "never_converted.provenance.json")
+
+
+class TestSidecarCache:
+    def _write_trees(self, tmp_path):
+        """The same filename in two trees, with different content."""
+        cards = tmp_path / "cardsfolder"
+        tokens = tmp_path / "tokenscripts"
+        write_sidecar(
+            _sidecar(), sidecar_path_for(cards / "a" / "ajanis_pridemate.txt"),
+        )
+        token_script = "tokenscripts/ajanis_pridemate.txt"
+        write_sidecar(
+            ProvenanceSidecar(
+                card="Ajani's Pridemate token",
+                script_file=token_script,
+                lines=(
+                    SidecarLine(
+                        line_index=0, line_kind="keyword",
+                        provenance=(ProvenanceKey(token_script, 0, "static", 0),),
+                    ),
+                ),
+            ),
+            sidecar_path_for(tokens / "ajanis_pridemate.txt"),
+        )
+        return SidecarCache({"cardsfolder": cards, "tokenscripts": tokens})
+
+    def test_one_filename_resolves_differently_per_tree(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        assert cache.get(_SCRIPT).card == "Ajani's Pridemate"
+        assert cache.get("tokenscripts/ajanis_pridemate.txt").card == (
+            "Ajani's Pridemate token"
+        )
+
+    def test_the_letter_keyed_and_flat_layouts_both_resolve(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        assert cache.path_for(_SCRIPT).parts[-2] == "a"
+        assert cache.path_for("tokenscripts/ajanis_pridemate.txt").parts[-2] == (
+            "tokenscripts"
+        )
+
+    def test_a_card_is_read_once(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        assert cache.get(_SCRIPT) is cache.get(_SCRIPT)
+
+    def test_an_unconfigured_tree_fails_loudly(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        with pytest.raises(KeyError, match="no converted root configured"):
+            cache.get("variant-scripts/whatever.txt")
+
+    def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        assert cache.row_for(_TRIGGER) == 1
+        assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
