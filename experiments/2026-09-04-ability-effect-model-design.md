@@ -310,6 +310,25 @@ Reminder text covers what the scripts do not. All but one of the 202 keywords ca
 
 The split is benign for the zero-shot goal. New-set variation keywords are the script-generated kind, and the engine-coded set is old, stable, and densely trained. Generated definitions do name other keywords: flying's static reads "can't be blocked except by creatures with flying or reach". Expansion dropout absorbs that, since a referenced keyword stays a token that may itself expand on other samples. Saga chapters and class levels have only per-card definitions, because their effect bodies live on the host card's variables.
 
+## The rarest damage-step keywords set the corpus size
+
+Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes an order of magnitude apart. A 19,000-record sample of ordinary sealed self-play produced the counts below — random sealed-legal sets, six workers, no coverage decking.
+
+| Keyword | Qualifying records in 19k | Implied corpus for 200 |
+|---|---|---|
+| trample | 110 | 35,000 |
+| first strike | 100 | 38,000 |
+| deathtouch | 64 | 59,000 |
+| lifelink | 63 | 60,000 |
+| infect | 16 | 240,000 |
+| double strike | 10 | 380,000 |
+| indestructible | 10 | 380,000 |
+| wither | 0 | — |
+
+Seven of the eight clear the threshold at a few hundred thousand records, which is a couple of hours of collection at six workers. Wither is the exception, and its absence is a property of the format rather than of the collector: almost no sealed-legal set prints it, so more collection of the same kind adds nothing. Reaching it needs a set restriction or the coverage collector, which decks cards match play never deals.
+
+The implied column extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
+
 ## Build order — first embeddings before full machinery
 
 The subsystems stage so that the first `e` vectors exist and pass canaries as early as possible. Stage one needs no Forge patch at all: the event bus plus the resolution bracket, bracket-attributed resolution records and combat records, the provenance sidecar, and the trainer with per-entity heads, the script-API classification auxiliary, and keyword-expansion dropout over reminder-text definitions (a training-time augmentation needing no collector). That is enough for the nearest-neighbor, ward, and damage-step keyword-separation canaries. Combat sits in stage one because the damage-step keywords have no behavioral signal without it; the canary is scoped to that family, since evasion keywords have no combat-record gradient and their non-separation at stage one is expected, not a failure. Mana-ability records also wait for the patch, since the bus-only stage cannot see the inline mana path. Stage two is the three-hook patch set and what it unlocks (cause-attributed triggers, mana records, rewrite records, sub-ability attribution), plus playability records (which bring the evasion keywords' signal), continuous-effect and trigger-fire records, and the coverage collector for the fifth of the corpus match play never reaches. Stage three adds interventional resolutions and, only if the damage-step canary fails, the probe. Stage four is the script surface: vocabulary rebuild, the compositional script tokenizer, the asymmetric paired-encoding loss, the definition upgrade from reminder text to captured scripts, and synthetic script variants. Each stage widens the corpus without invalidating earlier records, since the record schema is fixed up front.
