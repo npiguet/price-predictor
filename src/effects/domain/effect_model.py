@@ -201,6 +201,10 @@ PER_ENTITY_FIELDS: tuple[FieldSpec, ...] = (
     FieldSpec("cards_milled", FieldType.COUNT, FieldScope.PLAYER),
     FieldSpec("library_events", FieldType.MULTI_BINARY, FieldScope.PLAYER,
               arity=len(LIBRARY_EVENTS)),
+    # Poison is not in FR-077's player group, but the snapshot tracks it and
+    # gate 2's infect row has nowhere else to land: infect's whole player-side
+    # effect is poison, so without this field that row could never fire.
+    FieldSpec("poison_delta", FieldType.SIGNED_DELTA, FieldScope.PLAYER),
     *_mana_fields(),
     # ── legality bits ──
     FieldSpec("target_legal", FieldType.BINARY, FieldScope.LEGALITY,
