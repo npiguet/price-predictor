@@ -138,6 +138,23 @@ class GrantedTemporary:
     abilities: tuple[ProvenanceKey, ...] = ()
 
 
+def normalize_keyword(raw: str) -> str:
+    """Forge's spelling of a keyword, in the one this package reads.
+
+    Forge writes what the card prints — ``"first strike"``, ``"ward:2"``,
+    ``"landwalk:forest"`` — while :data:`OVERLAY_KEYWORDS`, gate 2's table and
+    ``--probe-keywords`` all spell them ``first_strike`` and ``ward``. Without
+    this the two-word keywords silently match nothing: first strike and double
+    strike are exactly the pair gate 2 reported zero observations for on a
+    corpus that contained hundreds.
+
+    The parameter after ``:`` is dropped because the keyword is the same
+    keyword whatever its value; the value reaches the model through the ability
+    line, not through the overlay bit.
+    """
+    return raw.split(":", 1)[0].strip().lower().replace(" ", "_")
+
+
 @dataclass(frozen=True, slots=True)
 class StackExtras:
     """Fields an entity carries only while it is a stack object."""
