@@ -119,6 +119,15 @@ class SidecarLine:
     role_spans: tuple[RoleSpan, ...] = ()
 
 
+def _note_declared(
+    declared: dict[tuple[int, str], int], key: ProvenanceKey,
+) -> None:
+    slot = (key.face, key.trait_kind)
+    highest = declared.get(slot)
+    if highest is None or key.index_within_kind > highest:
+        declared[slot] = key.index_within_kind
+
+
 @dataclass(frozen=True, slots=True)
 class ProvenanceSidecar:
     """``<name>.provenance.json``, read beside the converted ``<name>.txt``.
@@ -129,6 +138,15 @@ class ProvenanceSidecar:
     runtime and still produces a key, so without this list an expected dedup and
     a genuine corpus/sidecar mismatch would look identical at the join — and the
     mismatch is the one condition that must fail loudly.
+
+    A third case sits between them: a trait Forge builds only when it
+    instantiates a live card. Level up, bestow and scavenge each add a spell
+    ability the card script never declares, so the runtime trait list is longer
+    than the parsed one and the extra index belongs to no line and no dropped
+    key. It is told apart by position — its index is past every index this face
+    declared for that kind — and treated like a dropped key rather than a
+    mismatch, because a reconversion moves *every* key, not the tail of one
+    card's spell list.
     """
 
     card: str
@@ -140,13 +158,32 @@ class ProvenanceSidecar:
     _row_by_key: dict[ProvenanceKey, int] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+    # (face, trait_kind) -> the highest index the sidecar declared for it.
+    _declared_max: dict[tuple[int, str], int] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         index: dict[ProvenanceKey, int] = {}
+        declared: dict[tuple[int, str], int] = {}
         for row, line in enumerate(self.lines):
             for key in line.provenance:
                 index.setdefault(key, row)
+                _note_declared(declared, key)
+        for key in self.dropped_keys:
+            _note_declared(declared, key)
         object.__setattr__(self, "_row_by_key", index)
+        object.__setattr__(self, "_declared_max", declared)
+
+    def is_runtime_only(self, key: ProvenanceKey) -> bool:
+        """Is this a trait Forge built at instantiation rather than one parsed?
+
+        True when the key's index sits past everything this face declared for
+        its kind — the shape a level-up or bestow ability has, appended to the
+        end of the runtime list.
+        """
+        highest = self._declared_max.get((key.face, key.trait_kind))
+        return highest is not None and key.index_within_kind > highest
 
     @property
     def tree(self) -> str:
@@ -157,16 +194,17 @@ class ProvenanceSidecar:
         row = self._row_by_key.get(key)
         if row is not None:
             return row
-        if key in self.dropped_keys:
+        if key in self.dropped_keys or self.is_runtime_only(key):
             return None
         raise KeyError(self._mismatch_message(key))
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
         """The rendered line a key resolves to, or None where it was dropped.
 
-        Raises when the key is in neither ``lines`` nor ``dropped_keys``: the
-        sidecar does not describe the card the record was collected against,
-        which means the corpus was reconverted between collection and training.
+        Raises when the key is in neither ``lines`` nor ``dropped_keys`` and its
+        index is inside what this face declared: the sidecar does not describe
+        the card the record was collected against, which means the corpus was
+        reconverted between collection and training.
         """
         row = self.row_for(key)
         return None if row is None else self.lines[row]

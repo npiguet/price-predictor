@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.Json;
+import forge.game.card.Card;
 import forge.game.keyword.Keyword;
 import forge.game.keyword.KeywordInterface;
 import forge.game.replacement.ReplacementEffect;
@@ -49,20 +50,23 @@ public class KeywordDefinitionMain {
 
         try {
             ForgeEnvironmentInitializer.initialize();
-            String json = render();
-            Path output = Path.of(outputPath);
-            if (output.getParent() != null) {
-                Files.createDirectories(output.getParent());
-            }
-            Files.writeString(output, json, StandardCharsets.UTF_8);
-            System.out.println("Wrote " + Keyword.values().length
-                    + " keyword definitions to " + output);
+            System.out.println("Wrote keyword definitions to "
+                    + writeTo(Path.of(outputPath)));
             System.exit(0);
         } catch (IOException | RuntimeException e) {
             System.err.println("Fatal error: " + e.getMessage());
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    /** Render the document and write it, creating the parent directory. */
+    static Path writeTo(Path output) throws IOException {
+        if (output.getParent() != null) {
+            Files.createDirectories(output.getParent());
+        }
+        Files.writeString(output, render(), StandardCharsets.UTF_8);
+        return output;
     }
 
     /**
@@ -110,6 +114,12 @@ public class KeywordDefinitionMain {
             if (instance == null) {
                 return null;
             }
+            // A fresh instance carries no traits: Forge builds them in
+            // createTraits, against a host card. Without this call every
+            // keyword reports an empty script and the whole capture is silently
+            // null. The host is a bare Card with no game — enough for the
+            // template expansion the factory does, and nothing more.
+            instance.createTraits(new Card(0, null), true, true);
             List<String> parts = new ArrayList<>();
             for (Trigger trigger : instance.getTriggers()) {
                 parts.add(renderParams(trigger.getMapParams()));

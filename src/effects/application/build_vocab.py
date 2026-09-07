@@ -182,6 +182,11 @@ def run(config: BuildVocabConfig) -> int:
                 if token not in vocab:
                     vocab[token] = len(vocab)
 
+        # Counted inside the scratch tree's lifetime: the staged sources are
+        # real sources, and reporting only the card folders understates the
+        # scan the docs describe as covering three.
+        scanned = len(folders) + len(list(extra.glob("*.txt")))
+
     truncated = truncate_to_target_size(vocab, domain_token_count, config.target_size)
 
     vocab_path = config.resolved_vocab_path()
@@ -189,7 +194,7 @@ def run(config: BuildVocabConfig) -> int:
     save_vocabulary(truncated, vocab_path)
     logger.info(
         "Wrote %d tokens to %s (surface=%s, %d sources)",
-        len(truncated), vocab_path, config.surface, len(folders),
+        len(truncated), vocab_path, config.surface, scanned,
     )
     return len(truncated)
 

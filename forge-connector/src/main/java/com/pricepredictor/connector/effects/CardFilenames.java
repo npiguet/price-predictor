@@ -14,9 +14,13 @@ import java.util.Locale;
  * {@code CardFilenamesTest} pins the agreement against the same cases the
  * Python suite uses.
  *
- * <p>Forge itself cannot supply the path: {@code CardRules.getNormalizedName()}
- * is only set by the two-argument {@code readCard(script, filename)}, which
- * nothing in the engine calls, so it is null for every card in a live game.
+ * <p>This is the <b>fallback</b>, not the primary route. Forge's folder loader
+ * calls the two-argument {@code readCard(script, filename)}, so a card loaded
+ * from {@code cardsfolder} carries its own file stem in
+ * {@code CardRules.getNormalizedName()}, and {@link ProvenanceKey} asks for that
+ * first — Forge's filenames disagree with its card names often enough that a
+ * sanitizer alone loses cards. The sanitizer still names variants, and still
+ * covers a card with no rules attached.
  */
 public final class CardFilenames {
 
@@ -69,6 +73,32 @@ public final class CardFilenames {
      * <p>Written with forward slashes on every platform, because the string
      * itself is the key both sides compare.
      */
+    /**
+     * The tree-prefixed path for a stem that is already a filename.
+     *
+     * <p>Token scripts are filed by what the token <em>is</em> — colours, power,
+     * toughness, type, abilities — not by its name:
+     * {@code c_1_1_eldrazi_scion_sac.txt} is the Eldrazi Scion. Sanitizing the
+     * name would name a file that does not exist, and the two 1/1 Eldrazi Scions
+     * that differ only in their sacrifice ability would collide besides.
+     */
+    public static String scriptFileForStem(String tree, String stem) {
+        if (SourceTree.isFlat(tree)) {
+            return tree + "/" + stem + ".txt";
+        }
+        String directory;
+        if (stem.isEmpty()) {
+            directory = "_";
+        } else if (stem.startsWith("a-")) {
+            // Alchemy rebalances keep their literal "a-" and live in their own
+            // directory rather than under "a".
+            directory = REBALANCED_DIR;
+        } else {
+            directory = stem.substring(0, 1);
+        }
+        return tree + "/" + directory + "/" + stem + ".txt";
+    }
+
     public static String scriptFile(String tree, String cardName) {
         String stem;
         String directory;
