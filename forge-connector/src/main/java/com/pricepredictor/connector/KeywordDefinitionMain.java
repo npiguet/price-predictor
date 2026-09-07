@@ -2,6 +2,11 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.Json;
 import forge.game.keyword.Keyword;
+import forge.game.keyword.KeywordInterface;
+import forge.game.replacement.ReplacementEffect;
+import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+import forge.game.trigger.Trigger;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -9,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Writes every Forge keyword's reminder-text template as JSON.
@@ -76,9 +83,67 @@ public class KeywordDefinitionMain {
             }
             entries.add(Json.string(keyword.toString()) + ":{"
                     + "\"reminder_template\":" + Json.string(emptyToNull(keyword.getReminderText()))
-                    + ",\"generated_script\":null}");
+                    + ",\"generated_script\":" + Json.string(generatedScript(keyword))
+                    + "}");
         }
         return "{" + String.join(",", entries) + "}";
+    }
+
+    /**
+     * The implementation script Forge's keyword factory generates, as text.
+     *
+     * <p>Most keywords are implemented by generating traits from a template —
+     * flying becomes a static ability, cycling becomes an activated one — and
+     * that generated script is the mechanism the keyword stands for. On the
+     * stage-four script surface it is what a keyword expands to, and it is far
+     * closer to what the keyword *does* than its reminder text is.
+     *
+     * <p>Null for the engine-coded minority, which generates no script and keeps
+     * its reminder template. Captured at the factory rather than read from a
+     * file because no file contains it.
+     */
+    private static String generatedScript(Keyword keyword) {
+        try {
+            // The factory keys on the display name, which is what a card's
+            // keyword line spells and what the definition file is keyed by.
+            KeywordInterface instance = Keyword.getInstance(keyword.toString());
+            if (instance == null) {
+                return null;
+            }
+            List<String> parts = new ArrayList<>();
+            for (Trigger trigger : instance.getTriggers()) {
+                parts.add(renderParams(trigger.getMapParams()));
+            }
+            for (ReplacementEffect replacement : instance.getReplacements()) {
+                parts.add(renderParams(replacement.getMapParams()));
+            }
+            for (StaticAbility staticAbility : instance.getStaticAbilities()) {
+                parts.add(renderParams(staticAbility.getMapParams()));
+            }
+            for (SpellAbility ability : instance.getAbilities()) {
+                parts.add(renderParams(ability.getMapParams()));
+            }
+            parts.removeIf(part -> part == null || part.isEmpty());
+            return parts.isEmpty() ? null : String.join(" ;; ", parts);
+        } catch (RuntimeException e) {
+            // A keyword whose factory needs a host card cannot be captured
+            // standalone; it keeps its reminder template.
+            return null;
+        }
+    }
+
+    private static String renderParams(Map<String, String> params) {
+        if (params == null || params.isEmpty()) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> entry : new TreeMap<>(params).entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(" | ");
+            }
+            sb.append(entry.getKey()).append("$ ").append(entry.getValue());
+        }
+        return sb.toString();
     }
 
     /** Null rather than "" for a keyword with no reminder text of its own. */

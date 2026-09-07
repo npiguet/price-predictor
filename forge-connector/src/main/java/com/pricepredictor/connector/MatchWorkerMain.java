@@ -165,7 +165,12 @@ public class MatchWorkerMain {
 
     private static void initializeForge(WorkerConfig config) {
         System.out.println("Initializing Forge environment...");
-        ForgeEnvironmentInitializer.initialize();
+        // Stage four's variant scripts are staged into Forge's custom-cards
+        // directory before the card database is read; a script that appears
+        // afterwards is invisible for the life of the JVM.
+        String variantScripts = System.getProperty("effect.variant.scripts");
+        ForgeEnvironmentInitializer.initialize(
+                variantScripts == null ? null : Path.of(variantScripts));
         System.out.println("Forge initialized. Starting match generation.");
         System.out.println("Match format: best-of-" + config.bestOf());
     }

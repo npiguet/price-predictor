@@ -52,14 +52,29 @@ class CachedVectors:
 
 
 def load_cache(
-    abilities_root: Path, sidecars_root: Path, *, variant: str = "full",
+    abilities_root: Path,
+    sidecars_root: Path,
+    *,
+    variant: str = "full",
+    surface: str = "prose",
 ) -> CachedVectors:
     """Load a variant's cache, keyed by the ability text each row encodes.
 
     ``sidecars_root`` supplies the texts: the cache is row-aligned with each
-    source's sidecar, so the pairing is positional and needs no index.
+    source's sidecar, so the pairing is positional and needs no index. The key
+    is the text on the surface the checkpoint encoded from — prose through
+    stage three, script from stage four — because a check that keyed on the
+    other surface would be comparing the vectors against texts they do not
+    encode.
     """
-    from effects.infrastructure.sidecar_io import SIDECAR_SUFFIX, read_sidecar
+    from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.sidecar_io import (
+        SIDECAR_SUFFIX,
+        converted_text_path,
+        prose_for,
+        prose_lines,
+        read_sidecar,
+    )
 
     suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
     cached = CachedVectors()
@@ -81,8 +96,9 @@ def load_cache(
                 cache_path, matrix.shape[0], len(sidecar.lines),
             )
             continue
+        rendered = prose_lines(converted_text_path(sidecar_path))
         for row, line in zip(matrix, sidecar.lines):
-            text = line.script_text
+            text = encoding_text(line, prose_for(line, rendered), surface)
             if text:
                 cached.by_text.setdefault(text, row)
         if matrix.size:

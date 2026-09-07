@@ -147,6 +147,39 @@ def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     )
 
 
+def converted_text_path(sidecar_path: Path) -> Path:
+    """The converted ``.txt`` beside a sidecar."""
+    sidecar_path = Path(sidecar_path)
+    stem = sidecar_path.name[: -len(SIDECAR_SUFFIX)]
+    return sidecar_path.with_name(f"{stem}.txt")
+
+
+def prose_lines(converted_txt: Path) -> list[str]:
+    """The converted file's rendered lines, indexable by ``line_index``.
+
+    The prose surface encodes these; the sidecar carries only the script. A
+    reader that used ``script_text`` for both would silently encode the wrong
+    surface, and the result would look like a working run.
+    """
+    path = Path(converted_txt)
+    if not path.exists():
+        return []
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def prose_for(line, lines: list[str]) -> str | None:
+    """One line's converted prose, without its ``kind[n]: `` prefix.
+
+    The prefix is structure rather than card text, and the role spans the
+    tokenizer applies are offsets into the prose without it.
+    """
+    if not lines or not (0 <= line.line_index < len(lines)):
+        return None
+    rendered = lines[line.line_index]
+    separator = rendered.find(": ")
+    return rendered if separator < 0 else rendered[separator + 2:]
+
+
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
@@ -164,6 +197,7 @@ class SidecarCache:
         """
         self._roots = {name: Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
+        self._prose: dict[str, list[str]] = {}
 
     def path_for(self, script_file: str) -> Path:
         tree, _, relative = script_file.partition("/")
@@ -184,6 +218,23 @@ class SidecarCache:
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
         """The rendered line a record's key names, or None where it was dropped."""
         return self.get(key.script_file).line_for(key)
+
+    def prose_for(self, key: ProvenanceKey) -> str | None:
+        """The converted prose of the line a key names.
+
+        Read from the ``.txt`` beside the sidecar and held per card, because the
+        prose surface encodes it and the sidecar carries only the script.
+        """
+        line = self.line_for(key)
+        if line is None:
+            return None
+        rendered = self._prose.get(key.script_file)
+        if rendered is None:
+            rendered = prose_lines(
+                converted_text_path(self.path_for(key.script_file))
+            )
+            self._prose[key.script_file] = rendered
+        return prose_for(line, rendered)
 
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a record's key names, or None where it was dropped."""
