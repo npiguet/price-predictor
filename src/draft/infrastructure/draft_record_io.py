@@ -2,8 +2,9 @@
 
 One self-contained JSON record per line, append-only. Readers tolerate a
 trailing partial final line (supervisor crash mid-write); ``--resume`` counts
-complete records toward ``--n-drafts``. Mirrors the partial-line tolerance of
-``sealed``'s ``pool_file_reader`` / ``cards_played_reader``.
+complete records toward ``--n-drafts``. The partial-line rule is the shared
+``price_predictor.infrastructure.append_only`` primitive, which the sealed
+readers use too.
 
 Serialization lives here (infrastructure); the in-memory shape is the pure
 ``DraftRecord`` domain dataclass from ``draft_geometry``.
@@ -17,6 +18,10 @@ from pathlib import Path
 from typing import IO, Any
 
 from draft.domain.draft_geometry import Booster, DraftRecord, Seat
+from price_predictor.infrastructure.append_only import (
+    count_complete_lines,
+    iter_complete_lines,
+)
 
 _JSON_SEPARATORS = (",", ":")  # compact, newline-free
 
@@ -84,18 +89,7 @@ def read_records(path: Path) -> Iterator[DraftRecord]:
     terminating newline (JVM/supervisor crash mid-write) is dropped. Blank
     lines are ignored.
     """
-    if not path.exists():
-        return
-    content = path.read_bytes()
-    if not content:
-        return
-    # A trailing partial line is one not ending in "\n"; splitlines keeps it as
-    # the last element, so drop that element when the file doesn't end in "\n".
-    text = content.decode("utf-8")
-    lines = text.splitlines()
-    drop_last = not text.endswith("\n")
-    end = len(lines) - 1 if (drop_last and lines) else len(lines)
-    for line in lines[:end]:
+    for line in iter_complete_lines(path):
         stripped = line.strip()
         if not stripped:
             continue
@@ -111,13 +105,4 @@ def count_complete_records(path: Path) -> int:
     matching ``count_complete_lines_and_truncate_partial`` semantics minus the
     truncation, since JSON readers already skip the partial).
     """
-    if not path.exists():
-        return 0
-    content = path.read_bytes()
-    if not content:
-        return 0
-    text = content.decode("utf-8")
-    lines = text.splitlines()
-    drop_last = not text.endswith("\n")
-    end = len(lines) - 1 if (drop_last and lines) else len(lines)
-    return sum(1 for line in lines[:end] if line.strip())
+    return count_complete_lines(path, skip_blank=True)

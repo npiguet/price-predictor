@@ -455,13 +455,12 @@ def main(argv: list[str] | None = None) -> int:
 
     _log("fitting probes")
     folds = 2 if args.smoke else 5
-    if args.smoke:
-        pl.ALPHA_GRID = (1.0, 10.0)
+    alphas = (1.0, 10.0) if args.smoke else pl.ALPHA_GRID
     probe_sets = []
     for mode in ("fidelity", "honest"):
         for weighted in (True, False):
             ps = pl.fit_probes(join, embeddings, mode=mode, weighted=weighted,
-                               folds=folds)
+                               folds=folds, alphas=alphas)
             probe_sets.append(ps)
             if not args.smoke:
                 pl.save_probes(ps)
