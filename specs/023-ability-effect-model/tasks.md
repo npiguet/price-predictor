@@ -145,16 +145,16 @@ verdict. Nothing in `../forge` has been modified.
 
 ### Keyword definitions and vocabulary
 
-- [ ] T057 [P] [US1] Implement `forge-connector/.../KeywordDefinitionMain.java` emitting keyword → reminder-text template for every keyword as JSON
-- [ ] T058 [P] [US1] Implement `src/effects/infrastructure/keyword_definition_connector.py` spawning it, mirroring `match_worker_connector.py`'s shape (prior art: research.md § Adjacent prior art — one connector per Java main)
-- [ ] T059 [US1] Implement `src/effects/application/extract_keyword_definitions.py`
-- [ ] T060 [US1] Implement `src/effects/application/build_vocab.py` wrapping `price_predictor.application.build_vocabulary` and the promoted truncation (T014), scanning converted cards, token scripts, and the keyword-definition file, seeding `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`
-- [ ] T061 [P] [US1] Unit-test in `tests/unit/effects/application/test_build_vocab.py`: seeded specials present, `--target-size` respected, and the prose/script vocab paths kept separate
+- [X] T057 [P] [US1] Implement `forge-connector/.../KeywordDefinitionMain.java` emitting keyword → reminder-text template for every keyword as JSON
+- [X] T058 [P] [US1] Implement `src/effects/infrastructure/keyword_definition_connector.py` spawning it, mirroring `match_worker_connector.py`'s shape (prior art: research.md § Adjacent prior art — one connector per Java main)
+- [X] T059 [US1] Implement `src/effects/application/extract_keyword_definitions.py`
+- [X] T060 [US1] Implement `src/effects/application/build_vocab.py` wrapping `price_predictor.application.build_vocabulary` and the promoted truncation (T014), scanning converted cards, token scripts, and the keyword-definition file, seeding `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`
+- [X] T061 [P] [US1] Unit-test in `tests/unit/effects/application/test_build_vocab.py`: seeded specials present, `--target-size` respected, and the prose/script vocab paths kept separate
 
 ### Model
 
-- [ ] T062 [US1] Implement `src/effects/domain/ability_tokenizer.py` wrapping `MtgTokenizer`: `[MASK]`/`[CLS]`, character offsets so role spans can be applied per token, and keyword-expansion hooks. The shared tokenizer returns bare strings with no offsets and seeds neither special
-- [ ] T063 [P] [US1] Unit-test the tokenizer in `tests/unit/effects/domain/test_ability_tokenizer.py`: offsets map to the sidecar's role spans, unknown words become `[UNK]` with no subword fallback, unknown keywords always expand
+- [X] T062 [US1] Implement `src/effects/domain/ability_tokenizer.py` wrapping `MtgTokenizer`: `[MASK]`/`[CLS]`, character offsets so role spans can be applied per token, and keyword-expansion hooks. The shared tokenizer returns bare strings with no offsets and seeds neither special
+- [X] T063 [P] [US1] Unit-test the tokenizer in `tests/unit/effects/domain/test_ability_tokenizer.py`: offsets map to the sidecar's role spans, unknown words become `[UNK]` with no subword fallback, unknown keywords always expand
 - [ ] T064 [US1] Implement `src/effects/domain/ability_encoder.py`: token + position + role embeddings, the monotone number embedding (learned base plus log1p(n) × learned direction), N transformer layers, `[CLS]` pooling to `e` with train-time additive noise (prior art: `sealed/domain/encoder_model.py`)
 - [ ] T065 [US1] Implement keyword-expansion dropout in the encoder: expand at `--keyword-expand-p`, always expand unknown keywords, instantiate parameterized templates with the instance's own values (a keyword referenced without an instance, inside another definition, expands with the template's generic wording), never expand host-card-bodied keywords (saga chapters, class levels), leave nested keywords as tokens
 - [ ] T066 [US1] Implement `src/effects/domain/effect_head_input.py` (prior art: `draft/domain/draft_state.py`, the typed model-input module in the sibling package): snapshot → `[GLOBAL] [ACT] [PLAYER]… [CARD] e e …` with position ids resetting at each `[CARD]`, controller tags relative to `actor_player`, context-ability dropout, entity ability tokens limited to printed and attachment-granted lines with temporary grants riding the overlay (FR-073), and the per-kind input variations from the root spec's record-kind table

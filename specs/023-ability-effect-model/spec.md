@@ -223,7 +223,8 @@ loss.
   (`domain` → `application` → `infrastructure`), exposing `python -m effects <subcommand>`.
 - **FR-002**: `effects` MUST import only the following, and neither `price_predictor` nor `sealed` may
   import from `effects`:
-  - from `price_predictor`: the tokenizer, `build_vocabulary` and its target-size truncation,
+  - from `price_predictor`: the tokenizer, `tokenizer_store` (the vocabulary file format both
+    surfaces are written in and read back from), `build_vocabulary` and its target-size truncation,
     `forge_jvm` worker helpers, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`,
     and `ridge_probes`;
   - from `sealed.domain`: `manabase.compute_basic_lands`, `card_embedding_layout`;
