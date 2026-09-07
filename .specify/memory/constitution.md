@@ -1,6 +1,37 @@
 <!--
   Sync Impact Report
   ==================
+  Version change: 2.3.0 → 2.4.0
+  Modified principles:
+    - IV. Domain-Driven Design & Separation of Concerns —
+      the framework-import prohibition gains a narrow
+      exception for modules whose subject is a model
+      architecture. Six modules across sealed/domain and
+      draft/domain already relied on it; the alternative was
+      three packages in standing violation. The exception is
+      limited to architecture definitions, so training loops,
+      checkpoint IO, and data loading stay out of domain.
+    - VII. Codebase-Aware Planning — clause (c)'s rename
+      requirement becomes conditional on the names actually
+      colliding. The clause exists to stop two names for one
+      thing; where a parallel concept's name is already
+      distinct, a rename has no ambiguity to resolve.
+  Added sections: None
+  Removed sections: None
+  Templates requiring updates:
+    - .specify/templates/plan-template.md — ✅ No change
+      (its Constitution Check is generic; the Codebase Survey
+      and Performance Review subsections are unaffected)
+    - .specify/templates/tasks-template.md — ✅ No change
+      (its Principle VII note asks for prior-art references,
+      which the narrowed clause still requires)
+    - .specify/templates/spec-template.md — ✅ No change
+  Quality Gates updated: None — both amendments narrow a MUST
+    rather than adding one
+  Follow-up TODOs: None
+
+  Prior report
+  ------------
   Version change: 2.2.0 → 2.3.0
   Modified principles: None
   Added sections:
@@ -99,8 +130,14 @@ boundaries between layers.
   orchestration), and infrastructure (external services, storage,
   APIs).
 - Domain logic MUST NOT depend on infrastructure details. The
-  domain layer MUST be free of framework imports, database
-  drivers, and HTTP concerns.
+  domain layer MUST be free of database drivers, HTTP concerns,
+  and framework imports — with one exception: a module whose
+  subject *is* a model architecture MAY import the tensor
+  framework, because the architecture is domain knowledge and
+  the framework is the notation it is written in. The exception
+  is limited to architecture definitions; training loops,
+  checkpoint IO, and data loading stay in application and
+  infrastructure.
 - Each bounded context MUST have a clear, explicit boundary.
   Cross-context communication MUST go through well-defined
   interfaces, never direct internal access.
@@ -199,8 +236,11 @@ there. Planning in isolation is forbidden.
 - New domain concepts MUST NOT silently duplicate existing ones. If
   a concept with a similar name or responsibility already exists, the
   plan MUST either (a) reuse it, (b) extend it, or (c) explicitly
-  justify why a parallel concept is warranted and propose a rename of
-  the older concept so the codebase converges rather than diverges.
+  justify why a parallel concept is warranted. Where the two names
+  would collide or read as interchangeable, (c) MUST also propose a
+  rename of the older concept so the codebase converges. Where the
+  names are already distinct, the justification stands alone — a
+  rename with no ambiguity to resolve is churn.
 - Tasks in `tasks.md` that introduce a new entity, service, port, or
   adapter MUST reference the nearest prior art identified in the
   survey. A new sibling is acceptable only when its divergence is
@@ -327,4 +367,4 @@ and architectural decisions MUST comply with the principles above.
   the conflict MUST be raised explicitly and resolved by amending
   the constitution, not by silently bypassing it.
 
-**Version**: 2.3.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-06-10
+**Version**: 2.4.0 | **Ratified**: 2026-02-26 | **Last Amended**: 2026-09-07

@@ -92,11 +92,10 @@ allowed set is:
 | `sealed.application` | **nothing** | `train-scorer` Phase A is re-run as a subprocess, not imported, which keeps the application layers disjoint |
 
 Anything outside this table is a boundary violation, and the import-direction test asserts exactly it.
-Rows 1 and 3 are FR-002 as written. Rows 2, 4 and 5 widen it, and widening a declared boundary is a
-spec change rather than a plan-level decision: `tasks.md` should carry an FR-002 amendment naming
-them, rather than let the import-direction test encode a surface the spec does not describe. FR-090
-is widened the same way and for the same kind of reason — the checkpoint gains the withheld keyword —
-and belongs in the same amendment.
+Every row above is FR-002 as amended. The table originally widened the declared boundary in three
+rows, and widening one is a spec change rather than a plan-level decision, so FR-002 was amended to
+declare the full surface and FR-090 to include the withheld keyword. The import-direction test now
+asserts a surface the spec describes.
 
 **Follow-up tasks this surfaced, to be carried into `tasks.md`:**
 

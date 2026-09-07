@@ -221,9 +221,15 @@ loss.
 
 - **FR-001**: A new Python package `src/effects/` MUST exist, laid out hexagonally
   (`domain` → `application` → `infrastructure`), exposing `python -m effects <subcommand>`.
-- **FR-002**: `effects` MUST import from `price_predictor` (tokenizer, vocabulary builder, `forge_jvm`
-  worker helpers) and `sealed` (`manabase.compute_basic_lands`), and neither package may import from
-  `effects`.
+- **FR-002**: `effects` MUST import only the following, and neither `price_predictor` nor `sealed` may
+  import from `effects`:
+  - from `price_predictor`: the tokenizer, `build_vocabulary` and its target-size truncation,
+    `forge_jvm` worker helpers, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`,
+    and `ridge_probes`;
+  - from `sealed.domain`: `manabase.compute_basic_lands`, `card_embedding_layout`;
+  - from `sealed.infrastructure`: `ConvertedCardLocator`, `embedding_store`;
+  - from `sealed.application`: nothing. `train-scorer` Phase A is re-run as a subprocess, not
+    imported, so the two application layers stay disjoint.
 - **FR-003**: Java collectors, the `MatchWorkerMain` instrumentation behind `--effect-records`, and
   `KeywordDefinitionMain` MUST live in `forge-connector`.
 - **FR-004**: The engine patch set MUST live under `forge-connector/patches/`, carrying the three
@@ -504,8 +510,11 @@ loss.
   takes 10% of the remaining games.
 - **FR-089**: The best checkpoint MUST be selected by card-disjoint validation loss.
 - **FR-090**: A checkpoint MUST record the split it trained against — the held-out card list and the
-  `game_id` set across both strata — plus the vocabulary and keyword-definition paths and their
-  content hashes.
+  `game_id` set across both strata — plus the vocabulary and keyword-definition paths, their content
+  hashes, and the keyword withheld from training (or null). The evaluator reads the withheld keyword
+  from the checkpoint rather than from a flag, for the same reason it reads the split from there: the
+  zero-shot check must measure the model that was trained, not a keyword an operator remembers
+  choosing.
 - **FR-091**: `--split-from PATH` MUST make a run inherit another checkpoint's split, vocabulary, and
   keyword-definition paths, and every variant run MUST inherit from the `full` run it baselines.
 - **FR-092**: Inference commands MUST hash the vocabulary and keyword-definition files they actually
@@ -565,9 +574,18 @@ loss.
 #### Evaluation
 
 - **FR-106**: `python -m effects evaluate-effect-model` MUST run the battery over the trained variants
-  and report per record kind and per held-out stratum, the four being: unique-text (line texts
-  appearing on no training card), shared-text (texts also on training cards), novel combinations of
-  seen sub-abilities, and numeric extrapolation (seen effect, unseen magnitude).
+  and report per record kind and per held-out stratum. The four strata are computed from the
+  provenance sidecar's `script_api_type`, `script_param_keys`, and `script_text`, which every converted
+  tree carries from stage one:
+  - **unique-text** — the line's text appears on no training card;
+  - **shared-text** — the line's text also appears on a training card;
+  - **novel combination** — every sub-ability API type in the line appears in training, but their
+    ordered sequence for this line does not;
+  - **numeric extrapolation** — the line's (API type, parameter-key set) pair appears in training, and
+    at least one of its numeric parameter values falls outside the range observed for that pair in
+    training.
+
+  A line may qualify for more than one stratum and is reported under each.
 - **FR-107**: Splits MUST come from `--checkpoint`'s recorded split and never be recomputed; the
   command MUST fail fast when a `--variant-checkpoint` records a different split, or different
   vocabulary or keyword-definition hashes, than `--checkpoint`.
