@@ -221,21 +221,21 @@ kinds; run `collect-coverage` to completion on a small `--target-records` and re
 
 ### The patch set
 
-- [ ] T105 [US2] Write `forge-connector/patches/01-trigger-cause.patch`, the trigger-handler cause-channel hook, plus the one-line addition of `AbilityKey.Cause` at the `Destroyed` firing site where the ability is in scope but currently dropped
-- [ ] T106 [US2] Write `forge-connector/patches/02-replacement-hook.patch`, the replacement-execution-point hook, deep-copying the parameter map before the call (the handler's own copy is shallow and replacements mutate nested structures in place)
-- [ ] T107 [US2] Write `forge-connector/patches/03-subability-pointer.patch`, the threaded currently-resolving-sub-ability pointer
-- [ ] T108 [US2] Write `forge-connector/patches/04-logging-points.patch`, the trigger-fire and playability logging points: the trigger handler's condition evaluation, and the AI's candidate computation, combat-setup legality, and legality/cost-adjustment checks
-- [ ] T109 [P] [US2] Document the patch set in `forge-connector/patches/README.md`: what each hook is for, how to apply and re-apply, and how to verify the worker reports `mode = patched`
+- [X] T105 [US2] Write `forge-connector/patches/01-trigger-cause.patch`, the trigger-handler cause-channel hook, plus the one-line addition of `AbilityKey.Cause` at the `Destroyed` firing site where the ability is in scope but currently dropped
+- [X] T106 [US2] Write `forge-connector/patches/02-replacement-hook.patch`, the replacement-execution-point hook, deep-copying the parameter map before the call (the handler's own copy is shallow and replacements mutate nested structures in place)
+- [X] T107 [US2] Write `forge-connector/patches/03-subability-pointer.patch`, the threaded currently-resolving-sub-ability pointer
+- [X] T108 [US2] Write `forge-connector/patches/04-logging-points.patch`, the trigger-fire and playability logging points: the trigger handler's condition evaluation, and the AI's candidate computation, combat-setup legality, and legality/cost-adjustment checks
+- [X] T109 [P] [US2] Document the patch set in `forge-connector/patches/README.md`: what each hook is for, how to apply and re-apply, and how to verify the worker reports `mode = patched`
 
 ### Record kinds the patch unlocks
 
-- [ ] T110 [US2] Implement cause-attributed trigger collection and sub-ability attribution in `forge-connector/.../effects/TriggerCollector.java`
-- [ ] T111 [P] [US2] Implement mana-record collection in `forge-connector/.../effects/ManaCollector.java` riding the inline cast/resolution triggers, honouring `--mana-cap` (per unique mana-ability text, per worker process)
-- [ ] T112 [P] [US2] Implement rewrite-record collection in `forge-connector/.../effects/RewriteCollector.java` at the shared replacement execution point
-- [ ] T113 [P] [US2] Implement continuous-effect collection in `forge-connector/.../effects/ContinuousCollector.java` from the per-card layer tables after a recompute, coalesced per stable board, with static id 0 (temporary pumps) staying on the resolution bracket, and the acting static's own contributions removed from the record's entity inputs
-- [ ] T114 [P] [US2] Implement trigger-fire collection in `forge-connector/.../effects/TriggerFireCollector.java` at the condition-evaluation hook, with same-event-type negatives
-- [ ] T115 [US2] Implement playability collection in `forge-connector/.../effects/PlayabilityCollector.java` for all three subkinds, honouring `--playability-rate` (which samples `decision`-subkind logging points only; `attackers` and `blockers` are always logged), snapshotting defensively — a verdict may be abandoned mid-evaluation and the legality check mutates the checked ability's targets, so never reuse a checked ability object
-- [ ] T116 [US2] Add snapshot tier 3 (unreferenced stack contents) to the snapshot builder in `forge-connector/.../effects/SnapshotBuilder.java`
+- [X] T110 [US2] Implement cause-attributed trigger collection and sub-ability attribution in `forge-connector/.../effects/TriggerCollector.java`
+- [X] T111 [P] [US2] Implement mana-record collection in `forge-connector/.../effects/ManaCollector.java` riding the inline cast/resolution triggers, honouring `--mana-cap` (per unique mana-ability text, per worker process)
+- [X] T112 [P] [US2] Implement rewrite-record collection in `forge-connector/.../effects/RewriteCollector.java` at the shared replacement execution point
+- [X] T113 [P] [US2] Implement continuous-effect collection in `forge-connector/.../effects/ContinuousCollector.java` from the per-card layer tables after a recompute, coalesced per stable board, with static id 0 (temporary pumps) staying on the resolution bracket, and the acting static's own contributions removed from the record's entity inputs
+- [X] T114 [P] [US2] Implement trigger-fire collection in `forge-connector/.../effects/TriggerFireCollector.java` at the condition-evaluation hook, with same-event-type negatives
+- [X] T115 [US2] Implement playability collection in `forge-connector/.../effects/PlayabilityCollector.java` for all three subkinds, honouring `--playability-rate` (which samples `decision`-subkind logging points only; `attackers` and `blockers` are always logged), snapshotting defensively — a verdict may be abandoned mid-evaluation and the legality check mutates the checked ability's targets, so never reuse a checked ability object
+- [X] T116 [US2] Add snapshot tier 3 (unreferenced stack contents) to the snapshot builder in `forge-connector/.../effects/SnapshotBuilder.java`
 
 ### Coverage collector
 
@@ -243,7 +243,7 @@ kinds; run `collect-coverage` to completion on a small `--target-records` and re
 - [X] T118 [P] [US2] Implement `src/effects/infrastructure/castability_connector.py` spawning it (one connector per Java main)
 - [X] T119 [US2] Implement `src/effects/infrastructure/collector_connector.py` spawning the records-only worker (T054) over coverage decks, reusing `ForgeWorkerPool` (prior art: its third supervisor; already extracted at the second instance)
 - [X] T120 [US2] Implement `src/effects/application/collect_coverage.py`: rounds, held-out exclusion via `--split-from`, corpus-wide 40-card deck building (23 nonlands plus basics from `compute_basic_lands`) weighted by record scarcity, with deck candidates and the coverage unit drawn from the `output/cardsfolder/` entry of `--cards-folder` alone, the consult as a ranking input only, satisfaction and retirement, and the two residues
-- [ ] T121 [P] [US2] JUnit-test the US2 collectors in `forge-connector/src/test/java/.../PatchedCollectorTest.java`: cause-attributed trigger attribution, a stacked-replacement pair each carrying the event it received, a coalesced continuous record per stable board, a same-event-type trigger negative, and snapshot tier 3 present
+- [X] T121 [P] [US2] JUnit-test the US2 collectors in `forge-connector/src/test/java/.../PatchedCollectorTest.java`: cause-attributed trigger attribution, a stacked-replacement pair each carrying the event it received, a coalesced continuous record per stable board, a same-event-type trigger negative, and snapshot tier 3 present
 - [X] T122 [US2] Wire `collect-coverage` into the CLI with its documented defaults
 - [ ] T123 [US2] Implement the role-polarity probe in the evaluator, now that mana records give it its effect-position half: compare the model's predicted mana-pool sign for `{R}` in cost position against effect position
 

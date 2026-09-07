@@ -9,7 +9,28 @@ them the collectors still run, fall back to bracket attribution, and stamp every
 an upgrade silently reverts them, which is why attribution mode is detected at worker startup rather
 than being a build flag: a lapsed patch mislabels a corpus otherwise.
 
-## Applying
+## Status: hook specifications, not `git apply` input
+
+**These files are not machine-applicable diffs yet.** Each one names its target
+file, quotes the surrounding source, and gives the exact code to add, but the hunk
+headers are descriptive rather than line-exact — producing a diff `git apply` accepts
+means applying and compiling it against the sibling checkout, which changes a build
+this repository does not own.
+
+Read them as the specification of what each hook is and why, apply them by hand, then
+regenerate real diffs from the result:
+
+```bash
+cd ../forge
+git diff > ../price-predictor/forge-connector/patches/applied.patch
+```
+
+Nothing in this repository depends on the patches being applied. The connector builds
+against **stock** Forge, reaches every hook reflectively, and falls back to bracket
+attribution when it finds none — so an unpatched checkout collects a `degraded`
+corpus rather than failing.
+
+## Applying, once the diffs are real
 
 ```bash
 cd ../forge
