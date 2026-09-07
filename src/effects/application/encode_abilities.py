@@ -107,42 +107,51 @@ def taxonomy_vector(line: SidecarLine, e_dim: int) -> np.ndarray:
 
 def encode_sidecar(
     sidecar: ProvenanceSidecar,
+    sidecar_path: Path | None = None,
     *,
     variant: str,
     e_dim: int,
-    encode_line=None,
+    encode_lines=None,
 ) -> np.ndarray:
     """One source's ``(n_lines, e_dim)`` matrix, row-aligned to its sidecar.
 
-    ``encode_line`` maps a :class:`SidecarLine` to its vector; the ``taxonomy``
-    variant supplies its own and needs no model.
+    ``encode_lines`` maps a whole sidecar to its ``(n_lines, e_dim)`` matrix —
+    the whole card at once rather than a line at a time, so the encoder runs one
+    batched forward pass per card instead of one per ability. It is given the
+    sidecar's own path because the prose surface reads the converted text beside
+    it. The ``taxonomy`` variant needs neither and has no encoder at all.
     """
     if not sidecar.lines:
         return np.zeros((0, e_dim), dtype=np.float32)
     if variant == VARIANT_TAXONOMY:
         rows = [taxonomy_vector(line, e_dim) for line in sidecar.lines]
-    elif encode_line is None:
+        return np.stack(rows).astype(np.float32)
+    if encode_lines is None:
         raise ValueError(
             f"--variant {variant} needs an encoder; only {VARIANT_TAXONOMY} "
             "can be emitted without one"
         )
-    else:
-        rows = [encode_line(line) for line in sidecar.lines]
-    return np.stack(rows).astype(np.float32)
+    return encode_lines(sidecar, sidecar_path).astype(np.float32)
 
 
-def run(config: EncodeAbilitiesConfig, *, encode_line=None) -> EncodeSummary:
+def run(config: EncodeAbilitiesConfig, *, encode_lines=None) -> EncodeSummary:
     """Encode every source under the configured trees.
 
     Idempotent: re-running rewrites the same rows from the same checkpoint. The
     hash check runs before anything is written, so a vocabulary that moved since
     training stops the run rather than filling the cache with vectors that mean
     nothing.
+
+    ``encode_lines`` is injected so the pure pass is testable with no torch; the
+    CLI supplies :func:`build_encode_lines`, which loads the checkpoint's
+    encoder once and batches.
     """
     store = AbilityCacheStore(config.output_root, variant=config.variant)
     cleaned = store.clean() if config.clean else 0
 
     e_dim, provenance = _load_checkpoint_facts(config)
+    if encode_lines is None and config.variant != VARIANT_TAXONOMY:
+        encode_lines = build_encode_lines(config)
 
     folders = [Path(f) for f in config.cards_folders if Path(f).is_dir()]
     if config.variant_scripts and Path(config.variant_scripts).is_dir():
@@ -156,8 +165,8 @@ def run(config: EncodeAbilitiesConfig, *, encode_line=None) -> EncodeSummary:
                 skipped += 1
                 continue
             matrix = encode_sidecar(
-                sidecar, variant=config.variant, e_dim=e_dim,
-                encode_line=encode_line,
+                sidecar, sidecar_path, variant=config.variant, e_dim=e_dim,
+                encode_lines=encode_lines,
             )
             store.write(sidecar.script_file, matrix, sidecar)
             sources += 1
@@ -170,6 +179,50 @@ def run(config: EncodeAbilitiesConfig, *, encode_line=None) -> EncodeSummary:
         if provenance.withheld_keyword else "",
     )
     return EncodeSummary(sources=sources, rows=rows, skipped=skipped, cleaned=cleaned)
+
+
+def build_encode_lines(config: EncodeAbilitiesConfig):
+    """The real encoder as a ``sidecar -> (n_lines, e_dim)`` callable.
+
+    Loaded once for the whole run: the checkpoint read and the weights moved to
+    the device are the expensive part, and doing them per card would dominate
+    the encode.
+    """
+    from effects.application.extract_keyword_definitions import (
+        load_keyword_definitions,
+    )
+    from effects.domain.ability_tokenizer import AbilityTokenizer
+    from effects.infrastructure.ability_encoder_runner import (
+        AbilityEncoderRunner,
+    )
+    from effects.infrastructure.sidecar_io import (
+        converted_text_path,
+        prose_lines,
+    )
+    from price_predictor.infrastructure.tokenizer_store import load_vocabulary
+
+    path = config.resolved_checkpoint()
+    checkpoint = EffectModelStore(path.parent).load(path)
+    vocab_path, keyword_path = resolve_inference_paths(
+        checkpoint.provenance,
+        vocab_path=config.vocab_path,
+        keyword_path=config.keyword_definitions,
+    )
+    definitions = (
+        load_keyword_definitions(keyword_path) if keyword_path.exists() else {}
+    )
+    tokenizer = AbilityTokenizer(load_vocabulary(vocab_path), definitions)
+    runner = AbilityEncoderRunner.from_checkpoint(
+        checkpoint, tokenizer, vocab_path=vocab_path,
+    )
+
+    def encode_lines(sidecar: ProvenanceSidecar, sidecar_path: Path) -> np.ndarray:
+        # The prose surface reads the converted .txt beside the sidecar; the
+        # script surface does not, and a variant tree has no prose at all.
+        prose = prose_lines(converted_text_path(sidecar_path))
+        return runner.encode_sidecar_lines(sidecar, prose)
+
+    return encode_lines
 
 
 def _load_checkpoint_facts(config: EncodeAbilitiesConfig):

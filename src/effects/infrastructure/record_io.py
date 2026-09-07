@@ -54,7 +54,10 @@ from effects.domain.state_snapshot import (
     StackExtras,
     StateSnapshot,
 )
-from price_predictor.infrastructure.append_only import iter_complete_lines
+from price_predictor.infrastructure.append_only import (
+    count_complete_lines,
+    iter_complete_lines,
+)
 
 _JSON_SEPARATORS = (",", ":")  # compact, newline-free
 
@@ -590,5 +593,16 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
 
 
 def count_records(directory: Path) -> int:
-    """Complete records under ``directory``, for progress and resume."""
-    return sum(1 for _ in read_records(directory))
+    """Complete records under ``directory``, for progress and resume.
+
+    Counts complete lines rather than parsed records: the count is a number,
+    and building a record dataclass per line to arrive at it would parse the
+    whole corpus's JSON — the variant collector asks for this before every run
+    just to size its budget.
+    """
+    directory = Path(directory)
+    if not directory.is_dir():
+        return 0
+    return sum(
+        count_complete_lines(shard) for shard in sorted(directory.glob("*.jsonl"))
+    )
