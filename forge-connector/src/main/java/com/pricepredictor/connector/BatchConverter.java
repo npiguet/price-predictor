@@ -44,6 +44,27 @@ public class BatchConverter {
      */
     public BatchResult convert(Path cardsPath, Path outputPath, String tree)
             throws IOException {
+        return convert(cardsPath, outputPath, tree, true);
+    }
+
+    /**
+     * Convert a source tree, optionally writing only the sidecars.
+     *
+     * <p>Stage four's variant tree is the sidecar-only case. A variant has no
+     * oracle text — nobody printed the card — so converting it to prose would
+     * put text in the corpus no card has (FR-056). The sidecar is still needed,
+     * and must come from this parser rather than a reimplementation: a
+     * provenance key's {@code index_within_kind} is the trait's position in
+     * Forge's own runtime trait list, so only the parser that builds that list
+     * can number it the way the collectors will.
+     *
+     * @param writeConvertedText false to write the sidecar alone, leaving the
+     *                           source script in place when {@code outputPath}
+     *                           is the source directory
+     */
+    public BatchResult convert(
+            Path cardsPath, Path outputPath, String tree, boolean writeConvertedText)
+            throws IOException {
         int totalFiles = 0;
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
@@ -81,7 +102,9 @@ public class BatchConverter {
 
                 Path outputFile = outputPath.resolve(relativePath);
                 Files.createDirectories(outputFile.getParent());
-                Files.writeString(outputFile, output);
+                if (writeConvertedText) {
+                    Files.writeString(outputFile, output);
+                }
 
                 ProvenanceSidecar sidecar = ProvenanceSidecar.build(
                         result.faces().get(0).name(), scriptKeyPath, result,

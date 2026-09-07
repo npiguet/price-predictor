@@ -1,8 +1,9 @@
 """Reading and writing ``<name>.provenance.json`` beside a converted card.
 
-The sidecar is written by `price_predictor convert` for the two converted trees
-and by `effects collect-variants` for the perturbed one; it is read here into
-the pure dataclasses of :mod:`effects.domain.provenance`.
+The sidecar is written by the Java parser — `price_predictor convert` for the
+two converted trees, and `VariantSidecarMain` (spawned by `effects
+collect-variants`) for the perturbed one, where it is the only output. It is
+read here into the pure dataclasses of :mod:`effects.domain.provenance`.
 
 The join rule it implements is the one thing this module exists for:
 
@@ -33,6 +34,10 @@ from effects.domain.provenance import (
 )
 
 SIDECAR_SUFFIX = ".provenance.json"
+
+#: The one tree whose sidecars sit beside a *source* script rather than a
+#: converted one, and which therefore has no prose surface at all.
+VARIANT_SCRIPTS_TREE = "variant-scripts"
 
 _JSON_SEPARATORS = (",", ":")
 
@@ -136,8 +141,8 @@ def read_sidecar(path: Path) -> ProvenanceSidecar:
 def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
     """Write one sidecar beside its converted text.
 
-    Used by `collect-variants`, which produces perturbed scripts that no Java
-    converter ever sees.
+    The inverse of :func:`read_sidecar`, used by the tests and by any tool that
+    needs to produce a sidecar without a Forge runtime.
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,7 +229,15 @@ class SidecarCache:
 
         Read from the ``.txt`` beside the sidecar and held per card, because the
         prose surface encodes it and the sidecar carries only the script.
+
+        A variant has none: nobody printed the card, so there is no oracle text
+        to convert, and the ``.txt`` beside its sidecar is the Forge source
+        script rather than converted prose. Returning None is what makes the
+        prose surface fall back to the script for a variant instead of encoding
+        a source-script line as if it were card text.
         """
+        if key.script_file.startswith(f"{VARIANT_SCRIPTS_TREE}/"):
+            return None
         line = self.line_for(key)
         if line is None:
             return None

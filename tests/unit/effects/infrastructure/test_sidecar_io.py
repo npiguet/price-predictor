@@ -200,3 +200,42 @@ class TestSidecarCache:
         cache = self._write_trees(tmp_path)
         assert cache.row_for(_TRIGGER) == 1
         assert cache.line_for(_TRIGGER).script_api_type == "PutCounter"
+
+
+class TestTheVariantTreeHasNoProse:
+    """A variant's sidecar sits beside a Forge *source* script, not a converted
+    one, so reading a line of it as prose would encode script grammar as if it
+    were card text — and it would look like a working run."""
+
+    def _cache(self, tmp_path):
+        variants = tmp_path / "variant-scripts"
+        script = "variant-scripts/lightning_bolt_variant_0.txt"
+        key = ProvenanceKey(script, 0, "spell", 0)
+        write_sidecar(
+            ProvenanceSidecar(
+                card="Lightning Bolt Variant 0",
+                script_file=script,
+                lines=(
+                    SidecarLine(
+                        line_index=0, line_kind="spell", provenance=(key,),
+                        script_text="SP$ DealDamage | NumDmg$ 7",
+                    ),
+                ),
+            ),
+            sidecar_path_for(variants / "lightning_bolt_variant_0.txt"),
+        )
+        # The .txt beside it is the source script the collector played.
+        (variants / "lightning_bolt_variant_0.txt").write_text(
+            "Name:Lightning Bolt Variant 0\nTypes:Instant\n", encoding="utf-8",
+        )
+        return SidecarCache({"variant-scripts": variants}), key
+
+    def test_a_variant_key_has_no_prose(self, tmp_path):
+        cache, key = self._cache(tmp_path)
+        assert cache.prose_for(key) is None
+
+    def test_the_line_still_resolves(self, tmp_path):
+        """Only the prose surface is absent; the join itself is ordinary."""
+        cache, key = self._cache(tmp_path)
+        assert cache.row_for(key) == 0
+        assert cache.line_for(key).script_text == "SP$ DealDamage | NumDmg$ 7"

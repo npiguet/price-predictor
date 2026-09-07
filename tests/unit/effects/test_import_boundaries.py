@@ -27,6 +27,7 @@ _ALLOWED: dict[str, set[str] | None] = {
     "price_predictor.infrastructure.torch_checkpoint": None,
     "price_predictor.infrastructure.torch_training": {"clip_per_group"},
     "price_predictor.infrastructure.append_only": None,
+    "price_predictor.infrastructure.card_filenames": {"sanitize_card_name"},
     "sealed.domain.manabase": {"compute_basic_lands"},
     "sealed.domain.card_embedding_layout": None,
     "sealed.infrastructure.converted_card_locator": {"ConvertedCardLocator"},

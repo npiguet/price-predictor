@@ -91,6 +91,8 @@ Inputs the code expects to find on disk:
 - `output/effects/records/` — append-only effect-record shards from `sealed match-outcomes --effect-records`; the input to `effects train-effect-model`.
 - `output/effects/keyword-definitions.json` — Forge's keyword table, from `effects extract-keyword-definitions`; scanned by `build-vocab` and read by the encoder's keyword expansion.
 - `output/effects/abilities/` — the per-ability embedding cache from `effects encode-abilities`.
+- `output/effects/variant-scripts/` — perturbed Forge source scripts from `effects collect-variants` (stage four), on the script surface only and never converted to prose.
+- `../forge` with `forge-connector/patches/` applied — the engine hooks the collectors look up reflectively. Unpatched, collection still runs and stamps every record `degraded`.
 - `output/sealed/pools/{set}/pools.txt` or `output/sealed/pools/pools.txt` — generated sealed pools (`SET_CODE;Card1|...` per line).
 - `output/sealed/generated-decks.txt` — scorer-built 40-card decks from `build-decks` (`LABEL;SET_CODE;Card1|...|Card40` per line); input to `match-outcomes --side-a-decks` / `--side-b-decks`.
 - `output/sealed/match-outcomes.txt` — append-only training data for the scorer.
