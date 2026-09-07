@@ -14,7 +14,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from price_predictor.application.build_vocabulary import build_vocabulary
+from price_predictor.application.build_vocabulary import (
+    build_vocabulary,
+    truncate_to_target_size,
+)
 from price_predictor.infrastructure.tokenizer_store import save_vocabulary
 
 
@@ -36,28 +39,6 @@ class EmptyCardsFolderError(RuntimeError):
     """Raised when the cards-folder has no ``*.txt`` files. Maps to exit code 1."""
 
 
-def _truncate_to_target_size(
-    vocab: dict[str, int], domain_token_count: int, target_size: int,
-) -> dict[str, int]:
-    """Keep the seeded specials + domain tokens, then drop the long tail of
-    corpus-frequency tokens beyond ``target_size``.
-
-    The price-side ``build_vocabulary`` orders entries (special, domain,
-    set-code fragments, frequency-sorted corpus tokens, leftover mana
-    symbols) so truncating from the tail preserves the seeded slots.
-    """
-    if target_size < domain_token_count:
-        raise ValueError(
-            f"--target-size ({target_size}) is smaller than the seeded "
-            f"token count ({domain_token_count}); seeded tokens are always "
-            "preserved per Decision D-1."
-        )
-    if len(vocab) <= target_size:
-        return vocab
-    items = sorted(vocab.items(), key=lambda kv: kv[1])[:target_size]
-    return {tok: i for i, (tok, _) in enumerate(items)}
-
-
 def run(config: BuildVocabConfig) -> int:
     """Execute the build-vocab pipeline. Returns the resulting vocab size."""
     cards_folder = Path(config.cards_folder)
@@ -77,7 +58,7 @@ def run(config: BuildVocabConfig) -> int:
         printings_path=printings_path,
     )
 
-    truncated = _truncate_to_target_size(
+    truncated = truncate_to_target_size(
         result.vocab, result.domain_token_count, config.target_size,
     )
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from price_predictor.infrastructure.append_only import iter_complete_lines
 from sealed.domain.match import Side
 from sealed.infrastructure.delimited import parse_pipe_list, split_record
 
@@ -59,19 +60,9 @@ def iter_rows(path: Path) -> Iterator[CardsPlayedRow]:
     """Stream rows from ``path``.
 
     Tolerates a trailing partial (non-newline-terminated) line silently —
-    that's the JVM-crash-mid-write recovery path (Edge Cases).
-    Raises ``ValueError`` on a mid-file malformed line.
+    that's the JVM-crash-mid-write recovery path (Edge Cases), applied by the
+    shared ``append_only`` primitive. Raises ``ValueError`` on a mid-file
+    malformed line.
     """
-    path = Path(path)
-    with path.open("rb") as f:
-        raw = f.read()
-    if not raw:
-        return
-    text = raw.decode("utf-8")
-    has_trailing_newline = text.endswith("\n")
-    lines = text.splitlines()
-    if not has_trailing_newline and lines:
-        # Drop the final non-newline-terminated line silently.
-        lines = lines[:-1]
-    for line in lines:
+    for line in iter_complete_lines(Path(path)):
         yield _parse_line(line)

@@ -259,6 +259,36 @@ def _compute_coverage(
     return coverage_pct, round(100.0 - coverage_pct, 1)
 
 
+def truncate_to_target_size(
+    vocab: dict[str, int], domain_token_count: int, target_size: int,
+) -> dict[str, int]:
+    """Keep the seeded specials + domain tokens, then drop the long tail of
+    corpus-frequency tokens beyond ``target_size``.
+
+    :func:`build_vocabulary` orders entries (special, domain, set-code
+    fragments, frequency-sorted corpus tokens, leftover mana symbols) so
+    truncating from the tail preserves the seeded slots.
+
+    This is what every wrapper's ``--target-size`` flag does. It lives here
+    rather than in one of them so ``sealed build-vocab`` and ``effects
+    build-vocab`` share one implementation instead of a private import.
+
+    Raises:
+        ValueError: If ``target_size`` is below the seeded token count, since
+            seeded tokens are always preserved.
+    """
+    if target_size < domain_token_count:
+        raise ValueError(
+            f"--target-size ({target_size}) is smaller than the seeded "
+            f"token count ({domain_token_count}); seeded tokens are always "
+            "preserved."
+        )
+    if len(vocab) <= target_size:
+        return vocab
+    items = sorted(vocab.items(), key=lambda kv: kv[1])[:target_size]
+    return {tok: i for i, (tok, _) in enumerate(items)}
+
+
 def build_vocabulary(
     cards_path: Path,
     freq_threshold: int = 5,

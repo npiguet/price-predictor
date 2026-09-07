@@ -22,7 +22,6 @@ import re
 import sys
 import unicodedata
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -43,52 +42,50 @@ SCRATCH.mkdir(parents=True, exist_ok=True)
 
 sys.path.insert(0, str(REPO / "src"))
 
+from price_predictor.application.ridge_probes import (  # noqa: E402, F401
+    ALPHA_GRID,
+    COUNTER_COLUMNS,
+    HEADS,
+    LOGIT_CLIP,
+    SHRINKAGE_K,
+    HeadProbe,
+    ProbeSet,
+    _choose_alpha,
+    _pearson,
+    _r2,
+    _ridge_solve,
+    fit_probes,
+    head_effective_n,
+    head_weight,
+    to_logit,
+)
+from price_predictor.application.ridge_probes import (  # noqa: E402
+    load_labels as _load_labels,
+)
 from price_predictor.domain.card_text import ConvertedCardText  # noqa: E402
 from price_predictor.infrastructure.tokenizer_store import load_tokenizer  # noqa: E402
 from sealed.domain.card_encoder import CardEncoder  # noqa: E402
 from sealed.infrastructure.encoder_store import SealedEncoderStore  # noqa: E402
 
-TEXT_DIM = 512          # pooled text vector; the cached .npz is 512 + 32 features
-SHRINKAGE_K = 20.0      # train-encoder --shrinkage-k default, used for the labels
+# The ridge harness, the label reader, and the per-head weighting live in
+# ``price_predictor.application.ridge_probes`` so the effects decodability
+# battery can import them too; they are re-exported here because every probe
+# script reaches them through this module. Only the NAS default path and the
+# pickle helpers over ``SCRATCH`` stay local.
 
-# Head order matches ``train_encoder._ALL_HEAD_NAMES`` / the label file columns.
-HEADS: tuple[str, ...] = (
-    "score_play", "score_draw", "played_rate", "cast_lift",
-    "color_lift_W", "color_lift_U", "color_lift_B", "color_lift_R",
-    "color_lift_G",
-)
-COUNTER_COLUMNS: tuple[str, ...] = (
-    "wins_when_played", "wins_when_in_deck",
-    "losses_when_played", "losses_when_in_deck",
-)
+TEXT_DIM = 512          # pooled text vector; the cached .npz is 512 + 32 features
 
 
 # ── labels ──────────────────────────────────────────────────────────────
 
 
 def load_labels(path: Path = WIN_RATES) -> dict[str, dict]:
-    """``cards-win-rates.txt`` → ``name -> {column: value}``.
+    """``cards-win-rates.txt`` → ``name -> {column: value}``, from the NAS.
 
-    The four counters come back as ``int``; the eighteen raw/shrunk label
-    cells as ``float`` or ``None`` (an empty cell means "no signal", not
-    "neutral signal" — see the file-format contract in CLAUDE.md). The
-    file is UTF-8; reading it as cp1252 crashes on accented card names.
+    Default-path wrapper over ``ridge_probes.load_labels``, which takes the
+    path as a required argument so it can run without this drive mounted.
     """
-    rows: dict[str, dict] = {}
-    with open(path, encoding="utf-8") as f:
-        header = f.readline().rstrip("\n").split(";")
-        for line in f:
-            parts = line.rstrip("\n").split(";")
-            if len(parts) != len(header):
-                continue
-            rec: dict = {}
-            for key, value in zip(header[1:], parts[1:]):
-                if key in COUNTER_COLUMNS:
-                    rec[key] = int(value)
-                else:
-                    rec[key] = float(value) if value != "" else None
-            rows[parts[0]] = rec
-    return rows
+    return _load_labels(path)
 
 
 # ── name → converted-file join ──────────────────────────────────────────
@@ -182,57 +179,7 @@ def resolve_card_file(
 # ── per-head observation counts ─────────────────────────────────────────
 
 
-def _head_n(rec: dict, head: str) -> float | None:
-    """Effective observation count behind one head's cell, or None.
-
-    ``played_rate`` and ``cast_lift`` read straight off the four counters.
-    The remaining seven heads use denominators (@play / @draw / per-color
-    slices) that ``cards-win-rates.txt`` does not carry, but every one of
-    them is recoverable from the raw/shrunk pair: both share a numerator,
-    so ``shrunk / raw == n / (n + k)`` and ``n = k · shrunk / (raw −
-    shrunk)``. That identity degrades when the numerator is near zero
-    (the cells are rounded to five decimals), so it is only used when
-    ``|raw|`` is comfortably above the rounding floor; otherwise the fall
-    back is ``n_in_deck / 2`` for the two @play/@draw heads (each game
-    puts exactly one side on the play) and ``n_in_deck`` for a color lift.
-    """
-    in_deck = rec["wins_when_in_deck"] + rec["losses_when_in_deck"]
-    if head == "played_rate":
-        return float(in_deck)
-    if head == "cast_lift":
-        played = rec["wins_when_played"] + rec["losses_when_played"]
-        return float(min(played, in_deck - played))
-
-    if head in ("score_play", "score_draw"):
-        raw, shrunk = rec[f"raw_{head}"], rec[f"shrunk_{head}"]
-        fallback = in_deck / 2.0
-    else:
-        color = head[-1]
-        raw, shrunk = rec[f"raw_color_lift_{color}"], rec[f"shrunk_color_lift_{color}"]
-        # color_lift subtracts the card's overall score, so undo that first.
-        overall_num = rec["wins_when_played"] - rec["losses_when_played"]
-        if in_deck == 0:
-            return None
-        if raw is not None:
-            raw = raw + overall_num / in_deck
-        if shrunk is not None:
-            shrunk = shrunk + overall_num / (in_deck + SHRINKAGE_K)
-        fallback = float(in_deck)
-    if raw is None or shrunk is None:
-        return None
-    if abs(raw) < 5e-4 or raw == shrunk:
-        return fallback
-    ratio = shrunk / raw
-    if not (0.0 < ratio < 1.0):
-        return fallback
-    return SHRINKAGE_K * ratio / (1.0 - ratio)
-
-
-def head_weight(n: float | None, k: float = SHRINKAGE_K) -> float:
-    """FR-017a per-head sample weight ``n / (n + k)``; 0.0 for a dead cell."""
-    if n is None or n <= 0:
-        return 0.0
-    return float(n / (n + k))
+_head_n = head_effective_n  # the name the probe scripts already call it by
 
 
 # ── the encoder's own train/val split ───────────────────────────────────
@@ -248,8 +195,10 @@ def reconstruct_split(labels: dict[str, dict]) -> tuple[set[str], set[str]]:
     the run's own partition. ``p0_build`` asserts the sizes against the
     training log.
     """
-    from sealed.application.train_encoder import (  # local: heavy import
-        CardCounters, CardLabels, _split_cards,
+    from sealed.application.train_encoder import (  # noqa: I001 — local: heavy import
+        CardCounters,
+        CardLabels,
+        _split_cards,
     )
 
     label_map = {}
@@ -555,7 +504,7 @@ class EncoderRunner:
         device, batch_size = (("cpu", 1) if exact else (self.device, batch_size))
         self._to(device)
         stripped = [
-            "\n".join(l for l in t.splitlines() if not l.startswith("name:"))
+            "\n".join(ln for ln in t.splitlines() if not ln.startswith("name:"))
             for t in texts
         ]
         out = np.empty((len(texts), TEXT_DIM), dtype=np.float32)
@@ -594,164 +543,9 @@ class EncoderRunner:
         }
 
 
-# ── ridge probes ────────────────────────────────────────────────────────
-
-ALPHA_GRID: tuple[float, ...] = (0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0)
-LOGIT_CLIP = 1e-3
-
-
-def to_logit(p: np.ndarray, clip: float = LOGIT_CLIP) -> np.ndarray:
-    q = np.clip(p, clip, 1.0 - clip)
-    return np.log(q / (1.0 - q))
-
-
-@dataclass
-class HeadProbe:
-    """One fitted ridge probe: 512 weights, an intercept, and its metrics."""
-
-    head: str
-    space: str            # "linear" or "logit" (played_rate only)
-    coef: np.ndarray      # (512,)
-    intercept: float
-    alpha: float
-    n_fit: int
-    metrics: dict = field(default_factory=dict)
-
-    def predict(self, embeddings: np.ndarray) -> np.ndarray:
-        return embeddings @ self.coef + self.intercept
-
-
-@dataclass
-class ProbeSet:
-    mode: str             # "fidelity" (all cards) or "honest" (train only)
-    weighted: bool
-    probes: dict[str, HeadProbe]
-
-    @property
-    def key(self) -> str:
-        return f"{self.mode}_{'w' if self.weighted else 'u'}"
-
-
-def _ridge_solve(
-    X: np.ndarray, y: np.ndarray, w: np.ndarray, alphas: Sequence[float],
-) -> dict[float, tuple[np.ndarray, float]]:
-    """Weighted ridge for every alpha at once (one eigendecomposition).
-
-    Centres X and y under the sample weights so the intercept is exact and
-    unpenalised, forms the 512×512 weighted Gram matrix once, and reuses
-    its eigendecomposition across the alpha grid.
-    """
-    sw = w / w.sum()
-    xm = sw @ X
-    ym = float(sw @ y)
-    Xc = X - xm
-    yc = y - ym
-    Xw = Xc * w[:, None]
-    gram = Xc.T @ Xw
-    rhs = Xw.T @ yc
-    evals, evecs = np.linalg.eigh(gram)
-    proj = evecs.T @ rhs
-    out: dict[float, tuple[np.ndarray, float]] = {}
-    for alpha in alphas:
-        coef = evecs @ (proj / (evals + alpha))
-        out[float(alpha)] = (coef, ym - float(xm @ coef))
-    return out
-
-
-def _r2(y: np.ndarray, pred: np.ndarray, w: np.ndarray | None = None) -> float:
-    if w is None:
-        w = np.ones_like(y)
-    mean = float((w * y).sum() / w.sum())
-    ss_res = float((w * (y - pred) ** 2).sum())
-    ss_tot = float((w * (y - mean) ** 2).sum())
-    return 1.0 - ss_res / ss_tot if ss_tot > 0 else float("nan")
-
-
-def _pearson(a: np.ndarray, b: np.ndarray) -> float:
-    if a.size < 2:
-        return float("nan")
-    return float(np.corrcoef(a, b)[0, 1])
-
-
-def _choose_alpha(
-    X: np.ndarray, y: np.ndarray, w: np.ndarray, folds: int = 5, seed: int = 42,
-) -> tuple[float, float]:
-    """K-fold CV over :data:`ALPHA_GRID`; returns ``(alpha, cv_r2)``."""
-    rng = np.random.default_rng(seed)
-    order = rng.permutation(len(y))
-    parts = np.array_split(order, folds)
-    scores = {a: 0.0 for a in ALPHA_GRID}
-    for part in parts:
-        mask = np.ones(len(y), dtype=bool)
-        mask[part] = False
-        fits = _ridge_solve(X[mask], y[mask], w[mask], ALPHA_GRID)
-        for alpha, (coef, b) in fits.items():
-            pred = X[part] @ coef + b
-            scores[alpha] += _r2(y[part], pred, w[part]) / folds
-    best = max(scores, key=lambda a: scores[a])
-    return best, scores[best]
-
-
-def fit_probes(
-    join: pd.DataFrame,
-    embeddings: np.ndarray,
-    *,
-    mode: str = "fidelity",
-    weighted: bool = True,
-    heads: Sequence[str] = HEADS,
-    folds: int = 5,
-) -> ProbeSet:
-    """Ridge probes from the 512-dim text vector to each shrunk label.
-
-    ``mode='fidelity'`` fits on every joined card — the read-off model for
-    counterfactual edits, where generalization is not the claim.
-    ``mode='honest'`` fits only on the encoder's own train split, so its
-    metrics on the val split are an unrecycled generalization number.
-
-    ``weighted`` applies the training objective's ``n/(n+20)`` per-head
-    sample weight. ``played_rate`` is fitted twice — linearly and in logit
-    space (``played_rate@logit``), since a rate bounded in [0, 1] with mass
-    near both ends is not a linear target.
-
-    ``embeddings`` must be row-aligned with ``join``.
-    """
-    if mode not in ("fidelity", "honest"):
-        raise ValueError(f"mode must be 'fidelity' or 'honest', got {mode!r}")
-    primary = join["is_primary"].to_numpy()
-    is_train = (join["split"] == "train").to_numpy()
-    is_val = (join["split"] == "val").to_numpy()
-    fit_base = primary & (is_train if mode == "honest" else np.ones_like(primary))
-
-    probes: dict[str, HeadProbe] = {}
-    for head in heads:
-        y_all = pd.to_numeric(join[f"shrunk_{head}"], errors="coerce").to_numpy(float)
-        w_all = join[f"w_{head}"].to_numpy(float)
-        have = np.isfinite(y_all) & (w_all > 0)
-        spaces = [("linear", y_all)]
-        if head == "played_rate":
-            spaces.append(("logit", to_logit(y_all)))
-        for space, target in spaces:
-            fit_mask = fit_base & have
-            X, y = embeddings[fit_mask], target[fit_mask]
-            w = w_all[fit_mask] if weighted else np.ones(fit_mask.sum())
-            alpha, cv_r2 = _choose_alpha(X, y, w, folds=folds)
-            coef, b = _ridge_solve(X, y, w, [alpha])[alpha]
-            metrics = {"cv_r2": cv_r2, "in_sample_r2": _r2(y, X @ coef + b, w)}
-            for split_name, split_mask in (("train", is_train), ("val", is_val)):
-                m = primary & have & split_mask
-                if m.sum() < 2:
-                    continue
-                pred = embeddings[m] @ coef + b
-                mw = w_all[m] if weighted else np.ones(int(m.sum()))
-                metrics[f"{split_name}_r2"] = _r2(target[m], pred, mw)
-                metrics[f"{split_name}_pearson"] = _pearson(target[m], pred)
-                metrics[f"{split_name}_n"] = int(m.sum())
-            name = head if space == "linear" else f"{head}@logit"
-            probes[name] = HeadProbe(
-                head=head, space=space, coef=coef, intercept=b, alpha=alpha,
-                n_fit=int(fit_mask.sum()), metrics=metrics,
-            )
-    return ProbeSet(mode=mode, weighted=weighted, probes=probes)
+# The ridge harness lives in ``price_predictor.application.ridge_probes``
+# and is re-exported at the top of this module; the pickle helpers below
+# stay here because they are about this study's SCRATCH directory.
 
 
 def save_probes(probe_set: ProbeSet, directory: Path = SCRATCH) -> Path:
@@ -803,7 +597,7 @@ def token_key(text: str, tokenizer=None) -> tuple[int, ...]:
     """
     tokenizer = tokenizer or load_tokenizer(VOCAB_PATH)
     stripped = "\n".join(
-        l for l in text.splitlines() if not l.startswith("name:")
+        ln for ln in text.splitlines() if not ln.startswith("name:")
     )
     return tuple(tokenizer.tokenize_to_ids(stripped))
 
@@ -967,7 +761,7 @@ def placebo_edits(text: str, freq: Counter | None = None) -> dict[str, str | Non
         "swap_static": None, "subtype_swap": None, "swap_ability_lines": None,
     }
 
-    statics = [i for i, l in enumerate(lines) if l.startswith("static:")]
+    statics = [i for i, ln in enumerate(lines) if ln.startswith("static:")]
     if len(statics) >= 2:
         edited = list(lines)
         a, b = statics[0], statics[1]
@@ -995,7 +789,7 @@ def placebo_edits(text: str, freq: Counter | None = None) -> dict[str, str | Non
         out["subtype_swap"] = "\n".join(edited)
         break
 
-    abilities = [i for i, l in enumerate(lines) if l.startswith(_ABILITY_PREFIXES)]
+    abilities = [i for i, ln in enumerate(lines) if ln.startswith(_ABILITY_PREFIXES)]
     if len(abilities) >= 2:
         a, b = abilities[0], abilities[-1]
         edited = list(lines)
