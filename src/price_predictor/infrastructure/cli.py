@@ -197,6 +197,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-path", type=str, default="./output",
         help="Output directory for converted files",
     )
+    convert_parser.add_argument(
+        "--tokens-path", type=str,
+        default="../forge/forge-gui/res/tokenscripts/",
+        help="Path to Forge tokenscripts directory (skipped if absent)",
+    )
+    convert_parser.add_argument(
+        "--tokens-output-path", type=str, default="./output/tokenscripts",
+        help=(
+            "Output directory for converted token scripts. Kept out of the card "
+            "tree because converted token and card filenames collide and the "
+            "sealed pipeline reads the card tree as its corpus."
+        ),
+    )
     convert_parser.set_defaults(func=run_convert)
 
     # ── check-convert ─────────────────────────────────────────────
@@ -320,7 +333,13 @@ def run_serve(args: argparse.Namespace) -> int:
 
 
 def run_convert(args: argparse.Namespace) -> int:
-    """Execute the convert command — launch Java batch converter."""
+    """Execute the convert command — launch Java batch converter.
+
+    Writes three things rather than one: converted card text, a
+    ``<name>.provenance.json`` sidecar beside each of them joining every
+    rendered line back to the runtime traits that produced it, and the
+    converted token scripts under their own tree.
+    """
     import subprocess
 
     from price_predictor.infrastructure.forge_jvm import (
@@ -346,6 +365,8 @@ def run_convert(args: argparse.Namespace) -> int:
         main_args=[
             "--cards-path", args.cards_path,
             "--output-path", args.output_path,
+            "--tokens-path", args.tokens_path,
+            "--tokens-output-path", args.tokens_output_path,
         ],
     )
 

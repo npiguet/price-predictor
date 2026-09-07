@@ -1,6 +1,9 @@
 package com.pricepredictor.connector;
 
 import com.esotericsoftware.minlog.Log;
+import com.pricepredictor.connector.effects.ProvenanceRecorder;
+import com.pricepredictor.connector.effects.ProvenanceSidecar;
+import com.pricepredictor.connector.effects.SourceTree;
 
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -13,6 +16,11 @@ import java.util.List;
 
 /**
  * Batch converts all Forge card scripts in a directory tree.
+ *
+ * <p>Each card produces two files: the converted text and a
+ * {@code <name>.provenance.json} sidecar beside it, joining every rendered line
+ * back to the runtime traits that produced it. Both come from one render pass,
+ * so the sidecar's line indices always describe the file that was written.
  */
 public class BatchConverter {
 
@@ -20,9 +28,22 @@ public class BatchConverter {
 
     /**
      * Convert all .txt card scripts in cardsPath, writing output to outputPath
-     * with mirrored directory structure.
+     * with mirrored directory structure. Sidecars are written for the
+     * {@code cardsfolder} tree.
      */
     public BatchResult convert(Path cardsPath, Path outputPath) throws IOException {
+        return convert(cardsPath, outputPath, SourceTree.CARDSFOLDER);
+    }
+
+    /**
+     * Convert a source tree, writing a provenance sidecar beside each card.
+     *
+     * @param tree which converted source tree this is; it prefixes every
+     *             provenance key's script path, because one filename occurs in
+     *             more than one tree and must resolve differently in each
+     */
+    public BatchResult convert(Path cardsPath, Path outputPath, String tree)
+            throws IOException {
         int totalFiles = 0;
         int succeeded = 0;
         List<String> warnings = new ArrayList<>();
@@ -43,14 +64,29 @@ public class BatchConverter {
             try {
                 List<String> lines = Files.readAllLines(scriptFile);
                 String filename = scriptFile.getFileName().toString();
-                MultiCard result = converter.parseScript(lines, filename);
-                String output = result.formatText();
-
-                // Mirror directory structure
                 Path relativePath = cardsPath.relativize(scriptFile);
+                // The key's script path is the source path as written, tree
+                // included — produced identically here and by the Python reader.
+                String scriptKeyPath = tree + "/"
+                        + relativePath.toString().replace('\\', '/');
+
+                RulesParser.ParsedCard parsed =
+                        converter.parseScript(lines, filename, scriptKeyPath);
+                MultiCard result = parsed.card();
+
+                List<Ability> owners = new ArrayList<>();
+                List<Integer> faceOfLine = new ArrayList<>();
+                List<String> renderedLines = result.renderLines(owners, faceOfLine);
+                String output = String.join("\n", renderedLines);
+
                 Path outputFile = outputPath.resolve(relativePath);
                 Files.createDirectories(outputFile.getParent());
                 Files.writeString(outputFile, output);
+
+                ProvenanceSidecar sidecar = ProvenanceSidecar.build(
+                        result.faces().get(0).name(), scriptKeyPath, result,
+                        renderedLines, owners, faceOfLine, parsed.recorders());
+                Files.writeString(sidecarPathFor(outputFile), sidecar.toJson());
                 succeeded++;
             } catch (Throwable t) {
                 // Forge's card-rules parser raises AssertionError on
@@ -64,6 +100,14 @@ public class BatchConverter {
         }
 
         return new BatchResult(totalFiles, succeeded, warnings);
+    }
+
+    /** The sidecar beside a converted {@code .txt}, the pairing {@code .npz} uses. */
+    public static Path sidecarPathFor(Path convertedTxt) {
+        String name = convertedTxt.getFileName().toString();
+        String stem = name.endsWith(".txt")
+                ? name.substring(0, name.length() - 4) : name;
+        return convertedTxt.resolveSibling(stem + ".provenance.json");
     }
 
     public record BatchResult(int totalFiles, int succeeded, List<String> warnings) {
