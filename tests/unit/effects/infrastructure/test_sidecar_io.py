@@ -86,6 +86,49 @@ class TestTheThreeJoinCases:
         assert "reconversion" in str(excinfo.value)
 
 
+class TestARuntimeOnlyTrait:
+    """Level up, bestow and scavenge each add a spell ability the card script
+    never declares, so the runtime trait list is longer than the parsed one.
+
+    That key belongs to no line and no dropped key, and failing on it stops
+    training on a corpus that is entirely correct — the six cards it hits are
+    not a reconversion. It is told apart by position: past everything the face
+    declared for that kind.
+    """
+
+    def test_an_index_past_everything_declared_resolves_to_no_line(self):
+        # The fixture declares static[0] (rendered) and static[2] (dropped).
+        beyond = ProvenanceKey(_SCRIPT, 0, "static", 5)
+        assert _sidecar().is_runtime_only(beyond)
+        assert _sidecar().line_for(beyond) is None
+        assert _sidecar().row_for(beyond) is None
+
+    def test_a_gap_inside_the_declared_range_still_fails(self):
+        """A reconversion moves every key, not the tail of one list — so an
+        index the face declared around but not at is still a mismatch."""
+        inside = ProvenanceKey(_SCRIPT, 0, "static", 1)
+        assert not _sidecar().is_runtime_only(inside)
+        with pytest.raises(KeyError):
+            _sidecar().line_for(inside)
+
+    def test_a_kind_the_face_never_declared_still_fails(self):
+        """Nothing was declared for it, so there is no tail to be past."""
+        assert not _sidecar().is_runtime_only(_ABSENT)
+
+    def test_a_dropped_key_counts_toward_what_was_declared(self):
+        """It is a trait the converter saw, so it bounds the parsed range."""
+        assert _sidecar().is_runtime_only(ProvenanceKey(_SCRIPT, 0, "static", 3))
+        assert not _sidecar().is_runtime_only(
+            ProvenanceKey(_SCRIPT, 0, "static", 2)
+        )
+
+    def test_another_face_is_bounded_separately(self):
+        """Each face has its own trait list, so face 1 declares nothing here."""
+        assert not _sidecar().is_runtime_only(
+            ProvenanceKey(_SCRIPT, 1, "static", 9)
+        )
+
+
 class TestRowAlignment:
     def test_row_i_is_the_ith_entry_of_lines(self):
         assert _sidecar().row_for(_TRIGGER) == 1

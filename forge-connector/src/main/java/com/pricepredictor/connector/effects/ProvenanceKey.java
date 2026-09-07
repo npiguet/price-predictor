@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
+import forge.card.CardRules;
 import forge.card.CardStateName;
+import forge.card.ICardFace;
 import forge.game.CardTraitBase;
 import forge.game.card.Card;
 import forge.game.card.CardState;
@@ -8,6 +10,8 @@ import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
+import forge.item.IPaperCard;
+import forge.item.PaperToken;
 
 import java.util.List;
 import java.util.Objects;
@@ -89,10 +93,71 @@ public record ProvenanceKey(
         int index = indexWithin(state, printed, kind);
         if (index < 0) return null;
         return new ProvenanceKey(
-                CardFilenames.scriptFile(treeOf(host), host.getName()),
+                scriptFileOf(host),
                 faceIndex(host, state.getStateName()),
                 kind,
                 index);
+    }
+
+    /**
+     * The converted script path a live card's traits belong to.
+     *
+     * <p>Forge is asked first and the name is only a fallback. A card loaded
+     * from the folder carries {@code CardRules.getNormalizedName()}, the stem of
+     * the file Forge actually read it from, and that beats any sanitizer:
+     * Forge's filenames disagree with its card names often enough to matter — a
+     * Fallaji Archaeologist lives in {@code fallaji_archeologist.txt} — and a
+     * misspelling cannot be derived. It also settles the two-faced cards for
+     * free, where {@code getName()} answers whichever face is up while the
+     * script is {@code westvale_abbey_ormendahl_profane_prince.txt} either way.
+     *
+     * <p>A token is filed under what it <em>is</em>, not what it is called:
+     * {@code c_1_1_eldrazi_scion_sac.txt} is the Eldrazi Scion. And
+     * {@code isToken()} does not mean "came from a token script" — a token copy
+     * of a real permanent is a token by that flag while its abilities are the
+     * printed card's — so the paper card decides the tree: only a
+     * {@link PaperToken} was read from a token script.
+     */
+    static String scriptFileOf(Card host) {
+        if (VariantRegistry.isVariant(host.getName())) {
+            return CardFilenames.scriptFile(
+                    SourceTree.VARIANT_SCRIPTS, host.getName());
+        }
+        String stem = tokenScriptStem(host);
+        if (stem != null) {
+            return CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem);
+        }
+        CardRules rules = host.getRules();
+        String normalized = rules == null ? null : rules.getNormalizedName();
+        if (normalized != null && !normalized.isEmpty()) {
+            return CardFilenames.scriptFileForStem(
+                    SourceTree.CARDSFOLDER, normalized);
+        }
+        return CardFilenames.scriptFile(SourceTree.CARDSFOLDER, host.getName());
+    }
+
+    /**
+     * A token's script-file stem, or null when the card did not come from a
+     * token script — including a token copy of a printed card.
+     */
+    private static String tokenScriptStem(Card host) {
+        try {
+            IPaperCard paper = host.getPaperCard();
+            if (!(paper instanceof PaperToken token)) {
+                return null;
+            }
+            // "c_1_1_eldrazi_scion_sac|OGW" or "…|OGW|12|1": the script stem is
+            // everything before the first separator.
+            String image = token.getImageFilename(1);
+            if (image == null || image.isEmpty()) {
+                return null;
+            }
+            int bar = image.indexOf('|');
+            String stem = bar < 0 ? image : image.substring(0, bar);
+            return stem.isEmpty() ? null : stem.replace(' ', '_');
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** Follow the granted / copied / copy-spell chain back to a printed trait. */
@@ -178,24 +243,6 @@ public record ProvenanceKey(
             }
         }
         return List.copyOf(order);
-    }
-
-    /**
-     * Which converted tree a live card's script came from.
-     *
-     * <p>A staged variant is an ordinary non-token card by the time Forge has
-     * loaded it, so the tree cannot be read off the card — it comes from the
-     * names {@link VariantRegistry} recorded at staging time. Without that a
-     * variant's records would be keyed under {@code cardsfolder/}, where no
-     * sidecar of that name exists, and the join would fail loudly on a corpus
-     * that is in fact correct.
-     */
-    private static String treeOf(Card card) {
-        if (card.isToken()) return SourceTree.TOKENSCRIPTS;
-        if (VariantRegistry.isVariant(card.getName())) {
-            return SourceTree.VARIANT_SCRIPTS;
-        }
-        return SourceTree.CARDSFOLDER;
     }
 
     /** The JSON object form used inside a record's {@code ability} array. */

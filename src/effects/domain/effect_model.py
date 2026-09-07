@@ -687,9 +687,15 @@ def entity_target_tensors(
     collected: dict[str, torch.Tensor] = {}
 
     for spec in fields:
-        shape = (batch, width) if spec.width <= 4 else (batch, width, spec.arity)
-        if spec.type is FieldType.MULTI_BINARY:
-            shape = (batch, width, spec.arity)
+        # Only a multi-binary field's *target* is as wide as its prediction.
+        # A categorical is just as wide to predict and one class index to
+        # supervise, so its target must stay scalar per entity — cross-entropy
+        # takes indices, not one-hots.
+        shape = (
+            (batch, width, spec.arity)
+            if spec.type is FieldType.MULTI_BINARY
+            else (batch, width)
+        )
         collected[spec.name] = torch.zeros(*shape)
 
     for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
