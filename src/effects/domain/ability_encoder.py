@@ -182,6 +182,43 @@ class AbilityEncoder(nn.Module):
         return e, hidden
 
 
+# ── surfaces (FR-062, stage four) ───────────────────────────────────────
+
+SURFACE_PROSE = "prose"
+SURFACE_SCRIPT = "script"
+
+
+def surface_of(vocab_path) -> str:
+    """Which surface a vocabulary path implies.
+
+    The surface follows the loaded ``--vocab-path`` rather than a flag of its
+    own, so a stage-one-to-three checkpoint keeps encoding against the
+    vocabulary it recorded even after a stage-four rebuild exists. A flag would
+    let the two disagree, and the disagreement would look like a working run.
+    """
+    from pathlib import Path
+
+    return (
+        SURFACE_SCRIPT
+        if "vocab-script" in Path(vocab_path).name
+        else SURFACE_PROSE
+    )
+
+
+def encoding_text(line, prose: str | None, surface: str) -> str | None:
+    """The text a line is encoded from, on the given surface.
+
+    Script from stage four, prose before it — and each falls back to the other
+    where its own is missing. A keyword-derived line has no Forge script of its
+    own, and a variant script has no prose at all, so a surface that dropped
+    what it lacked would drop a different slice of the corpus in each direction.
+    """
+    script = getattr(line, "script_text", None)
+    if surface == SURFACE_SCRIPT:
+        return script or prose
+    return prose or script
+
+
 def role_index(role: str | None) -> int:
     """The embedding row for a role tag; 0 for a token outside every span."""
     if role is None:

@@ -710,12 +710,20 @@ class ContextCache:
 # ── the run ─────────────────────────────────────────────────────────────
 
 
-def ability_text_of(record: EffectRecord, sidecars) -> str | None:
-    """The acting line's text, or None where the record has no acting line.
+def ability_text_of(
+    record: EffectRecord, sidecars, surface: str = "prose",
+) -> str | None:
+    """The acting line's text on ``surface``, or None where no line acts.
 
     ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
     what makes them sample uniformly rather than by rarity.
+
+    Falls back to the key itself where the sidecar carries neither surface, so a
+    line that cannot be read is still a distinct unit for rarity weighting
+    rather than collapsing into every other unreadable line.
     """
+    from effects.domain.ability_encoder import encoding_text
+
     if not record.ability:
         return None
     for key in record.ability:
@@ -723,8 +731,10 @@ def ability_text_of(record: EffectRecord, sidecars) -> str | None:
             line = sidecars.line_for(key)
         except KeyError:
             continue
-        if line is not None:
-            return line.script_text or f"{key.script_file}:{key.trait_kind}"
+        if line is None:
+            continue
+        text = encoding_text(line, sidecars.prose_for(key), surface)
+        return text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
     return None
 
 

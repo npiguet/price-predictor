@@ -315,3 +315,63 @@ class AbilityTokenizer:
     def _keyword_token(display_name: str) -> str:
         """Forge's display name as the token form the vocabulary carries."""
         return display_name.lower().replace("'", "").replace(" ", "_")
+
+    # ── the script surface (stage four) ─────────────────────────────────
+
+    def tokenize_script(self, script_text: str) -> list[Token]:
+        """Split a Forge script line, decomposing its compound selectors.
+
+        A script selector stacks its restrictions with punctuation:
+        ``Creature.nonDragon+OppCtrl`` is a creature, that is not a Dragon, that
+        an opponent controls. Read as one token it is a symbol the model has
+        seen a handful of times; read as three it is three restrictions the
+        model has seen thousands of times each, in every combination.
+
+        That is the whole reason the script surface is worth having — the
+        vocabulary is compositional in a way prose is not.
+        """
+        tokens: list[Token] = []
+        for match in _SCRIPT_TOKEN_RE.finditer(script_text):
+            raw = match.group(0)
+            if _SELECTOR_SPLIT_RE.search(raw):
+                tokens.extend(self._split_selector(raw, match.start()))
+                continue
+            text = raw if raw.startswith("{") else raw.lower()
+            tokens.append(Token(
+                text=text,
+                token_id=self.id_of(text),
+                start=match.start(),
+                end=match.end(),
+                number=float(raw) if raw.isdigit() else None,
+            ))
+        return tokens
+
+    def _split_selector(self, selector: str, offset: int) -> list[Token]:
+        """One compound selector as its parts, each keeping its own offset."""
+        tokens: list[Token] = []
+        position = 0
+        for part in _SELECTOR_SPLIT_RE.split(selector):
+            if not part:
+                position += 1
+                continue
+            start = selector.index(part, position)
+            text = part.lower()
+            tokens.append(Token(
+                text=text,
+                token_id=self.id_of(text),
+                start=offset + start,
+                end=offset + start + len(part),
+                number=float(part) if part.isdigit() else None,
+            ))
+            position = start + len(part)
+        return tokens
+
+
+#: Script grammar. A run of selector characters (letters, digits, ``.``, ``+``,
+#: ``-``) is one raw token that :meth:`AbilityTokenizer._split_selector` then
+#: decomposes; ``$`` and ``|`` are the script's own structure and stay as
+#: single-character tokens the model can read as separators.
+_SCRIPT_TOKEN_RE = re.compile(r"[A-Za-z0-9_.+\-]+|\{[^}]+\}|[$|]|[^\s\w]")
+
+#: The characters that stack restrictions inside one selector.
+_SELECTOR_SPLIT_RE = re.compile(r"[.+]")

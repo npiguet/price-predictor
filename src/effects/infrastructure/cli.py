@@ -248,6 +248,69 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
     return collect(config)
 
 
+# ── collect-variants ────────────────────────────────────────────────────
+
+
+def _collect_variants_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "collect-variants",
+        help=(
+            "Perturb Forge card scripts by one parameter and play the results, "
+            "so the corpus contains texts no real card prints"
+        ),
+    )
+    parser.set_defaults(func=run_collect_variants)
+    parser.add_argument(
+        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
+        help=f"Destination shard directory (default: {DEFAULT_RECORDS_DIR})",
+    )
+    parser.add_argument(
+        "--forge-cards-path", type=str,
+        default="../forge/forge-gui/res/cardsfolder/",
+        help=(
+            "Forge's *source* card scripts, not the converted ones: a variant "
+            "is a Forge script Forge must be able to load"
+        ),
+    )
+    parser.add_argument(
+        "--variant-scripts", type=str, default=DEFAULT_VARIANT_SCRIPTS,
+        help=f"Where perturbed scripts are written (default: {DEFAULT_VARIANT_SCRIPTS})",
+    )
+    parser.add_argument(
+        "--variant-volume", type=float, default=0.2,
+        help=(
+            "Cap on variant records as a fraction of the real records already "
+            "present (default: 0.2). Expressed against the corpus so it scales "
+            "with it."
+        ),
+    )
+    parser.add_argument("--decks-per-round", type=int, default=500)
+    parser.add_argument(
+        "--split-from", type=str, default=None,
+        help=(
+            "A checkpoint whose held-out cards, and their variants, are "
+            "excluded"
+        ),
+    )
+    parser.add_argument("--workers", type=int, default=12)
+    _add_cap_flags(parser)
+
+
+def run_collect_variants(args: argparse.Namespace) -> int:
+    from effects.application.collect_variants import CollectVariantsConfig
+    from effects.application.collect_variants import run as collect
+
+    return collect(CollectVariantsConfig(
+        effect_records=Path(args.effect_records),
+        forge_cards_path=Path(args.forge_cards_path),
+        variant_scripts=Path(args.variant_scripts),
+        variant_volume=args.variant_volume,
+        decks_per_round=args.decks_per_round,
+        split_from=Path(args.split_from) if args.split_from else None,
+        workers=args.workers,
+    ))
+
+
 # ── train-effect-model ──────────────────────────────────────────────────
 
 
@@ -521,6 +584,7 @@ _SUBCOMMAND_BUILDERS = (
     _build_vocab_parser,
     _extract_keyword_definitions_parser,
     _collect_coverage_parser,
+    _collect_variants_parser,
     _train_effect_model_parser,
     _encode_abilities_parser,
     _evaluate_effect_model_parser,

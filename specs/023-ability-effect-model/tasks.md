@@ -296,29 +296,29 @@ untouched; stage-one-to-three checkpoints still load and encode against their re
 
 ### Tests for User Story 4
 
-- [ ] T136 [P] [US4] Contract test in `tests/unit/effects/test_cli_contract_us4.py`: the stage-four CLI surface — `collect-variants`' flags and defaults, `build-vocab --surface script`, and `--variant-scripts` on the trainer, `encode-abilities` and `evaluate-effect-model`
-- [ ] T137 [P] [US4] Test in `tests/unit/effects/domain/test_script_tokenizer.py` that `Creature.nonDragon+OppCtrl` splits into `Creature`, `nonDragon`, `OppCtrl`
-- [ ] T138 [P] [US4] Test in `tests/unit/effects/application/test_variants.py`: variant records carry `synthetic = true` and `variant_of`, a variant of a held-out card is held out with it, variants contribute no pairing loss, and no variant is ever converted to prose
+- [X] T136 [P] [US4] Contract test in `tests/unit/effects/test_cli_contract_us4.py`: the stage-four CLI surface — `collect-variants`' flags and defaults, `build-vocab --surface script`, and `--variant-scripts` on the trainer, `encode-abilities` and `evaluate-effect-model`
+- [X] T137 [P] [US4] Test in `tests/unit/effects/domain/test_script_tokenizer.py` that `Creature.nonDragon+OppCtrl` splits into `Creature`, `nonDragon`, `OppCtrl`
+- [X] T138 [P] [US4] Test in `tests/unit/effects/application/test_variants.py`: variant records carry `synthetic = true` and `variant_of`, a variant of a held-out card is held out with it, variants contribute no pairing loss, and no variant is ever converted to prose
 
-- [ ] T139 [P] [US4] Integration test in `tests/integration/test_effects_variant_isolation.py` (marked `integration`): after a `collect-variants` run, the two sealed corpora are byte-identical to their pre-run state (US4 acceptance 5, FR-059, the other half of SC-007)
+- [X] T139 [P] [US4] Integration test in `tests/integration/test_effects_variant_isolation.py` (marked `integration`): after a `collect-variants` run, the two sealed corpora are byte-identical to their pre-run state (US4 acceptance 5, FR-059, the other half of SC-007)
 
 ### Script surface
 
-- [ ] T140 [US4] Add `--surface script` to `build-vocab`, scanning the sidecars' script lines and writing `models/effects/vocab-script.txt` — a path of its own, so the rebuild never overwrites the prose vocabulary earlier checkpoints recorded
-- [ ] T141 [US4] Implement the compositional script tokenizer in `ability_tokenizer.py`
-- [ ] T142 [US4] Make the script line the primary encoding surface with prose paired, in `src/effects/domain/ability_encoder.py` (surface selection and the paired encode) and `src/effects/domain/effect_model.py` (the pairing loss),, under an asymmetric loss with stop-gradient on the script side. The surface follows the loaded `--vocab-path`, so `--surface` keeps its `prose` default and stage-one-to-three checkpoints continue to encode against the vocabulary they recorded
-- [ ] T143 [US4] Extend `KeywordDefinitionMain` to capture the generated implementation script as text at the keyword factory for the script-generated majority; the engine-coded minority keeps its reminder template
-- [ ] T144 [US4] Switch keyword-expansion dropout in `src/effects/domain/ability_encoder.py` to the captured script on the script surface, falling back to the template where no script exists
+- [X] T140 [US4] Add `--surface script` to `build-vocab`, scanning the sidecars' script lines and writing `models/effects/vocab-script.txt` — a path of its own, so the rebuild never overwrites the prose vocabulary earlier checkpoints recorded
+- [X] T141 [US4] Implement the compositional script tokenizer in `ability_tokenizer.py`
+- [X] T142 [US4] Make the script line the primary encoding surface with prose paired, in `src/effects/domain/ability_encoder.py` (surface selection and the paired encode) and `src/effects/domain/effect_model.py` (the pairing loss),, under an asymmetric loss with stop-gradient on the script side. The surface follows the loaded `--vocab-path`, so `--surface` keeps its `prose` default and stage-one-to-three checkpoints continue to encode against the vocabulary they recorded
+- [X] T143 [US4] Extend `KeywordDefinitionMain` to capture the generated implementation script as text at the keyword factory for the script-generated majority; the engine-coded minority keeps its reminder template
+- [X] T144 [US4] Switch keyword-expansion dropout in `src/effects/domain/ability_encoder.py` to the captured script on the script surface, falling back to the template where no script exists
 
 ### Synthetic variants
 
-- [ ] T145 [US4] Implement `src/effects/domain/script_variants.py`: the perturbation rules (a numeric parameter shifted by up to ±3 or doubled, floored at zero in either case; a selector swapped from the checked-in whitelist)
-- [ ] T146 [US4] Make `output/effects/variant-scripts/` loadable by the worker JVM: `ForgeEnvironmentInitializer` resolves only `forge-gui/res/cardsfolder` (line 37) and Forge's own custom-card path is the fixed `ForgeConstants.USER_CUSTOM_CARDS_DIR` (`FModel.java:203`), so extend the initializer and `MatchWorkerMain` to accept an extra card-source directory. FR-055's "loaded from there as custom cards" is a Java-side capability; without it `collect-variants` cannot put a perturbed card into a game
-- [ ] T147 [US4] Implement `src/effects/application/collect_variants.py`: read source scripts from `--forge-cards-path`, write perturbed scripts and their sidecars to `output/effects/variant-scripts/`, hold a variant out whenever its source card is held out (FR-057), load them as custom cards, deck and schedule them exactly as coverage decks are through `collector_connector.py` and the records-only worker (so no sealed corpus is written), and honour `--variant-volume`
-- [ ] T148 [US4] Add `--variant-scripts` to `train-effect-model` (`src/effects/application/train_effect_model.py`), defaulting to `output/effects/variant-scripts/` at stage four, and make the trainer read that tree and its sidecars so variant records are trainable. Without this the corpus `collect-variants` produces cannot be trained on
-- [ ] T149 [US4] Add `--variant-scripts` to `evaluate-effect-model` (`src/effects/application/evaluate_effect_model.py`) with the trainer's default, so held-out strata and the reported checks can score variant records
-- [ ] T150 [US4] Extend `encode-abilities` to the variant tree, aligning rows to script lines rather than rendered lines
-- [ ] T151 [US4] Wire `collect-variants` into the CLI with its documented defaults
+- [X] T145 [US4] Implement `src/effects/domain/script_variants.py`: the perturbation rules (a numeric parameter shifted by up to ±3 or doubled, floored at zero in either case; a selector swapped from the checked-in whitelist)
+- [X] T146 [US4] Make `output/effects/variant-scripts/` loadable by the worker JVM: `ForgeEnvironmentInitializer` resolves only `forge-gui/res/cardsfolder` (line 37) and Forge's own custom-card path is the fixed `ForgeConstants.USER_CUSTOM_CARDS_DIR` (`FModel.java:203`), so extend the initializer and `MatchWorkerMain` to accept an extra card-source directory. FR-055's "loaded from there as custom cards" is a Java-side capability; without it `collect-variants` cannot put a perturbed card into a game
+- [X] T147 [US4] Implement `src/effects/application/collect_variants.py`: read source scripts from `--forge-cards-path`, write perturbed scripts and their sidecars to `output/effects/variant-scripts/`, hold a variant out whenever its source card is held out (FR-057), load them as custom cards, deck and schedule them exactly as coverage decks are through `collector_connector.py` and the records-only worker (so no sealed corpus is written), and honour `--variant-volume`
+- [X] T148 [US4] Add `--variant-scripts` to `train-effect-model` (`src/effects/application/train_effect_model.py`), defaulting to `output/effects/variant-scripts/` at stage four, and make the trainer read that tree and its sidecars so variant records are trainable. Without this the corpus `collect-variants` produces cannot be trained on
+- [X] T149 [US4] Add `--variant-scripts` to `evaluate-effect-model` (`src/effects/application/evaluate_effect_model.py`) with the trainer's default, so held-out strata and the reported checks can score variant records
+- [X] T150 [US4] Extend `encode-abilities` to the variant tree, aligning rows to script lines rather than rendered lines
+- [X] T151 [US4] Wire `collect-variants` into the CLI with its documented defaults
 
 **Checkpoint**: the encoder reads mechanism rather than description, and the corpus contains texts that
 never existed on a real card.
