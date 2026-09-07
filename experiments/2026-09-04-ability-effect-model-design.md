@@ -312,22 +312,24 @@ The split is benign for the zero-shot goal. New-set variation keywords are the s
 
 ## The rarest damage-step keywords set the corpus size
 
-Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes an order of magnitude apart. A 19,000-record sample of ordinary sealed self-play produced the counts below — random sealed-legal sets, six workers, no coverage decking.
+Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes an order of magnitude apart. A sample of ordinary sealed self-play holding 2,312 combat records produced the counts below — random sealed-legal sets, no coverage decking.
 
-| Keyword | Qualifying records in 19k | Implied corpus for 200 |
+| Keyword | Qualifying per 2,312 combat records | Combat records for 200 |
 |---|---|---|
-| trample | 110 | 35,000 |
-| first strike | 100 | 38,000 |
-| deathtouch | 64 | 59,000 |
-| lifelink | 63 | 60,000 |
-| infect | 16 | 240,000 |
-| double strike | 10 | 380,000 |
-| indestructible | 10 | 380,000 |
+| trample | 110 | 4,200 |
+| first strike | 100 | 4,600 |
+| deathtouch | 64 | 7,200 |
+| lifelink | 63 | 7,300 |
+| infect | 16 | 28,900 |
+| double strike | 10 | 46,200 |
+| indestructible | 10 | 46,200 |
 | wither | 0 | — |
 
-Seven of the eight clear the threshold at a few hundred thousand records, which is a couple of hours of collection at six workers. Wither is the exception, and its absence is a property of the format rather than of the collector: almost no sealed-legal set prints it, so more collection of the same kind adds nothing. Reaching it needs a set restriction or the coverage collector, which decks cards match play never deals.
+The run has to be sized in combat records rather than total ones. Combat records arrive at roughly a hundred per worker-minute whether or not the engine is patched, but a patched run's totals are dominated by playability records — 42,109 of 59,899 in one four-minute sample — so the same total record count carries a small fraction of the combat records a degraded run does. Seven of the eight clear the threshold in about ten worker-hours.
 
-The implied column extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
+Wither is the exception, and its absence is a property of the format rather than of the collector: almost no sealed-legal set prints it, so more collection of the same kind adds nothing. Reaching it needs a set restriction or the coverage collector, which decks cards match play never deals.
+
+The last column extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
 
 ## Build order — first embeddings before full machinery
 

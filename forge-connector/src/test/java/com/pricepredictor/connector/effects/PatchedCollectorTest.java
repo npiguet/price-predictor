@@ -139,18 +139,46 @@ class PatchedCollectorTest {
                 "forge.game.trigger.TriggerHandler", "setNoSuchListener");
     }
 
+    /**
+     * Exactly the hooks the checkout offers get installed, and no others.
+     *
+     * <p>Asserted against the checkout rather than against a fixed count: the
+     * sibling Forge is patched or not independently of this repository, so a
+     * test expecting zero passes only until someone applies the patches. What
+     * must hold either way is that install() finds what is there — a worker
+     * degrades on a stock checkout and collects fully on a patched one.
+     */
     @Test
-    void onAStockCheckoutNoHookIsInstalled() {
-        // Stage one is defined as the patch-free stage: the worker degrades
-        // rather than failing, and says so on every record.
+    void everyHookTheCheckoutOffersIsInstalledAndNoOthers() {
+        int available = 0;
+        if (PatchHooks.find(PatchHooks.REPLACEMENT_HANDLER,
+                "setEffectRecordListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.TRIGGER_HANDLER,
+                "setEffectRecordTriggerListener").present()) {
+            available++;
+        }
+        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
+                "setEffectRecordPlayabilityListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
-            assertEquals(0, collector.install());
-            assertTrue(collector.installedHooks().isEmpty());
+            assertEquals(available, collector.install());
+            assertEquals(available, collector.installedHooks().size());
         }
     }
 
+    /**
+     * The two read-only hooks answer null outside a resolution.
+     *
+     * <p>True on a stock checkout because the method does not exist, and true
+     * on a patched one because no trigger or sub-ability is resolving on this
+     * thread — the test asserts the caller-visible behaviour that holds either
+     * way.
+     */
     @Test
-    void theCauseAndSubAbilityHooksReadNullOnAStockCheckout() {
+    void theCauseAndSubAbilityHooksReadNullOutsideAResolution() {
         assertEquals(null, PatchHooks.currentTriggerCause());
         assertEquals(null, PatchHooks.currentSubAbility());
     }

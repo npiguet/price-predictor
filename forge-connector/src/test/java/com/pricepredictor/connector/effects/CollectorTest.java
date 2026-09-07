@@ -222,9 +222,22 @@ class CollectorTest {
 
     // ── attribution mode ────────────────────────────────────────────────
 
+    /**
+     * Detection agrees with what the checkout actually offers.
+     *
+     * <p>Asserted as an invariant rather than as a fixed answer, because the
+     * sibling checkout is patched or not independently of this repository: a
+     * test that hard-codes DEGRADED passes only until someone applies the
+     * patches, and then fails without anything being wrong.
+     */
     @Test
-    void stockForgeDetectsAsDegraded() {
-        assertEquals(AttributionMode.DEGRADED, AttributionMode.detect());
+    void theDetectedModeMatchesTheHooksPresence() {
+        boolean hookPresent = PatchHooks
+                .find(PatchHooks.TRIGGER_HANDLER, "setEffectRecordCause")
+                .present();
+        assertEquals(
+                hookPresent ? AttributionMode.PATCHED : AttributionMode.DEGRADED,
+                AttributionMode.detect());
     }
 
     @Test
