@@ -262,24 +262,24 @@ counterparts by `mirror_of`; the evaluator reports matched real-vs-fork agreemen
 
 ### Tests for User Story 3
 
-- [ ] T124 [P] [US3] Test in `tests/unit/effects/domain/test_fork_records.py`: an interventional record carries `interventional = true` + `fork = true`, no `link_id`, and no activation partner; a probe carries `fork = true` + `interventional = false`; at most two forks name one real resolution
-- [ ] T125 [P] [US3] Integration test in `tests/integration/test_effects_forks.py` (marked `integration`): a fork failing its copy-score check writes no record but still counts against the budget
+- [X] T124 [P] [US3] Test in `tests/unit/effects/domain/test_fork_records.py`: an interventional record carries `interventional = true` + `fork = true`, no `link_id`, and no activation partner; a probe carries `fork = true` + `interventional = false`; at most two forks name one real resolution
+- [X] T125 [P] [US3] Integration test in `tests/integration/test_effects_forks.py` (marked `integration`): a fork failing its copy-score check writes no record but still counts against the budget
 
 ### Interventional resolutions
 
-- [ ] T126 [US3] Implement interventional resolution in `forge-connector/.../effects/InterventionCollector.java`: run the game simulator on a fork with chosen targets and modes, route unaffordable candidates through the play-without-paying-mana path, verify the located ability through its provenance key, store the fork's own state, write the effect half only
-- [ ] T127 [US3] Implement `--probe-keywords` (comma-separated, default empty) as the runtime switch: with it unset no probe fork is taken at all, whatever the build state. This is US3 acceptance 3, and it is separate from the build decision gate 2 drives
-- [ ] T128 [US3] Enforce the budgets: `--interventions-per-game` and `--probes-per-game`, plus the fixed constant of at most two forks per real resolution, independent of either flag. Every fork counts against its budget even when discarded by the copy-score guard
-- [ ] T129 [US3] Score-check every fork against the live game at creation before any perturbation; on mismatch log a warning, discard the fork, and still count it against the budget
-- [ ] T130 [US3] Add snapshot tier 4 (unreferenced hand and graveyard) to `forge-connector/.../effects/SnapshotBuilder.java`
+- [X] T126 [US3] Implement interventional resolution in `forge-connector/.../effects/InterventionCollector.java`: run the game simulator on a fork with chosen targets and modes, route unaffordable candidates through the play-without-paying-mana path, verify the located ability through its provenance key, store the fork's own state, write the effect half only
+- [X] T127 [US3] Implement `--probe-keywords` (comma-separated, default empty) as the runtime switch: with it unset no probe fork is taken at all, whatever the build state. This is US3 acceptance 3, and it is separate from the build decision gate 2 drives
+- [X] T128 [US3] Enforce the budgets: `--interventions-per-game` and `--probes-per-game`, plus the fixed constant of at most two forks per real resolution, independent of either flag. Every fork counts against its budget even when discarded by the copy-score guard
+- [X] T129 [US3] Score-check every fork against the live game at creation before any perturbation; on mismatch log a warning, discard the fork, and still count it against the budget
+- [X] T130 [US3] Add snapshot tier 4 (unreferenced hand and graveyard) to `forge-connector/.../effects/SnapshotBuilder.java`
 
 ### Damage-step probes (contingent on gate 2)
 
-- [ ] T131 [P] [US3] JUnit-test the US3 fork path in `forge-connector/src/test/java/.../ForkCollectorTest.java`: an interventional record storing the fork's own state with no activation partner, a discarded fork still counting against its budget, and snapshot tier 4 present
-- [ ] T132 [US3] Implement the probe in `forge-connector/.../effects/DamageStepProbe.java` — **only if gate 2 failed for at least one keyword**: fork at declare-blockers after blocks lock, strip one keyword below the layer system with a keyword-cache refresh, resolve the damage step
-- [ ] T133 [US3] Install a seeded random source for both branches and restore it in a `finally` (Forge's own restore is not in a `finally`), and forbid two concurrent games per JVM while probes are on
-- [ ] T134 [US3] Record the fork branch as an ordinary `combat` record with `mirror_of` set; compute the real-vs-fork diff only at evaluation time, never as a training target
-- [ ] T135 [US3] Implement matched real-vs-fork agreement (prediction agreement over pairs joined by `mirror_of`) and the probe-diff re-check (gate 2's canary re-run over the real-and-fork combat pairs, probed keywords only) in the evaluator
+- [X] T131 [P] [US3] JUnit-test the US3 fork path in `forge-connector/src/test/java/.../ForkCollectorTest.java`: an interventional record storing the fork's own state with no activation partner, a discarded fork still counting against its budget, and snapshot tier 4 present
+- [X] T132 [US3] Implement the probe in `forge-connector/.../effects/DamageStepProbe.java` — **only if gate 2 failed for at least one keyword**: fork at declare-blockers after blocks lock, strip one keyword below the layer system with a keyword-cache refresh, resolve the damage step
+- [X] T133 [US3] Install a seeded random source for both branches and restore it in a `finally` (Forge's own restore is not in a `finally`), and forbid two concurrent games per JVM while probes are on
+- [X] T134 [US3] Record the fork branch as an ordinary `combat` record with `mirror_of` set; compute the real-vs-fork diff only at evaluation time, never as a training target
+- [X] T135 [US3] Implement matched real-vs-fork agreement (prediction agreement over pairs joined by `mirror_of`) and the probe-diff re-check (gate 2's canary re-run over the real-and-fork combat pairs, probed keywords only) in the evaluator
 
 **Checkpoint**: the corpus reaches abilities Forge never chose to use, and gate 2's failures have their
 isolated counterfactual.
