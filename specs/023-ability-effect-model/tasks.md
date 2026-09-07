@@ -328,7 +328,7 @@ never existed on a real card.
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [X] T152 Extend `src/effects/CLAUDE.md` and the root `CLAUDE.md` with the US2-US4 subcommands and artifacts, on top of the US1 documentation already written
-- [ ] T153 [P] Update `README.md` with the effects workflows: collection, coverage, training, encoding, evaluation
+- [X] T153 [P] Update `README.md` with the effects workflows: collection, coverage, training, encoding, evaluation
 - [ ] T154 Performance review per Principle VIII across all stories — I/O batching and caching, GPU placement, GPU batching with no per-item host↔device transfers in hot loops, vectorized hot loops (the snapshot-to-tensor derivation especially), streaming for the shard corpus, load-once reuse — verified against the 8 GB budget
 - [ ] T155 Fill the Outcome section of [`../../experiments/2026-09-04-ability-effect-model-design.md`](../../experiments/2026-09-04-ability-effect-model-design.md) with the first run's gate results — that file is the only home for run numbers
 

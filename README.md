@@ -996,3 +996,88 @@ a frozen sealed scorer + picker, and a populated `.npz` card cache. The corpus
 is `output/draft/drafts.jsonl` (one self-contained record per line); checkpoints
 land under `models/draft/agent/`. Full per-command detail intentionally lives in
 `CLAUDE.md` and the spec's `quickstart.md` to avoid duplicating it here.
+
+---
+
+## `python -m effects` — Ability Effect Model
+
+The `effects` module pretrains a model of **what each card ability does in
+play**, learned from games Forge is already playing. It ships two artifacts: a
+per-ability embedding cache (one fixed-width vector per unique ability line,
+computed once offline) and a state-conditional effect head that predicts an
+ability's effect on a given game state. Per-command flags and the file formats
+are documented in `src/effects/CLAUDE.md` and
+`specs/023-ability-effect-model/quickstart.md`; the launch entries are:
+
+```bash
+# 0. one-time: the converter now also writes a provenance sidecar per card,
+#    which is the join between a runtime Forge trait and a converted line
+python -m price_predictor convert
+
+# 1. Forge's keyword table, then the tokenizer vocabulary that scans it
+python -m effects extract-keyword-definitions
+python -m effects build-vocab
+python -m effects build-vocab --surface script      # stage four, its own file
+
+# 2. collect. Instrumentation is an opt-in on a command that already exists;
+#    absent the flag nothing about a self-play run changes
+python -m sealed match-outcomes --effect-records output/effects/records/
+
+# 2b. cards sealed pools never contain (stage two), and cards nobody printed
+#     (stage four). Both write effect records ONLY — no sealed corpus is touched
+python -m effects collect-coverage --split-from models/effects/effect-model/latest.pt
+python -m effects collect-variants --split-from models/effects/effect-model/latest.pt
+
+# 3. train both transformers jointly from random init
+python -m effects train-effect-model
+python -m effects train-effect-model --context-cache        # the 8 GB fallback
+#    every baseline MUST inherit the split it is a baseline for
+python -m effects train-effect-model --variant identity \
+  --split-from models/effects/effect-model/latest.pt
+
+# 4. compute the shipping cache once; downstream consumers read it, not the model
+python -m effects encode-abilities
+python -m effects encode-abilities --variant identity   # writes <name>.identity.npz
+
+# 5. the three gates and the reported checks
+python -m effects evaluate-effect-model \
+  --variant-checkpoint identity=models/effects/effect-model/identity/latest.pt
+```
+
+Collection rides matches that were going to be played anyway, so it costs no
+extra simulation. `--effect-records` has **no default** on `match-outcomes`,
+because a default would quietly turn every self-play run into a collection run;
+without it no shard is opened and `match-outcomes.txt` and `cards-played.txt`
+keep their exact format and content. `collect-coverage` and `collect-variants`
+run the same worker in a **records-only** mode that constructs neither sealed
+writer at all: their decks are built for coverage rather than for a fair
+self-play sample, and mixing them into the sealed corpus would corrupt the
+scorer's training data.
+
+Exact attribution needs four engine hooks that live in `forge-connector/patches/`
+and are applied by hand to the sibling `../forge` checkout. Nothing requires
+them: the connector compiles against **stock** Forge, looks every hook up by
+name at startup, and falls back to bracket attribution when it finds none. Every
+record carries the mode it was collected under, so a corpus gathered after a
+Forge upgrade dropped the patches says so rather than being silently mislabeled.
+
+Three gates guard the result, and two of them block. **Gate 1** compares the
+model against an identity baseline that cannot read text, on three margins at
+once — whether it knows *that* something happens, *what*, and *how much* — so a
+model that has learned only the marginal effect distribution fails. **Gate 2**
+perturbs eight combat-damage keywords and asks whether the prediction moves in
+the right direction; it blocks nothing, but its per-keyword verdict decides
+whether stage three builds probe machinery at all. **Gate 3** checks the
+embedding geometry rather than the loss, because a collapsed space passes every
+average-case metric.
+
+Requires the `forge-connector` fat JAR (now also containing
+`KeywordDefinitionMain`, `CastabilityMain` and `VariantSidecarMain`) and a
+converted corpus with sidecars. Records land in
+`output/effects/records/{run_id}.{worker}.jsonl`, the ability cache in
+`output/effects/abilities/`, and checkpoints under
+`models/effects/effect-model/`. A checkpoint carries the split it trained
+against and the hashes of the vocabulary and keyword file it read, and every
+inference command re-hashes what it actually loaded and fails fast on a
+mismatch — a cache encoded against a different vocabulary produces vectors that
+look fine and mean nothing.
