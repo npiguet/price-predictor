@@ -300,9 +300,15 @@ A fork differs from the live game in ways the collector has to record around. Th
 
 The per-card layer tables are keyed by (timestamp, static id) for keywords, types, colors, and names, and the continuous-effects pass writes every change with the applying static's id, so per-static per-entity attribution is a read, not an inference. Two limits verified in source: the applied-effect object does not expose its static ability, but the layer tables' column key is the public static id, so the join is a direct id read; and temporary pumps write static id zero into the same tables, which is why until-end-of-turn effects stay on the resolution bracket. For the record schema's sake, the replacement-type enum has 40 members to the trigger enum's 147.
 
-### Keyword definitions are extractable for most keywords, with reminder templates for the rest
+### The factory yields a script for 75 of 202 keywords; reminder text covers the rest
 
-Roughly 150 of Forge's 202 keywords generate their desugared implementation as script text, and the capture point exists: the generated script strings are built as plain text in the keyword factory before being parsed, so the collector records them at generation rather than reconstructing them from parsed parameter maps, which alphabetize keys and detach sub-abilities. The engine-coded minority generates no script (ancient primitives like first strike, trample, deathtouch, lifelink, and haste, plus the cost-modifying family like kicker and convoke); for those, Forge carries per-keyword reminder-text templates that need no card at all. The split is benign for the zero-shot goal, because new-set variation keywords are precisely the script-generated kind, while the engine-coded set is old, stable, and densely trained. Generated definitions do reference other keywords (blitz grants haste; flying's static names reach), which expansion dropout absorbs: a referenced keyword stays a token that may itself expand on other samples. A few keywords (saga chapters, class levels) have only per-card definitions, because their effect bodies live on the host card's variables.
+Asking Forge's keyword factory for a keyword by display name and reading the traits it builds returns a script for 75 of the 202 keywords. Flying, vigilance, ward, flashback and cascade all come back with theirs. The traits have to be read inside the factory, where they are built against a host card. Reconstructing them afterwards from parsed parameter maps loses the ordering, because those maps alphabetize their keys and detach sub-abilities.
+
+Only one of the two reasons a keyword returns nothing is permanent. The engine-coded family generates no script at any point: the ancient primitives first strike, trample, deathtouch, lifelink and haste, plus the cost-modifying kicker and convoke. The parameterized keywords are the recoverable half — afflict, annihilator, amplify, awaken, absorb build no trait from a bare name because the template needs the value the card printed. Choosing representative values per keyword class is the open question listed below, and it would move most of that group.
+
+Reminder text covers what the scripts do not. All but one of the 202 keywords carry a template, so a keyword with no script still expands to a sentence rather than to `[UNK]`.
+
+The split is benign for the zero-shot goal. New-set variation keywords are the script-generated kind, and the engine-coded set is old, stable, and densely trained. Generated definitions do name other keywords: flying's static reads "can't be blocked except by creatures with flying or reach". Expansion dropout absorbs that, since a referenced keyword stays a token that may itself expand on other samples. Saga chapters and class levels have only per-card definitions, because their effect bodies live on the host card's variables.
 
 ## Build order — first embeddings before full machinery
 
@@ -327,4 +333,8 @@ The subsystems stage so that the first `e` vectors exist and pass canaries as ea
 
 ## Outcome / Result
 
-Not yet run. To be filled in once the collection pipeline and the first pretraining round exist.
+Not yet run. The stage-one pipeline executes end to end against a stock, unpatched Forge: conversion with sidecars, the keyword table, the vocabulary, collection riding ordinary self-play, training, the four evaluation baselines, the ability cache, and the gate battery. No pretraining run at corpus scale has happened, so every gate verdict is still open.
+
+Three gates decide whether the design works, and each needs that run. Gate 1 is the three margins against the identity baseline on the unique-text stratum. Gate 3 is the collapse canaries over the cache. Gate 2 is the per-keyword verdict on the eight damage-step keywords, which is what says whether stage three has to build probe machinery at all. Fill them in here.
+
+The run also settles the corpus questions the design left open: how many records each of the three stage-one sampling classes actually yields, what fraction of the converted corpus sealed self-play never reaches, and whether the 8 GB budget holds with live context re-encoding or forces the stop-gradient cache.
