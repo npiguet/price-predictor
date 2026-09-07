@@ -8,6 +8,8 @@ rather than recomputing them against a corpus that has grown since.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 import torch
 
@@ -262,6 +264,35 @@ class TestStoreFiles:
         loaded = store.load()
         assert loaded.model_config == _MODEL_CONFIG
         assert loaded.encoder_config == _ENCODER_CONFIG
+
+
+class TestExtraRoundTrip:
+    """The identity baseline's ``e`` lives in an embedding table, not in the
+    encoder. A checkpoint that dropped it would reload as random vectors and
+    hand gate 1 a margin nobody earned — and gate 1 blocks shipping."""
+
+    def test_a_variants_extra_payload_survives_a_round_trip(
+        self, tmp_path, files,
+    ):
+        table = torch.nn.Embedding(8, 4).state_dict()
+        store = EffectModelStore(tmp_path / "effect-model")
+        store.save(replace(
+            _checkpoint(files),
+            variant="identity",
+            extra={"identity_table": table},
+        ))
+        loaded = store.load()
+        assert "identity_table" in loaded.extra
+        assert torch.equal(
+            loaded.extra["identity_table"]["weight"], table["weight"],
+        )
+
+    def test_a_checkpoint_with_no_extra_loads_an_empty_one(
+        self, tmp_path, files,
+    ):
+        store = EffectModelStore(tmp_path / "effect-model")
+        store.save(_checkpoint(files))
+        assert store.load().extra == {}
 
 
 class TestInferencePathResolution:
