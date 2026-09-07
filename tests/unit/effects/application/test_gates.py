@@ -376,6 +376,36 @@ class TestStageGatedChecks:
             assert "stage three" in skip_unavailable(name).detail
 
 
+class TestRolePolarity:
+    """The narrowest possible test of the role embedding."""
+
+    def test_opposite_signs_read_as_the_roles_separating(self):
+        from effects.application.evaluate_effect_model import evaluate_role_polarity
+
+        result = evaluate_role_polarity(-0.8, 0.9)
+        assert result.status is CheckStatus.REPORTED
+        assert "cost position predicts a mana decrease" in result.detail
+
+    def test_the_same_sign_reads_as_the_roles_not_separating(self):
+        from effects.application.evaluate_effect_model import evaluate_role_polarity
+
+        result = evaluate_role_polarity(0.5, 0.9)
+        assert "not separating them" in result.detail
+
+    def test_it_waits_for_mana_records(self):
+        from effects.application.evaluate_effect_model import evaluate_role_polarity
+
+        result = evaluate_role_polarity(None, None)
+        assert result.status is CheckStatus.SKIPPED
+        assert "stage two" in result.detail
+
+    def test_it_blocks_nothing_either_way(self):
+        from effects.application.evaluate_effect_model import evaluate_role_polarity
+
+        assert not evaluate_role_polarity(0.5, 0.5).blocks
+        assert not evaluate_role_polarity(-0.5, 0.5).blocks
+
+
 class TestReport:
     def test_a_report_ships_when_no_gate_blocks(self):
         report = EvaluationReport()
