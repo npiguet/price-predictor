@@ -1,0 +1,186 @@
+"""Every flag and default of the US1 CLI surface (T039).
+
+Parsed values only, no execution. The defaults are contract: a default that
+drifts changes what a corpus or a checkpoint means, silently and after the fact.
+
+The stage-four rows (``--variant-scripts`` on the trainer's own default,
+``--surface script``'s vocabulary path) are US4's, and are covered by its own
+contract test.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from effects.infrastructure.cli import build_parser
+
+
+def parse(*argv: str):
+    return build_parser().parse_args(argv)
+
+
+class TestBuildVocab:
+    def test_the_defaults_are_the_contracts(self):
+        args = parse("build-vocab")
+        assert args.surface == "prose"
+        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.vocab_path is None  # resolved per surface
+        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.target_size == 5000
+
+    def test_cards_folder_is_repeatable(self):
+        args = parse(
+            "build-vocab", "--cards-folder", "a/", "--cards-folder", "b/",
+        )
+        assert args.cards_folders == ["a/", "b/"]
+
+    def test_the_default_resolves_to_both_converted_trees(self):
+        from effects.infrastructure.cli import resolve_cards_folders
+
+        folders = resolve_cards_folders(parse("build-vocab").cards_folders)
+        assert [f.as_posix() for f in folders] == [
+            "output/cardsfolder", "output/tokenscripts",
+        ]
+
+    def test_the_surface_choices_are_prose_and_script(self):
+        assert parse("build-vocab", "--surface", "script").surface == "script"
+        with pytest.raises(SystemExit):
+            parse("build-vocab", "--surface", "oracle")
+
+    def test_an_explicit_vocab_path_is_carried(self):
+        args = parse("build-vocab", "--vocab-path", "models/x.txt")
+        assert args.vocab_path == "models/x.txt"
+
+
+class TestExtractKeywordDefinitions:
+    def test_the_output_default_is_the_contracts(self):
+        args = parse("extract-keyword-definitions")
+        assert args.output == "output/effects/keyword-definitions.json"
+
+
+class TestTrainEffectModel:
+    def test_the_path_defaults_are_the_contracts(self):
+        args = parse("train-effect-model")
+        assert args.records_dir == "output/effects/records/"
+        assert args.vocab_path == "models/effects/vocab.txt"
+        assert args.printings_path == "resources/AllPrintings.json"
+        assert args.keyword_definitions == "output/effects/keyword-definitions.json"
+        assert args.model_output is None  # resolved from --variant
+        assert args.split_from is None
+        assert args.variant_scripts is None
+
+    def test_the_architecture_defaults_are_the_contracts(self):
+        args = parse("train-effect-model")
+        assert args.e_dim == 64
+        assert args.e_noise == 0.05
+        assert args.keyword_expand_p == 0.25
+        assert args.context_dropout == 0.15
+
+    def test_the_auxiliary_weights_are_the_contracts(self):
+        args = parse("train-effect-model")
+        assert args.mlm_weight == 0.1
+        assert args.mlm_mask_prob == 0.15
+        assert args.api_weight == 0.05
+
+    def test_the_schedule_defaults_are_the_contracts(self):
+        args = parse("train-effect-model")
+        assert args.curriculum_step == 10000
+        assert args.batch_size == 32
+        assert args.grad_accum == 1
+        assert args.steps_per_epoch == 5000
+        assert args.epochs == 40
+        assert args.patience == 5
+
+    def test_the_context_cache_is_off_by_default(self):
+        """It is a documented fallback for the GPU budget, not the default."""
+        args = parse("train-effect-model")
+        assert args.context_cache is False
+        assert args.cache_refresh == 500
+        assert parse("train-effect-model", "--context-cache").context_cache
+
+    def test_the_mixture_defaults_to_the_eight_class_one(self):
+        assert parse("train-effect-model").kind_mix is None
+
+    def test_the_variant_choices_are_the_five(self):
+        for variant in ("full", "identity", "state-only", "no-state", "taxonomy"):
+            assert parse(
+                "train-effect-model", "--variant", variant,
+            ).variant == variant
+        with pytest.raises(SystemExit):
+            parse("train-effect-model", "--variant", "oracle")
+
+    def test_full_is_the_default_variant(self):
+        assert parse("train-effect-model").variant == "full"
+
+    def test_withhold_keyword_defaults_to_none(self):
+        assert parse("train-effect-model").withhold_keyword is None
+        assert parse(
+            "train-effect-model", "--withhold-keyword", "cascade",
+        ).withhold_keyword == "cascade"
+
+
+class TestEncodeAbilities:
+    def test_the_defaults_are_the_contracts(self):
+        args = parse("encode-abilities")
+        assert args.variant == "full"
+        assert args.checkpoint is None  # resolved from --variant
+        assert args.output_root == "output/effects/abilities/"
+        assert args.clean is False
+
+    def test_the_vocabulary_paths_default_to_the_checkpoints(self):
+        """FR-097: resolved from the loaded checkpoint, not from a constant."""
+        args = parse("encode-abilities")
+        assert args.vocab_path is None
+        assert args.keyword_definitions is None
+
+    def test_the_variant_selects_the_checkpoint_and_the_suffix_together(self):
+        from effects.application.encode_abilities import EncodeAbilitiesConfig
+
+        config = EncodeAbilitiesConfig(variant="no-state")
+        assert config.resolved_checkpoint().parent.name == "no-state"
+
+    def test_clean_is_a_flag(self):
+        assert parse("encode-abilities", "--clean").clean is True
+
+
+class TestEvaluateEffectModel:
+    def test_the_defaults_are_the_contracts(self):
+        args = parse("evaluate-effect-model")
+        assert args.checkpoint == "models/effects/effect-model/latest.pt"
+        assert args.records_dir == "output/effects/records/"
+        assert args.variant_checkpoints is None
+        assert args.sealed_encoder_checkpoint == "models/sealed/encoder/latest.pt"
+
+    def test_variant_checkpoint_is_repeatable(self):
+        args = parse(
+            "evaluate-effect-model",
+            "--variant-checkpoint", "identity=a.pt",
+            "--variant-checkpoint", "no-state=b.pt",
+        )
+        assert args.variant_checkpoints == ["identity=a.pt", "no-state=b.pt"]
+
+    def test_there_is_no_split_flag(self):
+        """Splits come from the checkpoint — never a flag, never recomputed."""
+        for name in ("--split", "--split-from", "--held-out-cards"):
+            with pytest.raises(SystemExit):
+                parse("evaluate-effect-model", name, "x")
+
+    def test_the_vocabulary_paths_default_to_the_checkpoints(self):
+        args = parse("evaluate-effect-model")
+        assert args.vocab_path is None
+        assert args.keyword_definitions is None
+
+
+class TestSubcommandTable:
+    def test_every_us1_subcommand_is_registered(self):
+        parser = build_parser()
+        action = next(
+            a for a in parser._actions if isinstance(a.choices, dict)
+        )
+        assert {
+            "build-vocab", "extract-keyword-definitions", "train-effect-model",
+            "encode-abilities", "evaluate-effect-model",
+        } <= set(action.choices)
+
+    def test_bare_invocation_prints_help_rather_than_failing(self):
+        assert getattr(build_parser().parse_args([]), "func", None) is None

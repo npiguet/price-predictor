@@ -705,3 +705,104 @@ class ContextCache:
 
     def __len__(self) -> int:
         return len(self._vectors)
+
+
+# ── the run ─────────────────────────────────────────────────────────────
+
+
+def ability_text_of(record: EffectRecord, sidecars) -> str | None:
+    """The acting line's text, or None where the record has no acting line.
+
+    ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
+    what makes them sample uniformly rather than by rarity.
+    """
+    if not record.ability:
+        return None
+    for key in record.ability:
+        try:
+            line = sidecars.line_for(key)
+        except KeyError:
+            continue
+        if line is not None:
+            return line.script_text or f"{key.script_file}:{key.trait_kind}"
+    return None
+
+
+def load_corpus(records_dir: Path) -> list[EffectRecord]:
+    from effects.infrastructure.record_io import read_records
+
+    return list(read_records(Path(records_dir)))
+
+
+def build_split(
+    config: TrainEffectModelConfig, records: list[EffectRecord],
+) -> tuple[CorpusSplit, HeldOutCards]:
+    """Derive the split, or inherit one through ``--split-from`` (FR-091)."""
+    if config.split_from is not None:
+        from effects.infrastructure.effect_model_store import EffectModelStore
+
+        source = Path(config.split_from)
+        provenance = EffectModelStore(source.parent).load(source).provenance
+        held_out = HeldOutCards(
+            names=frozenset(provenance.held_out_cards), script_files=frozenset(),
+        )
+        return (
+            CorpusSplit(
+                held_out_cards=provenance.held_out_cards,
+                card_disjoint_games=frozenset(provenance.card_disjoint_games),
+                game_disjoint_games=frozenset(provenance.game_disjoint_games),
+            ),
+            held_out,
+        )
+
+    cards_folder = next(
+        (Path(f) for f in config.cards_folders if Path(f).name == "cardsfolder"),
+        Path(config.cards_folders[0]),
+    )
+    card_files = load_card_files(cards_folder)
+    printings = (
+        load_first_printings(config.printings_path)
+        if Path(config.printings_path).exists()
+        else {}
+    )
+    held_out = newest_first_holdout(card_files, printings)
+    return derive_split(records, held_out), held_out
+
+
+def run(config: TrainEffectModelConfig) -> int:
+    """Train the encoder and effect head jointly. Returns an exit code.
+
+    Torch and the corpus are loaded here rather than at import, so
+    ``python -m effects --help`` and the unit suite stay fast.
+    """
+    require_split_from(config.variant, config.split_from)
+
+    records = load_corpus(config.records_dir)
+    if not records:
+        logger.error(
+            "No effect records under %s. Collect some first with "
+            "'python -m sealed match-outcomes --effect-records %s'.",
+            config.records_dir, config.records_dir,
+        )
+        return 1
+
+    split, _held_out = build_split(config, records)
+    present = set(class_counts(records))
+    mix = renormalize_mix(parse_kind_mix(config.kind_mix), present)
+
+    training = [r for r in records if split.is_training_game(r.game_id)]
+    logger.info(
+        "Corpus: %d records over %d games — %d training, %d card-disjoint, "
+        "%d game-disjoint. Classes present: %s",
+        len(records), len({r.game_id for r in records}), len(training),
+        len(split.card_disjoint_games), len(split.game_disjoint_games),
+        ", ".join(sorted(present)),
+    )
+    logger.info(
+        "Sampling mixture over the classes present: %s",
+        ", ".join(f"{name} {share:.0%}" for name, share in sorted(mix.items())),
+    )
+
+    from effects.application.training_loop import TrainingLoop
+
+    return TrainingLoop(config, records, split, mix).execute()

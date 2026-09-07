@@ -582,6 +582,93 @@ def api_loss(
     return total
 
 
+def collate_surfaces(
+    surfaces: list, *, e_dim: int, widths: dict[SlotKind, int],
+) -> dict[str, torch.Tensor]:
+    """Pad a batch of token surfaces into the trunk's keyword arguments.
+
+    Each slot kind's features go into its own zero-padded tensor, so the model
+    can project all four with four matmuls rather than gathering per slot. The
+    batch pads to its own longest surface: board sizes vary a great deal and
+    padding to a fixed width would spend most of the compute on empty slots.
+    """
+    batch = len(surfaces)
+    width = max((len(s.slots) for s in surfaces), default=1)
+    features = {
+        kind: torch.zeros(batch, width, size) for kind, size in widths.items()
+    }
+    slot_kinds = torch.zeros(batch, width, dtype=torch.long)
+    positions = torch.zeros(batch, width, dtype=torch.long)
+    e_vectors = torch.zeros(batch, width, e_dim)
+    attention = torch.zeros(batch, width, dtype=torch.long)
+
+    for row, surface in enumerate(surfaces):
+        for column, slot in enumerate(surface.slots):
+            slot_kinds[row, column] = int(slot.kind)
+            positions[row, column] = slot.position
+            attention[row, column] = 1
+            if slot.features and slot.kind in features:
+                values = torch.tensor(slot.features, dtype=torch.float32)
+                features[slot.kind][row, column, : values.shape[0]] = values
+            if slot.e is not None:
+                vector = torch.tensor(slot.e, dtype=torch.float32)
+                e_vectors[row, column, : vector.shape[0]] = vector
+
+    return {
+        "slot_features": features,
+        "slot_kinds": slot_kinds,
+        "positions": positions,
+        "e_vectors": e_vectors,
+        "attention_mask": attention,
+    }
+
+
+def entity_target_tensors(
+    surfaces: list, targets_per_surface: list[dict], fields: tuple[FieldSpec, ...],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+    """Gather per-entity outputs and their targets into aligned tensors.
+
+    Returns ``(gate_target, field_targets, entity_mask, entity_index)``, where
+    ``entity_index`` selects the ``[CARD]`` and ``[PLAYER]`` columns of the
+    trunk output. A record that mentions an entity no slot represents is simply
+    not gathered — the surface is the authority on what exists.
+    """
+    batch = len(surfaces)
+    width = max((len(s.entity_slots) for s in surfaces), default=1)
+    gate = torch.zeros(batch, width)
+    mask = torch.zeros(batch, width)
+    index = torch.zeros(batch, width, dtype=torch.long)
+    collected: dict[str, torch.Tensor] = {}
+
+    for spec in fields:
+        shape = (batch, width) if spec.width <= 4 else (batch, width, spec.arity)
+        if spec.type is FieldType.MULTI_BINARY:
+            shape = (batch, width, spec.arity)
+        collected[spec.name] = torch.zeros(*shape)
+
+    for row, (surface, targets) in enumerate(zip(surfaces, targets_per_surface)):
+        for column, slot_index in enumerate(surface.entity_slots):
+            slot = surface.slots[slot_index]
+            key = slot.entity_id or slot.player_id
+            mask[row, column] = 1
+            index[row, column] = slot_index
+            entry = targets.get(key)
+            if entry is None:
+                continue
+            gate[row, column] = 1.0 if entry.affected else 0.0
+            for spec in fields:
+                value = entry.fields.get(spec.name)
+                if value is None:
+                    continue
+                if isinstance(value, list):
+                    collected[spec.name][row, column, : len(value)] = torch.tensor(
+                        value, dtype=torch.float32,
+                    )
+                else:
+                    collected[spec.name][row, column] = float(value)
+    return gate, collected, mask, index
+
+
 def pairing_loss(
     script_e: torch.Tensor, prose_e: torch.Tensor,
 ) -> torch.Tensor:

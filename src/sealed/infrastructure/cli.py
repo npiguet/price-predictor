@@ -947,6 +947,80 @@ def _build_match_outcomes_parser(subparsers) -> None:
             " Default: 7."
         ),
     )
+    _add_effect_record_flags(match_parser)
+
+
+# ── effect-record instrumentation (spec 023) ────────────────────────────
+#
+# The opt-in lives here rather than in `effects` because these matches were
+# going to be played anyway: the instrumentation rides them and costs no extra
+# simulation. Absent the flag, nothing changes — no effect records are written
+# and match-outcomes.txt and cards-played.txt keep their exact format and
+# content.
+
+#: Cap and budget defaults, shared with the effects-owned collectors (FR-028).
+EFFECT_MANA_CAP = 2000
+EFFECT_PLAYABILITY_RATE = 0.1
+EFFECT_INTERVENTIONS_PER_GAME = 2
+EFFECT_PROBES_PER_GAME = 2
+
+
+def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--effect-records",
+        default=None,
+        help=(
+            "Opt in to effect-record collection, writing JSONL shards to this"
+            " directory. There is NO default: on this command collection is the"
+            " opt-in, not the point. Absent, no effect records are written and"
+            " this command behaves exactly as it does today."
+        ),
+    )
+    parser.add_argument(
+        "--mana-cap",
+        type=int,
+        default=EFFECT_MANA_CAP,
+        help=(
+            "Resolution records per unique mana-ability text, per worker"
+            f" process (default: {EFFECT_MANA_CAP})."
+        ),
+    )
+    parser.add_argument(
+        "--playability-rate",
+        type=float,
+        default=EFFECT_PLAYABILITY_RATE,
+        help=(
+            "Fraction of decision-subkind playability logging points sampled."
+            " attackers and blockers records are always logged."
+            f" Default: {EFFECT_PLAYABILITY_RATE}."
+        ),
+    )
+    parser.add_argument(
+        "--interventions-per-game",
+        type=int,
+        default=EFFECT_INTERVENTIONS_PER_GAME,
+        help=(
+            "Interventional resolutions per game (stage three). Default:"
+            f" {EFFECT_INTERVENTIONS_PER_GAME}."
+        ),
+    )
+    parser.add_argument(
+        "--probes-per-game",
+        type=int,
+        default=EFFECT_PROBES_PER_GAME,
+        help=(
+            "Damage-step probe forks per game. Default:"
+            f" {EFFECT_PROBES_PER_GAME}."
+        ),
+    )
+    parser.add_argument(
+        "--probe-keywords",
+        default="",
+        help=(
+            "Comma-separated canary-failing keywords to probe. Empty (the"
+            " default) takes no probe fork at all, whatever the build state."
+        ),
+    )
 
 
 _ENCODE_CARDS_DEFAULT_ENCODER = "models/sealed/encoder/latest.pt"
