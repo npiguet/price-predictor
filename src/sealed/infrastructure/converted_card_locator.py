@@ -5,6 +5,14 @@ that previously lived (duplicated) in ``match_data_loader`` and
 ``evaluate_scorer``. Both ``.txt`` (converted card scripts) and ``.npz``
 (card embeddings) live in the same letter-keyed directory layout, so a
 single locator handles both.
+
+There are three converted source trees and they do not share a layout:
+``cardsfolder`` is letter-keyed, while ``tokenscripts`` and ``variant-scripts``
+are flat. One filename therefore names different files in different trees —
+Ajani's Pridemate is ``cardsfolder/a/ajanis_pridemate.txt`` on one side and
+``tokenscripts/ajanis_pridemate.txt`` on the other — so a locator is bound to a
+tree at construction. ``cardsfolder`` is the default, which is what every
+existing sealed caller means.
 """
 
 from __future__ import annotations
@@ -21,7 +29,21 @@ from sealed.domain.deck import BASIC_LAND_NAMES
 from sealed.infrastructure.card_name_corrections import FILENAME_CORRECTIONS
 
 # Re-exported for callers that historically imported it from here.
-__all__ = ["BASIC_LAND_NAMES", "ConvertedCardLocator"]
+__all__ = [
+    "BASIC_LAND_NAMES",
+    "SOURCE_TREE_LAYOUTS",
+    "ConvertedCardLocator",
+]
+
+_LETTER_KEYED = "letter-keyed"
+_FLAT = "flat"
+
+#: How each converted source tree lays its files out.
+SOURCE_TREE_LAYOUTS: dict[str, str] = {
+    "cardsfolder": _LETTER_KEYED,
+    "tokenscripts": _FLAT,
+    "variant-scripts": _FLAT,
+}
 
 
 class ConvertedCardLocator:
@@ -33,13 +55,42 @@ class ConvertedCardLocator:
     split, and adventure cards have filenames like ``"frontface_backface.npz"``
     but the source files reference only the front face — those are resolved
     by prefix search.
+
+    ``tree`` names which converted source tree ``cards_path`` holds, which fixes
+    the directory layout to search and prefixes the paths
+    :meth:`script_file` returns.
     """
 
-    def __init__(self, cards_path: Path) -> None:
+    def __init__(self, cards_path: Path, *, tree: str = "cardsfolder") -> None:
+        if tree not in SOURCE_TREE_LAYOUTS:
+            raise ValueError(
+                f"unknown converted source tree {tree!r}; "
+                f"known trees: {sorted(SOURCE_TREE_LAYOUTS)}"
+            )
         self._cards_path = cards_path
+        self._tree = tree
+        self._layout = SOURCE_TREE_LAYOUTS[tree]
         self._letter_index: dict[str, dict[str, Path]] = {}
         self._embedding_cache: dict[str, np.ndarray | None] = {}
         self._text_cache: dict[str, ConvertedCardText | None] = {}
+
+    @property
+    def tree(self) -> str:
+        return self._tree
+
+    def script_file(self, card_name: str) -> str | None:
+        """The tree-prefixed path a provenance key names, or None if unresolved.
+
+        ``cardsfolder/a/ajanis_pridemate.txt`` or
+        ``tokenscripts/ajanis_pridemate.txt`` — written with forward slashes on
+        every platform, because the Java writer and this reader must produce the
+        same string or the join fails loudly.
+        """
+        path = self.text_path(card_name)
+        if path is None:
+            return None
+        relative = path.relative_to(self._cards_path)
+        return f"{self._tree}/{relative.as_posix()}"
 
     def text_path(self, card_name: str) -> Path | None:
         return self._find_file(card_name, ".txt")
@@ -88,8 +139,9 @@ class ConvertedCardLocator:
 
     def expected_path(self, card_name: str, ext: str) -> Path:
         """Return the expected exact-match path (used for error messages)."""
-        filename, first_letter = self._split_filename(card_name)
-        return self._cards_path / first_letter / f"{filename}{ext}"
+        filename, subdirectory = self._split_filename(card_name)
+        base = self._cards_path / subdirectory if subdirectory else self._cards_path
+        return base / f"{filename}{ext}"
 
     def _find_file(self, card_name: str, ext: str) -> Path | None:
         hit = self._find_exact_or_prefix(card_name, ext)
@@ -107,8 +159,8 @@ class ConvertedCardLocator:
         return None
 
     def _find_exact_or_prefix(self, card_name: str, ext: str) -> Path | None:
-        filename, first_letter = self._split_filename(card_name)
-        index = self._index_for(first_letter)
+        filename, subdirectory = self._split_filename(card_name)
+        index = self._index_for(subdirectory)
 
         exact = index.get(f"{filename}{ext}")
         if exact is not None:
@@ -142,16 +194,23 @@ class ConvertedCardLocator:
             pass
         return True
 
-    def _index_for(self, letter: str) -> dict[str, Path]:
-        cached = self._letter_index.get(letter)
+    def _index_for(self, subdirectory: str) -> dict[str, Path]:
+        """Index one directory's entries by filename, memoized.
+
+        ``subdirectory`` is the letter (or ``rebalanced``) in a letter-keyed
+        tree and empty in a flat one, where the whole tree is one directory.
+        """
+        cached = self._letter_index.get(subdirectory)
         if cached is not None:
             return cached
-        letter_dir = self._cards_path / letter
+        directory = (
+            self._cards_path / subdirectory if subdirectory else self._cards_path
+        )
         index: dict[str, Path] = {}
-        if letter_dir.is_dir():
-            for entry in letter_dir.iterdir():
+        if directory.is_dir():
+            for entry in directory.iterdir():
                 index[entry.name] = entry
-        self._letter_index[letter] = index
+        self._letter_index[subdirectory] = index
         return index
 
     _REBALANCED_DIR = "rebalanced"
@@ -161,14 +220,19 @@ class ConvertedCardLocator:
         # under cardsfolder/rebalanced/ as "a-akki_ronin.txt" — the literal
         # "a-" prefix is kept (the general sanitizer would turn it into
         # "a_"), and the directory is "rebalanced" rather than first-letter.
-        if card_name[:2].upper() == "A-" and len(card_name) > 2:
+        rebalanced = card_name[:2].upper() == "A-" and len(card_name) > 2
+        if rebalanced:
             stem = sanitize_card_name(card_name[2:], FILENAME_CORRECTIONS)
-            return f"a-{stem}", self._REBALANCED_DIR
-
-        resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
-        if "/" in resolved:
-            first_letter, filename = resolved.split("/", 1)
+            filename, first_letter = f"a-{stem}", self._REBALANCED_DIR
         else:
-            filename = resolved
-            first_letter = filename[0] if filename else "_"
+            resolved = sanitize_card_name(card_name, FILENAME_CORRECTIONS)
+            if "/" in resolved:
+                first_letter, filename = resolved.split("/", 1)
+            else:
+                filename = resolved
+                first_letter = filename[0] if filename else "_"
+        # A flat tree has no per-letter directories, so everything sits at the
+        # root; the sanitized filename is unchanged either way.
+        if self._layout == _FLAT:
+            return filename, ""
         return filename, first_letter

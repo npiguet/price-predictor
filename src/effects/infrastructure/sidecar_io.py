@@ -1,0 +1,190 @@
+"""Reading and writing ``<name>.provenance.json`` beside a converted card.
+
+The sidecar is written by `price_predictor convert` for the two converted trees
+and by `effects collect-variants` for the perturbed one; it is read here into
+the pure dataclasses of :mod:`effects.domain.provenance`.
+
+The join rule it implements is the one thing this module exists for:
+
+- a key that appears in ``lines`` resolves to that line;
+- a key in ``dropped_keys`` resolves to **no** line and is kept — the converter
+  deduplicated that trait away, but it is still live at runtime and still
+  produces a key, so the record supervises through its state and payload with
+  nothing to join to;
+- a key in neither **fails loudly**, because the only way that happens is a
+  reconversion between collection and training, and a corpus scored against the
+  wrong sidecar is worse than one that stops.
+
+Per-line provenance entries omit ``script_file`` — it is the same for every key
+in one file and lives in the header.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from effects.domain.provenance import (
+    ProvenanceKey,
+    ProvenanceSidecar,
+    RoleSpan,
+    SidecarLine,
+    SubAbilityLink,
+)
+
+SIDECAR_SUFFIX = ".provenance.json"
+
+_JSON_SEPARATORS = (",", ":")
+
+
+def sidecar_path_for(converted_txt: Path) -> Path:
+    """The sidecar beside a converted ``.txt``, the same pairing ``.npz`` uses."""
+    converted_txt = Path(converted_txt)
+    return converted_txt.with_suffix(SIDECAR_SUFFIX)
+
+
+def sidecar_to_dict(sidecar: ProvenanceSidecar) -> dict:
+    return {
+        "card": sidecar.card,
+        "script_file": sidecar.script_file,
+        "lines": [
+            {
+                "line_index": line.line_index,
+                "line_kind": line.line_kind,
+                "provenance": [
+                    {
+                        "face": key.face,
+                        "trait_kind": key.trait_kind,
+                        "index_within_kind": key.index_within_kind,
+                    }
+                    for key in line.provenance
+                ],
+                "sub_ability_links": [
+                    {"path": list(link.path), "label": link.label}
+                    for link in line.sub_ability_links
+                ],
+                "script_api_type": line.script_api_type,
+                "script_param_keys": list(line.script_param_keys),
+                "script_text": line.script_text,
+                "role_spans": [
+                    {"start": span.start, "end": span.end, "role": span.role}
+                    for span in line.role_spans
+                ],
+            }
+            for line in sidecar.lines
+        ],
+        "dropped_keys": [
+            {
+                "face": key.face,
+                "trait_kind": key.trait_kind,
+                "index_within_kind": key.index_within_kind,
+            }
+            for key in sidecar.dropped_keys
+        ],
+    }
+
+
+def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
+    script_file = data["script_file"]
+    return ProvenanceSidecar(
+        card=data["card"],
+        script_file=script_file,
+        lines=tuple(
+            SidecarLine(
+                line_index=line["line_index"],
+                line_kind=line["line_kind"],
+                provenance=tuple(
+                    ProvenanceKey.from_dict(key, script_file=script_file)
+                    for key in line.get("provenance", ())
+                ),
+                sub_ability_links=tuple(
+                    SubAbilityLink(
+                        path=tuple(link["path"]), label=link.get("label", ""),
+                    )
+                    for link in line.get("sub_ability_links", ())
+                ),
+                script_api_type=line.get("script_api_type"),
+                script_param_keys=tuple(line.get("script_param_keys", ())),
+                script_text=line.get("script_text"),
+                role_spans=tuple(
+                    RoleSpan(
+                        start=span["start"], end=span["end"], role=span["role"],
+                    )
+                    for span in line.get("role_spans", ())
+                ),
+            )
+            for line in data.get("lines", ())
+        ),
+        dropped_keys=tuple(
+            ProvenanceKey.from_dict(key, script_file=script_file)
+            for key in data.get("dropped_keys", ())
+        ),
+    )
+
+
+def read_sidecar(path: Path) -> ProvenanceSidecar:
+    """Load one sidecar. Raises ``FileNotFoundError`` if it is missing.
+
+    A missing sidecar is not tolerated the way a partial shard line is: a record
+    that names a card with no sidecar cannot be joined at all, and silently
+    skipping it would drop training signal without saying so.
+    """
+    path = Path(path)
+    return sidecar_from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:
+    """Write one sidecar beside its converted text.
+
+    Used by `collect-variants`, which produces perturbed scripts that no Java
+    converter ever sees.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(sidecar_to_dict(sidecar), separators=_JSON_SEPARATORS),
+        encoding="utf-8",
+    )
+
+
+class SidecarCache:
+    """Sidecars held by script file, read once per card.
+
+    Training joins millions of records against a few tens of thousands of cards,
+    so the read has to happen once per card rather than once per record. The
+    cache is per run and holds only what the corpus actually names.
+    """
+
+    def __init__(self, roots: dict[str, Path]) -> None:
+        """``roots`` maps a source tree name to the directory it was written to.
+
+        e.g. ``{"cardsfolder": Path("output/cardsfolder"), "tokenscripts":
+        Path("output/tokenscripts")}``. A key's ``script_file`` names its tree,
+        which is what lets one filename resolve differently in two trees.
+        """
+        self._roots = {name: Path(root) for name, root in roots.items()}
+        self._cache: dict[str, ProvenanceSidecar] = {}
+
+    def path_for(self, script_file: str) -> Path:
+        tree, _, relative = script_file.partition("/")
+        if tree not in self._roots:
+            raise KeyError(
+                f"no converted root configured for source tree {tree!r}; "
+                f"known trees: {sorted(self._roots)}"
+            )
+        return sidecar_path_for(self._roots[tree] / relative)
+
+    def get(self, script_file: str) -> ProvenanceSidecar:
+        cached = self._cache.get(script_file)
+        if cached is None:
+            cached = read_sidecar(self.path_for(script_file))
+            self._cache[script_file] = cached
+        return cached
+
+    def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
+        """The rendered line a record's key names, or None where it was dropped."""
+        return self.get(key.script_file).line_for(key)
+
+    def row_for(self, key: ProvenanceKey) -> int | None:
+        """The ability-cache row a record's key names, or None where it was dropped."""
+        return self.get(key.script_file).row_for(key)
