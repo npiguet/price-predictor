@@ -462,6 +462,7 @@ def per_entity_loss(
     entity_mask: torch.Tensor,
     *,
     fields: tuple[FieldSpec, ...],
+    report_parts: bool = False,
 ) -> tuple[torch.Tensor, dict[str, float]]:
     """The per-entity head's loss, normalized per record over entity count.
 
@@ -471,6 +472,10 @@ def per_entity_loss(
         field_targets: per-field ``(batch, entities, …)`` targets.
         entity_mask: ``(batch, entities)``, 1 for a real entity.
         fields: the fields active at this step, from :func:`active_fields`.
+        report_parts: read each term back as a Python float for logging. Off by
+            default: every read is a device synchronization, and with fifteen
+            active fields that is fifteen stalls on a path the training loop
+            walks once per batch and whose result it discards.
 
     The gate trains on every entity — players included, since the head is mapped
     over ``[PLAYER]`` outputs too. Conditional fields train only where the
@@ -488,17 +493,22 @@ def per_entity_loss(
     gate = functional.binary_cross_entropy_with_logits(
         gate_logits[mask], gate_target[mask].float(), reduction="sum",
     )
-    parts["gate"] = float(gate.detach())
+    if report_parts:
+        parts["gate"] = float(gate.detach())
     total = gate
 
     affected = mask & gate_target.bool()
+    # Read once rather than per field: the mask does not change inside the
+    # loop, and each read stalls on the device.
+    any_affected = bool(affected.any())
     for spec in fields:
         target = field_targets.get(spec.name)
-        if target is None or not affected.any():
+        if target is None or not any_affected:
             continue
         start, end = FIELD_SLICES[spec.name]
         loss = field_loss(spec, outputs[..., start:end][affected], target[affected])
-        parts[spec.name] = float(loss.detach())
+        if report_parts:
+            parts[spec.name] = float(loss.detach())
         total = total + loss
 
     records = max(int(outputs.shape[0]), 1)
@@ -601,6 +611,13 @@ def collate_surfaces(
     can project all four with four matmuls rather than gathering per slot. The
     batch pads to its own longest surface: board sizes vary a great deal and
     padding to a fixed width would spend most of the compute on empty slots.
+
+    A slot whose ``e`` is an ``int`` names a row of a matrix this function does
+    not have — the training loop's live encoder output. Its row lands in
+    ``e_rows`` (``-1`` everywhere else) and the caller resolves it on the device
+    with :func:`scatter_e_rows`. Resolving it here would mean pulling the
+    encoder's vectors back to the host once per ability slot, which both costs a
+    synchronization per slot and severs the gradient.
     """
     batch = len(surfaces)
     width = max((len(s.slots) for s in surfaces), default=1)
@@ -610,6 +627,7 @@ def collate_surfaces(
     slot_kinds = torch.zeros(batch, width, dtype=torch.long)
     positions = torch.zeros(batch, width, dtype=torch.long)
     e_vectors = torch.zeros(batch, width, e_dim)
+    e_rows = torch.full((batch, width), -1, dtype=torch.long)
     attention = torch.zeros(batch, width, dtype=torch.long)
 
     for row, surface in enumerate(surfaces):
@@ -620,7 +638,9 @@ def collate_surfaces(
             if slot.features and slot.kind in features:
                 values = torch.tensor(slot.features, dtype=torch.float32)
                 features[slot.kind][row, column, : values.shape[0]] = values
-            if slot.e is not None:
+            if isinstance(slot.e, int):
+                e_rows[row, column] = slot.e
+            elif slot.e is not None:
                 vector = torch.tensor(slot.e, dtype=torch.float32)
                 e_vectors[row, column, : vector.shape[0]] = vector
 
@@ -629,8 +649,24 @@ def collate_surfaces(
         "slot_kinds": slot_kinds,
         "positions": positions,
         "e_vectors": e_vectors,
+        "e_rows": e_rows,
         "attention_mask": attention,
     }
+
+
+def scatter_e_rows(
+    e_vectors: torch.Tensor, e_rows: torch.Tensor, matrix: torch.Tensor,
+) -> torch.Tensor:
+    """Fill the slots that named a row of ``matrix`` with that row.
+
+    One gather over the whole batch, on whatever device the matrix is on, and
+    differentiable — which is the point. ``e`` is what the ability encoder
+    produces, so the effect head's loss reaches the encoder only through this
+    path; a per-slot host round trip would train the head against a constant.
+    """
+    valid = e_rows >= 0
+    gathered = matrix[e_rows.clamp(min=0)]
+    return torch.where(valid.unsqueeze(-1), gathered, e_vectors)
 
 
 def entity_target_tensors(

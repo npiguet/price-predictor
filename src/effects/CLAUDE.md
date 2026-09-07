@@ -64,6 +64,18 @@ The real-versus-fork difference is computed at **evaluation time** and never bec
 
 Loaded into a worker by staging them into Forge's custom-cards directory before `FModel.initialize` — the card database is read once at startup, and a script that appears afterwards is invisible for the life of the JVM. Staging also registers every name with `VariantRegistry`, which is what makes `ProvenanceKey` say `variant-scripts/`: once loaded, a variant is an ordinary non-token card and nothing on it says otherwise.
 
+## Performance invariants
+
+Four things on the hot paths are load-bearing rather than incidental, and each has a failure mode that looks like a working run.
+
+**`e` enters the head by row index, never by value.** A training surface's `Slot.e` is an `int` naming a row of the batch's encoded-ability matrix, and `scatter_e_rows` turns rows into vectors on the device in one gather. Reading the vectors back to the host per ability slot would both stall once per slot and **sever the gradient** — the effect head's loss reaches the ability encoder through this path and no other, so a model trained that way would optimize the head against a frozen random encoder and still report a falling loss.
+
+**The loss decomposition is opt-in.** `per_entity_loss(..., report_parts=True)` reads each term back as a Python float, and each read synchronizes; with fifteen active fields that is fifteen stalls per batch for numbers the training loop discards. The epoch's running loss accumulates on the device and is read once when the epoch closes.
+
+**`encode-abilities` batches by unique text.** The corpus repeats itself heavily — every *Flying*, every *deals 3 damage to any target* — so `AbilityEncoderRunner` deduplicates a card's lines before the forward pass and encodes 256 texts at a time. It loads the checkpoint once for the whole run and calls `eval()`, which matters beyond dropout: the encoder adds noise to `e` while training, and a cache built without it would differ between two runs of the same command.
+
+**The trainer materializes the corpus.** `load_corpus` reads every shard into a list, because the split derivation and the weighted sampler both need the whole corpus indexed by game and by sampling class. Everything else streams (`read_records` is an iterator, `count_records` counts lines without parsing them). This is the known ceiling on corpus size and the thing to change first if a run runs out of host memory.
+
 ## Model artifacts
 
 Checkpoints live under `models/effects/effect-model/` (`{timestamp}.pt` plus a rolling `latest.pt`); a variant writes to `models/effects/effect-model/{variant}/`, so a baseline run can never overwrite the checkpoint the cache was built from. Beyond weights, a checkpoint records **the split it trained against** (the held-out card list and both `game_id` sets, enumerated rather than derived), the vocabulary and keyword-definition paths and their content hashes, and the keyword withheld from training. Every inference command re-hashes what it actually loaded and fails fast on a mismatch: encoding a cache against a different vocabulary produces vectors that look fine and mean nothing. The MLM, script-API and pairing heads are training-only and are filtered out at save time.

@@ -135,8 +135,13 @@ class Slot:
     kind: SlotKind
     position: int
     features: tuple[float, ...] = ()
-    #: The ability vector an ``ACT`` or ``ABILITY`` slot carries.
-    e: tuple[float, ...] | None = None
+    #: The ability vector an ``ACT`` or ``ABILITY`` slot carries — either the
+    #: values themselves (inference, reading the cache) or an ``int`` row of a
+    #: matrix supplied at collate time (training, where ``e`` is the live
+    #: encoder output and must stay a tensor the gradient can flow back
+    #: through). A row index is not a vector of one element: the two are told
+    #: apart by type, never by length.
+    e: tuple[float, ...] | int | None = None
     #: ``CARD`` slots: token ids of the entity's subtypes, mean-pooled by the
     #: model. Subtypes are an open vocabulary (every set adds creature types),
     #: so they enter through the shared token embedding rather than a one-hot.
@@ -360,9 +365,12 @@ def build_effect_head_input(
     """Lay one record out as the token surface.
 
     Args:
-        e_for: ``ProvenanceKey -> tuple[float, ...] | None``, the ability cache
-            lookup. A key the cache cannot resolve contributes a zero vector
-            rather than dropping the token, so the entity keeps its shape.
+        e_for: ``ProvenanceKey -> tuple[float, ...] | int | None``, the ability
+            lookup. A tuple is the vector itself, read from the cache; an ``int``
+            is a row of a matrix supplied at collate time, which is how the
+            training loop keeps ``e`` a live encoder output the gradient can
+            flow back through. A key that resolves to neither contributes a zero
+            vector rather than dropping the token, so the entity keeps its shape.
         e_dim: bottleneck width, for the zero vectors above.
         candidate_index: a ``playability``/``decision`` record trains as one
             example per candidate; this selects which candidate's ``e`` sits in
@@ -429,9 +437,12 @@ def build_effect_head_input(
                 and rng.random() < context_dropout
             ):
                 continue
+            resolved = e_for(key)
             slots.append(Slot(
                 kind=SlotKind.ABILITY, position=position,
-                e=e_for(key) or zero,
+                # Explicitly against None: row 0 is a valid matrix row and
+                # ``or`` would read it as a miss.
+                e=zero if resolved is None else resolved,
                 entity_id=entity.id,
             ))
             position += 1
@@ -457,7 +468,7 @@ def _ability_keys(entity: EntityState) -> tuple[ProvenanceKey, ...]:
 def _act_vector(
     record: EffectRecord, e_for, zero: tuple[float, ...],
     candidate_index: int | None,
-) -> tuple[float, ...] | None:
+):
     if _act_is_empty(record):
         return zero
     payload = record.payload
@@ -471,7 +482,7 @@ def _act_vector(
     return zero
 
 
-def _first_vector(keys, e_for, zero: tuple[float, ...]) -> tuple[float, ...]:
+def _first_vector(keys, e_for, zero: tuple[float, ...]):
     """The first key that resolves; zeros if none do.
 
     A rendered line merged from several traits carries several keys and they all

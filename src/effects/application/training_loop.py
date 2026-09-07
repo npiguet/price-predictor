@@ -68,6 +68,7 @@ from effects.domain.effect_model import (
     collate_surfaces,
     entity_target_tensors,
     per_entity_loss,
+    scatter_e_rows,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.infrastructure.effect_model_store import (
@@ -159,14 +160,19 @@ class TrainingLoop:
     def _encode_texts(
         self, texts: set[str], encoder: AbilityEncoder,
         tokenizer: AbilityTokenizer,
-    ) -> dict[str, torch.Tensor]:
+    ) -> tuple[dict[str, int], torch.Tensor | None]:
         """Encode each unique ability text once for the whole batch.
 
         This is what grouping a batch by game buys: the abilities on one board
         recur across that game's records, so one forward pass serves many.
+
+        Returns ``(row_of_text, matrix)`` rather than per-text vectors: the
+        surface carries row indices and the vectors stay on the device in one
+        tensor, so the gradient reaches the encoder and no ability vector makes
+        a host round trip.
         """
         if not texts:
-            return {}
+            return {}, None
         hidden_keywords, _force = withheld_keyword_rules(
             self.config.withhold_keyword
         )
@@ -182,9 +188,9 @@ class TrainingLoop:
         batch = collate_lines(lines, tokenizer.pad_id)
         batch = {k: v.to(self.device) for k, v in batch.items()}
         vectors, _hidden = encoder(**batch)
-        return dict(zip(ordered, vectors))
+        return {text: row for row, text in enumerate(ordered)}, vectors
 
-    def _surface_for(self, record, vectors: dict, sidecars, e_dim: int):
+    def _surface_for(self, record, rows: dict[str, int], sidecars, e_dim: int):
         """One record's token surface, with the variant's masks applied."""
 
         def e_for(key):
@@ -197,10 +203,7 @@ class TrainingLoop:
             if line is None:
                 return None
             text = line.script_text or f"{key.script_file}:{key.trait_kind}"
-            vector = vectors.get(text)
-            return None if vector is None else tuple(
-                vector.detach().cpu().tolist()
-            )
+            return rows.get(text)
 
         return build_effect_head_input(
             record,
@@ -221,9 +224,9 @@ class TrainingLoop:
             text for record in records
             if (text := ability_text_of(record, sidecars)) is not None
         }
-        vectors = self._encode_texts(texts, encoder, tokenizer)
+        rows, matrix = self._encode_texts(texts, encoder, tokenizer)
         surfaces = [
-            self._surface_for(record, vectors, sidecars, self.config.e_dim)
+            self._surface_for(record, rows, sidecars, self.config.e_dim)
             for record in records
         ]
         batch = collate_surfaces(
@@ -238,6 +241,14 @@ class TrainingLoop:
                 for k, v in batch.items() if k != "slot_features"
             },
         }
+        e_rows = batch.pop("e_rows")
+        if matrix is not None:
+            # The one place the encoder's output enters the head. Done here
+            # rather than in collate because the vectors must stay on the
+            # device and attached to the graph.
+            batch["e_vectors"] = scatter_e_rows(
+                batch["e_vectors"], e_rows, matrix,
+            )
         hidden = model(**batch)
         outputs = model.per_entity(hidden)
 
@@ -250,9 +261,12 @@ class TrainingLoop:
         gate, field_targets, mask, index = entity_target_tensors(
             surfaces, targets, fields,
         )
-        gathered = torch.stack([
-            outputs[row, index[row]] for row in range(outputs.shape[0])
-        ])
+        # One batched gather rather than a slice per row: `index` selects each
+        # surface's [CARD] and [PLAYER] columns, and the rows are independent.
+        index = index.to(self.device)
+        gathered = outputs.gather(
+            1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
+        )
         loss, _parts = per_entity_loss(
             gathered, gate.to(self.device),
             {k: v.to(self.device) for k, v in field_targets.items()},
@@ -318,7 +332,10 @@ class TrainingLoop:
         for epoch in range(1, self.config.epochs + 1):
             encoder.train()
             model.train()
-            running = 0.0
+            # Accumulated on the device and read once at the end of the epoch.
+            # Reading it per step would synchronize once per batch for a number
+            # nothing looks at until the epoch closes.
+            running = torch.zeros((), device=self.device)
             for _ in range(self.config.steps_per_epoch):
                 for group in optimizer.param_groups:
                     group["lr"] = learning_rate_at(step, warmup=warmup)
@@ -336,14 +353,14 @@ class TrainingLoop:
                     clip_per_group(optimizer, MAX_GRAD_NORM)
                     optimizer.step()
                     optimizer.zero_grad(set_to_none=True)
-                running += float(loss.detach())
+                running += loss.detach()
                 step += 1
                 if self.context_cache is not None:
                     self.context_cache.note_batch()
 
             result = EpochResult(
                 epoch=epoch,
-                train_loss=running / max(self.config.steps_per_epoch, 1),
+                train_loss=float(running) / max(self.config.steps_per_epoch, 1),
                 card_disjoint_loss=self._validate(
                     card_disjoint, encoder, model, tokenizer, sidecars, widths,
                     step,
@@ -389,7 +406,7 @@ class TrainingLoop:
             by_game[record.game_id].append(record)
         from effects.application.train_effect_model import BatchPlan
 
-        total = 0.0
+        total = torch.zeros((), device=self.device)
         batches = 0
         with torch.no_grad():
             for game_id, group in by_game.items():
@@ -398,11 +415,12 @@ class TrainingLoop:
                     sidecars, widths, step,
                 )
                 if loss is not None:
-                    total += float(loss)
+                    # Accumulated on the device; read once below.
+                    total += loss
                     batches += 1
         encoder.train()
         model.train()
-        return total / batches if batches else float("nan")
+        return float(total) / batches if batches else float("nan")
 
     def _provenance(self) -> SplitProvenance:
         return SplitProvenance(

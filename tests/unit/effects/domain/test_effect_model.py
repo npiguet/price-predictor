@@ -48,6 +48,7 @@ from effects.domain.effect_model import (
     mlm_loss,
     pairing_loss,
     per_entity_loss,
+    scatter_e_rows,
     verdict_loss,
 )
 from effects.domain.state_snapshot import COLORS
@@ -266,9 +267,11 @@ class TestLosses:
         fields = (FIELDS_BY_NAME["damage_taken"],)
         off = per_entity_loss(
             outputs, torch.zeros(2, 3), targets, entity_mask, fields=fields,
+            report_parts=True,
         )[1]
         on = per_entity_loss(
             outputs, torch.ones(2, 3), targets, entity_mask, fields=fields,
+            report_parts=True,
         )[1]
         assert "damage_taken" not in off
         assert "damage_taken" in on
@@ -276,8 +279,29 @@ class TestLosses:
     def test_the_gate_trains_on_every_entity_including_unaffected_ones(self):
         _, parts = per_entity_loss(
             self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
+            report_parts=True,
         )
         assert parts["gate"] > 0.0
+
+    def test_the_decomposition_is_off_by_default(self):
+        """Each term read back is a device synchronization, and the training
+        loop discards them — so the caller has to ask."""
+        _, parts = per_entity_loss(
+            self._outputs(), torch.zeros(2, 3), {}, torch.ones(2, 3), fields=(),
+        )
+        assert parts == {}
+
+    def test_the_total_is_the_same_either_way(self):
+        """Reporting must not change what is optimized."""
+        outputs = self._outputs()
+        quiet, _ = per_entity_loss(
+            outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+        )
+        loud, _ = per_entity_loss(
+            outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+            report_parts=True,
+        )
+        assert float(quiet) == pytest.approx(float(loud))
 
     def test_the_loss_is_normalized_per_record_not_per_entity(self):
         """A twelve-permanent board must not outweigh a two-permanent one."""
@@ -303,10 +327,12 @@ class TestLosses:
         outputs = self._outputs()
         full = per_entity_loss(
             outputs, torch.ones(2, 3), {}, torch.ones(2, 3), fields=(),
+            report_parts=True,
         )[1]["gate"]
         masked = per_entity_loss(
             outputs, torch.ones(2, 3), {},
             torch.tensor([[1.0, 1.0, 0.0], [1.0, 0.0, 0.0]]), fields=(),
+            report_parts=True,
         )[1]["gate"]
         assert masked < full
 
@@ -432,3 +458,47 @@ class TestFieldSpec:
                 global_features=8, act_features=6, player_features=10,
                 card_features=12, d_model=10, n_heads=4,
             )
+
+
+class TestScatterERows:
+    """How the ability encoder's output reaches the effect head.
+
+    A surface built for training carries row indices rather than values, and
+    this is where the rows become vectors. Both properties below are the reason
+    it exists: a per-slot round trip through the host would sever the gradient,
+    and the effect head's loss would then never reach the encoder at all.
+    """
+
+    def _matrix(self) -> torch.Tensor:
+        return torch.tensor(
+            [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], requires_grad=True,
+        )
+
+    def test_a_named_row_replaces_the_slots_vector(self):
+        e_vectors = torch.zeros(1, 3, 2)
+        rows = torch.tensor([[2, 0, -1]])
+        out = scatter_e_rows(e_vectors, rows, self._matrix())
+        assert out[0, 0].tolist() == [5.0, 6.0]
+        assert out[0, 1].tolist() == [1.0, 2.0]
+
+    def test_an_unnamed_slot_keeps_what_collate_put_there(self):
+        """-1 means "no row named": a literal vector, or the zero padding."""
+        e_vectors = torch.tensor([[[0.0, 0.0], [7.0, 8.0]]])
+        rows = torch.tensor([[-1, -1]])
+        out = scatter_e_rows(e_vectors, rows, self._matrix())
+        assert out.tolist() == e_vectors.tolist()
+
+    def test_row_zero_is_a_row_and_not_a_miss(self):
+        e_vectors = torch.zeros(1, 1, 2)
+        out = scatter_e_rows(e_vectors, torch.tensor([[0]]), self._matrix())
+        assert out[0, 0].tolist() == [1.0, 2.0]
+
+    def test_the_gradient_reaches_the_matrix(self):
+        matrix = self._matrix()
+        out = scatter_e_rows(torch.zeros(1, 2, 2), torch.tensor([[1, -1]]), matrix)
+        out.sum().backward()
+        assert matrix.grad is not None
+        # Only the row that was named receives gradient.
+        assert matrix.grad[1].tolist() == [1.0, 1.0]
+        assert matrix.grad[0].tolist() == [0.0, 0.0]
+        assert matrix.grad[2].tolist() == [0.0, 0.0]

@@ -289,6 +289,99 @@ class TestTaxonomyVariant:
         ).shape == (0, E_DIM)
 
 
+class TestTheRealEncoder:
+    """The shipping variants read a trained encoder, not a hash embedding.
+
+    Without this the only variant that can produce a cache is ``taxonomy``, the
+    baseline — and the artifact the whole feature exists to ship cannot be
+    built at all.
+    """
+
+    @pytest.fixture
+    def trained(self, tmp_path):
+        """A corpus plus a checkpoint carrying real encoder weights."""
+        cards = tmp_path / "cardsfolder"
+        (cards / "s").mkdir(parents=True)
+        write_sidecar(
+            _sidecar("cardsfolder/s/serra_angel.txt", 3),
+            sidecar_path_for(cards / "s" / "serra_angel.txt"),
+        )
+        (cards / "s" / "serra_angel.txt").write_text(
+            "name: serra angel\nstatic[0]: creatures you control get +1/+1\n"
+            "static[1]: flying\nstatic[2]: vigilance\nstatic[3]: whatever\n"
+            "static[4]: whatever\n",
+            encoding="utf-8",
+        )
+        vocab = tmp_path / "vocab.txt"
+        vocab.write_text(
+            "\n".join([
+                "[PAD]", "[UNK]", "cardname", "[MASK]", "[CLS]", "creatures",
+                "you", "control", "get", "flying", "vigilance", "1",
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        keywords = tmp_path / "kw.json"
+        keywords.write_text("{}", encoding="utf-8")
+
+        torch.manual_seed(0)
+        encoder_config = AbilityEncoderConfig(
+            vocab_size=12, e_dim=E_DIM, d_model=16, n_layers=1, n_heads=2,
+            ff_dim=32,
+        )
+        from effects.domain.ability_encoder import AbilityEncoder
+
+        store = EffectModelStore(tmp_path / "models" / "effect-model")
+        store.save(EffectCheckpoint(
+            encoder_config=encoder_config,
+            model_config=_MODEL_CONFIG,
+            encoder_state=AbilityEncoder(encoder_config).state_dict(),
+            model_state=EffectModel(_MODEL_CONFIG).state_dict(),
+            provenance=SplitProvenance(
+                vocab_path=str(vocab), keyword_definitions_path=str(keywords),
+                vocab_hash=content_hash(vocab),
+                keyword_definitions_hash=content_hash(keywords),
+            ),
+        ))
+        return EncodeAbilitiesConfig(
+            cards_folders=(cards,),
+            checkpoint=store.latest_path(),
+            output_root=tmp_path / "abilities",
+            variant="full",
+        )
+
+    def test_the_shipping_variant_writes_a_cache(self, trained):
+        summary = run(trained)
+        assert summary.sources == 1
+        assert summary.rows == 3
+        store = AbilityCacheStore(trained.output_root, variant="full")
+        assert store.read("cardsfolder/s/serra_angel.txt").shape == (3, E_DIM)
+
+    def test_the_rows_are_not_all_the_same(self, trained):
+        """A cache of one repeated vector would pass every shape check and
+        carry no information."""
+        run(trained)
+        rows = AbilityCacheStore(trained.output_root, variant="full").read(
+            "cardsfolder/s/serra_angel.txt"
+        )
+        assert not np.allclose(rows[0], rows[1]) or not np.allclose(
+            rows[1], rows[2]
+        )
+
+    def test_a_second_run_reproduces_the_same_bytes(self, trained):
+        """The encoder adds noise to e while training and drops out; a cache
+        built without eval() would differ run to run and every consumer reads
+        the cache rather than the model."""
+        run(trained)
+        first = AbilityCacheStore(
+            trained.output_root, variant="full",
+        ).read("cardsfolder/s/serra_angel.txt").copy()
+        run(trained)
+        second = AbilityCacheStore(
+            trained.output_root, variant="full",
+        ).read("cardsfolder/s/serra_angel.txt")
+        np.testing.assert_array_equal(first, second)
+
+
 class TestHashCheck:
     def test_a_moved_vocabulary_stops_the_run_before_writing(
         self, corpus, tmp_path,
