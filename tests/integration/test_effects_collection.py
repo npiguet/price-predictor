@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.infrastructure.record_io import read_records
+from effects.infrastructure.record_io import iter_shards, read_records
 from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
@@ -83,9 +83,9 @@ def test_collection_writes_records_under_one_attribution_mode(
     if not records:
         pytest.skip("worker produced no records within the collection window")
 
-    shards = list(records_dir.glob("*.jsonl"))
+    shards = iter_shards(records_dir)
     assert shards, "no shard was written"
-    assert shards[0].name.endswith(".0.jsonl"), shards[0].name
+    assert shards[0].name.endswith(".0.jsonl.gz"), shards[0].name
 
     kinds = {record.kind.value for record in records}
     assert "resolution" in kinds, f"no resolution records; saw {kinds}"

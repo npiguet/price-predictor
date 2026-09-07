@@ -33,7 +33,8 @@ class CollectorTest {
     @Test
     void aShardIsNamedForItsRunAndWorker() {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run-uuid", 4)) {
-            assertEquals("run-uuid.4.jsonl", writer.path().getFileName().toString());
+            assertEquals(
+                    "run-uuid.4.jsonl.gz", writer.path().getFileName().toString());
         }
     }
 
@@ -68,8 +69,7 @@ class CollectorTest {
             writer.write("{\"a\":1}");
             writer.write("{\"a\":2}");
         }
-        List<String> lines = Files.readAllLines(tempDir.resolve("run.0.jsonl"));
-        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), lines);
+        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), readShard("run.0"));
     }
 
     @Test
@@ -80,7 +80,51 @@ class CollectorTest {
         try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
             writer.write("{\"a\":2}");
         }
-        assertEquals(2, Files.readAllLines(tempDir.resolve("run.0.jsonl")).size());
+        assertEquals(2, readShard("run.0").size());
+    }
+
+    @Test
+    void aShardIsAConcatenationOfCompleteGzipMembers() throws IOException {
+        // Each writer contributes its own member, so appending is valid gzip
+        // rather than a second stream glued onto the first. That is what lets a
+        // killed worker truncate the last member and leave the rest readable.
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+            writer.write("{\"a\":1}");
+        }
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+            writer.write("{\"a\":2}");
+        }
+        byte[] bytes = Files.readAllBytes(
+                tempDir.resolve("run.0" + RecordShardWriter.SUFFIX));
+        int members = 0;
+        for (int i = 0; i + 1 < bytes.length; i++) {
+            // gzip's magic number, which starts every member.
+            if ((bytes[i] & 0xFF) == 0x1F && (bytes[i + 1] & 0xFF) == 0x8B) {
+                members++;
+            }
+        }
+        assertTrue(members >= 2, "expected one member per writer, saw " + members);
+    }
+
+    @Test
+    void aFullBlockIsFlushedWithoutClosing() throws IOException {
+        // The worker loops until it is killed, so a shard that only wrote on
+        // close would be empty for the whole run.
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0);
+        for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
+            writer.write("{\"a\":" + i + "}");
+        }
+        assertEquals(RecordShardWriter.BLOCK_RECORDS, readShard("run.0").size());
+    }
+
+    /** The shard's lines, decompressed. */
+    private List<String> readShard(String stem) throws IOException {
+        Path path = tempDir.resolve(stem + RecordShardWriter.SUFFIX);
+        try (var gzip = new java.util.zip.GZIPInputStream(Files.newInputStream(path));
+                var reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(gzip, java.nio.charset.StandardCharsets.UTF_8))) {
+            return reader.lines().toList();
+        }
     }
 
     @Test

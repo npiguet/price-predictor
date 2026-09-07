@@ -194,8 +194,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to Forge cardsfolder directory",
     )
     convert_parser.add_argument(
-        "--output-path", type=str, default="./output",
-        help="Output directory for converted files",
+        "--output-path", type=str, default="./output/cardsfolder",
+        help=(
+            "Output directory for converted files. Defaults to the tree every "
+            "consumer reads: 'vocabulary', the sealed pipeline and the effects "
+            "package all look in ./output/cardsfolder, so writing anywhere "
+            "else produces a corpus none of them find."
+        ),
     )
     convert_parser.add_argument(
         "--tokens-path", type=str,
@@ -223,8 +228,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to Forge cardsfolder directory",
     )
     check_parser.add_argument(
-        "--output-path", type=str, default="./output",
-        help="Path to converted output directory",
+        "--output-path", type=str, default="./output/cardsfolder",
+        help="Path to converted output directory, as 'convert' writes it",
     )
     check_parser.add_argument(
         "--threshold", type=float, default=0.5,

@@ -1,4 +1,4 @@
-From 84f22495735e8414a2d5d4bc419086dc21b80e68 Mon Sep 17 00:00:00 2001
+From 2691d8c17d57692d35e952100499b75329c016c6 Mon Sep 17 00:00:00 2001
 From: lordofthepigs <nicolas.piguet@gmail.com>
 Date: Mon, 7 Sep 2026 21:49:33 +0200
 Subject: [PATCH] Add effect-record instrumentation hooks
@@ -6,7 +6,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Four hooks an external tool reads to record what each ability does when it
+Six hooks an external tool reads to record what each ability does when it
 resolves. Every one is inert unless something installs a listener or reads the
 pointer, and nothing in Forge does — the reader is a separate project that
 builds against stock Forge and reaches these reflectively.
@@ -33,6 +33,17 @@ AiController gains a listener called with the rules-level verdict for each
 candidate the AI evaluated — can-play, affordable, has-legal-target. Never the
 AI's policy judgment: that is its opinion rather than the game's rules.
 
+AbilityManaPart gains a listener at the point produced mana reaches the pool.
+Mana abilities never use the stack, so an observer watching casts and
+resolutions sees no mana at all; the notification carries the mana after any
+replacement has rewritten it.
+
+Card gains keyed accessors for the type and colour layer tables, matching the
+ones the keyword and P/T layers already have. The existing accessors flatten
+each table into the applied result, which is what the rules need and which
+loses the column key — the applying static's id — that per-static attribution
+turns on.
+
 GameAction.destroy puts the causing ability in the Destroyed trigger's run
 parameters. It is in scope and was being dropped, so nothing downstream could
 name what destroyed the permanent.
@@ -40,9 +51,11 @@ name what destroyed the permanent.
  .../src/main/java/forge/ai/AiController.java  | 34 +++++++++++
  .../src/main/java/forge/game/GameAction.java  |  6 ++
  .../java/forge/game/ability/AbilityUtils.java | 32 ++++++++++
+ .../src/main/java/forge/game/card/Card.java   | 18 ++++++
  .../game/replacement/ReplacementHandler.java  | 54 ++++++++++++++++
+ .../game/spellability/AbilityManaPart.java    | 25 ++++++++
  .../forge/game/trigger/TriggerHandler.java    | 61 +++++++++++++++++++
- 5 files changed, 187 insertions(+)
+ 7 files changed, 230 insertions(+)
 
 diff --git a/forge-ai/src/main/java/forge/ai/AiController.java b/forge-ai/src/main/java/forge/ai/AiController.java
 index f4b491e887c..bb652206a2d 100644
@@ -161,6 +174,35 @@ index aa35c2ffd71..4bc9074ea7a 100644
          Player pl = sa.getActivatingPlayer();
          final Game game = pl.getGame();
  
+diff --git a/forge-game/src/main/java/forge/game/card/Card.java b/forge-game/src/main/java/forge/game/card/Card.java
+index b874a1e9a96..78210bf7c29 100644
+--- a/forge-game/src/main/java/forge/game/card/Card.java
++++ b/forge-game/src/main/java/forge/game/card/Card.java
+@@ -4120,6 +4120,24 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
+         return changedCardKeywords;
+     }
+ 
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++    //
++    // The keyword and P/T layer tables already have keyed accessors; these two
++    // give the type and colour layers the same, so a reader can attribute a
++    // change to the static that made it. The existing accessors flatten the
++    // table into the applied result, which is what the rules need and loses
++    // exactly the column key — the static's id — that attribution turns on.
++
++    /** Layer 4 type changes, keyed by timestamp and applying static's id. */
++    public Table<Long, Long, ICardChangedType> getChangedCardTypesTable() {
++        return changedCardTypes;
++    }
++
++    /** Layer 5 colour changes, keyed by timestamp and applying static's id. */
++    public Table<Long, Long, CardColor> getChangedCardColorsTable() {
++        return changedCardColors;
++    }
++
+     public void setChangedCardKeywords(Table<Long, Long, KeywordsChange> changedCardKeywords) {
+         this.changedCardKeywords.clear();
+         for (Table.Cell<Long, Long, KeywordsChange> entry : changedCardKeywords.cellSet()) {
 diff --git a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java b/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
 index 4d9877fb55b..70178d3da1a 100644
 --- a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
@@ -233,6 +275,49 @@ index 4d9877fb55b..70178d3da1a 100644
          final ReplacementEffect replacementEffect, final Player decider) {
          Card host = replacementEffect.getHostCard();
          // AlternateState for OriginsPlaneswalker
+diff --git a/forge-game/src/main/java/forge/game/spellability/AbilityManaPart.java b/forge-game/src/main/java/forge/game/spellability/AbilityManaPart.java
+index 8171a902306..70b72918557 100644
+--- a/forge-game/src/main/java/forge/game/spellability/AbilityManaPart.java
++++ b/forge-game/src/main/java/forge/game/spellability/AbilityManaPart.java
+@@ -87,6 +87,23 @@ public class AbilityManaPart implements java.io.Serializable {
+     private transient Card sourceCard;
+     private transient IHasSVars sVarHolder;
+ 
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++    //
++    // Mana abilities never use the stack, so nothing on the event bus marks one
++    // resolving and an observer watching casts and resolutions sees no mana at
++    // all. This is the single point every produced mana passes through, after
++    // any replacement has rewritten it.
++
++    /** Notified with the mana an ability actually produced. */
++    public interface EffectRecordManaListener {
++        void onManaProduced(SpellAbility ability, Player player, String produced);
++    }
++
++    private static EffectRecordManaListener effectRecordManaListener;
++
++    public static void setEffectRecordManaListener(final EffectRecordManaListener listener) {
++        effectRecordManaListener = listener;
++    }
+ 
+     // Spells paid with this mana spell can't be countered.
+ 
+@@ -200,6 +217,14 @@ public class AbilityManaPart implements java.io.Serializable {
+ 
+         manaPool.addMana(this.lastManaProduced);
+ 
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // After the replacement rewrite and after the pool has it, so the
++        // string recorded is the mana that actually arrived.
++        if (effectRecordManaListener != null) {
++            effectRecordManaListener.onManaProduced(
++                    root == null ? sa : root, player, afterReplace);
++        }
++
+         final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(source);
+         runParams.put(AbilityKey.Player, player);
+         runParams.put(AbilityKey.Produced, afterReplace);
 diff --git a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java b/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
 index a5298d71237..30127819b06 100644
 --- a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java

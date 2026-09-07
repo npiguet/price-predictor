@@ -28,6 +28,8 @@ public final class PatchHooks {
             "forge.game.replacement.ReplacementHandler";
     static final String ABILITY_UTILS = "forge.game.ability.AbilityUtils";
     static final String AI_CONTROLLER = "forge.ai.AiController";
+    static final String ABILITY_MANA_PART =
+            "forge.game.spellability.AbilityManaPart";
 
     /** What a hook lookup produced, or why it did not. */
     public record Lookup(Class<?> owner, Method method) {

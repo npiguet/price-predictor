@@ -197,6 +197,11 @@ public class MatchWorkerMain {
             System.out.println(
                     "Effect records: " + effectRecords.path()
                             + " [mode=" + AttributionMode.detect().wireValue() + "]");
+            // The worker loops until the supervisor terminates it, so close()
+            // is never reached on the normal path. Without this the block in
+            // flight — up to a few hundred records — is lost on every stop.
+            final RecordShardWriter toFlush = effectRecords;
+            Runtime.getRuntime().addShutdownHook(new Thread(toFlush::close));
         }
 
         MatchGenerator generator = new MatchGenerator(

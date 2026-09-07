@@ -410,7 +410,11 @@ def _payload_from_json(
                 Contribution(
                     entity=c["entity"],
                     pt_boost=tuple(c.get("pt_boost", (0, 0))),
-                    keywords=tuple(c.get("keywords", ())),
+                    # Same spelling rule as the overlay channel: Forge writes
+                    # "first strike", everything downstream reads first_strike.
+                    keywords=tuple(
+                        normalize_keyword(k) for k in c.get("keywords", ())
+                    ),
                     types=tuple(c.get("types", ())),
                     colors=tuple(c.get("colors", ())),
                     name=c.get("name"),
@@ -576,13 +580,72 @@ class ShardWriter:
             self._handle = None
 
 
+#: Both shard spellings. `.jsonl.gz` is what the writer produces; plain
+#: `.jsonl` is read so a corpus collected before compression keeps working,
+#: because the corpus is append-only and cannot be regenerated.
+SHARD_GLOBS: tuple[str, ...] = ("*.jsonl.gz", "*.jsonl")
+
+
+def iter_shard_lines(path: Path) -> Iterator[str]:
+    """Every complete line of a shard, compressed or not.
+
+    A compressed shard is a concatenation of gzip members, one per block of
+    records. Every member stands alone, so a worker killed mid-write truncates
+    the last one and leaves the rest readable — and a truncated member raises
+    on read, which is where the stream stops. That is the same rule a plain
+    shard's trailing partial line follows, applied a block at a time.
+    """
+    path = Path(path)
+    if path.suffix != ".gz":
+        yield from iter_complete_lines(path)
+        return
+
+    import gzip
+    import zlib
+
+    pending = ""
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as handle:
+            for line in handle:
+                if line.endswith("\n"):
+                    if pending:
+                        line = pending + line
+                        pending = ""
+                    yield line
+                else:
+                    # No newline: either the file ends here or the member was
+                    # cut short. Held back rather than yielded, because half a
+                    # record parses as nothing.
+                    pending = line
+    except (EOFError, gzip.BadGzipFile, zlib.error):
+        # The final member was truncated by a killed worker. Everything before
+        # it has already been yielded.
+        return
+
+
 def read_shard(path: Path) -> Iterator[EffectRecord]:
     """Yield every complete record in one shard; skip a trailing partial line."""
-    for line in iter_complete_lines(Path(path)):
+    for line in iter_shard_lines(Path(path)):
         stripped = line.strip()
         if not stripped:
             continue
         yield record_from_dict(json.loads(stripped))
+
+
+def iter_shards(directory: Path) -> list[Path]:
+    """Every shard under ``directory``, in name order, either spelling."""
+    directory = Path(directory)
+    if not directory.is_dir():
+        return []
+    found: list[Path] = []
+    for pattern in SHARD_GLOBS:
+        found.extend(
+            path for path in directory.glob(pattern)
+            # "*.jsonl" also matches "x.jsonl.gz" on some platforms; the
+            # compressed pattern already claimed those.
+            if path.suffix != ".gz" or pattern.endswith(".gz")
+        )
+    return sorted(set(found))
 
 
 def read_records(directory: Path) -> Iterator[EffectRecord]:
@@ -591,10 +654,7 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
     A missing directory yields nothing rather than raising: a collection run
     that has not started yet is an empty corpus, not an error.
     """
-    directory = Path(directory)
-    if not directory.is_dir():
-        return
-    for shard in sorted(directory.glob("*.jsonl")):
+    for shard in iter_shards(directory):
         yield from read_shard(shard)
 
 
@@ -605,10 +665,14 @@ def count_records(directory: Path) -> int:
     and building a record dataclass per line to arrive at it would parse the
     whole corpus's JSON — the variant collector asks for this before every run
     just to size its budget.
+
+    A compressed shard still has to be decompressed to be counted, so the saving
+    there is only the JSON parse.
     """
-    directory = Path(directory)
-    if not directory.is_dir():
-        return 0
-    return sum(
-        count_complete_lines(shard) for shard in sorted(directory.glob("*.jsonl"))
-    )
+    total = 0
+    for shard in iter_shards(directory):
+        if shard.suffix == ".gz":
+            total += sum(1 for line in iter_shard_lines(shard) if line.strip())
+        else:
+            total += count_complete_lines(shard)
+    return total
