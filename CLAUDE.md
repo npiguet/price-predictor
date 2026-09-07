@@ -22,11 +22,12 @@ cd forge-connector && mvn package -DskipTests
 
 ## Architecture
 
-Three Python packages live under `src/`, each laid out in hexagonal (ports-and-adapters) style: `domain` → `application` → `infrastructure`. Per-package detail lives next to the code and loads when you work there:
+Four Python packages live under `src/`, each laid out in hexagonal (ports-and-adapters) style: `domain` → `application` → `infrastructure`. Per-package detail lives next to the code and loads when you work there:
 
 - `src/price_predictor/CLAUDE.md` — price prediction (sklearn + transformer, `convert`, `vocabulary`, `serve`).
 - `src/sealed/CLAUDE.md` — sealed pipeline (encoder, scorer, picker, self-play match generation) and its file formats.
 - `src/draft/CLAUDE.md` — draft agent (gen-1 imitation, gen-2 RL, gen-3 online GRPO) and `drafts.jsonl`.
+- `src/effects/CLAUDE.md` — ability effect model (per-ability embedding cache, state-conditional effect head, effect-record corpus) and its three gates.
 
 ### `forge-connector` — Java Maven module
 
@@ -50,6 +51,8 @@ These workers import `forge-game` / `forge-core` from the sibling `../forge` che
 
 `draft` **imports from** `sealed` and `price_predictor` (scorer, picker, greedy builder, `deck_assembly`, `score_decks`, `ConvertedCardLocator`, card-embedding layout, `torch_checkpoint`, `torch_training`, `forge_jvm` worker helpers) — never the reverse. `draft` adds only the genuinely-new logic (booster→state geometry, typed-token state, the two-headed model, the Java draft worker).
 
+`effects` **imports from** `sealed` and `price_predictor` too, over a surface FR-002 declares explicitly and an import-direction test asserts: the tokenizer and `tokenizer_store`, `build_vocabulary`, `forge_jvm`, `torch_checkpoint`, `torch_training.clip_per_group`, `append_only`, `ridge_probes`, `compute_basic_lands`, `ConvertedCardLocator`, `card_embedding_layout`, `embedding_store` — and **nothing from `sealed.application`**, which stays disjoint (`train-scorer` Phase A is re-run as a subprocess rather than imported).
+
 ## Corpus file formats
 
 Append-only data contracts spanning the Java writers and the Python readers — no single source file teaches a whole one, and a mismatch silently corrupts a corpus that cannot easily be rebuilt.
@@ -62,6 +65,12 @@ Cards-win-rates file format (`output/sealed/cards-win-rates.txt`): overwritten b
 
 Draft-games file format (`output/draft/draft-games.txt`): the **same ten-field match-outcome format** as `output/sealed/match-outcomes.txt`, written by `python -m draft play-draft-games`, one row per match. `method_A`/`method_B` carry the two seats' draft-agent labels (`gen4`, `forge-full`, …) in the role the sealed pipeline gives a `build-decks --label`; a seat whose deck was rebuilt by Forge's own builder under `--forge-native-fraction` reports as `forge-native`. Note `forge-full` is a *drafting* mix label — full-strength Forge picks, against `forge-r30`/`forge-r100` — and its deck was built by this project's picker/SA builder, because `generate-draft-data` never calls a Forge deck builder; `forge-native` is that same drafting with Forge's `BoosterDeckBuilder` building too (the drafted-pool builder, handed the colours the seat committed to during the draft — **not** `SealedDeckBuilder`, which re-derives colours from the finished pool), so it alone is Forge end to end. `run_id` is the `play-draft-games` invocation. Both decks of a row were drafted in the same pod, though the row does not record which — pod identity has no field in this format. Kept in a **separate file** from the sealed corpus on purpose: these are draft-pool matches, and `train-scorer`/`train-encoder` must not read them. Tallied by `python scripts/analyze_winrates.py output/draft/draft-games.txt`.
 
+Effect-record shard format (`output/effects/records/{run_id}.{worker}.jsonl`): one self-contained JSON record per line, append-only; readers load every `*.jsonl` in the directory and tolerate a trailing partial final line. One shard **per worker** rather than one shared file, because records are far larger than a match-outcome row and concurrent appends would interleave mid-record. Envelope: `record_id` (`{run_id}.{worker}.{counter}`), `run_id`, `timestamp` (ISO 8601 UTC), `game_id` (`{run_id}.{worker}.{game counter}` — the join key for a checkpoint's recorded split), `kind` (`resolution` | `rewrite` | `continuous` | `combat` | `trigger` | `playability`), `moment` (resolution kind only), `subkind` (playability kind only), `link_id` (joins a resolution pair; absent where a half has no partner), `mirror_of`, `variant_of`, `mode` (`patched` | `degraded`), `interventional` / `fork` / `synthetic`, `actor_player`, `ability` (provenance keys; absent for `combat` and `playability`), `state`, `payload`. Both ids carry the worker index because workers count independently. **`mode`, `interventional`, `fork` and `synthetic` are collection metadata and never reach the model.** The schema is frozen before stage-one collection: later stages make new `kind` values reachable and add snapshot tiers but never redefine a field, enforced by contract tests rather than a version field. Full schema in `specs/023-ability-effect-model/contracts/record-schema.md`.
+
+Provenance sidecar format (`<name>.provenance.json`, beside each converted `.txt`, written by `python -m price_predictor convert`): the join between runtime Forge trait objects and converted ability lines. Converted-line ordinals cannot be the key — the converter runs one per-face bracket counter across five mixed line kinds, emits keyword-derived lines first though Forge appends them last, and merges and deduplicates relative to the runtime objects — so the key is printed provenance `(script_file, face, trait_kind, index_within_kind)`, the script file including its tree (`cardsfolder` is letter-keyed, `tokenscripts` and `variant-scripts` are flat, and one filename occurs in more than one). Per rendered line: the provenance key list (**several** where the line merged several traits), sub-ability index paths, the trait's script API type, parameter keys and script text, and prose role spans tagged `cost` | `effect` | `trigger-condition` | `target-spec`. A trait the converter deduplicated away maps to **no** line and appears in `dropped_keys` — still live at runtime, so a record naming it is kept with nothing to join to. A key in neither list **fails loudly**: the sidecar does not describe the card the record was collected against. Row *i* of the ability cache corresponds to `lines[i]`.
+
+Ability cache format (`output/effects/abilities/<tree>/…`): one `.npz` per source file holding a `float32` array of shape `(n_lines, e_dim)` under the key `e`, row-aligned with that source's sidecar (rendered lines for a converted tree, script lines for the variant tree). Kept **outside** `output/cardsfolder/` because the sealed pipeline's `encode-cards --clean` deletes every `.npz` under that tree. A `--variant` run writes `<name>.{variant}.npz` beside the shipping `<name>.npz` rather than over it.
+
 Pool file format (`output/sealed/pools/*/pools.txt`): one pool per line, `SET_CODE;Card1|Card2|...|CardN`. The set-code prefix lets downstream tools (`build-decks`, self-play `match-outcomes`) honor same-set constraints.
 
 Generated-decks file format (`output/sealed/generated-decks.txt`): one finished 40-card deck per line, `LABEL;SET_CODE;Card1|Card2|...|Card40`. `LABEL` is the value passed to `build-decks --label` and is recorded as the `method_A` / `method_B` tag whenever this deck is sampled into a self-play match. Concatenating multiple generated-decks files with different labels into one self-play corpus is supported.
@@ -70,12 +79,18 @@ Drafts file format (`output/draft/drafts.jsonl`): one self-contained JSON record
 
 ## Model artifact layout
 
-Checkpoints live under `models/{price-predictor,sealed,draft}/`; every trainer writes a `{timestamp}` file plus a rolling `latest`. Best-checkpoint selection differs per model — scorer by val accuracy, picker by val reward, draft agent by val loss (gen-3 online: by anchor margin). See each package's `CLAUDE.md` and its store module.
+Checkpoints live under `models/{price-predictor,sealed,draft,effects}/`; every trainer writes a `{timestamp}` file plus a rolling `latest`. Best-checkpoint selection differs per model — scorer by val accuracy, picker by val reward, draft agent by val loss (gen-3 online: by anchor margin), effect model by card-disjoint val loss. See each package's `CLAUDE.md` and its store module.
+
+An effects checkpoint additionally records **the split it trained against** — the held-out card list and both strata's `game_id` sets, enumerated rather than derived — plus the vocabulary and keyword-definition paths and their content hashes, and the keyword withheld from training. `evaluate-effect-model` reads all of it and recomputes none of it, because the corpus is append-only: a recomputed split would score the gates partly on games the model trained on.
 
 Inputs the code expects to find on disk:
 - `resources/AllPrintings.json`, `resources/AllPricesToday.json` — MTGJSON dumps.
 - `../forge/forge-gui/res/cardsfolder/` — Forge card scripts (source for `convert`).
-- `output/cardsfolder/` — converted card text files, each paired with a `.npz` after `encode-cards` runs.
+- `../forge/forge-gui/res/tokenscripts/` — Forge token scripts, converted to `output/tokenscripts/` by the same `convert` run. Kept out of the card tree because converted token and card filenames collide and the sealed pipeline reads that tree as its card corpus.
+- `output/cardsfolder/` — converted card text files, each paired with a `.npz` after `encode-cards` runs and a `.provenance.json` written by `convert`.
+- `output/effects/records/` — append-only effect-record shards from `sealed match-outcomes --effect-records`; the input to `effects train-effect-model`.
+- `output/effects/keyword-definitions.json` — Forge's keyword table, from `effects extract-keyword-definitions`; scanned by `build-vocab` and read by the encoder's keyword expansion.
+- `output/effects/abilities/` — the per-ability embedding cache from `effects encode-abilities`.
 - `output/sealed/pools/{set}/pools.txt` or `output/sealed/pools/pools.txt` — generated sealed pools (`SET_CODE;Card1|...` per line).
 - `output/sealed/generated-decks.txt` — scorer-built 40-card decks from `build-decks` (`LABEL;SET_CODE;Card1|...|Card40` per line); input to `match-outcomes --side-a-decks` / `--side-b-decks`.
 - `output/sealed/match-outcomes.txt` — append-only training data for the scorer.
