@@ -25,8 +25,11 @@ Now writes three things instead of one: converted card text under `output/cardsf
 `<name>.provenance.json` beside each of them, and converted token scripts under `output/tokenscripts/`
 with sidecars of their own.
 
-**Check**: a card whose converted file has N ability lines has a sidecar with N `lines` entries, and a
-merged line carries more than one provenance key.
+**Checks**: every converted `.txt` has a sidecar beside it, every sidecar line's `line_index` points
+inside the file it describes, and a card whose converter deduplicated a trait lists that trait in
+`dropped_keys`. A sub-ability or mode rendered as its own line carries no key — it is reached through
+its parent's `sub_ability_links` — so a line with an empty `provenance` is expected rather than a
+fault.
 
 ## 2. Keyword definitions and vocabulary
 

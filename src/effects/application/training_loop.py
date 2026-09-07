@@ -26,6 +26,10 @@ from pathlib import Path
 
 import torch
 
+from effects.application.surface_batching import (
+    IDENTITY_TABLE_SIZE,
+    SurfaceBatcher,
+)
 from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
@@ -42,23 +46,17 @@ from effects.application.train_effect_model import (
     sampling_class,
     variant_masks,
     warmup_steps,
-    withheld_keyword_rules,
 )
 from effects.domain.ability_encoder import (
     AbilityEncoder,
     AbilityEncoderConfig,
-    collate_lines,
-    encoding_text,
-    prepare_line,
     surface_of,
 )
 from effects.domain.ability_tokenizer import AbilityTokenizer
 from effects.domain.effect_head_input import (
     SlotKind,
     act_features,
-    build_effect_head_input,
     card_features,
-    continuous_masked_keywords,
     global_features,
     player_features,
 )
@@ -66,10 +64,8 @@ from effects.domain.effect_model import (
     EffectModel,
     EffectModelConfig,
     active_fields,
-    collate_surfaces,
     entity_target_tensors,
     per_entity_loss,
-    scatter_e_rows,
 )
 from effects.domain.effect_targets import derive_targets
 from effects.infrastructure.effect_model_store import (
@@ -78,27 +74,12 @@ from effects.infrastructure.effect_model_store import (
     SplitProvenance,
     content_hash,
 )
+from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
 from effects.infrastructure.sidecar_io import SidecarCache
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
-
-#: Rows in the ``identity`` baseline's free-embedding table. Ample for the
-#: corpus's distinct ability texts, so collisions stay rare.
-IDENTITY_TABLE_SIZE = 1 << 17
-
-
-def text_slot(text: str, size: int) -> int:
-    """A stable table row for an ability text.
-
-    ``hash()`` is salted per process and would give the baseline a different
-    table on every run, so this hashes the bytes explicitly.
-    """
-    import hashlib
-
-    digest = hashlib.sha256(text.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], "big") % size
 
 
 class TrainingLoop:
@@ -177,152 +158,21 @@ class TrainingLoop:
                 break
         return widths
 
-    # ── the surface ─────────────────────────────────────────────────────
-
-    def _encode_texts(
-        self, texts: dict[str, object], encoder: AbilityEncoder,
-        tokenizer: AbilityTokenizer,
-    ) -> tuple[dict[str, int], torch.Tensor | None]:
-        """Encode each unique ability text once for the whole batch.
-
-        This is what grouping a batch by game buys: the abilities on one board
-        recur across that game's records, so one forward pass serves many.
-
-        Returns ``(row_of_text, matrix)`` rather than per-text vectors: the
-        surface carries row indices and the vectors stay on the device in one
-        tensor, so the gradient reaches the encoder and no ability vector makes
-        a host round trip.
-
-        Two baselines never reach the encoder at all. ``identity`` reads a free
-        vector per text — the control for "is the encoder reading the words, or
-        just memorizing which ability this is" — and ``taxonomy`` reads the
-        sidecar's API type and parameter keys, the control for "is it reading
-        more than the script's shape".
-        """
-        if not texts:
-            return {}, None
-        ordered = sorted(texts)
-        rows = {text: row for row, text in enumerate(ordered)}
-        if self.masks.identity_embedding:
-            return rows, self._identity_vectors(ordered)
-        if self.masks.taxonomy_embedding:
-            return rows, self._taxonomy_vectors(ordered, texts)
-
-        hidden_keywords, _force = withheld_keyword_rules(
-            self.config.withhold_keyword
-        )
-        lines = []
-        for text in ordered:
-            tokens = tokenizer.tokenize(text)
-            tokens = [t for t in tokens if t.text not in hidden_keywords]
-            tokens = tokenizer.expand_keywords(
-                tokens, probability=self.config.keyword_expand_p, rng=self.rng,
-            )
-            lines.append(prepare_line(tokenizer, tokens))
-        batch = collate_lines(lines, tokenizer.pad_id)
-        batch = {k: v.to(self.device) for k, v in batch.items()}
-        vectors, _hidden = encoder(**batch)
-        return rows, vectors
-
-    def _identity_vectors(self, ordered: list[str]) -> torch.Tensor:
-        """A free learned vector per ability text, keyed by hash.
-
-        Hashed into a fixed table rather than indexed by a corpus-wide text list,
-        so the baseline needs no pass over the corpus to number its texts and a
-        text unseen at that pass cannot break it. Collisions cost the baseline a
-        little, and the baseline is the thing the real model must beat.
-        """
-        index = torch.tensor(
-            [text_slot(text, IDENTITY_TABLE_SIZE) for text in ordered],
-            dtype=torch.long, device=self.device,
-        )
-        return self.identity_table(index)
-
-    def _taxonomy_vectors(
-        self, ordered: list[str], lines: dict[str, object],
-    ) -> torch.Tensor:
-        """The taxonomy baseline's stand-in for an encoded ``e``.
-
-        Deterministic and unlearned — the same hash embedding the cache writes
-        for this variant, so the trained baseline and its cache agree.
-        """
-        import numpy as np
-
-        from effects.application.encode_abilities import taxonomy_vector
-
-        rows = np.stack([
-            taxonomy_vector(lines[text], self.config.e_dim) for text in ordered
-        ])
-        return torch.from_numpy(rows).to(self.device)
-
-    def _text_of(self, key, sidecars) -> str | None:
-        """The text one ability key is encoded from, on the run's surface.
-
-        The single definition of it. Two of these that disagree — one keying the
-        batch's encoding by prose and the other looking it up by script — miss
-        every time, and the effect head then trains on an all-zero ``e`` while
-        every loss still falls.
-        """
-        try:
-            line = sidecars.line_for(key)
-        except KeyError:
-            return None
-        if line is None:
-            return None
-        text = encoding_text(line, sidecars.prose_for(key), self.surface)
-        return text or (
-            f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
-        )
-
-    def _batch_texts(self, records, sidecars) -> dict[str, object]:
-        """Every ability text this batch's surfaces will reference, to its line.
-
-        The acting line of each record **and** every ability on every entity in
-        its state: the context abilities are the board the head reads, and a
-        text left out of the encode reaches the model as a zero vector.
-
-        The line comes along because the ``taxonomy`` baseline reads the
-        sidecar's script facts rather than the text.
-        """
-        texts: dict[str, object] = {}
-
-        def note(key) -> str | None:
-            try:
-                line = sidecars.line_for(key)
-            except KeyError:
-                return None
-            if line is None:
-                return None
-            text = self._text_of(key, sidecars)
-            if text is not None:
-                texts.setdefault(text, line)
-            return text
-
-        for record in records:
-            for key in record.ability or ():
-                if note(key) is not None:
-                    break
-            for entity in record.state.entities:
-                for key in (*entity.printed, *entity.granted_attached):
-                    note(key)
-        return texts
-
-    def _surface_for(self, record, rows: dict[str, int], sidecars, e_dim: int):
-        """One record's token surface, with the variant's masks applied."""
-
-        def e_for(key):
-            if self.masks.zero_e:
-                return None
-            text = self._text_of(key, sidecars)
-            return None if text is None else rows.get(text)
-
-        return build_effect_head_input(
-            record,
-            e_for=e_for,
-            e_dim=e_dim,
+    def _batcher(self, tokenizer, sidecars, widths) -> SurfaceBatcher:
+        """The records-to-inputs pipeline, shared with the gate-1 evaluator."""
+        return SurfaceBatcher(
+            tokenizer=tokenizer,
+            sidecars=sidecars,
+            masks=self.masks,
+            surface=self.surface,
+            e_dim=self.config.e_dim,
+            widths=widths,
+            device=self.device,
+            withhold_keyword=self.config.withhold_keyword,
+            keyword_expand_p=self.config.keyword_expand_p,
             context_dropout=self.config.context_dropout,
             rng=self.rng,
-            masked_keywords=continuous_masked_keywords(record),
+            identity_table=self.identity_table,
         )
 
     # ── stepping ────────────────────────────────────────────────────────
@@ -331,41 +181,9 @@ class TrainingLoop:
         records = plan.records
         if not records:
             return None
-        rows, matrix = self._encode_texts(
-            self._batch_texts(records, sidecars), encoder, tokenizer,
+        batch, surfaces = self._batcher(tokenizer, sidecars, widths).build(
+            records, encoder,
         )
-        surfaces = [
-            self._surface_for(record, rows, sidecars, self.config.e_dim)
-            for record in records
-        ]
-        batch = collate_surfaces(
-            surfaces, e_dim=self.config.e_dim, widths=widths,
-        )
-        if self.masks.zero_state:
-            # The average-effect control: no board at all. Zeroed here rather
-            # than left out of the surface so the slots, and therefore the
-            # per-entity targets, keep their shape.
-            for kind in (SlotKind.PLAYER, SlotKind.CARD):
-                batch["slot_features"][kind] = torch.zeros_like(
-                    batch["slot_features"][kind]
-                )
-        batch = {
-            "slot_features": {
-                k: v.to(self.device) for k, v in batch["slot_features"].items()
-            },
-            **{
-                k: v.to(self.device)
-                for k, v in batch.items() if k != "slot_features"
-            },
-        }
-        e_rows = batch.pop("e_rows")
-        if matrix is not None:
-            # The one place the encoder's output enters the head. Done here
-            # rather than in collate because the vectors must stay on the
-            # device and attached to the graph.
-            batch["e_vectors"] = scatter_e_rows(
-                batch["e_vectors"], e_rows, matrix,
-            )
         hidden = model(**batch)
         outputs = model.per_entity(hidden)
 
@@ -515,6 +333,13 @@ class TrainingLoop:
                     variant=self.config.variant,
                     best_val_loss=stopper.best,
                     epoch=epoch,
+                    # The identity baseline's e lives in this table rather than
+                    # in the encoder, so a checkpoint without it reloads as
+                    # random vectors and hands gate 1 a margin nobody earned.
+                    extra=(
+                        {IDENTITY_TABLE_KEY: self.identity_table.state_dict()}
+                        if self.identity_table is not None else {}
+                    ),
                 ))
             if stopper.should_stop:
                 logger.info(

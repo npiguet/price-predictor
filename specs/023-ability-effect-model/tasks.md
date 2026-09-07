@@ -196,7 +196,7 @@ verdict. Nothing in `../forge` has been modified.
 - [X] T096 [US1] Make checks whose records do not exist yet skip rather than fail: matched real-vs-fork and probe-diff wait for US3, the role-polarity probe for US2
 - [X] T097 [US1] Wire every US1 subcommand into `src/effects/infrastructure/cli.py`
 - [X] T098 [US1] Write `src/effects/CLAUDE.md` covering the US1 subcommands and artifacts, and update the root `CLAUDE.md` (it says "Three Python packages live under `src/`" and carries the per-corpus file-format contracts) with the effect-record, sidecar, and ability-cache formats. Constitution Quality Gate: documentation ships in the same change as the workflow, so the MVP is not documentation-free
-- [ ] T099 [US1] Run [quickstart.md](quickstart.md) end to end and confirm each stated check, including that the sealed corpora are unaffected by the flag
+- [X] T099 [US1] Run [quickstart.md](quickstart.md) end to end and confirm each stated check, including that the sealed corpora are unaffected by the flag
 
 **Checkpoint**: US1 delivers a populated embedding cache and all three gate verdicts against stock
 Forge. **Gate 2's per-keyword output decides whether US3 builds probe machinery at all.**

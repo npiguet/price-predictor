@@ -176,6 +176,15 @@ def filter_training_only(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: Payload keys the checkpoint's own fields already carry; everything else in a
+#: loaded payload is a variant's ``extra``. ``model_config`` is written by
+#: ``save_checkpoint`` itself.
+_RESERVED_PAYLOAD_KEYS = frozenset({
+    "encoder_state_dict", "model_state_dict", "encoder_config", "model_config",
+    "provenance", "variant", "best_val_loss", "epoch", "config",
+})
+
+
 class EffectModelStore:
     """Reads and writes ``{timestamp}.pt`` plus a rolling ``latest.pt``."""
 
@@ -230,6 +239,14 @@ class EffectModelStore:
             variant=payload.get("variant", VARIANT_FULL),
             best_val_loss=payload.get("best_val_loss", float("inf")),
             epoch=payload.get("epoch", 0),
+            # Whatever a variant needed to save beyond the two state dicts —
+            # the identity baseline's embedding table is the one that exists.
+            # Round-tripped rather than dropped: a baseline reloaded without it
+            # scores on random vectors.
+            extra={
+                key: value for key, value in payload.items()
+                if key not in _RESERVED_PAYLOAD_KEYS
+            },
         )
 
 

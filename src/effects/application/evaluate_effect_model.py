@@ -30,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
+from effects.application.gate_one import GateOneMetrics
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     MIN_DIRECTION_AGREEMENT,
@@ -90,13 +91,50 @@ class CheckResult:
 # ── gate 1: the identity baseline ───────────────────────────────────────
 
 
-@dataclass(frozen=True, slots=True)
-class GateOneMetrics:
-    """One model's scores on the card-disjoint split's unique-text stratum."""
+def run_gate_one(
+    config, main, identity, *, vocab_path: Path, keyword_path: Path,
+) -> CheckResult:
+    """Score both models on the split's unique-text stratum and compare.
 
-    affected_gate_f1: float
-    zone_outcome_accuracy: float
-    mean_poisson_deviance: float
+    Loading two models and running the corpus twice is the expensive part of an
+    evaluation, so it happens only when the baseline is actually supplied.
+    """
+    from effects.application.gate_one import (
+        measure,
+        training_texts,
+        unique_text_records,
+    )
+    from effects.infrastructure.model_runner import (
+        load_runnable,
+        stratum_records,
+    )
+
+    records, training, message = stratum_records(config, main)
+    if not records:
+        return CheckResult("gate-1", CheckStatus.SKIPPED, message)
+
+    scores = {}
+    for name, checkpoint in (("model", main), ("identity", identity)):
+        encoder, model, batcher, fields = load_runnable(
+            config, checkpoint,
+            vocab_path=vocab_path, keyword_path=keyword_path,
+            records=records,
+        )
+        stratum = unique_text_records(
+            records, batcher, seen=training_texts(training, batcher),
+        )
+        if not stratum:
+            return CheckResult(
+                "gate-1", CheckStatus.SKIPPED,
+                "no resolution record in the card-disjoint split has an "
+                "ability text absent from training; the identity baseline "
+                "could recall every text in it, so the comparison would "
+                "measure memorization on both sides rather than reading",
+            )
+        scores[name] = measure(
+            stratum, encoder, model, batcher, fields=fields,
+        )
+    return evaluate_gate_one(scores["model"], scores["identity"])
 
 
 def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
@@ -691,6 +729,11 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
             "gate-1", CheckStatus.SKIPPED,
             "needs --variant-checkpoint identity=PATH: gate 1 is defined "
             "against that baseline",
+        ))
+    else:
+        report.add(run_gate_one(
+            config, main, variants["identity"],
+            vocab_path=vocab_path, keyword_path=keyword_path,
         ))
 
     # ── gate 2: per keyword, routing only ──
