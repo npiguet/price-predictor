@@ -377,6 +377,16 @@ class EffectModel(nn.Module):
 # ── losses (FR-080, FR-081, FR-082, FR-085) ─────────────────────────────
 
 
+def per_entity_fields_of_type(*types: FieldType) -> tuple[FieldSpec, ...]:
+    """Every per-entity field of one of ``types``.
+
+    Gate 1's deviance is read over the count-valued ones, and a caller that
+    enumerated them by name would drift the moment a field was added.
+    """
+    wanted = set(types)
+    return tuple(spec for spec in PER_ENTITY_FIELDS if spec.type in wanted)
+
+
 def active_fields(
     *, present_classes: frozenset[str], step: int, curriculum_step: int,
 ) -> tuple[FieldSpec, ...]:
