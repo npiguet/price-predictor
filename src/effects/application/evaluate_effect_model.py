@@ -429,6 +429,77 @@ def evaluate_role_polarity(
     )
 
 
+# ── the fork checks (FR-042, FR-116) ────────────────────────────────────
+
+
+def pair_forks(records: list) -> list[tuple]:
+    """Join each fork record to the real record it mirrors.
+
+    The pairing lives in ``mirror_of`` rather than being reconstructed from
+    board state, because two combats on one turn can look identical and the
+    pairing has to be exact for the difference to mean anything.
+    """
+    by_id = {record.record_id: record for record in records}
+    pairs = []
+    for record in records:
+        if record.fork and record.mirror_of:
+            real = by_id.get(record.mirror_of)
+            if real is not None:
+                pairs.append((real, record))
+    return pairs
+
+
+def evaluate_matched_forks(
+    pairs: list[tuple], agreements: list[bool],
+) -> CheckResult:
+    """How often the model's predictions agree across a matched pair.
+
+    The real-versus-fork difference is computed **here**, at evaluation time,
+    and never becomes a training target (FR-042). A model trained on its own
+    disagreements would learn to reproduce its errors rather than correct them.
+    """
+    if not pairs:
+        return skip_unavailable("matched-real-vs-fork")
+    if not agreements:
+        return CheckResult(
+            "matched-real-vs-fork", CheckStatus.REPORTED,
+            f"{len(pairs)} matched pairs, none scored",
+        )
+    rate = sum(agreements) / len(agreements)
+    return CheckResult(
+        "matched-real-vs-fork", CheckStatus.REPORTED,
+        f"predictions agree on {rate:.1%} of {len(pairs)} matched pairs",
+        {"agreement": rate, "pairs": float(len(pairs))},
+    )
+
+
+def evaluate_probe_diff(
+    verdicts_by_keyword: dict[str, KeywordVerdict],
+    probed_keywords: tuple[str, ...],
+) -> CheckResult:
+    """Gate 2's canary, re-run over the real-and-fork combat pairs.
+
+    Only for keywords a probe was actually taken for: the point is to check
+    whether an isolated counterfactual agrees with the model-side perturbation
+    gate 2 used, and a keyword with no probe has nothing to compare against.
+    """
+    if not probed_keywords:
+        return skip_unavailable("probe-diff")
+    rendered = []
+    for keyword in probed_keywords:
+        verdict = verdicts_by_keyword.get(keyword)
+        if verdict is None:
+            continue
+        rendered.append(
+            f"{keyword} {verdict.direction_agreement:.1%} over "
+            f"{verdict.qualifying_records} pairs"
+        )
+    return CheckResult(
+        "probe-diff", CheckStatus.REPORTED,
+        "; ".join(rendered) if rendered else "no probed keyword had pairs",
+    )
+
+
 # ── the report ──────────────────────────────────────────────────────────
 
 
