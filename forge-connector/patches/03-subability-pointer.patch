@@ -1,0 +1,54 @@
+Effect-record hook 3: the threaded currently-resolving-sub-ability pointer.
+
+An ability's effect is a chain of sub-abilities: draw a card, then discard one,
+then put a counter. Attributing all three outcomes to the root line is coarse
+enough to hide which clause did what — and "put a counter" and "draw a card" are
+exactly the distinction the per-entity head is being taught.
+
+This hook threads a pointer to the sub-ability currently resolving, so an event
+arriving during resolution can name the clause that produced it. The sidecar
+records each trait's sub-ability index paths, and an event attributed to a link
+the sidecar does not map falls back to the root line rather than being dropped —
+so attribution is finer where the pointer is available and never lossy where it
+is not.
+
+Per-thread, and restored in a `finally`, because a sub-ability can itself
+resolve another.
+
+--- a/forge-game/src/main/java/forge/game/ability/AbilityUtils.java
++++ b/forge-game/src/main/java/forge/game/ability/AbilityUtils.java
+@@ -70,6 +70,27 @@ public class AbilityUtils {
+
++    // ── effect-record instrumentation (price-predictor spec 023) ──────────
++    //
++    // The sub-ability currently resolving on this thread, or null at the root.
++    // Read by effect-record collection to attribute an outcome to the clause
++    // that produced it rather than to the whole line.
++    private static final ThreadLocal<SpellAbility> EFFECT_RECORD_SUB_ABILITY =
++            new ThreadLocal<>();
++
++    /** The sub-ability currently resolving on this thread, or null. */
++    public static SpellAbility getEffectRecordSubAbility() {
++        return EFFECT_RECORD_SUB_ABILITY.get();
++    }
++
++    private static void setEffectRecordSubAbility(final SpellAbility sa) {
++        if (sa == null) {
++            EFFECT_RECORD_SUB_ABILITY.remove();
++        } else {
++            EFFECT_RECORD_SUB_ABILITY.set(sa);
++        }
++    }
++
+     public static void resolve(final SpellAbility sa) {
+-        resolveApiAbility(sa, sa.getActivatingPlayer().getGame());
++        final SpellAbility previous = EFFECT_RECORD_SUB_ABILITY.get();
++        setEffectRecordSubAbility(sa);
++        try {
++            resolveApiAbility(sa, sa.getActivatingPlayer().getGame());
++        } finally {
++            // Restored rather than cleared: a sub-ability can resolve another,
++            // and clearing would lose the enclosing clause on the way back up.
++            setEffectRecordSubAbility(previous);
++        }
+     }
