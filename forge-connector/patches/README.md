@@ -56,6 +56,8 @@ and the worker prints the detected mode at startup.
 | `ReplacementHandler` | listener around `executeReplacement` (`setEffectRecordListener`) | `rewrite` records |
 | `AbilityUtils` | per-thread pointer to the resolving sub-ability (`getEffectRecordSubAbility`) | per-clause attribution |
 | `AiController` | rules-level candidate verdicts (`setEffectRecordPlayabilityListener`) | `playability` records |
+| `AbilityManaPart` | listener where produced mana reaches the pool (`setEffectRecordManaListener`) | mana records, and with them the role-polarity probe |
+| `Card` | keyed accessors for the type and colour layer tables | the `continuous` record's type and colour channels |
 | `GameAction.destroy` | `AbilityKey.Cause` in the `Destroyed` run parameters | a destroy record can name what destroyed the permanent |
 
 The hook names are a contract with `PatchHooks` and `PatchedCollectors`, which look them up by string.
@@ -64,6 +66,11 @@ cost of building against stock Forge, and why the integration test asserts the m
 
 ## Not yet hooked
 
-`continuous` and mana records are still unreachable. The layer tables carry per-static attribution and
-`AbilityKey` carries the mana path, but nothing reads either yet: `PatchedCollectors` emits `rewrite`,
-`trigger` and `playability` only. A patched run therefore reaches six of the eight sampling classes.
+`playability-legality` is the one sampling class a patched run still misses. It is the legal attacker
+and blocker sets, which `AiAttackController` and `AiBlockController` compute and discard; nothing
+reads them, so a patched run reaches seven of the eight classes.
+
+The `continuous` record's type, colour and name channels are also still empty. The keyed accessors
+exist and the reader fills `pt_boost` and `keywords` from the P/T and keyword layers, which is where
+anthems and keyword grants live; types and colours need the applied change diffed against the base,
+which the flattened accessors make awkward and nobody has needed yet.

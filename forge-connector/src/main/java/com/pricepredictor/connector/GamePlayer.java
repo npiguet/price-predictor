@@ -128,6 +128,9 @@ public class GamePlayer {
                         game, effectRecords, gameId,
                         PatchedCollectors.CollectionCaps.defaults(), gameSeed++);
                 patched.install();
+                // Continuous effects are read off the layer tables at a phase
+                // boundary, which is the cheapest moment the board is stable.
+                game.subscribeToEvents(patched.phaseBridge());
             }
             try {
                 match.startGame(game); // blocks until game is finished

@@ -1,10 +1,20 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Table;
 import forge.game.Game;
+import forge.game.card.Card;
+import forge.game.keyword.KeywordInterface;
+import forge.game.keyword.KeywordsChange;
+import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
+import forge.game.zone.ZoneType;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +57,8 @@ public final class PatchedCollectors implements AutoCloseable {
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     private final List<String> installed = new ArrayList<>();
+    /** Static ability by layer-table id, resolved once per game. */
+    private final Map<Long, StaticAbility> staticsById = new HashMap<>();
     private final java.util.Random sampler;
 
     private long recordsWritten;
@@ -99,6 +111,25 @@ public final class PatchedCollectors implements AutoCloseable {
         return recordsWritten;
     }
 
+    /**
+     * Subscribes {@link #collectContinuous()} to the event bus.
+     *
+     * <p>A separate object rather than {@code @Subscribe} on the collector
+     * itself, because Forge's bus reflects over every public method of a
+     * subscriber and the collector's are the handler factories and the caps.
+     */
+    public final class PhaseBridge {
+        @com.google.common.eventbus.Subscribe
+        public void onPhase(forge.game.event.GameEventTurnPhase event) {
+            collectContinuous();
+        }
+    }
+
+    /** A bus subscriber that records continuous effects at each phase. */
+    public PhaseBridge phaseBridge() {
+        return new PhaseBridge();
+    }
+
     /** Hooks that were found and installed; empty on a stock checkout. */
     public List<String> installedHooks() {
         return List.copyOf(installed);
@@ -128,6 +159,11 @@ public final class PatchedCollectors implements AutoCloseable {
                 playabilityHandler())) {
             installed.add("playability");
         }
+        if (PatchHooks.install(
+                PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener",
+                manaHandler())) {
+            installed.add("mana");
+        }
         return installed.size();
     }
 
@@ -139,6 +175,8 @@ public final class PatchedCollectors implements AutoCloseable {
                 PatchHooks.TRIGGER_HANDLER, "setEffectRecordTriggerListener");
         PatchHooks.uninstall(
                 PatchHooks.AI_CONTROLLER, "setEffectRecordPlayabilityListener");
+        PatchHooks.uninstall(
+                PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener");
         installed.clear();
     }
 
@@ -264,6 +302,86 @@ public final class PatchedCollectors implements AutoCloseable {
     // ── mana records ────────────────────────────────────────────────────
 
     /**
+     * One resolution record per mana ability that produced mana.
+     *
+     * <p>A mana ability never uses the stack, so the bracket collector sees no
+     * cast and no resolution for it and the corpus has no effect half at all.
+     * That is what leaves the role-polarity probe unrunnable: paying {@code R}
+     * is observable from stage one, producing it is not.
+     */
+    private InvocationHandler manaHandler() {
+        return (proxy, method, args) -> {
+            if (!"onManaProduced".equals(method.getName()) || args == null
+                    || args.length < 3) {
+                return null;
+            }
+            SpellAbility ability = args[0] instanceof SpellAbility sa ? sa : null;
+            String produced = String.valueOf(args[2]);
+            if (ability == null || produced.isEmpty()) {
+                return null;
+            }
+            // Capped per unique text: a Mountain's tap ability resolves
+            // thousands of times a run and would otherwise be the corpus.
+            if (!allowManaRecord(manaAbilityText(ability, produced))) {
+                return null;
+            }
+            String player = args[1] instanceof Player p
+                    ? SnapshotBuilder.playerId(p) : activePlayerId();
+            EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
+                    .subject(player)
+                    .param("mana_by_color", manaByColor(produced));
+            emit(new EffectRecord(
+                    writer.nextRecordId(), writer.runId(),
+                    RecordShardWriter.timestamp(), gameId,
+                    EffectRecord.KIND_RESOLUTION, mode)
+                    .moment("resolution")
+                    .actor(player)
+                    .ability(keysOf(ability))
+                    .state(snapshots.toJson(null, List.of()))
+                    .payload("{\"events\":[" + event.toJson() + "]}"));
+            return null;
+        };
+    }
+
+    /**
+     * The cap's key: the ability, not the instance.
+     *
+     * <p>Every Mountain shares one text, so counting by text caps the whole
+     * class rather than each copy. The produced string rides along because a
+     * filter land producing {@code W} and the same land producing {@code U} are
+     * different observations of the same line.
+     */
+    private static String manaAbilityText(SpellAbility ability, String produced) {
+        Object api = ability.getApi();
+        return (api == null ? "?" : api.toString()) + "|"
+                + ability.getHostCard().getName() + "|" + produced;
+    }
+
+    /**
+     * Forge's produced-mana string as counts per colour letter.
+     *
+     * <p>Returned as a map rather than rendered here, because
+     * {@link EffectEvent#param} renders a map as a JSON object and a string as
+     * a JSON string — and the reader expects {@code {"B":1}}, not {@code "{...}"}.
+     */
+    static Map<String, Integer> manaByColor(String produced) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (String atom : produced.split(" ")) {
+            if (atom.isEmpty()) {
+                continue;
+            }
+            // A bare number is that many generic; anything else is one mana of
+            // the colour it names, "C" included.
+            if (atom.chars().allMatch(Character::isDigit)) {
+                counts.merge("C", Integer.parseInt(atom), Integer::sum);
+            } else {
+                counts.merge(atom.toUpperCase(java.util.Locale.ROOT), 1, Integer::sum);
+            }
+        }
+        return counts;
+    }
+
+    /**
      * Whether this mana ability may still be recorded (FR-037).
      *
      * <p>Counted per unique mana-ability text, per worker process: a basic
@@ -280,6 +398,157 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     // ── continuous records ──────────────────────────────────────────────
+
+    /**
+     * One record per static ability that is currently changing the board.
+     *
+     * <p>Called at a phase boundary, which is the cheapest moment the board is
+     * stable. The layer tables are keyed by (timestamp, applying static's id),
+     * so each entity's share of an effect is a read rather than an inference —
+     * an anthem's +1/+1 is recorded against the anthem, on each creature it
+     * touches, without diffing anything.
+     *
+     * <p>The snapshot a continuous record carries has the acting static's own
+     * contributions removed, because a model asked to predict the effect must
+     * not be handed a board that already contains it.
+     */
+    public void collectContinuous() {
+        if (mode == AttributionMode.DEGRADED) {
+            return;
+        }
+        Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            String entity = SnapshotBuilder.entityId(card);
+            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
+                    : card.getPTBoostTable().cellSet()) {
+                contribution(byStatic, cell.getColumnKey(), entity)
+                        .boost(cell.getValue().getLeft(), cell.getValue().getRight());
+            }
+            for (Table.Cell<Long, Long, KeywordsChange> cell
+                    : card.getChangedCardKeywords().cellSet()) {
+                Contribution into = contribution(byStatic, cell.getColumnKey(), entity);
+                for (KeywordInterface keyword : cell.getValue().getKeywords()) {
+                    into.keyword(keyword.getOriginal());
+                }
+            }
+        }
+
+        String boardHash = boardHash();
+        for (Map.Entry<Long, Map<String, Contribution>> entry : byStatic.entrySet()) {
+            // Id 0 is Forge's "no static" column: a temporary pump written by a
+            // resolving ability, which the resolution bracket already records.
+            if (entry.getKey() == 0L) {
+                continue;
+            }
+            StaticAbility source = staticById(entry.getKey());
+            if (source == null) {
+                continue;
+            }
+            String staticKey = String.valueOf(entry.getKey());
+            if (!allowContinuousRecord(staticKey, boardHash)) {
+                continue;
+            }
+            StringJoiner contributions = new StringJoiner(",", "[", "]");
+            for (Contribution contribution : entry.getValue().values()) {
+                contributions.add(contribution.toJson());
+            }
+            ProvenanceKey key = ProvenanceKey.of(source);
+            emit(new EffectRecord(
+                    writer.nextRecordId(), writer.runId(),
+                    RecordShardWriter.timestamp(), gameId,
+                    EffectRecord.KIND_CONTINUOUS, mode)
+                    .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
+                    .ability(key == null ? List.of() : List.of(key))
+                    .state(snapshots.toJson(null, List.of()))
+                    .payload("{\"contributions\":" + contributions
+                            + ",\"board_hash\":" + Json.string(boardHash) + "}"));
+        }
+    }
+
+    private static Contribution contribution(
+            Map<Long, Map<String, Contribution>> byStatic, Long staticId, String entity) {
+        return byStatic
+                .computeIfAbsent(staticId, id -> new LinkedHashMap<>())
+                .computeIfAbsent(entity, Contribution::new);
+    }
+
+    /**
+     * What the board looks like, for coalescing.
+     *
+     * <p>Names and computed power/toughness of everything in play. Two boards
+     * that hash the same produce the same contributions, so the second record
+     * would repeat the first exactly.
+     */
+    private String boardHash() {
+        StringBuilder shape = new StringBuilder();
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            shape.append(card.getId()).append(':').append(card.getName())
+                    .append(':').append(card.getNetPower())
+                    .append('/').append(card.getNetToughness()).append(';');
+        }
+        return Integer.toHexString(shape.toString().hashCode());
+    }
+
+    /**
+     * The static ability an id names, searched once per game and remembered.
+     *
+     * <p>The layer tables carry the id rather than the object, and nothing in
+     * the engine maps one back, so this walks what is in play. Cached because a
+     * phase boundary asks for the same handful of ids every time.
+     */
+    private StaticAbility staticById(Long id) {
+        if (staticsById.containsKey(id)) {
+            return staticsById.get(id);
+        }
+        StaticAbility found = null;
+        for (Card card : game.getCardsInGame()) {
+            for (StaticAbility candidate : card.getStaticAbilities()) {
+                if (candidate.getId() == id) {
+                    found = candidate;
+                    break;
+                }
+            }
+            if (found != null) {
+                break;
+            }
+        }
+        staticsById.put(id, found);
+        return found;
+    }
+
+    /** One entity's share of one static's effect, accumulated across layers. */
+    private static final class Contribution {
+        private final String entity;
+        private int power;
+        private int toughness;
+        private final Set<String> keywords = new LinkedHashSet<>();
+
+        Contribution(String entity) {
+            this.entity = entity;
+        }
+
+        void boost(int addPower, int addToughness) {
+            power += addPower;
+            toughness += addToughness;
+        }
+
+        void keyword(String keyword) {
+            if (keyword != null && !keyword.isEmpty()) {
+                keywords.add(keyword.toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+
+        String toJson() {
+            StringJoiner words = new StringJoiner(",", "[", "]");
+            for (String keyword : keywords) {
+                words.add(Json.string(keyword));
+            }
+            return "{\"entity\":" + Json.string(entity)
+                    + ",\"pt_boost\":[" + power + "," + toughness + "]"
+                    + ",\"keywords\":" + words
+                    + ",\"types\":[],\"colors\":[],\"name\":null}";
+        }
+    }
 
     /**
      * Whether a continuous record for this static on this board is new.
@@ -311,6 +580,14 @@ public final class PatchedCollectors implements AutoCloseable {
             event.param("cause", keys.toString());
         }
         return event;
+    }
+
+    private static List<ProvenanceKey> keysOf(SpellAbility ability) {
+        if (ability == null) {
+            return List.of();
+        }
+        ProvenanceKey key = ProvenanceKey.of(ability);
+        return key == null ? List.of() : List.of(key);
     }
 
     private String activePlayerId() {

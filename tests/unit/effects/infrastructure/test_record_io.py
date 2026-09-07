@@ -51,6 +51,7 @@ from effects.infrastructure.record_io import (
     ShardWriter,
     count_records,
     format_record_line,
+    iter_shards,
     read_records,
     read_shard,
     record_from_dict,
@@ -302,6 +303,95 @@ class TestShardDirectory:
             with ShardWriter(tmp_path, "run", worker) as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
         assert {r.worker for r in read_records(tmp_path)} == {"0", "1", "2"}
+
+
+class TestCompressedShards:
+    """The Java writer emits `.jsonl.gz` as concatenated gzip members, one per
+    block of records. The corpus is the run's real cost on disk — a few
+    megabytes a game — and it compresses roughly tenfold.
+
+    Two properties matter and neither is free: a corpus collected before
+    compression must keep reading, because it cannot be regenerated; and a
+    worker killed mid-block truncates the final member, which must stop the
+    read rather than fail it.
+    """
+
+    def _write_members(self, path, blocks: list[list[str]]) -> None:
+        """One gzip member per block, concatenated, as the Java writer does."""
+        import gzip
+
+        with path.open("wb") as handle:
+            for block in blocks:
+                handle.write(gzip.compress(
+                    "".join(line + "\n" for line in block).encode("utf-8")
+                ))
+
+    def _line(self, record_id: str) -> str:
+        return json.dumps(record_to_dict(_record(record_id=record_id)))
+
+    def test_a_compressed_shard_reads_back(self, tmp_path):
+        path = tmp_path / "run.0.jsonl.gz"
+        self._write_members(path, [[self._line("run.0.1"), self._line("run.0.2")]])
+        assert [r.record_id for r in read_shard(path)] == ["run.0.1", "run.0.2"]
+
+    def test_records_span_members(self, tmp_path):
+        """Every member stands alone, so the reader must not stop at the first."""
+        path = tmp_path / "run.0.jsonl.gz"
+        self._write_members(
+            path, [[self._line("run.0.1")], [self._line("run.0.2")]],
+        )
+        assert [r.record_id for r in read_shard(path)] == ["run.0.1", "run.0.2"]
+
+    def test_a_truncated_final_member_stops_the_read(self, tmp_path):
+        """A killed worker leaves one; everything before it still loads."""
+        path = tmp_path / "run.0.jsonl.gz"
+        self._write_members(
+            path, [[self._line("run.0.1")], [self._line("run.0.2")]],
+        )
+        data = path.read_bytes()
+        path.write_bytes(data[: len(data) - 12])
+        assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
+
+    def test_a_half_written_line_inside_a_member_is_skipped(self, tmp_path):
+        import gzip
+
+        path = tmp_path / "run.0.jsonl.gz"
+        body = self._line("run.0.1") + "\n" + self._line("run.0.2")[:20]
+        path.write_bytes(gzip.compress(body.encode("utf-8")))
+        assert [r.record_id for r in read_shard(path)] == ["run.0.1"]
+
+    def test_an_uncompressed_shard_still_reads(self, tmp_path):
+        """The corpus is append-only, so shards predating compression stay."""
+        with ShardWriter(tmp_path, "old", 0) as writer:
+            writer.write(_record(record_id="old.0.1"))
+        assert [r.record_id for r in read_records(tmp_path)] == ["old.0.1"]
+
+    def test_both_spellings_load_together(self, tmp_path):
+        with ShardWriter(tmp_path, "old", 0) as writer:
+            writer.write(_record(record_id="old.0.1"))
+        self._write_members(
+            tmp_path / "new.1.jsonl.gz", [[self._line("new.1.1")]],
+        )
+        assert {r.record_id for r in read_records(tmp_path)} == {
+            "old.0.1", "new.1.1",
+        }
+
+    def test_counting_covers_both_spellings(self, tmp_path):
+        with ShardWriter(tmp_path, "old", 0) as writer:
+            writer.write(_record(record_id="old.0.1"))
+        self._write_members(
+            tmp_path / "new.1.jsonl.gz",
+            [[self._line("new.1.1"), self._line("new.1.2")]],
+        )
+        assert count_records(tmp_path) == 3
+
+    def test_a_shard_named_gz_is_not_also_read_as_plain(self, tmp_path):
+        """`*.jsonl` must not claim `x.jsonl.gz` and try to parse it as text."""
+        self._write_members(
+            tmp_path / "run.0.jsonl.gz", [[self._line("run.0.1")]],
+        )
+        assert len(iter_shards(tmp_path)) == 1
+        assert count_records(tmp_path) == 1
 
     def test_shards_are_read_in_name_order(self, tmp_path):
         for worker in (2, 0, 1):

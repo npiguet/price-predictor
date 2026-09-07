@@ -312,24 +312,26 @@ The split is benign for the zero-shot goal. New-set variation keywords are the s
 
 ## The rarest damage-step keywords set the corpus size
 
-Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes an order of magnitude apart. A sample of ordinary sealed self-play holding 2,312 combat records produced the counts below — random sealed-legal sets, no coverage decking.
+Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes almost twenty times apart. A 351-game sample of ordinary patched sealed self-play produced the rates below — random sealed-legal sets, no coverage decking.
 
-| Keyword | Qualifying per 2,312 combat records | Combat records for 200 |
+| Keyword | Qualifying per game | Games for 200 |
 |---|---|---|
-| trample | 110 | 4,200 |
-| first strike | 100 | 4,600 |
-| deathtouch | 64 | 7,200 |
-| lifelink | 63 | 7,300 |
-| infect | 16 | 28,900 |
-| double strike | 10 | 46,200 |
-| indestructible | 10 | 46,200 |
-| wither | 0 | — |
+| trample | 0.53 | 380 |
+| first strike | 0.49 | 410 |
+| deathtouch | 0.25 | 820 |
+| lifelink | 0.21 | 960 |
+| double strike | 0.15 | 1,300 |
+| indestructible | 0.08 | 2,500 |
+| infect | 0.05 | 3,900 |
+| wither | 0.03 | 7,000 |
 
-The run has to be sized in combat records rather than total ones. Combat records arrive at roughly a hundred per worker-minute whether or not the engine is patched, but a patched run's totals are dominated by playability records — 42,109 of 59,899 in one four-minute sample — so the same total record count carries a small fraction of the combat records a degraded run does. Seven of the eight clear the threshold in about ten worker-hours.
+Games are the unit to size a run in, because they are the unit an operator sets and the only one that holds still. Records per game move with the collectors installed — a patched run writes 319 a game against a degraded run's 54, and the extra is mostly playability records, which gate 2 never counts. Four thousand games clears seven of the eight keywords and seven thousand clears all of them, wither included.
 
-Wither is the exception, and its absence is a property of the format rather than of the collector: almost no sealed-legal set prints it, so more collection of the same kind adds nothing. Reaching it needs a set restriction or the coverage collector, which decks cards match play never deals.
+Wither is only reachable at all because the patched collectors see more of each game; a degraded sample of comparable size observed none. It is still the rarest by a wide margin, because almost no sealed-legal set prints it, and a set restriction or the coverage collector reaches it far faster than volume does.
 
-The last column extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
+The corpus is the run's real cost on disk, and compression is what makes an overnight run fit. A game's records are 4.3 MB of JSON and 80 KB gzipped — a 54× ratio, because the records are the same keys and the same board described over and over. Seven thousand games is around half a gigabyte compressed and 30 GB without.
+
+The table extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
 
 ## Build order — first embeddings before full machinery
 

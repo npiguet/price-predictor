@@ -163,6 +163,10 @@ class PatchedCollectorTest {
                 "setEffectRecordPlayabilityListener").present()) {
             available++;
         }
+        if (PatchHooks.find(PatchHooks.ABILITY_MANA_PART,
+                "setEffectRecordManaListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
             assertEquals(available, collector.install());
             assertEquals(available, collector.installedHooks().size());

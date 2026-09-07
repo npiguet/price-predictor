@@ -95,12 +95,13 @@ it rides matches that were going to be played anyway — and the sealed corpora 
 so this doubles as a sealed self-play run. Ctrl-C to stop.
 
 **Checks**:
-- `output/effects/records/` fills with `{run_id}.{worker}.jsonl` shards.
+- `output/effects/records/` fills with `{run_id}.{worker}.jsonl.gz` shards.
 - Every record carries the same `mode`, and it is the one the checkout offers: `patched` after the
   engine patch, `degraded` without it, printed by each worker at startup. A run cannot mix the two —
   the mode is probed once per worker.
-- A `patched` run reaches `resolution`, `combat`, `playability`, `trigger` and `rewrite` — six of the
-  eight sampling classes. A `degraded` run reaches `resolution` and `combat` only, which is three.
+- A `patched` run reaches `resolution`, `combat`, `playability`, `trigger`, `rewrite` and
+  `continuous` — seven of the eight sampling classes, mana records arriving as the effect half of
+  `resolution`. A `degraded` run reaches `resolution` and `combat` only, which is three.
 - `output/sealed/match-outcomes.txt` and `cards-played.txt` are unchanged in format and content by the
   flag's presence.
 - A first-strike combat produced two `combat` records, one per damage step.
@@ -116,23 +117,37 @@ print(count_records(Path('output/effects/records')))"
 
 Gate 2 sets the corpus size, and it is the only judgement call in the procedure. It needs **200
 qualifying combat records per keyword** across the eight damage-step keywords, and those eight differ
-by more than an order of magnitude in how often sealed play produces them: trample and first strike
-arrive fastest, then deathtouch and lifelink, then infect, then double strike and indestructible.
-Wither barely appears in sealed-legal sets at all — expect it to route on under-sampling however long
-the run goes, and read that as a property of the format rather than a model failure.
+by more than an order of magnitude in how often sealed play produces them.
 
-Size the run in **combat records**, not total ones. Combat records arrive at about the same rate
-either way, but a patched run's totals are dominated by playability records, so the same total record
-count carries a small fraction of the combat records a degraded one does. Roughly ten worker-hours of
-collection clears seven of the eight; per-keyword rates measured against a real corpus are in the
-design record's feasibility section. A corpus large enough for gate 2 is comfortably large enough for
-gate 1 and for the split.
+Size the run in **games**, not records. A game yields a few hundred records, but the mix shifts with
+the collectors installed, so a record target moves under you while a game target does not:
+
+| Keyword | Games for 200 qualifying records |
+|---|---|
+| trample | ~380 |
+| first strike | ~410 |
+| deathtouch | ~820 |
+| lifelink | ~960 |
+| double strike | ~1,300 |
+| indestructible | ~2,500 |
+| infect | ~3,900 |
+| wither | ~7,000 |
+
+**About 4,000 games clears seven of the eight, and about 7,000 clears all eight.** Rates measured
+against a real corpus are in the design record's feasibility section; a corpus large enough for gate 2
+is comfortably large enough for gate 1 and for the split.
+
+A patched run writes roughly 320 records and 80 KB per game, so 7,000 games is about half a gigabyte.
+Shards are gzip-compressed, which is where the room comes from — the same corpus uncompressed is
+around 30 GB.
 
 ```bash
-# combat records so far, which is what gate 2 counts
+# what has been collected so far
 python -c "import sys;sys.path.insert(0,'src');from pathlib import Path;\
 from collections import Counter;from effects.infrastructure.record_io import read_records;\
-print(Counter(r.kind.value for r in read_records(Path('output/effects/records'))))"
+rs=list(read_records(Path('output/effects/records')));\
+print(f'{len({r.game_id for r in rs})} games, {len(rs)} records');\
+print(Counter(r.kind.value for r in rs))"
 ```
 
 ## 4. Train
