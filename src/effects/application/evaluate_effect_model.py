@@ -737,11 +737,16 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         ))
 
     # ── gate 2: per keyword, routing only ──
+    from effects.infrastructure.model_runner import build_sidecars
+
     scored = scored_records(read_records(config.records_dir), main.provenance)
+    counts = count_qualifying_all(
+        scored, keyword_rows(), build_sidecars(config),
+    )
     verdicts = [
         evaluate_keyword(
             row,
-            qualifying_records=count_qualifying(scored, row),
+            qualifying_records=counts[row.keyword],
             agreeing_records=0,
         )
         for row in keyword_rows()
@@ -798,24 +803,96 @@ NEIGHBOUR_QUERIES: tuple[str, ...] = (
 DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
 
 
-def count_qualifying(records: list, row: DamageStepKeyword) -> int:
+def keyword_of_line(line) -> str | None:
+    """The keyword a sidecar line *is*, or None if the line is not one.
+
+    A printed keyword converts to a ``static`` line whose script text is the
+    keyword's display name — White Knight's is exactly ``First Strike``. Read
+    in the gate's spelling, so ``first_strike`` matches.
+    """
+    script = getattr(line, "script_text", None)
+    if not script or "$" in script or "|" in script:
+        return None
+    return script.strip().lower().replace(" ", "_")
+
+
+class KeywordResolver:
+    """An entity's keywords, from both channels, memoized by provenance key.
+
+    Both channels have to be looked at. An entity's printed and
+    attachment-granted keywords reach the model as ability tokens, and only a
+    keyword granted until end of turn appears as a bare string in the overlay —
+    so reading the overlay alone sees the rare case and misses every creature
+    that printed the keyword, which is the common one.
+
+    The memo is what makes that affordable: a corpus repeats the same few
+    thousand cards across millions of combat records, and resolving each key
+    once turns the walk into a dict hit.
+    """
+
+    def __init__(self, sidecars=None) -> None:
+        self._sidecars = sidecars
+        self._by_key: dict[object, str | None] = {}
+
+    def _keyword_for(self, key) -> str | None:
+        if key not in self._by_key:
+            keyword = None
+            try:
+                line = self._sidecars.line_for(key)
+            except (KeyError, FileNotFoundError):
+                line = None
+            if line is not None:
+                keyword = keyword_of_line(line)
+            self._by_key[key] = keyword
+        return self._by_key[key]
+
+    def keywords_of(self, entity) -> set[str]:
+        found = set(entity.granted_temporary.keywords)
+        if self._sidecars is None:
+            return found
+        for key in (*entity.printed, *entity.granted_attached):
+            keyword = self._keyword_for(key)
+            if keyword is not None:
+                found.add(keyword)
+        return found
+
+
+def count_qualifying_all(
+    records: list, rows: tuple[DamageStepKeyword, ...], sidecars=None,
+) -> dict[str, int]:
+    """Every row's qualifying count, in one pass over the corpus.
+
+    One pass rather than one per keyword: each entity's keyword set is resolved
+    once and checked against all eight, which is the difference between an
+    evaluation that finishes and one that does not.
+    """
+    from effects.domain.records import RecordKind
+
+    resolver = KeywordResolver(sidecars)
+    counts = {row.keyword: 0 for row in rows}
+    wanted = set(counts)
+    for record in records:
+        if record.kind is not RecordKind.COMBAT:
+            continue
+        seen: set[str] = set()
+        for entity in record.state.entities:
+            if entity.combat is None:
+                continue
+            seen |= resolver.keywords_of(entity) & wanted
+        for keyword in seen:
+            counts[keyword] += 1
+    return counts
+
+
+def count_qualifying(records: list, row: DamageStepKeyword, sidecars=None) -> int:
     """Combat records in which the keyword's carrier is actually in combat.
 
     A first approximation of ``row.qualifies_when``: the full predicate needs
     the model's perturbed prediction, which the caller supplies. Counting here
     is what lets the under-sampled verdict fire before any model has run.
-    """
-    from effects.domain.records import RecordKind
 
-    keyword = row.keyword
-    qualifying = 0
-    for record in records:
-        if record.kind is not RecordKind.COMBAT:
-            continue
-        for entity in record.state.entities:
-            if entity.combat is None:
-                continue
-            if keyword in entity.granted_temporary.keywords:
-                qualifying += 1
-                break
-    return qualifying
+    Without ``sidecars`` only the overlay channel is visible, and the count then
+    describes a different population than the gate's table does — printed first
+    strike is most first strike.
+    """
+    return count_qualifying_all(records, (row,), sidecars)[row.keyword]

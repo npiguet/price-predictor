@@ -53,6 +53,7 @@ from effects.domain.state_snapshot import (
     Refs,
     StackExtras,
     StateSnapshot,
+    normalize_keyword,
 )
 from price_predictor.infrastructure.append_only import (
     count_complete_lines,
@@ -225,7 +226,12 @@ def _entity_from_json(data: dict) -> EntityState:
         face_down=data.get("face_down", False),
         granted_attached=_keys_from_json(data.get("granted_attached")),
         granted_temporary=GrantedTemporary(
-            keywords=tuple(granted.get("keywords", ())),
+            # Normalized on read rather than on write: the corpus is
+            # append-only, so shards collected before this was noticed carry
+            # Forge's spelling and have to keep resolving.
+            keywords=tuple(
+                normalize_keyword(k) for k in granted.get("keywords", ())
+            ),
             abilities=_keys_from_json(granted.get("abilities")),
         ),
         printed=_keys_from_json(data.get("printed")),
