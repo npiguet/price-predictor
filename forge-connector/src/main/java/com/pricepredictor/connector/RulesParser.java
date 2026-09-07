@@ -16,6 +16,8 @@ import com.pricepredictor.connector.ability.StandardKeyword;
 import com.pricepredictor.connector.ability.StaticAbilityEntry;
 import com.pricepredictor.connector.ability.TextAbility;
 import com.pricepredictor.connector.ability.TriggeredAbilityEntry;
+import com.pricepredictor.connector.effects.ProvenanceKey;
+import com.pricepredictor.connector.effects.ProvenanceRecorder;
 import forge.card.CardRarity;
 import forge.card.CardRules;
 import forge.card.CardSplitType;
@@ -59,6 +61,35 @@ public class RulesParser {
      * Parse a card script and build domain objects for all faces.
      */
     public MultiCard parseScript(List<String> scriptLines, String filename) {
+        return parseScript(scriptLines, filename, null).card();
+    }
+
+    /** A parsed card together with the per-face provenance recorders. */
+    public record ParsedCard(MultiCard card, List<ProvenanceRecorder> recorders) {
+    }
+
+    /**
+     * Parse a card script, optionally recording provenance.
+     *
+     * <p>Recording is additive: the rendered text is identical whether or not
+     * a script file is supplied, which is what lets the sidecar ship without
+     * reconverting a corpus.
+     *
+     * @param scriptFile the tree-prefixed script path keys should name, or null
+     *                   to skip recording
+     */
+    public ParsedCard parseScript(List<String> scriptLines, String filename,
+                                  String scriptFile) {
+        List<ProvenanceRecorder> recorders =
+                scriptFile == null ? null : new ArrayList<>();
+        MultiCard card = parseScriptInternal(scriptLines, filename, recorders,
+                scriptFile);
+        return new ParsedCard(card, recorders == null ? List.of() : recorders);
+    }
+
+    private MultiCard parseScriptInternal(List<String> scriptLines, String filename,
+                                          List<ProvenanceRecorder> recorders,
+                                          String scriptFile) {
         reader.reset();
 
         // Pre-pass: capture front-face Oracle, Name, and Draft lines.
@@ -89,7 +120,7 @@ public class RulesParser {
             reader.parseLine(line);
         }
         CardRules rules = reader.getCard();
-        MultiCard result = parseRules(rules);
+        MultiCard result = parseRules(rules, recorders, scriptFile);
 
         // Apply oracle fallback: if the primary face produced no ability lines and no
         // non-ability text (e.g. Draft/conspiracy cards whose game-engine abilities are
@@ -113,11 +144,25 @@ public class RulesParser {
      * Parse CardRules into a MultiCard.
      */
     public MultiCard parseRules(CardRules rules) {
+        return parseRules(rules, null, null);
+    }
+
+    /**
+     * Parse CardRules into a MultiCard, optionally recording provenance.
+     *
+     * @param recorders one recorder per face is appended here, in face order,
+     *                  or null to skip recording
+     * @param scriptFile the tree-prefixed script path keys should name
+     */
+    public MultiCard parseRules(CardRules rules, List<ProvenanceRecorder> recorders,
+                                String scriptFile) {
         CardSplitType splitType = rules.getSplitType();
         Card card = buildFullCard(rules);
 
         if (splitType == CardSplitType.None) {
-            return MultiCard.singleFace(parseFace(card, rules.getMainPart()));
+            return MultiCard.singleFace(
+                    parseFace(card, rules.getMainPart(),
+                            nextRecorder(recorders), 0, scriptFile));
         }
 
         String layout = splitType.name().toLowerCase();
@@ -126,37 +171,69 @@ public class RulesParser {
         CardStateName mainState = (splitType == CardSplitType.Split)
                 ? CardStateName.LeftSplit : CardStateName.Original;
         card.setState(mainState, false);
-        faces.add(parseFace(card, rules.getMainPart()));
+        faces.add(parseFace(card, rules.getMainPart(),
+                nextRecorder(recorders), 0, scriptFile));
 
         if (splitType == CardSplitType.Specialize) {
             for (Map.Entry<CardStateName, ICardFace> e : rules.getSpecializeParts().entrySet()) {
                 if (e.getValue() != null) {
                     card.setState(e.getKey(), false);
-                    faces.add(parseFace(card, e.getValue()));
+                    faces.add(parseFace(card, e.getValue(),
+                            nextRecorder(recorders), faces.size(), scriptFile));
                 }
             }
         } else {
             ICardFace otherFace = rules.getOtherPart();
             if (otherFace != null) {
                 card.setState(splitType.getChangedStateName(), false);
-                faces.add(parseFace(card, otherFace));
+                faces.add(parseFace(card, otherFace,
+                        nextRecorder(recorders), faces.size(), scriptFile));
             }
         }
 
         return MultiCard.multiFace(layout, faces);
     }
 
+    /** Append and return a fresh recorder, or null when recording is off. */
+    private static ProvenanceRecorder nextRecorder(List<ProvenanceRecorder> recorders) {
+        if (recorders == null) return null;
+        ProvenanceRecorder recorder = new ProvenanceRecorder();
+        recorders.add(recorder);
+        return recorder;
+    }
+
     /**
      * Parse a single card face. The Card must already be in the correct state.
      */
     CardFace parseFace(Card card, ICardFace face) {
+        return parseFace(card, face, null, 0, null);
+    }
+
+    /**
+     * Parse a single card face, optionally recording provenance.
+     *
+     * <p>Recording happens here rather than inside the ability implementations
+     * because this is the only place both the runtime trait and its index
+     * within its kind are in scope, and {@code index_within_kind} is half the
+     * provenance key. Each branch below records the abilities it appended by
+     * bracketing the list, so a factory that returns one ability and one that
+     * returns several are handled identically.
+     *
+     * @param recorder    collects trait-to-ability attribution, or null
+     * @param faceIndex   this face's ordinal in the converter's emission order
+     * @param scriptFile  the tree-prefixed path of the card's script, or null
+     */
+    CardFace parseFace(Card card, ICardFace face, ProvenanceRecorder recorder,
+                       int faceIndex, String scriptFile) {
         List<Ability> abilities = new ArrayList<>();
         boolean isClass = face.getType().toString().contains("Class");
         Set<String> classLevelDescriptions = new HashSet<>();
 
         // --- Keywords — route to variants ---
+        int keywordIndex = 0;
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
+            int before = abilities.size();
             if (kw == Keyword.UNDEFINED) {
                 routeUndefinedKeyword(ki, abilities, classLevelDescriptions);
             } else if (kw == Keyword.HAUNT) {
@@ -168,11 +245,28 @@ public class RulesParser {
             } else {
                 abilities.add(StandardKeyword.of(ki, kw));
             }
+            if (recorder != null) {
+                recorder.attributeKeyword(
+                        List.copyOf(abilities.subList(before, abilities.size())),
+                        new ProvenanceKey(scriptFile, faceIndex,
+                                ProvenanceKey.KIND_KEYWORD, keywordIndex),
+                        ki.getOriginal());
+            }
+            keywordIndex++;
         }
 
         // --- Spell abilities — route to variants ---
         boolean isAlternateFace = face.getType().hasSubtype("Adventure") || face.getType().hasSubtype("Omen");
+        int spellIndex = -1;
         for (SpellAbility sa : card.getSpellAbilities()) {
+            spellIndex++;
+            int beforeSpell = abilities.size();
+            // Declared before the skips below, so a trait the parser passes over
+            // lands in dropped_keys rather than failing the join: it is still
+            // live at runtime and a record can still name it.
+            ProvenanceKey spellKey = recorder == null ? null : new ProvenanceKey(
+                    scriptFile, faceIndex, ProvenanceKey.KIND_SPELL, spellIndex);
+            if (recorder != null) recorder.declare(spellKey);
             if (sa.getKeyword() != null) continue;
             // Adventure/Omen SAs belong to the Secondary state; skip them when processing the main face.
             // We check both sa.isAdventure()/isOmen() (which tests the SA's own CardStateName) and
@@ -207,6 +301,11 @@ public class RulesParser {
                 abilities.addAll(SpellEffect.fromChain(sa));
                 abilities.addAll(diceOutcomesFromSA(sa));
             }
+            if (recorder != null) {
+                recorder.attribute(
+                        List.copyOf(abilities.subList(beforeSpell, abilities.size())),
+                        spellKey, sa);
+            }
         }
 
         // --- Traits — direct wrapping ---
@@ -214,7 +313,12 @@ public class RulesParser {
         // When a secondary trigger re-uses the same Execute SVar, it is the "blocks" half of an
         // "attacks or blocks" pair — the primary already covers both, so skip the secondary.
         Set<String> primaryExecuteSVars = new HashSet<>();
+        int triggerIndex = -1;
         for (Trigger t : card.getTriggers()) {
+            triggerIndex++;
+            ProvenanceKey key = recorder == null ? null : new ProvenanceKey(
+                    scriptFile, faceIndex, ProvenanceKey.KIND_TRIGGER, triggerIndex);
+            if (recorder != null) recorder.declare(key);
             String exec = t.getParam("Execute");
             if ("True".equalsIgnoreCase(t.getParam("Secondary"))
                     && exec != null && primaryExecuteSVars.contains(exec)) {
@@ -223,13 +327,30 @@ public class RulesParser {
             if (exec != null && !"True".equalsIgnoreCase(t.getParam("Secondary"))) {
                 primaryExecuteSVars.add(exec);
             }
-            addIfNotNull(abilities, TriggeredAbilityEntry.of(t));
+            Ability triggered = TriggeredAbilityEntry.of(t);
+            addIfNotNull(abilities, triggered);
+            if (recorder != null) recorder.attribute(triggered, key, t);
         }
+        int staticIndex = -1;
         for (StaticAbility s : card.getStaticAbilities()) {
-            addIfNotNull(abilities, StaticAbilityEntry.of(s));
+            staticIndex++;
+            ProvenanceKey key = recorder == null ? null : new ProvenanceKey(
+                    scriptFile, faceIndex, ProvenanceKey.KIND_STATIC, staticIndex);
+            if (recorder != null) recorder.declare(key);
+            Ability entry = StaticAbilityEntry.of(s);
+            addIfNotNull(abilities, entry);
+            if (recorder != null) recorder.attribute(entry, key, s);
         }
+        int replacementIndex = -1;
         for (ReplacementEffect r : card.getReplacementEffects()) {
-            addIfNotNull(abilities, ReplacementAbilityEntry.of(r));
+            replacementIndex++;
+            ProvenanceKey key = recorder == null ? null : new ProvenanceKey(
+                    scriptFile, faceIndex, ProvenanceKey.KIND_REPLACEMENT,
+                    replacementIndex);
+            if (recorder != null) recorder.declare(key);
+            Ability entry = ReplacementAbilityEntry.of(r);
+            addIfNotNull(abilities, entry);
+            if (recorder != null) recorder.attribute(entry, key, r);
         }
 
         // --- Synthetic land mana ---
