@@ -181,6 +181,73 @@ def run_extract_keyword_definitions(args: argparse.Namespace) -> int:
     return extract(ExtractKeywordDefinitionsConfig(output=Path(args.output)))
 
 
+# ── collect-coverage ────────────────────────────────────────────────────
+
+
+def _collect_coverage_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "collect-coverage",
+        help=(
+            "Play weighted decks over the whole converted corpus until every "
+            "card is satisfied or retired"
+        ),
+    )
+    parser.set_defaults(func=run_collect_coverage)
+    parser.add_argument(
+        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
+        help=(
+            "Destination shard directory. Unlike on match-outcomes this has a "
+            f"default ({DEFAULT_RECORDS_DIR}): collection is the whole point "
+            "of this command."
+        ),
+    )
+    _add_cards_folder(parser)
+    parser.add_argument(
+        "--split-from", type=str, default=None,
+        help=(
+            "A checkpoint whose held-out cards are excluded from every deck. "
+            "Without it a coverage run would contaminate the card-disjoint "
+            "split of the model it feeds."
+        ),
+    )
+    parser.add_argument(
+        "--target-records", type=int, default=50,
+        help="Per-card satisfaction goal (default: 50)",
+    )
+    parser.add_argument(
+        "--decks-per-round", type=int, default=500,
+        help="Decks played as matches per round (default: 500)",
+    )
+    parser.add_argument(
+        "--no-progress-rounds", type=int, default=3,
+        help=(
+            "Consecutive rounds without a new qualifying record before a card "
+            "retires (default: 3). This is what makes the run terminate."
+        ),
+    )
+    parser.add_argument(
+        "--workers", type=int, default=12,
+        help="Parallel Java worker processes (default: 12)",
+    )
+    _add_cap_flags(parser)
+
+
+def run_collect_coverage(args: argparse.Namespace) -> int:
+    from effects.application.collect_coverage import CollectCoverageConfig
+    from effects.application.collect_coverage import run as collect
+
+    config = CollectCoverageConfig(
+        effect_records=Path(args.effect_records),
+        cards_folders=resolve_cards_folders(args.cards_folders),
+        split_from=Path(args.split_from) if args.split_from else None,
+        target_records=args.target_records,
+        decks_per_round=args.decks_per_round,
+        no_progress_rounds=args.no_progress_rounds,
+        workers=args.workers,
+    )
+    return collect(config)
+
+
 # ── train-effect-model ──────────────────────────────────────────────────
 
 
@@ -453,6 +520,7 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
 _SUBCOMMAND_BUILDERS = (
     _build_vocab_parser,
     _extract_keyword_definitions_parser,
+    _collect_coverage_parser,
     _train_effect_model_parser,
     _encode_abilities_parser,
     _evaluate_effect_model_parser,

@@ -213,9 +213,9 @@ kinds; run `collect-coverage` to completion on a small `--target-records` and re
 
 ### Tests for User Story 2
 
-- [ ] T100 [P] [US2] Test in `tests/unit/effects/domain/test_records_us2.py` that `continuous` records coalesce per (game, static, board hash), that `trigger` negatives are drawn same-event-type at ~1:1, and that no policy verdict can be represented in a `playability` payload
-- [ ] T101 [P] [US2] Contract test in `tests/unit/effects/test_cli_contract_collectors.py`: every flag and default in [contracts/cli.md](contracts/cli.md) for `sealed match-outcomes --effect-records` (no default), `collect-coverage`, and the shared cap/budget table — `--mana-cap` 2000, `--playability-rate` 0.1, `--interventions-per-game` 2, `--probes-per-game` 2, `--probe-keywords` empty
-- [ ] T102 [P] [US2] Test in `tests/unit/effects/application/test_coverage.py`: the castability consult ranks but never drops; satisfaction counts acting-host / event-subject / referenced-ref records and **not** mere snapshot presence; a card with no new qualifying record for `--no-progress-rounds` retires; the run terminates
+- [X] T100 [P] [US2] Test in `tests/unit/effects/domain/test_records_us2.py` that `continuous` records coalesce per (game, static, board hash), that `trigger` negatives are drawn same-event-type at ~1:1, and that no policy verdict can be represented in a `playability` payload
+- [X] T101 [P] [US2] Contract test in `tests/unit/effects/test_cli_contract_collectors.py`: every flag and default in [contracts/cli.md](contracts/cli.md) for `sealed match-outcomes --effect-records` (no default), `collect-coverage`, and the shared cap/budget table — `--mana-cap` 2000, `--playability-rate` 0.1, `--interventions-per-game` 2, `--probes-per-game` 2, `--probe-keywords` empty
+- [X] T102 [P] [US2] Test in `tests/unit/effects/application/test_coverage.py`: the castability consult ranks but never drops; satisfaction counts acting-host / event-subject / referenced-ref records and **not** mere snapshot presence; a card with no new qualifying record for `--no-progress-rounds` retires; the run terminates
 - [ ] T103 [P] [US2] Integration test in `tests/integration/test_effects_coverage_isolation.py` (marked `integration`): after a `collect-coverage` run, `output/sealed/match-outcomes.txt` and `cards-played.txt` are byte-identical to their pre-run state (US2 acceptance 8, FR-052, half of SC-007)
 - [ ] T104 [P] [US2] Integration test in `tests/integration/test_effects_patched.py` (marked `integration`): against a patched checkout, records carry `mode = patched` and rewrite/continuous/trigger/playability kinds appear
 
@@ -239,12 +239,12 @@ kinds; run `collect-coverage` to completion on a small `--target-records` and re
 
 ### Coverage collector
 
-- [ ] T117 [US2] Implement `forge-connector/.../CastabilityMain.java` — FR-047's consult, which needs a live Forge
-- [ ] T118 [P] [US2] Implement `src/effects/infrastructure/castability_connector.py` spawning it (one connector per Java main)
-- [ ] T119 [US2] Implement `src/effects/infrastructure/collector_connector.py` spawning the records-only worker (T054) over coverage decks, reusing `ForgeWorkerPool` (prior art: its third supervisor; already extracted at the second instance)
-- [ ] T120 [US2] Implement `src/effects/application/collect_coverage.py`: rounds, held-out exclusion via `--split-from`, corpus-wide 40-card deck building (23 nonlands plus basics from `compute_basic_lands`) weighted by record scarcity, with deck candidates and the coverage unit drawn from the `output/cardsfolder/` entry of `--cards-folder` alone, the consult as a ranking input only, satisfaction and retirement, and the two residues
+- [X] T117 [US2] Implement `forge-connector/.../CastabilityMain.java` — FR-047's consult, which needs a live Forge
+- [X] T118 [P] [US2] Implement `src/effects/infrastructure/castability_connector.py` spawning it (one connector per Java main)
+- [X] T119 [US2] Implement `src/effects/infrastructure/collector_connector.py` spawning the records-only worker (T054) over coverage decks, reusing `ForgeWorkerPool` (prior art: its third supervisor; already extracted at the second instance)
+- [X] T120 [US2] Implement `src/effects/application/collect_coverage.py`: rounds, held-out exclusion via `--split-from`, corpus-wide 40-card deck building (23 nonlands plus basics from `compute_basic_lands`) weighted by record scarcity, with deck candidates and the coverage unit drawn from the `output/cardsfolder/` entry of `--cards-folder` alone, the consult as a ranking input only, satisfaction and retirement, and the two residues
 - [ ] T121 [P] [US2] JUnit-test the US2 collectors in `forge-connector/src/test/java/.../PatchedCollectorTest.java`: cause-attributed trigger attribution, a stacked-replacement pair each carrying the event it received, a coalesced continuous record per stable board, a same-event-type trigger negative, and snapshot tier 3 present
-- [ ] T122 [US2] Wire `collect-coverage` into the CLI with its documented defaults
+- [X] T122 [US2] Wire `collect-coverage` into the CLI with its documented defaults
 - [ ] T123 [US2] Implement the role-polarity probe in the evaluator, now that mana records give it its effect-position half: compare the model's predicted mana-pool sign for `{R}` in cost position against effect position
 
 **Checkpoint**: attribution is exact, the corpus's largest line kind has records, and the cards sealed
