@@ -167,6 +167,10 @@ class PatchedCollectorTest {
                 "setEffectRecordManaListener").present()) {
             available++;
         }
+        if (PatchHooks.find(PatchHooks.AI_CONTROLLER,
+                "setEffectRecordCombatListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
             assertEquals(available, collector.install());
             assertEquals(available, collector.installedHooks().size());

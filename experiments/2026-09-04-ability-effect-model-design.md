@@ -325,11 +325,13 @@ Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that
 | infect | 0.05 | 3,900 |
 | wither | 0.03 | 7,000 |
 
-Games are the unit to size a run in, because they are the unit an operator sets and the only one that holds still. Records per game move with the collectors installed — a patched run writes 319 a game against a degraded run's 54, and the extra is mostly playability records, which gate 2 never counts. Four thousand games clears seven of the eight keywords and seven thousand clears all of them, wither included.
+Games are the unit to size a run in, because they are the unit an operator sets and the only one that holds still. Records per game move with the collectors installed — a patched run writes about 510 a game against a degraded run's 54, and the extra is mostly playability records, which gate 2 never counts. Four thousand games clears seven of the eight keywords and seven thousand clears all of them, wither included.
 
 Wither is only reachable at all because the patched collectors see more of each game; a degraded sample of comparable size observed none. It is still the rarest by a wide margin, because almost no sealed-legal set prints it, and a set restriction or the coverage collector reaches it far faster than volume does.
 
-The corpus is the run's real cost on disk, and compression is what makes an overnight run fit. A game's records are 4.3 MB of JSON and 80 KB gzipped — a 54× ratio, because the records are the same keys and the same board described over and over. Seven thousand games is around half a gigabyte compressed and 30 GB without.
+The corpus is the run's real cost on disk, and compression is what makes an overnight run fit. A game's records are several megabytes of JSON and around 130 KB gzipped — a ratio near 50×, because the records are the same keys and the same board described over and over. Seven thousand games is under a gigabyte compressed and tens of gigabytes without.
+
+Two collectors need a cap that is not a sample, and both get the same one: drop a record that would be byte-identical to one already written. Continuous effects reapply on every recompute, and the AI re-asks who may block while it evaluates a combat, so both produce the same answer many times over an unchanged board — legality records were four fifths of the corpus before coalescing and are under a third after. Collapsing identical records loses nothing by construction, which is what separates this from sampling: a legal set that genuinely changed differs in the payload and records again.
 
 The table extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
 

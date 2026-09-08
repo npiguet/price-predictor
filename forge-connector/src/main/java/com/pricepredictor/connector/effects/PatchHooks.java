@@ -30,6 +30,8 @@ public final class PatchHooks {
     static final String AI_CONTROLLER = "forge.ai.AiController";
     static final String ABILITY_MANA_PART =
             "forge.game.spellability.AbilityManaPart";
+    static final String CANT_ATTACK_BLOCK =
+            "forge.game.staticability.StaticAbilityCantAttackBlock";
 
     /** What a hook lookup produced, or why it did not. */
     public record Lookup(Class<?> owner, Method method) {
@@ -112,6 +114,25 @@ public final class PatchHooks {
             lookup.method().invoke(null, new Object[]{null});
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             // Nothing to undo on an unpatched checkout.
+        }
+    }
+
+    /**
+     * Call a patched static method, or answer null when it is absent.
+     *
+     * <p>Looked up by exact parameter types rather than by name alone, because
+     * these hooks are overloads of methods stock Forge already has: calling the
+     * wrong arity would throw rather than degrade.
+     */
+    public static Object invokeStatic(
+            String className, String methodName, Class<?>[] parameterTypes,
+            Object... args) {
+        try {
+            Method method = Class.forName(className)
+                    .getMethod(methodName, parameterTypes);
+            return method.invoke(null, args);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return null;
         }
     }
 

@@ -99,9 +99,10 @@ so this doubles as a sealed self-play run. Ctrl-C to stop.
 - Every record carries the same `mode`, and it is the one the checkout offers: `patched` after the
   engine patch, `degraded` without it, printed by each worker at startup. A run cannot mix the two —
   the mode is probed once per worker.
-- A `patched` run reaches `resolution`, `combat`, `playability`, `trigger`, `rewrite` and
-  `continuous` — seven of the eight sampling classes, mana records arriving as the effect half of
-  `resolution`. A `degraded` run reaches `resolution` and `combat` only, which is three.
+- A `patched` run reaches **all eight** sampling classes: `resolution` in both halves, `combat`,
+  `continuous`, `trigger`, `rewrite`, and `playability` in both its decision and legality subkinds.
+  Mana records arrive as the effect half of `resolution`. A `degraded` run reaches `resolution` and
+  `combat` only, which is three.
 - `output/sealed/match-outcomes.txt` and `cards-played.txt` are unchanged in format and content by the
   flag's presence.
 - A first-strike combat produced two `combat` records, one per damage step.
@@ -137,9 +138,9 @@ the collectors installed, so a record target moves under you while a game target
 against a real corpus are in the design record's feasibility section; a corpus large enough for gate 2
 is comfortably large enough for gate 1 and for the split.
 
-A patched run writes roughly 320 records and 80 KB per game, so 7,000 games is about half a gigabyte.
+A patched run writes roughly 510 records and 130 KB per game, so 7,000 games is under a gigabyte.
 Shards are gzip-compressed, which is where the room comes from — the same corpus uncompressed is
-around 30 GB.
+tens of gigabytes.
 
 ```bash
 # what has been collected so far

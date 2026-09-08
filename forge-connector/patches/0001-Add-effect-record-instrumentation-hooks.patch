@@ -1,4 +1,4 @@
-From 2691d8c17d57692d35e952100499b75329c016c6 Mon Sep 17 00:00:00 2001
+From 61a1396e9bf4676c1703a1ad9cb5ddd08690a8c1 Mon Sep 17 00:00:00 2001
 From: lordofthepigs <nicolas.piguet@gmail.com>
 Date: Mon, 7 Sep 2026 21:49:33 +0200
 Subject: [PATCH] Add effect-record instrumentation hooks
@@ -6,7 +6,7 @@ MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Six hooks an external tool reads to record what each ability does when it
+Eight hooks an external tool reads to record what each ability does when it
 resolves. Every one is inert unless something installs a listener or reads the
 pointer, and nothing in Forge does — the reader is a separate project that
 builds against stock Forge and reaches these reflectively.
@@ -29,9 +29,19 @@ so an outcome can be attributed to the clause that produced it rather than to
 the whole line. Restored rather than cleared on the way out, since a
 sub-ability can resolve another.
 
-AiController gains a listener called with the rules-level verdict for each
-candidate the AI evaluated — can-play, affordable, has-legal-target. Never the
-AI's policy judgment: that is its opinion rather than the game's rules.
+AiController gains two listeners. One is called with the rules-level verdict
+for each candidate the AI evaluated — can-play, affordable, has-legal-target.
+The other is called with the legal attacker and blocker sets, from
+AiAttackController.refreshCombatants and AiBlockController.getPossibleBlockers,
+both of which compute them and discard them once the AI has chosen. Neither
+carries the AI's policy judgment: that is its opinion rather than the game's
+rules.
+
+StaticAbilityCantAttackBlock.cantAttack and cantBlockBy each already found the
+static ability responsible and then reduced it to a boolean. The loop moves
+into cantAttackStatic and cantBlockByStatic, which return that ability, and the
+boolean methods delegate. Same answers, and a caller can now say which static
+stopped a creature rather than only that one did.
 
 AbilityManaPart gains a listener at the point produced mana reaches the pool.
 Mana abilities never use the stack, so an observer watching casts and
@@ -48,20 +58,65 @@ GameAction.destroy puts the causing ability in the Destroyed trigger's run
 parameters. It is in scope and was being dropped, so nothing downstream could
 name what destroyed the permanent.
 ---
- .../src/main/java/forge/ai/AiController.java  | 34 +++++++++++
+ .../java/forge/ai/AiAttackController.java     |  7 ++
+ .../main/java/forge/ai/AiBlockController.java | 13 ++++
+ .../src/main/java/forge/ai/AiController.java  | 64 +++++++++++++++++++
  .../src/main/java/forge/game/GameAction.java  |  6 ++
  .../java/forge/game/ability/AbilityUtils.java | 32 ++++++++++
  .../src/main/java/forge/game/card/Card.java   | 18 ++++++
  .../game/replacement/ReplacementHandler.java  | 54 ++++++++++++++++
  .../game/spellability/AbilityManaPart.java    | 25 ++++++++
- .../forge/game/trigger/TriggerHandler.java    | 61 +++++++++++++++++++
- 7 files changed, 230 insertions(+)
+ .../StaticAbilityCantAttackBlock.java         | 34 ++++++++--
+ .../forge/game/trigger/TriggerHandler.java    | 61 ++++++++++++++++++
+ 10 files changed, 310 insertions(+), 4 deletions(-)
 
+diff --git a/forge-ai/src/main/java/forge/ai/AiAttackController.java b/forge-ai/src/main/java/forge/ai/AiAttackController.java
+index 61d3fc9948d..a9ab245cf8f 100644
+--- a/forge-ai/src/main/java/forge/ai/AiAttackController.java
++++ b/forge-ai/src/main/java/forge/ai/AiAttackController.java
+@@ -130,6 +130,13 @@ public class AiAttackController {
+                 attackers.add(c);
+             }
+         }
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // The legality verdict for every creature the AI could have attacked
++        // with, computed here and otherwise discarded once it has chosen.
++        if (AiController.effectRecordCombatListener() != null) {
++            AiController.effectRecordCombatListener()
++                    .onAttackersComputed(defender, myList, this.attackers);
++        }
+         this.blockers = getPossibleBlockers(oppList, this.attackers, this.nextTurn);
+     }
+ 
+diff --git a/forge-ai/src/main/java/forge/ai/AiBlockController.java b/forge-ai/src/main/java/forge/ai/AiBlockController.java
+index 28a9bcd5778..be51fc63103 100644
+--- a/forge-ai/src/main/java/forge/ai/AiBlockController.java
++++ b/forge-ai/src/main/java/forge/ai/AiBlockController.java
+@@ -93,6 +93,19 @@ public class AiBlockController {
+             }
+         }
+ 
++        // ── effect-record instrumentation (price-predictor spec 023) ──────
++        // Anchored on the attacker: which creatures the rules let block *this*
++        // one, and how many it takes. Both are computed here and discarded once
++        // the AI has chosen its blocks.
++        if (AiController.effectRecordCombatListener() != null) {
++            Player defending = combat == null ? null
++                    : combat.getDefenderPlayerByAttacker(attacker);
++            int minBlockers = defending == null ? 1
++                    : CombatUtil.getMinNumBlockersForAttacker(attacker, defending);
++            AiController.effectRecordCombatListener()
++                    .onBlockersComputed(attacker, blockersLeft, blockers, minBlockers);
++        }
++
+         return blockers;
+     }
+ 
 diff --git a/forge-ai/src/main/java/forge/ai/AiController.java b/forge-ai/src/main/java/forge/ai/AiController.java
-index f4b491e887c..bb652206a2d 100644
+index f4b491e887c..49e2c50a1bc 100644
 --- a/forge-ai/src/main/java/forge/ai/AiController.java
 +++ b/forge-ai/src/main/java/forge/ai/AiController.java
-@@ -101,6 +101,30 @@ public class AiController {
+@@ -101,6 +101,60 @@ public class AiController {
      private List<SpellAbility> skipped;
      private volatile boolean timeoutReached;
  
@@ -89,10 +144,40 @@ index f4b491e887c..bb652206a2d 100644
 +        effectRecordPlayabilityListener = listener;
 +    }
 +
++    /**
++     * Notified with the legal attacker and blocker sets the AI computed.
++     *
++     * <p>Rules-level again: which creatures the game allows to attack or block,
++     * not which ones the AI decided to. Both sets are computed every combat and
++     * discarded once the AI has chosen.
++     *
++     * <p>Called with the candidates and the legal subset rather than the
++     * difference, so the reader decides what "forbidden" means without this
++     * side having to allocate a second collection per combat.
++     */
++    public interface EffectRecordCombatListener {
++        void onAttackersComputed(GameEntity defender, List<Card> candidates, List<Card> legal);
++
++        void onBlockersComputed(Card attacker, List<Card> candidates, List<Card> legal,
++                int minBlockers);
++    }
++
++    private static EffectRecordCombatListener effectRecordCombatListener;
++
++    public static void setEffectRecordCombatListener(
++            final EffectRecordCombatListener listener) {
++        effectRecordCombatListener = listener;
++    }
++
++    /** The combat listener, or null when none is installed. */
++    public static EffectRecordCombatListener effectRecordCombatListener() {
++        return effectRecordCombatListener;
++    }
++
      public AiController(final Player computerPlayer, final Game game0) {
          player = computerPlayer;
          game = game0;
-@@ -852,6 +876,16 @@ public class AiController {
+@@ -852,6 +906,16 @@ public class AiController {
          // this is the "heaviest" check, which also sets up targets, defines X, etc.
          AiPlayDecision canPlay = canPlaySa(sa);
  
@@ -318,6 +403,78 @@ index 8171a902306..70b72918557 100644
          final Map<AbilityKey, Object> runParams = AbilityKey.mapFromCard(source);
          runParams.put(AbilityKey.Player, player);
          runParams.put(AbilityKey.Produced, afterReplace);
+diff --git a/forge-game/src/main/java/forge/game/staticability/StaticAbilityCantAttackBlock.java b/forge-game/src/main/java/forge/game/staticability/StaticAbilityCantAttackBlock.java
+index 8326753dfd3..2510db30c2e 100644
+--- a/forge-game/src/main/java/forge/game/staticability/StaticAbilityCantAttackBlock.java
++++ b/forge-game/src/main/java/forge/game/staticability/StaticAbilityCantAttackBlock.java
+@@ -46,6 +46,21 @@ public class StaticAbilityCantAttackBlock {
+             return true;
+         }
+ 
++        return cantAttackStatic(attacker, defender) != null;
++    }
++
++    /**
++     * The static ability that stops this attack, or null if none does.
++     *
++     * <p>Effect-record instrumentation (price-predictor spec 023). The loop is
++     * the one {@link #cantAttack} already walked and threw away: it finds which
++     * static forbids the attack and then reports only that one did. A reader
++     * recording why a creature could not attack needs the ability itself.
++     *
++     * <p>Answers null for the keyword and detained cases, which forbid an
++     * attack without any static being responsible.
++     */
++    public static StaticAbility cantAttackStatic(final Card attacker, final GameEntity defender) {
+         for (final Card ca : attacker.getGame().getCardsIn(ZoneType.STATIC_ABILITIES_SOURCE_ZONES)) {
+             for (final StaticAbility stAb : ca.getStaticAbilities()) {
+                 if (!stAb.checkConditions(StaticAbilityMode.CantAttack)) {
+@@ -53,11 +68,11 @@ public class StaticAbilityCantAttackBlock {
+                 }
+ 
+                 if (applyCantAttackAbility(stAb, attacker, defender)) {
+-                    return true;
++                    return stAb;
+                 }
+             }
+         }
+-        return false;
++        return null;
+     }
+ 
+     /**
+@@ -205,6 +220,17 @@ public class StaticAbilityCantAttackBlock {
+     }
+ 
+     public static boolean cantBlockBy(final Card attacker, final Card blocker) {
++        return cantBlockByStatic(attacker, blocker) != null;
++    }
++
++    /**
++     * The static ability that stops this block, or null if none does.
++     *
++     * <p>Effect-record instrumentation (price-predictor spec 023), the blocking
++     * counterpart of {@link #cantAttackStatic}. Same loop, same result, keeping
++     * the ability rather than reducing it to a boolean.
++     */
++    public static StaticAbility cantBlockByStatic(final Card attacker, final Card blocker) {
+         // add attacker and blocker first in case of LKI
+         CardCollection list = new CardCollection(attacker);
+         if (blocker != null) {
+@@ -217,11 +243,11 @@ public class StaticAbilityCantAttackBlock {
+                     continue;
+                 }
+                 if (applyCantBlockByAbility(stAb, attacker, blocker)) {
+-                    return true;
++                    return stAb;
+                 }
+             }
+         }
+-        return false;
++        return null;
+     }
+ 
+     /**
 diff --git a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java b/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
 index a5298d71237..30127819b06 100644
 --- a/forge-game/src/main/java/forge/game/trigger/TriggerHandler.java
