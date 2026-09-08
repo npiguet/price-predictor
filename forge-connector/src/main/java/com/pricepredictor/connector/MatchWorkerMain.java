@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.AttributionMode;
+import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 
 import java.nio.file.Path;
@@ -197,6 +198,10 @@ public class MatchWorkerMain {
             System.out.println(
                     "Effect records: " + effectRecords.path()
                             + " [mode=" + AttributionMode.detect().wireValue() + "]");
+            // The mode is one hook's answer, so a partly-applied patch still
+            // reads "patched" while a channel this run meant to collect is
+            // quietly empty. This is what names that.
+            System.out.println(PatchHooks.report());
             // The worker loops until the supervisor terminates it, so close()
             // is never reached on the normal path. Without this the block in
             // flight — up to a few hundred records — is lost on every stop.

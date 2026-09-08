@@ -1054,8 +1054,10 @@ writer at all: their decks are built for coverage rather than for a fair
 self-play sample, and mixing them into the sealed corpus would corrupt the
 scorer's training data.
 
-Exact attribution needs four engine hooks that live in `forge-connector/patches/`
-and are applied by hand to the sibling `../forge` checkout. Nothing requires
+Exact attribution needs engine hooks, which live as one commit per hook on the
+`effect-record-hooks` branch of the sibling `../forge` checkout — the branch is
+the history, so this repository keeps no exported copy of it, and
+`PatchHooks.REQUIRED` is the inventory of what they are. Nothing requires
 them: the connector compiles against **stock** Forge, looks every hook up by
 name at startup, and falls back to bracket attribution when it finds none. Every
 record carries the mode it was collected under, so a corpus gathered after a

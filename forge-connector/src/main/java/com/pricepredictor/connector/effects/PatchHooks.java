@@ -3,6 +3,8 @@ package com.pricepredictor.connector.effects;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Reaches the engine patch's hooks without linking against them.
@@ -32,6 +34,112 @@ public final class PatchHooks {
             "forge.game.spellability.AbilityManaPart";
     static final String CANT_ATTACK_BLOCK =
             "forge.game.staticability.StaticAbilityCantAttackBlock";
+    static final String CARD = "forge.game.card.Card";
+    static final String COMBAT = "forge.game.combat.Combat";
+
+    /**
+     * One method the engine patch adds, and what having it buys.
+     *
+     * @param owner   the Forge class it is declared on
+     * @param method  its name, which is the whole contract — the collectors look
+     *                it up by string and a rename degrades a channel silently
+     * @param unlocks what stops working without it
+     */
+    public record Hook(String owner, String method, String unlocks) {
+
+        boolean present() {
+            return find(owner, method).present();
+        }
+
+        @Override
+        public String toString() {
+            return owner.substring(owner.lastIndexOf('.') + 1) + "." + method;
+        }
+    }
+
+    /**
+     * Every hook the collectors need, and the specification of the patch.
+     *
+     * <p>This list is the patch's description. The patch itself is a branch in
+     * the sibling checkout — {@code effect-record-hooks} in {@code ../forge} —
+     * because a branch is what git is for; keeping exported {@code .patch} files
+     * beside it meant maintaining a second copy of the same history by hand,
+     * and the two could disagree. What could not live in a branch is *why* each
+     * hook exists and what breaks without it, so that lives here, next to the
+     * code that reads them.
+     *
+     * <p>Reconstructing a lapsed patch starts here: each entry names the class,
+     * the method, and the record channel it feeds.
+     *
+     * <p>One change in the patch is not listed, because it adds no method to
+     * probe for: {@code GameAction.destroy} puts the causing ability into the
+     * {@code Destroyed} trigger's run parameters, where it was in scope and
+     * being dropped. Its absence shows up as a destroy record that cannot name
+     * what destroyed the permanent, not as a missing hook.
+     */
+    public static final List<Hook> REQUIRED = List.of(
+            new Hook(TRIGGER_HANDLER, "getEffectRecordCause",
+                    "cause attribution; this is the hook mode detection probes"),
+            new Hook(TRIGGER_HANDLER, "setEffectRecordTriggerListener",
+                    "trigger records, fired and not"),
+            new Hook(REPLACEMENT_HANDLER, "setEffectRecordListener",
+                    "rewrite records"),
+            new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
+                    "per-clause attribution: an event's attributed_to"),
+            new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
+                    "playability records, the decision subkind"),
+            new Hook(AI_CONTROLLER, "setEffectRecordCombatListener",
+                    "the playability record's attackers and blockers subkinds"),
+            new Hook(CANT_ATTACK_BLOCK, "cantAttackStatic",
+                    "each forbidden attacker's responsible_static"),
+            new Hook(CANT_ATTACK_BLOCK, "cantBlockByStatic",
+                    "each forbidden blocker's responsible_static"),
+            new Hook(ABILITY_MANA_PART, "setEffectRecordManaListener",
+                    "mana records, and with them the role-polarity probe"),
+            new Hook(CARD, "getChangedCardTypesByStatic",
+                    "a continuous contribution's types"),
+            new Hook(CARD, "getChangedCardColorsByStatic",
+                    "a continuous contribution's colors"),
+            new Hook(CARD, "getTypeWithout",
+                    "removing the acting static's types from a continuous snapshot"),
+            new Hook(CARD, "getColorWithout",
+                    "removing the acting static's colours from a continuous snapshot"),
+            new Hook(CARD, "getKeywordsWithout",
+                    "removing the acting static's keywords from a continuous snapshot"),
+            new Hook(COMBAT, "getAssignedDamage",
+                    "a combat record's assignment_choices"));
+
+    /** The required hooks this checkout does not have. */
+    public static List<Hook> missing() {
+        List<Hook> absent = new ArrayList<>();
+        for (Hook hook : REQUIRED) {
+            if (!hook.present()) {
+                absent.add(hook);
+            }
+        }
+        return absent;
+    }
+
+    /**
+     * One line per missing hook, for a worker to print at startup.
+     *
+     * <p>A partly-applied patch is the state worth naming: the mode still reads
+     * {@code patched} because that is one hook's answer, while a channel this
+     * run was meant to collect is quietly empty.
+     */
+    public static String report() {
+        List<Hook> absent = missing();
+        if (absent.isEmpty()) {
+            return "effect-record hooks: all " + REQUIRED.size() + " present";
+        }
+        StringBuilder out = new StringBuilder(
+                "effect-record hooks: " + absent.size() + " of " + REQUIRED.size()
+                        + " missing, so these channels stay empty:");
+        for (Hook hook : absent) {
+            out.append("\n  ").append(hook).append(" — ").append(hook.unlocks());
+        }
+        return out.toString();
+    }
 
     /** What a hook lookup produced, or why it did not. */
     public record Lookup(Class<?> owner, Method method) {

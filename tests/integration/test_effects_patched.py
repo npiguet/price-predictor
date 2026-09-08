@@ -80,8 +80,8 @@ def test_a_patched_checkout_stamps_every_record_patched(tmp_path: Path) -> None:
     modes = {record.mode.value for record in records}
     if modes == {"degraded"}:
         pytest.skip(
-            "../forge is unpatched, which is the stage-one case: apply "
-            "forge-connector/patches/ and rebuild to exercise this test"
+            "../forge is unpatched, which is the stage-one case: check out "
+            "its effect-record-hooks branch and rebuild to exercise this test"
         )
     assert modes == {"patched"}
 
