@@ -2,25 +2,27 @@
 
 **Feature**: `023-ability-effect-model` | **Date**: 2026-09-06
 
-The operating procedure for the whole feature. Steps 1–7 produce the first `e` vectors and all three
-gate verdicts, and are the acceptance path for User Story 1 in [spec.md](spec.md).
-[After stage one](#after-stage-one) covers the later stages, each of which widens the corpus without
-invalidating what came before.
+The operating procedure for the whole feature. The path below collects **everything the record schema
+names** and trains against it; [Collecting less](#collecting-less) says what to drop for a smaller run,
+and [What is not collected](#what-is-not-collected) lists the two fields that are empty on purpose.
 
-They run against a patched or a stock `../forge` alike. Applying
-[the engine patch](../../forge-connector/patches/) first is worth it — it is one `git am` and one
-rebuild, and it takes a run from three of the eight sampling classes to six — but nothing in the
-procedure requires it, and every step below says what changes either way.
+Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 
 | Step | Command | Wall clock | Attended |
 |---|---|---|---|
+| 0 | apply the engine patch series, rebuild Forge and the JAR | minutes | no |
 | 1 | `price_predictor convert` | minutes | no |
 | 2 | `effects extract-keyword-definitions`, `effects build-vocab` | minutes | no |
 | 3 | `sealed match-outcomes --effect-records` | hours | you decide when to stop |
-| 4 | `effects train-effect-model` | hours | no |
-| 5 | four baseline runs | 4 × step 4 | no |
-| 6 | `effects encode-abilities` ×3 | minutes | no |
-| 7 | `effects evaluate-effect-model` | minutes | read the output |
+| 4 | `effects collect-coverage` | hours | no |
+| 5 | `effects collect-variants` | hours | no |
+| 6 | `effects train-effect-model`, then four baselines | 5 × hours | no |
+| 7 | `effects encode-abilities` ×3 | minutes | no |
+| 8 | `effects evaluate-effect-model` | minutes | read the output |
+
+Steps 3–5 are three different ways to reach cards, and a full corpus wants all three: self-play plays
+what sealed pools deal, coverage plays what they never deal, and variants play text that never
+existed. Each writes into the same shard directory and none invalidates the others.
 
 ## Prerequisites
 
@@ -34,15 +36,24 @@ Python side spawns — `ConvertMain`, `KeywordDefinitionMain`, `VariantSidecarMa
 `MatchWorkerMain` — so rebuild it after any Java change, and **after applying the engine patch**,
 because the worker links against the freshly installed Forge jars.
 
-Apply the patch first unless there is a reason not to:
+## 0. Apply the engine patch series
 
 ```bash
 cd ../forge
 git checkout -b effect-record-hooks
-git am ../price-predictor/forge-connector/patches/0001-*.patch
+git am ../price-predictor/forge-connector/patches/0*.patch
 mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests
 cd ../price-predictor/forge-connector && mvn package -DskipTests
 ```
+
+**Apply the whole series, in order** — one commit per hook, so each is reviewable on its own. Without
+it a run collects three of the eight sampling classes and stamps every record `degraded`; with it, all
+eight, and the two fork kinds become available. Nothing in the procedure *requires* the patch, but a
+run meant to collect everything does.
+
+A Forge upgrade reverts the branch, which is why the mode is probed at worker startup rather than
+being a build flag: a lapsed patch otherwise mislabels a corpus. Rebase the branch and regenerate the
+series as [the patches README](../../forge-connector/patches/) describes.
 
 ## 1. Convert, with sidecars and token scripts
 
@@ -53,7 +64,7 @@ python -m price_predictor convert
 Writes three things: converted card text under `output/cardsfolder/`, a `<name>.provenance.json`
 beside each of them, and converted token scripts under `output/tokenscripts/` with sidecars of their
 own. The sidecar is the join between a runtime Forge trait and a converted line; without it every
-record collected in step 3 is unjoinable.
+record collected later is unjoinable.
 
 This rewrites the converted tree. The sealed pipeline's `.npz` card embeddings sit in that same tree
 and are not deleted, but they stop describing their neighbours if the rendered text moves — re-run
@@ -87,12 +98,22 @@ printed, and the engine-coded family generates nothing at all; both keep their t
 ## 3. Collect, riding ordinary self-play
 
 ```bash
-python -m sealed match-outcomes --effect-records output/effects/records/ --workers 6
+python -m sealed match-outcomes \
+    --effect-records output/effects/records/ --workers 6 \
+    --interventions-per-game 2 \
+    --probes-per-game 2 \
+    --probe-keywords first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect
 ```
 
 Instrumentation is an opt-in on a command that already exists. The flag costs no extra simulation —
 it rides matches that were going to be played anyway — and the sealed corpora keep their exact format,
 so this doubles as a sealed self-play run. Ctrl-C to stop.
+
+The three fork flags are off by default and are what makes this a collect-everything run. Naming all
+eight damage-step keywords collects a probe branch for each, which is what gate 2 checks its model-side
+perturbation against; naming none takes no probe at all. Forks are the only expensive mechanism here —
+each costs a game copy that re-parses every card from its script — so the per-game budgets are the
+throttle, not the keyword list.
 
 **Checks**:
 - `output/effects/records/` fills with `{run_id}.{worker}.jsonl.gz` shards.
@@ -101,17 +122,18 @@ so this doubles as a sealed self-play run. Ctrl-C to stop.
   the mode is probed once per worker.
 - A `patched` run reaches **all eight** sampling classes: `resolution` in both halves, `combat`,
   `continuous`, `trigger`, `rewrite`, and `playability` in both its decision and legality subkinds.
-  Mana records arrive as the effect half of `resolution`. A `degraded` run reaches `resolution` and
-  `combat` only, which is three.
+  Mana records arrive as the effect half of `resolution`.
 - `output/sealed/match-outcomes.txt` and `cards-played.txt` are unchanged in format and content by the
   flag's presence.
 - A first-strike combat produced two `combat` records, one per damage step.
 
 ```bash
-# records collected so far
+# what has been collected so far
 python -c "import sys;sys.path.insert(0,'src');from pathlib import Path;\
-from effects.infrastructure.record_io import count_records;\
-print(count_records(Path('output/effects/records')))"
+from collections import Counter;from effects.infrastructure.record_io import read_records;\
+rs=list(read_records(Path('output/effects/records')));\
+print(f'{len({r.game_id for r in rs})} games, {len(rs)} records');\
+print(Counter(r.kind.value for r in rs))"
 ```
 
 ### How long to collect
@@ -142,38 +164,104 @@ A patched run writes roughly 410 records and 90 KB per game, so 7,000 games is u
 Shards are gzip-compressed, which is where the room comes from — the same corpus uncompressed is
 tens of gigabytes.
 
+### The cap flags
+
 Five flags cap what one worker collects, and every one is a per-worker quantity the supervisor cannot
-observe, so they travel to the JVM as `-Deffect.*` properties. `--mana-cap` (1) is records per unique
-mana ability **per game**, drawn uniformly from that game's activations rather than taken first —
-a land's first tap is turn one against an empty board, and taking it would make every mana record
-describe the same early game. Keyed on the mana produced, so a dual land's colours each record.
-`--playability-rate` (0.1) samples decision points, the legality subkinds being coalesced instead. And
-`--interventions-per-game`, `--probes-per-game` and `--probe-keywords` are stage three's fork budgets,
-the last empty by default so no fork is taken unless asked.
+observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted by both
+`match-outcomes` and `collect-coverage`.
+
+| Flag | Default | What it caps |
+|---|---|---|
+| `--mana-cap` | 1 | Records per unique mana ability **per game**, drawn uniformly from that game's activations rather than taken first — a land's first tap is turn one against an empty board, and taking it would make every mana record describe the same early game. Keyed on the mana produced, so a dual land's colours each record. |
+| `--playability-rate` | 0.1 | Share of decision points sampled. The legality subkinds are coalesced on their rendered payload instead, since the AI re-asks who may block while it evaluates. |
+| `--interventions-per-game` | 2 | Forced resolutions per game. Off unless the flag is given. |
+| `--probes-per-game` | 2 | Damage-step probes per game. |
+| `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means no probe is ever taken, whatever the budget. |
+
+## 4. Collect the cards self-play never deals
 
 ```bash
-# what has been collected so far
-python -c "import sys;sys.path.insert(0,'src');from pathlib import Path;\
-from collections import Counter;from effects.infrastructure.record_io import read_records;\
-rs=list(read_records(Path('output/effects/records')));\
-print(f'{len({r.game_id for r in rs})} games, {len(rs)} records');\
-print(Counter(r.kind.value for r in rs))"
+python -m effects collect-coverage \
+    --split-from models/effects/effect-model/latest.pt \
+    --target-records 50 --workers 12 \
+    --interventions-per-game 2 \
+    --probes-per-game 2 \
+    --probe-keywords first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect
 ```
 
-## 4. Train
+Sealed self-play only ever plays what sealed pools contain, so a card in no sealed-legal set never
+appears in a record at all. Decks are built over the whole converted corpus, weighted toward the cards
+with the fewest records, and rounds play until every card is satisfied or retires after
+`--no-progress-rounds` without a new qualifying record — which is what makes the run terminate.
+
+`--split-from` keeps held-out cards out of every deck; without it a coverage run contaminates the
+split of the model it feeds. On a first pass there is no checkpoint yet, so either run step 6 once on
+the self-play corpus and come back, or omit the flag and accept that this corpus cannot be used to
+evaluate a model split afterwards.
+
+The run reports two residues — cards judged uncastable, and castable cards short of `--target-records`.
+An **interventional resolution** is the answer to both: it forks the game at a phase boundary, puts an
+ability nobody played on the fork's stack, and records what it did. It goes on the stack rather than
+through the cost machinery, because the cost is usually why the record is missing — an ability the AI
+never used is mostly one it could never afford, and paying for it would fail on exactly the population
+the intervention exists to reach. Lands and mana abilities are skipped: every game plays them, so
+forking to force one spends a game copy on the commonest event in the corpus.
+
+Every fork is score-checked against the live game before any perturbation, a discarded fork still
+counts against its budget, and at most two forks may target one real resolution.
+
+## 5. Collect synthetic variants
+
+The script surface is a second vocabulary and a second cache, side by side with the prose ones:
 
 ```bash
-python -m effects train-effect-model --withhold-keyword cascade
+python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
+
+python -m effects collect-variants \
+    --split-from models/effects/effect-model/latest.pt \
+    --variant-volume 0.2
+```
+
+`collect-variants` reads Forge's **source** scripts, perturbs one whitelisted parameter per variant,
+writes a sidecar for each through `VariantSidecarMain`, and plays them. `--variant-volume` caps
+variant records as a fraction of the real records already present, so the cap scales with the corpus.
+A variant of a held-out card is held out with it. Variant scripts land in
+`output/effects/variant-scripts/` and are never converted to prose — the perturbation is on the script
+surface only.
+
+## Verify the corpus before training
+
+```bash
+python -m effects field-coverage --effect-records output/effects/records
+```
+
+Names every record field the corpus never varied. A field written as a fixed literal and one a run
+happened not to exercise look identical from a corpus, so the report separates them by a checked-in
+list: `[known ]` is expected, `[NEW   ]` is either newly broken or newly rare, and only the writer
+says which. A "listed as constant but carrying data" section means a field was implemented and the
+list is stale.
+
+On a full run expect `[known ]` on exactly the two fields under
+[What is not collected](#what-is-not-collected). Everything else appearing as `[NEW   ]` is worth a
+look before spending hours training against it — a rare counter type absent from a short run is
+normal, a whole payload channel constant is not.
+
+## 6. Train, and train the baselines
+
+```bash
+python -m effects train-effect-model \
+    --variant-scripts output/effects/variant-scripts/ \
+    --withhold-keyword cascade
 ```
 
 `--withhold-keyword` holds one implemented keyword's token out of training so the zero-shot check in
-step 7 has something to measure; its occurrences are always expanded instead. Any implemented keyword
+step 8 has something to measure; its occurrences are always expanded instead. Any implemented keyword
 outside gate 2's eight damage-step keywords works; `cascade` is just an example. Withholding one of
 the eight would degrade that keyword's own gate-2 verdict in the same run.
 
-Trains both transformers jointly from random init. Stage one has three of the eight sampling
-classes — `resolution-cost`, `resolution-effect`, and `combat` — so the mixture renormalizes over what
-is present and the absent kinds' fields contribute no loss.
+Trains both transformers jointly from random init. The mixture renormalizes over the sampling classes
+actually present, and an absent kind's fields contribute no loss — so the same command works on a
+three-class stage-one corpus and an eight-class one.
 
 **Read the first line it prints.** It reports the split: total records, then how many are training,
 card-disjoint and game-disjoint. The split holds out cards by newest first printing until they cover
@@ -184,21 +272,16 @@ training share.
 On an 8 GB card, `--context-cache` is the documented fallback: it swaps live context re-encoding for a
 stop-gradient momentum cache refreshed every `--cache-refresh` batches.
 
-**Checks**: the checkpoint under `models/effects/effect-model/` records its held-out card list, its
-`game_id` set across both strata, and the vocabulary and keyword-definition paths plus their hashes.
-
-## 5. Train the baselines
-
-All four are needed at stage one, because every reported check except the three that wait for later
-stages runs now: gate 1 compares against `identity`, every record kind reports `state-only` as its
-floor, the average-effect control is `no-state`, and the taxonomy comparison is `taxonomy`. Each
-inherits the split, and each holds out the same keyword, so the only difference between a baseline and
-the shipping model is the input its variant masks:
+All four baselines are needed, because every reported check runs against one: gate 1 compares against
+`identity`, every record kind reports `state-only` as its floor, the average-effect control is
+`no-state`, and the taxonomy comparison is `taxonomy`. Each inherits the split and holds out the same
+keyword, so the only difference from the shipping model is the input its variant masks:
 
 ```bash
 for V in identity state-only no-state taxonomy; do
   python -m effects train-effect-model --variant $V \
       --split-from models/effects/effect-model/latest.pt \
+      --variant-scripts output/effects/variant-scripts/ \
       --withhold-keyword cascade
 done
 ```
@@ -207,16 +290,26 @@ These write under `models/effects/effect-model/{variant}/`, never over the shipp
 `--split-from` is required for a variant run — without it the run fails fast, rather than silently
 computing its own split and making the comparison meaningless.
 
-## 6. Encode the cache
+**For the script surface** add `--vocab-path models/effects/vocab-script.txt` to *every* command in
+steps 6, 7 and 8 — training, the four baselines, `encode-abilities` and `evaluate-effect-model` all
+take it. The surface follows the loaded vocabulary rather than a flag of its own, so the two cannot
+disagree; but a cache encoded under one vocabulary and evaluated under another is a mismatch nothing
+catches for you.
+
+**Checks**: the checkpoint under `models/effects/effect-model/` records its held-out card list, its
+`game_id` set across both strata, and the vocabulary and keyword-definition paths plus their hashes.
+
+## 7. Encode the cache
 
 The `e`-geometry checks (gate 3, the decodability battery, the ward canary, the scorer smoke test)
 read `full`, `no-state`, and `taxonomy`. `identity` and `state-only` are prediction baselines and
 need no cache, so encoding them is optional:
 
 ```bash
-python -m effects encode-abilities
+python -m effects encode-abilities --variant-scripts output/effects/variant-scripts/
 for V in no-state taxonomy; do
-  python -m effects encode-abilities --variant $V
+  python -m effects encode-abilities --variant $V \
+      --variant-scripts output/effects/variant-scripts/
 done
 ```
 
@@ -226,10 +319,11 @@ each file is `(n_lines, e_dim)` and row-aligned with that source's sidecar. Each
 variant has no encoder, so its file is the taxonomy lookup emitted into the same row layout — every
 `e`-geometry check reads one file shape.
 
-## 7. Evaluate
+## 8. Evaluate
 
 ```bash
 python -m effects evaluate-effect-model \
+    --variant-scripts output/effects/variant-scripts/ \
     --variant-checkpoint identity=models/effects/effect-model/identity/latest.pt \
     --variant-checkpoint state-only=models/effects/effect-model/state-only/latest.pt \
     --variant-checkpoint no-state=models/effects/effect-model/no-state/latest.pt \
@@ -246,108 +340,35 @@ non-zero when a blocking gate fails.
 |---|---|
 | **Gate 1** (identity baseline) | Blocks shipping. All three margins must hold on the card-disjoint split's unique-text stratum — resolution records whose acting text appears on no training card, the only slice where a free embedding per text cannot recall the answer. Failure means the encoder is not reading text. |
 | **Gate 3** (collapse canaries) | Blocks shipping. Mean pairwise cosine ≤ 0.5 over 10,000 pairs, top PC ≤ 30% of variance. |
-| **Gate 2** (damage-step canary), per keyword | Blocks nothing. Each of the eight keywords passes or is routed to a stage-three probe. **This is the output that decides whether stage three builds probe machinery at all.** |
+| **Gate 2** (damage-step canary), per keyword | Blocks nothing. Each of the eight keywords passes or is routed to a probe. On a corpus collected with `--probe-keywords`, each routed keyword has engine-side branches to check the model-side perturbation against. |
 | Ward canary, nearest-neighbour / UMAP, decodability battery, scorer smoke test | Reported, not gating |
 
-Checks needing records that do not exist yet are skipped: matched real-vs-fork agreement and the
-probe-diff re-check wait for stage three, the role-polarity probe for stage two, and the decodability
-battery needs `output/sealed/cards-win-rates.txt` from a `train-encoder` run.
+The decodability battery needs `output/sealed/cards-win-rates.txt` from a `train-encoder` run; without
+it that check is skipped rather than failed.
 
-## What stage one deliberately does not do
+## Collecting less
 
-No Forge source is modified. There are no `continuous`, `playability`, `trigger`, `rewrite`, or mana
-records, and no forks. Evasion keywords will not separate — their signal is playability records at
-stage two, which is why gate 2 covers only the damage-step family.
+Every step above can be dropped, and the ones after it still run:
 
-## After stage one
+| Drop | Cost |
+|---|---|
+| Step 0, the engine patch | Three of eight sampling classes, `degraded` mode, no forks. Evasion keywords will not separate — their signal is playability records. |
+| `--probe-keywords` in steps 3–4 | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
+| `--interventions-per-game` | Cards the AI can never afford to play keep no resolution record. |
+| Step 4, `collect-coverage` | Cards in no sealed-legal set appear in no record at all. |
+| Step 5, `collect-variants` | No script-surface corpus; the prose surface trains as before. |
 
-Each stage below widens the corpus. None of them invalidates a record collected earlier, because the
-envelope is frozen before stage-one collection; re-run steps 4–7 against the widened corpus to see
-what the new records buy.
+## What is not collected
 
-### Stage two — the patch set, and the cards self-play never deals
+Two fields in the record schema are deliberately empty, and `field-coverage` lists both as `[known ]`:
 
-The four hooks in `forge-connector/patches/` are **hook specifications**, applied to the sibling
-checkout by hand; see that directory's README. Applying them unlocks the `rewrite`, `continuous`,
-`trigger` and `playability` record kinds plus snapshot tier 3, and makes workers stamp `patched`
-instead of `degraded`. Rebuild `../forge` and the fat JAR afterwards.
-
-Sealed self-play only ever plays what sealed pools contain, so a card in no sealed-legal set never
-appears in a record at all:
-
-```bash
-python -m effects collect-coverage \
-    --split-from models/effects/effect-model/latest.pt \
-    --target-records 50 --workers 12
-```
-
-Decks are built over the whole converted corpus, weighted toward the cards with the fewest records,
-and rounds play until every card is satisfied or retires after `--no-progress-rounds` without a new
-qualifying record. `--split-from` keeps held-out cards out of every deck; without it a coverage run
-contaminates the split of the model it feeds. The run reports two residues — cards judged uncastable,
-and castable cards short of `--target-records` — and both fall to stage three.
-
-### Stage three — interventions and probes
-
-Only if gate 2 routed keywords. Its per-keyword verdict names exactly which:
-
-```bash
-python -m effects collect-coverage \
-    --split-from models/effects/effect-model/latest.pt \
-    --interventions-per-game 2 \
-    --probe-keywords first_strike,double_strike
-```
-
-Both switches are off by default, so a checkout carrying the machinery takes no fork unless asked:
-`--interventions-per-game` for forced resolutions, `--probe-keywords` for damage-step probes.
-
-An **interventional resolution** forks the game at a phase boundary, puts an ability nobody played on
-the fork's stack, and records what it did. It goes on the stack rather than through the cost
-machinery, because the cost is usually why the record is missing — an ability the AI never used is
-mostly one it could never afford, and paying for it would fail on exactly the population the
-intervention exists to reach. Lands and mana abilities are skipped: every game plays them, so forking
-to force one spends a game copy on the commonest event in the corpus.
-
-A **damage-step probe** forks the same damage step with one creature's keyword stripped and re-runs
-it, so gate 2's model-side perturbation has an engine-side ground truth to be checked against. It
-forks at the phase event, which fires before the turn-based action that deals the damage — the only
-moment the copy can diverge from a board where nothing has been dealt. The branch names both the
-keyword and the creature it came from: a board with two tramplers gives the keyword alone two
-readings, and reproducing the perturbation model-side would strip the wrong one.
-
-Every fork is score-checked against the live game before any perturbation, a discarded fork still
-counts against its budget, and at most two forks may target one real resolution.
-
-### Stage four — the script surface and synthetic variants
-
-The script surface is a second vocabulary and a second cache, side by side with the prose ones:
-
-```bash
-python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
-
-python -m effects collect-variants \
-    --split-from models/effects/effect-model/latest.pt \
-    --variant-volume 0.2
-```
-
-`collect-variants` reads Forge's **source** scripts, perturbs one whitelisted parameter per variant,
-writes a sidecar for each through `VariantSidecarMain`, and plays them. `--variant-volume` caps
-variant records as a fraction of the real records already present, so the cap scales with the corpus.
-A variant of a held-out card is held out with it.
-
-Then re-run steps 4, 6 and 7 with the variant tree, and — for the script surface — the script
-vocabulary. The surface follows the loaded vocabulary rather than a flag of its own, so the two cannot
-disagree:
-
-```bash
-python -m effects train-effect-model \
-    --vocab-path models/effects/vocab-script.txt \
-    --variant-scripts output/effects/variant-scripts/ \
-    --withhold-keyword cascade
-```
-
-`--variant-scripts` also takes on `encode-abilities` and `evaluate-effect-model`. It defaults to absent
-everywhere, so a stage-one checkpoint keeps working unchanged after a stage-four rebuild exists.
+- **A `continuous` contribution's `name`.** Eight cards in all of Forge write the name layer from a
+  static, the head has no field for a name, and a name is open-vocabulary over 33,680 strings unlike
+  every other channel.
+- **A `playability`/`decision` candidate's `responsible_static`.** It would need a `cantBeCastStatic`
+  hook Forge does not have, and even where the equivalent exists for attackers and blockers only about
+  a quarter of forbidden creatures find a static — the rest are stopped by the rules themselves, where
+  an empty list is the right answer.
 
 ## Where results go
 
