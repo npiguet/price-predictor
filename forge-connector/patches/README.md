@@ -60,6 +60,7 @@ and the worker prints the detected mode at startup.
 | `StaticAbilityCantAttackBlock` | `cantAttackStatic` / `cantBlockByStatic` return the responsible static rather than a boolean | each forbidden creature's `responsible_static` |
 | `AbilityManaPart` | listener where produced mana reaches the pool (`setEffectRecordManaListener`) | mana records, and with them the role-polarity probe |
 | `Card` | static-keyed accessors over every type and colour layer table, and a public `CardColor` | the `continuous` record's type and colour channels |
+| `Card` | `getTypeWithout` / `getColorWithout` / `getKeywordsWithout` — the layers recombined with one static's entries dropped | a `continuous` record's snapshot, which must not contain the effect it labels |
 | `GameAction.destroy` | `AbilityKey.Cause` in the `Destroyed` run parameters | a destroy record can name what destroyed the permanent |
 
 The hook names are a contract with `PatchHooks` and `PatchedCollectors`, which look them up by string.
@@ -76,6 +77,11 @@ is the same shape of change.
 Keyword *removals* are also unrecorded. The collector reads layer 6's granted keywords, and a
 `KeywordsChange` that takes one away has no path to `keywords_lost` — the same gap the type and
 colour channels had before they were split into gained and lost.
+
+The three `…Without` hooks arrived after the rest, so a checkout carrying an older revision of this
+patch reports `patched` and still cannot suppress. `PatchedCollectors` checks for them by name and
+collects no `continuous` records when they are missing, because a snapshot that still contains the
+effect it labels is worse than no record.
 
 Around a quarter of forbidden creatures name a `responsible_static`. The rest are stopped by the rules
 themselves — tapped, summoning sick, "can't attack" printed on the card — where no static ability is

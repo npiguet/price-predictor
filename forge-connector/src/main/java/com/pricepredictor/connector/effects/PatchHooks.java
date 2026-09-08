@@ -156,6 +156,30 @@ public final class PatchHooks {
         }
     }
 
+    /** Call a one-{@code long}-argument method on an instance, or answer null. */
+    public static Object read(Object target, String methodName, long argument) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            return target.getClass()
+                    .getMethod(methodName, long.class)
+                    .invoke(target, argument);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Whether every named no-argument-or-long method is present on a class. */
+    public static boolean present(String className, String... methodNames) {
+        for (String methodName : methodNames) {
+            if (!find(className, methodName).present()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** The trigger currently running, when the cause hook is present. */
     public static Object currentTriggerCause() {
         return readStatic(TRIGGER_HANDLER, "getEffectRecordCause");
