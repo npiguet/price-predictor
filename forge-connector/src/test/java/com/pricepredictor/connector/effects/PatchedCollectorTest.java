@@ -26,7 +26,11 @@ class PatchedCollectorTest {
     }
 
     private static PatchedCollectors collectors(CollectionCaps caps) {
-        return new PatchedCollectors(null, null, "game-1", caps, 42L);
+        return collectors(caps, 42L);
+    }
+
+    private static PatchedCollectors collectors(CollectionCaps caps, long seed) {
+        return new PatchedCollectors(null, null, "game-1", caps, seed);
     }
 
     // ── the shared caps ─────────────────────────────────────────────────
@@ -98,32 +102,72 @@ class PatchedCollectorTest {
                 .probesEnabled());
     }
 
-    // ── the mana cap ────────────────────────────────────────────────────
+    // ── the mana reservoir ──────────────────────────────────────────────
 
     @Test
-    void aManaAbilityIsRecordedUpToItsCap() {
+    void theFirstActivationsFillTheReservoir() {
         PatchedCollectors collector = collectors(caps(3, 1.0));
-        for (int i = 0; i < 3; i++) {
-            assertTrue(collector.allowManaRecord("Mana$ G"), "record " + i);
-        }
-        assertFalse(collector.allowManaRecord("Mana$ G"));
+        assertEquals(0, collector.manaReservoirSlot("Mana$ G"));
+        assertEquals(1, collector.manaReservoirSlot("Mana$ G"));
+        assertEquals(2, collector.manaReservoirSlot("Mana$ G"));
     }
 
     @Test
-    void theCapIsPerUniqueManaAbilityText() {
-        // A basic land's tap ability resolves thousands of times a run; a rare
-        // mana ability must not be starved by it.
+    void theReservoirIsPerUniqueManaAbilityText() {
+        // A basic land taps a dozen times a game; a rare mana ability must not
+        // be starved by it.
         PatchedCollectors collector = collectors(caps(1, 1.0));
-        assertTrue(collector.allowManaRecord("Mana$ G"));
-        assertFalse(collector.allowManaRecord("Mana$ G"));
-        assertTrue(collector.allowManaRecord("Mana$ Any | Amount$ 2"));
+        assertEquals(0, collector.manaReservoirSlot("Mana$ G"));
+        assertEquals(0, collector.manaReservoirSlot("Mana$ Any | Amount$ 2"));
     }
 
     @Test
-    void theCapIsPerWorkerProcess() {
-        // Two collectors are two JVM-local counters; neither sees the other's.
-        assertTrue(collectors(caps(1, 1.0)).allowManaRecord("Mana$ G"));
-        assertTrue(collectors(caps(1, 1.0)).allowManaRecord("Mana$ G"));
+    void aCapOfZeroRecordsNothing() {
+        assertEquals(-1, collectors(caps(0, 1.0)).manaReservoirSlot("Mana$ G"));
+    }
+
+    /**
+     * Every activation is equally likely to survive.
+     *
+     * <p>The property the reservoir exists for. Taking the first would make
+     * every mana record describe turn one against an empty board, because that
+     * is when a land's first tap happens — a bias introduced before collection
+     * has even started, into the one input the model conditions on.
+     */
+    @Test
+    void everyActivationIsEquallyLikelyToSurvive() {
+        int activations = 8;
+        int trials = 20000;
+        int[] survivors = new int[activations];
+        for (int trial = 0; trial < trials; trial++) {
+            PatchedCollectors collector = collectors(caps(1, 1.0), trial);
+            int held = -1;
+            for (int i = 0; i < activations; i++) {
+                if (collector.manaReservoirSlot("Mana$ G") >= 0) {
+                    held = i;
+                }
+            }
+            survivors[held]++;
+        }
+        double expected = (double) trials / activations;
+        for (int i = 0; i < activations; i++) {
+            assertTrue(
+                    Math.abs(survivors[i] - expected) < expected * 0.15,
+                    "activation " + i + " survived " + survivors[i]
+                            + " times, expected about " + expected);
+        }
+    }
+
+    @Test
+    void aLaterActivationCanReplaceAnEarlierOne() {
+        // Otherwise the reservoir is just "keep the first", renamed.
+        boolean replaced = false;
+        for (int seed = 0; seed < 50 && !replaced; seed++) {
+            PatchedCollectors collector = collectors(caps(1, 1.0), seed);
+            collector.manaReservoirSlot("Mana$ G");
+            replaced = collector.manaReservoirSlot("Mana$ G") == 0;
+        }
+        assertTrue(replaced, "no seed ever replaced the first activation");
     }
 
     // ── continuous coalescing ───────────────────────────────────────────

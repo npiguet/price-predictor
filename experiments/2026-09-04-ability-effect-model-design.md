@@ -335,6 +335,10 @@ Three collectors repeat themselves, and all three are capped by identity rather 
 
 Capping by identity rather than by count is what keeps the sample varied. A count cap keeps the first N and then nothing, which concentrates a card's records in whichever games came first; keeping one per game spreads them across every game the card appeared in, from a different board each time. The mana cap is keyed on the mana produced as well as the ability, so a dual land records each colour it makes — City of Brass reached five in a single game — and "add {R} or {G}" is visible in the corpus as both.
 
+Which activation a game keeps is drawn uniformly rather than taken first, because a land's first tap is turn one against an empty board. Taking it would have made almost every mana record describe the same early game, and the board is the one input the model conditions on — a bias worth avoiding before collection starts rather than discovering in a trained model. Reservoir sampling gives the uniform draw without knowing in advance how many activations a game will hold: the sampled records now span turns 1 to 57 with a mean near 13.
+
+A subtler version of the same bias nearly survived. Games are seeded consecutively, and a linear congruential generator's first output is close to a linear function of its seed, so consecutive games were taking nearly the same first sampling decision — correlating the mana reservoir and the playability sample across a whole run, invisibly to any test of a single game. The seed passes through SplitMix64's finalizer before it reaches the generator.
+
 The table extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
 
 ## Build order — first embeddings before full machinery
