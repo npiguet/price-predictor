@@ -305,6 +305,57 @@ class TestShardDirectory:
         assert {r.worker for r in read_records(tmp_path)} == {"0", "1", "2"}
 
 
+class TestTheProbedPerturbation:
+    """A damage-step probe records what it stripped, and from whom.
+
+    The keyword alone is ambiguous on a board with two tramplers, and an
+    evaluator reproducing the perturbation model-side would strip the wrong
+    creature — turning the counterfactual the probe exists for into a
+    comparison against a different one.
+    """
+
+    def _probe(self, **payload_kwargs) -> EffectRecord:
+        return _record(
+            kind=RecordKind.COMBAT, moment=None, ability=None,
+            fork=True, mirror_of="run.0.7",
+            payload=CombatPayload(
+                attackers=("E12",),
+                events=(Event(type=EventType.DAMAGE_DEALT,
+                              params={"amount": 2, "combat": True}),),
+                **payload_kwargs,
+            ),
+        )
+
+    def test_both_halves_round_trip(self):
+        probe = self._probe(probed_keyword="trample", probed_entity="E12")
+        loaded = record_from_dict(record_to_dict(probe))
+        assert loaded.payload.probed_keyword == "trample"
+        assert loaded.payload.probed_entity == "E12"
+
+    def test_an_observed_combat_record_names_neither(self):
+        """Nothing was perturbed, so there is nothing to name."""
+        observed = _record(
+            kind=RecordKind.COMBAT, moment=None, ability=None,
+            payload=CombatPayload(attackers=("E12",)),
+        )
+        loaded = record_from_dict(record_to_dict(observed))
+        assert loaded.payload.probed_keyword is None
+        assert loaded.payload.probed_entity is None
+
+    def test_a_record_written_before_the_fields_existed_still_reads(self):
+        """Compatibility rule 1: the corpus is append-only, and a shard
+        collected before the probe existed cannot be regenerated."""
+        wire = record_to_dict(
+            _record(kind=RecordKind.COMBAT, moment=None, ability=None,
+                    payload=CombatPayload(attackers=("E12",)))
+        )
+        del wire["payload"]["probed_keyword"]
+        del wire["payload"]["probed_entity"]
+        loaded = record_from_dict(wire)
+        assert loaded.payload.probed_keyword is None
+        assert loaded.payload.attackers == ("E12",)
+
+
 class TestCompressedShards:
     """The Java writer emits `.jsonl.gz` as concatenated gzip members, one per
     block of records. The corpus is the run's real cost on disk — a few

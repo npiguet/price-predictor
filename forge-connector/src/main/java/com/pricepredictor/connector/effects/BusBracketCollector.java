@@ -63,6 +63,9 @@ public final class BusBracketCollector {
 
     private long recordsWritten;
 
+    /** Told each combat record's id, for a probe that mirrors it. */
+    private java.util.function.Consumer<String> onCombatRecord;
+
     public BusBracketCollector(
             Game game, RecordShardWriter writer, String gameId) {
         this.game = game;
@@ -70,6 +73,19 @@ public final class BusBracketCollector {
         this.gameId = gameId;
         this.snapshots = new SnapshotBuilder(game);
         this.mode = AttributionMode.detect();
+    }
+
+    /**
+     * Be told the id of each {@code combat} record as it is written.
+     *
+     * <p>A damage-step probe forks before the step and cannot know what it
+     * mirrors until the real record exists, so the pairing is handed over here
+     * rather than reconstructed. Reconstructing it from board state would not
+     * work: two combats in one turn can look identical, and a wrong pairing
+     * makes the difference between them meaningless.
+     */
+    public void onCombatRecord(java.util.function.Consumer<String> listener) {
+        this.onCombatRecord = listener;
     }
 
     public long recordsWritten() {
@@ -294,12 +310,19 @@ public final class BusBracketCollector {
         var phase = game.getPhaseHandler();
         String actor = phase == null || phase.getPlayerTurn() == null
                 ? null : SnapshotBuilder.playerId(phase.getPlayerTurn());
+        String recordId = writer.nextRecordId();
         emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                recordId, writer.runId(), RecordShardWriter.timestamp(),
                 gameId, EffectRecord.KIND_COMBAT, mode)
                 .actor(actor)
                 .state(combatState)
                 .payload(combatPayload()));
+        // A damage-step probe forked before this step and has been holding its
+        // branch since: it needs this record's id to say which combat it
+        // mirrors, and the id does not exist until the record is written.
+        if (onCombatRecord != null) {
+            onCombatRecord.accept(recordId);
+        }
         combatEvents.clear();
         combatParticipants.clear();
         combatState = null;

@@ -61,6 +61,8 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Stage three's forks, or null when the run takes none. */
     private ForkCollector forks;
+    /** Probe branches waiting for the combat record they mirror. */
+    private final List<ForkCollector.HeldProbe> heldProbes = new ArrayList<>();
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     /** Legality answers already recorded this game, keyed by rendered payload. */
@@ -214,6 +216,10 @@ public final class PatchedCollectors implements AutoCloseable {
         public void onPhase(forge.game.event.GameEventTurnPhase event) {
             collectContinuous();
             collectInterventions();
+            // Before the turn-based action that deals the damage: the phase
+            // event fires ahead of it, which is the only moment a probe can
+            // fork from a board where nothing has been dealt yet.
+            collectProbes();
         }
     }
 
@@ -609,6 +615,92 @@ public final class PatchedCollectors implements AutoCloseable {
             return false;
         }
         return !interveneSeen.contains(manaAbilityText(candidate, ""));
+    }
+
+    // ── damage-step probes (stage three) ────────────────────────────────
+
+    /**
+     * Fork this damage step for each probed keyword a combatant carries.
+     *
+     * <p>Gate 2 perturbs the keyword <b>model-side</b> and asks whether the
+     * prediction moves the right way. A probe answers the same question against
+     * the engine: the same combat, actually re-run without the keyword, so the
+     * model's response has a ground truth to be checked against. It is built
+     * only for the keywords gate 2 routed to it, which is why
+     * {@code --probe-keywords} is empty by default.
+     *
+     * <p>The branches are held rather than written. Each mirrors the real combat
+     * record, which does not exist until the step this ran ahead of has
+     * finished.
+     */
+    public void collectProbes() {
+        if (forks == null || !caps.probesEnabled() || mode == AttributionMode.DEGRADED) {
+            return;
+        }
+        var phase = game.getPhaseHandler();
+        if (phase == null || phase.getPhase() == null) {
+            return;
+        }
+        String step = phase.getPhase().toString();
+        if (!step.contains("COMBAT_DAMAGE") && !step.contains("FIRST_STRIKE_DAMAGE")) {
+            return;
+        }
+        boolean firstStrike = step.contains("FIRST_STRIKE");
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            if (!inCombat(card)) {
+                continue;
+            }
+            for (KeywordInterface keyword : card.getKeywords()) {
+                String original = keyword.getOriginal();
+                if (original == null || original.isEmpty()) {
+                    continue;
+                }
+                // The flag names keywords in the corpus's spelling
+                // (first_strike); the card carries Forge's (First Strike).
+                // Matched on the normalized form and stripped by the card's own,
+                // so neither side has to guess the other's.
+                if (!caps.probeKeywords().contains(normalizeKeyword(original))) {
+                    continue;
+                }
+                ForkCollector.HeldProbe held =
+                        forks.probe(original, card, firstStrike);
+                if (held != null) {
+                    heldProbes.add(held);
+                }
+            }
+        }
+    }
+
+    /** Is this creature in the combat about to deal damage? */
+    private boolean inCombat(Card card) {
+        var combat = game.getCombat();
+        return combat != null
+                && (combat.isAttacking(card) || combat.isBlocking(card));
+    }
+
+    /**
+     * Forge's spelling of a keyword in the one every reader uses.
+     *
+     * <p>Mirrors {@code effects.domain.state_snapshot.normalize_keyword}: the
+     * parameter after {@code :} goes, spaces become underscores. Two spellings
+     * of first strike is exactly the mismatch that made gate 2 report zero
+     * observations of it.
+     */
+    static String normalizeKeyword(String original) {
+        int parameter = original.indexOf(':');
+        String base = parameter < 0 ? original : original.substring(0, parameter);
+        return base.trim().toLowerCase(java.util.Locale.ROOT).replace(' ', '_');
+    }
+
+    /** Complete every held branch against the combat record it mirrors. */
+    public void writeHeldProbes(String combatRecordId) {
+        if (forks == null || heldProbes.isEmpty()) {
+            return;
+        }
+        for (ForkCollector.HeldProbe held : heldProbes) {
+            forks.writeHeldProbe(held, combatRecordId);
+        }
+        heldProbes.clear();
     }
 
     // ── mana records ────────────────────────────────────────────────────

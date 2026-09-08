@@ -68,10 +68,11 @@ cost of building against stock Forge, and why the integration test asserts the m
 
 ## Not yet hooked
 
-A patched run reaches all eight sampling classes. What is still empty is the `continuous` record's
-type, colour and name channels: the keyed accessors exist and the reader fills `pt_boost` and
-`keywords` from the P/T and keyword layers, which is where anthems and keyword grants live, but types
-and colours need the applied change diffed against the base and nobody has needed them yet.
+A patched run reaches all eight sampling classes, and both stage-three fork kinds work. What is still
+empty is the `continuous` record's type, colour and name channels: the keyed accessors exist and the
+reader fills `pt_boost` and `keywords` from the P/T and keyword layers, which is where anthems and
+keyword grants live, but types and colours need the applied change diffed against the base and nobody
+has needed them yet.
 
 Around a quarter of forbidden creatures name a `responsible_static`. The rest are stopped by the rules
 themselves — tapped, summoning sick, "can't attack" printed on the card — where no static ability is

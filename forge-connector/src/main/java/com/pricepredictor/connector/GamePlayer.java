@@ -123,8 +123,9 @@ public class GamePlayer {
                 // change when the game does. Both collectors share that id —
                 // they describe the same game.
                 String gameId = effectRecords.nextGameId();
-                game.subscribeToEvents(new BusBracketCollector(
-                        game, effectRecords, gameId));
+                BusBracketCollector bracket = new BusBracketCollector(
+                        game, effectRecords, gameId);
+                game.subscribeToEvents(bracket);
                 // The patched collectors reach the engine through static
                 // listeners, so they are installed for the life of one game and
                 // uninstalled after it. On a stock checkout install() finds no
@@ -138,6 +139,10 @@ public class GamePlayer {
                             game, effectRecords, gameId, caps, gameSeed));
                 }
                 gameSeed++;
+                // A probe forks before the damage step and cannot know which
+                // combat record it mirrors until that record is written.
+                final PatchedCollectors withProbes = patched;
+                bracket.onCombatRecord(withProbes::writeHeldProbes);
                 patched.install();
                 // Continuous effects are read off the layer tables at a phase
                 // boundary, which is the cheapest moment the board is stable.
