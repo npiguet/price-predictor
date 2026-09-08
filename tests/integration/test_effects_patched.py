@@ -180,6 +180,41 @@ def test_a_continuous_snapshot_does_not_contain_the_effect_it_labels(
     )
 
 
+def test_no_field_listed_as_constant_has_quietly_started_carrying_data(
+    tmp_path: Path,
+) -> None:
+    """The ratchet on the constant-field inventory.
+
+    Asserted in one direction only. Observing a value is evidence that a field
+    is wired; *not* observing one is not evidence that it is unwired, because a
+    short collection window is also how a rare field looks. So this fails when
+    a listed field carries something -- meaning it was implemented and the list
+    is stale -- and never fails for a field that merely went unexercised.
+
+    The other direction is the operator's: ``field_coverage`` over a full
+    corpus prints every constant field, and one that is not on the list is
+    either newly broken or newly rare.
+    """
+    from effects.application.field_coverage import (
+        KNOWN_CONSTANT_FIELDS,
+        field_coverage,
+    )
+
+    records = _require_patched(tmp_path / "records")
+    if not records:
+        pytest.skip("worker produced no records within the collection window")
+
+    coverage = field_coverage(records)
+    carrying = sorted(
+        path for path in KNOWN_CONSTANT_FIELDS
+        if path in coverage and not coverage[path].constant
+    )
+    assert not carrying, (
+        "these fields are listed in KNOWN_CONSTANT_FIELDS but now carry data; "
+        f"remove them from the list: {carrying}"
+    )
+
+
 def test_a_patched_checkout_collects_snapshot_tier_three(tmp_path: Path) -> None:
     """Unreferenced stack contents, which stage one does not collect."""
     records = _require_patched(tmp_path / "records")
