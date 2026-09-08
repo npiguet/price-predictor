@@ -84,6 +84,31 @@ class ForkCollectorTest {
         assertEquals(0L, collector.recordsWritten());
     }
 
+    /**
+     * The intervention resolves the ability rather than only forking.
+     *
+     * <p>The failure this guards against is a collector that copies the game,
+     * score-checks it, snapshots it, and writes a record saying an ability was
+     * forced without saying what it did — which is what this class did before
+     * the resolution was written, and which looks like a working collector.
+     *
+     * <p>Only the wiring is checkable here, because forking needs a live game;
+     * {@code tests/integration/test_effects_forks.py} asserts against a real
+     * one that the records carry events.
+     */
+    @Test
+    void interveningResolvesRatherThanOnlyCopying() throws Exception {
+        var method = ForkCollector.class.getDeclaredMethod(
+                "forceResolution",
+                forge.game.Game.class,
+                forge.game.spellability.SpellAbility.class,
+                forge.game.player.Player.class);
+        assertTrue(method != null, "no resolution step on the intervention path");
+        // Returns the events it observed, so an empty payload can only mean the
+        // ability genuinely did nothing observable.
+        assertEquals(List.class, method.getReturnType());
+    }
+
     // ── the probe switch ────────────────────────────────────────────────
 
     @Test

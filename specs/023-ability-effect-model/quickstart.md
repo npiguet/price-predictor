@@ -298,11 +298,21 @@ python -m effects collect-coverage \
     --probe-keywords first_strike,double_strike
 ```
 
-`--probe-keywords` is comma-separated and empty by default, so a checkout carrying the machinery takes
-no fork unless asked. An interventional resolution forces an ability that no game plays; a damage-step
-probe re-runs one combat with a keyword stripped. Every fork is score-checked against the live game
-before any perturbation, a discarded fork still counts against its budget, and at most two forks may
-target one real resolution.
+Both switches are off by default, so a checkout carrying the machinery takes no fork unless asked:
+`--interventions-per-game` for forced resolutions, `--probe-keywords` for damage-step probes.
+
+An **interventional resolution** forks the game at a phase boundary, puts an ability nobody played on
+the fork's stack, and records what it did. It goes on the stack rather than through the cost
+machinery, because the cost is usually why the record is missing — an ability the AI never used is
+mostly one it could never afford, and paying for it would fail on exactly the population the
+intervention exists to reach. Lands and mana abilities are skipped: every game plays them, so forking
+to force one spends a game copy on the commonest event in the corpus.
+
+A **damage-step probe** re-runs one combat with a keyword stripped. That half is not built — it
+records a branch it is handed, and nothing runs the stripped combat yet.
+
+Every fork is score-checked against the live game before any perturbation, a discarded fork still
+counts against its budget, and at most two forks may target one real resolution.
 
 ### Stage four — the script surface and synthetic variants
 

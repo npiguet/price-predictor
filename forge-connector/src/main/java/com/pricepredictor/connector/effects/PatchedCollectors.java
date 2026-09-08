@@ -57,6 +57,10 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Map<String, Integer> manaRecords = new HashMap<>();
     /** The sampled mana records, held until the game ends. */
     private final Map<String, List<EffectRecord>> manaReservoir = new LinkedHashMap<>();
+    /** Lines already offered an intervention, so a redraw does not repeat one. */
+    private final Set<String> interveneSeen = new LinkedHashSet<>();
+    /** Stage three's forks, or null when the run takes none. */
+    private ForkCollector forks;
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     /** Legality answers already recorded this game, keyed by rendered payload. */
@@ -182,8 +186,20 @@ public final class PatchedCollectors implements AutoCloseable {
         return z ^ (z >>> 31);
     }
 
+    /**
+     * Attach stage three's fork collector.
+     *
+     * <p>Optional and off by default: with none attached, or with
+     * {@code --interventions-per-game 0}, no game is ever copied. Separate from
+     * the constructor because forking is a build decision gate 2 informs, not
+     * something every collecting run should pay for.
+     */
+    public void withForks(ForkCollector forks) {
+        this.forks = forks;
+    }
+
     public long recordsWritten() {
-        return recordsWritten;
+        return recordsWritten + (forks == null ? 0 : forks.recordsWritten());
     }
 
     /**
@@ -197,6 +213,7 @@ public final class PatchedCollectors implements AutoCloseable {
         @com.google.common.eventbus.Subscribe
         public void onPhase(forge.game.event.GameEventTurnPhase event) {
             collectContinuous();
+            collectInterventions();
         }
     }
 
@@ -529,6 +546,69 @@ public final class PatchedCollectors implements AutoCloseable {
     @SuppressWarnings("unchecked")
     private static List<Card> asCards(Object value) {
         return value instanceof List<?> list ? (List<Card>) list : List.of();
+    }
+
+    // ── interventional resolutions (stage three) ────────────────────────
+
+    /**
+     * Force an ability nobody played, at a phase boundary.
+     *
+     * <p>Some abilities appear in no record however long collection runs: the
+     * AI judges them bad, cannot afford them, or never draws them into a board
+     * where they do anything. Observation cannot reach those, so the corpus
+     * forks the game and makes one happen.
+     *
+     * <p>Driven from a phase boundary rather than from the playability hook,
+     * even though that hook knows exactly which candidates were declined. The
+     * hook fires inside the AI's own evaluation, and forking the game there
+     * means copying a game that is mid-decision and re-entering the rules
+     * engine underneath it. A phase boundary is the same board with nothing in
+     * flight.
+     *
+     * <p>Costs a game copy and a stack resolution each, which is why
+     * {@code --interventions-per-game} defaults low and why nothing happens at
+     * all when it is zero.
+     */
+    public void collectInterventions() {
+        if (forks == null || mode == AttributionMode.DEGRADED) {
+            return;
+        }
+        Player actor = game.getPhaseHandler() == null
+                ? null : game.getPhaseHandler().getPlayerTurn();
+        if (actor == null) {
+            return;
+        }
+        for (Card card : actor.getCardsIn(ZoneType.Hand)) {
+            for (SpellAbility candidate : card.getSpellAbilities()) {
+                if (!worthIntervening(candidate)) {
+                    continue;
+                }
+                if (!forks.mayIntervene(candidate.getId())) {
+                    return;
+                }
+                interveneSeen.add(manaAbilityText(candidate, ""));
+                forks.intervene(candidate, candidate.getId());
+            }
+        }
+    }
+
+    /**
+     * Is this line one observation cannot reach anyway?
+     *
+     * <p>Lands and mana abilities are excluded because every game plays them —
+     * forking to force a Mountain onto the battlefield spends a game copy to
+     * observe the most common event in the corpus. What is left is the spells
+     * and activated abilities the AI passed over, which is the population the
+     * intervention exists for.
+     *
+     * <p>Once per line per game: a card redrawn or returned to hand is the same
+     * line, and forcing it twice buys the second copy of one observation.
+     */
+    private boolean worthIntervening(SpellAbility candidate) {
+        if (candidate.isLandAbility() || candidate.isManaAbility()) {
+            return false;
+        }
+        return !interveneSeen.contains(manaAbilityText(candidate, ""));
     }
 
     // ── mana records ────────────────────────────────────────────────────
