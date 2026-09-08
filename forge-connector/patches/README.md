@@ -56,6 +56,8 @@ and the worker prints the detected mode at startup.
 | `ReplacementHandler` | listener around `executeReplacement` (`setEffectRecordListener`) | `rewrite` records |
 | `AbilityUtils` | per-thread pointer to the resolving sub-ability (`getEffectRecordSubAbility`) | per-clause attribution |
 | `AiController` | rules-level candidate verdicts (`setEffectRecordPlayabilityListener`) | `playability` records |
+| `AiController` | legal attacker and blocker sets (`setEffectRecordCombatListener`) | the `playability` record's `attackers` and `blockers` subkinds |
+| `StaticAbilityCantAttackBlock` | `cantAttackStatic` / `cantBlockByStatic` return the responsible static rather than a boolean | each forbidden creature's `responsible_static` |
 | `AbilityManaPart` | listener where produced mana reaches the pool (`setEffectRecordManaListener`) | mana records, and with them the role-polarity probe |
 | `Card` | keyed accessors for the type and colour layer tables | the `continuous` record's type and colour channels |
 | `GameAction.destroy` | `AbilityKey.Cause` in the `Destroyed` run parameters | a destroy record can name what destroyed the permanent |
@@ -66,11 +68,11 @@ cost of building against stock Forge, and why the integration test asserts the m
 
 ## Not yet hooked
 
-`playability-legality` is the one sampling class a patched run still misses. It is the legal attacker
-and blocker sets, which `AiAttackController` and `AiBlockController` compute and discard; nothing
-reads them, so a patched run reaches seven of the eight classes.
+A patched run reaches all eight sampling classes. What is still empty is the `continuous` record's
+type, colour and name channels: the keyed accessors exist and the reader fills `pt_boost` and
+`keywords` from the P/T and keyword layers, which is where anthems and keyword grants live, but types
+and colours need the applied change diffed against the base and nobody has needed them yet.
 
-The `continuous` record's type, colour and name channels are also still empty. The keyed accessors
-exist and the reader fills `pt_boost` and `keywords` from the P/T and keyword layers, which is where
-anthems and keyword grants live; types and colours need the applied change diffed against the base,
-which the flattened accessors make awkward and nobody has needed yet.
+Around a quarter of forbidden creatures name a `responsible_static`. The rest are stopped by the rules
+themselves — tapped, summoning sick, "can't attack" printed on the card — where no static ability is
+to blame, and an empty list is the right answer rather than a gap.

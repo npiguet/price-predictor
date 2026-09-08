@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
 import forge.game.Game;
+import forge.game.GameEntity;
 import forge.game.card.Card;
 import forge.game.keyword.KeywordInterface;
 import forge.game.keyword.KeywordsChange;
@@ -56,6 +57,8 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Map<String, Integer> manaRecords = new HashMap<>();
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
+    /** Legality answers already recorded this game, keyed by rendered payload. */
+    private final Set<String> coalescedLegality = new LinkedHashSet<>();
     private final List<String> installed = new ArrayList<>();
     /** Static ability by layer-table id, resolved once per game. */
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
@@ -164,6 +167,11 @@ public final class PatchedCollectors implements AutoCloseable {
                 manaHandler())) {
             installed.add("mana");
         }
+        if (PatchHooks.install(
+                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener",
+                combatLegalityHandler())) {
+            installed.add("combat-legality");
+        }
         return installed.size();
     }
 
@@ -177,6 +185,8 @@ public final class PatchedCollectors implements AutoCloseable {
                 PatchHooks.AI_CONTROLLER, "setEffectRecordPlayabilityListener");
         PatchHooks.uninstall(
                 PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener");
+        PatchHooks.uninstall(
+                PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener");
         installed.clear();
     }
 
@@ -297,6 +307,153 @@ public final class PatchedCollectors implements AutoCloseable {
                             + ",\"responsible_static\":[]}]}"));
             return null;
         };
+    }
+
+    // ── playability records: the legality subkinds ──────────────────────
+
+    /**
+     * The legal attacker and blocker sets, and what keeps the rest out.
+     *
+     * <p>The eighth sampling class, and the only one that says what the rules
+     * *forbid* rather than what happened.
+     *
+     * <p>Deduplicated by payload rather than sampled. The AI asks these
+     * questions repeatedly while it evaluates a combat — once per candidate
+     * block assignment, once per defender it considers — and the board does not
+     * move while it does, so the answers repeat verbatim. Left alone they were
+     * four fifths of the corpus at thirteen hundred records a game. Two records
+     * that would be byte-identical carry the same observation once, so
+     * collapsing them loses nothing, which is what makes this a cap rather than
+     * a sample.
+     */
+    private InvocationHandler combatLegalityHandler() {
+        return (proxy, method, args) -> {
+            if (args == null) {
+                return null;
+            }
+            if ("onAttackersComputed".equals(method.getName()) && args.length >= 3) {
+                emitAttackers(args[0], asCards(args[1]), asCards(args[2]));
+            } else if ("onBlockersComputed".equals(method.getName())
+                    && args.length >= 4) {
+                emitBlockers(
+                        args[0] instanceof Card attacker ? attacker : null,
+                        asCards(args[1]), asCards(args[2]),
+                        args[3] instanceof Integer min ? min : 0);
+            }
+            return null;
+        };
+    }
+
+    private void emitAttackers(Object defender, List<Card> candidates, List<Card> legal) {
+        if (candidates.isEmpty()) {
+            return;
+        }
+        GameEntity target = defender instanceof GameEntity entity ? entity : null;
+        StringJoiner attackers = new StringJoiner(",", "[", "]");
+        for (Card card : legal) {
+            attackers.add(Json.string(SnapshotBuilder.entityId(card)));
+        }
+        StringJoiner forbidden = new StringJoiner(",", "[", "]");
+        for (Card card : candidates) {
+            if (legal.contains(card)) {
+                continue;
+            }
+            forbidden.add(forbiddenJson(
+                    card, target == null ? null : cantAttackStatic(card, target)));
+        }
+        String payload = "{\"legal_attackers\":" + attackers
+                + ",\"forbidden\":" + forbidden + "}";
+        if (!allowLegalityRecord("attackers", payload)) {
+            return;
+        }
+        emit(new EffectRecord(
+                writer.nextRecordId(), writer.runId(),
+                RecordShardWriter.timestamp(), gameId,
+                EffectRecord.KIND_PLAYABILITY, mode)
+                .subkind("attackers")
+                .actor(activePlayerId())
+                .state(snapshots.toJson(null, List.of()))
+                .payload(payload));
+    }
+
+    private void emitBlockers(
+            Card attacker, List<Card> candidates, List<Card> legal, int minBlockers) {
+        if (attacker == null || candidates.isEmpty()) {
+            return;
+        }
+        StringJoiner blockers = new StringJoiner(",", "[", "]");
+        for (Card card : legal) {
+            blockers.add(Json.string(SnapshotBuilder.entityId(card)));
+        }
+        StringJoiner forbidden = new StringJoiner(",", "[", "]");
+        for (Card card : candidates) {
+            if (legal.contains(card)) {
+                continue;
+            }
+            forbidden.add(forbiddenJson(card, cantBlockByStatic(attacker, card)));
+        }
+        String payload = "{\"anchor_attacker\":"
+                + Json.string(SnapshotBuilder.entityId(attacker))
+                + ",\"legal_blockers\":" + blockers
+                + ",\"forbidden\":" + forbidden
+                + ",\"min_blockers\":" + minBlockers + "}";
+        if (!allowLegalityRecord("blockers", payload)) {
+            return;
+        }
+        emit(new EffectRecord(
+                writer.nextRecordId(), writer.runId(),
+                RecordShardWriter.timestamp(), gameId,
+                EffectRecord.KIND_PLAYABILITY, mode)
+                .subkind("blockers")
+                // Anchored on the attacker: "who may block" has no answer
+                // without saying what they would be blocking.
+                .actor(SnapshotBuilder.playerId(attacker.getController()))
+                .state(snapshots.toJson(null, List.of()))
+                .payload(payload));
+    }
+
+    /**
+     * Whether this legality answer is new in this game.
+     *
+     * <p>Keyed on the rendered payload, so only a byte-identical record is
+     * dropped. A legal set that genuinely changed — a creature untapped, an
+     * anthem resolved — differs in the payload and records again.
+     */
+    public boolean allowLegalityRecord(String subkind, String payload) {
+        return coalescedLegality.add(subkind + "@" + payload.hashCode());
+    }
+
+    /**
+     * One entity kept out of a legal set, and the static responsible.
+     *
+     * <p>The static is often absent, and that is a real answer rather than a
+     * gap: a creature that is tapped, or summoning sick, or has "can't attack"
+     * printed on it, is stopped by the rules themselves and no static ability
+     * is to blame.
+     */
+    private static String forbiddenJson(Card card, StaticAbility responsible) {
+        ProvenanceKey key = responsible == null ? null : ProvenanceKey.of(responsible);
+        return "{\"entity\":" + Json.string(SnapshotBuilder.entityId(card))
+                + ",\"responsible_static\":["
+                + (key == null ? "" : key.toJson()) + "]}";
+    }
+
+    /** Reflective, because the engine exposes these only on a patched checkout. */
+    private static StaticAbility cantAttackStatic(Card attacker, GameEntity defender) {
+        return (StaticAbility) PatchHooks.invokeStatic(
+                PatchHooks.CANT_ATTACK_BLOCK, "cantAttackStatic",
+                new Class<?>[]{Card.class, GameEntity.class}, attacker, defender);
+    }
+
+    private static StaticAbility cantBlockByStatic(Card attacker, Card blocker) {
+        return (StaticAbility) PatchHooks.invokeStatic(
+                PatchHooks.CANT_ATTACK_BLOCK, "cantBlockByStatic",
+                new Class<?>[]{Card.class, Card.class}, attacker, blocker);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Card> asCards(Object value) {
+        return value instanceof List<?> list ? (List<Card>) list : List.of();
     }
 
     // ── mana records ────────────────────────────────────────────────────
