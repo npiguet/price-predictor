@@ -92,7 +92,11 @@ The probe's `interventional = false` is what distinguishes it from an interventi
 **Rules**
 
 - Characteristics are computed (post-layer), never printed. Exception: a `continuous` record's snapshot
-  has the acting static's own contributions removed from every layer channel it wrote.
+  has the acting static's own contributions removed from every layer channel it wrote — the board is
+  **recomputed with that static's layer entries dropped**, not stripped of the tokens it contributed.
+  So a contribution can still appear in its own snapshot where a second static or the card's own
+  printed text supplies it: an anthem granting trample to a creature printed with trample leaves
+  trample in the board, which is the board that anthem acted on.
 - Inclusion tiers, in order: (1) referenced objects — every entity-valued ref appears as an entity in
   whatever zone it sits, with that zone recorded; (2) core — global, battlefield, and command-zone
   effect cards; (3) unreferenced stack; (4) unreferenced hand and graveyard. Tiers 1–2 from stage one,

@@ -1,4 +1,4 @@
-From 6d83a6a05dd8c95504b41fadec7e6f5324560dcc Mon Sep 17 00:00:00 2001
+From 1bd1d544948be7456e0696c0d85f32b017e1df60 Mon Sep 17 00:00:00 2001
 From: lordofthepigs <nicolas.piguet@gmail.com>
 Date: Mon, 7 Sep 2026 21:49:33 +0200
 Subject: [PATCH] Add effect-record instrumentation hooks
@@ -48,16 +48,29 @@ Mana abilities never use the stack, so an observer watching casts and
 resolutions sees no mana at all; the notification carries the mana after any
 replacement has rewritten it.
 
-Card gains accessors that regroup the type and colour layer tables under the
-static that wrote each entry, matching what the keyword and P/T layers already
-expose. The existing accessors flatten them into the applied result, which is
-what the rules need and which loses the applying static's id that per-static
-attribution turns on. Each channel is spread over three tables — by-text,
+Card gains five accessors, answering two halves of one question about a
+continuous effect: what one static contributes, and what the card would be
+without it.
+
+getChangedCardTypesByStatic and getChangedCardColorsByStatic regroup the type
+and colour layer tables under the static that wrote each entry, matching what
+the keyword and P/T layers already expose. The existing accessors flatten them
+into the applied result, which is what the rules need and which loses the
+applying static's id. Each channel is spread over three tables — by-text,
 character-defining, and the main layer — and the regrouping happens here, where
 the layers are known, rather than in a caller that would take one of the three
 and under-report without failing. The key is the static's id alone rather than
 the (timestamp, id) pair the tables use, since one static can write to more
 than one of these layers and the pairs would collide.
+
+getTypeWithout, getColorWithout and getKeywordsWithout recombine the layers the
+way getType, getColor and updateKeywordsCache do, with one static's entries
+dropped, and return the answer instead of caching it. None of them touches the
+card. Subtracting a static's contributions from the applied result is a
+different and wrong answer: a second static granting the same keyword or type
+would go with it, a card printed with what its own static grants would lose it,
+and a static that overwrites a type line or strips a whole class of type cannot
+be inverted from its contribution at all.
 
 CardColor becomes public for the same reader. It is a two-component record of
 what its accessor returns, and a caller outside this package cannot invoke a
@@ -67,17 +80,17 @@ GameAction.destroy puts the causing ability in the Destroyed trigger's run
 parameters. It is in scope and was being dropped, so nothing downstream could
 name what destroyed the permanent.
 ---
- .../java/forge/ai/AiAttackController.java     |  7 ++
- .../main/java/forge/ai/AiBlockController.java | 13 ++++
- .../src/main/java/forge/ai/AiController.java  | 64 +++++++++++++++++++
- .../src/main/java/forge/game/GameAction.java  |  6 ++
- .../java/forge/game/ability/AbilityUtils.java | 32 ++++++++++
- .../src/main/java/forge/game/card/Card.java   | 47 +++++++++++++-
- .../game/replacement/ReplacementHandler.java  | 54 ++++++++++++++++
- .../game/spellability/AbilityManaPart.java    | 25 ++++++++
- .../StaticAbilityCantAttackBlock.java         | 34 ++++++++--
- .../forge/game/trigger/TriggerHandler.java    | 61 ++++++++++++++++++
- 10 files changed, 338 insertions(+), 5 deletions(-)
+ .../java/forge/ai/AiAttackController.java     |   7 +
+ .../main/java/forge/ai/AiBlockController.java |  13 ++
+ .../src/main/java/forge/ai/AiController.java  |  64 +++++++++
+ .../src/main/java/forge/game/GameAction.java  |   6 +
+ .../java/forge/game/ability/AbilityUtils.java |  32 +++++
+ .../src/main/java/forge/game/card/Card.java   | 129 +++++++++++++++++-
+ .../game/replacement/ReplacementHandler.java  |  54 ++++++++
+ .../game/spellability/AbilityManaPart.java    |  25 ++++
+ .../StaticAbilityCantAttackBlock.java         |  34 ++++-
+ .../forge/game/trigger/TriggerHandler.java    |  61 +++++++++
+ 10 files changed, 420 insertions(+), 5 deletions(-)
 
 diff --git a/forge-ai/src/main/java/forge/ai/AiAttackController.java b/forge-ai/src/main/java/forge/ai/AiAttackController.java
 index 61d3fc9948d..a9ab245cf8f 100644
@@ -269,10 +282,10 @@ index aa35c2ffd71..4bc9074ea7a 100644
          final Game game = pl.getGame();
  
 diff --git a/forge-game/src/main/java/forge/game/card/Card.java b/forge-game/src/main/java/forge/game/card/Card.java
-index b874a1e9a96..d15c4a513c1 100644
+index b874a1e9a96..f4ad3d596c9 100644
 --- a/forge-game/src/main/java/forge/game/card/Card.java
 +++ b/forge-game/src/main/java/forge/game/card/Card.java
-@@ -4120,6 +4120,48 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
+@@ -4120,6 +4120,130 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
          return changedCardKeywords;
      }
  
@@ -318,10 +331,92 @@ index b874a1e9a96..d15c4a513c1 100644
 +        return grouped;
 +    }
 +
++    // The three below answer the other half of the same reader's question. The
++    // accessors above say what one static contributes; these say what the card
++    // would be without it, which is the board that static acted on.
++    //
++    // Subtracting the contributions from the applied result is not the same
++    // answer: two statics granting the same type or keyword would both have to
++    // go, and a static that overwrites a type line or removes a whole class of
++    // type cannot be inverted from its contribution at all. So each recombines
++    // the layers the way the rules do, with one static's entries dropped, which
++    // also means they stay correct when Forge's own combination changes.
++    //
++    // None of them touches the card. The cached value the game reads is the one
++    // updateKeywordsCache and updateTypes wrote; these build a parallel answer
++    // and hand it back.
++
++    /** This card's type line as it would be without one static's changes. */
++    public CardTypeView getTypeWithout(final long staticId) {
++        return getOriginalType().getTypeWithChanges(withoutStatic(staticId,
++                changedCardTypesByText, changedCardTypesCharacterDefining,
++                changedCardTypes));
++    }
++
++    /** This card's colours as they would be without one static's changes. */
++    public ColorSet getColorWithout(final long staticId) {
++        byte colors = currentState.getColor().getColor();
++        for (final CardColor cc : withoutStatic(staticId, changedCardColorsByText,
++                changedCardColorsCharacterDefining, changedCardColors)) {
++            if (cc.additional()) {
++                colors |= cc.color().getColor();
++            } else {
++                colors = cc.color().getColor();
++            }
++        }
++        return ColorSet.fromMask(colors);
++    }
++
++    /**
++     * This card's keywords as they would be without one static's changes.
++     *
++     * <p>The body of {@link #updateKeywordsCache(CardState)} with the static's
++     * entries dropped, returning the collection rather than caching it. The
++     * by-word layer-3 change is not keyed by static and always applies.
++     */
++    public KeywordCollection getKeywordsWithout(final long staticId) {
++        CardState state = getCurrentState();
++        KeywordCollection keywords = new KeywordCollection();
++        keywords.insertAll(state.getIntrinsicKeywords());
++        if (state.getStateName().equals(CardStateName.Original)) {
++            if (hasState(CardStateName.LeftSplit)) {
++                keywords.insertAll(getState(CardStateName.LeftSplit).getIntrinsicKeywords());
++            }
++            if (hasState(CardStateName.RightSplit)) {
++                keywords.insertAll(getState(CardStateName.RightSplit).getIntrinsicKeywords());
++            }
++        }
++        keywords.applyChanges(Iterables.concat(
++                withoutStatic(staticId, changedCardKeywordsByText), // Layer 3
++                ImmutableList.of(changedCardKeywordsByWord), // Layer 3
++                state.getLandTraitChanges(), // Layer 4
++                withoutStatic(staticId, changedCardKeywords) // Layer 6
++        ));
++        for (Keyword k : getCantHaveKeyword()) {
++            keywords.removeAll(k);
++        }
++        return keywords;
++    }
++
++    /** Every layer entry except the named static's, in layer order. */
++    @SafeVarargs
++    private static <T> List<T> withoutStatic(
++            final long staticId, final Table<Long, Long, ? extends T>... tables) {
++        List<T> kept = new ArrayList<>();
++        for (Table<Long, Long, ? extends T> table : tables) {
++            for (Table.Cell<Long, Long, ? extends T> cell : table.cellSet()) {
++                if (cell.getColumnKey() != staticId) {
++                    kept.add(cell.getValue());
++                }
++            }
++        }
++        return kept;
++    }
++
      public void setChangedCardKeywords(Table<Long, Long, KeywordsChange> changedCardKeywords) {
          this.changedCardKeywords.clear();
          for (Table.Cell<Long, Long, KeywordsChange> entry : changedCardKeywords.cellSet()) {
-@@ -4222,7 +4264,10 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
+@@ -4222,7 +4346,10 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
          return ColorSet.fromMask(colors);
      }
  

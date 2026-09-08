@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Table;
+import forge.card.CardTypeView;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.game.Game;
@@ -11,6 +13,7 @@ import forge.game.keyword.KeywordInterface;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -82,6 +85,18 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     public String toJson(SpellAbility acting, Iterable<Card> referenced) {
+        return toJson(acting, referenced, null);
+    }
+
+    /**
+     * Render the snapshot for one record, minus one static's contributions.
+     *
+     * @param withoutStatic the id of a static ability whose changes are removed
+     *                      from every entity, or null to show the board as it
+     *                      stands
+     */
+    public String toJson(
+            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic) {
         Set<Card> entities = new LinkedHashSet<>();
         if (referenced != null) {
             for (Card card : referenced) {
@@ -109,7 +124,7 @@ public final class SnapshotBuilder {
 
         StringJoiner entityJson = new StringJoiner(",", "[", "]");
         for (Card card : entities) {
-            entityJson.add(entityToJson(card));
+            entityJson.add(entityToJson(card, Suppressed.of(card, withoutStatic)));
         }
         StringJoiner playerJson = new StringJoiner(",", "[", "]");
         for (Player player : game.getPlayers()) {
@@ -195,7 +210,61 @@ public final class SnapshotBuilder {
                 + ",\"untapped_production\":" + production + "}";
     }
 
-    private String entityToJson(Card card) {
+    /**
+     * One entity's characteristics with an acting static's changes removed.
+     *
+     * <p>A {@code continuous} record's label is what its static does to the
+     * board, so a snapshot that still contains the static's own work hands the
+     * model the answer with the question. Every channel that static wrote has
+     * to come back out.
+     *
+     * <p>Recombined by the engine rather than subtracted here, because
+     * subtraction gets two cases wrong: another static granting the same
+     * keyword or type would go with it, and a static that overwrites a type
+     * line or strips a whole class of type cannot be inverted from what it
+     * contributed. Power and toughness are the exception — boosts are summed
+     * per static, so dropping one term is already exact.
+     */
+    private record Suppressed(
+            CardTypeView type, ColorSet colors,
+            Iterable<KeywordInterface> keywords, int power, int toughness) {
+
+        /**
+         * What the card would be without this static, or null for no change.
+         *
+         * <p>Null when the patch is absent, which is also when a continuous
+         * record is never written — {@link PatchedCollectors#collectContinuous}
+         * checks for these three before it collects, so a leaking snapshot is
+         * not reachable by falling back to here.
+         */
+        static Suppressed of(Card card, Long staticId) {
+            if (staticId == null) {
+                return null;
+            }
+            if (!(PatchHooks.read(card, "getTypeWithout", staticId)
+                            instanceof CardTypeView type)
+                    || !(PatchHooks.read(card, "getColorWithout", staticId)
+                            instanceof ColorSet colors)
+                    || !(PatchHooks.read(card, "getKeywordsWithout", staticId)
+                            instanceof Iterable<?> keywords)) {
+                return null;
+            }
+            int power = 0;
+            int toughness = 0;
+            for (Table.Cell<Long, Long, Pair<Integer, Integer>> cell
+                    : card.getPTBoostTable().cellSet()) {
+                if (staticId.equals(cell.getColumnKey())) {
+                    power += cell.getValue().getLeft();
+                    toughness += cell.getValue().getRight();
+                }
+            }
+            @SuppressWarnings("unchecked")
+            Iterable<KeywordInterface> typed = (Iterable<KeywordInterface>) keywords;
+            return new Suppressed(type, colors, typed, power, toughness);
+        }
+    }
+
+    private String entityToJson(Card card, Suppressed without) {
         Card attached = card.getAttachedTo();
         return "{\"id\":" + Json.string(entityId(card))
                 + ",\"name\":" + Json.string(card.getName())
@@ -207,12 +276,12 @@ public final class SnapshotBuilder {
                 + ",\"copy_source\":null"
                 + ",\"token_script_id\":"
                 + Json.string(card.isToken() ? card.getName() : null)
-                + ",\"types\":" + typeJson(card)
-                + ",\"subtypes\":" + subtypeJson(card)
-                + ",\"supertypes\":" + supertypeJson(card)
-                + ",\"colors\":" + colorJson(card)
+                + ",\"types\":" + typeJson(card, without)
+                + ",\"subtypes\":" + subtypeJson(card, without)
+                + ",\"supertypes\":" + supertypeJson(card, without)
+                + ",\"colors\":" + colorJson(card, without)
                 + ",\"mana_value\":" + card.getCMC()
-                + ",\"pt\":" + ptJson(card)
+                + ",\"pt\":" + ptJson(card, without)
                 + ",\"tapped\":" + card.isTapped()
                 + ",\"sick\":" + card.isSick()
                 + ",\"damage\":" + card.getDamage()
@@ -222,7 +291,7 @@ public final class SnapshotBuilder {
                 + Json.string(attached == null ? null : entityId(attached))
                 + ",\"face_down\":" + card.isFaceDown()
                 + ",\"granted_attached\":" + keyJson(grantedAttached(card))
-                + ",\"granted_temporary\":" + grantedTemporaryJson(card)
+                + ",\"granted_temporary\":" + grantedTemporaryJson(card, without)
                 + ",\"printed\":" + keyJson(printedKeys(card))
                 + ",\"stack_extras\":null}";
     }
@@ -241,7 +310,7 @@ public final class SnapshotBuilder {
      * adds a boost and one that adds a counter are different effects with the
      * same total, and the head has to predict which happened.
      */
-    private String ptJson(Card card) {
+    private String ptJson(Card card, Suppressed without) {
         if (!card.isCreature()) {
             return "null";
         }
@@ -251,6 +320,10 @@ public final class SnapshotBuilder {
         int baseToughness = card.getBaseToughness();
         int boostPower = card.getNetPower() - basePower - counterPower;
         int boostToughness = card.getNetToughness() - baseToughness - counterPower;
+        if (without != null) {
+            boostPower -= without.power();
+            boostToughness -= without.toughness();
+        }
         return "{\"base\":[" + basePower + "," + baseToughness + "]"
                 + ",\"boosts\":[" + boostPower + "," + boostToughness + "]"
                 + ",\"counters\":[" + counterPower + "," + counterPower + "]}";
@@ -291,9 +364,10 @@ public final class SnapshotBuilder {
                 + ",\"became_blocked\":" + combat.isBlocked(card) + "}";
     }
 
-    private String grantedTemporaryJson(Card card) {
+    private String grantedTemporaryJson(Card card, Suppressed without) {
         StringJoiner keywords = new StringJoiner(",", "[", "]");
-        for (KeywordInterface keyword : card.getKeywords()) {
+        for (KeywordInterface keyword
+                : without == null ? card.getKeywords() : without.keywords()) {
             if (!keyword.getOriginal().isEmpty()) {
                 keywords.add(Json.string(
                         keyword.getOriginal().toLowerCase(java.util.Locale.ROOT)));
@@ -343,33 +417,38 @@ public final class SnapshotBuilder {
         return joiner.toString();
     }
 
-    private String typeJson(Card card) {
+    private static CardTypeView typeOf(Card card, Suppressed without) {
+        return without == null ? card.getType() : without.type();
+    }
+
+    private String typeJson(Card card, Suppressed without) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (var type : card.getType().getCoreTypes()) {
+        for (var type : typeOf(card, without).getCoreTypes()) {
             joiner.add(Json.string(typeName(type)));
         }
         return joiner.toString();
     }
 
-    private String subtypeJson(Card card) {
+    private String subtypeJson(Card card, Suppressed without) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String subtype : card.getType().getSubtypes()) {
+        for (String subtype : typeOf(card, without).getSubtypes()) {
             joiner.add(Json.string(typeName(subtype)));
         }
         return joiner.toString();
     }
 
-    private String supertypeJson(Card card) {
+    private String supertypeJson(Card card, Suppressed without) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (var supertype : card.getType().getSupertypes()) {
+        for (var supertype : typeOf(card, without).getSupertypes()) {
             joiner.add(Json.string(typeName(supertype)));
         }
         return joiner.toString();
     }
 
-    private String colorJson(Card card) {
+    private String colorJson(Card card, Suppressed without) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        for (String color : colorLetters(card.getColor())) {
+        for (String color
+                : colorLetters(without == null ? card.getColor() : without.colors())) {
             joiner.add(Json.string(color));
         }
         return joiner.toString();

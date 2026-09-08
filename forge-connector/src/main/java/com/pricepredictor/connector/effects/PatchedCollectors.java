@@ -78,6 +78,17 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Map<Long, StaticAbility> staticsById = new HashMap<>();
     private final java.util.Random sampler;
 
+    /**
+     * Whether the engine can say what a card would be without one static.
+     *
+     * <p>Separate from {@link AttributionMode}, which probes the trigger-cause
+     * hook. These three arrived later, so a checkout patched against an older
+     * revision of the patch reports {@code patched} and still cannot suppress.
+     */
+    static final boolean CAN_SUPPRESS = PatchHooks.present(
+            "forge.game.card.Card",
+            "getTypeWithout", "getColorWithout", "getKeywordsWithout");
+
     private long recordsWritten;
 
     /** The caps and budgets every collecting supervisor shares (FR-028). */
@@ -872,10 +883,12 @@ public final class PatchedCollectors implements AutoCloseable {
      *
      * <p>The snapshot a continuous record carries has the acting static's own
      * contributions removed, because a model asked to predict the effect must
-     * not be handed a board that already contains it.
+     * not be handed a board that already contains it. That removal is the
+     * record's whole premise, so a checkout that cannot do it collects nothing
+     * here rather than a corpus whose inputs contain their own labels.
      */
     public void collectContinuous() {
-        if (mode == AttributionMode.DEGRADED) {
+        if (mode == AttributionMode.DEGRADED || !CAN_SUPPRESS) {
             return;
         }
         Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
@@ -935,7 +948,7 @@ public final class PatchedCollectors implements AutoCloseable {
                     EffectRecord.KIND_CONTINUOUS, mode)
                     .actor(SnapshotBuilder.playerId(source.getHostCard().getController()))
                     .ability(key == null ? List.of() : List.of(key))
-                    .state(snapshots.toJson(null, List.of()))
+                    .state(snapshots.toJson(null, List.of(), entry.getKey()))
                     .payload("{\"contributions\":" + contributions
                             + ",\"board_hash\":" + Json.string(boardHash) + "}"));
         }
