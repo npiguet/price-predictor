@@ -1,6 +1,12 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
+import forge.card.CardChangedType;
+import forge.card.CardTypeView;
+import forge.card.ColorSet;
+import forge.card.RemoveType;
+import forge.card.StateChangedType;
+import forge.card.WordChangedType;
 import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.card.Card;
@@ -887,6 +893,20 @@ public final class PatchedCollectors implements AutoCloseable {
                     into.keyword(keyword.getOriginal());
                 }
             }
+            for (Map.Entry<Long, List<Object>> changed
+                    : changesByStatic(card, "getChangedCardTypesByStatic").entrySet()) {
+                Contribution into = contribution(byStatic, changed.getKey(), entity);
+                for (Object change : changed.getValue()) {
+                    typeTokens(change, into);
+                }
+            }
+            for (Map.Entry<Long, List<Object>> changed
+                    : changesByStatic(card, "getChangedCardColorsByStatic").entrySet()) {
+                Contribution into = contribution(byStatic, changed.getKey(), entity);
+                for (Object change : changed.getValue()) {
+                    colorTokens(change, into);
+                }
+            }
         }
 
         String boardHash = boardHash();
@@ -926,6 +946,110 @@ public final class PatchedCollectors implements AutoCloseable {
         return byStatic
                 .computeIfAbsent(staticId, id -> new LinkedHashMap<>())
                 .computeIfAbsent(entity, Contribution::new);
+    }
+
+    /**
+     * A patched layer accessor's answer, grouped by the static that wrote it.
+     *
+     * <p>Reflective because the accessor is the patch's, and the P/T and keyword
+     * accessors beside it are not: those exist in stock Forge, which is what the
+     * connector compiles against. An unpatched checkout answers an empty map,
+     * though {@link #collectContinuous()} has already returned by then.
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<Long, List<Object>> changesByStatic(Card card, String accessor) {
+        Object answer = PatchHooks.read(card, accessor);
+        return answer instanceof Map ? (Map<Long, List<Object>>) answer : Map.of();
+    }
+
+    /**
+     * What one type-layer entry does, as tokens.
+     *
+     * <p>Read off the change object rather than diffed out of the applied type
+     * line, for the reason the P/T and keyword channels are: two statics that
+     * both grant {@code Creature} are indistinguishable in the result, and the
+     * record has to say which one this is.
+     *
+     * <p>A bare token is a type the static adds, {@code -x} one it removes, and
+     * a lone {@code =} marks the rest as a type line the static sets outright
+     * rather than adds to. Removing every type of a kind has no name to give, so
+     * it gets {@code -all-creature-types} and its siblings.
+     */
+    static void typeTokens(Object change, Contribution into) {
+        if (change instanceof CardChangedType typed) {
+            addTypes(into, "", typed.addType());
+            addTypes(into, "-", typed.removeType());
+            if (typed.addAllCreatureTypes()) {
+                into.type("all-creature-types");
+            }
+            for (RemoveType removed : typed.remove()) {
+                into.type("-all-" + kebab(removed.name()));
+            }
+        } else if (change instanceof StateChangedType state) {
+            into.type("=");
+            addTypes(into, "", state.type());
+        } else if (change instanceof WordChangedType word) {
+            // A text change swaps one subtype word for another, which is a
+            // removal and an addition in the same entry.
+            into.type("-" + SnapshotBuilder.typeName(word.oldWord()));
+            into.type(SnapshotBuilder.typeName(word.newWord()));
+        }
+    }
+
+    private static void addTypes(Contribution into, String prefix, CardTypeView types) {
+        if (types == null) {
+            return;
+        }
+        for (var type : types.getCoreTypes()) {
+            into.type(prefix + SnapshotBuilder.typeName(type));
+        }
+        for (var supertype : types.getSupertypes()) {
+            into.type(prefix + SnapshotBuilder.typeName(supertype));
+        }
+        for (String subtype : types.getSubtypes()) {
+            into.type(prefix + SnapshotBuilder.typeName(subtype));
+        }
+    }
+
+    /** {@code CreatureTypes} as {@code creature-types}. */
+    private static String kebab(String name) {
+        return name.replaceAll("(?<=.)(?=\\p{Upper})", "-")
+                .toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * What one colour-layer entry does, as tokens.
+     *
+     * <p>The letters are the snapshot's, so a static's share of an entity's
+     * colours reads the same as the entity's own. A lone {@code =} carries the
+     * same meaning it does for types: the static sets the colour rather than
+     * adding to it, and a {@code =} with nothing after it turns the entity
+     * colourless.
+     *
+     * <p>Reflective on both components, because the record they belong to is the
+     * patch's own nested type and this side cannot name it.
+     */
+    static void colorTokens(Object change, Contribution into) {
+        // Both components or neither: a half-read entry would report a colour
+        // change as a replacement, which is the one reading that is never safe
+        // to guess at.
+        if (!(PatchHooks.read(change, "additional") instanceof Boolean additional)
+                || !(PatchHooks.read(change, "color") instanceof ColorSet colors)) {
+            return;
+        }
+        List<String> letters = SnapshotBuilder.colorLetters(colors);
+        if (!additional) {
+            into.color("=");
+            if (letters.isEmpty()) {
+                // Setting the colour to nothing is what makes a permanent
+                // colourless, which the vocabulary spells C rather than as an
+                // empty list.
+                into.color("C");
+            }
+        }
+        for (String letter : letters) {
+            into.color(letter);
+        }
     }
 
     /**
@@ -973,11 +1097,16 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /** One entity's share of one static's effect, accumulated across layers. */
-    private static final class Contribution {
+    static final class Contribution {
         private final String entity;
         private int power;
         private int toughness;
         private final Set<String> keywords = new LinkedHashSet<>();
+        // Sets rather than lists: a static that writes to two type layers can
+        // name the same type twice, and the second says nothing the first did
+        // not. Insertion-ordered so a "=" marker stays ahead of what it marks.
+        private final Set<String> types = new LinkedHashSet<>();
+        private final Set<String> colors = new LinkedHashSet<>();
 
         Contribution(String entity) {
             this.entity = entity;
@@ -994,15 +1123,33 @@ public final class PatchedCollectors implements AutoCloseable {
             }
         }
 
-        String toJson() {
-            StringJoiner words = new StringJoiner(",", "[", "]");
-            for (String keyword : keywords) {
-                words.add(Json.string(keyword));
+        void type(String token) {
+            if (token != null && !token.isEmpty()) {
+                types.add(token);
             }
+        }
+
+        void color(String token) {
+            if (token != null && !token.isEmpty()) {
+                colors.add(token);
+            }
+        }
+
+        String toJson() {
             return "{\"entity\":" + Json.string(entity)
                     + ",\"pt_boost\":[" + power + "," + toughness + "]"
-                    + ",\"keywords\":" + words
-                    + ",\"types\":[],\"colors\":[],\"name\":null}";
+                    + ",\"keywords\":" + tokenJson(keywords)
+                    + ",\"types\":" + tokenJson(types)
+                    + ",\"colors\":" + tokenJson(colors)
+                    + ",\"name\":null}";
+        }
+
+        private static String tokenJson(Set<String> tokens) {
+            StringJoiner joiner = new StringJoiner(",", "[", "]");
+            for (String token : tokens) {
+                joiner.add(Json.string(token));
+            }
+            return joiner.toString();
         }
     }
 

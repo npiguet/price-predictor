@@ -32,7 +32,7 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
-from effects.domain.state_snapshot import GlobalState, StateSnapshot
+from effects.domain.state_snapshot import COLORS, GlobalState, StateSnapshot
 
 _SNAPSHOT = StateSnapshot(
     global_=GlobalState(
@@ -328,6 +328,75 @@ class TestPayloadKinds:
         assert targets["E1"].fields["keywords_gained"][
             OVERLAY_KEYWORDS.index("flying")
         ] == 1.0
+
+    def test_a_bare_type_token_is_gained_and_a_dashed_one_is_lost(self):
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(entity="E1", types=("creature", "-land")),
+            )),
+            kind=RecordKind.CONTINUOUS, moment=None,
+        )
+        targets = derive_targets(record)
+        assert targets["E1"].fields["types_gained"][
+            CARD_TYPES.index("creature")
+        ] == 1.0
+        assert targets["E1"].fields["types_lost"][
+            CARD_TYPES.index("land")
+        ] == 1.0
+
+    def test_an_added_colour_is_gained_and_nothing_is_lost(self):
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(entity="E1", colors=("G",)),
+            )),
+            kind=RecordKind.CONTINUOUS, moment=None,
+        )
+        targets = derive_targets(record)
+        assert targets["E1"].fields["colors_gained"][COLORS.index("G")] == 1.0
+        # Absent, not an empty set: the record says nothing about losses.
+        assert "colors_lost" not in targets["E1"].fields
+
+    def test_a_replacement_reports_what_it_sets_and_no_loss(self):
+        """``=`` says the static overwrites the line.
+
+        What it displaced is not in the record — the snapshot beside it is the
+        board *after* the static applied — so the lost field stays unset rather
+        than being guessed at.
+        """
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(entity="E1", colors=("=", "C"), types=("=", "land")),
+            )),
+            kind=RecordKind.CONTINUOUS, moment=None,
+        )
+        targets = derive_targets(record)
+        assert targets["E1"].fields["colors_gained"][COLORS.index("C")] == 1.0
+        assert targets["E1"].fields["types_gained"][CARD_TYPES.index("land")] == 1.0
+        assert "colors_lost" not in targets["E1"].fields
+        assert "types_lost" not in targets["E1"].fields
+
+    def test_tokens_outside_the_vocabulary_are_dropped_not_misfiled(self):
+        """Subtypes and whole-class removals are real, and have no field.
+
+        The record keeps them because they describe what the static did; the
+        model has a slot for each core type and none for "every creature type
+        at once", so they must fall out here rather than land on a neighbour.
+        """
+        record = _record(
+            ContinuousPayload(contributions=(
+                Contribution(
+                    entity="E1",
+                    types=("elf", "legendary", "all-creature-types",
+                           "-all-land-types", "creature"),
+                ),
+            )),
+            kind=RecordKind.CONTINUOUS, moment=None,
+        )
+        targets = derive_targets(record)
+        assert targets["E1"].fields["types_gained"] == [
+            1.0 if name == "creature" else 0.0 for name in CARD_TYPES
+        ]
+        assert "types_lost" not in targets["E1"].fields
 
     def test_events_of_reads_each_payload_kind(self):
         assert len(events_of(_resolution(

@@ -59,7 +59,7 @@ and the worker prints the detected mode at startup.
 | `AiController` | legal attacker and blocker sets (`setEffectRecordCombatListener`) | the `playability` record's `attackers` and `blockers` subkinds |
 | `StaticAbilityCantAttackBlock` | `cantAttackStatic` / `cantBlockByStatic` return the responsible static rather than a boolean | each forbidden creature's `responsible_static` |
 | `AbilityManaPart` | listener where produced mana reaches the pool (`setEffectRecordManaListener`) | mana records, and with them the role-polarity probe |
-| `Card` | keyed accessors for the type and colour layer tables | the `continuous` record's type and colour channels |
+| `Card` | static-keyed accessors over every type and colour layer table, and a public `CardColor` | the `continuous` record's type and colour channels |
 | `GameAction.destroy` | `AbilityKey.Cause` in the `Destroyed` run parameters | a destroy record can name what destroyed the permanent |
 
 The hook names are a contract with `PatchHooks` and `PatchedCollectors`, which look them up by string.
@@ -68,11 +68,14 @@ cost of building against stock Forge, and why the integration test asserts the m
 
 ## Not yet hooked
 
-A patched run reaches all eight sampling classes, and both stage-three fork kinds work. What is still
-empty is the `continuous` record's type, colour and name channels: the keyed accessors exist and the
-reader fills `pt_boost` and `keywords` from the P/T and keyword layers, which is where anthems and
-keyword grants live, but types and colours need the applied change diffed against the base and nobody
-has needed them yet.
+A patched run reaches all eight sampling classes, both stage-three fork kinds work, and a
+`continuous` record fills every channel but `name`. Nothing reads the name layer table yet, and it
+has no accessor here; `changedCardNames` is keyed the same way the other three are, so adding one
+is the same shape of change.
+
+Keyword *removals* are also unrecorded. The collector reads layer 6's granted keywords, and a
+`KeywordsChange` that takes one away has no path to `keywords_lost` — the same gap the type and
+colour channels had before they were split into gained and lost.
 
 Around a quarter of forbidden creatures name a `responsible_static`. The rest are stopped by the rules
 themselves — tapped, summoning sick, "can't attack" printed on the card — where no static ability is

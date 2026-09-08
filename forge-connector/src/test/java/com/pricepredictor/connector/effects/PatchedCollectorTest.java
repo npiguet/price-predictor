@@ -1,10 +1,18 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
+import forge.card.CardChangedType;
+import forge.card.CardType;
+import forge.card.ColorSet;
+import forge.card.RemoveType;
+import forge.card.StateChangedType;
+import forge.card.WordChangedType;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -200,6 +208,110 @@ class PatchedCollectorTest {
         for (int board = 0; board < 100; board++) {
             assertTrue(collector.allowContinuousRecord("anthem", "board-" + board));
         }
+    }
+
+    // ── continuous type and colour channels ─────────────────────────────
+
+    /**
+     * A stand-in for the patch's own {@code Card.CardColor}.
+     *
+     * <p>The real one is nested in {@code Card} and only exists as a public type
+     * on a patched checkout, which this module does not compile against. The
+     * collector reads both components reflectively, so any public record with
+     * the same two accessors exercises the same path — and a test that named the
+     * real type would not compile on a stock checkout.
+     */
+    public record ColorChange(ColorSet color, boolean additional) {
+    }
+
+    private static String tokens(Contribution into, String field) {
+        String json = into.toJson();
+        int at = json.indexOf("\"" + field + "\":[");
+        return json.substring(at + field.length() + 4, json.indexOf(']', at));
+    }
+
+    @Test
+    void anAddedTypeIsBareAndARemovedOneIsDashed() {
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.typeTokens(new CardChangedType(
+                new CardType(List.of("Creature", "Elf"), true),
+                new CardType(List.of("Land"), true),
+                false, Set.of()), into);
+        assertEquals("\"creature\",\"elf\",\"-land\"", tokens(into, "types"));
+    }
+
+    @Test
+    void removingAWholeClassOfTypeIsNamedForTheClass() {
+        // "loses all creature types" names no type, so it cannot be spelled as
+        // a list of removals.
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.typeTokens(new CardChangedType(
+                null, null, true,
+                Set.of(RemoveType.CreatureTypes, RemoveType.SuperTypes)), into);
+        assertEquals(
+                Set.of("\"all-creature-types\"", "\"-all-creature-types\"",
+                        "\"-all-super-types\""),
+                Set.of(tokens(into, "types").split(",")));
+    }
+
+    @Test
+    void aStateChangeMarksTheTypeLineAsSetRatherThanAdded() {
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.typeTokens(
+                new StateChangedType(new CardType(List.of("Land"), true)), into);
+        assertEquals("\"=\",\"land\"", tokens(into, "types"));
+    }
+
+    @Test
+    void aTextChangeIsARemovalAndAnAdditionInOneEntry() {
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.typeTokens(new WordChangedType("Forest", "Island"), into);
+        assertEquals("\"-forest\",\"island\"", tokens(into, "types"));
+    }
+
+    @Test
+    void anAdditionalColourIsJustTheLetter() {
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.colorTokens(
+                new ColorChange(ColorSet.fromNames("green"), true), into);
+        assertEquals("\"G\"", tokens(into, "colors"));
+    }
+
+    @Test
+    void aReplacingColourIsMarked() {
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.colorTokens(
+                new ColorChange(ColorSet.fromNames("green"), false), into);
+        assertEquals("\"=\",\"G\"", tokens(into, "colors"));
+    }
+
+    @Test
+    void replacingTheColourWithNothingIsColourless() {
+        // An empty colour set and an empty token list are different answers:
+        // one turns the permanent colourless, the other says nothing happened.
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.colorTokens(
+                new ColorChange(ColorSet.fromMask(0), false), into);
+        assertEquals("\"=\",\"C\"", tokens(into, "colors"));
+    }
+
+    @Test
+    void anUnreadableColourEntryContributesNothingRatherThanAReplacement() {
+        // Guessing here would report every colour change as an overwrite.
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.colorTokens(new Object(), into);
+        assertEquals("", tokens(into, "colors"));
+    }
+
+    @Test
+    void aStaticThatWritesTheSameTypeTwiceSaysItOnce() {
+        // One static can write to more than one type layer.
+        Contribution into = new Contribution("E1");
+        CardChangedType change = new CardChangedType(
+                new CardType(List.of("Creature"), true), null, false, Set.of());
+        PatchedCollectors.typeTokens(change, into);
+        PatchedCollectors.typeTokens(change, into);
+        assertEquals("\"creature\"", tokens(into, "types"));
     }
 
     // ── hook lookup ─────────────────────────────────────────────────────

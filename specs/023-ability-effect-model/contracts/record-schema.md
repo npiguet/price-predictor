@@ -135,6 +135,27 @@ completeness test maps every Forge effect API class to a covered type or an expl
 Verdicts are rules-level only. The AI's policy judgments ("another time", "life in danger") are never
 recorded.
 
+### A contribution's `types` and `colors`
+
+Each is one flat list of tokens, so the operation rides on the token rather than on a field:
+
+| Token | Means |
+|---|---|
+| `creature`, `W` | the static adds this type or colour |
+| `-creature`, `-W` | it removes it |
+| `=` | the tokens after it are a line the static **sets** rather than adds to |
+| `=`, `C` | it sets the colour to none, which is what makes a permanent colourless |
+| `all-creature-types` | it grants every creature type at once |
+| `-all-creature-types` | it removes a whole class; likewise `-all-card-types`, `-all-super-types`, `-all-sub-types`, `-all-land-types`, `-all-artifact-types`, `-all-enchantment-types` |
+
+Types are spelled as the snapshot spells an entity's own, and include subtypes and supertypes.
+`types_gained` / `types_lost` cover the core types only, so the rest stay in the record without
+reaching a head field.
+
+A `=` reports what it sets and nothing lost. The displaced types are not in the record — the snapshot
+beside it is the board after the static applied — so `types_lost` / `colors_lost` go unset, which reads
+as "this record does not say" rather than as an empty set.
+
 ## Compatibility rules
 
 1. A field may be **added**; existing fields may not change meaning or type.

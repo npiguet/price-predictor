@@ -144,7 +144,23 @@ class RewritePayload:
 
 @dataclass(frozen=True, slots=True)
 class Contribution:
-    """One entity's share of a continuous effect, per layer channel."""
+    """One entity's share of a continuous effect, per layer channel.
+
+    ``types`` and ``colors`` are each one flat list because the record schema
+    fixes the field, so the operation rides on the token:
+
+    ==================  ====================================================
+    ``creature``        the static adds this type (``W``: this colour)
+    ``-creature``       the static removes it
+    ``=``               the tokens after it are a line the static *sets*
+                        rather than adds to; ``=`` alone with ``C`` is what
+                        turns a permanent colourless
+    ``all-creature-types``  and its ``-all-*`` siblings: a whole class at once
+    ==================  ====================================================
+
+    Types are spelled the way the snapshot spells an entity's own, and carry
+    subtypes and supertypes as well as the core types the model has fields for.
+    """
 
     entity: str
     pt_boost: tuple[int, int] = (0, 0)
