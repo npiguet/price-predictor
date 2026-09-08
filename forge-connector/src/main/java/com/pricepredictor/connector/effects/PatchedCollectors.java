@@ -53,8 +53,10 @@ public final class PatchedCollectors implements AutoCloseable {
     private final String gameId;
     private final CollectionCaps caps;
 
-    /** Per-unique-mana-text counts, for {@code --mana-cap}. */
+    /** Activations seen per unique mana text, the reservoir's {@code n}. */
     private final Map<String, Integer> manaRecords = new HashMap<>();
+    /** The sampled mana records, held until the game ends. */
+    private final Map<String, List<EffectRecord>> manaReservoir = new LinkedHashMap<>();
     /** Boards a continuous static has already been recorded on, for coalescing. */
     private final Set<String> coalescedBoards = new LinkedHashSet<>();
     /** Legality answers already recorded this game, keyed by rendered payload. */
@@ -159,7 +161,25 @@ public final class PatchedCollectors implements AutoCloseable {
                         SnapshotBuilder.TIER_UNREFERENCED_STACK,
                 });
         this.mode = AttributionMode.detect();
-        this.sampler = new java.util.Random(seed);
+        this.sampler = new java.util.Random(scramble(seed));
+    }
+
+    /**
+     * Spread out a seed before it reaches {@link java.util.Random}.
+     *
+     * <p>Games are seeded consecutively, and a linear congruential generator's
+     * first output is close to a linear function of its seed — so consecutive
+     * seeds make consecutive games take nearly the same first sampling
+     * decisions. That would correlate the mana reservoir and the playability
+     * sample across a whole run, in a way no test of one game could see.
+     *
+     * <p>SplitMix64's finalizer, which is the standard mixer for exactly this.
+     */
+    private static long scramble(long seed) {
+        long z = seed + 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
     }
 
     public long recordsWritten() {
@@ -229,6 +249,9 @@ public final class PatchedCollectors implements AutoCloseable {
 
     @Override
     public void close() {
+        // Before the hooks come down: this is the last moment the game can be
+        // said to have ended, and the mana reservoir is only decided then.
+        flushMana();
         PatchHooks.uninstall(
                 PatchHooks.REPLACEMENT_HANDLER, "setEffectRecordListener");
         PatchHooks.uninstall(
@@ -529,9 +552,9 @@ public final class PatchedCollectors implements AutoCloseable {
             if (ability == null || produced.isEmpty()) {
                 return null;
             }
-            // Capped per unique text: a Mountain's tap ability resolves
-            // thousands of times a run and would otherwise be the corpus.
-            if (!allowManaRecord(manaAbilityText(ability, produced))) {
+            String key = manaAbilityText(ability, produced);
+            int slot = manaReservoirSlot(key);
+            if (slot < 0) {
                 return null;
             }
             String player = args[1] instanceof Player p
@@ -539,7 +562,11 @@ public final class PatchedCollectors implements AutoCloseable {
             EffectEvent event = new EffectEvent(EffectEvent.MANA_PRODUCED)
                     .subject(player)
                     .param("mana_by_color", manaByColor(produced));
-            emit(new EffectRecord(
+            // Held rather than written: which activation survives is not known
+            // until the game ends. The state is snapshotted here, at the moment
+            // the mana was made, so a record that does survive describes the
+            // board it was actually produced on.
+            EffectRecord record = new EffectRecord(
                     writer.nextRecordId(), writer.runId(),
                     RecordShardWriter.timestamp(), gameId,
                     EffectRecord.KIND_RESOLUTION, mode)
@@ -547,7 +574,14 @@ public final class PatchedCollectors implements AutoCloseable {
                     .actor(player)
                     .ability(keysOf(ability))
                     .state(snapshots.toJson(null, List.of()))
-                    .payload("{\"events\":[" + event.toJson() + "]}"));
+                    .payload("{\"events\":[" + event.toJson() + "]}");
+            List<EffectRecord> held =
+                    manaReservoir.computeIfAbsent(key, k -> new ArrayList<>());
+            if (slot == held.size()) {
+                held.add(record);
+            } else {
+                held.set(slot, record);
+            }
             return null;
         };
     }
@@ -591,25 +625,60 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * Whether this mana ability may still be recorded (FR-037).
+     * Which reservoir slot this activation takes, or -1 to skip it (FR-037).
      *
-     * <p>Counted <b>per game</b>, because this collector is built per game — a
-     * Mountain taps a dozen times a game for the same R and the repeats observe
-     * a board that barely moved, so one of them carries the observation and the
-     * rest are duplication. Across a run the class still contributes a record
-     * per game it appeared in, from a different board each time, which is more
-     * varied than the first N activations of one worker's first few games.
+     * <p>A Mountain taps a dozen times a game for the same R, and the repeats
+     * observe a board that barely moved, so the corpus keeps
+     * {@code --mana-cap} of them per game. <b>Which</b> ones is the question
+     * this answers, and taking the first would be the wrong answer: a land's
+     * first tap is almost always turn one against an empty board, so every mana
+     * record would describe the same early game and the model would see a
+     * board-independent effect on a board that never varied.
+     *
+     * <p>Reservoir sampling (Algorithm R) instead: the first {@code cap} fill
+     * the reservoir, and the {@code n}th after that replaces a uniformly chosen
+     * one with probability {@code cap/n}. Every activation in the game ends up
+     * equally likely to survive, without knowing in advance how many there will
+     * be.
+     *
+     * <p>The record is built only when this returns a slot, so the expensive
+     * part — the state snapshot — is paid a logarithmic number of times rather
+     * than once per activation.
      *
      * <p>The produced mana is part of the key rather than of the count, so a
-     * dual land making G and the same land making U both record.
+     * dual land making G and the same land making U each get a reservoir.
      */
-    public boolean allowManaRecord(String abilityText) {
-        int seen = manaRecords.getOrDefault(abilityText, 0);
-        if (seen >= caps.manaCap()) {
-            return false;
+    public int manaReservoirSlot(String abilityText) {
+        int cap = caps.manaCap();
+        if (cap <= 0) {
+            return -1;
         }
-        manaRecords.put(abilityText, seen + 1);
-        return true;
+        int seen = manaRecords.merge(abilityText, 1, Integer::sum);
+        if (seen <= cap) {
+            return seen - 1;
+        }
+        int candidate = sampler.nextInt(seen);
+        return candidate < cap ? candidate : -1;
+    }
+
+    /**
+     * Write the sampled mana records, once the game can produce no more.
+     *
+     * <p>They are held until here because reservoir sampling does not know
+     * which activation won until the last one has happened. A game whose JVM
+     * dies loses its reservoir — at most {@code --mana-cap} records per mana
+     * ability, against a crash that already costs the rest of the game.
+     */
+    private void flushMana() {
+        for (List<EffectRecord> held : manaReservoir.values()) {
+            for (EffectRecord record : held) {
+                if (record != null) {
+                    emit(record);
+                }
+            }
+        }
+        manaReservoir.clear();
+        manaRecords.clear();
     }
 
     // ── continuous records ──────────────────────────────────────────────

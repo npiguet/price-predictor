@@ -144,8 +144,10 @@ tens of gigabytes.
 
 Five flags cap what one worker collects, and every one is a per-worker quantity the supervisor cannot
 observe, so they travel to the JVM as `-Deffect.*` properties. `--mana-cap` (1) is records per unique
-mana ability **per game**, keyed on the mana produced so a dual land's colours each record;
-`--playability-rate` (0.1) samples decision points, the legality subkinds being coalesced instead; and
+mana ability **per game**, drawn uniformly from that game's activations rather than taken first —
+a land's first tap is turn one against an empty board, and taking it would make every mana record
+describe the same early game. Keyed on the mana produced, so a dual land's colours each record.
+`--playability-rate` (0.1) samples decision points, the legality subkinds being coalesced instead. And
 `--interventions-per-game`, `--probes-per-game` and `--probe-keywords` are stage three's fork budgets,
 the last empty by default so no fork is taken unless asked.
 
