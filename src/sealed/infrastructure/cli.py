@@ -959,10 +959,40 @@ def _build_match_outcomes_parser(subparsers) -> None:
 # content.
 
 #: Cap and budget defaults, shared with the effects-owned collectors (FR-028).
-EFFECT_MANA_CAP = 2000
+#:
+#: Restated rather than imported: `sealed` never imports from `effects`, and
+#: the import-direction test enforces that. Two copies of a default is two
+#: corpora that mean different things, so a test in the effects suite — which
+#: may import both — asserts these agree with `CollectionCaps`.
+EFFECT_MANA_CAP = 1
 EFFECT_PLAYABILITY_RATE = 0.1
 EFFECT_INTERVENTIONS_PER_GAME = 2
 EFFECT_PROBES_PER_GAME = 2
+EFFECT_PROBE_KEYWORDS = ""
+
+
+def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
+    """The cap flags as the ``-D`` properties the worker reads them from.
+
+    Built here rather than imported from ``effects``, which this package never
+    imports. The property names are the contract between the two sides and are
+    pinned by a test that may see both.
+    """
+    return {
+        "effect.mana.cap": str(getattr(args, "mana_cap", EFFECT_MANA_CAP)),
+        "effect.playability.rate": str(
+            getattr(args, "playability_rate", EFFECT_PLAYABILITY_RATE)
+        ),
+        "effect.interventions.per.game": str(
+            getattr(args, "interventions_per_game", EFFECT_INTERVENTIONS_PER_GAME)
+        ),
+        "effect.probes.per.game": str(
+            getattr(args, "probes_per_game", EFFECT_PROBES_PER_GAME)
+        ),
+        "effect.probe.keywords": str(
+            getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS)
+        ),
+    }
 
 
 def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
@@ -981,8 +1011,11 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         type=int,
         default=EFFECT_MANA_CAP,
         help=(
-            "Resolution records per unique mana-ability text, per worker"
-            f" process (default: {EFFECT_MANA_CAP})."
+            "Records per unique mana ability, per game (default:"
+            f" {EFFECT_MANA_CAP}). A Mountain taps a dozen times a game for the"
+            " same R, and the repeats observe a board that barely moved. Keyed"
+            " on the mana produced too, so a dual land's two colours both"
+            " record."
         ),
     )
     parser.add_argument(
@@ -1732,6 +1765,7 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         side_b_decks_path=side_b_decks,
         side_b_decks_weight=side_b_decks_weight,
         effect_records_dir=effect_records_dir,
+        collection_caps=_effect_collection_caps(args),
     )
 
     try:

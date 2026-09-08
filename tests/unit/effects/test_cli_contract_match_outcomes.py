@@ -1,4 +1,4 @@
-"""The instrumentation opt-in on ``sealed match-outcomes`` (T044).
+﻿"""The instrumentation opt-in on ``sealed match-outcomes`` (T044).
 
 ``--effect-records`` has **no default** here, unlike on the effects-owned
 collectors where collection is the whole point. That asymmetry is the contract
@@ -44,7 +44,7 @@ class TestEffectRecordsOptIn:
 class TestCapAndBudgetFlags:
     def test_the_five_defaults_are_the_contracts(self):
         args = parse("match-outcomes")
-        assert args.mana_cap == 2000
+        assert args.mana_cap == 1
         assert args.playability_rate == 0.1
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2

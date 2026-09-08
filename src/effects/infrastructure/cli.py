@@ -17,6 +17,14 @@ import logging
 import sys
 from pathlib import Path
 
+from effects.domain.collection_caps import (
+    DEFAULT_INTERVENTIONS_PER_GAME,
+    DEFAULT_MANA_CAP,
+    DEFAULT_PLAYABILITY_RATE,
+    DEFAULT_PROBES_PER_GAME,
+    CollectionCaps,
+)
+
 logger = logging.getLogger(__name__)
 
 # ── shared defaults (contracts/cli.md) ──────────────────────────────────
@@ -32,10 +40,10 @@ DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
 #: Caps and budgets, shared by every collecting supervisor (FR-028).
 CAP_DEFAULTS: dict[str, object] = {
-    "mana_cap": 2000,
-    "playability_rate": 0.1,
-    "interventions_per_game": 2,
-    "probes_per_game": 2,
+    "mana_cap": DEFAULT_MANA_CAP,
+    "playability_rate": DEFAULT_PLAYABILITY_RATE,
+    "interventions_per_game": DEFAULT_INTERVENTIONS_PER_GAME,
+    "probes_per_game": DEFAULT_PROBES_PER_GAME,
     "probe_keywords": "",
 }
 
@@ -55,16 +63,19 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mana-cap", type=int, default=CAP_DEFAULTS["mana_cap"],
         help=(
-            "Resolution records per unique mana-ability text, per worker "
-            "process (default: 2000)"
+            "Records per unique mana ability, per game (default: 1). A "
+            "Mountain taps a dozen times a game for the same R, and the "
+            "repeats observe a board that barely moved. Keyed on the mana "
+            "produced too, so a dual land's two colours both record."
         ),
     )
     parser.add_argument(
         "--playability-rate", type=float,
         default=CAP_DEFAULTS["playability_rate"],
         help=(
-            "Fraction of decision-subkind logging points sampled; attackers "
-            "and blockers are always logged (default: 0.1)"
+            "Fraction of decision-subkind logging points sampled (default: "
+            "0.1). The legality subkinds are not sampled — identical answers "
+            "are coalesced instead."
         ),
     )
     parser.add_argument(
@@ -244,6 +255,7 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
         decks_per_round=args.decks_per_round,
         no_progress_rounds=args.no_progress_rounds,
         workers=args.workers,
+        caps=CollectionCaps.from_args(args),
     )
     return collect(config)
 
@@ -308,6 +320,7 @@ def run_collect_variants(args: argparse.Namespace) -> int:
         decks_per_round=args.decks_per_round,
         split_from=Path(args.split_from) if args.split_from else None,
         workers=args.workers,
+        caps=CollectionCaps.from_args(args),
     ))
 
 

@@ -138,9 +138,16 @@ the collectors installed, so a record target moves under you while a game target
 against a real corpus are in the design record's feasibility section; a corpus large enough for gate 2
 is comfortably large enough for gate 1 and for the split.
 
-A patched run writes roughly 510 records and 130 KB per game, so 7,000 games is under a gigabyte.
+A patched run writes roughly 410 records and 90 KB per game, so 7,000 games is under a gigabyte.
 Shards are gzip-compressed, which is where the room comes from — the same corpus uncompressed is
 tens of gigabytes.
+
+Five flags cap what one worker collects, and every one is a per-worker quantity the supervisor cannot
+observe, so they travel to the JVM as `-Deffect.*` properties. `--mana-cap` (1) is records per unique
+mana ability **per game**, keyed on the mana produced so a dual land's colours each record;
+`--playability-rate` (0.1) samples decision points, the legality subkinds being coalesced instead; and
+`--interventions-per-game`, `--probes-per-game` and `--probe-keywords` are stage three's fork budgets,
+the last empty by default so no fork is taken unless asked.
 
 ```bash
 # what has been collected so far

@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,11 +34,61 @@ class PatchedCollectorTest {
     @Test
     void theDefaultCapsAreTheContracts() {
         CollectionCaps defaults = CollectionCaps.defaults();
-        assertEquals(2000, defaults.manaCap());
+        // One record per mana ability per game: this collector is built per
+        // game, and a Mountain's dozen taps observe a board that barely moved.
+        assertEquals(1, defaults.manaCap());
         assertEquals(0.1, defaults.playabilityRate());
         assertEquals(2, defaults.interventionsPerGame());
         assertEquals(2, defaults.probesPerGame());
         assertTrue(defaults.probeKeywords().isEmpty());
+    }
+
+    /**
+     * The caps arrive as system properties the supervisor sets.
+     *
+     * <p>Every one is a per-worker-process quantity the Python side cannot
+     * observe, so the flags are inert unless this reads them — which is exactly
+     * the state they were in before: parsed by the CLI and never sent.
+     */
+    @Test
+    void capsAreReadFromSystemProperties() {
+        Map<String, String> properties = Map.of(
+                "effect.mana.cap", "7",
+                "effect.playability.rate", "0.5",
+                "effect.interventions.per.game", "3",
+                "effect.probes.per.game", "4",
+                "effect.probe.keywords", "wither, infect");
+        properties.forEach(System::setProperty);
+        try {
+            CollectionCaps caps = CollectionCaps.fromSystemProperties();
+            assertEquals(7, caps.manaCap());
+            assertEquals(0.5, caps.playabilityRate());
+            assertEquals(3, caps.interventionsPerGame());
+            assertEquals(4, caps.probesPerGame());
+            assertEquals(List.of("wither", "infect"), caps.probeKeywords());
+        } finally {
+            properties.keySet().forEach(System::clearProperty);
+        }
+    }
+
+    @Test
+    void anUnsetPropertyKeepsItsDefault() {
+        // A worker started without instrumentation sets none of them, and one
+        // started by an older supervisor may set only some.
+        CollectionCaps caps = CollectionCaps.fromSystemProperties();
+        assertEquals(CollectionCaps.defaults(), caps);
+    }
+
+    @Test
+    void aMalformedPropertyKeepsItsDefaultRatherThanFailing() {
+        System.setProperty("effect.mana.cap", "not-a-number");
+        try {
+            assertEquals(
+                    CollectionCaps.defaults().manaCap(),
+                    CollectionCaps.fromSystemProperties().manaCap());
+        } finally {
+            System.clearProperty("effect.mana.cap");
+        }
     }
 
     @Test
