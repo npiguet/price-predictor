@@ -8,6 +8,7 @@ import forge.game.replacement.ReplacementEffect;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
+import forge.util.Lang;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Writes every Forge keyword's reminder-text template as JSON.
@@ -86,12 +89,58 @@ public class KeywordDefinitionMain {
                 continue;
             }
             entries.add(Json.string(keyword.toString()) + ":{"
-                    + "\"reminder_template\":" + Json.string(emptyToNull(keyword.getReminderText()))
+                    + "\"reminder_template\":"
+                    + Json.string(emptyToNull(expandPlurals(keyword.getReminderText())))
                     + ",\"generated_script\":" + Json.string(generatedScript(keyword))
                     + "}");
         }
         return "{" + String.join(",", entries) + "}";
     }
+
+    /**
+     * Forge's plural markup, rendered the way Forge renders it.
+     *
+     * <p>A reminder text carries {@code {count:noun}} where the count is filled
+     * in from the card and the noun is pluralized to match —
+     * {@code "sacrifices {%d:permanent}"}. Forge does that substitution first
+     * and expands the markup afterwards, so an instance never sees it. A
+     * template has no instance and no values, so the markup survived into the
+     * definition file, and the tokenizer read each one as a single symbol
+     * because braces delimit an atom: {@code {%1$d:tapped and attacking 1/1 red
+     * Warrior creature token}} became one vocabulary entry.
+     *
+     * <p>Expanded through Forge's own {@link Lang}, so the plural forms are the
+     * engine's rather than a second implementation of English. A count that is
+     * still a format placeholder takes Forge's variable-count branch, which
+     * pluralizes the noun and leaves the placeholder in front of it — where the
+     * encoder's existing placeholder dropping removes it, the same way it
+     * already handles a bare {@code %s} elsewhere in a template.
+     */
+    static String expandPlurals(String reminderText) {
+        if (reminderText == null || reminderText.indexOf('{') < 0) {
+            return reminderText;
+        }
+        Matcher matcher = PLURAL_MARKUP.matcher(reminderText);
+        StringBuilder out = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(out, Matcher.quoteReplacement(
+                    Lang.nounWithNumeralExceptOne(matcher.group(1), matcher.group(2))));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    /**
+     * {@code {count:noun}}, with a wider count than Forge's own matcher.
+     *
+     * <p>Forge matches the count as {@code \w+} because by the time it looks,
+     * the count is a number. Here it is still {@code %d} or {@code %1$s}, which
+     * {@code \w+} does not match — the reason the markup came through untouched.
+     * Neither part may contain a brace, so a mana symbol beside it is not at
+     * risk of being swallowed.
+     */
+    private static final Pattern PLURAL_MARKUP =
+            Pattern.compile("\\{([^:{}]+):([^{}]+)\\}");
 
     /**
      * The implementation script Forge's keyword factory generates, as text.

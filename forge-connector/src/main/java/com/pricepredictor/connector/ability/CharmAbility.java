@@ -71,7 +71,7 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
                 }
                 String modeCost = choice.getParam("ModeCost");
                 if (modeCost != null && !modeCost.isEmpty()) {
-                    String costToken = "{" + modeCost.trim() + "}";
+                    String costToken = manaCostSymbols(modeCost);
                     choiceDesc = choiceDesc != null && !choiceDesc.isEmpty()
                             ? costToken + " \u2014 " + choiceDesc
                             : costToken;
@@ -131,6 +131,27 @@ public record CharmAbility(String descriptionText, List<Ability> subAbilities) i
         }
         // No MinCharmNum (or minNum == num): choose exactly N
         return "Choose " + numberWord(num);
+    }
+
+    /**
+     * A Forge cost string as the mana symbols a card prints.
+     *
+     * <p>Forge writes a cost space-separated — {@code ModeCost$ 3 W W} — and one
+     * pair of braces around the whole of it produces {@code {3 W W}}, which the
+     * tokenizer reads as a single symbol because braces delimit an atom. That
+     * put a distinct token in the vocabulary for every multi-shard mode cost,
+     * each unrelated to the {@code {3}}, {@code {W}} the rest of the corpus
+     * uses. One pair of braces per shard is what a card prints and what every
+     * other cost in the converted text already looks like.
+     */
+    static String manaCostSymbols(String cost) {
+        StringBuilder out = new StringBuilder();
+        for (String shard : cost.trim().split("\\s+")) {
+            if (!shard.isEmpty()) {
+                out.append('{').append(shard).append('}');
+            }
+        }
+        return out.toString();
     }
 
     private static int parseSimpleInt(String s) {

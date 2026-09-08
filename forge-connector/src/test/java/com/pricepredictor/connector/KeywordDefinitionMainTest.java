@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,6 +38,48 @@ class KeywordDefinitionMainTest {
         assertTrue(json.startsWith("{"));
         assertTrue(json.contains("\"Flying\""), "Flying is missing");
         assertTrue(json.contains("\"Cascade\""), "Cascade is missing");
+    }
+
+    @Test
+    void pluralMarkupIsExpandedRatherThanShipped(@TempDir Path dir)
+            throws IOException {
+        // Forge fills the count in from the card and expands {count:noun}
+        // afterwards, so an instance never sees the markup. A template has no
+        // instance, so it survived — and braces delimit an atom to the
+        // tokenizer, which turned each one into a single vocabulary entry:
+        // "{%1$d:tapped and attacking 1/1 red Warrior creature token}".
+        String json = write(dir);
+        assertFalse(json.contains("{%"),
+                "a reminder template still carries {count:noun} markup");
+    }
+
+    @Test
+    void aVariableCountPluralizesItsNoun() {
+        // Forge's own variable-count branch: the placeholder stays in front,
+        // where the encoder's placeholder dropping removes it, and the noun is
+        // pluralized because an unknown count is not one.
+        assertEquals(
+                "Whenever this creature attacks, defending player sacrifices "
+                        + "%d permanents.",
+                KeywordDefinitionMain.expandPlurals(
+                        "Whenever this creature attacks, defending player "
+                                + "sacrifices {%d:permanent}."));
+    }
+
+    @Test
+    void aLiteralOneTakesTheArticle() {
+        // The other branch, and the reason not to just delete the count:
+        // Emerge's cost is one of a thing, not a plural of it.
+        assertEquals(
+                "sacrificing a %2$s",
+                KeywordDefinitionMain.expandPlurals("sacrificing {1:%2$s}"));
+    }
+
+    @Test
+    void textWithoutMarkupIsUntouched() {
+        // Mana symbols are braces too, and share the noun's delimiter.
+        String text = "This spell costs {1} less to cast for each %s you control.";
+        assertEquals(text, KeywordDefinitionMain.expandPlurals(text));
     }
 
     @Test
