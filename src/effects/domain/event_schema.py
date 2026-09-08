@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import ClassVar
 
 
 class EventType(StrEnum):
@@ -158,7 +159,9 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.PT_CHANGE: ("power_delta", "toughness_delta", "set_pt"),
     EventType.KEYWORD_CHANGE: ("keywords", "removed"),
     EventType.TYPE_CHANGE: ("types_added", "types_removed", "overwrite"),
-    EventType.COLOR_CHANGE: ("colors", "overwrite"),
+    # colors_removed is additive: the head has a colors_lost field and the type
+    # carried no way to say a colour went away, so nothing ever reached it.
+    EventType.COLOR_CHANGE: ("colors", "colors_removed", "overwrite"),
     EventType.NAME_CHANGE: ("name",),
     EventType.ABILITY_CHANGE: ("abilities", "removed"),
     EventType.CONTROL_CHANGE: ("controller",),
@@ -212,13 +215,21 @@ class Event:
     duration: str | None = None
     attributed_to: str | None = None
 
+    #: Params any event may carry, because they say where it came from rather
+    #: than what it was. ``mode`` is the engine's own name for the hook that
+    #: produced it, kept because Forge has some two hundred trigger modes and
+    #: this vocabulary is a closed set of outcomes: mapping every one would be
+    #: a table nobody could keep true, and carrying the name loses nothing.
+    #: ``cause`` is the run-parameter key list the hook was called with.
+    PROVENANCE_PARAMS: ClassVar[frozenset[str]] = frozenset({"mode", "cause"})
+
     def __post_init__(self) -> None:
-        allowed = EVENT_PARAMS.get(self.type, ())
-        unknown = set(self.params) - set(allowed)
+        allowed = set(EVENT_PARAMS.get(self.type, ())) | self.PROVENANCE_PARAMS
+        unknown = set(self.params) - allowed
         if unknown:
             raise ValueError(
                 f"event {self.type.value} carries params {sorted(unknown)} that "
-                f"the schema does not normalize; allowed: {list(allowed)}"
+                f"the schema does not normalize; allowed: {sorted(allowed)}"
             )
 
     def as_dict(self) -> dict:

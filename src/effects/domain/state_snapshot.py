@@ -155,6 +155,28 @@ def normalize_keyword(raw: str) -> str:
     return raw.split(":", 1)[0].strip().lower().replace(" ", "_")
 
 
+def normalize_counter_type(raw: str) -> str:
+    """Forge's spelling of a counter type, in the one this package reads.
+
+    Forge names a counter the way a card prints it — ``"+1/+1"``, ``"-1/-1"`` —
+    while :data:`COUNTER_TYPES` and the head's per-type fields spell them
+    ``P1P1`` and ``M1M1``. Without this the two most common counters in the game
+    fall through to ``counters_delta_other``: a corpus with 399 ``+1/+1``
+    changes reported none, in the field that is supposed to hold them.
+
+    The transform is Forge's own naming rule read backwards — plus becomes P,
+    minus becomes M, the slash goes — so it also handles the rarer shapes
+    (``+1/+0``) without a table to keep in step.
+    """
+    return (
+        raw.strip()
+        .replace("+", "P")
+        .replace("-", "M")
+        .replace("/", "")
+        .upper()
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class StackExtras:
     """Fields an entity carries only while it is a stack object."""

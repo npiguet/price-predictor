@@ -71,55 +71,13 @@ class FieldCoverage:
 #: is removed, which is what stops a fixed field from quietly staying on a list
 #: of known problems, and what stops the list itself from drifting.
 KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
-    # ── the activation half of a resolution pair carries only its outcome ──
-    "record.payload<ActivationPayload>.costs",
-    "record.payload<ActivationPayload>.costs.mana_by_color",
-    "record.payload<ActivationPayload>.costs.tapped",
-    "record.payload<ActivationPayload>.costs.life",
-    "record.payload<ActivationPayload>.costs.sacrificed",
-    "record.payload<ActivationPayload>.costs.discarded",
-    "record.payload<ActivationPayload>.costs.exiled",
-    # ── a verdict that does not say which ability it is about ──
-    "record.payload<PlayabilityDecisionPayload>.candidates[].ability",
-    "record.payload<PlayabilityDecisionPayload>.candidates[].legal_targets",
-    "record.payload<PlayabilityDecisionPayload>.candidates[].cost_after_adjustment",
+    # ── deliberately not collected ──
+    # A verdict that does not name the static forbidding it. The attacker and
+    # blocker subkinds carry theirs, through cantAttackStatic and
+    # cantBlockByStatic; the decision subkind would need an equivalent
+    # cantBeCastStatic that Forge does not have, and only about a quarter of
+    # forbidden creatures find a static even where the hook exists.
     "record.payload<PlayabilityDecisionPayload>.candidates[].responsible_static",
-    # ── the event shape's two unset fields ──
-    # EffectEvent has setters for both and nothing calls them. duration is why
-    # pt_duration and type_color_duration are the only two head fields no target
-    # path writes: the model cannot separate "until end of turn" from "for good"
-    # because no record has ever said which. attributed_to is the sub-ability
-    # granularity the schema promises for a resolution.
-    "record.payload<ResolutionPayload>.events[].duration",
-    "record.payload<ResolutionPayload>.events[].attributed_to",
-    "record.payload<CombatPayload>.events[].duration",
-    "record.payload<CombatPayload>.events[].attributed_to",
-    "record.payload<TriggerPayload>.event.duration",
-    "record.payload<TriggerPayload>.event.attributed_to",
-    "record.payload<RewritePayload>.incoming.duration",
-    "record.payload<RewritePayload>.incoming.attributed_to",
-    "record.payload<RewritePayload>.outgoing.duration",
-    "record.payload<RewritePayload>.outgoing.attributed_to",
-    # A rewrite and a trigger name no subjects, though a resolution's and a
-    # combat's events do -- so this is those two collectors, not the shape.
-    "record.payload<TriggerPayload>.event.subjects",
-    "record.payload<RewritePayload>.incoming.subjects",
-    "record.payload<RewritePayload>.outgoing.subjects",
-    # ── snapshot fields never filled ──
-    "record.state.pending_event",
-    "record.state.global_.emblems",
-    "record.state.entities[].face",
-    "record.state.entities[].copy_source",
-    "record.state.entities[].stack_extras",
-    # Until-end-of-turn ability grants. Attachment grants do arrive, through
-    # granted_attached, so this is the narrower half.
-    "record.state.entities[].granted_temporary.abilities",
-    # Every colour written as 0: what mana a player could still make is in the
-    # schema and has never been computed.
-    "record.state.players[].untapped_production",
-    "record.state.refs.modes",
-    "record.state.refs.choices",
-    # ── deliberately empty ──
     # Eight cards in Forge write the name layer from a static, the head has no
     # field for a name, and it is open-vocabulary unlike every other channel.
     "record.payload<ContinuousPayload>.contributions[].name",

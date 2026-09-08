@@ -321,14 +321,14 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
-            EffectEvent incoming = describeParams(args[1]);
-            EffectEvent outgoing = describeParams(args[2]);
+            EffectEvent incoming = describeParams(args[0], args[1]);
+            EffectEvent outgoing = describeParams(args[0], args[2]);
             emit(new EffectRecord(
                     writer.nextRecordId(), writer.runId(),
                     RecordShardWriter.timestamp(), gameId,
                     EffectRecord.KIND_REWRITE, mode)
                     .actor(activePlayerId())
-                    .state(snapshots.toJson(null, List.of()))
+                    .state(snapshots.toJson(null, List.of(), null, incoming))
                     .payload("{\"incoming\":" + incoming.toJson()
                             + ",\"outgoing\":" + outgoing.toJson() + "}"));
             return null;
@@ -355,13 +355,13 @@ public final class PatchedCollectors implements AutoCloseable {
             if (!fired && sampler.nextDouble() > NEGATIVE_SAMPLE_RATE) {
                 return null;
             }
-            EffectEvent event = describeParams(args[1]);
+            EffectEvent event = describeParams(args[0], args[1]);
             emit(new EffectRecord(
                     writer.nextRecordId(), writer.runId(),
                     RecordShardWriter.timestamp(), gameId,
                     EffectRecord.KIND_TRIGGER, mode)
                     .actor(activePlayerId())
-                    .state(snapshots.toJson(null, List.of()))
+                    .state(snapshots.toJson(null, List.of(), null, event))
                     .payload("{\"event\":" + event.toJson()
                             + ",\"fired\":" + fired + "}"));
             return null;
@@ -405,6 +405,30 @@ public final class PatchedCollectors implements AutoCloseable {
             boolean canPlay = Boolean.TRUE.equals(args[1]);
             boolean affordable = Boolean.TRUE.equals(args[2]);
             boolean hasLegalTarget = Boolean.TRUE.equals(args[3]);
+            // Read now, into values. The comment above is the reason: the
+            // ability object is not safe to keep, but what it says at this
+            // instant is, and without it the record names no ability at all.
+            List<ProvenanceKey> candidateKeys = List.of();
+            StringJoiner legalTargets = new StringJoiner(",", "[", "]");
+            String manaCost = null;
+            if (args[0] instanceof SpellAbility candidate) {
+                candidateKeys = keysOf(candidate);
+                if (candidate.getTargets() != null) {
+                    for (GameEntity target : candidate.getTargets().getTargetEntities()) {
+                        String id = target instanceof Card card
+                                ? SnapshotBuilder.entityId(card)
+                                : target instanceof Player player
+                                        ? SnapshotBuilder.playerId(player) : null;
+                        if (id != null) {
+                            legalTargets.add(Json.string(id));
+                        }
+                    }
+                }
+                if (candidate.getPayCosts() != null) {
+                    manaCost = String.valueOf(
+                            candidate.getPayCosts().getTotalMana());
+                }
+            }
             emit(new EffectRecord(
                     writer.nextRecordId(), writer.runId(),
                     RecordShardWriter.timestamp(), gameId,
@@ -413,12 +437,18 @@ public final class PatchedCollectors implements AutoCloseable {
                     .actor(activePlayerId())
                     .state(snapshots.toJson(null, List.of()))
                     .payload("{\"candidates\":[{"
-                            + "\"ability\":[]"
+                            + "\"ability\":" + keyListJson(candidateKeys)
                             + ",\"verdict\":{\"can_play\":" + canPlay
                             + ",\"affordable\":" + affordable
                             + ",\"has_legal_target\":" + hasLegalTarget + "}"
-                            + ",\"legal_targets\":[]"
-                            + ",\"cost_after_adjustment\":{}"
+                            + ",\"legal_targets\":" + legalTargets
+                            + ",\"cost_after_adjustment\":"
+                            + (manaCost == null
+                                    ? "{}"
+                                    : "{\"mana\":" + Json.string(manaCost) + "}")
+                            // responsible_static needs a cantBeCastStatic hook
+                            // that does not exist; the attacker and blocker
+                            // subkinds carry theirs, this one does not.
                             + ",\"responsible_static\":[]}]}"));
             return null;
         };
@@ -905,6 +935,12 @@ public final class PatchedCollectors implements AutoCloseable {
                 for (KeywordInterface keyword : cell.getValue().getKeywords()) {
                     into.keyword(keyword.getOriginal());
                 }
+                // The same channel's other half. A static that takes a keyword
+                // away had no path to keywords_lost, which is a head field, so
+                // "loses flying" and "does nothing" recorded identically.
+                for (String removed : cell.getValue().getRemoveKeywords()) {
+                    into.keyword("-" + removed);
+                }
             }
             for (Map.Entry<Long, List<Object>> changed
                     : changesByStatic(card, "getChangedCardTypesByStatic").entrySet()) {
@@ -1186,9 +1222,25 @@ public final class PatchedCollectors implements AutoCloseable {
      * side does not link against, so the description is by string. That loses
      * type information the Python reader does not use.
      */
-    private EffectEvent describeParams(Object params) {
-        EffectEvent event = new EffectEvent(EffectEvent.ZONE_CHANGE);
+    private EffectEvent describeParams(Object trait, Object params) {
+        String mode = modeOf(trait);
+        EffectEvent event = new EffectEvent(EVENT_BY_MODE.getOrDefault(
+                mode, EffectEvent.STATE_FLAG_CHANGE));
+        // The engine's own name for what happened, kept whether or not the
+        // vocabulary has a member for it. Forge has some two hundred trigger
+        // modes and the vocabulary is a closed set of outcomes, so mapping
+        // every one would be a table nobody could keep true; carrying the mode
+        // loses nothing and lets a later stage map more of them.
+        if (mode != null) {
+            event.param("mode", mode);
+        }
         if (params instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String subject = subjectOf(entry.getValue());
+                if (subject != null) {
+                    event.subject(subject);
+                }
+            }
             StringJoiner keys = new StringJoiner(",");
             for (Object key : map.keySet()) {
                 keys.add(String.valueOf(key));
@@ -1196,6 +1248,90 @@ public final class PatchedCollectors implements AutoCloseable {
             event.param("cause", keys.toString());
         }
         return event;
+    }
+
+    /**
+     * The entity a run-parameter value names, or null when it names none.
+     *
+     * <p>A replacement's and a trigger's parameter maps are the only place
+     * those records say what they are about, and nothing read them: every
+     * rewrite and trigger event in the corpus named no subjects at all, which
+     * left the pending-event overlay with nothing to attach to.
+     */
+    private static String subjectOf(Object value) {
+        if (value instanceof Card card) {
+            return SnapshotBuilder.entityId(card);
+        }
+        if (value instanceof Player player) {
+            return SnapshotBuilder.playerId(player);
+        }
+        if (value instanceof SpellAbility ability && ability.getHostCard() != null) {
+            return SnapshotBuilder.entityId(ability.getHostCard());
+        }
+        return null;
+    }
+
+    /** A trigger's or replacement's mode, by whichever accessor it has. */
+    private static String modeOf(Object trait) {
+        Object mode = PatchHooks.read(trait, "getMode");
+        return mode == null ? null : String.valueOf(mode);
+    }
+
+    /**
+     * Forge modes that have a counterpart in the event vocabulary.
+     *
+     * <p>Deliberately partial. The vocabulary names observable outcomes and
+     * Forge names engine hooks, so only some pairs are the same thing; the rest
+     * carry their mode as a parameter and take the generic type.
+     */
+    private static final Map<String, String> EVENT_BY_MODE = Map.ofEntries(
+            Map.entry("ChangesZone", EffectEvent.ZONE_CHANGE),
+            Map.entry("Moved", EffectEvent.ZONE_CHANGE),
+            Map.entry("Destroy", EffectEvent.DESTROYED),
+            Map.entry("Destroyed", EffectEvent.DESTROYED),
+            Map.entry("Sacrificed", EffectEvent.SACRIFICED),
+            Map.entry("DamageDone", EffectEvent.DAMAGE_DEALT),
+            Map.entry("DamageDealtOnce", EffectEvent.DAMAGE_DEALT),
+            Map.entry("DamageAll", EffectEvent.DAMAGE_DEALT),
+            Map.entry("Drawn", EffectEvent.CARD_DRAWN),
+            Map.entry("Draw", EffectEvent.CARD_DRAWN),
+            Map.entry("Discarded", EffectEvent.CARD_DISCARDED),
+            Map.entry("Milled", EffectEvent.CARD_MILLED),
+            Map.entry("LifeGained", EffectEvent.LIFE_CHANGE),
+            Map.entry("LifeLost", EffectEvent.LIFE_CHANGE),
+            Map.entry("GainLife", EffectEvent.LIFE_CHANGE),
+            Map.entry("LoseLife", EffectEvent.LIFE_CHANGE),
+            Map.entry("Poisoned", EffectEvent.POISON_CHANGE),
+            Map.entry("CounterAdded", EffectEvent.COUNTER_CHANGE),
+            Map.entry("CounterAddedOnce", EffectEvent.COUNTER_CHANGE),
+            Map.entry("CounterRemoved", EffectEvent.COUNTER_CHANGE),
+            Map.entry("AddCounter", EffectEvent.COUNTER_CHANGE),
+            Map.entry("RemoveCounter", EffectEvent.COUNTER_CHANGE),
+            Map.entry("Taps", EffectEvent.TAPPED),
+            Map.entry("TapsForMana", EffectEvent.MANA_PRODUCED),
+            Map.entry("Untaps", EffectEvent.UNTAPPED),
+            Map.entry("Attached", EffectEvent.ATTACHED),
+            Map.entry("Unattach", EffectEvent.UNATTACHED),
+            Map.entry("SpellCast", EffectEvent.SPELL_CAST),
+            Map.entry("SpellAbilityCast", EffectEvent.SPELL_CAST),
+            Map.entry("Countered", EffectEvent.SPELL_COUNTERED),
+            Map.entry("TokenCreated", EffectEvent.TOKEN_CREATED),
+            Map.entry("TokenCreatedOnce", EffectEvent.TOKEN_CREATED),
+            Map.entry("Attackers", EffectEvent.ATTACKERS_DECLARED),
+            Map.entry("AttackerBlocked", EffectEvent.BLOCKERS_DECLARED),
+            Map.entry("Shuffled", EffectEvent.LIBRARY_SHUFFLED),
+            Map.entry("Scry", EffectEvent.CARD_LOOKED_AT),
+            Map.entry("Surveil", EffectEvent.CARD_LOOKED_AT),
+            Map.entry("PhaseOut", EffectEvent.PHASED),
+            Map.entry("PhaseIn", EffectEvent.PHASED),
+            Map.entry("Regenerated", EffectEvent.REGENERATED));
+
+    private static String keyListJson(List<ProvenanceKey> keys) {
+        StringJoiner joiner = new StringJoiner(",", "[", "]");
+        for (ProvenanceKey key : keys) {
+            joiner.add(key.toJson());
+        }
+        return joiner.toString();
     }
 
     private static List<ProvenanceKey> keysOf(SpellAbility ability) {

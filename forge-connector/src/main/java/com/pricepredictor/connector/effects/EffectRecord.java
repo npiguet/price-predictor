@@ -1,8 +1,23 @@
 package com.pricepredictor.connector.effects;
 
+import forge.card.MagicColor;
+import forge.card.mana.ManaCost;
+import forge.card.mana.ManaCostShard;
+import forge.game.card.Card;
+import forge.game.cost.Cost;
+import forge.game.cost.CostDiscard;
+import forge.game.cost.CostExile;
+import forge.game.cost.CostPart;
+import forge.game.cost.CostPartWithList;
+import forge.game.cost.CostPayLife;
+import forge.game.cost.CostSacrifice;
+import forge.game.cost.CostTapType;
+import forge.game.spellability.SpellAbility;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.StringJoiner;
+
 
 /**
  * One record line, assembled field by field.
@@ -172,10 +187,93 @@ public final class EffectRecord {
         return "{\"events\":" + joiner + "}";
     }
 
-    /** ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half. */
-    public static String costPayload(String outcome) {
-        return "{\"costs\":{\"mana_by_color\":{},\"tapped\":[],\"life\":0,"
-                + "\"sacrificed\":[],\"discarded\":[],\"exiled\":[]},"
+    /**
+     * ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half.
+     *
+     * <p>Read after the cost has been paid, which is when a cast event fires,
+     * so the card lists are what was actually spent rather than what the cost
+     * asked for. A cost with no list part contributes nothing rather than an
+     * empty entry.
+     *
+     * <p>Mana is counted per colour with a hybrid shard counted under each
+     * colour it could have paid: the cost is what the card asks, and which half
+     * of a hybrid was used is not in it. Generic and X land under {@code C}.
+     */
+    public static String costPayload(SpellAbility ability, String outcome) {
+        Cost cost = ability == null ? null : ability.getPayCosts();
+        StringJoiner mana = new StringJoiner(",", "{", "}");
+        List<String> tapped = new ArrayList<>();
+        List<String> sacrificed = new ArrayList<>();
+        List<String> discarded = new ArrayList<>();
+        List<String> exiled = new ArrayList<>();
+        int life = 0;
+
+        if (cost != null) {
+            ManaCost total = cost.getTotalMana();
+            for (char color : COST_COLORS) {
+                int count = shardCount(total, color);
+                if (count > 0) {
+                    mana.add(Json.string(String.valueOf(color)) + ":" + count);
+                }
+            }
+            int generic = total.getGenericCost()
+                    + (ability.getXManaCostPaid() == null
+                            ? 0 : ability.getXManaCostPaid() * total.countX());
+            if (generic > 0) {
+                mana.add("\"C\":" + generic);
+            }
+            for (CostPart part : cost.getCostParts()) {
+                if (part instanceof CostPayLife payLife) {
+                    life += amountOf(payLife, ability);
+                } else if (part instanceof CostPartWithList listed) {
+                    // Four different questions about one card list, told apart
+                    // by which cost part produced it.
+                    List<String> into =
+                            part instanceof CostSacrifice ? sacrificed
+                            : part instanceof CostDiscard ? discarded
+                            : part instanceof CostExile ? exiled
+                            : part instanceof CostTapType ? tapped
+                            : null;
+                    if (into != null) {
+                        for (Card card : listed.getCardList()) {
+                            into.add(SnapshotBuilder.entityId(card));
+                        }
+                    }
+                }
+            }
+        }
+        return "{\"costs\":{\"mana_by_color\":" + mana
+                + ",\"tapped\":" + Json.stringArray(tapped)
+                + ",\"life\":" + life
+                + ",\"sacrificed\":" + Json.stringArray(sacrificed)
+                + ",\"discarded\":" + Json.stringArray(discarded)
+                + ",\"exiled\":" + Json.stringArray(exiled) + "},"
                 + "\"outcome\":" + Json.string(outcome) + "}";
+
     }
+
+    private static final char[] COST_COLORS = {'W', 'U', 'B', 'R', 'G'};
+
+    /** How many shards of a cost could be paid with this colour. */
+    private static int shardCount(ManaCost cost, char color) {
+        byte mask = MagicColor.fromName(String.valueOf(color));
+        int count = 0;
+        for (ManaCostShard shard : cost) {
+            if ((shard.getColorMask() & mask) != 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static int amountOf(CostPayLife part, SpellAbility ability) {
+        try {
+            return Integer.parseInt(part.getAmount());
+        } catch (NumberFormatException | NullPointerException e) {
+            // An X or a script variable; the announced value is the record's
+            // business and the amount is not readable here without evaluating.
+            return 0;
+        }
+    }
+
 }

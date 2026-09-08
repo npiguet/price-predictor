@@ -40,8 +40,16 @@ public final class EffectEvent {
     public static final String UNATTACHED = "unattached";
     public static final String CONTROL_CHANGE = "control_change";
     public static final String FACE_CHANGE = "face_change";
+    /** The generic outcome, for an engine mode the vocabulary has no member for. */
+    public static final String STATE_FLAG_CHANGE = "state_flag_change";
+    public static final String KEYWORD_CHANGE = "keyword_change";
+    public static final String TYPE_CHANGE = "type_change";
+    public static final String COLOR_CHANGE = "color_change";
+    public static final String CARD_DRAWN = "card_drawn";
+    public static final String CARD_DISCARDED = "card_discarded";
     public static final String CARD_MILLED = "card_milled";
     public static final String CARD_LOOKED_AT = "card_looked_at";
+    public static final String LIBRARY_REORDERED = "library_reordered";
     public static final String LIBRARY_SHUFFLED = "library_shuffled";
     public static final String MANA_PRODUCED = "mana_produced";
     public static final String SPELL_CAST = "spell_cast";

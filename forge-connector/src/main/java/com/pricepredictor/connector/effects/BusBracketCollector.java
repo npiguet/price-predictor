@@ -5,10 +5,17 @@ import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
+import forge.game.zone.ZoneType;
+import forge.game.card.CardView;
+import forge.game.event.GameEventCardAttachment;
+import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
+import forge.game.event.GameEventScry;
+import forge.game.event.GameEventSurveil;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
@@ -63,6 +70,14 @@ public final class BusBracketCollector {
     private final List<EffectEvent> combatEvents = new ArrayList<>();
     /** The step's combat, read when its bracket opens rather than at flush. */
     private CombatShape combatShape = CombatShape.empty();
+    /**
+     * Computed characteristics, so a stats-changed event can say what changed.
+     *
+     * <p>Lives for the game rather than the bracket: a pump in one bracket and
+     * its wearing off in another are both differences from what was there
+     * before, and a per-bracket baseline would report the second as nothing.
+     */
+    private final StatDiffer stats = new StatDiffer();
     /**
      * Assignments already written, for the length of one combat.
      *
@@ -130,7 +145,7 @@ public final class BusBracketCollector {
                 .ability(resolvingKeys)
                 .linkId(bracketLinkId())
                 .state(openBracketState)
-                .payload(EffectRecord.costPayload(EffectRecord.OUTCOME_RESOLVED)));
+                .payload(EffectRecord.costPayload(ability, EffectRecord.OUTCOME_RESOLVED)));
     }
 
     /** A resolution closes the bracket and writes the effect half. */
@@ -176,7 +191,8 @@ public final class BusBracketCollector {
     @Subscribe
     public void onCardDamaged(GameEventCardDamaged event) {
         String subject = "E" + event.card().getId();
-        EffectEvent damage = BusEvents.cardDamaged(event, isCombatDamage());
+        EffectEvent damage = EventAttribution.stamp(
+                BusEvents.cardDamaged(event, isCombatDamage()), resolving);
         if (isCombatDamage()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -189,7 +205,8 @@ public final class BusBracketCollector {
     @Subscribe
     public void onPlayerDamaged(GameEventPlayerDamaged event) {
         String subject = "P" + event.target().getId();
-        EffectEvent damage = BusEvents.playerDamaged(event);
+        EffectEvent damage = EventAttribution.stamp(
+                BusEvents.playerDamaged(event), resolving);
         if (event.combat()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -228,6 +245,92 @@ public final class BusBracketCollector {
         }
     }
 
+    /**
+     * A draw, a discard or a mill, which the bus has no event for.
+     *
+     * <p>Each is a card moving between two zones and which of the three it is
+     * depends on where it came from, so it has to be classified from the pair.
+     * The head counts all three per player and none of those counters had ever
+     * fired.
+     */
+    @Subscribe
+    public void onCardChangeZone(GameEventCardChangeZone event) {
+        EffectEvent named = BusEvents.libraryMovement(event);
+        if (named != null) {
+            record(named);
+        }
+        if (event.card() != null && event.from() != null
+                && event.from().zoneType() == ZoneType.Battlefield) {
+            // Off the battlefield a card's computed characteristics stop
+            // meaning anything, and one that returns is a new object.
+            stats.forget(event.card().getId());
+        }
+    }
+
+    /**
+     * The engine says a card's stats moved; this says what moved.
+     *
+     * <p>The bus publishes one event for a pump, an anthem recompute, an
+     * animation and a colour change alike, and it names only the card. Without
+     * the difference, the whole "gets +2/+2 and gains flying" family — most of
+     * what a limited deck does — resolved into an empty event list.
+     */
+    @Subscribe
+    public void onStatsChanged(GameEventCardStatsChanged event) {
+        if (event.cards() == null) {
+            return;
+        }
+        for (CardView view : event.cards()) {
+            if (view == null) {
+                continue;
+            }
+            Card card = cardById(view.getId());
+            if (card != null) {
+                for (EffectEvent changed : stats.diff(card)) {
+                    record(changed);
+                }
+            }
+        }
+    }
+
+    @Subscribe
+    public void onAttachment(GameEventCardAttachment event) {
+        EffectEvent attached = BusEvents.attachment(event);
+        if (attached != null) {
+            record(attached);
+        }
+    }
+
+    @Subscribe
+    public void onScry(GameEventScry event) {
+        for (EffectEvent looked : BusEvents.scry(event)) {
+            record(looked);
+        }
+    }
+
+    @Subscribe
+    public void onSurveil(GameEventSurveil event) {
+        for (EffectEvent looked : BusEvents.surveil(event)) {
+            record(looked);
+        }
+    }
+
+    /**
+     * The battlefield card an id names, or null.
+     *
+     * <p>The bus hands out views rather than cards, and a view carries the id
+     * and not the object. The battlefield is small enough that a scan costs
+     * less than an index kept in step with every zone change.
+     */
+    private Card cardById(int id) {
+        for (Card card : game.getCardsIn(ZoneType.Battlefield)) {
+            if (card.getId() == id) {
+                return card;
+            }
+        }
+        return null;
+    }
+
     // ── plumbing ────────────────────────────────────────────────────────
 
     /**
@@ -237,6 +340,10 @@ public final class BusBracketCollector {
      * attribute to the bracket they follow, which is the one that caused them.
      */
     private void record(EffectEvent event) {
+        // Stamped here rather than where the event is built: which clause
+        // produced it and how long it lasts are properties of the bracket it
+        // landed in, and only this side knows that.
+        EventAttribution.stamp(event, resolving);
         if (isCombatDamage()) {
             openCombatBracket();
             combatEvents.add(event);

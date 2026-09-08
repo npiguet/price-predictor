@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
 
@@ -53,6 +54,7 @@ from effects.domain.state_snapshot import (
     Refs,
     StackExtras,
     StateSnapshot,
+    normalize_counter_type,
     normalize_keyword,
 )
 from price_predictor.infrastructure.append_only import (
@@ -90,7 +92,25 @@ def _events_to_json(events: tuple[Event, ...]) -> list[dict]:
 
 
 def _events_from_json(data: Any) -> tuple[Event, ...]:
-    return tuple(Event.from_dict(item) for item in data or ())
+    return tuple(_event_from_json(item) for item in data or ())
+
+
+def _event_from_json(item: Any) -> Event:
+    """One event, with its counter type in this package's spelling.
+
+    Normalized on read for the same reason keywords are: Forge writes what a
+    card prints and the head reads a canonical name, and a corpus already
+    collected cannot be rewritten. Doing it here rather than at the head's
+    lookup means every consumer gets the same answer.
+    """
+    event = Event.from_dict(item)
+    counter = event.params.get("counter_type")
+    if isinstance(counter, str):
+        return replace(
+            event,
+            params={**event.params, "counter_type": normalize_counter_type(counter)},
+        )
+    return event
 
 
 # ── snapshot ────────────────────────────────────────────────────────────

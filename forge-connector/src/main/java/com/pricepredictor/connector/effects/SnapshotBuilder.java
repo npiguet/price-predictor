@@ -1,12 +1,15 @@
 package com.pricepredictor.connector.effects;
 
 import com.google.common.collect.Table;
+import forge.card.CardStateName;
 import forge.card.CardTypeView;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.GameEntity;
 import forge.game.card.CardCollectionView;
+
 import forge.game.card.CounterEnumType;
 import forge.game.card.CounterType;
 import forge.game.keyword.KeywordInterface;
@@ -97,6 +100,20 @@ public final class SnapshotBuilder {
      */
     public String toJson(
             SpellAbility acting, Iterable<Card> referenced, Long withoutStatic) {
+        return toJson(acting, referenced, withoutStatic, null);
+    }
+
+    /**
+     * Render the snapshot, naming the event a record is about to handle.
+     *
+     * @param pending the incoming event on a {@code rewrite} or {@code trigger}
+     *                record. The event itself lives in the payload; the snapshot
+     *                carries it so the entities it is about to affect are
+     *                nameable from the board the model is shown
+     */
+    public String toJson(
+            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic,
+            EffectEvent pending) {
         Set<Card> entities = new LinkedHashSet<>();
         if (referenced != null) {
             for (Card card : referenced) {
@@ -139,7 +156,8 @@ public final class SnapshotBuilder {
                 + ",\"players\":" + playerJson
                 + ",\"entities\":" + entityJson
                 + ",\"refs\":" + refsToJson(acting)
-                + ",\"pending_event\":null"
+                + ",\"pending_event\":"
+                + (pending == null ? "null" : pending.toJson())
                 + ",\"tiers\":" + tierJson + "}";
     }
 
@@ -154,7 +172,80 @@ public final class SnapshotBuilder {
                 + Json.string(priority == null ? null : playerId(priority))
                 + ",\"stack_size\":" + game.getStack().size()
                 + ",\"combat_substep\":" + Json.string(combatSubstep())
-                + ",\"emblems\":[]}";
+                + ",\"emblems\":" + keyJson(emblems()) + "}";
+    }
+
+    /**
+     * Command-zone emblems, as the key of the line that made each.
+     *
+     * <p>An emblem is a continuous effect with no permanent to hang on, so it
+     * appears nowhere else in the snapshot; without this the board says nothing
+     * about an effect that changes every turn of the rest of the game.
+     */
+    private List<ProvenanceKey> emblems() {
+        List<ProvenanceKey> keys = new ArrayList<>();
+        for (Card card : game.getCardsIn(ZoneType.Command)) {
+            if (!card.isEmblem()) {
+                continue;
+            }
+            for (SpellAbility sa : card.getSpellAbilities()) {
+                ProvenanceKey key = ProvenanceKey.of(sa);
+                if (key != null && !keys.contains(key)) {
+                    keys.add(key);
+                }
+            }
+        }
+        return keys;
+    }
+
+    /**
+     * How much of each colour this player could still make, per colour.
+     *
+     * <p>Counted over untapped permanents' mana abilities, one per ability that
+     * can produce the colour. It is what separates a board that can answer a
+     * threat from one that only looks like it can, and the field had been
+     * written as zero for every colour since the snapshot was first built.
+     *
+     * <p>An ability that makes one mana of any colour counts once for each, so
+     * the numbers are an upper bound rather than a sum that can be spent.
+     */
+    private Map<Character, Integer> untappedProduction(Player player) {
+        Map<Character, Integer> production = new java.util.HashMap<>();
+        for (Card card : player.getCardsIn(ZoneType.Battlefield)) {
+            if (card.isTapped()) {
+                continue;
+            }
+            for (SpellAbility ability : card.getManaAbilities()) {
+                var part = ability.getManaPart();
+                if (part == null) {
+                    continue;
+                }
+                for (char color : COLORS) {
+                    if (part.canProduce(String.valueOf(color), ability)) {
+                        production.merge(color, 1, Integer::sum);
+                    }
+                }
+            }
+        }
+        return production;
+    }
+
+    /**
+     * Creatures this player lost from the battlefield this turn.
+     *
+     * <p>The engine keeps what left the battlefield, not what died, so a
+     * bounced or exiled creature counts here too. It is a close reading of a
+     * condition many triggers ask about and the field had been a constant zero;
+     * an exact count would need a hook where the death is decided.
+     */
+    private int creaturesLost(Player player) {
+        int count = 0;
+        for (Card card : game.getLeftBattlefieldThisTurn()) {
+            if (card.isCreature() && card.getController() == player) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private static String phaseName(Object phase) {
@@ -188,12 +279,14 @@ public final class SnapshotBuilder {
     private String playerToJson(Player player) {
         StringJoiner floating = new StringJoiner(",", "{", "}");
         StringJoiner production = new StringJoiner(",", "{", "}");
+        Map<Character, Integer> untapped = untappedProduction(player);
         for (char color : COLORS) {
             byte shard = MagicColor.fromName(String.valueOf(color));
             floating.add(
                     Json.string(String.valueOf(color)) + ":"
                             + player.getManaPool().getAmountOfColor(shard));
-            production.add(Json.string(String.valueOf(color)) + ":0");
+            production.add(Json.string(String.valueOf(color)) + ":"
+                    + untapped.getOrDefault(color, 0));
         }
         return "{\"id\":" + Json.string(playerId(player))
                 + ",\"life\":" + player.getLife()
@@ -203,7 +296,9 @@ public final class SnapshotBuilder {
                 + ",\"poison\":" + player.getPoisonCounters()
                 + ",\"energy\":" + player.getCounters(
                         CounterEnumType.ENERGY)
-                + ",\"this_turn\":{\"creatures_died\":0,\"spells_cast\":"
+                + ",\"this_turn\":{\"creatures_died\":"
+                + creaturesLost(player)
+                + ",\"spells_cast\":"
                 + player.getSpellsCastThisTurn()
                 + ",\"lands_played\":" + player.getLandsPlayedThisTurn() + "}"
                 + ",\"floating_mana\":" + floating
@@ -272,8 +367,8 @@ public final class SnapshotBuilder {
                 + ",\"controller\":" + Json.string(
                         card.getController() == null
                                 ? null : playerId(card.getController()))
-                + ",\"face\":" + 0
-                + ",\"copy_source\":null"
+                + ",\"face\":" + faceOf(card)
+                + ",\"copy_source\":" + Json.string(copySourceOf(card))
                 + ",\"token_script_id\":"
                 + Json.string(card.isToken() ? card.getName() : null)
                 + ",\"types\":" + typeJson(card, without)
@@ -293,7 +388,7 @@ public final class SnapshotBuilder {
                 + ",\"granted_attached\":" + keyJson(grantedAttached(card))
                 + ",\"granted_temporary\":" + grantedTemporaryJson(card, without)
                 + ",\"printed\":" + keyJson(printedKeys(card))
-                + ",\"stack_extras\":null}";
+                + ",\"stack_extras\":" + stackExtrasJson(card) + "}";
     }
 
     private String zoneName(Card card) {
@@ -383,7 +478,101 @@ public final class SnapshotBuilder {
                         keyword.getOriginal().toLowerCase(java.util.Locale.ROOT)));
             }
         }
-        return "{\"keywords\":" + keywords + ",\"abilities\":[]}";
+        return "{\"keywords\":" + keywords
+                + ",\"abilities\":" + keyJson(grantedTemporaryAbilities(card)) + "}";
+    }
+
+    /**
+     * Lines granted by a timestamped change rather than printed or attached.
+     *
+     * <p>"Gains flying and 'T: draw a card' until end of turn" puts the second
+     * half here. Attachment grants ride {@code granted_attached} instead, and
+     * the two stay apart because the model reads them differently: an entity's
+     * ability tokens are its printed and attached lines, while a temporary
+     * grant is part of what happened to it.
+     */
+    private List<ProvenanceKey> grantedTemporaryAbilities(Card card) {
+        List<ProvenanceKey> keys = new ArrayList<>();
+        Object changes = PatchHooks.read(card, "getChangedCardTraits");
+        if (!(changes instanceof com.google.common.collect.Table<?, ?, ?> table)) {
+            return keys;
+        }
+        for (Object value : table.values()) {
+            Object abilities = PatchHooks.read(value, "getAbilities");
+            if (!(abilities instanceof Iterable<?> granted)) {
+                continue;
+            }
+            for (Object ability : granted) {
+                if (ability instanceof SpellAbility sa) {
+                    ProvenanceKey key = ProvenanceKey.of(sa);
+                    if (key != null && !keys.contains(key)) {
+                        keys.add(key);
+                    }
+                }
+            }
+        }
+        return keys;
+    }
+
+    /** Which face is up, as an index; 0 is the printed front. */
+    private static int faceOf(Card card) {
+        var state = card.getCurrentStateName();
+        return state == null || state == CardStateName.Original ? 0 : 1;
+    }
+
+    /** What this permanent is copying, or null when it is itself. */
+    private static String copySourceOf(Card card) {
+        Card copied = card.getCopiedPermanent();
+        if (copied != null) {
+            return entityId(copied);
+        }
+        Card cloner = card.getCloner();
+        return cloner == null ? null : entityId(cloner);
+    }
+
+    /**
+     * What a stack object announced, or null when the entity is not on the stack.
+     *
+     * <p>Divided damage and "up to N" counts are choices the caster made that no
+     * other field records: a Fireball for 3 split two ways and one aimed at a
+     * single creature have the same cost and the same text.
+     */
+    private String stackExtrasJson(Card card) {
+        SpellAbility onStack = null;
+        for (var instance : game.getStack()) {
+            SpellAbility candidate = instance.getSpellAbility();
+            if (candidate != null && candidate.getHostCard() == card) {
+                onStack = candidate;
+                break;
+            }
+        }
+        if (onStack == null || onStack.getTargets() == null) {
+            return "null";
+        }
+        StringJoiner targets = new StringJoiner(",", "[", "]");
+        StringJoiner amounts = new StringJoiner(",", "{", "}");
+        int chosen = 0;
+        for (GameEntity target : onStack.getTargets().getTargetEntities()) {
+            chosen++;
+            String id = target instanceof Card targeted
+                    ? entityId(targeted)
+                    : target instanceof Player player ? playerId(player) : null;
+            if (id == null) {
+                continue;
+            }
+            targets.add(Json.string(id));
+            Integer divided = onStack.getDividedValue(target);
+            if (divided != null) {
+                amounts.add(Json.string(id) + ":" + divided);
+            }
+        }
+        StringJoiner upTo = new StringJoiner(",", "{", "}");
+        if (onStack.getTargetRestrictions() != null) {
+            upTo.add("\"chosen\":" + chosen);
+        }
+        return "{\"targets\":" + targets
+                + ",\"per_target_amounts\":" + amounts
+                + ",\"up_to_counts\":" + upTo + "}";
     }
 
     /** Printed lines, as provenance keys into the card's own script. */
@@ -521,9 +710,58 @@ public final class SnapshotBuilder {
         }
         return "{\"targets\":" + targets
                 + ",\"source\":" + Json.string(source)
-                + ",\"modes\":[]"
+                + ",\"modes\":" + modesJson(acting)
                 + ",\"x\":" + (x == null ? "null" : x)
-                + ",\"choices\":{}}";
+                + ",\"choices\":" + choicesJson(acting) + "}";
+    }
+
+    /**
+     * The modes chosen on a modal spell.
+     *
+     * <p>A charm's three modes are one card and three effects, and which was
+     * chosen is nowhere else in the record: the ability key is the same line
+     * either way.
+     */
+    private String modesJson(SpellAbility acting) {
+        StringJoiner modes = new StringJoiner(",", "[", "]");
+        if (acting != null && acting.getChosenList() != null) {
+            // Forge keeps the chosen modes as the sub-abilities they select,
+            // so the mode is named by the clause it turns on.
+            for (var mode : acting.getChosenList()) {
+                modes.add(Json.string(
+                        mode.getApi() == null ? "?" : mode.getApi().name()));
+            }
+        }
+        return modes.toString();
+    }
+
+    /**
+     * Resolution-time choices the engine asked the controller to make.
+     *
+     * <p>A named card, a chosen colour, a chosen type or number — each turns
+     * one line into a different effect, and the head reads them from
+     * {@code [ACT]} alongside the announced values.
+     */
+    private String choicesJson(SpellAbility acting) {
+        StringJoiner choices = new StringJoiner(",", "{", "}");
+        if (acting == null || acting.getHostCard() == null) {
+            return choices.toString();
+        }
+        Card host = acting.getHostCard();
+        addChoice(choices, "named_card", host.getNamedCard());
+        addChoice(choices, "chosen_color", host.getChosenColors() == null
+                ? null : String.join("|", host.getChosenColors()));
+        addChoice(choices, "chosen_type", host.getChosenType());
+        if (host.hasChosenNumber()) {
+            choices.add("\"chosen_number\":" + host.getChosenNumber());
+        }
+        return choices.toString();
+    }
+
+    private static void addChoice(StringJoiner into, String name, String value) {
+        if (value != null && !value.isEmpty()) {
+            into.add(Json.string(name) + ":" + Json.string(value));
+        }
     }
 
     private static boolean contains(int[] values, int value) {

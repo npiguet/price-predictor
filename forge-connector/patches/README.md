@@ -76,22 +76,27 @@ The hook names are a contract with `PatchHooks` and `PatchedCollectors`, which l
 Renaming one on either side degrades the corpus silently rather than failing the build — that is the
 cost of building against stock Forge, and why the integration test asserts the mode.
 
-## Not yet hooked
+## Not hooked, on purpose
 
-A patched run reaches all eight sampling classes, both stage-three fork kinds work, and a
-`continuous` record fills every channel but `name`. Nothing reads the name layer table yet, and it
-has no accessor here; `changedCardNames` is keyed the same way the other three are, so adding one
-is the same shape of change.
+A patched run reaches all eight sampling classes, both stage-three fork kinds work, and every
+record field the schema names is written except two.
 
-Keyword *removals* are also unrecorded. The collector reads layer 6's granted keywords, and a
-`KeywordsChange` that takes one away has no path to `keywords_lost` — the same gap the type and
-colour channels had before they were split into gained and lost.
+A `continuous` contribution's `name` stays empty. Eight cards in all of Forge write the name layer
+from a static — six with `SetName`, Spy Kit with `AddNames`, Volrath's Shapeshifter with
+`GainTextOf` — the head has no field for a name, and a name is open-vocabulary over 33,680 strings
+unlike every other channel. `changedCardNames` is keyed the same way the other layer tables are, so
+adding it later is the same shape of change as the type and colour accessors.
+
+A `playability`/`decision` candidate's `responsible_static` stays empty. It would need a
+`cantBeCastStatic` equivalent to the `cantAttackStatic` and `cantBlockByStatic` in this patch, and
+even where that hook exists only about a quarter of forbidden creatures find a static: the rest are
+stopped by the rules themselves — tapped, summoning sick, "can't attack" printed on the card — where
+an empty list is the right answer rather than a gap.
+
+Both are listed in `KNOWN_CONSTANT_FIELDS`, so `python -m effects field-coverage` names them as
+expected rather than as findings.
 
 The three `…Without` hooks arrived after the rest, so a checkout carrying an older revision of this
 patch reports `patched` and still cannot suppress. `PatchedCollectors` checks for them by name and
 collects no `continuous` records when they are missing, because a snapshot that still contains the
 effect it labels is worse than no record.
-
-Around a quarter of forbidden creatures name a `responsible_static`. The rest are stopped by the rules
-themselves — tapped, summoning sick, "can't attack" printed on the card — where no static ability is
-to blame, and an empty list is the right answer rather than a gap.
