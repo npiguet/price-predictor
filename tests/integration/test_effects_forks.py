@@ -31,7 +31,9 @@ _COLLECTION_SECONDS = 240
 _POLL_SECONDS = 5
 
 
-def _run(records_dir: Path, interventions: int = 0) -> list:
+def _run(
+    records_dir: Path, interventions: int = 0, probe_keywords: str = "",
+) -> list:
     try:
         resolve_connector_jar()
     except FileNotFoundError:
@@ -45,6 +47,8 @@ def _run(records_dir: Path, interventions: int = 0) -> list:
         worker_index=0,
         collection_caps=CollectionCaps(
             interventions_per_game=interventions,
+            probes_per_game=4,
+            probe_keywords=probe_keywords,
         ).as_system_properties(),
     )
     try:
@@ -53,7 +57,13 @@ def _run(records_dir: Path, interventions: int = 0) -> list:
             time.sleep(_POLL_SECONDS)
             if process.poll() is not None:
                 pytest.fail(f"worker exited early with {process.returncode}")
-            if sum(1 for _ in read_records(records_dir)) >= 20:
+            records = list(read_records(records_dir))
+            # A fork run has to reach combat, which is several turns in — the
+            # twenty-record mark is the first turn, long before one happens.
+            if probe_keywords:
+                if any(r.fork for r in records):
+                    break
+            elif len(records) >= 20:
                 break
         return list(read_records(records_dir))
     finally:
@@ -141,6 +151,78 @@ def test_an_intervention_forces_something_observation_misses(
             ("/mountain.txt", "/island.txt", "/swamp.txt", "/plains.txt",
              "/forest.txt")
         ), f"forced a basic land: {script}"
+
+
+_PROBED = "first_strike,trample,deathtouch"
+
+
+def test_a_probe_pairs_to_the_combat_it_varies(tmp_path: Path) -> None:
+    """A branch that pairs to nothing is unreadable: the whole point is the
+    difference between it and the step it forked from."""
+    records = _run(tmp_path / "records", probe_keywords=_PROBED)
+    probes = [r for r in records if r.fork and not r.interventional]
+    if not probes:
+        pytest.skip("no probe landed within the collection window")
+
+    paired = {fork.record_id for _real, fork in pair_forks(records)}
+    for probe in probes:
+        assert probe.record_id in paired, (
+            f"probe {probe.record_id} mirrors {probe.mirror_of}, which is not "
+            "in the corpus"
+        )
+
+
+def test_a_probe_names_what_it_perturbed(tmp_path: Path) -> None:
+    """Keyword and carrier both. A board with two tramplers gives the keyword
+    alone two readings, and an evaluator reproducing the perturbation
+    model-side would strip the wrong creature."""
+    records = _run(tmp_path / "records", probe_keywords=_PROBED)
+    probes = [r for r in records if r.fork and not r.interventional]
+    if not probes:
+        pytest.skip("no probe landed within the collection window")
+
+    for probe in probes:
+        assert probe.payload.probed_keyword in _PROBED.split(",")
+        assert probe.payload.probed_entity, "no carrier named"
+
+
+def test_the_probed_creature_actually_lost_the_keyword(tmp_path: Path) -> None:
+    """The failure this catches is a strip that silently does nothing: the
+    branch then equals the real step, and the counterfactual says the keyword
+    was worth nothing."""
+    records = _run(tmp_path / "records", probe_keywords=_PROBED)
+    probes = [r for r in records if r.fork and not r.interventional]
+    if not probes:
+        pytest.skip("no probe landed within the collection window")
+
+    checked = 0
+    for probe in probes:
+        carrier = next(
+            (e for e in probe.state.entities
+             if e.id == probe.payload.probed_entity),
+            None,
+        )
+        if carrier is None:
+            continue
+        checked += 1
+        assert probe.payload.probed_keyword not in carrier.granted_temporary.keywords, (
+            f"{probe.payload.probed_keyword} survived the strip on "
+            f"{carrier.name}"
+        )
+    assert checked, "no probe's carrier appeared in its own snapshot"
+
+
+def test_an_observed_combat_record_perturbs_nothing(tmp_path: Path) -> None:
+    records = _run(tmp_path / "records", probe_keywords=_PROBED)
+    observed = [
+        r for r in records
+        if r.kind.value == "combat" and not r.fork
+    ]
+    if not observed:
+        pytest.skip("worker produced no combat records within the window")
+    for record in observed:
+        assert record.payload.probed_keyword is None
+        assert record.payload.probed_entity is None
 
 
 def test_no_record_carries_a_precomputed_diff(tmp_path: Path) -> None:

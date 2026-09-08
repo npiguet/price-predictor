@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.StringJoiner;
 
 /**
  * Stage three: records for what observation cannot reach.
@@ -114,7 +115,14 @@ public final class ForkCollector {
      * so a checkout that has the machinery does not start using it by default.
      */
     public boolean mayProbe(String keyword) {
-        if (probeKeywords.isEmpty() || !probeKeywords.contains(keyword)) {
+        // Normalized before the check: the flag names keywords the way the
+        // corpus spells them (first_strike) and a caller holding a card's
+        // keyword has Forge's (First Strike). Comparing the two directly is
+        // what made gate 2 report zero observations of first strike, and it
+        // would have made every probe silently decline here.
+        if (keyword == null || probeKeywords.isEmpty()
+                || !probeKeywords.contains(
+                        PatchedCollectors.normalizeKeyword(keyword))) {
             return false;
         }
         return probesUsed < probesPerGame;
@@ -353,6 +361,138 @@ public final class ForkCollector {
                 .actor(actorPlayerId)
                 .state(snapshotJson)
                 .payload(payloadJson));
+        return true;
+    }
+
+    /**
+     * Re-run this damage step without one creature's keyword.
+     *
+     * <p>Called <b>before</b> the real step, which is the only moment the fork
+     * can diverge: the phase event fires ahead of the turn-based action that
+     * deals the damage, so the copy is taken from a board where nothing has
+     * been dealt yet. The fork then assigns and deals its own damage with the
+     * keyword gone, and what the bus publishes is what that keyword was worth.
+     *
+     * <p>The branch is <b>held rather than written</b>. It mirrors the real
+     * combat record, and that record does not exist until the step it forked
+     * ahead of has finished — so the caller completes the pairing once the id
+     * is known. Reconstructing the pairing from board state instead would break
+     * on two identical-looking combats in one turn.
+     *
+     * @return the held branch, or null when the fork could not be taken
+     */
+    public HeldProbe probe(String keyword, Card carrier, boolean firstStrike) {
+        if (!mayProbe(keyword) || carrier == null) {
+            return null;
+        }
+        // Counted before the score check, like an intervention: a copy that
+        // systematically fails must not retry until the game ends.
+        probesUsed++;
+
+        GameCopier copier;
+        Game fork;
+        try {
+            copier = new GameCopier(game);
+            fork = copier.makeCopy();
+        } catch (RuntimeException e) {
+            discarded++;
+            return null;
+        }
+        Player perspective = game.getPhaseHandler() == null
+                ? null : game.getPhaseHandler().getPlayerTurn();
+        if (perspective == null || !scoreCheck(fork, perspective)) {
+            discarded++;
+            return null;
+        }
+
+        Card forkCarrier;
+        try {
+            forkCarrier = copier.find(carrier);
+        } catch (RuntimeException e) {
+            forkCarrier = null;
+        }
+        if (forkCarrier == null || fork.getCombat() == null) {
+            discarded++;
+            return null;
+        }
+
+        // The state is the board as the step began, with the keyword already
+        // gone: that is the input the counterfactual answers for.
+        SnapshotBuilder snapshots = new SnapshotBuilder(fork);
+        ForkEventSink sink = new ForkEventSink();
+        fork.subscribeToEvents(sink);
+        String state;
+        try {
+            // Through the layer system rather than off the printed list: the
+            // keyword may be printed, equipped or granted until end of turn,
+            // and a removal layer takes it away in all three cases the way the
+            // rules would.
+            forkCarrier.addChangedCardKeywords(
+                    null, List.of(keyword), false,
+                    fork.getNextTimestamp(), null);
+            state = snapshots.toJson(null, List.of());
+            fork.getCombat().removeAbsentCombatants();
+            if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                fork.getCombat().dealAssignedDamage();
+            }
+        } catch (RuntimeException | StackOverflowError e) {
+            // A stripped keyword reaches combat states ordinary play does not.
+            // Discarding is right; failing the worker is not.
+            discarded++;
+            return null;
+        }
+        return new HeldProbe(
+                PatchedCollectors.normalizeKeyword(keyword),
+                SnapshotBuilder.entityId(carrier), state, sink.events(),
+                SnapshotBuilder.playerId(perspective));
+    }
+
+    /**
+     * A probe branch waiting for the record it mirrors.
+     *
+     * <p>Holds what the fork observed until the real combat record has an id.
+     * The probe's own budget was already spent taking the fork, so a branch
+     * that is never completed still counted — the cost was the simulation, not
+     * the write.
+     */
+    public record HeldProbe(
+            String keyword, String carrier, String state,
+            List<EffectEvent> events, String actor) {
+
+        /**
+         * The branch's payload, naming what was perturbed.
+         *
+         * <p>Both the keyword and the creature it came from: a board with two
+         * tramplers gives the keyword alone two readings, and the evaluator
+         * reproducing this perturbation model-side would strip the wrong one.
+         */
+        String payload() {
+            StringJoiner rendered = new StringJoiner(",", "[", "]");
+            for (EffectEvent event : events) {
+                rendered.add(event.toJson());
+            }
+            return "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{}"
+                    + ",\"events\":" + rendered
+                    + ",\"probed_keyword\":" + Json.string(keyword)
+                    + ",\"probed_entity\":" + Json.string(carrier) + "}";
+        }
+    }
+
+    /** Write a held branch, now that the record it mirrors has an id. */
+    public boolean writeHeldProbe(HeldProbe held, String mirrorOfRecordId) {
+        if (held == null || mirrorOfRecordId == null) {
+            return false;
+        }
+        emit(new EffectRecord(
+                writer.nextRecordId(), writer.runId(),
+                RecordShardWriter.timestamp(), gameId,
+                EffectRecord.KIND_COMBAT, mode)
+                .fork(true)
+                .interventional(false)
+                .mirrorOf(mirrorOfRecordId)
+                .actor(held.actor())
+                .state(held.state())
+                .payload(held.payload()));
         return true;
     }
 

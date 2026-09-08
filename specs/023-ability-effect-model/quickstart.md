@@ -308,8 +308,12 @@ mostly one it could never afford, and paying for it would fail on exactly the po
 intervention exists to reach. Lands and mana abilities are skipped: every game plays them, so forking
 to force one spends a game copy on the commonest event in the corpus.
 
-A **damage-step probe** re-runs one combat with a keyword stripped. That half is not built — it
-records a branch it is handed, and nothing runs the stripped combat yet.
+A **damage-step probe** forks the same damage step with one creature's keyword stripped and re-runs
+it, so gate 2's model-side perturbation has an engine-side ground truth to be checked against. It
+forks at the phase event, which fires before the turn-based action that deals the damage — the only
+moment the copy can diverge from a board where nothing has been dealt. The branch names both the
+keyword and the creature it came from: a board with two tramplers gives the keyword alone two
+readings, and reproducing the perturbation model-side would strip the wrong one.
 
 Every fork is score-checked against the live game before any perturbation, a discarded fork still
 counts against its budget, and at most two forks may target one real resolution.

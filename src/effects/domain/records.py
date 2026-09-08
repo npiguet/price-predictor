@@ -179,6 +179,13 @@ class CombatPayload:
     blocks: dict[str, tuple[str, ...]] = field(default_factory=dict)
     assignment_choices: dict[str, dict[str, int]] = field(default_factory=dict)
     events: tuple[Event, ...] = ()
+    #: Damage-step probes only: which keyword was stripped, and from which
+    #: creature. Both are needed to reproduce the perturbation model-side —
+    #: a board with two tramplers gives the keyword alone two readings, and the
+    #: comparison the probe exists for would be against the wrong one. Absent on
+    #: an observed combat record, which perturbs nothing.
+    probed_keyword: str | None = None
+    probed_entity: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

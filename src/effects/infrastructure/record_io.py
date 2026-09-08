@@ -326,6 +326,8 @@ def _payload_to_json(payload) -> dict:
                     k: dict(v) for k, v in payload.assignment_choices.items()
                 },
                 "events": _events_to_json(payload.events),
+                "probed_keyword": payload.probed_keyword,
+                "probed_entity": payload.probed_entity,
             }
         case TriggerPayload():
             return {"event": payload.event.as_dict(), "fired": payload.fired}
@@ -432,6 +434,8 @@ def _payload_from_json(
                 for k, v in (data.get("assignment_choices") or {}).items()
             },
             events=_events_from_json(data.get("events")),
+            probed_keyword=data.get("probed_keyword"),
+            probed_entity=data.get("probed_entity"),
         )
     if kind is RecordKind.TRIGGER:
         return TriggerPayload(
