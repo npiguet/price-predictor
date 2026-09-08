@@ -237,11 +237,19 @@ loss.
     imported, so the two application layers stay disjoint.
 - **FR-003**: Java collectors, the `MatchWorkerMain` instrumentation behind `--effect-records`, and
   `KeywordDefinitionMain` MUST live in `forge-connector`.
-- **FR-004**: The engine patch set MUST live under `forge-connector/patches/`, carrying the three
-  attribution hooks, the missing cause at the `Destroyed` firing site, and the trigger-fire and
-  playability logging points, applied to the sibling `../forge` checkout.
+- **FR-004**: The engine hooks MUST live as commits on a branch of the sibling `../forge` checkout,
+  one commit per hook, carrying the attribution hooks, the missing cause at the `Destroyed` firing
+  site, the trigger-fire and playability logging points, the mana-production point, the per-static
+  layer accessors and their `…Without` recombinations, and the combat damage assignment. This
+  repository MUST NOT carry an exported copy of them: a branch is the history, and a directory of
+  patch files beside it is a second copy of that history maintained by hand.
+- **FR-004a**: The hooks' inventory — every class, method, and the record channel it feeds — MUST
+  live in code, in `PatchHooks.REQUIRED`, and MUST be what hook detection reads rather than a
+  parallel list. It is the specification of what a patched Forge has to provide, and what a lapsed
+  patch is reconstructed from.
 - **FR-005**: Workers MUST detect hook presence at startup and run degraded (bracket-only attribution)
-  against stock Forge rather than failing.
+  against stock Forge rather than failing. A worker MUST also report which required hooks are absent,
+  because a partly-applied patch still detects as `patched` while a channel stays empty.
 - **FR-006**: Model artifacts MUST live under `models/effects/`; corpus and generated files under
   `output/effects/`.
 

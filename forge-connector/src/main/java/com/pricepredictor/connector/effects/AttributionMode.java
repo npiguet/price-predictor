@@ -38,14 +38,6 @@ public enum AttributionMode {
         return wireValue;
     }
 
-    /**
-     * Hooks the patch adds. Probed by name so detection needs no compile-time
-     * dependency on a patched checkout — the connector must build against stock
-     * Forge.
-     */
-    private static final String TRIGGER_HANDLER = "forge.game.trigger.TriggerHandler";
-    private static final String CAUSE_HOOK = "setEffectRecordCause";
-
     private static AttributionMode detected;
 
     /** Probe once per JVM and remember the answer. */
@@ -56,18 +48,17 @@ public enum AttributionMode {
         return detected;
     }
 
+    /**
+     * Whether the cause channel is there.
+     *
+     * <p>Read from {@link PatchHooks#REQUIRED} rather than naming the method
+     * again here, so the mode and the hook inventory cannot drift apart. It is
+     * deliberately one hook and not all of them: the mode says how an event was
+     * attributed, and a checkout missing some later hook still attributes
+     * exactly. {@link PatchHooks#report} is what names a partly-applied patch.
+     */
     private static AttributionMode probe() {
-        try {
-            Class<?> handler = Class.forName(TRIGGER_HANDLER);
-            for (Method method : handler.getMethods()) {
-                if (CAUSE_HOOK.equals(method.getName())) {
-                    return PATCHED;
-                }
-            }
-        } catch (ClassNotFoundException | LinkageError ignored) {
-            // Forge without the trigger handler at all is not a patched Forge.
-        }
-        return DEGRADED;
+        return PatchHooks.REQUIRED.get(0).present() ? PATCHED : DEGRADED;
     }
 
     /** For tests: forget the probe so the next call re-runs it. */

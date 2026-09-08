@@ -36,24 +36,27 @@ Python side spawns — `ConvertMain`, `KeywordDefinitionMain`, `VariantSidecarMa
 `MatchWorkerMain` — so rebuild it after any Java change, and **after applying the engine patch**,
 because the worker links against the freshly installed Forge jars.
 
-## 0. Apply the engine patch series
+## 0. Put the sibling checkout on the hooks branch
 
 ```bash
 cd ../forge
-git checkout -b effect-record-hooks
-git am ../price-predictor/forge-connector/patches/0*.patch
+git checkout effect-record-hooks          # after a Forge upgrade: git rebase master
 mvn -pl forge-core,forge-game,forge-ai -am install -DskipTests
 cd ../price-predictor/forge-connector && mvn package -DskipTests
 ```
 
-**Apply the whole series, in order** — one commit per hook, so each is reviewable on its own. Without
-it a run collects three of the eight sampling classes and stamps every record `degraded`; with it, all
-eight, and the two fork kinds become available. Nothing in the procedure *requires* the patch, but a
-run meant to collect everything does.
+The hooks are commits on that branch, one per hook. This repository carries no exported patch copy —
+the branch is the history — so a Forge upgrade is a rebase, and `PatchHooks.REQUIRED` is the
+inventory of what the branch has to provide.
 
-A Forge upgrade reverts the branch, which is why the mode is probed at worker startup rather than
-being a build flag: a lapsed patch otherwise mislabels a corpus. Rebase the branch and regenerate the
-series as [the patches README](../../forge-connector/patches/) describes.
+Rebuild the fat JAR afterwards, always: the worker links against the freshly installed Forge jars.
+Without the hooks a run collects three of the eight sampling classes and stamps every record
+`degraded`; with them, all eight, and the two fork kinds become available. Nothing in the procedure
+*requires* them, but a run meant to collect everything does.
+
+**Read the two lines each worker prints at startup**, not just the first. The mode is one hook's
+answer, so a half-rebased branch still reports `patched` while a channel this run meant to collect is
+quietly empty; the second line names any required hook that is missing and what it costs.
 
 ## 1. Convert, with sidecars and token scripts
 

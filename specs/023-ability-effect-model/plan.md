@@ -21,7 +21,7 @@ so the first embeddings and all three evaluation gates exist before any engine p
 **Language/Version**: Python 3.14.3 (`requires-python >=3.14`); Java 17 for the collectors
 **Primary Dependencies**: torch ≥ 2.2 (CUDA 12.6 wheel index), numpy ≥ 1.26; Java side compiles
 against forge-game / forge-core / forge-gui / forge-ai `2.0.15-SNAPSHOT` from the sibling `../forge`
-checkout, plus the engine patch set under `forge-connector/patches/`
+checkout, whose `effect-record-hooks` branch carries the engine hooks
 **Storage**: append-only JSONL record shards (`output/effects/records/`), per-card JSON provenance
 sidecars beside the converted corpus, `.npz` ability caches (`output/effects/abilities/`), `.pt`
 checkpoints (`models/effects/`)
@@ -227,7 +227,6 @@ src/sealed/                           # the stage-one collection opt-in lives he
 └── (domain unchanged)
 
 forge-connector/
-├── patches/                          # engine patch set, applied to ../forge
 └── src/main/java/com/pricepredictor/connector/
     ├── effects/                      # collector classes
     ├── KeywordDefinitionMain.java    # new worker main
@@ -287,7 +286,7 @@ spec's numbering — sub-ranges invented here would. This is the map `tasks.md` 
 | Package layout and boundaries (FR-001…006) | the source tree above; FR-002's dependency direction enforced by an import-direction test over the surface named below, FR-005's degraded-mode detection by the Java collectors and the `mode` field |
 | Ability identity (FR-007…012) | `RulesParser.java` + `ConvertMain.java`, surfaced by `price_predictor/infrastructure/cli.py` (write); `effects/domain/provenance.py` + `infrastructure/sidecar_io.py` (read); `contracts/provenance-sidecar.md` |
 | Corpus (FR-013…029) — envelope, snapshot, events, payloads, caps and budgets | `effects/domain/records.py`, `state_snapshot.py`, `event_schema.py`; caps surfaced by `infrastructure/cli.py` and enforced in the Java collectors; `contracts/record-schema.md` |
-| Collectors (FR-030…043) — channels, brackets, continuous, mana, playability, interventions, probes, fork guards | `forge-connector/.../effects/` + `patches/`; `effects/infrastructure/collector_connector.py` for the effects-owned supervisors. **FR-030/031's opt-in on `sealed match-outcomes`** is owned by `sealed/infrastructure/cli.py`, `sealed/application/match_outcomes.py`, and `sealed/infrastructure/match_worker_connector.py` — the User Story 1 acceptance path runs through sealed, not through `effects`. **FR-042** (the real-vs-fork diff is never a training target) is a constraint *on* the evaluator, honoured in `application/evaluate_effect_model.py`. **FR-052 and FR-059** (coverage and variant matches write effect records only) are enforced in `MatchWorkerMain`'s records-only mode, not in the Python supervisors: they reuse that worker, which today requires `-Doutput.file` and builds a `CardsPlayedWriter` unconditionally, so a Python-side guard would not bind |
+| Collectors (FR-030…043) — channels, brackets, continuous, mana, playability, interventions, probes, fork guards | `forge-connector/.../effects/` + the `effect-record-hooks` branch of `../forge`; `effects/infrastructure/collector_connector.py` for the effects-owned supervisors. **FR-030/031's opt-in on `sealed match-outcomes`** is owned by `sealed/infrastructure/cli.py`, `sealed/application/match_outcomes.py`, and `sealed/infrastructure/match_worker_connector.py` — the User Story 1 acceptance path runs through sealed, not through `effects`. **FR-042** (the real-vs-fork diff is never a training target) is a constraint *on* the evaluator, honoured in `application/evaluate_effect_model.py`. **FR-052 and FR-059** (coverage and variant matches write effect records only) are enforced in `MatchWorkerMain`'s records-only mode, not in the Python supervisors: they reuse that worker, which today requires `-Doutput.file` and builds a `CardsPlayedWriter` unconditionally, so a Python-side guard would not bind |
 | Coverage collector (FR-044…052) — rounds, split exclusion, deck weighting, castability-ranks-not-drops, the satisfaction predicate, retirement, and the two residues | `effects/application/collect_coverage.py`, except **FR-047's castability consult**, which needs a live Forge: `CastabilityMain.java` behind `effects/infrastructure/castability_connector.py`, keeping the repo's one-connector-per-main convention |
 | Synthetic script variants (FR-053…059) — perturbation, output tree, script-surface-only, volume cap, and split inheritance | `effects/application/collect_variants.py`, `effects/domain/script_variants.py` |
 | Keyword definitions (FR-060) | `KeywordDefinitionMain.java`, `effects/infrastructure/keyword_definition_connector.py`, `effects/application/extract_keyword_definitions.py` |
