@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
+import forge.ai.ComputerUtil;
 import forge.ai.simulation.GameCopier;
+import forge.ai.simulation.GameSimulator;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -183,9 +185,13 @@ public final class ForkCollector {
         interventionsUsed++;
         forksPerResolution.merge(realResolutionId, 1, Integer::sum);
 
+        GameCopier copier;
         Game fork;
         try {
-            fork = new GameCopier(game).makeCopy();
+            // Both inside the guard: the copier's own constructor reads the
+            // game, so a game it cannot read fails here rather than at makeCopy.
+            copier = new GameCopier(game);
+            fork = copier.makeCopy();
         } catch (RuntimeException e) {
             discarded++;
             return false;
@@ -198,9 +204,16 @@ public final class ForkCollector {
             return false;
         }
 
-        // The fork's own state, not the live game's: the intervention changed
-        // the board, and recording the original would describe a situation the
-        // resolution never saw.
+        SpellAbility forked = findInFork(copier, fork, ability);
+        Player actor = forked == null ? null : mappedPlayer(copier, perspective);
+        if (forked == null || actor == null) {
+            discarded++;
+            return false;
+        }
+
+        // The fork's own state, not the live game's, and read *before* the
+        // resolution: the record's state is the board the ability acted on, and
+        // reading it after would hand the model the answer.
         SnapshotBuilder snapshots = new SnapshotBuilder(fork, new int[]{
                 SnapshotBuilder.TIER_REFERENCED,
                 SnapshotBuilder.TIER_CORE,
@@ -210,6 +223,14 @@ public final class ForkCollector {
                 // intervention chose from cards nobody was going to play.
                 SnapshotBuilder.TIER_UNREFERENCED_HAND_GRAVEYARD,
         });
+        String state = snapshots.toJson(forked, referencedOf(forked));
+
+        List<EffectEvent> events = forceResolution(fork, forked, actor);
+        if (events == null) {
+            discarded++;
+            return false;
+        }
+
         emit(new EffectRecord(
                 writer.nextRecordId(), writer.runId(),
                 RecordShardWriter.timestamp(), gameId,
@@ -220,10 +241,85 @@ public final class ForkCollector {
                 // No link_id: the effect half is written alone, because there
                 // was no real activation to pair it with.
                 .actor(SnapshotBuilder.playerId(perspective))
+                // The *live* ability's keys, not the fork's. A provenance key
+                // names a printed line, which the copy shares — but keying off
+                // the copy would make the record's identity depend on a game
+                // that no longer exists.
                 .ability(keysOf(ability))
-                .state(snapshots.toJson(ability, referencedOf(ability)))
-                .payload(EffectRecord.eventsPayload(List.of())));
+                .state(state)
+                .payload(EffectRecord.eventsPayload(events)));
         return true;
+    }
+
+    /**
+     * Put the ability on the fork's stack and resolve it, collecting what it did.
+     *
+     * <p>Placed on the stack directly rather than played through the AI's cost
+     * machinery, because <b>the cost is the reason the record is missing</b>. An
+     * ability the AI never used is usually one it could never afford, and
+     * routing the fork through cost payment fails on exactly the population the
+     * intervention exists to reach — leaving lands and other free plays, which
+     * observation already covers. The corpus wants what the effect does, and
+     * the cost half is recorded from real activations elsewhere.
+     *
+     * <p>Resolution drains the whole stack, so a trigger the effect put there
+     * is part of what the effect did.
+     *
+     * @return the events, empty if the ability resolved and did nothing
+     *         observable, or null if it could not be resolved at all
+     */
+    private List<EffectEvent> forceResolution(
+            Game fork, SpellAbility ability, Player actor) {
+        ForkEventSink sink = new ForkEventSink();
+        fork.subscribeToEvents(sink);
+        try {
+            ability.setActivatingPlayer(actor);
+            fork.copyLastState();
+            fork.getStack().add(ability);
+            GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
+            return sink.events();
+        } catch (RuntimeException | StackOverflowError e) {
+            // A forced resolution reaches states ordinary play does not — an
+            // ability resolving with no legal target, a cost that was never
+            // paid — and a card that throws is one this fork cannot describe.
+            // Discarding is right; failing the worker is not.
+            return null;
+        }
+    }
+
+    /**
+     * The fork's copy of a live ability, or null when it cannot be matched.
+     *
+     * <p>The host card maps directly through the copier. The ability itself
+     * does not, so it is matched by description among the copy's — the same
+     * approach Forge's own simulator takes.
+     */
+    private static SpellAbility findInFork(
+            GameCopier copier, Game fork, SpellAbility ability) {
+        Card host;
+        try {
+            host = copier.find(ability.getHostCard());
+        } catch (RuntimeException e) {
+            return null;
+        }
+        if (host == null) {
+            return null;
+        }
+        String description = ability.getDescription();
+        for (SpellAbility candidate : host.getSpellAbilities()) {
+            if (candidate.getDescription().equals(description)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static Player mappedPlayer(GameCopier copier, Player player) {
+        try {
+            return copier.find(player);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     // ── damage-step probes ──────────────────────────────────────────────

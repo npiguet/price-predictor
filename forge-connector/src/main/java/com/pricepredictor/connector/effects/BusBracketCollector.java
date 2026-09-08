@@ -143,10 +143,7 @@ public final class BusBracketCollector {
     @Subscribe
     public void onCardDamaged(GameEventCardDamaged event) {
         String subject = "E" + event.card().getId();
-        EffectEvent damage = new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject(subject)
-                .param("amount", event.amount())
-                .param("combat", isCombatDamage());
+        EffectEvent damage = BusEvents.cardDamaged(event, isCombatDamage());
         if (isCombatDamage()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -159,10 +156,7 @@ public final class BusBracketCollector {
     @Subscribe
     public void onPlayerDamaged(GameEventPlayerDamaged event) {
         String subject = "P" + event.target().getId();
-        EffectEvent damage = new EffectEvent(EffectEvent.DAMAGE_DEALT)
-                .subject(subject)
-                .param("amount", event.amount())
-                .param("combat", event.combat());
+        EffectEvent damage = BusEvents.playerDamaged(event);
         if (event.combat()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -174,51 +168,31 @@ public final class BusBracketCollector {
 
     @Subscribe
     public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        record(new EffectEvent(EffectEvent.LIFE_CHANGE)
-                .subject("P" + event.player().getId())
-                .param("delta", event.newLives() - event.oldLives()));
+        record(BusEvents.lifeChanged(event));
     }
 
     @Subscribe
     public void onPoisoned(GameEventPlayerPoisoned event) {
-        record(new EffectEvent(EffectEvent.POISON_CHANGE)
-                .subject("P" + event.receiver().getId())
-                .param("delta", event.amount()));
+        record(BusEvents.poisoned(event));
     }
 
     @Subscribe
     public void onCounters(GameEventCardCounters event) {
-        record(new EffectEvent(EffectEvent.COUNTER_CHANGE)
-                .subject("E" + event.card().getId())
-                .param("counter_type", event.type().getName().toUpperCase(
-                        java.util.Locale.ROOT))
-                .param("delta", event.newValue() - event.oldValue()));
+        record(BusEvents.counters(event));
     }
 
     @Subscribe
     public void onTapped(GameEventCardTapped event) {
-        record(new EffectEvent(
-                event.tapped() ? EffectEvent.TAPPED : EffectEvent.UNTAPPED)
-                .subject("E" + event.card().getId()));
+        record(BusEvents.tapped(event));
     }
 
-    /**
-     * Zone changes, the workhorse outcome.
-     *
-     * <p>The bus's zone event names the zone rather than the card, so the
-     * destination is read from the event and the subject from the game's own
-     * view of what just moved.
-     */
+    /** Zone changes, the workhorse outcome. */
     @Subscribe
     public void onZone(GameEventZone event) {
-        if (event.card() == null) {
-            return;
+        EffectEvent moved = BusEvents.zone(event);
+        if (moved != null) {
+            record(moved);
         }
-        record(new EffectEvent(EffectEvent.ZONE_CHANGE)
-                .subject("E" + event.card().getId())
-                .param("to_zone", event.zoneType() == null
-                        ? null
-                        : event.zoneType().name().toLowerCase(java.util.Locale.ROOT)));
     }
 
     // ── plumbing ────────────────────────────────────────────────────────

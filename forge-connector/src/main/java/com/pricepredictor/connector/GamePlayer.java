@@ -1,6 +1,7 @@
 package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.BusBracketCollector;
+import com.pricepredictor.connector.effects.ForkCollector;
 import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 import forge.ai.LobbyPlayerAi;
@@ -129,7 +130,14 @@ public class GamePlayer {
                 // uninstalled after it. On a stock checkout install() finds no
                 // hook and the game plays exactly as it did before.
                 patched = new PatchedCollectors(
-                        game, effectRecords, gameId, caps, gameSeed++);
+                        game, effectRecords, gameId, caps, gameSeed);
+                if (caps.interventionsPerGame() > 0 || caps.probesEnabled()) {
+                    // Stage three. Nothing is copied unless a budget says so,
+                    // because a fork costs a game copy and a stack resolution.
+                    patched.withForks(new ForkCollector(
+                            game, effectRecords, gameId, caps, gameSeed));
+                }
+                gameSeed++;
                 patched.install();
                 // Continuous effects are read off the layer tables at a phase
                 // boundary, which is the cheapest moment the board is stable.
