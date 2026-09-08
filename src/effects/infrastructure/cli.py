@@ -260,6 +260,77 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
     return collect(config)
 
 
+# ── field-coverage ──────────────────────────────────────────────────────
+
+
+def _field_coverage_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "field-coverage",
+        help=(
+            "Report which record fields a collected corpus has ever actually "
+            "carried, and which are always the same value"
+        ),
+    )
+    parser.set_defaults(func=run_field_coverage)
+    parser.add_argument(
+        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
+        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    )
+    parser.add_argument(
+        "--all", action="store_true",
+        help="List every field, not only the constant ones",
+    )
+
+
+def run_field_coverage(args: argparse.Namespace) -> int:
+    """Name the fields a corpus never varied, and say which are expected.
+
+    A field written as a fixed literal and one that a short run happened not to
+    exercise look identical from a corpus, so the report separates them by the
+    checked-in list rather than pretending to infer it. A constant field marked
+    NEW is either newly broken or newly rare, and only the writer says which.
+    """
+    from effects.application.field_coverage import (
+        KNOWN_CONSTANT_FIELDS,
+        field_coverage,
+    )
+    from effects.infrastructure.record_io import iter_shards, read_shard
+
+    root = Path(args.effect_records)
+    shards = iter_shards(root)
+    if not shards:
+        print(f"no shards under {root}")
+        return 1
+
+    records = (record for shard in shards for record in read_shard(shard))
+    coverage = field_coverage(records)
+    if not coverage:
+        print(f"no records under {root}")
+        return 1
+
+    rows = coverage.values() if args.all else [
+        row for row in coverage.values() if row.constant
+    ]
+    print(f"{len(coverage)} fields over {root}\n")
+    for row in rows:
+        if not row.constant:
+            print(f"  [varies] {row.path}   ({row.populated}/{row.seen})")
+        elif row.path in KNOWN_CONSTANT_FIELDS:
+            print(f"  [known ] {row.path}   (seen {row.seen})")
+        else:
+            print(f"  [NEW   ] {row.path}   (seen {row.seen})")
+
+    stale = sorted(
+        path for path in KNOWN_CONSTANT_FIELDS
+        if path in coverage and not coverage[path].constant
+    )
+    if stale:
+        print("\nlisted as constant but carrying data — remove from the list:")
+        for path in stale:
+            print(f"  {path}")
+    return 0
+
+
 # ── collect-variants ────────────────────────────────────────────────────
 
 
@@ -597,6 +668,7 @@ _SUBCOMMAND_BUILDERS = (
     _build_vocab_parser,
     _extract_keyword_definitions_parser,
     _collect_coverage_parser,
+    _field_coverage_parser,
     _collect_variants_parser,
     _train_effect_model_parser,
     _encode_abilities_parser,

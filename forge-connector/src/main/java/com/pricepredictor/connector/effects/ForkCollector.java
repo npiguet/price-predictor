@@ -422,6 +422,7 @@ public final class ForkCollector {
         ForkEventSink sink = new ForkEventSink();
         fork.subscribeToEvents(sink);
         String state;
+        CombatShape shape;
         try {
             // Through the layer system rather than off the printed list: the
             // keyword may be printed, equipped or granted until end of turn,
@@ -432,7 +433,12 @@ public final class ForkCollector {
                     fork.getNextTimestamp(), null);
             state = snapshots.toJson(null, List.of());
             fork.getCombat().removeAbsentCombatants();
+            // Who is blocking whom, before the damage removes any of them; the
+            // assignment only exists after. Gate 2 reads this branch against
+            // the record it mirrors, so both are read the same way.
+            shape = CombatShape.of(fork.getCombat());
             if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                shape.addAssignment(fork.getCombat(), null);
                 fork.getCombat().dealAssignedDamage();
             }
         } catch (RuntimeException | StackOverflowError e) {
@@ -444,7 +450,7 @@ public final class ForkCollector {
         return new HeldProbe(
                 PatchedCollectors.normalizeKeyword(keyword),
                 SnapshotBuilder.entityId(carrier), state, sink.events(),
-                SnapshotBuilder.playerId(perspective));
+                SnapshotBuilder.playerId(perspective), shape.fields());
     }
 
     /**
@@ -457,7 +463,7 @@ public final class ForkCollector {
      */
     public record HeldProbe(
             String keyword, String carrier, String state,
-            List<EffectEvent> events, String actor) {
+            List<EffectEvent> events, String actor, String combatFields) {
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -465,13 +471,19 @@ public final class ForkCollector {
          * <p>Both the keyword and the creature it came from: a board with two
          * tramplers gives the keyword alone two readings, and the evaluator
          * reproducing this perturbation model-side would strip the wrong one.
+         *
+         * <p>{@code combatFields} is the fork's own combat, rendered when the
+         * branch was taken. It is the counterfactual's half of what gate 2
+         * compares: the observed record says who blocked whom and how the
+         * damage was split with the keyword, and this says the same about the
+         * board without it.
          */
         String payload() {
             StringJoiner rendered = new StringJoiner(",", "[", "]");
             for (EffectEvent event : events) {
                 rendered.add(event.toJson());
             }
-            return "{\"attackers\":[],\"blocks\":{},\"assignment_choices\":{}"
+            return "{" + combatFields
                     + ",\"events\":" + rendered
                     + ",\"probed_keyword\":" + Json.string(keyword)
                     + ",\"probed_entity\":" + Json.string(carrier) + "}";

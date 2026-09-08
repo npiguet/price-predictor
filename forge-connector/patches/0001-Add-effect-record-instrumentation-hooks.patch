@@ -1,7 +1,7 @@
 From 1bd1d544948be7456e0696c0d85f32b017e1df60 Mon Sep 17 00:00:00 2001
 From: lordofthepigs <nicolas.piguet@gmail.com>
 Date: Mon, 7 Sep 2026 21:49:33 +0200
-Subject: [PATCH] Add effect-record instrumentation hooks
+Subject: [PATCH 1/2] Add effect-record instrumentation hooks
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit

@@ -1,8 +1,10 @@
 package com.pricepredictor.connector.effects;
 
+import com.google.common.collect.Table;
 import com.google.common.eventbus.Subscribe;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.player.Player;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardTapped;
@@ -17,8 +19,10 @@ import forge.game.event.GameEventZone;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -57,6 +61,16 @@ public final class BusBracketCollector {
 
     /** Combat damage accumulates into its own bracket, closed at the phase end. */
     private final List<EffectEvent> combatEvents = new ArrayList<>();
+    /** The step's combat, read when its bracket opens rather than at flush. */
+    private CombatShape combatShape = CombatShape.empty();
+    /**
+     * Assignments already written, for the length of one combat.
+     *
+     * <p>Forge's assignment table is never cleared between the first-strike and
+     * regular steps, so without this the regular step's record repeats first
+     * strike's. Cleared when the combat ends, not when a step does.
+     */
+    private final Set<String> assignmentsSeen = new LinkedHashSet<>();
     private final Set<String> combatParticipants = new LinkedHashSet<>();
     private String combatSubstep;
     private String combatState;
@@ -152,6 +166,9 @@ public final class BusBracketCollector {
     @Subscribe
     public void onCombatEnded(GameEventCombatEnded event) {
         flushCombat();
+        // The next combat's assignment table starts empty, so what this one
+        // wrote must stop suppressing entries in it.
+        assignmentsSeen.clear();
     }
 
     // ── outcome events ──────────────────────────────────────────────────
@@ -285,6 +302,16 @@ public final class BusBracketCollector {
         return phase.getPhase().toString().contains("COMBAT_DAMAGE");
     }
 
+    /**
+     * Start a damage step's bracket, and capture the combat it is about.
+     *
+     * <p>The structure is read here rather than at the flush, because the flush
+     * happens at the phase boundary — after the damage has been dealt and the
+     * creatures it killed have left. Read there, an attacker that traded with
+     * its blocker is in neither list, and the record describes a combat nobody
+     * fought. Read here it matches the snapshot beside it, which is taken in
+     * the same call.
+     */
     private void openCombatBracket() {
         if (combatState != null) {
             return;
@@ -294,6 +321,11 @@ public final class BusBracketCollector {
                 && phase.getPhase().toString().contains("FIRST_STRIKE")
                 ? "first_strike" : "regular";
         combatState = snapshots.toJson(null, List.of());
+        // The damage has been assigned by now -- the first damage event is what
+        // opened this bracket -- but nothing has died yet, so this is the one
+        // moment both halves of the shape are readable.
+        combatShape = CombatShape.of(game.getCombat());
+        combatShape.addAssignment(game.getCombat(), assignmentsSeen);
     }
 
     /**
@@ -325,26 +357,17 @@ public final class BusBracketCollector {
         }
         combatEvents.clear();
         combatParticipants.clear();
+        combatShape = CombatShape.empty();
         combatState = null;
         combatSubstep = null;
     }
 
     private String combatPayload() {
-        StringJoiner attackers = new StringJoiner(",", "[", "]");
-        var combat = game.getCombat();
-        if (combat != null) {
-            for (Card attacker : combat.getAttackers()) {
-                attackers.add(Json.string(SnapshotBuilder.entityId(attacker)));
-            }
-        }
         StringJoiner events = new StringJoiner(",", "[", "]");
         for (EffectEvent event : combatEvents) {
             events.add(event.toJson());
         }
-        return "{\"attackers\":" + attackers
-                + ",\"blocks\":{}"
-                + ",\"assignment_choices\":{}"
-                + ",\"events\":" + events + "}";
+        return "{" + combatShape.fields() + ",\"events\":" + events + "}";
     }
 
     private void emit(EffectRecord record) {

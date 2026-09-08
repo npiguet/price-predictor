@@ -355,11 +355,21 @@ public final class SnapshotBuilder {
                 }
             }
         }
+        StringJoiner blocking = new StringJoiner(",", "[", "]");
+        if (combat.isBlocking(card)) {
+            // The other half of blocked_by. Without it a blocker's own entry
+            // says only that it is somewhere in a combat, so the flag the head
+            // reads for "is this creature blocking" was always false — and the
+            // blocking relationship is what trample and deathtouch act through.
+            for (Card attacker : combat.getAttackersBlockedBy(card)) {
+                blocking.add(Json.string(entityId(attacker)));
+            }
+        }
         Object defender = combat.isAttacking(card)
                 ? combat.getDefenderByAttacker(card) : null;
         return "{\"attacking\":"
                 + Json.string(defender == null ? null : String.valueOf(defender))
-                + ",\"blocking\":[]"
+                + ",\"blocking\":" + blocking
                 + ",\"blocked_by\":" + blockedBy
                 + ",\"became_blocked\":" + combat.isBlocked(card) + "}";
     }
