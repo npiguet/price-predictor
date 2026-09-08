@@ -1,4 +1,4 @@
-From 61a1396e9bf4676c1703a1ad9cb5ddd08690a8c1 Mon Sep 17 00:00:00 2001
+From 6d83a6a05dd8c95504b41fadec7e6f5324560dcc Mon Sep 17 00:00:00 2001
 From: lordofthepigs <nicolas.piguet@gmail.com>
 Date: Mon, 7 Sep 2026 21:49:33 +0200
 Subject: [PATCH] Add effect-record instrumentation hooks
@@ -48,11 +48,20 @@ Mana abilities never use the stack, so an observer watching casts and
 resolutions sees no mana at all; the notification carries the mana after any
 replacement has rewritten it.
 
-Card gains keyed accessors for the type and colour layer tables, matching the
-ones the keyword and P/T layers already have. The existing accessors flatten
-each table into the applied result, which is what the rules need and which
-loses the column key — the applying static's id — that per-static attribution
-turns on.
+Card gains accessors that regroup the type and colour layer tables under the
+static that wrote each entry, matching what the keyword and P/T layers already
+expose. The existing accessors flatten them into the applied result, which is
+what the rules need and which loses the applying static's id that per-static
+attribution turns on. Each channel is spread over three tables — by-text,
+character-defining, and the main layer — and the regrouping happens here, where
+the layers are known, rather than in a caller that would take one of the three
+and under-report without failing. The key is the static's id alone rather than
+the (timestamp, id) pair the tables use, since one static can write to more
+than one of these layers and the pairs would collide.
+
+CardColor becomes public for the same reader. It is a two-component record of
+what its accessor returns, and a caller outside this package cannot invoke a
+record component whose declaring class it may not access.
 
 GameAction.destroy puts the causing ability in the Destroyed trigger's run
 parameters. It is in scope and was being dropped, so nothing downstream could
@@ -63,12 +72,12 @@ name what destroyed the permanent.
  .../src/main/java/forge/ai/AiController.java  | 64 +++++++++++++++++++
  .../src/main/java/forge/game/GameAction.java  |  6 ++
  .../java/forge/game/ability/AbilityUtils.java | 32 ++++++++++
- .../src/main/java/forge/game/card/Card.java   | 18 ++++++
+ .../src/main/java/forge/game/card/Card.java   | 47 +++++++++++++-
  .../game/replacement/ReplacementHandler.java  | 54 ++++++++++++++++
  .../game/spellability/AbilityManaPart.java    | 25 ++++++++
  .../StaticAbilityCantAttackBlock.java         | 34 ++++++++--
  .../forge/game/trigger/TriggerHandler.java    | 61 ++++++++++++++++++
- 10 files changed, 310 insertions(+), 4 deletions(-)
+ 10 files changed, 338 insertions(+), 5 deletions(-)
 
 diff --git a/forge-ai/src/main/java/forge/ai/AiAttackController.java b/forge-ai/src/main/java/forge/ai/AiAttackController.java
 index 61d3fc9948d..a9ab245cf8f 100644
@@ -260,10 +269,10 @@ index aa35c2ffd71..4bc9074ea7a 100644
          final Game game = pl.getGame();
  
 diff --git a/forge-game/src/main/java/forge/game/card/Card.java b/forge-game/src/main/java/forge/game/card/Card.java
-index b874a1e9a96..78210bf7c29 100644
+index b874a1e9a96..d15c4a513c1 100644
 --- a/forge-game/src/main/java/forge/game/card/Card.java
 +++ b/forge-game/src/main/java/forge/game/card/Card.java
-@@ -4120,6 +4120,24 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
+@@ -4120,6 +4120,48 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
          return changedCardKeywords;
      }
  
@@ -272,22 +281,58 @@ index b874a1e9a96..78210bf7c29 100644
 +    // The keyword and P/T layer tables already have keyed accessors; these two
 +    // give the type and colour layers the same, so a reader can attribute a
 +    // change to the static that made it. The existing accessors flatten the
-+    // table into the applied result, which is what the rules need and loses
-+    // exactly the column key — the static's id — that attribution turns on.
++    // tables into the applied result, which is what the rules need and loses
++    // exactly the key — the applying static's id — that attribution turns on.
++    //
++    // Each channel is spread over three tables, and a reader that took only one
++    // would under-report rather than fail, so the split is resolved here where
++    // the layers are known rather than by the caller.
 +
-+    /** Layer 4 type changes, keyed by timestamp and applying static's id. */
-+    public Table<Long, Long, ICardChangedType> getChangedCardTypesTable() {
-+        return changedCardTypes;
++    /** Type changes from every layer, keyed by the applying static's id. */
++    public Map<Long, List<ICardChangedType>> getChangedCardTypesByStatic() {
++        return byStatic(List.of(changedCardTypesByText,
++                changedCardTypesCharacterDefining, changedCardTypes));
 +    }
 +
-+    /** Layer 5 colour changes, keyed by timestamp and applying static's id. */
-+    public Table<Long, Long, CardColor> getChangedCardColorsTable() {
-+        return changedCardColors;
++    /** Colour changes from every layer, keyed by the applying static's id. */
++    public Map<Long, List<CardColor>> getChangedCardColorsByStatic() {
++        return byStatic(List.of(changedCardColorsByText,
++                changedCardColorsCharacterDefining, changedCardColors));
++    }
++
++    /**
++     * Regroup layer tables under the static that wrote each entry.
++     *
++     * <p>A list per id rather than a table, because one static can write to
++     * more than one of these layers and the (timestamp, id) keys would collide.
++     */
++    private static <T> Map<Long, List<T>> byStatic(
++            List<Table<Long, Long, T>> tables) {
++        Map<Long, List<T>> grouped = new LinkedHashMap<>();
++        for (Table<Long, Long, T> table : tables) {
++            for (Table.Cell<Long, Long, T> cell : table.cellSet()) {
++                grouped.computeIfAbsent(cell.getColumnKey(),
++                        id -> new ArrayList<>()).add(cell.getValue());
++            }
++        }
++        return grouped;
 +    }
 +
      public void setChangedCardKeywords(Table<Long, Long, KeywordsChange> changedCardKeywords) {
          this.changedCardKeywords.clear();
          for (Table.Cell<Long, Long, KeywordsChange> entry : changedCardKeywords.cellSet()) {
+@@ -4222,7 +4264,10 @@ public class Card extends GameEntity implements Comparable<Card>, IHasSVars, ITr
+         return ColorSet.fromMask(colors);
+     }
+ 
+-    private record CardColor(ColorSet color, boolean additional) {
++    // Public for the effect-record instrumentation above: a reader outside this
++    // package reaches getChangedCardColorsByStatic reflectively, and cannot call
++    // a record component whose declaring class it may not access.
++    public record CardColor(ColorSet color, boolean additional) {
+ 
+     }
+ 
 diff --git a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java b/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java
 index 4d9877fb55b..70178d3da1a 100644
 --- a/forge-game/src/main/java/forge/game/replacement/ReplacementHandler.java

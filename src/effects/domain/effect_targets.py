@@ -285,8 +285,43 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
                     "keywords_gained", OVERLAY_KEYWORDS.index(normalized),
                     len(OVERLAY_KEYWORDS),
                 )
-        _apply_multi(entry, "types_gained", contribution.types, _TYPE_INDEX)
-        _apply_multi(entry, "colors_gained", contribution.colors, _COLOR_INDEX)
+        gained, lost = _split_contribution(contribution.types)
+        _apply_multi(entry, "types_gained", gained, _TYPE_INDEX)
+        _apply_multi(entry, "types_lost", lost, _TYPE_INDEX)
+        gained, lost = _split_contribution(contribution.colors)
+        _apply_multi(entry, "colors_gained", gained, _COLOR_INDEX)
+        _apply_multi(entry, "colors_lost", lost, _COLOR_INDEX)
+
+
+def _split_contribution(tokens: tuple[str, ...]) -> tuple[list[str], list[str]]:
+    """One contribution channel, split into what it grants and what it takes.
+
+    The collector writes a channel as one list because the record schema fixes
+    the field, so a removal is marked with a leading ``-`` and a lone ``=``
+    marks the channel as one the static sets outright rather than adds to.
+
+    A replacement reports only what it sets. What it displaced is not in the
+    record: the snapshot beside it is the board after the static applied, so
+    reading the entity's current types back would name what it still has, not
+    what it lost. Leaving the field unset says "this record does not say",
+    which is the one honest answer -- ``target_for`` skips an unset field
+    rather than scoring it as an empty set.
+
+    Tokens naming a whole class of type -- ``all-creature-types`` and the
+    ``-all-*`` removals -- match nothing in ``CARD_TYPES`` and drop here. They
+    are kept in the record because they are real, and the model has no field
+    for "every creature type at once" to put them in.
+    """
+    gained: list[str] = []
+    lost: list[str] = []
+    for token in tokens:
+        if token == "=":
+            continue
+        if token.startswith("-"):
+            lost.append(token[1:])
+        else:
+            gained.append(token)
+    return gained, lost
 
 
 def target_for(

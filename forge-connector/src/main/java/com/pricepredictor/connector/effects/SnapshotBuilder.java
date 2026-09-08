@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -345,7 +346,7 @@ public final class SnapshotBuilder {
     private String typeJson(Card card) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (var type : card.getType().getCoreTypes()) {
-            joiner.add(Json.string(type.name().toLowerCase(java.util.Locale.ROOT)));
+            joiner.add(Json.string(typeName(type)));
         }
         return joiner.toString();
     }
@@ -353,7 +354,7 @@ public final class SnapshotBuilder {
     private String subtypeJson(Card card) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (String subtype : card.getType().getSubtypes()) {
-            joiner.add(Json.string(subtype.toLowerCase(java.util.Locale.ROOT)));
+            joiner.add(Json.string(typeName(subtype)));
         }
         return joiner.toString();
     }
@@ -361,21 +362,50 @@ public final class SnapshotBuilder {
     private String supertypeJson(Card card) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
         for (var supertype : card.getType().getSupertypes()) {
-            joiner.add(Json.string(
-                    supertype.name().toLowerCase(java.util.Locale.ROOT)));
+            joiner.add(Json.string(typeName(supertype)));
         }
         return joiner.toString();
     }
 
     private String colorJson(Card card) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");
-        var colors = card.getColor();
-        for (char color : COLORS) {
-            if (colors.hasAnyColor(MagicColor.fromName(String.valueOf(color)))) {
-                joiner.add(Json.string(String.valueOf(color)));
-            }
+        for (String color : colorLetters(card.getColor())) {
+            joiner.add(Json.string(color));
         }
         return joiner.toString();
+    }
+
+    /**
+     * One type-line name as the snapshot spells it.
+     *
+     * <p>Core types and supertypes arrive as enums and subtypes as strings, and
+     * a continuous record's contributions mix all three into one list. Shared so
+     * that a static's share of an entity's types is spelled the way the entity's
+     * own types are — a model that saw {@code Creature} in one and
+     * {@code creature} in the other would learn them as different types.
+     */
+    static String typeName(Object type) {
+        String name = type instanceof Enum<?> value ? value.name() : String.valueOf(type);
+        return name.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * A colour set as the snapshot's letters, in WUBRG order.
+     *
+     * <p>Shared with the continuous record's contributions for the same reason
+     * {@link #typeName} is.
+     */
+    static List<String> colorLetters(ColorSet colors) {
+        List<String> letters = new ArrayList<>();
+        if (colors == null) {
+            return letters;
+        }
+        for (char color : COLORS) {
+            if (colors.hasAnyColor(MagicColor.fromName(String.valueOf(color)))) {
+                letters.add(String.valueOf(color));
+            }
+        }
+        return letters;
     }
 
     /** Targets, source and announced values for the acting ability. */

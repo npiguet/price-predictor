@@ -136,6 +136,26 @@ public final class PatchHooks {
         }
     }
 
+    /**
+     * Read a no-argument method on an instance, or null when it is absent.
+     *
+     * <p>Looked up on the receiver's own class, so both the method and its
+     * declaring class have to be public — which is why the patch widens
+     * {@code Card.CardColor} rather than leaving this side to force access.
+     * Forcing it would work today and break the first time Forge is run on a
+     * module path, and the failure would be a silently empty channel.
+     */
+    public static Object read(Object target, String methodName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            return target.getClass().getMethod(methodName).invoke(target);
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+            return null;
+        }
+    }
+
     /** The trigger currently running, when the cause hook is present. */
     public static Object currentTriggerCause() {
         return readStatic(TRIGGER_HANDLER, "getEffectRecordCause");
