@@ -195,7 +195,9 @@ class CollectorTest {
     void aPartnerlessHalfCarriesNoLinkId() {
         String json = record(EffectRecord.KIND_RESOLUTION)
                 .moment(EffectRecord.MOMENT_ACTIVATION)
-                .payload(EffectRecord.costPayload(EffectRecord.OUTCOME_COUNTERED))
+                // No ability: a countered spell's costs are still readable in
+                // a real game, but the record's shape does not depend on them.
+                .payload(EffectRecord.costPayload(null, EffectRecord.OUTCOME_COUNTERED))
                 .toJson();
         assertTrue(json.contains("\"link_id\":null"), json);
         assertTrue(json.contains("\"outcome\":\"countered\""), json);

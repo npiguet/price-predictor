@@ -161,13 +161,19 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
         case EventType.PT_CHANGE:
             entry.add("power_delta", float(params.get("power_delta", 0)))
             entry.add("toughness_delta", float(params.get("toughness_delta", 0)))
+            _apply_duration(entry, "pt_duration", event.duration)
         case EventType.KEYWORD_CHANGE:
             _apply_keywords(entry, params)
         case EventType.TYPE_CHANGE:
             _apply_multi(entry, "types_gained", params.get("types_added"), _TYPE_INDEX)
             _apply_multi(entry, "types_lost", params.get("types_removed"), _TYPE_INDEX)
+            _apply_duration(entry, "type_color_duration", event.duration)
         case EventType.COLOR_CHANGE:
             _apply_multi(entry, "colors_gained", params.get("colors"), _COLOR_INDEX)
+            _apply_multi(
+                entry, "colors_lost", params.get("colors_removed"), _COLOR_INDEX,
+            )
+            _apply_duration(entry, "type_color_duration", event.duration)
         case EventType.CONTROL_CHANGE:
             entry.set("control_change", 1)
         case EventType.ATTACHED | EventType.UNATTACHED:
@@ -199,6 +205,23 @@ def _apply_event(entry: EntityTargets, event: Event) -> None:
 
 _TYPE_INDEX = "type"
 _COLOR_INDEX = "color"
+
+
+def _apply_duration(entry: EntityTargets, name: str, duration: str | None) -> None:
+    """How long a lasting change lasts, where the record says.
+
+    The two duration fields were the only ones in the head no path wrote, and
+    the cause was upstream: an ``Event``'s ``duration`` had a setter nothing
+    called, so a pump until end of turn and a permanent one recorded
+    identically and there was nothing to learn the difference from.
+
+    An unrecognised or absent duration leaves the field unset rather than
+    guessing a bucket, which reads as "this record does not say".
+    """
+    from effects.domain.effect_model import DURATIONS
+
+    if duration in DURATIONS:
+        entry.set(name, DURATIONS.index(duration))
 
 
 def _apply_multi(entry: EntityTargets, name: str, values, kind: str) -> None:
@@ -279,10 +302,15 @@ def _apply_continuous(record: EffectRecord, slot) -> None:
             entry.add("power_delta", float(contribution.pt_boost[0]))
             entry.add("toughness_delta", float(contribution.pt_boost[1]))
         for keyword in contribution.keywords:
-            normalized = keyword.strip().lower().replace(" ", "_")
+            # Same "-" convention as the type and colour channels: a static
+            # that takes a keyword away marks it, because the contribution is
+            # one flat list and the head has a field for each direction.
+            lost = keyword.startswith("-")
+            normalized = keyword.lstrip("-").strip().lower().replace(" ", "_")
             if normalized in OVERLAY_KEYWORDS:
                 entry.flag(
-                    "keywords_gained", OVERLAY_KEYWORDS.index(normalized),
+                    "keywords_lost" if lost else "keywords_gained",
+                    OVERLAY_KEYWORDS.index(normalized),
                     len(OVERLAY_KEYWORDS),
                 )
         gained, lost = _split_contribution(contribution.types)
