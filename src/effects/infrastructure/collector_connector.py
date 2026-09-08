@@ -18,6 +18,7 @@ import subprocess
 import uuid
 from pathlib import Path
 
+from effects.domain.collection_caps import CollectionCaps
 from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
@@ -38,10 +39,12 @@ class CollectorSupervisor:
         effect_records: Path,
         *,
         run_id: str | None = None,
+        caps: CollectionCaps | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._effect_records = Path(effect_records)
         self._run_id = run_id or str(uuid.uuid4())
+        self._caps = caps or CollectionCaps()
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
 
@@ -62,6 +65,7 @@ class CollectorSupervisor:
             best_of=COVERAGE_BEST_OF,
             effect_records_dir=self._effect_records,
             worker_index=worker_id,
+            collection_caps=self._caps.as_system_properties(),
         )
         logger.info("Coverage worker %d started (PID %d)", worker_id, process.pid)
         return process

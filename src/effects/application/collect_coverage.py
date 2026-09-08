@@ -36,6 +36,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain.collection_caps import CollectionCaps
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_RECORDS_DIR = Path("output/effects/records/")
@@ -60,6 +62,7 @@ class CollectCoverageConfig:
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
     no_progress_rounds: int = DEFAULT_NO_PROGRESS_ROUNDS
     workers: int = 12
+    caps: CollectionCaps = field(default_factory=CollectionCaps)
 
     def coverage_folder(self) -> Path:
         """The one tree deck candidates and the coverage unit come from.
@@ -308,6 +311,7 @@ def run(config: CollectCoverageConfig) -> int:
 
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,
+        caps=config.caps,
     )
     round_number = 0
     while not is_complete(coverage, config.target_records):

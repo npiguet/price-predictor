@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import IO
 
@@ -35,6 +36,7 @@ class MatchWorkerConnector:
         side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
         effect_records_dir: Path | None = None,
         worker_index: int = 0,
+        collection_caps: Mapping[str, object] | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -66,6 +68,10 @@ class MatchWorkerConnector:
             worker_index: This worker's index, which the shard filename and
                 every record id carry — workers count independently, so their
                 ids would otherwise collide across a run's shards.
+            collection_caps: Per-worker collection caps, as produced by
+                ``effects.domain.collection_caps.as_system_properties``. Only
+                meaningful alongside ``effect_records_dir``; the worker falls
+                back to its own defaults for anything absent.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -94,6 +100,8 @@ class MatchWorkerConnector:
         if effect_records_dir is not None:
             system_properties["effect.records.dir"] = str(effect_records_dir)
             system_properties["effect.worker.index"] = str(worker_index)
+            for key, value in (collection_caps or {}).items():
+                system_properties[key] = str(value)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:

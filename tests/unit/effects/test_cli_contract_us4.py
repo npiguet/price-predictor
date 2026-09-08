@@ -1,4 +1,4 @@
-"""The stage-four CLI surface (T136).
+﻿"""The stage-four CLI surface (T136).
 
 ``--surface script`` writes a vocabulary of its own, and every stage-four flag
 defaults to absent on the commands stage one already ships — a stage-one
@@ -39,7 +39,7 @@ class TestCollectVariants:
 
     def test_it_carries_the_shared_cap_flags(self):
         args = parse("collect-variants")
-        assert args.mana_cap == 2000
+        assert args.mana_cap == 1
         assert args.probe_keywords == ""
 
     def test_the_volume_cap_is_overridable(self):

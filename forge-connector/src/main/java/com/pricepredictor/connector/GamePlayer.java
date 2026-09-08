@@ -106,6 +106,10 @@ public class GamePlayer {
         // Seeds the patched collectors' sampling, so a worker's games sample
         // independently of one another rather than all alike.
         long gameSeed = startMillis;
+        // Read once per match rather than per game: the supervisor sets them
+        // when it spawns the worker and they do not change under it.
+        PatchedCollectors.CollectionCaps caps =
+                PatchedCollectors.CollectionCaps.fromSystemProperties();
 
         while (!match.isMatchOver()) {
             var game = match.createGame();
@@ -125,8 +129,7 @@ public class GamePlayer {
                 // uninstalled after it. On a stock checkout install() finds no
                 // hook and the game plays exactly as it did before.
                 patched = new PatchedCollectors(
-                        game, effectRecords, gameId,
-                        PatchedCollectors.CollectionCaps.defaults(), gameSeed++);
+                        game, effectRecords, gameId, caps, gameSeed++);
                 patched.install();
                 // Continuous effects are read off the layer tables at a phase
                 // boundary, which is the cheapest moment the board is stable.

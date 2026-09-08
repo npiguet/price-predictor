@@ -32,6 +32,7 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from effects.domain.collection_caps import CollectionCaps
 from effects.domain.script_variants import perturb, variant_name
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
@@ -62,6 +63,7 @@ class CollectVariantsConfig:
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
     split_from: Path | None = None
     workers: int = 12
+    caps: CollectionCaps = field(default_factory=CollectionCaps)
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +225,7 @@ def run(config: CollectVariantsConfig) -> int:
 
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,
+        caps=config.caps,
     )
     supervisor.play_round(
         {v.name: 1.0 for v in variants}, Path(config.variant_scripts),

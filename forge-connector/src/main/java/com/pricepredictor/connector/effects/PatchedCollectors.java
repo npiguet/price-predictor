@@ -75,7 +75,59 @@ public final class PatchedCollectors implements AutoCloseable {
             List<String> probeKeywords) {
 
         public static CollectionCaps defaults() {
-            return new CollectionCaps(2000, 0.1, 2, 2, List.of());
+            return new CollectionCaps(1, 0.1, 2, 2, List.of());
+        }
+
+        /**
+         * Read from the {@code effect.*} system properties the supervisor sets.
+         *
+         * <p>Each falls back to its default rather than failing, because a
+         * worker started without instrumentation sets none of them and one
+         * started by an older supervisor may set only some.
+         */
+        public static CollectionCaps fromSystemProperties() {
+            CollectionCaps defaults = defaults();
+            return new CollectionCaps(
+                    intProperty("effect.mana.cap", defaults.manaCap()),
+                    doubleProperty("effect.playability.rate", defaults.playabilityRate()),
+                    intProperty("effect.interventions.per.game",
+                            defaults.interventionsPerGame()),
+                    intProperty("effect.probes.per.game", defaults.probesPerGame()),
+                    listProperty("effect.probe.keywords"));
+        }
+
+        private static int intProperty(String name, int fallback) {
+            try {
+                String value = System.getProperty(name);
+                return value == null || value.isBlank()
+                        ? fallback : Integer.parseInt(value.trim());
+            } catch (NumberFormatException e) {
+                return fallback;
+            }
+        }
+
+        private static double doubleProperty(String name, double fallback) {
+            try {
+                String value = System.getProperty(name);
+                return value == null || value.isBlank()
+                        ? fallback : Double.parseDouble(value.trim());
+            } catch (NumberFormatException e) {
+                return fallback;
+            }
+        }
+
+        private static List<String> listProperty(String name) {
+            String value = System.getProperty(name);
+            if (value == null || value.isBlank()) {
+                return List.of();
+            }
+            List<String> parsed = new ArrayList<>();
+            for (String part : value.split(",")) {
+                if (!part.isBlank()) {
+                    parsed.add(part.trim());
+                }
+            }
+            return List.copyOf(parsed);
         }
 
         /**
@@ -541,9 +593,15 @@ public final class PatchedCollectors implements AutoCloseable {
     /**
      * Whether this mana ability may still be recorded (FR-037).
      *
-     * <p>Counted per unique mana-ability text, per worker process: a basic
-     * land's tap ability resolves thousands of times a run and would otherwise
-     * be most of the corpus.
+     * <p>Counted <b>per game</b>, because this collector is built per game — a
+     * Mountain taps a dozen times a game for the same R and the repeats observe
+     * a board that barely moved, so one of them carries the observation and the
+     * rest are duplication. Across a run the class still contributes a record
+     * per game it appeared in, from a different board each time, which is more
+     * varied than the first N activations of one worker's first few games.
+     *
+     * <p>The produced mana is part of the key rather than of the count, so a
+     * dual land making G and the same land making U both record.
      */
     public boolean allowManaRecord(String abilityText) {
         int seen = manaRecords.getOrDefault(abilityText, 0);

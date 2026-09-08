@@ -1,4 +1,4 @@
-"""The collecting supervisors' flags and their shared caps (T101).
+﻿"""The collecting supervisors' flags and their shared caps (T101).
 
 ``--effect-records`` has a default on the effects-owned collectors and **no**
 default on ``sealed match-outcomes``. That asymmetry is the contract: on this
@@ -54,7 +54,7 @@ class TestCollectCoverage:
 class TestSharedCapFlags:
     def test_the_five_defaults_are_the_contracts(self):
         args = parse("collect-coverage")
-        assert args.mana_cap == 2000
+        assert args.mana_cap == 1
         assert args.playability_rate == 0.1
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
