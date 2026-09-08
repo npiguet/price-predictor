@@ -86,12 +86,20 @@ def _scan_sources(config: BuildVocabConfig) -> list[Path]:
     return present
 
 
-def _keyword_corpus_text(path: Path) -> str:
-    """Reminder templates and captured scripts as one blob for the scan.
+def _keyword_corpus_text(path: Path, surface: str = SURFACE_PROSE) -> str:
+    """What a keyword expands to on this surface, as a blob for the scan.
 
     Keyword definitions are what expansion substitutes in, so every word in
     them has to be in the vocabulary — otherwise expanding a keyword would
     replace one known token with a sentence of ``[UNK]``.
+
+    **Which field, though, follows the surface.** ``expand_keywords``
+    substitutes the reminder template on the prose surface and the captured
+    script from stage four (FR-060, FR-062); scanning both put Forge script
+    syntax — ``activezones``, ``9999``, bare ``$`` and ``%`` — into a prose
+    vocabulary that can never encode it. On the script surface the template is
+    still scanned, because the engine-coded keywords generate no script and
+    keep their template, and the encoder falls back to it for exactly those.
     """
     from effects.application.extract_keyword_definitions import (
         load_keyword_definitions,
@@ -102,7 +110,7 @@ def _keyword_corpus_text(path: Path) -> str:
         lines.append(definition.keyword)
         if definition.reminder_template:
             lines.append(definition.reminder_template)
-        if definition.generated_script:
+        if surface == SURFACE_SCRIPT and definition.generated_script:
             lines.append(definition.generated_script)
     return "\n".join(lines)
 
@@ -145,7 +153,8 @@ def run(config: BuildVocabConfig) -> int:
         keyword_path = Path(config.keyword_definitions)
         if keyword_path.exists():
             (extra / "keyword_definitions.txt").write_text(
-                _keyword_corpus_text(keyword_path), encoding="utf-8",
+                _keyword_corpus_text(keyword_path, config.surface),
+                encoding="utf-8",
             )
         else:
             logger.warning(

@@ -104,6 +104,68 @@ def _config(corpus, tmp_path, **overrides) -> BuildVocabConfig:
     return BuildVocabConfig(**defaults)
 
 
+class TestTheKeywordScanFollowsTheSurface:
+    """A keyword expands to its template on prose, its script from stage four.
+
+    Scanning both put Forge script syntax into a prose vocabulary that can
+    never encode it: 65 tokens of it — ``activezones``, ``cantblockby``,
+    ``counters_ge``, a bare ``_p`` — sitting alongside the words cards are
+    written in. Nothing failed, because a vocabulary with extra entries still
+    loads and still tokenizes; the tokens were simply never going to be seen.
+    """
+
+    @pytest.fixture
+    def scripted(self, corpus, tmp_path):
+        """Two keywords whose scripts use words their reminder text does not.
+
+        Two of each word, because the scan runs at the production
+        ``freq_threshold=2`` — a hapax is corpus noise on 33k cards, and a
+        fixture that tested against a lower threshold would test something the
+        command never does.
+        """
+        cards, tokens, keywords = corpus
+        script = (
+            "Mode$ CantBlockBy | ValidAttacker$ Creature.Self | "
+            "ActiveZones$ Battlefield"
+        )
+        reminder = "This creature can't be blocked except by creatures with it."
+        keywords.write_text(
+            json.dumps({
+                "Flying": {
+                    "reminder_template": reminder,
+                    "generated_script": script,
+                },
+                "Shadow": {
+                    "reminder_template": reminder,
+                    "generated_script": script,
+                },
+            }),
+            encoding="utf-8",
+        )
+        return cards, tokens, keywords
+
+    def test_prose_does_not_take_script_parameter_names(self, scripted, tmp_path):
+        config = _config(scripted, tmp_path, target_size=5000)
+        run(config)
+        vocab = load_vocabulary(config.vocab_path)
+        assert "activezones" not in vocab
+        assert "cantblockby" not in vocab
+        # The reminder text is still scanned: it is what prose expands to.
+        assert "blocked" in vocab
+
+    def test_the_script_surface_takes_both(self, scripted, tmp_path):
+        # Its own file, and the engine-coded keywords generate no script and
+        # keep their template — so the template is scanned on both surfaces.
+        config = _config(
+            scripted, tmp_path, surface=SURFACE_SCRIPT,
+            vocab_path=tmp_path / "vocab-script.txt", target_size=5000,
+        )
+        run(config)
+        vocab = load_vocabulary(config.vocab_path)
+        assert "activezones" in vocab
+        assert "blocked" in vocab
+
+
 class TestSeededSpecials:
     def test_the_five_specials_are_all_present(self, corpus, tmp_path):
         config = _config(corpus, tmp_path)
