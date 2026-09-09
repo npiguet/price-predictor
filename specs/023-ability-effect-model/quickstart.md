@@ -61,8 +61,15 @@ quietly empty; the second line names any required hook that is missing and what 
 ## 1. Convert, with sidecars and token scripts
 
 ```bash
-python -m price_predictor convert
+python -m price_predictor convert \
+    --output-path ./output/cardsfolder \
+    --tokens-output-path ./output/tokenscripts
 ```
+
+Both paths are named rather than defaulted. The defaults are these same two trees, but they are
+**relative**, so the command run from anywhere but the repository root writes a second converted
+corpus where nothing looks for it and leaves the real one stale — a failure that surfaces hours
+later as records that join nothing.
 
 Writes three things: converted card text under `output/cardsfolder/`, a `<name>.provenance.json`
 beside each of them, and converted token scripts under `output/tokenscripts/` with sidecars of their
@@ -103,10 +110,39 @@ printed, and the engine-coded family generates nothing at all; both keep their t
 ```bash
 python -m sealed match-outcomes \
     --effect-records output/effects/records/ --workers 6 \
+    --snapshot-tiers 1,2,3,4 \
+    --playability-rate 0.1 \
+    --legality-rate 0.1 \
     --interventions-per-game 2 \
     --probes-per-game 2 \
     --probe-keywords first_strike,double_strike,deathtouch,lifelink,trample,indestructible,wither,infect
 ```
+
+`--snapshot-tiers 1,2,3,4` because this command opts into interventions and probes, which are
+stage three, and stage three collects at that depth. Left at the `1,2,3` default it would write
+stage-three forks into stage-two snapshots, and tier 4 is the one tier no later pass can add:
+an absent tier means uncollected, so a reader cannot tell an empty graveyard from an
+unrecorded one. It costs about 59% more entities per record — 11.8 cards sit in hands and
+graveyards against the 19.9 entities a snapshot already carries.
+
+The two sampling rates are named rather than defaulted, because both defaults are judgement
+calls and the command should carry them. `0.1` is right for the same reason in both cases: the
+question is not what share of the corpus a class occupies, it is whether the class holds enough
+distinct records for the batch quota to draw from. A full 40-epoch training draws roughly 640,000
+`playability/decision` examples (5000 steps x 32 batch x 40 epochs x the 10% quota); at `0.1` an
+eight-hour run collects around 7.7 million of them, twelve times over. Raising the rate buys
+nothing that the quota can spend and costs games: measured on this machine, `1.0` collected 60
+million decision records and 34,900 games where `0.1` collected 44,300 games, and it is the games
+that widen card coverage — which is what the card-disjoint split actually needs. Lowering it below
+`0.1` only saves disk.
+
+`--legality-rate` earns its own knob because the two playability subkinds arrive at wildly
+different volumes from one priority pass; legality records are also already coalesced per game on
+their rendered payload, so `0.1` samples what survives dedup rather than the raw flood.
+
+`--mana-cap` stays at its default of 1. A Mountain taps for `R` a dozen times a game against a
+board that barely moved, and the cap is keyed on the mana produced, so a dual land still records
+both of its colours; the last corpus carried 154,000 `mana_produced` events at that cap.
 
 Instrumentation is an opt-in on a command that already exists. The flag costs no extra simulation —
 it rides matches that were going to be played anyway — and the sealed corpora keep their exact format,
@@ -149,6 +185,13 @@ whether a channel is wired.
 - A `patched` run reaches **all eight** sampling classes: `resolution` in both halves, `combat`,
   `continuous`, `trigger`, `rewrite`, and `playability` in both its decision and legality subkinds.
   Mana records arrive as the effect half of `resolution`.
+- **`rewrite` should now be a populated class, not a rounding error.** One record is written per
+  replacement evaluation, `not_replaced` included, so the count should be comparable to `trigger`'s
+  rather than the 34-in-1.88M the old `{incoming, outgoing}` payload produced. A `rewrite` count still
+  in the tens after a full run means the hook is not passing `result`, not that replacements are rare.
+  Check the `result` breakdown as well as the count: all five values reachable, `not_replaced` the
+  bulk of them, and `outgoing` non-null only on the genuine in-place edits (counter counts, damage
+  amounts). Every `outgoing` non-null, or every one null, is a wiring defect.
 - `output/sealed/match-outcomes.txt` and `cards-played.txt` are unchanged in format and content by the
   flag's presence.
 - A first-strike combat produced two `combat` records, one per damage step.
