@@ -53,14 +53,19 @@ public final class EffectEvent {
     public static final String LIBRARY_REORDERED = "library_reordered";
     public static final String LIBRARY_SHUFFLED = "library_shuffled";
     public static final String MANA_PRODUCED = "mana_produced";
+    public static final String MANA_LOST = "mana_lost";
     public static final String SPELL_CAST = "spell_cast";
     public static final String SPELL_COUNTERED = "spell_countered";
+    public static final String SPELL_COPIED = "spell_copied";
     public static final String ATTACKERS_DECLARED = "attackers_declared";
     public static final String BLOCKERS_DECLARED = "blockers_declared";
+    public static final String BECAME_BLOCKED = "became_blocked";
     public static final String COMBAT_ENDED = "combat_ended";
     public static final String COIN_FLIPPED = "coin_flipped";
     public static final String DICE_ROLLED = "dice_rolled";
     public static final String DAY_NIGHT_CHANGED = "day_night_changed";
+    public static final String PLAYER_WON = "player_won";
+    public static final String PLAYER_LOST = "player_lost";
     public static final String SPEED_CHANGED = "speed_changed";
 
     private final String type;
@@ -85,6 +90,35 @@ public final class EffectEvent {
             params.put(key, value);
         }
         return this;
+    }
+
+    /**
+     * The object the engine names as having caused this outcome, as a ref.
+     *
+     * <p><b>One channel, one spelling.</b> Every collector writes the cause
+     * through this method and nowhere else, so the trait-derived side (a
+     * replacement's or a trigger's run-parameter map) and the bus-derived side
+     * (the event the bus delivered) put the same kind of value under the same
+     * key. The Python schema keeps {@code cause} in {@code PROVENANCE_PARAMS}
+     * rather than in one type's row, so every event type accepts it and no
+     * per-type table has to be widened for a new one.
+     *
+     * <p>The value is an entity or player ref — {@code "E24"}, {@code "P1"} —
+     * the same identity {@code state.entities} carries, never a description and
+     * never a list of the run-parameter keys the map happened to hold.
+     *
+     * <p>Why it is not decoration: {@code subjects} says who an outcome
+     * happened to and the normalized params say how much, which leaves two
+     * attackers each dealing 1 damage to the same player serializing
+     * byte-identically. Those are distinct events that must not be deduplicated,
+     * and the cause is what tells them apart.
+     *
+     * <p>A null ref writes nothing rather than a placeholder. Forge genuinely
+     * names no cause for a phase change, an untap, a block or a declared
+     * attack, and an honest absence is what a reader can act on.
+     */
+    public EffectEvent cause(String ref) {
+        return param("cause", ref);
     }
 
     /** ``end_of_turn``, ``permanent``, … for a continuous outcome. */

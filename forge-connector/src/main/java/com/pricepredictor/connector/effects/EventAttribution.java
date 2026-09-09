@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.card.Card;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
@@ -7,13 +8,20 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * The two fields an event carries about where it came from and how long it lasts.
+ * The three fields an event carries about where it came from and how long it lasts.
  *
- * <p>Both were declared on the event shape and never written. {@code duration}
- * is why {@code pt_duration} and {@code type_color_duration} were the only two
- * head fields no target path fed: an effect that pumps a creature and one that
- * pumps it permanently produced identical records, so there was nothing to
- * learn the difference from.
+ * <p>All three were declared on the event shape and never written by the bus
+ * paths. {@code duration} is why {@code pt_duration} and
+ * {@code type_color_duration} were the only two head fields no target path fed:
+ * an effect that pumps a creature and one that pumps it permanently produced
+ * identical records, so there was nothing to learn the difference from.
+ *
+ * <p>{@code cause} joined them here rather than living in each shaper because
+ * it answers the same question about the same instant as the other two, and
+ * because it has a default the shapers cannot know: an event the engine names
+ * no causer for was still produced by whatever line was resolving. Stamping all
+ * three at one door is what stopped the fork paths writing nulls while the
+ * observed path wrote answers.
  */
 final class EventAttribution {
 
@@ -139,6 +147,39 @@ final class EventAttribution {
         return END_OF_TURN;
     }
 
+    /**
+     * The card whose line produced this outcome, as an entity ref.
+     *
+     * <p>The bracket's own answer to "what caused this", for the many bus
+     * events that name no source of their own — a life change, a counter, a
+     * tap, a card moving. It is the host card of the clause that was resolving,
+     * falling back to the acting line's, read in the same order and from the
+     * same pointer as {@link #duration}: a clause that resolves out of an
+     * effect card names that card rather than the line the bracket opened on.
+     *
+     * <p>Deliberately the same value the trait-derived side produces for a
+     * {@code SpellAbility} cause, so a {@code zone_change} written from a
+     * replacement's parameter map and one written from the bus name the same
+     * card in the same spelling.
+     *
+     * <p>Null when nothing was resolving — a combat damage step, a turn-based
+     * action — which writes no {@code cause} at all rather than a placeholder.
+     * A caller that has a better answer than the bracket, such as the source
+     * the bus itself named on a damage event, passes it to
+     * {@link #stamp(EffectEvent, SpellAbility, Object, String)} and it wins.
+     */
+    static String cause(SpellAbility root, Object pointer) {
+        Card host = hostOf(pointer instanceof SpellAbility resolving ? resolving : null);
+        if (host == null) {
+            host = hostOf(root);
+        }
+        return host == null ? null : SnapshotBuilder.entityId(host);
+    }
+
+    private static Card hostOf(SpellAbility ability) {
+        return ability == null ? null : ability.getHostCard();
+    }
+
     private static String declaredDuration(SpellAbility root, Object pointer) {
         if (pointer instanceof SpellAbility resolving) {
             String own = resolving.getParam("Duration");
@@ -154,24 +195,44 @@ final class EventAttribution {
     }
 
     /**
-     * Stamp both onto an event, unless it already carries them.
+     * Stamp all three onto an event, from the bracket alone.
      *
      * <p>Applied where an event is filed rather than where it is built, because
      * only the collector knows which ability's bracket it landed in.
      */
     static EffectEvent stamp(EffectEvent event, SpellAbility root) {
-        // Read once: both fields answer the same question about the same
+        return stamp(event, root, PatchHooks.currentSubAbility(), null);
+    }
+
+    /**
+     * The same, with a cause the caller read off the event itself.
+     *
+     * <p>{@code namedCause} wins over the bracket's, and null defers to it.
+     * The precedence is the caller's to state rather than something read back
+     * off the half-built event: the engine's own naming — the creature a
+     * {@code GameEventCardDamaged} says dealt the damage — is more precise than
+     * "whatever line was resolving", and in a combat damage step it is the only
+     * answer there is.
+     */
+    static EffectEvent stamp(EffectEvent event, SpellAbility root, String namedCause) {
+        // Read once: all three fields answer the same question about the same
         // instant, and reading the hook twice could straddle a clause boundary
         // in a nested resolution.
-        return stamp(event, root, PatchHooks.currentSubAbility());
+        return stamp(event, root, PatchHooks.currentSubAbility(), namedCause);
     }
 
     static EffectEvent stamp(EffectEvent event, SpellAbility root, Object pointer) {
+        return stamp(event, root, pointer, null);
+    }
+
+    static EffectEvent stamp(
+            EffectEvent event, SpellAbility root, Object pointer, String namedCause) {
         if (event == null) {
             return null;
         }
         return event
                 .duration(duration(root, pointer))
-                .attributedTo(attributedTo(root, pointer));
+                .attributedTo(attributedTo(root, pointer))
+                .cause(namedCause != null ? namedCause : cause(root, pointer));
     }
 }

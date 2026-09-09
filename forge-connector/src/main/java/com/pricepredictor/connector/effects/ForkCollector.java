@@ -63,6 +63,15 @@ public final class ForkCollector {
     public static final String SUBSTEP_FIRST_STRIKE = "first_strike";
     public static final String SUBSTEP_REGULAR = "regular";
 
+    /**
+     * No turn could be read, so the pairing guard stands down.
+     *
+     * <p>A collector with no live game — the unit tests' shape — has no turn
+     * to compare against, and refusing to write there would test the guard
+     * rather than the pairing.
+     */
+    public static final int TURN_UNKNOWN = -1;
+
     private final Game game;
     private final RecordShardWriter writer;
     private final String gameId;
@@ -106,7 +115,9 @@ public final class ForkCollector {
         return recordsWritten;
     }
 
-    /** Forks created and thrown away by the score check. */
+    /** Forks created and thrown away rather than written: a copy the score
+     *  check rejected, a resolution that observed nothing, a branch whose own
+     *  damage step wrote no record for it to mirror. */
     public int discardedForks() {
         return discarded;
     }
@@ -302,7 +313,10 @@ public final class ForkCollector {
      */
     private List<EffectEvent> forceResolution(
             Game fork, SpellAbility ability, Player actor) {
-        ForkEventSink sink = new ForkEventSink(fork);
+        // The forked line is the sink's root: an event's attributed_to is read
+        // against the ability the bracket belongs to, and a fork's bracket is
+        // exactly this one forced resolution.
+        ForkEventSink sink = new ForkEventSink(fork, ability);
         fork.subscribeToEvents(sink);
         try {
             ability.setActivatingPlayer(actor);
@@ -536,7 +550,10 @@ public final class ForkCollector {
         // The state is the board as the step began, with the keyword already
         // gone: that is the input the counterfactual answers for.
         SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
-        ForkEventSink sink = new ForkEventSink(fork);
+        // No root: a damage step is a turn-based action, not a resolution, so
+        // this branch's events attribute the way the observed combat record's
+        // do -- from the resolving-clause pointer alone, which names nothing.
+        ForkEventSink sink = new ForkEventSink(fork, null);
         fork.subscribeToEvents(sink);
         String state;
         CombatShape shape;
@@ -576,7 +593,14 @@ public final class ForkCollector {
                 PatchedCollectors.normalizeKeyword(keyword),
                 SnapshotBuilder.entityId(carrier), state, sink.events(),
                 SnapshotBuilder.playerId(perspective), shape.fields(),
-                firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR);
+                firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR,
+                // The *live* game's turn, which is also the fork's: the copier
+                // carries the counter across (GameCopier hands it to
+                // devModeSet), and the corpus agrees -- not one of the 1,788
+                // interventional forks, written the instant they are taken,
+                // ever named a turn behind the record before it. Read here so
+                // the branch remembers the step it belongs to.
+                liveTurn());
     }
 
     /**
@@ -597,7 +621,21 @@ public final class ForkCollector {
     public record HeldProbe(
             String keyword, String carrier, String state,
             List<EffectEvent> events, String actor, String combatFields,
-            String substep) {
+            String substep, int turn) {
+
+        /**
+         * A branch with no turn to be checked against.
+         *
+         * <p>For callers assembling a branch by hand rather than forking a
+         * live game; {@link #TURN_UNKNOWN} is what stands the guard down.
+         */
+        public HeldProbe(
+                String keyword, String carrier, String state,
+                List<EffectEvent> events, String actor, String combatFields,
+                String substep) {
+            this(keyword, carrier, state, events, actor, combatFields, substep,
+                    TURN_UNKNOWN);
+        }
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -624,9 +662,41 @@ public final class ForkCollector {
         }
     }
 
-    /** Write a held branch, now that the record it mirrors has an id. */
+    /**
+     * Write a held branch, now that the record it mirrors has an id.
+     *
+     * <p>Only if the two describe the same moment. A branch is completed
+     * against the next combat record of its own substep, and a damage step that
+     * wrote no real record leaves its branch waiting for one — in the smoke
+     * corpus 55 of 1,069 probe records were completed that way, against a
+     * mirror one to <b>eight</b> turns later, and every mirrored pair whose
+     * turns disagreed was one of them. That is the whole residue of the
+     * validator's game_id invariant.
+     *
+     * <p>Dropped rather than relabelled, which is the choice worth stating.
+     * The fork's turn is not stale: the copier carries the counter across, and
+     * the branch's snapshot honestly describes the board of the turn it was
+     * taken on. Stamping the mirror's turn over it would make the state block
+     * lie about a board that is genuinely several turns old, and gate 2 would
+     * read the difference between two unrelated combats as something the
+     * keyword did. The branch's budget was spent taking the fork either way;
+     * the only question is whether an unreadable counterfactual is written,
+     * and it is not — the same policy {@code discardStaleProbes} already
+     * applies to a branch of the wrong substep.
+     */
     public boolean writeHeldProbe(HeldProbe held, String mirrorOfRecordId) {
         if (held == null || mirrorOfRecordId == null) {
+            return false;
+        }
+        int now = liveTurn();
+        if (held.turn() != TURN_UNKNOWN && now != TURN_UNKNOWN
+                && held.turn() != now) {
+            discarded++;
+            System.err.println(
+                    "Effect records: dropping a probe branch taken on turn "
+                            + held.turn() + " that would mirror "
+                            + mirrorOfRecordId + " from turn " + now
+                            + "; its own damage step wrote no record");
             return false;
         }
         emit(new EffectRecord(
@@ -655,6 +725,21 @@ public final class ForkCollector {
     }
 
     // ── plumbing ────────────────────────────────────────────────────────
+
+    /**
+     * The live game's turn, or {@link #TURN_UNKNOWN}.
+     *
+     * <p>Read from the game this collector forks from rather than from a fork,
+     * so a branch and the record it will mirror are timed by the same clock:
+     * the mirror's snapshot reads this same counter at the instant the branch
+     * is completed.
+     */
+    private int liveTurn() {
+        if (game == null || game.getPhaseHandler() == null) {
+            return TURN_UNKNOWN;
+        }
+        return game.getPhaseHandler().getTurn();
+    }
 
     /** The acting line, or the reason there is none — see the sibling in
      *  {@link BusBracketCollector}: a fork's record is as entitled to say why

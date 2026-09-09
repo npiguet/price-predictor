@@ -474,6 +474,7 @@ public final class PatchedCollectors implements AutoCloseable {
         private final Map<String, long[]> droppedByMode = new java.util.TreeMap<>();
         private final Map<String, long[]> writtenByMode = new java.util.TreeMap<>();
         private final Map<String, long[]> movedButUnread = new java.util.TreeMap<>();
+        private final Map<String, long[]> unchangedByMode = new java.util.TreeMap<>();
         private long dropped;
         private long written;
         private long droppedWithNothingMoved;
@@ -520,6 +521,7 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             if (!moved) {
                 droppedWithNothingMoved++;
+                count(unchangedByMode, modeName);
             }
         }
 
@@ -569,6 +571,12 @@ public final class PatchedCollectors implements AutoCloseable {
                     .append(top(movedButUnread));
             out.append("\n  ").append(droppedWithNothingMoved)
                     .append(" dropped with no raw parameter difference at all");
+            // Split by mode, because the whole-run total does not say which
+            // mode is a normaliser gap and which is genuinely an identity. The
+            // smoke run's 110 drops needed arithmetic across three lines to
+            // learn that 62 of Moved's 91 changed nothing at all and 29 changed
+            // only the ETB counter table; this line says it outright.
+            out.append("\n  of those, by mode: ").append(top(unchangedByMode));
             return out.toString();
         }
 
@@ -1881,11 +1889,8 @@ public final class PatchedCollectors implements AutoCloseable {
         for (String subject : subjectsOf(byName)) {
             event.subject(subject);
         }
-        normalizeParams(event, byName);
-        String cause = causeOf(byName);
-        if (cause != null) {
-            event.param("cause", cause);
-        }
+        normalizeParams(event, mode, byName);
+        event.cause(causeOf(byName));
         return event;
     }
 
@@ -1944,7 +1949,22 @@ public final class PatchedCollectors implements AutoCloseable {
      * every entry as one is what made the subject list meaningless.
      */
     private static final List<String> SUBJECT_KEYS = List.of(
-            "Affected", "Card", "Player", "DamageTarget", "Attacker", "Attached");
+            "Affected", "Card", "Player", "DamageTarget", "Attacker",
+            // Combat's own names, in the order that keeps each event about the
+            // creature it is about: an AttackerBlocked map holds Attacker and
+            // Blockers and is about the attacker, a Blocks map holds Blocker
+            // and Attackers and is about the blocker, and an AttackersDeclared
+            // map holds only the collection. Without these three, every one of
+            // them named no subject at all.
+            "Blocker", "Attackers", "Attached",
+            // Last, and only as a last resort. CardLKI is a copy of the card as
+            // it was, so wherever the live object is also in the map one of the
+            // keys above names it and this is never reached. Where it is not --
+            // MagicStack puts CardLKI, Activator and SpellAbility and no Card at
+            // all -- it is the only name the map has for the spell that was
+            // cast, and without it all 1,917 SpellCast events of the smoke
+            // corpus named no subject whatever.
+            "CardLKI");
 
     /** How many subjects one event may name before the list is capped. */
     private static final int MAX_SUBJECTS = 8;
@@ -1984,18 +2004,56 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * The object that caused this event, as a ref.
+     * Keys that name the object a run-parameter map blames, most specific first.
      *
-     * <p>{@code cause} is documented as an entity or player ref and was being
+     * <p>Forge spells the causing object six ways and the reading was two of
+     * them. Measured over the 28,343 trait-derived events of the smoke corpus:
+     * {@code Cause} answers for {@code ChangesZone} (81%), {@code Sacrificed}
+     * and {@code Exiled}; {@code SpellAbility} answers for {@code SpellCast}
+     * (100%) and {@code LifeLost}. The four added here are where the rest of
+     * the volume keeps it — {@code Source} on {@code CounterAdded}
+     * ({@code Card.java:1790}) and on {@code LifeGained}
+     * ({@code Player.java:487}), {@code SourceSA} on {@code BecomesTarget}
+     * ({@code SpellAbilityStackInstance.java:170}), {@code Causer} on
+     * {@code Destroyed} ({@code GameAction.java:2161}), {@code Activator} on
+     * {@code TapsForMana} ({@code AbilityManaPart.java:251}).
+     *
+     * <p>Ordered rather than merged because a map often holds several: an
+     * explicit {@code Cause} is the engine's own answer and outranks a source
+     * card, which outranks the player who happened to be acting.
+     *
+     * <p>{@code DamageSource} is deliberately absent. The damage types
+     * normalize it into their own {@code source} slot, and repeating it here
+     * would make the cause channel a copy of a field the reader already has
+     * rather than a second fact about the event.
+     */
+    private static final List<String> CAUSE_KEYS = List.of(
+            "Cause", "SpellAbility", "SourceSA", "Source", "Causer", "Activator");
+
+    /**
+     * The object that caused this event, as a ref, or null when none is named.
+     *
+     * <p>{@code cause} is documented as an entity or player ref and was once
      * written as a comma-joined list of run-parameter key names — the one place
      * the schema contradicted itself, and the value nothing could learn from.
      * A cause that is a spell or ability is named by the card it is on, which
      * is the identity the snapshot carries.
+     *
+     * <p>Null is a real answer and stays one. {@code Phase} carries only the
+     * turn's player ({@code PhaseHandler.java:438}, with the {@code Phase} key
+     * commented out), {@code Untaps} carries only the card
+     * ({@code Card.java:4864}), and {@code Attacks} and {@code Blocks} carry
+     * combat's shape and no actor: nothing in the game caused them in the sense
+     * this field means, and inventing one would be worse than the gap.
      */
     private static String causeOf(Map<String, Object> byName) {
-        Object cause = byName.get("Cause");
-        String ref = cause == null ? null : subjectOf(cause);
-        return ref != null ? ref : subjectOf(byName.get("SpellAbility"));
+        for (String key : CAUSE_KEYS) {
+            String ref = subjectOf(byName.get(key));
+            if (ref != null) {
+                return ref;
+            }
+        }
+        return null;
     }
 
     /**
@@ -2007,7 +2065,8 @@ public final class PatchedCollectors implements AutoCloseable {
      * type this has no reading for carries its mode and its cause and nothing
      * else, which is a smaller claim than the identity pair it used to make.
      */
-    private static void normalizeParams(EffectEvent event, Map<String, Object> byName) {
+    private static void normalizeParams(
+            EffectEvent event, String mode, Map<String, Object> byName) {
         switch (event.type()) {
             case EffectEvent.ZONE_CHANGE -> {
                 event.param("from_zone", zoneName(byName.get("Origin")));
@@ -2034,7 +2093,46 @@ public final class PatchedCollectors implements AutoCloseable {
                     "delta",
                     firstInt(byName, "LifeAmount", "LifeGained", "Amount"));
             case EffectEvent.CARD_DRAWN, EffectEvent.CARD_MILLED,
-                    EffectEvent.CARD_DISCARDED, EffectEvent.CARD_LOOKED_AT ->
+                    EffectEvent.CARD_DISCARDED ->
+                    event.param("count", firstInt(byName, "Number", "Num"));
+            // Scry and Surveil each spell their own count, and neither is
+            // Number: read under the general names alone this type carried no
+            // count at all.
+            case EffectEvent.CARD_LOOKED_AT -> {
+                event.param("count", firstInt(
+                        byName, "ScryNum", "SurveilNum", "Number", "Num"));
+                event.param("from_zone", zoneName(byName.get("Origin")));
+            }
+            case EffectEvent.POISON_CHANGE -> event.param(
+                    "delta", firstInt(byName, "Amount", "Num", "Number"));
+            case EffectEvent.MANA_PRODUCED, EffectEvent.MANA_LOST ->
+                    event.param("mana_by_color", manaOf(byName));
+            case EffectEvent.PHASED ->
+                    // Two modes, one type, and the direction is the whole of
+                    // the difference between them.
+                    event.param("out", !"PhaseIn".equals(mode));
+            case EffectEvent.ATTACHED ->
+                    event.param("attached_to", firstRef(
+                            byName, "AttachTarget", "Attached", "Card"));
+            case EffectEvent.UNATTACHED ->
+                    event.param("detached_from", firstRef(
+                            byName, "AttachTarget", "Attached", "Card"));
+            case EffectEvent.ATTACKERS_DECLARED ->
+                    // Attacked first: CombatUtil.checkDeclaredAttacker spells
+                    // the entity this creature attacked that way and no other.
+                    event.param("defender", firstRef(
+                            byName, "Attacked", "Defender", "AttackedTarget",
+                            "DefendingPlayer", "Defenders"));
+            case EffectEvent.BLOCKERS_DECLARED ->
+                    event.param("blocked", firstRef(
+                            byName, "Attackers", "Attacker"));
+            case EffectEvent.BECAME_BLOCKED ->
+                    event.param("blockers", refList(byName, "Blockers", "Blocker"));
+            case EffectEvent.FACE_CHANGE ->
+                    event.param("to_state", faceState(mode));
+            case EffectEvent.PLAYER_LOST ->
+                    event.param("reason", textOf(byName.get("LoseReason")));
+            case EffectEvent.SPELL_COPIED ->
                     event.param("count", firstInt(byName, "Number", "Num"));
             case EffectEvent.TOKEN_CREATED -> event.param(
                     "count", firstInt(byName, "TokenNum", "Number", "Num"));
@@ -2095,6 +2193,93 @@ public final class PatchedCollectors implements AutoCloseable {
             sum += count;
         }
         event.param("delta", sum);
+    }
+
+    /**
+     * The mana a mana event moved, in the slot the vocabulary declares.
+     *
+     * <p>Forge hands produced mana over as its own short text -- {@code "G"},
+     * {@code "G G"}, {@code "1"} -- so the reading is the one
+     * {@link #manaByColor(String)} already does for the activation channel,
+     * which is what keeps a tapped land and a replaced mana production
+     * comparable. A value that is not text yields nothing rather than an empty
+     * object: absent is the honest answer for a mana structure this side does
+     * not link against, and {@code {}} would claim no mana was produced.
+     */
+    private static Map<String, Integer> manaOf(Map<String, Object> byName) {
+        Object produced = byName.get("Produced");
+        if (!(produced instanceof String)) {
+            produced = byName.get("Mana");
+        }
+        if (!(produced instanceof String text)) {
+            return null;
+        }
+        Map<String, Integer> mana = manaByColor(text.trim());
+        return mana.isEmpty() ? null : mana;
+    }
+
+    /**
+     * Which face a card turned to.
+     *
+     * <p>Read from the mode rather than from a parameter, because the two modes
+     * that reach this type each mean exactly one direction and neither map
+     * carries a usable state name: {@code AbilityKey.CardState} exists but is a
+     * {@code CardState} object put there by door unlocking alone
+     * ({@code Card.java:8146}), and rendering it would fill the slot with an
+     * object's {@code toString} instead of a face.
+     */
+    private static String faceState(String mode) {
+        return "TurnFaceUp".equals(mode) ? "face_up" : "transformed";
+    }
+
+    /** The first of these keys that names an entity, single or collection. */
+    private static String firstRef(Map<String, Object> byName, String... keys) {
+        for (String key : keys) {
+            String ref = subjectOf(byName.get(key));
+            if (ref != null) {
+                return ref;
+            }
+            if (byName.get(key) instanceof Iterable<?> members) {
+                for (Object member : members) {
+                    ref = subjectOf(member);
+                    if (ref != null) {
+                        return ref;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Every entity these keys name, deduplicated, or null for none. */
+    private static List<String> refList(Map<String, Object> byName, String... keys) {
+        Set<String> refs = new LinkedHashSet<>();
+        for (String key : keys) {
+            Object value = byName.get(key);
+            if (value instanceof Iterable<?> members) {
+                for (Object member : members) {
+                    String ref = subjectOf(member);
+                    if (ref != null && refs.size() < MAX_SUBJECTS) {
+                        refs.add(ref);
+                    }
+                }
+            } else {
+                String ref = subjectOf(value);
+                if (ref != null && refs.size() < MAX_SUBJECTS) {
+                    refs.add(ref);
+                }
+            }
+        }
+        return refs.isEmpty() ? null : new ArrayList<>(refs);
+    }
+
+    /** A parameter's own text, or null where it holds none. */
+    private static String textOf(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
     }
 
     private static String counterName(Object type) {
@@ -2228,13 +2413,48 @@ public final class PatchedCollectors implements AutoCloseable {
             Map.entry("CreateToken", EffectEvent.TOKEN_CREATED),
             Map.entry("TokenCreatedOnce", EffectEvent.TOKEN_CREATED),
             Map.entry("Attackers", EffectEvent.ATTACKERS_DECLARED),
-            Map.entry("AttackerBlocked", EffectEvent.BLOCKERS_DECLARED),
+            Map.entry("AttackersDeclared", EffectEvent.ATTACKERS_DECLARED),
+            // Attacks is one creature being declared as an attacker, which is
+            // exactly what attackers_declared names -- and it is the third
+            // heaviest trait-derived mode in the corpus (2,632 events), every
+            // one of which took the generic type and carried nothing but its
+            // own name. As attackers_declared it carries the defender.
+            Map.entry("Attacks", EffectEvent.ATTACKERS_DECLARED),
+            Map.entry("Blocks", EffectEvent.BLOCKERS_DECLARED),
+            // Retargeted: the subject of an AttackerBlocked event is the
+            // attacker, not the blocker, so blockers_declared put the wrong
+            // creature in the slot named "blocked". became_blocked is the type
+            // whose subject is the attacker and whose param is the blockers.
+            Map.entry("AttackerBlocked", EffectEvent.BECAME_BLOCKED),
+            Map.entry("AttackerBlockedByCreature", EffectEvent.BECAME_BLOCKED),
+            Map.entry("TurnFaceUp", EffectEvent.FACE_CHANGE),
             Map.entry("Shuffled", EffectEvent.LIBRARY_SHUFFLED),
             Map.entry("Scry", EffectEvent.CARD_LOOKED_AT),
             Map.entry("Surveil", EffectEvent.CARD_LOOKED_AT),
             Map.entry("PhaseOut", EffectEvent.PHASED),
             Map.entry("PhaseIn", EffectEvent.PHASED),
-            Map.entry("Regenerated", EffectEvent.REGENERATED));
+            Map.entry("Regenerated", EffectEvent.REGENERATED),
+            // ── the replacement side's own spellings ────────────────────
+            // ReplacementType names its modes differently from TriggerType,
+            // and this table was written from the trigger vocabulary. A
+            // replacement mode with no entry here takes the generic type and
+            // carries nothing but its mode -- and an event with no value in it
+            // cannot differ from itself, so the pair is dropped as an identity
+            // rewrite however much the replacement changed. Untap was two such
+            // drops in the smoke run; the rest are the modes a random sealed
+            // game reaches less often.
+            Map.entry("Untap", EffectEvent.UNTAPPED),
+            Map.entry("Tap", EffectEvent.TAPPED),
+            Map.entry("DealtDamage", EffectEvent.DAMAGE_DEALT),
+            Map.entry("Counter", EffectEvent.SPELL_COUNTERED),
+            Map.entry("CopySpell", EffectEvent.SPELL_COPIED),
+            Map.entry("ProduceMana", EffectEvent.MANA_PRODUCED),
+            Map.entry("LoseMana", EffectEvent.MANA_LOST),
+            Map.entry("Transform", EffectEvent.FACE_CHANGE),
+            Map.entry("DeclareBlocker", EffectEvent.BLOCKERS_DECLARED),
+            Map.entry("RollDice", EffectEvent.DICE_ROLLED),
+            Map.entry("GameWin", EffectEvent.PLAYER_WON),
+            Map.entry("GameLoss", EffectEvent.PLAYER_LOST));
 
     private static String keyListJson(List<ProvenanceKey> keys) {
         StringJoiner joiner = new StringJoiner(",", "[", "]");

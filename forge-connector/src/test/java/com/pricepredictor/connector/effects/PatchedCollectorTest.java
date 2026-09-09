@@ -17,6 +17,7 @@ import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerHandler;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -1365,5 +1366,292 @@ class PatchedCollectorTest {
     void theCauseAndSubAbilityHooksReadNullOutsideAResolution() {
         assertEquals(null, PatchHooks.currentTriggerCause());
         assertEquals(null, PatchHooks.currentSubAbility());
+    }
+
+    // ── the cause channel ───────────────────────────────────────────────
+
+    /**
+     * A trigger of a chosen mode, on a host card the mode does not care about.
+     *
+     * <p>Parsed rather than taken off a real card, because what is under test
+     * is the reading of one mode's run parameters and finding a printed card
+     * per mode would tie the test to the set list.
+     */
+    private static Trigger triggerOfMode(String mode) {
+        return TriggerHandler.parseTrigger(
+                "Mode$ " + mode + " | TriggerZones$ Battlefield"
+                        + " | TriggerDescription$ under test",
+                TestCards.build("Paralyze"), true);
+    }
+
+    private static String eventOf(PatchedCollectors collector, Trigger trigger,
+            Map<String, Object> runParams) {
+        return collector.triggerRecord(trigger, runParams, true).toJson();
+    }
+
+    /**
+     * The cause channel has one spelling, and a missing cause writes nothing.
+     *
+     * <p>Both halves matter. {@code params.cause} is what tells two attackers
+     * each dealing 1 damage to the same player apart, so it has to be the same
+     * key holding the same kind of value wherever it is written; and Forge
+     * names no cause at all for a phase change or a block, where a placeholder
+     * would be a claim rather than a gap.
+     */
+    @Test
+    void theCauseChannelHasOneSpellingAndAnHonestAbsence() {
+        assertTrue(new EffectEvent(EffectEvent.TAPPED).cause("E7").toJson()
+                .contains("\"cause\":\"E7\""));
+        assertFalse(new EffectEvent(EffectEvent.TAPPED).cause(null).toJson()
+                .contains("cause"));
+    }
+
+    /**
+     * An event says what caused it, from whichever key the engine used.
+     *
+     * <p>{@code causeOf} read {@code Cause} and {@code SpellAbility} only, and
+     * over the smoke corpus that answered on 48% of trait-derived events: the
+     * modes that keep the causing object under {@code Source}
+     * ({@code CounterAdded}, {@code LifeGained}), {@code SourceSA}
+     * ({@code BecomesTarget}) or {@code Causer} ({@code Destroyed}) said
+     * nothing at all.
+     */
+    @Test
+    void aCounterEventNamesTheCardThatPutTheCounterThere() {
+        Card host = TestCards.build("Paralyze");
+        Card source = TestCards.build("Sol Ring");
+
+        String json = eventOf(recording(), triggerOfMode("CounterAdded"),
+                Map.of("Card", host, "Source", source,
+                        "CounterType", "P1P1", "CounterNum", 1));
+
+        assertTrue(json.contains(
+                "\"cause\":\"" + SnapshotBuilder.entityId(source) + "\""), json);
+    }
+
+    /** A cause that is a spell is named by the card it is printed on. */
+    @Test
+    void anAbilityCauseIsNamedByItsHostCard() {
+        Card host = TestCards.build("Paralyze");
+        Card caster = TestCards.build("Sol Ring");
+        SpellAbility cause = AbilityFactory.getAbility(
+                "DB$ Draw | Defined$ You | NumCards$ 1", caster);
+
+        String json = eventOf(recording(), triggerOfMode("ChangesZone"),
+                Map.of("Card", host, "Cause", cause,
+                        "Origin", "Battlefield", "Destination", "Graveyard"));
+
+        assertTrue(json.contains(
+                "\"cause\":\"" + SnapshotBuilder.entityId(caster) + "\""), json);
+    }
+
+    /**
+     * The chain is ordered, not merged.
+     *
+     * <p>A map often holds several of these at once — a zone change carries
+     * {@code Cause} and whatever the caller put under {@code Source} — and the
+     * engine's explicit answer is the one that outranks a source card.
+     */
+    @Test
+    void anExplicitCauseOutranksASofterName() {
+        Card host = TestCards.build("Paralyze");
+        Card named = TestCards.build("Sol Ring");
+        Card softer = TestCards.build("Mox Pearl");
+
+        String json = eventOf(recording(), triggerOfMode("ChangesZone"),
+                Map.of("Card", host, "Cause", named, "Source", softer,
+                        "Origin", "Battlefield", "Destination", "Graveyard"));
+
+        assertTrue(json.contains(
+                "\"cause\":\"" + SnapshotBuilder.entityId(named) + "\""), json);
+    }
+
+    /**
+     * Nothing caused an untap step, and the record says so by saying nothing.
+     *
+     * <p>{@code Card.java:4864} runs the {@code Untaps} trigger on a map that
+     * holds the card and no actor of any kind. Naming the host there would put
+     * the permanent that untapped into a slot that means "what did this to it".
+     */
+    @Test
+    void anEventNothingCausedCarriesNoCause() {
+        Card host = TestCards.build("Paralyze");
+
+        String json = eventOf(
+                recording(), triggerOfMode("Untaps"), Map.of("Card", host));
+
+        assertFalse(json.contains("\"cause\""), json);
+    }
+
+    // ── what an event says it was ───────────────────────────────────────
+
+    /**
+     * The cast spell is named by the only key the stack puts it under.
+     *
+     * <p>{@code MagicStack.java:363} builds the {@code SpellCast} map from
+     * {@code CardLKI}, {@code Activator} and {@code SpellAbility} and no
+     * {@code Card} at all, so all 1,917 {@code SpellCast} events of the smoke
+     * corpus named no subject whatever. Last in the key order, because
+     * {@code CardLKI} is a copy of the card as it was and the live object is
+     * the better answer wherever the map also holds one.
+     */
+    @Test
+    void aCastSpellIsNamedByItsLastKnownCopy() {
+        Card cast = TestCards.build("Sol Ring");
+        SpellAbility spell = AbilityFactory.getAbility(
+                "DB$ Draw | Defined$ You | NumCards$ 1", cast);
+
+        String json = eventOf(recording(), triggerOfMode("SpellCast"),
+                Map.of("CardLKI", cast, "SpellAbility", spell));
+
+        assertTrue(json.contains(
+                "\"subjects\":[\"" + SnapshotBuilder.entityId(cast) + "\"]"), json);
+    }
+
+    /**
+     * A declared attack is an attack, not an unnamed state flag.
+     *
+     * <p>{@code Attacks} is the third heaviest trait-derived mode in the smoke
+     * corpus (2,632 events) and had no entry in the mode table, so every one of
+     * them took the generic {@code state_flag_change} and carried nothing but
+     * its own name — two creatures attacking the same player were
+     * indistinguishable rows. As {@code attackers_declared} it carries the
+     * defender, read under the key {@code CombatUtil.checkDeclaredAttacker}
+     * actually uses.
+     */
+    @Test
+    void anAttackDeclarationSaysWhoWasAttacked() {
+        Card attacker = TestCards.build("Sol Ring");
+        Card defender = TestCards.build("Mox Pearl");
+
+        String json = eventOf(recording(), triggerOfMode("Attacks"),
+                Map.of("Attacker", attacker, "Attacked", defender));
+
+        assertTrue(json.contains("\"type\":\"attackers_declared\""), json);
+        assertTrue(json.contains(
+                "\"defender\":\"" + SnapshotBuilder.entityId(defender) + "\""), json);
+    }
+
+    /**
+     * A mana trigger says which mana, in the slot the activation channel uses.
+     *
+     * <p>{@code TapsForMana} was 534 events carrying only their mode. The
+     * reading is the same {@code manaByColor} the mana-activation records use,
+     * so a tapped land and a replaced mana production are comparable rows
+     * rather than two spellings of one fact.
+     */
+    @Test
+    void aManaTriggerSaysWhichManaWasProduced() {
+        Card land = TestCards.build("Sol Ring");
+
+        String json = eventOf(recording(), triggerOfMode("TapsForMana"),
+                Map.of("Card", land, "Produced", "G G"));
+
+        assertTrue(json.contains("\"type\":\"mana_produced\""), json);
+        assertTrue(json.contains("\"mana_by_color\":{\"G\":2}"), json);
+    }
+
+    /** And a mana value it cannot read is absent rather than an empty object. */
+    @Test
+    void anUnreadableManaValueLeavesTheSlotEmptyRatherThanClaimingNoMana() {
+        Card land = TestCards.build("Sol Ring");
+
+        String json = eventOf(recording(), triggerOfMode("TapsForMana"),
+                Map.of("Card", land));
+
+        assertFalse(json.contains("mana_by_color"), json);
+    }
+
+    /** Turning a card face up is a face change, and it says which face. */
+    @Test
+    void turningACardFaceUpNamesTheFaceItTurnedTo() {
+        Card card = TestCards.build("Sol Ring");
+
+        String json = eventOf(
+                recording(), triggerOfMode("TurnFaceUp"), Map.of("Card", card));
+
+        assertTrue(json.contains("\"type\":\"face_change\""), json);
+        assertTrue(json.contains("\"to_state\":\"face_up\""), json);
+    }
+
+    // ── what the rewrite channel drops, and why ─────────────────────────
+
+    /**
+     * The identity tally separates an unreadable change from no change at all.
+     *
+     * <p>The smoke run reported 110 drops, {@code Moved=91} among them, and
+     * {@code 69 dropped with no raw parameter difference at all} — three lines
+     * needing arithmetic across them to reach the one fact that decides what to
+     * do next: 62 of Moved's 91 changed nothing whatever and are genuinely
+     * identity rewrites, while 29 changed only the entry-counter table, which
+     * {@code zone_change} has no slot for. The per-mode line says it outright.
+     */
+    @Test
+    void theIdentityTallySeparatesAnUnreadableChangeFromNoChange() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+
+        tally.dropped("Moved", Map.of("Destination", "Battlefield"),
+                Map.of("Destination", "Battlefield"));
+        tally.dropped("Moved", Map.of("CounterMap", "{}"),
+                Map.of("CounterMap", "{P1P1=1}"));
+
+        String summary = tally.summary();
+        assertTrue(summary.contains(
+                "1 dropped with no raw parameter difference at all"), summary);
+        assertTrue(summary.contains("of those, by mode: Moved=1"), summary);
+        assertTrue(summary.contains("Moved.CounterMap=1"), summary);
+    }
+
+    /**
+     * A replacement whose mode only the replacement side spells is still typed.
+     *
+     * <p>{@code ReplacementType} names {@code Untap} where {@code TriggerType}
+     * names {@code Untaps}, and the mode table was written from the trigger
+     * vocabulary — so an untap replacement took the generic type, carried
+     * nothing but its own name, and could not differ from itself however much
+     * it changed. Paralyze's is that mode. It still drops, because a prevention
+     * changes no parameter at all, but the drop is now a mode the table knows.
+     */
+    @Test
+    void anUntapReplacementIsSpelledTheReplacementSideWay() {
+        Card paralyze = TestCards.build("Paralyze");
+        ReplacementEffect prevention =
+                paralyze.getCurrentState().getReplacementEffects().iterator().next();
+        PatchedCollectors collector = recording();
+
+        assertEquals("Untap", String.valueOf(prevention.getMode()));
+        assertNull(collector.rewriteRecord(
+                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze)));
+    }
+
+    /**
+     * Combat's three shapes each name the creature they are about.
+     *
+     * <p>{@code Blocks} holds {@code Blocker} and {@code Attackers},
+     * {@code AttackerBlockedByCreature} holds {@code Attacker} and
+     * {@code Blocker}, and {@code AttackersDeclared} holds only the collection —
+     * so with none of those three keys in the subject order, all 226 of them in
+     * the smoke corpus named no subject at all. The order is what keeps each
+     * event about the right creature rather than about whichever key was found
+     * first.
+     */
+    @Test
+    void eachCombatShapeIsAboutTheCreatureItIsAbout() {
+        Card attacker = TestCards.build("Sol Ring");
+        Card blocker = TestCards.build("Mox Pearl");
+        String attackerId = SnapshotBuilder.entityId(attacker);
+        String blockerId = SnapshotBuilder.entityId(blocker);
+
+        String blocks = eventOf(recording(), triggerOfMode("Blocks"),
+                Map.of("Blocker", blocker, "Attackers", attacker));
+        assertTrue(blocks.contains("\"subjects\":[\"" + blockerId + "\"]"), blocks);
+        assertTrue(blocks.contains("\"blocked\":\"" + attackerId + "\""), blocks);
+
+        String blocked = eventOf(recording(),
+                triggerOfMode("AttackerBlockedByCreature"),
+                Map.of("Attacker", attacker, "Blocker", blocker));
+        assertTrue(blocked.contains("\"type\":\"became_blocked\""), blocked);
+        assertTrue(blocked.contains("\"subjects\":[\"" + attackerId + "\"]"), blocked);
+        assertTrue(blocked.contains("\"blockers\":[\"" + blockerId + "\"]"), blocked);
     }
 }

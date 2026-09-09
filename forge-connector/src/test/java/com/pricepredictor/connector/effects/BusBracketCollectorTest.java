@@ -2,9 +2,18 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import forge.ai.LobbyPlayerAi;
+import forge.deck.Deck;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
+import forge.game.event.GameEventCardDamaged;
+import forge.game.phase.PhaseType;
+import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
@@ -13,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,10 +49,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * records were snapshotted one tier shallower than every other kind; and
  * {@code refs.modes} was filled on 125 records out of 55,296.
  *
+ * <p>Three more were measured on the 463,360-record smoke corpus that followed:
+ * not one of the 107,265 bus-derived events named what caused it, so two
+ * attackers each dealing 1 damage to the same player rendered byte-identically
+ * — 2,193 of the corpus's 3,780 duplicated events; nothing subscribed
+ * {@code GameEventGameFinished}, so a cast still on the stack when the game
+ * ended vanished with no record and no count, and the combat that decided the
+ * game was never flushed at all; and {@code declined} was written on nothing,
+ * so an optional effect the controller refused read exactly like one that did
+ * something.
+ *
  * <p>The bus itself is not exercised here — driving Forge's event bus needs a
  * running match, which is the integration test's job. What is exercised is
  * everything below the two lines that read the stack, against real abilities
- * built by {@code AbilityFactory} from real cards, which is where all four
+ * built by {@code AbilityFactory} from real cards, which is where all of these
  * defects lived.
  */
 @ExtendWith(ForgeExtension.class)
@@ -365,5 +385,339 @@ class BusBracketCollectorTest {
                 "the cost half describes the cast, before any of this existed");
         assertTrue(records.get(1).contains("\"targets\":[\"E" + victim.getId() + "\"]"),
                 records.get(1));
+    }
+
+    // ── what caused it ──────────────────────────────────────────────────
+
+    /**
+     * A damage event names the creature that dealt it, not the open bracket.
+     *
+     * <p>The source is on the bus event and was being dropped. It is what makes
+     * two attackers each dealing 1 damage to the same blocker two events rather
+     * than one line printed twice — and, on its own, the answer to "which
+     * permanent caused this damage", which the corpus did not carry at all.
+     */
+    @Test
+    void damageNamesThePermanentThatDealtIt() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        Card attacker = TestCards.build("Grizzly Bears");
+        Card victim = TestCards.build("Runeclaw Bear");
+
+        collector.beginBracket(bolt);
+        collector.onCardDamaged(new GameEventCardDamaged(
+                victim.getView(), attacker.getView(), 2,
+                GameEventCardDamaged.DamageType.Normal));
+        collector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertTrue(effectHalf.contains("\"cause\":\"E" + attacker.getId() + "\""),
+                effectHalf);
+        assertFalse(
+                effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
+                "the bus named a source, and it outranks the bracket");
+    }
+
+    /**
+     * An outcome the bus names no source for takes the resolving card.
+     *
+     * <p>Most of the channel: a zone change, a life total, a counter, a tap.
+     * The engine names nothing on those events, and the honest answer is the
+     * card whose line was resolving when they arrived — the same value the
+     * trait-derived side writes for a {@code SpellAbility} cause, so a
+     * {@code zone_change} from a replacement map and one from the bus name the
+     * same card in the same spelling.
+     */
+    @Test
+    void anOutcomeWithNoNamedSourceNamesTheResolvingCard() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.onCardChangeZone(new GameEventCardChangeZone(
+                TestCards.build("Grizzly Bears"),
+                zone(ZoneType.Battlefield), zone(ZoneType.Graveyard)));
+        collector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertTrue(
+                effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
+                effectHalf);
+    }
+
+    /** A damage event with no source falls back to the bracket like the rest. */
+    @Test
+    void damageFromNowhereStillNamesTheResolvingCard() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Runeclaw Bear").getView(), null, 1,
+                GameEventCardDamaged.DamageType.Normal));
+        collector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertTrue(
+                effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
+                effectHalf);
+    }
+
+    /**
+     * With nothing resolving and nothing named, the record says nothing.
+     *
+     * <p>An honest absence rather than a placeholder: Forge genuinely names no
+     * causer for a turn-based action, and a reader can act on the difference.
+     */
+    @Test
+    void anEventNothingCausedCarriesNoCause() {
+        assertNull(EventAttribution.cause(null, null));
+
+        String json = EventAttribution.stamp(
+                new EffectEvent(EffectEvent.UNTAPPED).subject("E7"), null, null)
+                .toJson();
+
+        assertFalse(json.contains("cause"), json);
+    }
+
+    // ── the end of the game ─────────────────────────────────────────────
+
+    /**
+     * A cast still on the stack when the game ends is counted, not invented.
+     *
+     * <p>It neither resolved nor left the stack, and {@code outcome} has no
+     * member for a game that stopped. Before, it simply vanished: nothing
+     * subscribed {@code GameEventGameFinished}, so one or two casts a game went
+     * unrecorded and uncounted.
+     */
+    @Test
+    void aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome()
+            throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        long abandoned = collector.finishGame(Set.of(bolt.getId()));
+
+        assertEquals(1, abandoned);
+        assertEquals(1, collector.abandonedActivations());
+        assertEquals(0, collector.unresolvedActivations(), "and it is let go of");
+        assertEquals(List.of(), written(), "no record claims one of the five");
+    }
+
+    /**
+     * A cast that had already left the stack is written off as it always was.
+     *
+     * <p>The two halves of what is held at the end are different facts: this
+     * one was removed without resolving, which {@code countered} is the
+     * schema's word for, and only the other has no word at all.
+     */
+    @Test
+    void aCastGoneFromTheStackByTheEndIsStillWrittenOff() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        long abandoned = collector.finishGame(Set.of());
+
+        assertEquals(0, abandoned);
+        assertEquals(0, collector.abandonedActivations());
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"outcome\":\"countered\""), records.get(0));
+    }
+
+    /**
+     * The combat that ended the game is written, where it used to be dropped.
+     *
+     * <p>A damage step's bracket closes at a phase boundary, and a game that
+     * ends in combat damage never reaches one: {@code PhaseHandler.mainLoopStep}
+     * returns the moment {@code checkStateBasedEffects} reports the game over,
+     * so no {@code GameEventTurnPhase} and no {@code GameEventCombatEnded}
+     * follow the lethal damage. The record for the most decisive combat of the
+     * game was the one no game had.
+     */
+    @Test
+    void theCombatThatEndedTheGameIsWritten() throws IOException {
+        Game game = gameInACombatDamageStep();
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        BusBracketCollector collector = new BusBracketCollector(
+                game, writer, "run.0-l1.0", CollectionCaps.defaults());
+        Card attacker = TestCards.build("Grizzly Bears");
+
+        collector.onCardDamaged(new GameEventCardDamaged(
+                TestCards.build("Runeclaw Bear").getView(), attacker.getView(), 2,
+                GameEventCardDamaged.DamageType.Normal));
+        collector.finishGame(Set.of());
+
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"kind\":\"combat\""), records.get(0));
+        assertTrue(records.get(0).contains("\"cause\":\"E" + attacker.getId() + "\""),
+                "and in a damage step the attacker is the only cause there is");
+    }
+
+    /**
+     * A game in a damage step, the only state a combat bracket opens in.
+     *
+     * <p>Its own game rather than the shared one every other test here uses:
+     * the phase is what routes an event into the combat bracket, and a shared
+     * game left in a damage step would route every other test's events there
+     * too.
+     */
+    private static Game gameInACombatDamageStep() {
+        Deck deck = new Deck();
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
+                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Game game = new Game(
+                players, rules, new Match(rules, players, "BusBracketTest"));
+        game.getPhaseHandler().devModeSet(
+                PhaseType.COMBAT_DAMAGE, game.getPlayers().get(0));
+        return game;
+    }
+
+    // ── an offer turned down ────────────────────────────────────────────
+
+    /**
+     * An optional effect the controller refused is {@code declined}.
+     *
+     * <p>The outcome the schema asked for and nothing ever wrote. There is no
+     * bus event for it — an offer nobody took moves no card, deals no damage
+     * and changes no life total — which is exactly why it needed saying: the
+     * record was otherwise identical to one for an effect that was never
+     * offered at all.
+     *
+     * <p>Partnerless, like a fizzle: {@code declined} is one of the three
+     * outcomes the schema says has no effect half, and the Python loader
+     * rejects a {@code declined} activation that reaches resolution.
+     */
+    @Test
+    void anOfferTheControllerRefusedIsDeclinedAndStandsAlone() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.noteDeclined();
+        collector.endBracket(bolt.getId(), false);
+
+        List<String> records = written();
+        assertEquals(1, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"outcome\":\"declined\""), records.get(0));
+        assertTrue(records.get(0).contains("\"link_id\":null"), records.get(0));
+    }
+
+    /**
+     * A refusal inside a resolution that did something is still resolved.
+     *
+     * <p>The half of the rule that keeps it from over-claiming. A line whose
+     * mandatory clause moved a card and whose optional clause was declined did
+     * something, and the schema's {@code declined} — offered, turned down,
+     * nothing happened — is not the word for it.
+     */
+    @Test
+    void aRefusalInsideAResolutionThatDidSomethingIsStillResolved()
+            throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.noteDeclined();
+        collector.onCardChangeZone(new GameEventCardChangeZone(
+                TestCards.build("Grizzly Bears"),
+                zone(ZoneType.Battlefield), zone(ZoneType.Graveyard)));
+        collector.endBracket(bolt.getId(), false);
+
+        List<String> records = written();
+        assertEquals(2, records.size(), records.toString());
+        assertTrue(records.get(0).contains("\"outcome\":\"resolved\""), records.get(0));
+    }
+
+    /** A refusal belongs to the bracket it happened in and to no later one. */
+    @Test
+    void aRefusalDoesNotOutliveItsBracket() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility refused = damageAbility();
+        SpellAbility answer = damageAbility();
+
+        collector.beginBracket(refused);
+        collector.noteDeclined();
+        // A spell cast in response takes the bracket over.
+        collector.beginBracket(answer);
+        collector.endBracket(answer.getId(), false);
+
+        // The refused spell is still held: nothing ever settled it. The
+        // records are the answer's own two halves, and its cost half is first.
+        List<String> records = written();
+        assertTrue(records.get(0).contains("\"outcome\":\"resolved\""), records.get(0));
+    }
+
+    /** A refusal outside any bracket is nobody's, and is dropped. */
+    @Test
+    void aRefusalWithNothingResolvingIsNotHeldAgainstTheNextSpell()
+            throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.noteDeclined();
+        collector.beginBracket(bolt);
+        collector.endBracket(bolt.getId(), false);
+
+        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""));
+    }
+
+    /**
+     * The hook is read for its answer, by the name the patch declares.
+     *
+     * <p>{@code PatchHooks} finds the listener interface by string and calls it
+     * through a proxy, so the method name and the argument positions are the
+     * whole contract; a typo in either degrades this channel with no error. The
+     * proxy here is the same shape the patched {@code PlayerControllerAi}
+     * installs.
+     */
+    @Test
+    void theConfirmHookIsReadForTheAnswerItCarries() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
+                ConfirmListener.class.getClassLoader(),
+                new Class<?>[]{ConfirmListener.class},
+                collector.confirmHandler());
+
+        collector.beginBracket(bolt);
+        listener.onConfirm(bolt, true);
+        collector.endBracket(bolt.getId(), false);
+
+        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
+                "an offer taken is described by what it did, not by an outcome");
+    }
+
+    /** And a refusal delivered the same way reaches the record. */
+    @Test
+    void aRefusalDeliveredThroughTheHookReachesTheRecord() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
+                ConfirmListener.class.getClassLoader(),
+                new Class<?>[]{ConfirmListener.class},
+                collector.confirmHandler());
+
+        collector.beginBracket(bolt);
+        listener.onConfirm(bolt, false);
+        collector.endBracket(bolt.getId(), false);
+
+        assertTrue(written().get(0).contains("\"outcome\":\"declined\""));
+    }
+
+    /**
+     * The interface the patch declares, restated here for the proxy.
+     *
+     * <p>Not imported: this module compiles against stock Forge, where it does
+     * not exist. That is the same reason the collector installs the real one
+     * reflectively.
+     */
+    private interface ConfirmListener {
+        void onConfirm(SpellAbility sa, boolean confirmed);
     }
 }

@@ -2,13 +2,16 @@ package com.pricepredictor.connector.effects;
 
 import com.google.common.eventbus.Subscribe;
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCombatEnded;
+import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.event.GameEventZone;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
 import forge.game.zone.ZoneType;
 import org.junit.jupiter.api.Test;
@@ -51,15 +54,16 @@ class ForkEventSinkTest {
     /**
      * Events that describe the shape of a game rather than an outcome.
      *
-     * <p>A fork has no cast, no resolution it did not force, no phase and no
-     * combat end: it is created, one ability is made to resolve, and it is
-     * thrown away. {@link GameEventZone} is here for a different reason — it is
-     * the per-zone-list notification that neither side reads any more.
+     * <p>A fork has no cast, no resolution it did not force, no phase, no
+     * combat end and no end of the game: it is created, one ability is made to
+     * resolve, and it is thrown away. {@link GameEventZone} is here for a
+     * different reason — it is the per-zone-list notification that neither side
+     * reads any more.
      */
     private static final Set<Class<?>> STRUCTURAL = Set.of(
             GameEventSpellAbilityCast.class, GameEventSpellResolved.class,
             GameEventTurnPhase.class, GameEventCombatEnded.class,
-            GameEventZone.class);
+            GameEventGameFinished.class, GameEventZone.class);
 
     /**
      * A fork describes an outcome the way an observed record does.
@@ -139,5 +143,60 @@ class ForkEventSinkTest {
     void aMoveWithNeitherEndIsNotRecorded() {
         assertEquals(null, BusEvents.cardMoved(
                 new GameEventCardChangeZone(TestCards.build("Mountain"), null, null)));
+    }
+
+    // ── a fork event says where it came from ────────────────────────────
+
+    /** Push one completed move through a sink and read back what it filed. */
+    private static EffectEvent filedMove(SpellAbility acting) {
+        ForkEventSink sink = new ForkEventSink(null, acting);
+        sink.onCardChangeZone(new GameEventCardChangeZone(
+                TestCards.build("Mountain"),
+                zone(ZoneType.Hand), zone(ZoneType.Battlefield)));
+        assertFalse(sink.isEmpty(), "the move was not filed at all");
+        return sink.events().get(0);
+    }
+
+    /**
+     * A fork's event answers "which clause did this" the way an observed one does.
+     *
+     * <p>{@code attributed_to} is a tri-state on the observed path — a
+     * sub-ability acted, the root line acted, or no pointer was available — and
+     * this sink named none of the three, so every event on every fork record
+     * was silently null. Measured across the smoke corpus that was most of the
+     * 30.9% of events with no attribution at all, and it made a fork record
+     * unable to answer a question a real one answers.
+     *
+     * <p>{@code unresolved} is the honest answer here: nothing is resolving in
+     * a unit test, and the point is that the field is <b>written</b> rather than
+     * left null.
+     */
+    @Test
+    void aForkEventNamesWhereItCameFrom() {
+        String json = filedMove(null).toJson();
+
+        assertFalse(json.contains("\"attributed_to\":null"), json);
+        assertTrue(json.contains("\"attributed_to\":\"unresolved\""), json);
+        assertTrue(json.contains("\"duration\":\"instant\""), json);
+    }
+
+    /**
+     * And the acting line the fork forced is the line it reads against.
+     *
+     * <p>Duration is the half of the stamp a unit test can steer without a
+     * resolving thread: it falls back to the root line's own {@code Duration$},
+     * so a permanent-duration line reaching the sink is visible in the event it
+     * files. A sink that ignored its acting line would say {@code instant}.
+     */
+    @Test
+    void theForcedLineIsTheOneAForkEventIsReadAgainst() {
+        SpellAbility pump = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | Defined$ Self | NumAtt$ 2 | NumDef$ 2"
+                        + " | Duration$ Permanent",
+                TestCards.build("Fountain of Youth"));
+
+        String json = filedMove(pump).toJson();
+
+        assertTrue(json.contains("\"duration\":\"permanent\""), json);
     }
 }

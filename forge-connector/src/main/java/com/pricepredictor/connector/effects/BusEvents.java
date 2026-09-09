@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.card.CardView;
 import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
@@ -10,6 +11,7 @@ import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventSurveil;
+import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -29,6 +31,52 @@ import java.util.Locale;
 final class BusEvents {
 
     private BusEvents() {
+    }
+
+    // ── what the bus names as the causer ────────────────────────────────
+
+    /**
+     * The permanent the bus says dealt this damage, or null.
+     *
+     * <p>Read here rather than fabricated by the collector because the event
+     * carries it: {@code GameEventCardDamaged} and
+     * {@code GameEventPlayerDamaged} each name a source {@code CardView}, and
+     * for combat damage that source is the attacking or blocking creature —
+     * the one fact a damage step's record could not say.
+     *
+     * <p>Answered as a ref rather than written onto the event, because which
+     * cause an event ends up carrying is a decision about precedence — the
+     * source the bus named beats the ability whose bracket the event landed in
+     * — and this class deliberately holds no opinion about brackets. The
+     * collector combines the two; see {@code BusBracketCollector.record}.
+     */
+    static String causeOf(GameEventCardDamaged event) {
+        return cardRef(event.source());
+    }
+
+    /** The permanent the bus says dealt this damage to a player, or null. */
+    static String causeOf(GameEventPlayerDamaged event) {
+        return cardRef(event.source());
+    }
+
+    /**
+     * The player the bus says handed out this poison, or null.
+     *
+     * <p>A player rather than a card: {@code GameEventPlayerPoisoned} names the
+     * source as a {@code PlayerView}, which is the infecting player rather than
+     * the creature. Both spellings are legal refs and {@code state.entities}
+     * carries both, so the channel takes whichever the engine actually names.
+     */
+    static String causeOf(GameEventPlayerPoisoned event) {
+        return playerRef(event.source());
+    }
+
+    private static String cardRef(CardView view) {
+        return view == null ? null : "E" + view.getId();
+    }
+
+    private static String playerRef(PlayerView view) {
+        return view == null ? null : "P" + view.getId();
     }
 
     static EffectEvent cardDamaged(GameEventCardDamaged event, boolean combat) {

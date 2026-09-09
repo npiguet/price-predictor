@@ -44,6 +44,19 @@ class ForkCollectorTest {
                 caps, 42L);
     }
 
+    /**
+     * The same, over a game whose turn can be read.
+     *
+     * <p>No turn is ever taken in the shared test game, so its phase handler
+     * reads turn 0 — which is all the pairing guard needs: a branch that says
+     * it came from any other turn disagrees with it.
+     */
+    private ForkCollector collectorOverAGame(CollectionCaps caps) {
+        return new ForkCollector(
+                TestCards.game(), new RecordShardWriter(tempDir, "run", 0, "l1"),
+                "run.0-l1.0", caps, 42L);
+    }
+
     // ── the per-game budget ─────────────────────────────────────────────
 
     @Test
@@ -248,6 +261,68 @@ class ForkCollectorTest {
         // Spelled as the bracket collector spells it, because the two classes
         // have to agree about which step they are describing.
         assertEquals("regular", ForkCollector.SUBSTEP_REGULAR);
+    }
+
+    // ── the held branch knows *when* it came from ───────────────────────
+
+    /**
+     * A branch and the record it mirrors describe the same turn, or neither is
+     * written.
+     *
+     * <p>The substep alone was not enough. A branch whose own damage step wrote
+     * no combat record kept waiting for the next record of that substep, which
+     * in the smoke corpus arrived up to <b>eight turns</b> later: 55 of 1,069
+     * probe records mirrored a record from a different turn, and every mirrored
+     * pair whose turns disagreed was one of those. Because the branch's own
+     * snapshot is honest — the copier carries the turn across, and not one of
+     * the 1,788 interventional forks ever named a stale one — relabelling it
+     * would make the state block lie, so the branch is dropped instead.
+     *
+     * <p>Dropped counts as a discarded fork: the simulation was spent either
+     * way, and the counter is what makes the loss visible in a run's summary.
+     */
+    @Test
+    void aBranchFromAnEarlierTurnIsNotWrittenAgainstThisOnesRecord() {
+        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+
+        assertFalse(collector.writeHeldProbe(branch(7), "run.0-l1.9"),
+                "a branch seven turns older than its mirror is not a pair");
+        assertEquals(0L, collector.recordsWritten());
+        assertEquals(1, collector.discardedForks());
+    }
+
+    /** A branch from the turn the record was written on is written. */
+    @Test
+    void aBranchFromThisTurnIsWritten() {
+        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+
+        assertTrue(collector.writeHeldProbe(branch(0), "run.0-l1.9"));
+        assertEquals(1L, collector.recordsWritten());
+    }
+
+    /**
+     * A branch with no turn to check is written, as it always was.
+     *
+     * <p>{@link ForkCollector#TURN_UNKNOWN} is what a hand-built branch carries
+     * and what a collector with no live game reads, and the guard fires on
+     * neither: there is no turn to disagree with.
+     */
+    @Test
+    void aBranchWithNoTurnIsPairedAsBefore() {
+        ForkCollector collector = collectorOverAGame(caps(2, 2, List.of("trample")));
+        ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
+                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
+                ForkCollector.SUBSTEP_REGULAR);
+
+        assertEquals(ForkCollector.TURN_UNKNOWN, held.turn());
+        assertTrue(collector.writeHeldProbe(held, "run.0-l1.9"));
+    }
+
+    /** A branch from a named turn, otherwise like every other hand-built one. */
+    private static ForkCollector.HeldProbe branch(int turn) {
+        return new ForkCollector.HeldProbe(
+                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
+                ForkCollector.SUBSTEP_REGULAR, turn);
     }
 
     // ── the seeded source ───────────────────────────────────────────────

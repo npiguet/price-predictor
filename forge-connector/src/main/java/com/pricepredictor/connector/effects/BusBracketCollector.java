@@ -14,6 +14,7 @@ import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
+import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventSurveil;
 import forge.game.event.GameEventPlayerDamaged;
@@ -24,6 +25,7 @@ import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
 import forge.game.spellability.SpellAbility;
 
+import java.lang.reflect.InvocationHandler;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -53,7 +55,8 @@ import java.util.StringJoiner;
  * {@code outcome} is a field of it and a spell that is countered before it
  * resolves never publishes anything else the collector could attach the answer
  * to. A cast still on the stack when the game ends is dropped rather than given
- * one of the five outcomes it did not have.
+ * one of the five outcomes it did not have — but it is now counted and named
+ * rather than vanishing; see {@link #finishGame}.
  *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
@@ -113,6 +116,23 @@ public final class BusBracketCollector {
 
     private long recordsWritten;
 
+    /**
+     * Whether the controller turned something down while this bracket was open.
+     *
+     * <p>Scoped to the bracket rather than matched against the declined
+     * ability's id, because Forge resolves a copy of the ability it was handed
+     * and an id comparison would silently never match — the same reason
+     * {@link EventAttribution} counts a clause upward from the pointer instead
+     * of downward from the root. What keeps the flag from over-claiming is the
+     * second half of the test in {@link #endBracket}: a resolution that
+     * produced any outcome at all is {@code resolved} however many optional
+     * clauses inside it were declined.
+     */
+    private boolean bracketDeclined;
+
+    /** Casts still on the stack when the game ended, over the whole game. */
+    private long abandonedActivations;
+
     /** Told each combat record's id, for a probe that mirrors it. */
     private java.util.function.Consumer<String> onCombatRecord;
 
@@ -135,6 +155,12 @@ public final class BusBracketCollector {
         this.gameId = gameId;
         this.snapshots = new SnapshotBuilder(game, caps.snapshotTierArray());
         this.mode = AttributionMode.detect();
+        // Installed here and dropped at GameEventGameFinished, because this
+        // collector has no other lifecycle: it is subscribed to the bus for
+        // exactly one game and the bus tells it when that game is over. On an
+        // unpatched checkout install() finds no hook and nothing changes.
+        PatchHooks.install(
+                PLAYER_CONTROLLER_AI, CONFIRM_LISTENER, confirmHandler());
     }
 
     /**
@@ -229,6 +255,11 @@ public final class BusBracketCollector {
      * skips resolution entirely when the targets are gone, so the alternative is
      * a record claiming an empty event list for something that never ran — and
      * a partnerless {@code link_id} on the cost half, which the schema bars.
+     *
+     * <p>A decline writes no effect half either, for the same reason and by the
+     * same rule: {@code declined} is one of the three outcomes the schema calls
+     * partnerless, and the Python loader rejects a {@code declined} activation
+     * that reaches resolution.
      */
     @Subscribe
     public void onResolved(GameEventSpellResolved event) {
@@ -254,14 +285,17 @@ public final class BusBracketCollector {
         // its real outcome; what it must not do is issue a link to an effect
         // half nobody is going to write.
         boolean bracketIsThisAbility = resolving != null && resolving.getId() == abilityId;
-        boolean writesEffectHalf = bracketIsThisAbility && !fizzled;
+        boolean declined = bracketIsThisAbility && !fizzled && wasDeclined();
+        boolean writesEffectHalf = bracketIsThisAbility && !fizzled && !declined;
 
         String link = settleActivation(
                 abilityId,
                 fizzled
                         ? EffectRecord.OUTCOME_FIZZLED
-                        : outcomeOf(heldTargetsAtCast(abilityId),
-                                bracketIsThisAbility ? resolving : null),
+                        : declined
+                                ? EffectRecord.OUTCOME_DECLINED
+                                : outcomeOf(heldTargetsAtCast(abilityId),
+                                        bracketIsThisAbility ? resolving : null),
                 writesEffectHalf);
 
         if (writesEffectHalf) {
@@ -313,11 +347,22 @@ public final class BusBracketCollector {
 
     // ── outcome events ──────────────────────────────────────────────────
 
+    /**
+     * One damage, and the permanent that dealt it.
+     *
+     * <p>The cause comes off the event rather than off the bracket, because in
+     * a damage step there is no bracket: nothing is resolving, and the
+     * attacking creature is the only answer to "what caused this". It is also
+     * what makes two attackers each dealing 1 damage to the same blocker two
+     * distinguishable events instead of one line rendered twice — 2,193 of the
+     * smoke corpus's 3,780 duplicated events are exactly that pair.
+     */
     @Subscribe
     public void onCardDamaged(GameEventCardDamaged event) {
         String subject = "E" + event.card().getId();
         EffectEvent damage = EventAttribution.stamp(
-                BusEvents.cardDamaged(event, isCombatDamage()), resolving);
+                BusEvents.cardDamaged(event, isCombatDamage()), resolving,
+                BusEvents.causeOf(event));
         if (isCombatDamage()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -331,7 +376,8 @@ public final class BusBracketCollector {
     public void onPlayerDamaged(GameEventPlayerDamaged event) {
         String subject = "P" + event.target().getId();
         EffectEvent damage = EventAttribution.stamp(
-                BusEvents.playerDamaged(event), resolving);
+                BusEvents.playerDamaged(event), resolving,
+                BusEvents.causeOf(event));
         if (event.combat()) {
             openCombatBracket();
             combatParticipants.add(subject);
@@ -348,7 +394,7 @@ public final class BusBracketCollector {
 
     @Subscribe
     public void onPoisoned(GameEventPlayerPoisoned event) {
-        record(BusEvents.poisoned(event));
+        record(BusEvents.poisoned(event), BusEvents.causeOf(event));
     }
 
     @Subscribe
@@ -467,10 +513,21 @@ public final class BusBracketCollector {
      * attribute to the bracket they follow, which is the one that caused them.
      */
     private void record(EffectEvent event) {
+        record(event, null);
+    }
+
+    /**
+     * The same, for an event the bus itself named a causer for.
+     *
+     * @param namedCause the ref the engine named, which outranks the bracket's,
+     *                   or null to take the bracket's
+     */
+    private void record(EffectEvent event, String namedCause) {
         // Stamped here rather than where the event is built: which clause
-        // produced it and how long it lasts are properties of the bracket it
-        // landed in, and only this side knows that.
-        EventAttribution.stamp(event, resolving);
+        // produced it, how long it lasts and — absent a name off the event
+        // itself — what caused it are properties of the bracket it landed in,
+        // and only this side knows that.
+        EventAttribution.stamp(event, resolving, namedCause);
         if (isCombatDamage()) {
             openCombatBracket();
             if (fileEvent(event, combatEvents, combatEventKeys)) {
@@ -524,6 +581,7 @@ public final class BusBracketCollector {
 
     private void openBracket(SpellAbility ability) {
         this.resolving = ability;
+        this.bracketDeclined = false;
         this.resolvingKeys = keysOf(ability);
         this.resolvingActor = actorOf(ability);
         this.openBracketState = snapshots.toJson(ability, referencedOf(ability));
@@ -533,6 +591,7 @@ public final class BusBracketCollector {
 
     private void closeBracket() {
         this.resolving = null;
+        this.bracketDeclined = false;
         this.resolvingKeys =
                 new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
         this.resolvingActor = null;
@@ -677,6 +736,11 @@ public final class BusBracketCollector {
         if (pendingActivations.isEmpty()) {
             return;
         }
+        writeOffRemoved(idsOnStack());
+    }
+
+    /** The ability ids the stack holds right now. */
+    private Set<Integer> idsOnStack() {
         Set<Integer> onStack = new LinkedHashSet<>();
         for (var instance : game.getStack()) {
             SpellAbility sa = instance == null ? null : instance.getSpellAbility();
@@ -684,7 +748,7 @@ public final class BusBracketCollector {
                 onStack.add(sa.getId());
             }
         }
-        writeOffRemoved(onStack);
+        return onStack;
     }
 
     /**
@@ -713,10 +777,131 @@ public final class BusBracketCollector {
      * <p>At the end of a game whatever is left here is dropped: a spell on the
      * stack when the last player lost neither resolved nor was removed, and
      * {@code outcome} has no member for it. Writing one of the five would be a
-     * claim about a game that stopped, so the count is reported instead.
+     * claim about a game that stopped, so the count is reported instead — by
+     * {@link #abandonedActivations()}, which is the running total of them.
      */
     long unresolvedActivations() {
         return pendingActivations.size();
+    }
+
+    // ── the end of the game ─────────────────────────────────────────────
+
+    /**
+     * The last thing that happens to a game, and the last chance to write.
+     *
+     * <p>Nothing subscribed this event, and two channels were being lost at it.
+     *
+     * <p>The <b>combat bracket</b> is closed at a phase boundary, and a game
+     * that ends in combat damage never reaches one:
+     * {@code PhaseHandler.mainLoopStep} returns the moment
+     * {@code checkStateBasedEffects} says the game is over, so neither
+     * {@code GameEventTurnPhase} nor {@code GameEventCombatEnded} follows the
+     * lethal damage step. The record for the combat that decided the game was
+     * therefore the one combat record no game had.
+     *
+     * <p>The <b>held casts</b> split in two, and only one half is writable.
+     * A spell that left the stack since the last reconcile point — countered,
+     * exiled off the stack, swept away by the effect that ended the game — is
+     * written off exactly as it would be at any other moment. What is genuinely
+     * still on the stack is not: it neither resolved nor was removed, and
+     * {@code outcome} has no member for that. Those are counted and named on
+     * stderr rather than stamped with one of the five they did not have.
+     */
+    @Subscribe
+    public void onGameFinished(GameEventGameFinished event) {
+        finishGame(idsOnStack());
+    }
+
+    /**
+     * The half of {@link #onGameFinished} that has already read the stack.
+     *
+     * @param onStack the ability ids the stack still holds
+     * @return how many held casts were abandoned rather than written
+     */
+    long finishGame(Set<Integer> onStack) {
+        flushCombat();
+        writeOffRemoved(onStack);
+        long abandoned = pendingActivations.size();
+        if (abandoned > 0) {
+            StringJoiner names = new StringJoiner(", ");
+            for (PendingActivation activation : pendingActivations) {
+                names.add(activation.linkId());
+            }
+            System.err.println(
+                    "effect records: " + gameId + " ended with " + abandoned
+                            + " cast(s) still on the stack, dropped because"
+                            + " outcome has no member for a game that stopped: "
+                            + names);
+        }
+        pendingActivations.clear();
+        abandonedActivations += abandoned;
+        // The listener is static and this collector lives for one game, so the
+        // game ending is where it has to go.
+        PatchHooks.uninstall(PLAYER_CONTROLLER_AI, CONFIRM_LISTENER);
+        return abandoned;
+    }
+
+    /** How many casts this game abandoned on the stack, over the whole game. */
+    long abandonedActivations() {
+        return abandonedActivations;
+    }
+
+    // ── an offer the controller turned down ─────────────────────────────
+
+    /** The patched class that answers for the AI, and the setter it exposes. */
+    private static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
+    private static final String CONFIRM_LISTENER = "setEffectRecordConfirmListener";
+
+    /**
+     * Notice that the controller said no to something.
+     *
+     * <p>{@code declined} is the one outcome nothing ever wrote, and there is
+     * no bus event for it: an optional effect nobody took produces no zone
+     * change, no damage and no life total to notice, which is precisely why the
+     * schema wanted it — the counterfactual "it was offered and refused" is
+     * otherwise indistinguishable from "it was never offered".
+     *
+     * <p>Only the refusal is kept. The hook is called with both answers, the
+     * way the trigger-condition hook is, but an accepted offer is already
+     * described by the events it produced.
+     *
+     * <p>Package-visible so a test can drive it through a proxy of its own. The
+     * method name and the argument positions are the whole contract with the
+     * patch — {@link PatchHooks} looks both up by string — and a typo in either
+     * degrades this channel silently.
+     */
+    InvocationHandler confirmHandler() {
+        return (proxy, method, args) -> {
+            if (!"onConfirm".equals(method.getName()) || args == null
+                    || args.length < 2) {
+                return null;
+            }
+            if (Boolean.FALSE.equals(args[1])) {
+                noteDeclined();
+            }
+            return null;
+        };
+    }
+
+    /** Record a refusal against the open bracket, if there is one. */
+    void noteDeclined() {
+        if (resolving != null) {
+            bracketDeclined = true;
+        }
+    }
+
+    /**
+     * Whether the open bracket is a refusal rather than a resolution.
+     *
+     * <p>Both halves are required. A refusal alone is not enough: a line whose
+     * mandatory clause drew a card and whose optional clause was declined did
+     * something, and {@code resolved} is the honest word for it. An empty event
+     * list alone is not enough either — plenty of resolutions produce nothing
+     * this collector can observe. Together they are the shape the schema
+     * describes: offered, turned down, and nothing happened.
+     */
+    private boolean wasDeclined() {
+        return bracketDeclined && bracketEvents.isEmpty();
     }
 
     /**

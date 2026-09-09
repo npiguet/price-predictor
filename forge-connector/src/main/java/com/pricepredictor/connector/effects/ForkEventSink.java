@@ -15,6 +15,7 @@ import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventSurveil;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -42,15 +43,33 @@ import java.util.List;
  * <p>Its own {@link StatDiffer}, primed by nothing: a fork lives for one
  * resolution, so the first computed characteristics it sees are the baseline
  * the resolution moved away from.
+ *
+ * <p>Every event is stamped by {@link EventAttribution} on its way in, for the
+ * same reason: {@code attributed_to} and {@code duration} are how a reader asks
+ * which clause of the line did this and how long it lasts, and a fork that
+ * answered null to both was not describing the outcome the same way after all.
+ * Across the smoke corpus that silence was most of the 30.9% of events with no
+ * attribution at all.
  */
 final class ForkEventSink {
 
     private final Game fork;
+    /**
+     * The line whose resolution is being watched, or null when nothing resolves.
+     *
+     * <p>An interventional fork forces one ability, and that ability is the
+     * root the sub-ability pointer is read against. A damage-step probe forces
+     * no ability at all: it deals combat damage directly, so there is no root,
+     * and its events attribute exactly the way the observed combat record's do
+     * — from the pointer alone, which for a turn-based action names nothing.
+     */
+    private final SpellAbility acting;
     private final StatDiffer stats = new StatDiffer();
     private final List<EffectEvent> events = new ArrayList<>();
 
-    ForkEventSink(Game fork) {
+    ForkEventSink(Game fork, SpellAbility acting) {
         this.fork = fork;
+        this.acting = acting;
     }
 
     List<EffectEvent> events() {
@@ -61,36 +80,57 @@ final class ForkEventSink {
         return events.isEmpty();
     }
 
+    /**
+     * File one event, attributed.
+     *
+     * <p>The single door in, so a new subscriber cannot forget the stamp —
+     * which is exactly how the fork paths came to write events with a null
+     * {@code attributed_to} while the observed path stamped every one of its
+     * own. The bracket collector's {@code record} is the sibling of this.
+     */
+    private void file(EffectEvent event) {
+        if (event != null) {
+            events.add(EventAttribution.stamp(event, acting));
+        }
+    }
+
+    /** File a reading that produced several events, all from the same clause. */
+    private void fileAll(List<EffectEvent> produced) {
+        for (EffectEvent event : produced) {
+            file(event);
+        }
+    }
+
     @Subscribe
     public void onCardDamaged(GameEventCardDamaged event) {
         // Not combat: a forced resolution is not a combat damage step, and the
         // flag is what a reader uses to tell the two apart.
-        events.add(BusEvents.cardDamaged(event, false));
+        file(BusEvents.cardDamaged(event, false));
     }
 
     @Subscribe
     public void onPlayerDamaged(GameEventPlayerDamaged event) {
-        events.add(BusEvents.playerDamaged(event));
+        file(BusEvents.playerDamaged(event));
     }
 
     @Subscribe
     public void onLifeChanged(GameEventPlayerLivesChanged event) {
-        events.add(BusEvents.lifeChanged(event));
+        file(BusEvents.lifeChanged(event));
     }
 
     @Subscribe
     public void onPoisoned(GameEventPlayerPoisoned event) {
-        events.add(BusEvents.poisoned(event));
+        file(BusEvents.poisoned(event));
     }
 
     @Subscribe
     public void onCounters(GameEventCardCounters event) {
-        events.add(BusEvents.counters(event));
+        file(BusEvents.counters(event));
     }
 
     @Subscribe
     public void onTapped(GameEventCardTapped event) {
-        events.add(BusEvents.tapped(event));
+        file(BusEvents.tapped(event));
     }
 
     /**
@@ -103,14 +143,8 @@ final class ForkEventSink {
      */
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
-        EffectEvent moved = BusEvents.cardMoved(event);
-        if (moved != null) {
-            events.add(moved);
-        }
-        EffectEvent named = BusEvents.libraryMovement(event);
-        if (named != null) {
-            events.add(named);
-        }
+        file(BusEvents.cardMoved(event));
+        file(BusEvents.libraryMovement(event));
         if (event.card() != null && event.from() != null
                 && event.from().zoneType() == ZoneType.Battlefield) {
             // Off the battlefield a card's computed characteristics stop
@@ -138,27 +172,24 @@ final class ForkEventSink {
             }
             Card card = cardById(view.getId());
             if (card != null) {
-                events.addAll(stats.diff(card));
+                fileAll(stats.diff(card));
             }
         }
     }
 
     @Subscribe
     public void onAttachment(GameEventCardAttachment event) {
-        EffectEvent attached = BusEvents.attachment(event);
-        if (attached != null) {
-            events.add(attached);
-        }
+        file(BusEvents.attachment(event));
     }
 
     @Subscribe
     public void onScry(GameEventScry event) {
-        events.addAll(BusEvents.scry(event));
+        fileAll(BusEvents.scry(event));
     }
 
     @Subscribe
     public void onSurveil(GameEventSurveil event) {
-        events.addAll(BusEvents.surveil(event));
+        fileAll(BusEvents.surveil(event));
     }
 
     /**

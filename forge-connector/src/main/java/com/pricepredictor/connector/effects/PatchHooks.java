@@ -36,6 +36,7 @@ public final class PatchHooks {
             "forge.game.staticability.StaticAbilityCantAttackBlock";
     static final String CARD = "forge.game.card.Card";
     static final String COMBAT = "forge.game.combat.Combat";
+    static final String PLAYER_CONTROLLER_AI = "forge.ai.PlayerControllerAi";
 
     /**
      * One method the engine patch adds, and what having it buys.
@@ -107,7 +108,10 @@ public final class PatchHooks {
             new Hook(CARD, "getKeywordsWithout",
                     "removing the acting static's keywords from a continuous snapshot"),
             new Hook(COMBAT, "getAssignedDamage",
-                    "a combat record's assignment_choices"));
+                    "a combat record's assignment_choices"),
+            new Hook(PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
+                    "the declined outcome: an optional effect the controller "
+                    + "was offered and turned down"));
 
     /** The required hooks this checkout does not have. */
     public static List<Hook> missing() {

@@ -15,6 +15,7 @@ import forge.game.trigger.Trigger;
 import forge.game.trigger.WrappedAbility;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
+import forge.util.FileSection;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -90,7 +91,40 @@ public record ProvenanceKey(
     public static final String UNRESOLVED_UNKNOWN_KIND = "unknown_kind";
     /** The acting card is engine-built and has no script file in any tree. */
     public static final String UNRESOLVED_ENGINE_EFFECT = "engine_effect";
-    /** A keyable kind whose position in its own state could not be established. */
+    /**
+     * The trait came from a keyword the card does not print, and the permanent
+     * that handed it out is no longer reachable.
+     *
+     * <p>Truthful rather than alarming: a keyword an anthem or a pump spell
+     * granted names no printed line <em>on the recipient</em>, so there is
+     * nothing to key even when nothing is broken. The static-granted case does
+     * key — through the grantor — so what is left here is the spell-granted
+     * one, where Forge keeps no back-reference to the ability that granted it.
+     */
+    public static final String UNRESOLVED_GRANTED_KEYWORD = "granted_keyword";
+
+    /**
+     * The trait was built at runtime from another card's script and lives on a
+     * card other than the one whose text it came from.
+     *
+     * <p>An aura's or an equipment's granted trigger, an {@code Animate}'s
+     * granted ability, and an effect card's own traits are all parsed from an
+     * SVar of the donor. Forge points them at the donor's {@code CardState},
+     * which is enough to name the donor's script file, but the SVar is not a
+     * member of any of that state's trait slices and nothing records which
+     * printed line named the SVar — so the card is known and the line is not.
+     * Distinct from {@link #UNRESOLVED_UNINDEXABLE} because it is a property of
+     * how Forge grants traits, not evidence of a resolver that regressed.
+     */
+    public static final String UNRESOLVED_GRANTED_TRAIT = "granted_trait";
+
+    /**
+     * A keyable kind, printed on the state it names, whose position in that
+     * state could not be established.
+     *
+     * <p>The alarm. Every shape that legitimately has no printed line now has a
+     * reason of its own, so this one means the resolver regressed.
+     */
     public static final String UNRESOLVED_UNINDEXABLE = "unindexable";
 
     /** How many donor hops {@link #resolve} will take before giving up. */
@@ -138,11 +172,33 @@ public record ProvenanceKey(
      *       identity — a confidently wrong key naming the recipient's script.</li>
      *   <li><b>The trait as it stands</b>, by identity first and then by
      *       structural fingerprint, which is what catches the stack's copies.</li>
+     *   <li><b>Granted keywords</b> resolve through
+     *       {@code KeywordInterface.getStatic()} to the static that handed the
+     *       keyword out. A keyword granted by another permanent — Virulent
+     *       Sliver's poisonous, Eldrazi Conscription's annihilator — builds its
+     *       trigger on the <em>recipient</em>, where it names no printed line;
+     *       {@code Card.getKeywordForStaticAbility} records the grantor, and
+     *       that grantor's static is the printed line. Tried only when the
+     *       keyword is not one the state prints, so an intrinsic keyword still
+     *       keys to its own ordinal.</li>
+     *   <li><b>Engine-spawned triggers</b> resolve through
+     *       {@code Trigger.getSpawningAbility()}. A delayed trigger — the
+     *       "sacrifice it at the beginning of the next end step" that
+     *       {@code AtEOT$} builds, and the Immediate and Delayed trigger
+     *       effects — is assembled in Java onto an LKI copy of its host and is
+     *       a member of no slice at all, but it carries a copy of the ability
+     *       that spawned it, and that copy fingerprints back to the line.</li>
      *   <li><b>Copied abilities</b> resolve through the original-ability
      *       back-reference, which the stack sets but the cost-variant helpers
      *       do not.</li>
      *   <li><b>Effect cards</b> ({@code Foo's Effect}) key to the ability that
      *       created them, which is where the printed line lives.</li>
+     *   <li><b>Traits granted out of a donor's SVar</b> — an aura's
+     *       {@code AddTrigger$}, an {@code Animate}'s {@code Triggers$} — key
+     *       to the line that named the SVar, found by
+     *       {@link #keyForGrantingLine}. Forge keeps no back-reference for
+     *       these, so this is the one step that searches rather than follows,
+     *       and it is last for that reason.</li>
      * </ol>
      *
      * <p>{@code getOriginalHost()} is deliberately not used to key a granted
@@ -188,7 +244,19 @@ public record ProvenanceKey(
             // 4. The trait where it stands.
             ProvenanceKey here = keyFor(t);
             if (here != null) return new Resolved(here, null);
-            // 5. The copy's original.
+            // 5. A granted keyword's printed line is the donor's static.
+            KeywordInterface keyword = t.getKeyword();
+            if (keyword != null && keyword.getStatic() != null
+                    && keywordIndex(t.getCardState(), keyword) < 0) {
+                t = keyword.getStatic();
+                continue;
+            }
+            // 6. A trigger the engine spawned keys to the ability that spawned it.
+            if (t instanceof Trigger trigger && trigger.getSpawningAbility() != null) {
+                t = trigger.getSpawningAbility();
+                continue;
+            }
+            // 7. The copy's original.
             if (t instanceof SpellAbility sa) {
                 SpellAbility original = sa.getOriginalAbility();
                 if (original != null && original != sa) {
@@ -196,13 +264,16 @@ public record ProvenanceKey(
                     continue;
                 }
             }
-            // 6. An effect card's printed line belongs to whatever made it.
+            // 8. An effect card's printed line belongs to whatever made it.
             CardState state = t.getCardState();
             Card host = state == null ? t.getHostCard() : state.getCard();
             if (host != null && host.getEffectSourceAbility() != null) {
                 t = host.getEffectSourceAbility();
                 continue;
             }
+            // 9. A trait a donor line granted out of one of its own SVars.
+            ProvenanceKey granting = keyForGrantingLine(t);
+            if (granting != null) return new Resolved(granting, null);
             reason = reasonFor(t, state, host);
             break;
         }
@@ -210,14 +281,116 @@ public record ProvenanceKey(
     }
 
     /**
+     * The printed line that granted a trait out of one of its own SVars.
+     *
+     * <p>An aura's or an equipment's {@code AddTrigger$}, an {@code Animate}'s
+     * {@code Triggers$} and an {@code Effect}'s traits are all parsed from an
+     * SVar of the donor, and Forge points the result at the donor's
+     * {@code CardState} — so the card is known, and only the line is missing.
+     * Nothing in the engine records which line named the SVar, but the state
+     * still holds both halves, so the lookup Forge did on the way out can be
+     * done again on the way back: find the SVar whose text parses to exactly
+     * these parameters, then find the line that names that SVar.
+     *
+     * <p>Both halves refuse when more than one candidate matches, for the
+     * reason {@link #indexLike} refuses: a record with no key is still
+     * trainable through its state and payload, while a record with the wrong
+     * key silently trains the wrong line. The parameter comparison is equality
+     * between two runs of Forge's own {@code FileSection} parse, not a
+     * resemblance test, so a match is the SVar and not something like it.
+     *
+     * <p>This is the last resort, tried only once every back-reference in the
+     * chain has come up empty — which is also why walking four trait lists here
+     * costs nothing measurable: in the smoke corpus one record in a thousand
+     * ever reached this point.
+     */
+    private static ProvenanceKey keyForGrantingLine(CardTraitBase trait) {
+        CardState state = trait.getCardState();
+        if (state == null) return null;
+        Map<String, String> want = trait.getOriginalMapParams();
+        if (want == null || want.isEmpty()) return null;
+        String svar = soleSVarParsingTo(state, want);
+        if (svar == null) return null;
+        CardTraitBase line = soleLineNaming(state, svar);
+        return line == null ? null : keyFor(line);
+    }
+
+    /** The one SVar of {@code state} whose text parses to {@code want}, or null. */
+    private static String soleSVarParsingTo(CardState state, Map<String, String> want) {
+        String hit = null;
+        int hits = 0;
+        for (Map.Entry<String, String> svar : state.getSVars().entrySet()) {
+            String text = svar.getValue();
+            if (text == null || text.indexOf('$') < 0) continue;
+            if (want.equals(FileSection.parseToMap(
+                    text, FileSection.DOLLAR_SIGN_KV_SEPARATOR))) {
+                if (hits == 0) hit = svar.getKey();
+                hits++;
+            }
+        }
+        return hits == 1 ? hit : null;
+    }
+
+    /** The one printed line of {@code state} that names {@code svar}, or null. */
+    private static CardTraitBase soleLineNaming(CardState state, String svar) {
+        CardTraitBase hit = null;
+        int hits = 0;
+        for (String kind : List.of(
+                KIND_SPELL, KIND_TRIGGER, KIND_STATIC, KIND_REPLACEMENT)) {
+            Iterable<? extends CardTraitBase> slice = slice(state, kind);
+            if (slice == null) continue;
+            for (CardTraitBase candidate : slice) {
+                if (namesSVar(candidate, svar)) {
+                    if (hits == 0) hit = candidate;
+                    hits++;
+                }
+            }
+        }
+        return hits == 1 ? hit : null;
+    }
+
+    /**
+     * Whether a line names an SVar, as a whole word.
+     *
+     * <p>{@code AddTrigger$ TrigA & TrigB} and {@code Triggers$ TrigA} both
+     * name {@code TrigA}; a substring test would also match {@code TrigAttack}.
+     */
+    private static boolean namesSVar(CardTraitBase trait, String svar) {
+        Map<String, String> params = trait.getOriginalMapParams();
+        if (params == null) return false;
+        for (String value : params.values()) {
+            if (value == null) continue;
+            for (String token : SVAR_LIST.split(value)) {
+                if (token.equals(svar)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** How a line separates the SVar names it grants: spaces, commas, ampersands. */
+    private static final java.util.regex.Pattern SVAR_LIST =
+            java.util.regex.Pattern.compile("[\\s,&]+");
+
+    /**
      * Why a trait that reached the end of the chain names no printed line.
      *
-     * <p>The engine-built case is checked last and wins: The Monarch, The
+     * <p>The engine-built case is checked first and wins: The Monarch, The
      * Initiative and the dungeons are {@code new Card(...)} with their traits
      * built inline, no paper card and no rules, so no script file exists to
      * name. That is expected rather than a resolver failure, and the two have
      * to be distinguishable — an empty key alone cannot tell them apart, which
      * is exactly what hid this defect for a whole collection run.
+     *
+     * <p>The two granted cases exist for the same reason one layer down. A
+     * corpus that reported 443 {@code unindexable} traits was reporting a
+     * resolver bug that was not there: every one of them was a trait Forge
+     * grants at runtime — a poisonous trigger on the Sliver that received it, a
+     * Genju's trigger on an animated Plains, an {@code AtEOT$} sacrifice on a
+     * token copy — and lumping them in with the alarm makes the alarm
+     * unreadable, which is the same failure as an empty key with no reason at
+     * all. What the two say is checkable: {@code isCopiedTrait()} is Forge's
+     * own test for a trait living on a card other than the one whose script
+     * text it came from.
      */
     private static String reasonFor(CardTraitBase trait, CardState state, Card host) {
         if (isScriptless(host)) {
@@ -226,8 +399,16 @@ public record ProvenanceKey(
         if (state == null) {
             return UNRESOLVED_NO_CARD_STATE;
         }
-        if (trait.getKeyword() == null && kindOf(trait) == null) {
+        if (trait.getKeyword() != null) {
+            // keyFor refuses a keyword the state does not print, and the
+            // grantor hop has already been tried, so this is the granted one.
+            return UNRESOLVED_GRANTED_KEYWORD;
+        }
+        if (kindOf(trait) == null) {
             return UNRESOLVED_UNKNOWN_KIND;
+        }
+        if (trait.isCopiedTrait()) {
+            return UNRESOLVED_GRANTED_TRAIT;
         }
         return UNRESOLVED_UNINDEXABLE;
     }
@@ -323,9 +504,17 @@ public record ProvenanceKey(
     /**
      * The converted script path a live card's traits belong to.
      *
-     * <p>Forge is asked first and the name is only a fallback. A card loaded
-     * from the folder carries {@code CardRules.getNormalizedName()}, the stem of
-     * the file Forge actually read it from, and that beats any sanitizer:
+     * <p>Forge is asked first and the name is only a fallback. The strongest
+     * answer is {@code CardRules.getPath()}, the file the card reader actually
+     * opened: the converter keys each sidecar by that same path relativised
+     * against the same root, so taking it here is not a rule that agrees with
+     * the tree but the tree's own record, and the two cannot drift. It is also
+     * the only answer that is right for the 86 cards the tree does not file
+     * under their initial — {@code +2 Mace} is {@code cardsfolder/p/+2_mace.txt}
+     * and no derivation reaches that.
+     *
+     * <p>Failing that, {@code CardRules.getNormalizedName()} is the stem of the
+     * file Forge read the card from, and that still beats any sanitizer:
      * Forge's filenames disagree with its card names often enough to matter — a
      * Fallaji Archaeologist lives in {@code fallaji_archeologist.txt} — and a
      * misspelling cannot be derived. It also settles the two-faced cards for
@@ -349,10 +538,17 @@ public record ProvenanceKey(
             return CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem);
         }
         CardRules rules = host.getRules();
-        String normalized = rules == null ? null : rules.getNormalizedName();
-        if (normalized != null && !normalized.isEmpty()) {
-            return CardFilenames.scriptFileForStem(
-                    SourceTree.CARDSFOLDER, normalized);
+        if (rules != null) {
+            String read = SourceTree.relativePathIn(
+                    SourceTree.CARDSFOLDER, rules.getPath());
+            if (read != null) {
+                return SourceTree.CARDSFOLDER + "/" + read;
+            }
+            String normalized = rules.getNormalizedName();
+            if (normalized != null && !normalized.isEmpty()) {
+                return CardFilenames.scriptFileForStem(
+                        SourceTree.CARDSFOLDER, normalized);
+            }
         }
         return CardFilenames.scriptFile(SourceTree.CARDSFOLDER, host.getName());
     }

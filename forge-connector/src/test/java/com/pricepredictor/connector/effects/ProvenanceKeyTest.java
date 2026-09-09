@@ -8,7 +8,9 @@ import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
 import forge.game.spellability.SpellAbility;
+import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
+import forge.game.trigger.TriggerHandler;
 import forge.game.trigger.WrappedAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -504,5 +506,375 @@ class ProvenanceKeyTest {
 
         assertEquals(ProvenanceKey.resolve(printed).key(), ProvenanceKey.of(printed));
         assertNull(ProvenanceKey.of(null));
+    }
+
+    // -- the script path comes from the tree, not from a rule ------------
+
+    /**
+     * The card no derivation rule reaches. {@code +2 Mace} sanitizes to
+     * {@code +2_mace}, whose initial is {@code +}, and Forge files it under
+     * {@code p/}. Nothing downstream would have complained: only a
+     * {@code keyword} key is checked against its sidecar, so the fabricated
+     * path joined to nothing in silence.
+     */
+    @Test
+    void aCardTheTreeFilesUnderAnotherLetterKeysToWhereItReallyIs() {
+        Card mace = card("+2 Mace");
+        ProvenanceKey key = ProvenanceKey.of(
+                mace.getCurrentState().getStaticAbilities().iterator().next());
+
+        assertNotNull(key);
+        assertEquals("cardsfolder/p/+2_mace.txt", key.scriptFile());
+    }
+
+    /**
+     * And the ordinary case is untouched: the path is still the file Forge read
+     * the card from, which for almost every card is the derived one too.
+     */
+    @Test
+    void anOrdinaryCardStillKeysToItsLetterDirectory() {
+        Card fountain = card("Fountain of Youth");
+        ProvenanceKey key = ProvenanceKey.of(
+                scriptedSpell(fountain.getCurrentState(), "GainLife"));
+
+        assertNotNull(key);
+        assertEquals("cardsfolder/f/fountain_of_youth.txt", key.scriptFile());
+    }
+
+    /**
+     * The join is a string comparison, so what the collector writes has to be
+     * what the converter wrote: the source path relativised against the tree,
+     * with forward slashes, on a platform whose own separator is neither.
+     */
+    @Test
+    void theKeyedPathIsTheOneTheConverterWouldHaveWritten() {
+        Card mace = card("+2 Mace");
+        String path = ProvenanceKey.scriptFileOf(mace);
+
+        assertEquals(SourceTree.CARDSFOLDER + "/"
+                        + SourceTree.relativePathIn(
+                                SourceTree.CARDSFOLDER, mace.getRules().getPath()),
+                path);
+        assertEquals(-1, path.indexOf('\\'), path);
+    }
+
+    // -- granted keywords key to the permanent that granted them ---------
+
+    /**
+     * Virulent Sliver gives every Sliver poisonous 1, and poisonous builds a
+     * trigger — on the <em>recipient</em>, where it names no printed line. The
+     * recipient's keyword list is not an answer: it is a position in a list of
+     * things the card does not print. The static that handed the keyword out is
+     * the printed line, and {@code Card.getKeywordForStaticAbility} records it.
+     *
+     * <p>This was the largest single bucket among the 443 records that reported
+     * {@code unindexable} in the smoke corpus.
+     */
+    @Test
+    void aKeywordGrantedByAnotherPermanentKeysToThatPermanentsStatic() {
+        Card donor = card("Virulent Sliver");
+        StaticAbility grantor =
+                donor.getCurrentState().getStaticAbilities().iterator().next();
+        Card recipient = card("Metallic Sliver");
+
+        ProvenanceKey key = ProvenanceKey.of(
+                grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
+
+        assertNotNull(key, "a granted keyword's trigger must key to its donor");
+        assertEquals("cardsfolder/v/virulent_sliver.txt", key.scriptFile());
+        assertEquals(ProvenanceKey.KIND_STATIC, key.traitKind());
+        assertEquals(ProvenanceKey.of(grantor), key);
+    }
+
+    /**
+     * Never the recipient. Keying a granted trigger where it now lives would
+     * teach the model that Metallic Sliver — a vanilla 1/1 — prints a poison
+     * trigger, which is worse than naming no line at all.
+     */
+    @Test
+    void aGrantedKeywordNeverKeysToTheCardThatReceivedIt() {
+        Card donor = card("Virulent Sliver");
+        StaticAbility grantor =
+                donor.getCurrentState().getStaticAbilities().iterator().next();
+        Card recipient = card("Metallic Sliver");
+
+        ProvenanceKey key = ProvenanceKey.of(
+                grantedKeywordTrigger(recipient, "Poisonous:1", grantor));
+
+        assertNotEquals(ProvenanceKey.scriptFileOf(recipient), key.scriptFile());
+    }
+
+    /**
+     * A keyword the card does print is untouched by the donor hop: it still
+     * keys to its own ordinal, which is what the converter emits.
+     */
+    @Test
+    void aPrintedKeywordStillKeysToItsOwnOrdinal() {
+        Card blast = card("Blast from the Past");
+        CardState state = blast.getCurrentState();
+        KeywordInterface flashback = null;
+        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
+            if (keyword.getOriginal().startsWith("Flashback")) flashback = keyword;
+        }
+        assertNotNull(flashback);
+
+        SpellAbility derived =
+                scriptedSpell(state, "DealDamage").copy(blast, null, false, true);
+        derived.setKeyword(flashback);
+        ProvenanceKey key = ProvenanceKey.of(derived);
+
+        assertNotNull(key);
+        assertEquals(ProvenanceKey.KIND_KEYWORD, key.traitKind());
+        assertEquals(ProvenanceKey.keywordIndex(state, flashback), key.indexWithinKind());
+    }
+
+    /** The engine's own path for handing a keyword to another permanent. */
+    private static Trigger grantedKeywordTrigger(
+            Card recipient, String keyword, StaticAbility grantor) {
+        KeywordInterface granted =
+                recipient.getKeywordForStaticAbility(keyword, grantor, 1);
+        for (Trigger trigger : granted.getTriggers()) {
+            return trigger;
+        }
+        throw new AssertionError(keyword + " built no trigger");
+    }
+
+    // -- triggers the engine spawned ------------------------------------
+
+    /**
+     * A delayed trigger — the "sacrifice it at the beginning of the next end
+     * step" that {@code AtEOT$} builds — is assembled in Java rather than
+     * parsed from a card, so it is a member of no trait list anywhere. It does
+     * carry a copy of the ability that spawned it, and that is the printed
+     * line.
+     */
+    @Test
+    void aDelayedTriggerKeysToTheAbilityThatSpawnedIt() {
+        Card fountain = card("Fountain of Youth");
+        SpellAbility spawner = scriptedSpell(fountain.getCurrentState(), "GainLife");
+
+        ProvenanceKey key = ProvenanceKey.of(delayedTriggerSpawnedBy(spawner));
+
+        assertNotNull(key, "a delayed trigger must key to its spawner");
+        assertEquals(ProvenanceKey.of(spawner), key);
+        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+    }
+
+    /**
+     * The same shape spawned from inside a trigger's {@code Execute$} SVar
+     * keys one step further, to the {@code T:} line: the SVar is a member of no
+     * slice, so the trigger is what is printed. Two of the smoke corpus's
+     * biggest offenders were exactly this — a token created by a triggered
+     * ability and sacrificed at end of turn.
+     */
+    @Test
+    void aDelayedTriggerSpawnedInsideATriggerKeysToTheTriggerLine() {
+        Card brassMan = card("Brass Man");
+        Trigger printed = brassMan.getCurrentState().getTriggers().iterator().next();
+        SpellAbility execute = printed.ensureAbility();
+        execute.setTrigger(printed);
+
+        ProvenanceKey key = ProvenanceKey.of(delayedTriggerSpawnedBy(execute));
+
+        assertNotNull(key);
+        assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
+        assertEquals(ProvenanceKey.KIND_TRIGGER, key.traitKind());
+        assertEquals(0, key.indexWithinKind());
+    }
+
+    /**
+     * Built the way {@code SpellAbilityEffect.registerDelayedTrigger} builds
+     * it, minus the LKI host copy the engine passes — which changes nothing
+     * here, because the point is that the trigger belongs to no slice either
+     * way.
+     */
+    private static Trigger delayedTriggerSpawnedBy(SpellAbility spawner) {
+        Trigger delayed = TriggerHandler.parseTrigger(
+                "Mode$ Phase | Phase$ End Of Turn | TriggerDescription$ Sacrifice it.",
+                spawner.getHostCard(), spawner.isIntrinsic());
+        delayed.setSpawningAbility(spawner.copy(spawner.getHostCard(), true));
+        return delayed;
+    }
+
+    // -- reasons for the traits that genuinely have no printed line ------
+
+    // -- traits granted out of a donor's SVar ---------------------------
+
+    /**
+     * Genju of the Fields animates a Plains and hands it the
+     * {@code PseudoLifelink} trigger. Forge parses that from the aura's SVar
+     * and points it at the aura's state — enough to name the file, and nothing
+     * in the engine says which of the aura's lines named the SVar. Both halves
+     * are still in the state, so the lookup Forge did on the way out can be
+     * done again backwards: the SVar whose text parses to these parameters, and
+     * then the line that names that SVar.
+     *
+     * <p>This shape was half of the 443 records the smoke corpus reported as
+     * {@code unindexable}.
+     */
+    @Test
+    void anAuraGrantedTriggerKeysToTheLineThatGrantedIt() {
+        Card genju = card("Genju of the Fields");
+        SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
+        Trigger granted = grantedFromSVar(genju, card("Plains"), "PseudoLifelink", animate);
+
+        ProvenanceKey key = ProvenanceKey.of(granted);
+
+        assertNotNull(key, "the aura's own Animate line granted this trigger");
+        assertEquals(ProvenanceKey.of(animate), key);
+        assertEquals("cardsfolder/g/genju_of_the_fields.txt", key.scriptFile());
+        assertEquals(ProvenanceKey.KIND_SPELL, key.traitKind());
+    }
+
+    /** Never the creature that received it, which prints no such line. */
+    @Test
+    void anAuraGrantedTriggerNeverKeysToTheCreatureItWasGrantedTo() {
+        Card genju = card("Genju of the Fields");
+        Card plains = card("Plains");
+        SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
+
+        ProvenanceKey key = ProvenanceKey.of(
+                grantedFromSVar(genju, plains, "PseudoLifelink", animate));
+
+        assertNotEquals(ProvenanceKey.scriptFileOf(plains), key.scriptFile());
+    }
+
+    /**
+     * The equipment half of the same shape, and the commonest donor in the
+     * corpus: a continuous static with {@code AddTrigger$}, whose grantee is
+     * whatever it is attached to.
+     */
+    @Test
+    void anEquipmentGrantedTriggerKeysToTheStaticThatGrantedIt() {
+        Card aura = card("Commanding Presence");
+        StaticAbility grantor = null;
+        for (StaticAbility stAb : aura.getCurrentState().getStaticAbilities()) {
+            if (stAb.hasParam("AddTrigger")) grantor = stAb;
+        }
+        assertNotNull(grantor, "Commanding Presence grants a trigger");
+        Card recipient = card("Grizzly Bears");
+
+        // The engine's own path: Card.getTriggerForStaticAbility.
+        Trigger granted = recipient.getTriggerForStaticAbility(
+                aura.getCurrentState().getSVar(grantor.getParam("AddTrigger")), grantor);
+
+        ProvenanceKey key = ProvenanceKey.of(granted);
+        assertNotNull(key);
+        assertEquals(ProvenanceKey.of(grantor), key);
+        assertEquals("cardsfolder/c/commanding_presence.txt", key.scriptFile());
+        assertEquals(ProvenanceKey.KIND_STATIC, key.traitKind());
+    }
+
+    /**
+     * Two SVars with the same text cannot be told apart, so neither is
+     * answered. No key beats a wrong key here exactly as it does for the
+     * structural fingerprint.
+     */
+    @Test
+    void anAmbiguousSvarRefusesToGuessWhichLineGrantedIt() {
+        Card genju = card("Genju of the Fields");
+        CardState state = genju.getCurrentState();
+        SpellAbility animate = scriptedSpell(state, "Animate");
+        Trigger granted = grantedFromSVar(genju, card("Plains"), "PseudoLifelink", animate);
+        state.setSVar("PseudoLifelinkTwin", state.getSVar("PseudoLifelink"));
+
+        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+
+        assertNull(resolved.key(), "two SVars parse the same; neither is the answer");
+        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+    }
+
+    /**
+     * A granted trait the engine assembled in Java rather than from an SVar —
+     * {@code CountersPut}'s and {@code Earthbend}'s inline triggers — has no
+     * SVar to look up and no back-reference, so it names the donor card and no
+     * line. {@code unindexable} is the wrong reason for it: that one is
+     * documented as the signature of a resolver bug and must not appear in a
+     * healthy run, while this appears whenever an aura, an equipment or an
+     * {@code Animate} does its job.
+     */
+    @Test
+    void aGrantedTraitWithNoSvarToFindSaysItWasGrantedRatherThanRaisingTheAlarm() {
+        Card genju = card("Genju of the Fields");
+        SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
+        Trigger granted = TriggerHandler.parseTrigger(
+                "Mode$ Phase | Phase$ End Of Turn | TriggerDescription$ Assembled inline.",
+                card("Plains"), false, animate);
+
+        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+
+        assertNull(resolved.key(), "no SVar of the donor carries this text");
+        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_TRAIT, resolved.reason());
+    }
+
+    /** A granted trait still names the donor's card, even when the line is lost. */
+    @Test
+    void aGrantedTraitStillKnowsWhichCardGrantedIt() {
+        Card genju = card("Genju of the Fields");
+        SpellAbility animate = scriptedSpell(genju.getCurrentState(), "Animate");
+        Trigger granted = TriggerHandler.parseTrigger(
+                "Mode$ Phase | Phase$ End Of Turn | TriggerDescription$ Assembled inline.",
+                card("Plains"), false, animate);
+
+        assertEquals("cardsfolder/g/genju_of_the_fields.txt",
+                ProvenanceKey.scriptFileOf(granted.getCardState().getCard()),
+                "the donor's state is what Forge points a granted trait at");
+    }
+
+    /** Granted the way {@code AnimateEffectBase} grants: parsed from the donor's SVar. */
+    private static Trigger grantedFromSVar(
+            Card donor, Card recipient, String svar, SpellAbility granting) {
+        return TriggerHandler.parseTrigger(
+                donor.getCurrentState().getSVar(svar), recipient, false, granting);
+    }
+
+    /**
+     * A keyword granted by something that is not a continuous static — a pump
+     * spell's "gains flying until end of turn" — keeps no back-reference to the
+     * ability that granted it, so its trigger names no line anywhere. That is a
+     * property of how Forge grants keywords, not a resolver failure, and it
+     * says so.
+     */
+    @Test
+    void aKeywordGrantedWithNoGrantorSaysItWasGranted() {
+        Card recipient = card("Metallic Sliver");
+        Trigger granted = grantedKeywordTrigger(recipient, "Poisonous:1", null);
+
+        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(granted);
+
+        assertNull(resolved.key(), "the recipient prints no such keyword");
+        assertEquals(ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD, resolved.reason());
+    }
+
+    /**
+     * The alarm keeps its meaning: a trait printed on the state it names, which
+     * still cannot be placed in that state, is a resolver failure and nothing
+     * else.
+     */
+    @Test
+    void aPrintedTraitThatCannotBePlacedStillRaisesTheAlarm() {
+        Card fountain = card("Fountain of Youth");
+        SpellAbility stray = AbilityFactory.getAbility(
+                "DB$ GainLife | Defined$ You | LifeAmount$ 99", fountain);
+        stray.setCardState(fountain.getCurrentState());
+
+        ProvenanceKey.Resolved resolved = ProvenanceKey.resolve(stray);
+
+        assertNull(resolved.key());
+        assertEquals(ProvenanceKey.UNRESOLVED_UNINDEXABLE, resolved.reason());
+    }
+
+    /** Every reason is distinct, because a reason that collides says nothing. */
+    @Test
+    void theReasonVocabularyHasNoDuplicates() {
+        List<String> reasons = List.of(
+                ProvenanceKey.UNRESOLVED_NO_CARD_STATE,
+                ProvenanceKey.UNRESOLVED_UNKNOWN_KIND,
+                ProvenanceKey.UNRESOLVED_ENGINE_EFFECT,
+                ProvenanceKey.UNRESOLVED_GRANTED_KEYWORD,
+                ProvenanceKey.UNRESOLVED_GRANTED_TRAIT,
+                ProvenanceKey.UNRESOLVED_UNINDEXABLE);
+
+        assertEquals(reasons.size(), new java.util.HashSet<>(reasons).size());
     }
 }
