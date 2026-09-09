@@ -1205,6 +1205,234 @@ class TestProbeVisibility:
         )
 
 
+class TestAForksTurnAgreesWithItsMirror:
+    """The residue of the game_id check, named where it can be acted on.
+
+    A probe re-runs one damage step from the state the real combat was in, so
+    the fork and the record it mirrors describe one moment. When the fork's
+    snapshot lags, the game_id check sees a backward turn jump and blames a
+    game merge that never happened — which is how 3.9% of the smoke corpus's
+    probe forks were reported for a whole pass.
+    """
+
+    def _probe(self, record_id: str, mirror: str, turn: int):
+        return _combat(
+            record_id, fork=True, mirror_of=mirror, state=_snapshot(turn=turn),
+            payload=CombatPayload(attackers=("E0",), probed_keyword="trample"),
+        )
+
+    def _real(self, record_id: str, turn: int):
+        return _combat(record_id, state=_snapshot(turn=turn))
+
+    def test_a_fork_at_its_mirrors_turn_holds(self):
+        records = _healthy() + [
+            self._real("run.0-L1.900", 6),
+            self._probe("run.0-L1.901", "run.0-L1.900", 6),
+        ]
+        finding = _named(validate_corpus(records), "agrees with the record it mirrors")
+        assert finding.ok, finding.detail
+        assert "0/1 forks disagree" in finding.measured
+
+    def test_a_stale_fork_snapshot_is_named_with_both_turns(self):
+        records = _healthy() + [
+            self._real("run.0-L1.900", 9),
+            self._probe("run.0-L1.901", "run.0-L1.900", 8),
+        ]
+        finding = _named(validate_corpus(records), "agrees with the record it mirrors")
+        assert not finding.ok, finding.measured
+        assert "1/1 forks disagree" in finding.measured
+        assert any(
+            "run.0-L1.901 at turn 8 mirrors run.0-L1.900 at turn 9" in line
+            for line in finding.detail
+        )
+
+    def test_a_fork_ahead_of_its_mirror_is_caught_too(self):
+        """Only lag has been observed, but the invariant is agreement."""
+        records = _healthy() + [
+            self._real("run.0-L1.900", 6),
+            self._probe("run.0-L1.901", "run.0-L1.900", 7),
+        ]
+        assert not _named(
+            validate_corpus(records), "agrees with the record it mirrors"
+        ).ok
+
+    def test_a_mirror_outside_the_window_is_counted_apart_and_judged_not_at_all(
+        self,
+    ):
+        """``--limit`` cuts the stream mid-game; the missing half is the
+        reader's doing, not the collector's."""
+        records = _healthy() + [self._probe("run.0-L1.901", "run.0-L1.900", 8)]
+        finding = _named(validate_corpus(records), "agrees with the record it mirrors")
+        assert finding.ok, finding.detail
+        assert "0/0 forks disagree" in finding.measured
+        assert "1 mirrors fell outside the window" in finding.measured
+
+    def test_a_fork_written_before_the_record_it_mirrors_still_joins(self):
+        """A shard may carry either half first, so the comparison waits for the
+        end of the pass rather than for the next record."""
+        records = _healthy() + [
+            self._probe("run.0-L1.901", "run.0-L1.900", 8),
+            self._real("run.0-L1.900", 9),
+        ]
+        assert not _named(
+            validate_corpus(records), "agrees with the record it mirrors"
+        ).ok
+
+
+class TestForkEventsNameAClause:
+    """Attribution on the records the fork collectors write, measured apart.
+
+    The aggregate hid this: the observed records reached 84.8% naming a clause
+    while every one of the 1,698 fork events in the same window said nothing,
+    and the two averaged into a number that read as a channel warming up.
+    """
+
+    def _fork(self, record_id: str, attributed_to):
+        return _resolution(
+            record_id, interventional=True, fork=True,
+            payload=ResolutionPayload(
+                events=(
+                    Event(
+                        type=EventType.DAMAGE_DEALT, subjects=("E1",),
+                        attributed_to=attributed_to,
+                    ),
+                ),
+            ),
+        )
+
+    def test_a_window_with_no_forks_says_so_without_failing(self):
+        finding = _named(validate_corpus(_healthy()), "fork records")
+        assert finding.watched and finding.ok
+        assert "0/0" in finding.measured
+
+    def test_silent_fork_events_are_watched_by_default(self):
+        records = _healthy() + [self._fork("run.0-L1.900", None)]
+        finding = _named(validate_corpus(records), "fork records")
+        assert finding.watched and finding.ok
+        assert "0/1 events on fork records name a clause" in finding.measured
+        assert "absent: 1" in finding.detail
+
+    def test_a_floor_turns_the_measurement_into_a_verdict(self):
+        records = _healthy() + [self._fork("run.0-L1.900", None)]
+        finding = _named(
+            validate_corpus(records, Thresholds(min_fork_attributed_rate=0.9)),
+            "fork records",
+        )
+        assert not finding.ok and not finding.watched
+
+    def test_a_fork_naming_the_root_line_clears_the_floor(self):
+        records = _healthy() + [self._fork("run.0-L1.900", ATTRIBUTION_ROOT)]
+        assert _named(
+            validate_corpus(records, Thresholds(min_fork_attributed_rate=0.9)),
+            "fork records",
+        ).ok
+
+    def test_an_explicit_unresolved_counts_as_naming_something(self):
+        """Saying the pointer did not land is a fact; saying nothing is not."""
+        records = _healthy() + [self._fork("run.0-L1.900", ATTRIBUTION_UNRESOLVED)]
+        finding = _named(validate_corpus(records), "fork records")
+        assert "1/1 events on fork records name a clause" in finding.measured
+
+
+class TestEventsThatDeclareACauseNameOne:
+    """The identity channel the duplicate-event check leans on.
+
+    Two attackers dealing 1 to the same player differ in nothing but their
+    cause, so an empty one turns two real outcomes into one outcome written
+    twice — the collector is right not to dedupe them and the duplicate check
+    is right to complain, and only this number says which side to fix.
+    """
+
+    def _zone_change(self, record_id: str, cause):
+        params = {"from_zone": "battlefield", "to_zone": "graveyard"}
+        if cause is not None:
+            params["cause"] = cause
+        return _resolution(
+            record_id,
+            payload=ResolutionPayload(
+                events=(
+                    Event(
+                        type=EventType.ZONE_CHANGE, subjects=("E1",),
+                        params=params, attributed_to=ATTRIBUTION_ROOT,
+                    ),
+                ),
+            ),
+        )
+
+    def test_a_missing_cause_is_watched_by_default(self):
+        records = _healthy() + [self._zone_change("run.0-L1.900", None)]
+        finding = _named(validate_corpus(records), "declare a cause")
+        assert finding.watched and finding.ok
+        # Four of the healthy window's trigger records carry a zone_change of
+        # their own, and none of them names a cause either.
+        assert "0/5 events" in finding.measured
+
+    def test_a_populated_cause_is_counted(self):
+        records = _healthy() + [self._zone_change("run.0-L1.900", "E7")]
+        finding = _named(validate_corpus(records), "declare a cause")
+        assert "1/5 events" in finding.measured
+        assert "zone_change: 1/5" in finding.detail
+
+    def test_a_floor_turns_the_measurement_into_a_verdict(self):
+        records = _healthy() + [self._zone_change("run.0-L1.900", None)]
+        finding = _named(
+            validate_corpus(records, Thresholds(min_cause_rate=0.5)),
+            "declare a cause",
+        )
+        assert not finding.ok and not finding.watched
+
+    def test_a_type_whose_row_declares_no_cause_is_not_measured(self):
+        """Every type *may* carry a cause and most correctly never do, so a
+        rate over the whole vocabulary would read near zero and mean nothing.
+        The healthy window's resolutions are damage_dealt, which declares
+        ``source`` instead, so only its four zone_changes are counted."""
+        finding = _named(validate_corpus(_healthy()), "declare a cause")
+        assert "0/4 events" in finding.measured
+        assert not any("damage_dealt" in line for line in finding.detail)
+
+
+class TestNonKeywordKeysAreWatchedNotJudged:
+    """Every trait kind is joined; only the keyword kind carries the verdict.
+
+    A spell or static mismatch has a cause a keyword mismatch does not — a
+    reconversion between collection and training, or a line the converter never
+    emits at all — and nobody has measured what its healthy value is. Reported
+    as its own number rather than folded into the keyword line's tail, because
+    a number in a passing check's detail is a number nobody reads.
+    """
+
+    def _spell_record(self, index: int):
+        return _trigger(
+            "run.0-L1.900", ability=(ProvenanceKey(_BEARS, 0, "spell", index),),
+        )
+
+    def test_a_spell_mismatch_is_reported_without_failing_the_run(self, tmp_path):
+        sidecars = _write_bears_sidecar(tmp_path, (0,))
+        findings = validate_corpus(
+            [*_healthy(), self._spell_record(3)], None, sidecars,
+        )
+        finding = _named(findings, "non-keyword provenance keys")
+        assert finding.watched and finding.ok
+        assert "keys of every other trait kind fail to join" in finding.measured
+        # Both spell keys in the window: the planted mismatch, and the healthy
+        # window's own line, whose card has no sidecar in this tree.
+        assert "spell: 2/2 unjoinable" in finding.detail
+        assert _named(findings, "keyword provenance keys").ok
+
+    def test_the_keyword_line_reports_only_keyword_keys(self):
+        """It reported both tallies in one sentence, and the one that could
+        fail the run was the one an operator stopped reading."""
+        finding = _named(validate_corpus(_healthy()), "keyword provenance keys")
+        assert "over all" not in finding.measured
+
+    def test_both_findings_say_so_when_no_tree_was_readable(self):
+        findings = validate_corpus(_healthy(), None, None)
+        for fragment in ("keyword provenance keys", "non-keyword provenance keys"):
+            finding = _named(findings, fragment)
+            assert finding.watched and finding.ok
+            assert "none checked" in finding.measured
+
+
 @pytest.mark.parametrize(
     "fragment",
     [
@@ -1224,6 +1452,10 @@ class TestProbeVisibility:
         "draw negatives",
         "where the card came from",
         "name what produced them",
+        "fork records",
+        "declare a cause",
+        "agrees with the record it mirrors",
+        "non-keyword provenance keys",
         "probe forks",
     ],
 )

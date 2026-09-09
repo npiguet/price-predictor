@@ -969,6 +969,32 @@ EFFECT_PLAYABILITY_RATE = 0.1
 EFFECT_INTERVENTIONS_PER_GAME = 2
 EFFECT_PROBES_PER_GAME = 2
 EFFECT_PROBE_KEYWORDS = ""
+EFFECT_LEGALITY_RATE = 0.1
+EFFECT_SNAPSHOT_TIERS = "1,2,3"
+
+
+def _snapshot_tiers(text: str) -> str:
+    """`--snapshot-tiers` as argparse wants it: validated, still the string.
+
+    The rule is restated here rather than imported, like the cap defaults
+    above and for the same reason — this package never imports ``effects`` —
+    and a test that may see both sides pins the two spellings together.
+    Checked at all because the JVM's two failure modes are both worse than an
+    argument error: an unparseable vector falls back to the default silently,
+    and a parseable non-prefix throws once a game is already running.
+    """
+    try:
+        tiers = tuple(int(part.strip()) for part in text.split(",") if part.strip())
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"snapshot tiers must be comma-separated integers, got {text!r}"
+        ) from None
+    if tiers != (1, 2, 3, 4)[:len(tiers)] or len(tiers) < 2:
+        raise argparse.ArgumentTypeError(
+            "snapshot tiers must be a prefix of [1, 2, 3, 4] holding at least "
+            f"1 and 2, got {list(tiers)}"
+        )
+    return text
 
 
 def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
@@ -991,6 +1017,12 @@ def _effect_collection_caps(args: argparse.Namespace) -> dict[str, str]:
         ),
         "effect.probe.keywords": str(
             getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS)
+        ),
+        "effect.legality.rate": str(
+            getattr(args, "legality_rate", EFFECT_LEGALITY_RATE)
+        ),
+        "effect.snapshot.tiers": str(
+            getattr(args, "snapshot_tiers", EFFECT_SNAPSHOT_TIERS)
         ),
     }
 
@@ -1024,7 +1056,8 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         default=EFFECT_PLAYABILITY_RATE,
         help=(
             "Fraction of decision-subkind playability logging points sampled."
-            " attackers and blockers records are always logged."
+            " attackers and blockers records are sampled separately, at"
+            " --legality-rate."
             f" Default: {EFFECT_PLAYABILITY_RATE}."
         ),
     )
@@ -1056,6 +1089,30 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
             " --probes-per-game says. e.g. --probe-keywords"
             " first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
+        ),
+    )
+    parser.add_argument(
+        "--legality-rate",
+        type=float,
+        default=EFFECT_LEGALITY_RATE,
+        help=(
+            "Fraction of legality-subkind playability logging points kept,"
+            " sampled after the dedup. Separate from --playability-rate: the"
+            " two subkinds arrive at very different volumes from the same"
+            f" priority pass. Default: {EFFECT_LEGALITY_RATE}."
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-tiers",
+        type=_snapshot_tiers,
+        default=EFFECT_SNAPSHOT_TIERS,
+        help=(
+            "Snapshot inclusion depth, comma-separated; a prefix of 1,2,3,4."
+            " 1 referenced objects, 2 core (global, battlefield, command-zone"
+            " effect cards), 3 the unreferenced stack, 4 unreferenced hands"
+            " and graveyards. Run-level, so every collector renders at the"
+            " same depth. Default:"
+            f" {EFFECT_SNAPSHOT_TIERS}."
         ),
     )
 

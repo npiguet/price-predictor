@@ -11,11 +11,15 @@ with the collectors US2 adds.
 
 from __future__ import annotations
 
+import pytest
+
 from sealed.infrastructure.cli import (
     EFFECT_INTERVENTIONS_PER_GAME,
+    EFFECT_LEGALITY_RATE,
     EFFECT_MANA_CAP,
     EFFECT_PLAYABILITY_RATE,
     EFFECT_PROBES_PER_GAME,
+    EFFECT_SNAPSHOT_TIERS,
     announce_probe_state,
     build_parser,
 )
@@ -43,13 +47,15 @@ class TestEffectRecordsOptIn:
 
 
 class TestCapAndBudgetFlags:
-    def test_the_five_defaults_are_the_contracts(self):
+    def test_the_defaults_are_the_contracts(self):
         args = parse("match-outcomes")
         assert args.mana_cap == 1
         assert args.playability_rate == 0.1
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
         assert args.probe_keywords == ""
+        assert args.legality_rate == 0.1
+        assert args.snapshot_tiers == "1,2,3"
 
     def test_the_constants_and_the_defaults_agree(self):
         args = parse("match-outcomes")
@@ -57,6 +63,8 @@ class TestCapAndBudgetFlags:
         assert args.playability_rate == EFFECT_PLAYABILITY_RATE
         assert args.interventions_per_game == EFFECT_INTERVENTIONS_PER_GAME
         assert args.probes_per_game == EFFECT_PROBES_PER_GAME
+        assert args.legality_rate == EFFECT_LEGALITY_RATE
+        assert args.snapshot_tiers == EFFECT_SNAPSHOT_TIERS
 
     def test_probes_are_off_unless_keywords_are_named(self):
         """No probe fork is taken at all with the flag unset (US3 acceptance 3)."""
@@ -73,11 +81,31 @@ class TestCapAndBudgetFlags:
             "--playability-rate", "0.5",
             "--interventions-per-game", "4",
             "--probes-per-game", "1",
+            "--legality-rate", "0.5",
+            "--snapshot-tiers", "1,2,3,4",
         )
         assert args.mana_cap == 50
         assert args.playability_rate == 0.5
         assert args.interventions_per_game == 4
         assert args.probes_per_game == 1
+        assert args.legality_rate == 0.5
+        assert args.snapshot_tiers == "1,2,3,4"
+
+    def test_the_tier_vector_is_reachable_from_this_supervisor_too(self):
+        """It was documented in `MatchWorkerMain`, read by the JVM, and
+        settable by no command, so stage three's hand-and-graveyard tier took
+        a code edit to request."""
+        assert parse(
+            "match-outcomes", "--snapshot-tiers", "1,2,3,4",
+        ).snapshot_tiers == "1,2,3,4"
+
+    @pytest.mark.parametrize("bad", ["1,3", "1", "1,two,3"])
+    def test_a_vector_the_snapshot_builder_would_refuse_is_refused_here(self, bad):
+        """The JVM falls back silently on an unparseable vector and throws
+        mid-game on a parseable non-prefix; both are worse than a usage
+        error."""
+        with pytest.raises(SystemExit):
+            parse("match-outcomes", "--snapshot-tiers", bad)
 
 
 class TestProbesAnnounceThemselves:

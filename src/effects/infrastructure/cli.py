@@ -19,10 +19,13 @@ from pathlib import Path
 
 from effects.domain.collection_caps import (
     DEFAULT_INTERVENTIONS_PER_GAME,
+    DEFAULT_LEGALITY_RATE,
     DEFAULT_MANA_CAP,
     DEFAULT_PLAYABILITY_RATE,
     DEFAULT_PROBES_PER_GAME,
+    DEFAULT_SNAPSHOT_TIERS,
     CollectionCaps,
+    parse_snapshot_tiers,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,12 +53,20 @@ DEFAULT_MIN_COST_EVIDENCE = 200
 DEFAULT_MAX_DUPLICATE_EVENT_RATE = 0.02
 DEFAULT_MAX_TRIGGER_FIRED_SHARE = 0.65
 
-#: The two rates `validate-corpus` measures and does not judge unless asked.
+#: The rates `validate-corpus` measures and does not judge unless asked.
 #: Their healthy value is not yet known — a `zone_change` for a card *made*
-#: rather than moved has no origin to report — so a default floor would fail
-#: every run, which is the failure mode the whole command exists to avoid.
+#: rather than moved has no origin to report, and a hook that names no causing
+#: object is not a collector that lost it — so a default floor would fail every
+#: run, which is the failure mode the whole command exists to avoid.
 DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE = None
 DEFAULT_MIN_ATTRIBUTED_RATE = None
+DEFAULT_MIN_FORK_ATTRIBUTED_RATE = None
+DEFAULT_MIN_CAUSE_RATE = None
+
+#: Judged, and at zero: a fork is taken at the moment it mirrors, so the two
+#: records describe one moment and there is no rate at which they may disagree
+#: about which turn it is.
+DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE = 0.0
 
 #: Caps and budgets, shared by every collecting supervisor (FR-028).
 CAP_DEFAULTS: dict[str, object] = {
@@ -64,6 +75,8 @@ CAP_DEFAULTS: dict[str, object] = {
     "interventions_per_game": DEFAULT_INTERVENTIONS_PER_GAME,
     "probes_per_game": DEFAULT_PROBES_PER_GAME,
     "probe_keywords": "",
+    "legality_rate": DEFAULT_LEGALITY_RATE,
+    "snapshot_tiers": DEFAULT_SNAPSHOT_TIERS,
 }
 
 
@@ -75,6 +88,22 @@ def _add_cards_folder(parser: argparse.ArgumentParser) -> None:
             f"{' and '.join(DEFAULT_CARDS_FOLDERS)}."
         ),
     )
+
+
+def _snapshot_tiers(text: str) -> str:
+    """`--snapshot-tiers` as argparse wants it: validated, still the string.
+
+    The value travels to the JVM as a comma-separated property, so it stays a
+    string; only its shape is checked here. Raising
+    ``ArgumentTypeError`` puts the rule in the usage message rather than in a
+    traceback, and catches the vector the JVM would otherwise accept silently
+    and then throw on mid-game.
+    """
+    try:
+        parse_snapshot_tiers(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+    return text
 
 
 def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
@@ -118,6 +147,28 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
             "later. e.g. --probe-keywords "
             "first_strike,double_strike,deathtouch,lifelink,trample,"
             "indestructible,wither,infect"
+        ),
+    )
+    parser.add_argument(
+        "--legality-rate", type=float, default=CAP_DEFAULTS["legality_rate"],
+        help=(
+            "Fraction of legality-subkind logging points kept, sampled after "
+            "the dedup (default: 0.1). Separate from --playability-rate "
+            "because the two subkinds arrive at very different volumes from "
+            "the same priority pass."
+        ),
+    )
+    parser.add_argument(
+        "--snapshot-tiers", type=_snapshot_tiers,
+        default=CAP_DEFAULTS["snapshot_tiers"],
+        help=(
+            "Snapshot inclusion depth, comma-separated (default: "
+            f"{DEFAULT_SNAPSHOT_TIERS}). A prefix of 1,2,3,4: 1 referenced "
+            "objects, 2 core (global, battlefield, command-zone effect "
+            "cards), 3 the unreferenced stack, 4 unreferenced hands and "
+            "graveyards. Run-level, so every collector renders at the same "
+            "depth — a depth that varies by kind makes state.tiers a proxy "
+            "for how the record was collected."
         ),
     )
 
@@ -488,6 +539,38 @@ def _validate_corpus_parser(subparsers) -> None:
             "failing the run"
         ),
     )
+    parser.add_argument(
+        "--min-fork-attributed-rate", type=float,
+        default=DEFAULT_MIN_FORK_ATTRIBUTED_RATE,
+        help=(
+            "Share of events on fork records that must name a producing "
+            "clause. Unset by default: measured and reported as [WATCH]. Kept "
+            "apart from --min-attributed-rate because the fork collectors are "
+            "different code, and the aggregate hid a fork path writing null "
+            "on every event"
+        ),
+    )
+    parser.add_argument(
+        "--min-cause-rate", type=float, default=DEFAULT_MIN_CAUSE_RATE,
+        help=(
+            "Share of the events whose schema row declares a cause that must "
+            "populate it. Unset by default: measured and reported as [WATCH]. "
+            "An empty cause is what makes two attackers' identical damage "
+            "read as one outcome written twice"
+        ),
+    )
+    parser.add_argument(
+        "--max-mirror-turn-disagreement-rate", type=float,
+        default=DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE,
+        help=(
+            "Share of fork records whose turn may differ from the record they "
+            f"mirror (default: {DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE}). "
+            "A fork is taken at the moment it mirrors, so a disagreement is a "
+            "stale snapshot; it surfaced before as a backward turn jump in "
+            "the game_id check, which blamed a game merge that had not "
+            "happened"
+        ),
+    )
     _add_cards_folder(parser)
 
 
@@ -525,6 +608,9 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
         max_trigger_fired_share=args.max_trigger_fired_share,
         min_zone_change_from_zone_rate=args.min_zone_change_from_zone_rate,
         min_attributed_rate=args.min_attributed_rate,
+        min_fork_attributed_rate=args.min_fork_attributed_rate,
+        min_cause_rate=args.min_cause_rate,
+        max_mirror_turn_disagreement_rate=args.max_mirror_turn_disagreement_rate,
     )
     sidecars = _sidecars_for_validation(args)
     findings = validate_corpus(read_window(root, args.limit), thresholds, sidecars)

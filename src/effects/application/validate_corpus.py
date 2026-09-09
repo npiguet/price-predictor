@@ -36,10 +36,15 @@ import hashlib
 import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from effects.domain.event_schema import Event, EventType, attribution_kind
+from effects.domain.event_schema import (
+    CAUSE_BEARING_TYPES,
+    Event,
+    EventType,
+    attribution_kind,
+)
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
@@ -142,6 +147,26 @@ class Thresholds:
     #: sub-ability index, the root line, or an explicit ``unresolved``. ``None``
     #: watches the number without judging it.
     min_attributed_rate: float | None = None
+    #: Share of fork records' events that must name a producing clause.
+    #: Separate from :attr:`min_attributed_rate` because the fork collectors
+    #: are different code that the attribution channel reached last: the
+    #: aggregate rate hides a fork path writing ``null`` on every event behind
+    #: the observed records' healthy majority. ``None`` watches it.
+    min_fork_attributed_rate: float | None = None
+    #: Share of the events whose own parameter row declares ``cause`` that
+    #: must populate it. An empty ``cause`` is why two attackers dealing 1 to
+    #: the same player serialize byte-identically and read as a duplicated
+    #: event. ``None`` watches the number: the healthy share is below 1 —
+    #: some hooks genuinely name no causing object — and is not yet known.
+    min_cause_rate: float | None = None
+    #: Share of fork records that may carry a ``state.global.turn`` differing
+    #: from the record they mirror. Judged at zero rather than watched: a fork
+    #: is taken *at* the moment it mirrors, so its snapshot is that moment's,
+    #: and there is no healthy rate at which the two disagree. The smoke
+    #: corpus disagreed on 3.9% of probe forks, always behind, and that was
+    #: the whole residue of the game_id invariant — which reported it as a
+    #: backward turn jump, naming the game rather than the collector.
+    max_mirror_turn_disagreement_rate: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,7 +394,11 @@ class _Tally:
 
     def __init__(self) -> None:
         self.total = 0
-        self.record_ids: set[str] = set()
+        #: Every record id seen, and the turn its snapshot claims. One dict
+        #: rather than a set plus a parallel map: the id membership test and
+        #: the mirror comparison want the same keys, and the window is held in
+        #: memory precisely once either way.
+        self.record_turns: dict[str, int] = {}
         self.duplicate_ids = 0
         self.duplicate_id_examples: list[str] = []
         self.games: dict[str, _Game] = defaultdict(_Game)
@@ -406,6 +435,14 @@ class _Tally:
         self.probe_forks = 0
         self.probed_keywords: Counter[str] = Counter()
         self.interventions = 0
+        #: (fork record id, the record it mirrors, the fork's own turn).
+        #: Compared after the pass, not during it, because a shard may carry
+        #: the fork before the record it mirrors.
+        self.mirrors: list[tuple[str, str, int]] = []
+        self.fork_events = 0
+        self.fork_attribution: Counter[str] = Counter()
+        #: event type -> [carries a cause, seen]
+        self.cause_bearing: dict[str, list[int]] = defaultdict(lambda: [0, 0])
 
     def add(self, record: EffectRecord) -> None:
         self.total += 1
@@ -414,12 +451,15 @@ class _Tally:
         self.modes[record.mode.value] += 1
         self.mode_examples.setdefault(record.mode.value, record.record_id)
 
-        if record.record_id in self.record_ids:
+        turn = record.state.global_.turn
+        if record.record_id in self.record_turns:
             self.duplicate_ids += 1
             if len(self.duplicate_id_examples) < _EXAMPLES:
                 self.duplicate_id_examples.append(record.record_id)
         else:
-            self.record_ids.add(record.record_id)
+            self.record_turns[record.record_id] = turn
+        if record.mirror_of is not None:
+            self.mirrors.append((record.record_id, record.mirror_of, turn))
 
         game = self.games[record.game_id]
         game.names.update(entity.name for entity in record.state.entities)
@@ -429,7 +469,6 @@ class _Tally:
             # mark a later record is measured against.
             self.mana_flush_exempt += 1
         else:
-            turn = record.state.global_.turn
             if turn < game.max_turn:
                 game.backward_jump = max(game.backward_jump, game.max_turn - turn)
             game.max_turn = max(game.max_turn, turn)
@@ -500,6 +539,13 @@ class _Tally:
                 self.zone_changes += 1
                 self.zone_changes_with_from += bool(event.params.get("from_zone"))
                 self.zone_change_to[str(event.params.get("to_zone"))] += 1
+            if event.type in CAUSE_BEARING_TYPES:
+                counts = self.cause_bearing[event.type.value]
+                counts[0] += bool(event.params.get("cause"))
+                counts[1] += 1
+            if record.fork:
+                self.fork_events += 1
+                self.fork_attribution[attribution_kind(event.attributed_to)] += 1
         if isinstance(record.payload, ResolutionPayload):
             for event in record.payload.events:
                 self.resolution_events += 1
@@ -528,7 +574,7 @@ class _Tally:
             self._links_pair(limits),
             *self._acting_lines(limits),
             self._empty_ability_says_why(),
-            self._keys_join_their_sidecar(sidecars),
+            *self._keys_join_their_sidecar(sidecars),
             self._collected_patched(),
             self._outcome_varies(),
             self._costs_carry_something(limits),
@@ -538,6 +584,9 @@ class _Tally:
             self._trigger_negatives(limits),
             self._zone_changes_say_where_from(limits),
             self._resolution_events_name_a_clause(limits),
+            self._fork_events_name_a_clause(limits),
+            self._cause_bearing_events_name_a_cause(limits),
+            self._forks_share_their_mirrors_turn(limits),
             self._probe_forks_were_taken(),
         ]
 
@@ -547,7 +596,7 @@ class _Tally:
             name="record_id is unique across the run's shards",
             ok=self.duplicate_ids == 0,
             measured=(
-                f"{self.duplicate_ids} repeats of {len(self.record_ids)} "
+                f"{self.duplicate_ids} repeats of {len(self.record_turns)} "
                 f"distinct ids over {self.total} records ({rate:.1%})"
             ),
             detail=tuple(f"repeated: {rid}" for rid in self.duplicate_id_examples),
@@ -672,7 +721,7 @@ class _Tally:
             ),
         )
 
-    def _keys_join_their_sidecar(self, sidecars) -> Finding:
+    def _keys_join_their_sidecar(self, sidecars) -> list[Finding]:
         """Every provenance key the window names resolves in its own sidecar.
 
         This is the check that would have caught the launch blocker: the
@@ -682,26 +731,35 @@ class _Tally:
         could notice, because a wrong row is indistinguishable from a right one
         until a human reads the text beside a record.
 
+        Two findings over one join, because the two kinds of key fail for
+        different reasons and only one of them has a calibrated threshold.
         ``keyword`` keys carry the verdict: they are the kind that disagreed,
-        and the only kind whose ordinal is derived rather than positional. Every
-        other kind is measured and reported without failing the run, because a
-        mismatch there has a cause a keyword mismatch does not — a reconversion
-        between collection and training — and the number is what an operator
-        needs either way.
+        and the only kind whose ordinal is derived rather than positional.
+        Every other kind — ``spell``, ``static``, ``trigger``, ``replacement``
+        — is reported as its own watched number rather than folded into the
+        keyword line's tail, because a mismatch there has a cause a keyword
+        mismatch does not (a reconversion between collection and training, or
+        a line the converter never emits at all, like an ``SVar``-borne static
+        on an Effect card) and nobody has yet measured what its healthy value
+        is. Watched *first*: the number is what turns it into a verdict later,
+        and failing runs on an uncalibrated check is how an operator learns to
+        skip the whole report.
         """
-        title = "keyword provenance keys join their sidecar"
+        keyword_title = "keyword provenance keys join their sidecar"
+        other_title = "non-keyword provenance keys join their sidecar"
         if sidecars is None:
-            return Finding(
-                name=title, ok=True, watched=True,
+            unchecked = Finding(
+                name=keyword_title, ok=True, watched=True,
                 measured=(
                     f"{len(self.keys)} distinct keys, none checked: no converted "
                     "tree was readable (pass --cards-folder)"
                 ),
             )
+            return [unchecked, replace(unchecked, name=other_title)]
         checked: Counter[str] = Counter()
         unjoinable: Counter[str] = Counter()
-        unchecked: Counter[str] = Counter()
-        examples: list[str] = []
+        unchecked_by_tree: Counter[str] = Counter()
+        examples: dict[str, list[str]] = defaultdict(list)
         ordered = sorted(
             self.keys,
             key=lambda k: (k.script_file, k.trait_kind, k.index_within_kind),
@@ -709,34 +767,50 @@ class _Tally:
         for key in ordered:
             result = _join_result(sidecars, key)
             if result is _UNCHECKED:
-                unchecked[key.tree] += 1
+                unchecked_by_tree[key.tree] += 1
                 continue
             checked[key.trait_kind] += 1
             if result is None:
                 continue
             unjoinable[key.trait_kind] += 1
-            if len(examples) < _EXAMPLES:
-                examples.append(result)
+            bucket = examples["keyword" if key.trait_kind == "keyword" else "other"]
+            if len(bucket) < _EXAMPLES:
+                bucket.append(result)
         keywords = checked.get("keyword", 0)
         broken = unjoinable.get("keyword", 0)
-        skipped = sum(unchecked.values())
-        detail = [
-            f"{kind}: {unjoinable[kind]}/{count} unjoinable"
-            for kind, count in sorted(checked.items())
-        ] + [
+        skipped = sum(unchecked_by_tree.values())
+        other_checked = sum(checked.values()) - keywords
+        other_broken = sum(unjoinable.values()) - broken
+        other_rate = other_broken / other_checked if other_checked else 0.0
+        trees = tuple(
             f"{count} keys in {tree}, a tree this run was not given"
-            for tree, count in sorted(unchecked.items())
-        ] + examples
-        return Finding(
-            name=title,
-            ok=broken == 0,
-            measured=(
-                f"{broken}/{keywords} keyword keys fail to join; "
-                f"{sum(unjoinable.values())}/{sum(checked.values())} over all "
-                f"trait kinds, {skipped} unchecked"
-            ),
-            detail=tuple(detail),
+            for tree, count in sorted(unchecked_by_tree.items())
         )
+        return [
+            Finding(
+                name=keyword_title,
+                ok=broken == 0,
+                measured=(
+                    f"{broken}/{keywords} keyword keys fail to join, "
+                    f"{skipped} unchecked"
+                ),
+                detail=trees + tuple(examples["keyword"]),
+            ),
+            Finding(
+                name=other_title,
+                ok=True,
+                watched=True,
+                measured=(
+                    f"{other_broken}/{other_checked} keys of every other trait "
+                    f"kind fail to join ({other_rate:.1%}, watched, no ceiling)"
+                ),
+                detail=tuple(
+                    f"{kind}: {unjoinable[kind]}/{count} unjoinable"
+                    for kind, count in sorted(checked.items())
+                    if kind != "keyword"
+                ) + tuple(examples["other"]),
+            ),
+        ]
 
     def _collected_patched(self) -> Finding:
         """A degraded run silently loses four record kinds.
@@ -987,6 +1061,112 @@ class _Tally:
                 f"{state}: {count}"
                 for state, count in sorted(self.attribution.items())
             ),
+        )
+
+    def _fork_events_name_a_clause(self, limits: Thresholds) -> Finding:
+        """The attribution pointer on the records the fork collectors write.
+
+        Broken out from :meth:`_resolution_events_name_a_clause` because the
+        forks are written by different code, and the aggregate hid exactly
+        that: the observed records reached 84.6% naming a clause while every
+        one of the fork collectors' events said ``null``, and the two numbers
+        averaged to something that looked like a channel merely warming up.
+        A fork whose events name nothing cannot be compared clause by clause
+        with the record it mirrors, which is the entire point of taking it.
+        """
+        floor = limits.min_fork_attributed_rate
+        named = self.fork_events - self.fork_attribution.get("absent", 0)
+        rate = named / self.fork_events if self.fork_events else 0.0
+        limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
+        return Finding(
+            name="fork records' events name what produced them",
+            ok=floor is None or not self.fork_events or rate >= floor,
+            watched=floor is None,
+            measured=(
+                f"{named}/{self.fork_events} events on fork records name a "
+                f"clause ({rate:.1%}, {limit})"
+            ),
+            detail=tuple(
+                f"{state}: {count}"
+                for state, count in sorted(self.fork_attribution.items())
+            ),
+        )
+
+    def _cause_bearing_events_name_a_cause(self, limits: Thresholds) -> Finding:
+        """Whether the events that declare a ``cause`` populate it.
+
+        Measured over :data:`~effects.domain.event_schema.CAUSE_BEARING_TYPES`
+        alone — the types whose own parameter row asks for one — because every
+        type *may* carry a cause and most correctly never do, so a rate over
+        the whole vocabulary would read near zero on a healthy corpus and mean
+        nothing.
+
+        It is also the identity channel the duplicate-event check depends on:
+        two attackers dealing the same damage to the same player differ in
+        nothing but their cause, so an empty ``cause`` turns two real outcomes
+        into one outcome written twice, and the two checks disagree with each
+        other rather than with the collector.
+        """
+        floor = limits.min_cause_rate
+        with_cause = sum(counts[0] for counts in self.cause_bearing.values())
+        seen = sum(counts[1] for counts in self.cause_bearing.values())
+        rate = with_cause / seen if seen else 0.0
+        limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
+        return Finding(
+            name="events that declare a cause name one",
+            ok=floor is None or not seen or rate >= floor,
+            watched=floor is None,
+            measured=(
+                f"{with_cause}/{seen} events of the {len(CAUSE_BEARING_TYPES)} "
+                f"cause-bearing types carry a cause ({rate:.1%}, {limit})"
+            ),
+            detail=tuple(
+                f"{event_type}: {counts[0]}/{counts[1]}"
+                for event_type, counts in sorted(self.cause_bearing.items())
+            ),
+        )
+
+    def _forks_share_their_mirrors_turn(self, limits: Thresholds) -> Finding:
+        """A fork's snapshot is of the moment it forked, which is its mirror's.
+
+        The probe re-runs one damage step from the state the real combat was
+        in, so the two records describe one moment and must agree about which
+        turn it is. When they do not, the fork's ``turn`` is unusable for
+        time-ordering — and the failure surfaced somewhere much less
+        actionable: as a *backward turn jump* in "each game_id names one
+        game", which named the game and blamed a merge that had not happened.
+        15 of 384 probe forks in the smoke corpus sat a turn behind their
+        mirror, never ahead, and were the whole residue of that invariant.
+
+        Judged at zero rather than watched, unlike the other new checks: there
+        is no rate at which two records of one moment may disagree about it.
+        Forks whose mirror fell outside the window are counted apart and
+        judged not at all — ``--limit`` cuts the stream mid-game, and the
+        missing half is the reader's doing, not the collector's.
+        """
+        disagreed: list[str] = []
+        uncomparable = 0
+        for record_id, mirror_of, turn in self.mirrors:
+            mirror_turn = self.record_turns.get(mirror_of)
+            if mirror_turn is None:
+                uncomparable += 1
+            elif mirror_turn != turn:
+                disagreed.append(
+                    f"{record_id} at turn {turn} mirrors {mirror_of} at turn "
+                    f"{mirror_turn}"
+                )
+        comparable = len(self.mirrors) - uncomparable
+        rate = len(disagreed) / comparable if comparable else 0.0
+        return Finding(
+            name="a fork's turn agrees with the record it mirrors",
+            ok=rate <= limits.max_mirror_turn_disagreement_rate,
+            measured=(
+                f"{len(disagreed)}/{comparable} forks disagree with their "
+                f"mirror about the turn ({rate:.1%}, limit "
+                f"{limits.max_mirror_turn_disagreement_rate:.1%}); "
+                f"{uncomparable} mirrors fell outside the window"
+            ),
+            detail=tuple(disagreed[:_EXAMPLES]),
         )
 
     def _probe_forks_were_taken(self) -> Finding:

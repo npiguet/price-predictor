@@ -82,6 +82,21 @@ nothing on this chain. `null` is none of the three and means **unknown** — it 
 predates the sentinels left behind, and it covered `root` and `unresolved` at once, which made a dead
 attribution channel indistinguishable from a working one.
 
+`params` are per-type: a collector writes exactly the keys its type's row declares and a reader may
+assume no others, which is what "per-type field normalization" buys — the same outcome from two
+different script APIs lands in the same slots. Two params sit outside the rows and any type may carry
+them: `mode`, the engine's own name for the hook that produced the event, and `cause`, the entity or
+player ref of the causing object. `cause` also has its own row on `zone_change`, `destroyed` and
+`sacrificed`, which is the set the validator measures its population over; it is the only thing
+separating two attackers' identical damage from one outcome written twice. `zone_change` additionally
+carries `library_position` — where in the library the card landed, counted from the top — because a
+`Moved` replacement that changes only that position is otherwise a rewrite whose two halves read alike
+and which is dropped as an identity.
+
+Widening a row, or a nullable field's value set, is compatibility rule 1 and redefines nothing: a
+reader that predates the addition drops the key it does not know, which is why a param a writer emits
+before the schema accepts it is invisible rather than wrong.
+
 ### Per-kind payloads
 
 | Kind / moment | Payload |

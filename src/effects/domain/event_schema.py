@@ -133,7 +133,14 @@ class EventType(StrEnum):
 # the same outcome from two different script APIs lands in the same slots.
 # A type absent from this table carries no params beyond its subjects.
 EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
-    EventType.ZONE_CHANGE: ("from_zone", "to_zone", "cause"),
+    # library_position is where in the library the card landed, counted from
+    # the top: a `Moved` replacement that puts a card second-from-top instead
+    # of into the graveyard changes only that, and without the slot the two
+    # halves of the rewrite read alike and the record is dropped as an
+    # identity. Absent where the destination is not a library.
+    EventType.ZONE_CHANGE: (
+        "from_zone", "to_zone", "cause", "library_position",
+    ),
     EventType.DESTROYED: ("regenerable", "cause"),
     EventType.SACRIFICED: ("cause",),
     EventType.PHASED: ("out",),
@@ -196,6 +203,17 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.CLASH_RESOLVED: ("won",),
     EventType.PILES_MADE: ("piles", "chosen"),
 }
+
+
+#: The types whose own parameter row declares ``cause``, so a collector that
+#: leaves it empty on one of them is silent about something the schema asked
+#: for. Every type may carry a ``cause`` — it is a provenance param — but only
+#: these were judged to have one worth naming, and the validator measures the
+#: population rate over exactly this set rather than over the whole vocabulary,
+#: where a near-zero rate would be correct and mean nothing.
+CAUSE_BEARING_TYPES: frozenset[EventType] = frozenset(
+    event_type for event_type, params in EVENT_PARAMS.items() if "cause" in params
+)
 
 
 #: ``attributed_to`` when the acting line's own top-level clause produced the

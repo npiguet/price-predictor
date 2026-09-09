@@ -203,6 +203,8 @@ observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted
 | `--interventions-per-game` | 2 | Forced resolutions per game. Off unless the flag is given. |
 | `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
 | `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
+| `--legality-rate` | 0.1 | Share of legality points kept, sampled *after* the coalescing above. Its own knob because the two playability subkinds arrive at very different volumes from one priority pass. |
+| `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. Stage three collects at `1,2,3,4`. |
 
 ## 4. Collect the cards self-play never deals
 

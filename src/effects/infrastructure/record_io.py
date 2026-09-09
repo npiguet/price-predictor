@@ -22,8 +22,13 @@ corpus only ever showed one. ``zone_change`` gained no new param when
 ``from_zone`` started being written; the key was already in ``EVENT_PARAMS`` and
 always empty. ``attributed_to`` gained two sentinel *values* (``root``,
 ``unresolved``) and stayed a nullable string, so a reader that predates them
-parses them as the strings they are. Compatibility rule 1 forbids only the other
-direction — nothing here may change what an existing field *means*, because the
+parses them as the strings they are. ``zone_change`` then gained a genuinely
+new key, ``library_position``: adding a param to a type's row widens what the
+type may carry and redefines nothing it already carried — and it has to happen
+*here first*, because a reader that does not know a key drops it, so a param a
+writer emits before the schema accepts it is invisible rather than wrong.
+Compatibility rule 1 forbids only the other direction — nothing here may change
+what an existing field *means*, because the
 corpus is append-only and a reinterpreted field silently reinterprets hours of
 records that cannot be recollected.
 """

@@ -7,10 +7,14 @@ repaired without recollecting it.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from effects.domain.records import (
     COLLECTION_METADATA_FIELDS,
+    UNRESOLVED_REASONS,
     ActivationPayload,
     CombatPayload,
     Costs,
@@ -265,3 +269,56 @@ class TestIdentity:
         record = make_record()
         with pytest.raises(AttributeError):
             record.link_id = "pair-1"
+
+
+#: The Java side of the contract. Read rather than mirrored in a constant,
+#: because a mirrored list is a third copy to drift.
+_JAVA_PROVENANCE_KEY = (
+    Path(__file__).resolve().parents[4]
+    / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
+    / "connector" / "effects" / "ProvenanceKey.java"
+)
+
+
+class TestTheUnresolvedVocabularyIsOneSet:
+    """Every reason the collector writes is a reason the reader accepts.
+
+    It was not. The collector learned to say ``granted_keyword`` and
+    ``granted_trait`` -- a keyword or trait granted by something that keeps no
+    back-reference to what granted it -- while ``UNRESOLVED_REASONS`` still
+    listed four values, so ``record_from_dict`` rejected every record carrying
+    one. 187 of 391,168 records in a smoke corpus, spread over 17 of 32 shards,
+    and the reader raises rather than skips: the first such record ends the
+    read, which would have ended an eight-hour corpus at the first consumer.
+
+    A closed vocabulary is the right shape -- an unrecognised reason should be
+    loud, since the field exists to separate "no printed line exists" from "the
+    resolver failed". What was missing is anything holding the two ends of it
+    together, which is what this test is.
+    """
+
+    def _java_reasons(self) -> set[str]:
+        """Every ``UNRESOLVED_*`` literal the collector's key resolver names."""
+        source = _JAVA_PROVENANCE_KEY.read_text(encoding="utf-8")
+        return set(re.findall(
+            r'UNRESOLVED_[A-Z_]+\s*=\s*"([a-z_]+)"', source,
+        ))
+
+    def test_the_collector_writes_no_reason_the_reader_rejects(self):
+        java = self._java_reasons()
+        assert java, "no UNRESOLVED_* literals found; did the file move?"
+        assert java <= UNRESOLVED_REASONS, (
+            "the collector writes reasons the reader would reject: "
+            f"{sorted(java - UNRESOLVED_REASONS)}"
+        )
+
+    def test_the_reader_accepts_no_reason_the_collector_never_writes(self):
+        """The other direction, so a dead value cannot sit in the set unnoticed.
+
+        A reason nothing writes reads as evidence that a resolver path exists
+        when it does not.
+        """
+        assert UNRESOLVED_REASONS <= self._java_reasons(), (
+            "the reader accepts reasons nothing writes: "
+            f"{sorted(UNRESOLVED_REASONS - self._java_reasons())}"
+        )

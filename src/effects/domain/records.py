@@ -91,7 +91,8 @@ COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
 #: ``unindexable`` is the signature of a resolver bug and must not appear in a
 #: healthy run at all.
 UNRESOLVED_REASONS: frozenset[str] = frozenset({
-    "engine_effect", "no_card_state", "unknown_kind", "unindexable",
+    "engine_effect", "no_card_state", "unknown_kind",
+    "granted_keyword", "granted_trait", "unindexable",
 })
 
 #: Kinds where no single line acts, so the envelope carries no ``ability``.

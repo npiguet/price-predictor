@@ -91,13 +91,22 @@ Flags live on every collecting supervisor (`match-outcomes`, `collect-coverage`,
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--mana-cap` | 2000 | cap on resolution records per unique mana-ability text, counted per worker process |
-| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` records are always logged |
+| `--mana-cap` | 1 | cap on resolution records per unique (mana ability, mana produced) pair, per game |
+| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` records are sampled at `--legality-rate` instead |
+| `--legality-rate` | 0.1 | fraction of `legality`-subkind logging points kept, sampled **after** the dedup |
 | `--interventions-per-game` | 2 | interventional resolutions per game (stage three) |
 | `--probes-per-game` | 2 | damage-step probe forks per game (only for keywords whose canary failed — § Evaluation, gate 2) |
 | `--probe-keywords` | _(none; probes disabled)_ | the canary-failing keywords to probe, comma-separated |
+| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth, a prefix of `1,2,3,4`; stage three collects at `1,2,3,4` |
 
 Continuous records need no cap: coalescing per stable board is the cap.
+
+Every one of these is a per-worker-process quantity the supervisor cannot observe, so each travels to
+the JVM as an `effect.*` system property; the flag set, the property set and the JVM's
+`CollectionCaps` record are one set, pinned by a test that reads both sides. `--snapshot-tiers` is
+run-level rather than per-collector on purpose: a depth chosen per call site makes `state.tiers` a
+proxy for *how* a record was collected, and the first corpus put tier 4 on the interventional records
+and nowhere else — a perfect predictor of a flag the schema forbids the model to see.
 
 # Ability identity
 

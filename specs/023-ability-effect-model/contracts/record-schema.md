@@ -150,6 +150,27 @@ a token entering the battlefield. It is legitimately absent only where nothing l
 rather than moved. `validate-corpus` measures the share that carries it, and the share whose `to_zone`
 is `stack`, because a channel that is mostly casts is reporting the stack rather than the board.
 
+`library_position` joins the row for the destination `from_zone`/`to_zone` cannot describe: where in
+the library the card landed, counted from the top. A `Moved` replacement that puts a card second from
+the top instead of into the graveyard changes only that, so without the slot the two halves of the
+rewrite serialize identically and the record is dropped as an identity — which is why `Moved` was 91
+of 110 dropped rewrites in the smoke run and had never once produced a written one. Absent wherever
+the destination is not a library. Adding a param to a type's row **widens the row and redefines
+nothing** (compatibility rule 1).
+
+### `cause` names the object that caused the event
+
+`cause` is a provenance param: *any* event may carry it, and it holds the entity or player ref of the
+causing object, or is absent where the hook names none. Three types declare it in their own params
+row — `zone_change`, `destroyed`, `sacrificed` — and those are the ones `validate-corpus` measures,
+because a rate over the whole vocabulary would read near zero on a perfectly healthy corpus.
+
+It is also what keeps two real outcomes from reading as one written twice: two attackers dealing 1
+damage to the same player produce events that differ in nothing else, so the duplicate-event check
+counts them as a repeat while the collector is right not to dedupe them. `damage_dealt` names the
+same fact as `source`; the two spellings are deliberate and not interchangeable, and a collector
+fills the one its type's row declares.
+
 ## Payloads
 
 | Kind / moment | Payload |

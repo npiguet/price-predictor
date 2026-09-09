@@ -15,6 +15,7 @@ from effects.domain.event_schema import (
     ATTRIBUTION_ROOT,
     ATTRIBUTION_SENTINELS,
     ATTRIBUTION_UNRESOLVED,
+    CAUSE_BEARING_TYPES,
     EFFECT_API_EVENTS,
     EVENT_PARAMS,
     EXCLUDED_EFFECT_APIS,
@@ -139,6 +140,76 @@ class TestEventNormalization:
             duration="end_of_turn",
         )
         assert event.duration == "end_of_turn"
+
+
+class TestTheZoneChangeRow:
+    """The one slot a `Moved` replacement can move and nothing else.
+
+    A replacement that puts a card second from the top of its library instead
+    of into the graveyard changes the destination and the position; without a
+    slot for the position, the two halves of the rewrite serialize alike and
+    the record is dropped as an identity — which is why `Moved` was 91 of 110
+    dropped rewrites and had never once produced a written one.
+    """
+
+    def test_a_library_destination_can_say_where_in_the_library(self):
+        event = Event(
+            type=EventType.ZONE_CHANGE,
+            subjects=("E1",),
+            params={
+                "from_zone": "battlefield", "to_zone": "library",
+                "library_position": 1,
+            },
+        )
+        assert event.params["library_position"] == 1
+
+    def test_it_round_trips(self):
+        event = Event(
+            type=EventType.ZONE_CHANGE,
+            params={"to_zone": "library", "library_position": 0},
+        )
+        assert Event.from_dict(event.as_dict()) == event
+
+    def test_it_is_optional(self):
+        """Absent wherever the destination is not a library."""
+        assert Event(
+            type=EventType.ZONE_CHANGE, params={"to_zone": "graveyard"},
+        ).params == {"to_zone": "graveyard"}
+
+
+class TestTheCauseBearingTypes:
+    """The types whose own row asks for a cause, which is what gets measured.
+
+    Every type may carry a ``cause`` — it is a provenance param — so a
+    population rate over the whole vocabulary would read near zero on a
+    perfectly healthy corpus and mean nothing. The set is derived from the
+    table rather than restated, so widening a row's params widens the
+    measurement with it.
+    """
+
+    def test_it_is_exactly_the_rows_that_declare_a_cause(self):
+        assert CAUSE_BEARING_TYPES == {
+            event_type for event_type, params in EVENT_PARAMS.items()
+            if "cause" in params
+        }
+
+    def test_the_three_removal_shaped_types_are_in_it(self):
+        for event_type in (
+            EventType.ZONE_CHANGE, EventType.DESTROYED, EventType.SACRIFICED,
+        ):
+            assert event_type in CAUSE_BEARING_TYPES
+
+    def test_a_type_that_names_its_source_differently_is_not_in_it(self):
+        """``damage_dealt`` carries ``source``; two spellings of one fact
+        would leave a reader to guess which one a collector filled."""
+        assert EventType.DAMAGE_DEALT not in CAUSE_BEARING_TYPES
+
+    def test_any_type_may_still_carry_a_cause(self):
+        """Being outside the set bars nothing — it only says the schema does
+        not ask."""
+        assert Event(
+            type=EventType.CARD_DRAWN, params={"count": 1, "cause": "E3"},
+        ).params["cause"] == "E3"
 
 
 class TestAttributionIsTriState:

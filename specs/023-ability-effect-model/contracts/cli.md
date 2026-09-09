@@ -81,6 +81,9 @@ them there costs minutes instead of the eight hours that run spent producing 14.
 | `--max-trigger-fired-share` | 0.65 | share of trigger records that may report `fired = true` |
 | `--min-zone-change-from-zone-rate` | *(unset)* | floor on the share of `zone_change` events carrying `from_zone`; unset means measure and watch |
 | `--min-attributed-rate` | *(unset)* | floor on the share of resolution events naming a producing clause; unset means measure and watch |
+| `--min-fork-attributed-rate` | *(unset)* | the same floor over the events on **fork** records, measured apart because the fork collectors are different code; unset means measure and watch |
+| `--min-cause-rate` | *(unset)* | floor on the share of the cause-declaring event types that populate `cause`; unset means measure and watch |
+| `--max-mirror-turn-disagreement-rate` | 0 | share of fork records whose `turn` may differ from the record they mirror. Judged, not watched: a fork is taken *at* the moment it mirrors |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted trees whose sidecars the corpus's provenance keys are joined against; repeatable |
 
 ### Judged and watched are separate
@@ -88,10 +91,12 @@ them there costs minutes instead of the eight hours that run spent producing 14.
 Every check reports **the number it measured** whether it passed or not — a threshold a run barely
 clears is what an operator needs to see, and "duplicates: FAIL" says nothing about whether a fix worked
 or merely moved. On top of that, a check with no threshold prints `[WATCH]` rather than
-`[PASS]`/`[FAIL]` and **cannot fail the run**. The two flags above that default to unset are watched
-until an operator gives them a floor; the probe count, and the keyword join on a machine with no
-converted tree, are watched always. The exit status and the closing summary count judged invariants
-only.
+`[PASS]`/`[FAIL]` and **cannot fail the run**. The four flags above that default to unset are watched
+until an operator gives them a floor; the probe count, the non-keyword provenance join, and the
+keyword join on a machine with no converted tree, are watched always. A number is published as a
+watched one *first* and promoted to a verdict by a threshold later — failing runs on a check nobody
+has calibrated is how an operator learns to skip the whole report. The exit status and the closing
+summary count judged invariants only.
 
 | Invariant | Breached when |
 |---|---|
@@ -102,7 +107,8 @@ only.
 | resolution records name an acting line | same rule; the report also breaks down `ability_unresolved` by reason |
 | continuous records name an acting line | same rule |
 | every empty ability says why it is empty | a record on a line-naming kind carries `ability: []` and no `ability_unresolved` |
-| keyword provenance keys join their sidecar | a `keyword` key appears in neither the named card's sidecar `lines` nor its `dropped_keys`. Other trait kinds are measured and reported without failing; `[WATCH]` where no converted tree was readable |
+| keyword provenance keys join their sidecar | a `keyword` key appears in neither the named card's sidecar `lines` nor its `dropped_keys`; `[WATCH]` where no converted tree was readable |
+| non-keyword provenance keys join their sidecar | never — always watched. Every other trait kind (`spell`, `static`, `trigger`, `replacement`) is joined and counted on its own line rather than in the keyword line's tail, because a mismatch there has a cause a keyword mismatch does not — a reconversion between collection and training, or a line the converter never emits at all — and nobody has yet measured its healthy value |
 | every record was collected in patched mode | any record carries `mode = degraded` |
 | `outcome` takes more than one value | every activation record reports the same outcome |
 | cost fields are not all empty | no activation record paid anything at all, or — once the window holds `--min-cost-evidence` activations — `mana_by_color` or `tapped` was never populated. Only those two: sacrifice, discard, exile and life costs are genuinely rare in a sealed pool, and a check that cries wolf on them is one an operator learns to skip |
@@ -112,6 +118,9 @@ only.
 | trigger records draw negatives against positives | fired share exceeds `--max-trigger-fired-share`; the report breaks the ratio down per evaluated trigger mode as well as in aggregate |
 | `zone_change` events say where the card came from | watched by default; breached only when `--min-zone-change-from-zone-rate` is given and the share falls below it. The `to_zone = stack` share rides along in the measurement |
 | resolution events name what produced them | watched by default; breached only when `--min-attributed-rate` is given. The measurement breaks `attributed_to` down into sub-ability / root / unresolved / absent |
+| fork records' events name what produced them | watched by default; breached only when `--min-fork-attributed-rate` is given. Measured apart from the row above because the fork collectors are different code: the observed records reached 84.8% naming a clause while every one of the 1,698 fork events in the same window said nothing, and the aggregate read as a channel merely warming up |
+| events that declare a cause name one | watched by default; breached only when `--min-cause-rate` is given. Measured over the types whose own params row declares `cause` (`zone_change`, `destroyed`, `sacrificed`) rather than the whole vocabulary, where a near-zero rate would be correct. It is also the identity channel the duplicate-event row depends on: two attackers dealing the same damage to the same player differ in nothing but their cause |
+| a fork's turn agrees with the record it mirrors | any fork's `state.global.turn` differs from its `mirror_of` record's, above `--max-mirror-turn-disagreement-rate` (default **0**). A fork is taken *at* the moment it mirrors, so there is no healthy rate of disagreement; forks whose mirror fell outside the window are counted apart and judged not at all. It surfaced before as a backward turn jump in the game_id row, which named the game and blamed a merge that had not happened |
 | probe forks were taken | never — always watched. Zero probes means `--probe-keywords` was empty, which is a launch choice rather than a defect |
 
 A kind absent from the window is reported as holding, not as broken: a two-minute window need not
@@ -137,13 +146,30 @@ no shards.
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--mana-cap` | 2000 | resolution records per unique mana-ability text, per worker process |
-| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` always logged |
+| `--mana-cap` | 1 | resolution records per unique (mana ability, mana produced) pair, per game |
+| `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` are sampled at `--legality-rate` instead |
+| `--legality-rate` | 0.1 | fraction of `legality`-subkind logging points kept, sampled after the dedup |
 | `--interventions-per-game` | 2 | interventional resolutions per game (stage three) |
 | `--probes-per-game` | 2 | damage-step probe forks per game — a budget, not a switch |
 | `--probe-keywords` | none (**probes disabled**) | comma-separated canary-failing keywords; required for any probe at all |
+| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth; a prefix of `1,2,3,4` holding at least `1,2` — 4 adds unreferenced hands and graveyards |
 
 `continuous` records take no cap: coalescing per stable board is the cap.
+
+**The flag set and the JVM's cap set are one set.** Each flag becomes an `effect.*` system property
+(`--snapshot-tiers` → `effect.snapshot.tiers`, and so on) and the worker's `CollectionCaps` record
+reads exactly those names; a test reads both sides and fails when either grows a knob the other does
+not have. It grew two before that test existed: `effect.snapshot.tiers` and `effect.legality.rate`
+were read by the JVM, documented in `MatchWorkerMain`, and settable by no command, so the tier-4
+snapshot stage three needs took a code edit to request and the legality sampler ran at a rate a
+javadoc called `--legality-rate` — a flag that did not exist.
+
+**`--snapshot-tiers` is validated before the JVM sees it.** A vector that is not a prefix of
+`1,2,3,4` holding at least `1,2` is a usage error, because both of the JVM's own failure modes are
+worse: an unparseable vector falls back to the default *silently*, and a parseable non-prefix throws
+inside `SnapshotBuilder` once a game is already running. Tiers are cumulative — 3 widens 2, 4 widens
+3 — and the battlefield goes into every snapshot regardless, so a vector omitting 2 would tell a
+reader the board was uncollected while the board sits in `entities`.
 
 **`--probes-per-game` alone buys nothing.** The budget is spent only on keywords `--probe-keywords`
 names, and it names none by default, so a run launched without it collects a corpus with zero probe

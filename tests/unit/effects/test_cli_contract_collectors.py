@@ -52,34 +52,36 @@ class TestCollectCoverage:
 
 
 class TestSharedCapFlags:
-    def test_the_five_defaults_are_the_contracts(self):
+    def test_the_defaults_are_the_contracts(self):
         args = parse("collect-coverage")
         assert args.mana_cap == 1
         assert args.playability_rate == 0.1
         assert args.interventions_per_game == 2
         assert args.probes_per_game == 2
         assert args.probe_keywords == ""
+        assert args.legality_rate == 0.1
+        assert args.snapshot_tiers == "1,2,3"
 
     def test_the_constants_and_the_parsed_defaults_agree(self):
+        """Every cap in the table, not a list this test has to be told about.
+
+        Spelled out one by one, a cap added to `CAP_DEFAULTS` and to only one
+        of the two parsers passed here — which is how `snapshot_tiers` and
+        `legality_rate` came to be readable by the JVM and settable by nobody.
+        """
         args = parse("collect-coverage")
-        assert args.mana_cap == CAP_DEFAULTS["mana_cap"]
-        assert args.playability_rate == CAP_DEFAULTS["playability_rate"]
-        assert args.interventions_per_game == CAP_DEFAULTS["interventions_per_game"]
-        assert args.probes_per_game == CAP_DEFAULTS["probes_per_game"]
-        assert args.probe_keywords == CAP_DEFAULTS["probe_keywords"]
+        for name, default in CAP_DEFAULTS.items():
+            assert getattr(args, name) == default, name
 
     def test_probes_are_off_until_keywords_are_named(self):
         """No probe fork is taken at all with the flag unset."""
         assert parse("collect-coverage").probe_keywords == ""
 
-    def test_the_same_five_flags_appear_on_match_outcomes(self):
+    def test_the_same_flags_appear_on_match_outcomes(self):
         """One cap table, shared by every collecting supervisor."""
         theirs = sealed_parser().parse_args(["match-outcomes"])
         ours = parse("collect-coverage")
-        for flag in (
-            "mana_cap", "playability_rate", "interventions_per_game",
-            "probes_per_game", "probe_keywords",
-        ):
+        for flag in CAP_DEFAULTS:
             assert getattr(theirs, flag) == getattr(ours, flag), flag
 
     def test_continuous_records_take_no_cap(self):
@@ -91,11 +93,45 @@ class TestSharedCapFlags:
         args = parse(
             "collect-coverage",
             "--mana-cap", "10", "--playability-rate", "1.0",
-            "--probe-keywords", "wither",
+            "--probe-keywords", "wither", "--legality-rate", "0.25",
+            "--snapshot-tiers", "1,2,3,4",
         )
         assert args.mana_cap == 10
         assert args.playability_rate == 1.0
         assert args.probe_keywords == "wither"
+        assert args.legality_rate == 0.25
+        assert args.snapshot_tiers == "1,2,3,4"
+
+
+class TestTheSnapshotTierFlag:
+    """Stage three's hand-and-graveyard tier has to be reachable from a flag.
+
+    It was not: the Java side read `-Deffect.snapshot.tiers` and documented it,
+    and no supervisor could set it, so tier 4 needed a code edit to request.
+    """
+
+    def test_tier_four_is_reachable(self):
+        assert parse(
+            "collect-coverage", "--snapshot-tiers", "1,2,3,4",
+        ).snapshot_tiers == "1,2,3,4"
+
+    def test_it_stays_a_string_because_it_travels_as_a_property(self):
+        args = parse("collect-coverage", "--snapshot-tiers", "1,2")
+        assert args.snapshot_tiers == "1,2"
+
+    @pytest.mark.parametrize("bad", ["1,3", "2,3", "1", "1,2,4", "4,3,2,1", "x"])
+    def test_a_vector_the_builder_would_refuse_is_refused_here(self, bad):
+        """Both JVM-side failures are worse than an argument error: an
+        unparseable vector falls back to the default silently, and a parseable
+        non-prefix throws once a game is already running."""
+        with pytest.raises(SystemExit):
+            parse("collect-coverage", "--snapshot-tiers", bad)
+
+    def test_match_outcomes_refuses_the_same_vectors(self):
+        with pytest.raises(SystemExit):
+            sealed_parser().parse_args(
+                ["match-outcomes", "--snapshot-tiers", "1,3"]
+            )
 
 
 class TestSubcommandTable:
