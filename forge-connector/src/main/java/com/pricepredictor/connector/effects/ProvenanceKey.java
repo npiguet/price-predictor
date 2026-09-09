@@ -231,9 +231,23 @@ public record ProvenanceKey(
             }
             if (t instanceof SpellAbility sa) {
                 // 2. The trigger or replacement that owns this ability.
-                ProvenanceKey borne = keyFor(sa.getTrigger());
+                Trigger owner = sa.getTrigger();
+                ProvenanceKey borne = keyFor(owner);
                 if (borne == null) borne = keyFor(sa.getReplacementEffect());
                 if (borne != null) return new Resolved(borne, null);
+                // A trigger the engine assembled at runtime keys to nothing
+                // itself, but it knows what spawned it, so hop to the trigger
+                // rather than past it and let step 6 follow that chain. This is
+                // the reflexive "you may pay {X}. When you do..." shape, which
+                // was the largest population reaching the end of this loop with
+                // no key: ImmediateTriggerEffect deliberately nulls the execute
+                // ability's parent, so there is no root to climb instead, and
+                // the only way back to the printed line is through the trigger
+                // that owns it.
+                if (owner != null && owner.getSpawningAbility() != null) {
+                    t = owner;
+                    continue;
+                }
                 // 3. Granted: the donor's static, not the recipient's list.
                 StaticAbility grantor = sa.getGrantorStatic();
                 if (grantor != null) {
@@ -482,11 +496,43 @@ public record ProvenanceKey(
      * still trainable through its state and payload, while a record with the
      * wrong key silently trains the wrong line.
      */
+    /**
+     * The position of the kind's only member of this trait's class, or -1.
+     *
+     * <p>The fallback for a trait with no fingerprint at all. A permanent spell
+     * is built in Java rather than parsed from a line -- {@code SpellPermanent}
+     * is constructed with an empty parameter map -- so a cost variant of one
+     * carries nothing to recognise it by: an Adventure half, a kicker, a
+     * {@code MayFlashCost} cast all copy the spell and set no back-reference,
+     * and the copy's fingerprint is as empty as the original's.
+     *
+     * <p>What is left is arithmetic. A card state has exactly one permanent
+     * spell, and a single candidate of the right class cannot be the wrong one.
+     * Two candidates and this refuses, for the reason {@link #indexLike}
+     * refuses: a record with no key is still trainable through its state and
+     * payload, while a record with the wrong key silently trains the wrong line.
+     */
+    private static int indexIfUnique(CardState state, CardTraitBase trait, String kind) {
+        Iterable<? extends CardTraitBase> slice = slice(state, kind);
+        if (slice == null) return -1;
+        int index = 0;
+        int hit = -1;
+        int hits = 0;
+        for (CardTraitBase candidate : slice) {
+            if (candidate.getClass() == trait.getClass()) {
+                hit = index;
+                hits++;
+            }
+            index++;
+        }
+        return hits == 1 ? hit : -1;
+    }
+
     private static int indexLike(CardState state, CardTraitBase trait, String kind) {
         Iterable<? extends CardTraitBase> slice = slice(state, kind);
         if (slice == null) return -1;
         Map<String, String> want = trait.getOriginalMapParams();
-        if (want == null || want.isEmpty()) return -1;   // no fingerprint, no guess
+        if (want == null || want.isEmpty()) return indexIfUnique(state, trait, kind);
         int index = 0;
         int hit = -1;
         int hits = 0;

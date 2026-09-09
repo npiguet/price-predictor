@@ -7,6 +7,7 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CardState;
 import forge.game.keyword.KeywordInterface;
+import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.staticability.StaticAbility;
 import forge.game.trigger.Trigger;
@@ -15,8 +16,12 @@ import forge.game.trigger.WrappedAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import forge.game.trigger.TriggerType;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -680,6 +685,86 @@ class ProvenanceKeyTest {
         assertEquals("cardsfolder/b/brass_man.txt", key.scriptFile());
         assertEquals(ProvenanceKey.KIND_TRIGGER, key.traitKind());
         assertEquals(0, key.indexWithinKind());
+    }
+
+    /**
+     * A reflexive trigger's {@code Execute$} ability keys to the printed
+     * {@code T:} line two steps above it.
+     *
+     * <p>The largest bucket the smoke corpus reported as {@code unindexable}:
+     * 378 records over 37 cards, all of them the "you may pay {X}. When you do,
+     * ..." shape. What resolves is the reflexive trigger's own execute ability,
+     * whose owning trigger {@code ImmediateTriggerEffect} assembles at runtime
+     * and which is therefore in no slice — but that trigger carries the ability
+     * that spawned it, and following that reaches the printed line. The
+     * resolver could already follow a {@code Trigger} it was handed directly;
+     * what it could not do was reach the trigger from the ability it owns.
+     */
+    @Test
+    void aReflexiveTriggersExecuteKeysToThePrintedTriggerLine() {
+        Card numa = card("Numa, Joraga Chieftain");
+        Trigger printed = numa.getCurrentState().getTriggers().iterator().next();
+        ProvenanceKey expected = ProvenanceKey.of(printed);
+        assertNotNull(expected, "the printed T: line must key");
+
+        SpellAbility payCost = printed.ensureAbility();
+        payCost.setTrigger(printed);
+        Trigger reflexive = reflexiveTriggerSpawnedBy(payCost);
+        SpellAbility execute = reflexive.ensureAbility();
+        execute.setTrigger(reflexive);
+
+        assertEquals(expected, ProvenanceKey.of(execute));
+        assertEquals(ProvenanceKey.KIND_TRIGGER, expected.traitKind());
+    }
+
+    /** Built the way {@code ImmediateTriggerEffect} builds it. */
+    private static Trigger reflexiveTriggerSpawnedBy(SpellAbility spawner) {
+        Card host = spawner.getHostCard();
+        Map<String, String> params = new HashMap<>(spawner.getMapParams());
+        params.put("Mode", TriggerType.Immediate.name());
+        params.remove("Cost");
+        Trigger reflexive = TriggerHandler.parseTrigger(
+                params, host, spawner.isIntrinsic(), null);
+        reflexive.setSpawningAbility(spawner.copy(host, true));
+        SpellAbility overriding = spawner.getAdditionalAbility("Execute");
+        if (overriding != null) {
+            SpellAbility copy = overriding.copy(host, null, false);
+            // The engine nulls the parent here, "otherwise it might have wrong
+            // root ability" -- which also cuts the link the resolver would
+            // otherwise climb.
+            if (copy instanceof AbilitySub sub) {
+                sub.setParent(null);
+            }
+            reflexive.setOverridingAbility(copy);
+        }
+        return reflexive;
+    }
+
+    /**
+     * A cost-variant copy of a permanent spell keys to the printed spell.
+     *
+     * <p>Casting for an alternative or an additional cost -- an Adventure half,
+     * kicker, {@code MayFlashCost} -- pushes a copy, and unlike the stack's own
+     * copy it carries no back-reference. The fingerprint cannot rescue it
+     * either: a permanent spell is built in Java with an empty parameter map
+     * ({@code SpellPermanent}), so there is nothing to match on. What is left
+     * is that a card state has exactly one of them, and one candidate needs no
+     * fingerprint to be unambiguous.
+     */
+    @Test
+    void aCostVariantCopyOfAPermanentSpellKeysToThePrintedSpell() {
+        Card adept = card("Silvergill Adept");
+        SpellAbility printed = adept.getCurrentState().getFirstSpellAbility();
+        ProvenanceKey expected = ProvenanceKey.of(printed);
+        assertNotNull(expected, "the pristine permanent spell must key");
+
+        SpellAbility variant = printed.copy(adept, null, false, true);
+
+        assertNull(variant.getOriginalAbility(),
+                "a cost variant carries no back-reference; that is the case under test");
+        assertTrue(printed.getOriginalMapParams().isEmpty(),
+                "a permanent spell has no script parameters to fingerprint");
+        assertEquals(expected, ProvenanceKey.of(variant));
     }
 
     /**
