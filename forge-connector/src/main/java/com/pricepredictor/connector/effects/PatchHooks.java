@@ -77,6 +77,17 @@ public final class PatchHooks {
      * {@code Destroyed} trigger's run parameters, where it was in scope and
      * being dropped. Its absence shows up as a destroy record that cannot name
      * what destroyed the permanent, not as a missing hook.
+     *
+     * <p>Presence is not the whole contract for the {@code set*Listener} hooks,
+     * and {@code setEffectRecordListener} is where that first bit. Its listener
+     * grew from three arguments to five so a rewrite record could say which
+     * {@code ReplacementResult} happened and which ability stood in for the
+     * event; the setter's name did not change, so this list still reports the
+     * hook present against either shape. What tells them apart at runtime is the
+     * record: an older jar yields a {@code result} of null on every rewrite. The
+     * handlers therefore read the tail arguments by {@code args.length} rather
+     * than assuming them, because a partly-current patch must degrade the way an
+     * absent one does instead of throwing inside a dynamic proxy.
      */
     public static final List<Hook> REQUIRED = List.of(
             new Hook(TRIGGER_HANDLER, "getEffectRecordCause",
@@ -84,7 +95,9 @@ public final class PatchHooks {
             new Hook(TRIGGER_HANDLER, "setEffectRecordTriggerListener",
                     "trigger records, fired and not"),
             new Hook(REPLACEMENT_HANDLER, "setEffectRecordListener",
-                    "rewrite records"),
+                    "rewrite records: the event a replacement received, what it "
+                    + "rewrote in place, which of the five ReplacementResults "
+                    + "it returned and which ability stood in for the event"),
             new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
                     "per-clause attribution: an event's attributed_to"),
             new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",

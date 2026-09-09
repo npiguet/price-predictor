@@ -48,6 +48,8 @@ from effects.domain.event_schema import (
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
+    REWRITE_RESULTS_RUNNING_AN_ABILITY,
+    REWRITE_RESULTS_WITHOUT_ABILITY,
     ActivationPayload,
     CollectionMode,
     CombatPayload,
@@ -159,6 +161,13 @@ class Thresholds:
     #: event. ``None`` watches the number: the healthy share is below 1 —
     #: some hooks genuinely name no causing object — and is not yet known.
     min_cause_rate: float | None = None
+    #: Share of ``replaced``/``updated`` rewrite records that must name the
+    #: ability that ran instead. ``None`` watches the number without judging
+    #: it, and it has to stay watched until someone measures the healthy share:
+    #: a replacement scripted with ``ReplacementResult$`` returns one of those
+    #: two outcomes having run no ability at all, so the ceiling is below 1 and
+    #: nobody knows by how much.
+    min_rewrite_replaced_by_rate: float | None = None
     #: Share of fork records that may carry a ``state.global.turn`` differing
     #: from the record they mirror. Judged at zero rather than watched: a fork
     #: is taken *at* the moment it mirrors, so its snapshot is that moment's,
@@ -271,9 +280,11 @@ def _own_events(record: EffectRecord) -> tuple[Event, ...]:
     """The events a record lists as its own outcomes.
 
     Resolution and combat payloads only. A ``trigger`` carries the event it
-    evaluated rather than one it caused, and a ``rewrite`` carries one event
-    twice by construction — counting either as a repeat would report a
-    duplicate on every healthy record of those kinds.
+    evaluated rather than one it caused, and a ``rewrite`` carries the same
+    event on both sides whenever the replacement edited nothing — counting
+    either as a repeat would report a duplicate on every healthy record of
+    those kinds. That stays true now that ``outgoing`` may be null: the old
+    shards it was written for are still in the corpus.
     """
     payload = record.payload
     if isinstance(payload, (ResolutionPayload, CombatPayload)):
@@ -294,7 +305,12 @@ def _all_events(record: EffectRecord) -> tuple[Event, ...]:
     if isinstance(payload, TriggerPayload):
         return (payload.event,)
     if isinstance(payload, RewritePayload):
-        return (payload.incoming, payload.outgoing)
+        # `outgoing` is null when the replacement rewrote nothing in place,
+        # which is most of them; there is no second event to measure there.
+        return (
+            (payload.incoming, payload.outgoing)
+            if payload.outgoing else (payload.incoming,)
+        )
     return ()
 
 
@@ -443,6 +459,20 @@ class _Tally:
         self.fork_attribution: Counter[str] = Counter()
         #: event type -> [carries a cause, seen]
         self.cause_bearing: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        self.rewrites = 0
+        #: result value -> [carries an outgoing, names a replaced_by, seen].
+        #: Keyed by the wire spelling, plus ``absent`` for a record written
+        #: before the hook passed one — the three-way split the reader keeps.
+        self.rewrite_results: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
+        #: Rewrites whose ``outgoing`` is byte-identical to their ``incoming``.
+        #: Harmless on a pre-contract shard and a defect on a record that
+        #: carries a ``result``, so the two are counted apart.
+        self.rewrite_identity = 0
+        self.rewrite_identity_examples: list[str] = []
+        #: ``prevented``/``skipped`` records carrying something they cannot
+        #: have: those outcomes return above the ability call.
+        self.rewrite_impossible = 0
+        self.rewrite_impossible_examples: list[str] = []
 
     def add(self, record: EffectRecord) -> None:
         self.total += 1
@@ -517,6 +547,8 @@ class _Tally:
             counts = self.trigger_modes[str(mode)]
             counts[0] += payload.fired
             counts[1] += 1
+        elif isinstance(payload, RewritePayload):
+            self._add_rewrite(record, payload)
         elif isinstance(payload, CombatPayload) and record.is_probe:
             self.probe_forks += 1
             if payload.probed_keyword:
@@ -551,6 +583,36 @@ class _Tally:
                 self.resolution_events += 1
                 self.attribution[attribution_kind(event.attributed_to)] += 1
 
+    def _add_rewrite(self, record: EffectRecord, payload: RewritePayload) -> None:
+        self.rewrites += 1
+        counts = self.rewrite_results[
+            payload.result.value if payload.result else "absent"
+        ]
+        counts[0] += payload.outgoing is not None
+        counts[1] += bool(payload.replaced_by)
+        counts[2] += 1
+        if payload.result is None:
+            # Pre-contract shard: an identity `outgoing` is what that writer
+            # always produced, and counting it as a defect would fail every
+            # window that reaches back past the change.
+            return
+        if payload.outgoing is not None and (
+            payload.outgoing.as_dict() == payload.incoming.as_dict()
+        ):
+            self.rewrite_identity += 1
+            if len(self.rewrite_identity_examples) < _EXAMPLES:
+                self.rewrite_identity_examples.append(
+                    f"{record.record_id} ({payload.result.value})"
+                )
+        if payload.result in REWRITE_RESULTS_WITHOUT_ABILITY and (
+            payload.outgoing is not None or payload.replaced_by
+        ):
+            self.rewrite_impossible += 1
+            if len(self.rewrite_impossible_examples) < _EXAMPLES:
+                self.rewrite_impossible_examples.append(
+                    f"{record.record_id} ({payload.result.value})"
+                )
+
     def _add_costs(self, payload: ActivationPayload) -> None:
         costs = payload.costs
         paid = {
@@ -582,6 +644,10 @@ class _Tally:
             self._duplicates(limits),
             self._duplicate_events(limits),
             self._trigger_negatives(limits),
+            self._rewrites_say_what_happened(),
+            self._rewrites_do_not_copy_their_event(),
+            self._rewrite_outcomes_agree_with_their_payload(),
+            self._rewrites_name_the_substituted_ability(limits),
             self._zone_changes_say_where_from(limits),
             self._resolution_events_name_a_clause(limits),
             self._fork_events_name_a_clause(limits),
@@ -998,6 +1064,144 @@ class _Tally:
             detail=tuple(
                 f"{mode}: {counts[0]}:{counts[1] - counts[0]} ({rate:.1%} fired)"
                 for rate, mode, counts in skewed[:_EXAMPLES]
+            ),
+        )
+
+    def _rewrites_without_a_result(self) -> int:
+        """Rewrites written before the hook passed one.
+
+        Read through ``.get``: ``rewrite_results`` is a ``defaultdict`` and
+        indexing it here would invent an ``absent`` row on a healthy window,
+        which every rewrite finding then prints.
+        """
+        counts = self.rewrite_results.get("absent")
+        return counts[2] if counts else 0
+
+    def _rewrite_shown(self) -> str:
+        """The result histogram, for whichever rewrite finding is printing."""
+        return ", ".join(
+            f"{name} {counts[2]}"
+            for name, counts in sorted(self.rewrite_results.items())
+        ) or "none"
+
+    def _rewrites_say_what_happened(self) -> Finding:
+        """Which of the five replacement outcomes the handler reported.
+
+        The whole ``rewrite`` channel hangs off this field. Without it the
+        payload models an edit-the-event mechanism Forge does not have, and
+        "enters tapped", "exile it instead" and "prevent that damage" all record
+        as an event that came out as it went in — which is why 87% of the hook's
+        calls were dropped as identity rewrites and the channel collected 34
+        usable records in 1.88M against a 7% share of the trainer's mix.
+
+        Judged at zero rather than watched: a rewrite record with no result is
+        either a pre-contract shard in the window, which validate-corpus is not
+        meant to be pointed at, or a hook that lost the argument. Both are worth
+        stopping for, and the detail below says which.
+        """
+        absent = self._rewrites_without_a_result()
+        named = self.rewrites - absent
+        return Finding(
+            name="rewrite records say which replacement result happened",
+            ok=absent == 0,
+            measured=(
+                f"{named}/{self.rewrites} rewrite records carry a result "
+                f"({self._rewrite_shown()})"
+            ),
+            detail=() if absent == 0 else (
+                f"{absent} carry none: either the window reaches back to shards "
+                "collected before the hook passed one, or the listener is "
+                "reading the wrong argument slot",
+            ),
+        )
+
+    def _rewrites_do_not_copy_their_event(self) -> Finding:
+        """``outgoing`` written as a copy of ``incoming`` says nothing.
+
+        A record whose two halves are byte-identical is what made this channel
+        unreadable: it cannot be told from a replacement that genuinely changed
+        one parameter back to its own value, and there is no such thing. Null
+        says "not rewritten in place" honestly, and every outcome except an
+        in-place parameter edit should be writing it.
+
+        Counted only over records that carry a ``result``. A pre-contract writer
+        had no null to write, so failing on its shards would report a defect
+        that was fixed rather than one that is present.
+        """
+        judged = self.rewrites - self._rewrites_without_a_result()
+        rate = self.rewrite_identity / judged if judged else 0.0
+        return Finding(
+            name="a rewrite's outgoing event is not a copy of its incoming one",
+            ok=self.rewrite_identity == 0,
+            measured=(
+                f"{self.rewrite_identity}/{judged} result-carrying rewrites "
+                f"repeat their incoming event as outgoing ({rate:.1%})"
+            ),
+            detail=tuple(self.rewrite_identity_examples),
+        )
+
+    def _rewrite_outcomes_agree_with_their_payload(self) -> Finding:
+        """``prevented`` and ``skipped`` cannot carry a payload.
+
+        Both are bare ``return`` statements above the
+        ``playSpellAbilityNoStack`` call in ``executeReplacementInternal``: no
+        ability ran, and nothing was written to the parameter map on the way
+        out. A record of one of those carrying an ``outgoing`` or a
+        ``replaced_by`` is therefore a listener reading a stale argument, not a
+        rare game state — which is the failure a reflective ``InvocationHandler``
+        makes silently, because nothing compiles against the signature.
+
+        ``not_replaced`` is deliberately not judged here. Its prevention branch
+        writes ``PreventedAmount`` into the map before returning, so it may
+        legitimately carry an ``outgoing``.
+        """
+        ran = ", ".join(
+            f"{name} {counts[0]}/{counts[2]} with outgoing, "
+            f"{counts[1]}/{counts[2]} with replaced_by"
+            for name, counts in sorted(self.rewrite_results.items())
+        ) or "none"
+        cannot = sorted(r.value for r in REWRITE_RESULTS_WITHOUT_ABILITY)
+        return Finding(
+            name="outgoing is null on the results that rewrote nothing",
+            ok=self.rewrite_impossible == 0,
+            measured=(
+                f"{self.rewrite_impossible} {'/'.join(cannot)} records carry an "
+                f"outgoing or a replaced_by, of {self.rewrites} rewrites ({ran})"
+            ),
+            detail=tuple(self.rewrite_impossible_examples),
+        )
+
+    def _rewrites_name_the_substituted_ability(self, limits: Thresholds) -> Finding:
+        """Which ability ran instead, on the outcomes that ran one.
+
+        Watched by default, and it has to stay watched until the healthy share
+        is measured: ``Replaced`` and ``Updated`` are also reachable from a
+        replacement scripted with ``ReplacementResult$``, which returns the
+        outcome having run no ability at all, so the ceiling is genuinely below
+        1 and nobody knows by how much. The number still matters — a resolver
+        that keys nothing reads as zero here — which is exactly what a watched
+        finding is for.
+        """
+        floor = limits.min_rewrite_replaced_by_rate
+        seen = named = 0
+        for result in REWRITE_RESULTS_RUNNING_AN_ABILITY:
+            counts = self.rewrite_results.get(result.value)
+            if counts:
+                named += counts[1]
+                seen += counts[2]
+        rate = named / seen if seen else 0.0
+        limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
+        return Finding(
+            name="rewrites name the ability that ran instead",
+            ok=floor is None or not seen or rate >= floor,
+            watched=floor is None,
+            measured=(
+                f"{named}/{seen} replaced/updated records name a replaced_by "
+                f"key ({rate:.1%}, {limit})"
+            ),
+            detail=tuple(
+                f"{name}: {counts[1]}/{counts[2]} name one"
+                for name, counts in sorted(self.rewrite_results.items())
             ),
         )
 

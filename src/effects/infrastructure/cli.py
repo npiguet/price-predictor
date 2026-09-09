@@ -62,6 +62,7 @@ DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE = None
 DEFAULT_MIN_ATTRIBUTED_RATE = None
 DEFAULT_MIN_FORK_ATTRIBUTED_RATE = None
 DEFAULT_MIN_CAUSE_RATE = None
+DEFAULT_MIN_REWRITE_REPLACED_BY_RATE = None
 
 #: Judged, and at zero: a fork is taken at the moment it mirrors, so the two
 #: records describe one moment and there is no rate at which they may disagree
@@ -560,6 +561,16 @@ def _validate_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--min-rewrite-replaced-by-rate", type=float,
+        default=DEFAULT_MIN_REWRITE_REPLACED_BY_RATE,
+        help=(
+            "Share of the rewrite records whose result ran an ability that "
+            "must name it. Unset by default: measured and reported as "
+            "[WATCH]. A replacement that substitutes an ability and cannot "
+            "say which one is the shape that left this channel unreadable"
+        ),
+    )
+    parser.add_argument(
         "--max-mirror-turn-disagreement-rate", type=float,
         default=DEFAULT_MAX_MIRROR_TURN_DISAGREEMENT_RATE,
         help=(
@@ -610,6 +621,7 @@ def run_validate_corpus(args: argparse.Namespace) -> int:
         min_attributed_rate=args.min_attributed_rate,
         min_fork_attributed_rate=args.min_fork_attributed_rate,
         min_cause_rate=args.min_cause_rate,
+        min_rewrite_replaced_by_rate=args.min_rewrite_replaced_by_rate,
         max_mirror_turn_disagreement_rate=args.max_mirror_turn_disagreement_rate,
     )
     sidecars = _sidecars_for_validation(args)

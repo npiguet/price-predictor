@@ -105,6 +105,17 @@ KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
 #: written, so an empty ``ability`` still could not say why it was empty.
 #: Listing any of them would have made a broken channel look like a known one,
 #: which is the exact failure this list is shaped to avoid.
+#:
+#: The ``rewrite`` payload's ``result`` and ``replaced_by`` join that sentence.
+#: Both read as constant on every corpus collected so far -- ``result`` as
+#: ``None`` and ``replaced_by`` as empty, because the hook did not pass either --
+#: and both would look like format scarcity from here, since the channel itself
+#: held 34 records in 1.88M. It was not scarcity: the payload modelled an
+#: edit-the-event mechanism Forge does not have, so ``incoming`` and
+#: ``outgoing`` came back byte-identical and 87% of the channel was dropped on
+#: the floor. A field that was constant because its channel was empty must not
+#: stay excused once the channel fills; excusing these two would have hidden
+#: exactly the defect that emptied it.
 
 
 def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:

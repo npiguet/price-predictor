@@ -97,8 +97,6 @@ public final class PatchedCollectors implements AutoCloseable {
             "getTypeWithout", "getColorWithout", "getKeywordsWithout");
 
     private long recordsWritten;
-    /** Replacements whose two halves read alike, dropped rather than written. */
-    private long identityRewrites;
 
     /** The caps and budgets every collecting supervisor shares (FR-028). */
     public record CollectionCaps(
@@ -268,17 +266,6 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
-     * Rewrites dropped because both halves read the same.
-     *
-     * <p>Worth watching rather than ignoring: a run where this is most of the
-     * replacements means the parameter normaliser has no reading for the modes
-     * this format actually plays, not that replacements do nothing.
-     */
-    public long identityRewrites() {
-        return identityRewrites;
-    }
-
-    /**
      * Subscribes {@link #collectContinuous()} to the event bus.
      *
      * <p>A separate object rather than {@code @Subscribe} on the collector
@@ -368,21 +355,38 @@ public final class PatchedCollectors implements AutoCloseable {
     // ── rewrite records ─────────────────────────────────────────────────
 
     /**
-     * One record per replacement, carrying the event it received and the one it
-     * produced.
+     * One record per replacement, carrying the event it received, the one it
+     * produced, which of the five results it returned and what ran instead.
      *
      * <p>Two replacements stacked on one event each get their own record, and
      * the second's incoming is the first's outgoing — which only holds because
      * the hook deep-copies the parameter map before the call.
+     *
+     * <p>The last two arguments are read by length rather than assumed present.
+     * The listener is installed reflectively over whatever interface the patched
+     * checkout declares, so its arity is a runtime fact: against a Forge jar
+     * built before the result and the substituted ability were added, this is
+     * still a three-argument call and the record honestly says it learnt
+     * neither. Indexing {@code args[3]} unguarded would instead throw inside a
+     * dynamic proxy, and the engine would surface that in the middle of a
+     * replacement as an UndeclaredThrowableException.
+     *
+     * <p>Package-private rather than private, which none of the other handlers
+     * needs to be: that argument order is a runtime contract with no compiler
+     * behind it, so {@code RewriteContractTest} calls this with a synthesized
+     * argument array in the compiler's place.
      */
-    private InvocationHandler rewriteHandler() {
+    InvocationHandler rewriteHandler() {
         return (proxy, method, args) -> {
             if (!"onReplacement".equals(method.getName()) || args == null
                     || args.length < 3) {
                 return null;
             }
-            EffectRecord record = rewriteRecord(args[0], args[1], args[2]);
-            if (record == null || !allowDistinctRecord(
+            EffectRecord record = rewriteRecord(
+                    args[0], args[1], args[2],
+                    args.length > 3 ? args[3] : null,
+                    args.length > 4 ? args[4] : null);
+            if (!allowDistinctRecord(
                     "rewrite", record.payloadJson(), record.stateJson())) {
                 return null;
             }
@@ -403,29 +407,51 @@ public final class PatchedCollectors implements AutoCloseable {
      * {@code game.getCardState(host)} the way {@code executeReplacementInternal}
      * does: that answers an alternate-state card, and the entity id in
      * {@code state.entities} is the one this object carries.
+     *
+     * <p><b>Every replacement writes a record, including the ones that declined.</b>
+     * There used to be a rule here dropping a pair whose halves read alike, and
+     * it took 87% of them, because a substitution leaves the map untouched and
+     * looked exactly like a replacement that did nothing. The result argument is
+     * what tells those apart, so there is no longer such a thing as an
+     * uninformative rewrite record: a {@code not_replaced} is this channel's
+     * negative, the same role a non-fired evaluation plays on the trigger
+     * channel, and it is what teaches when a replacement applies rather than
+     * only what it does when it has.
+     *
+     * @param result     Forge's {@code ReplacementResult}, or null where the
+     *                   replacement threw or the listener predates the argument
+     * @param replacedBy the {@code ReplaceWith$} ability that stood in for the
+     *                   event, or null where none ran
      */
-    EffectRecord rewriteRecord(Object trait, Object before, Object after) {
+    EffectRecord rewriteRecord(
+            Object trait, Object before, Object after, Object result,
+            Object replacedBy) {
         CardTraitBase acting = trait instanceof CardTraitBase ctb ? ctb : null;
         Card source = acting == null ? null : acting.getHostCard();
         EffectEvent incoming = describeParams(trait, before);
-        EffectEvent outgoing = describeParams(trait, after);
-        if (incoming.toJson().equals(outgoing.toJson())) {
-            // The two halves are the whole record: what the replacement
-            // received and what it passed on. Identical halves say a
-            // replacement ran and changed nothing this collector can see, which
-            // is what all 62,546 rewrite records of the first corpus said,
-            // because nothing read a parameter *value*. Now that the values are
-            // read, an identity pair means either a replacement that genuinely
-            // changed no observed parameter -- Prevented and Skipped do -- or a
-            // mode this normaliser has no reading for. Telling those apart
-            // needs the engine's own ReplacementResult, which the hook does not
-            // hand over; until it does, dropping is the honest answer, and the
-            // alternative is a record nobody can learn anything from.
-            identityRewrites++;
-            JVM_REWRITES.dropped(modeOf(trait), before, after);
-            return null;
-        }
-        JVM_REWRITES.written(modeOf(trait));
+        EffectEvent rendered = describeParams(trait, after);
+        // Null rather than a copy, and this is the whole of the contract. The
+        // two halves were byte-identical on 87% of the candidates because a
+        // substitution does not edit the map -- it runs another ability and
+        // returns a result -- so a copy here says "changed nothing observable"
+        // about a replacement that exiled the card instead of killing it. What
+        // survives the comparison is the genuine in-place edit:
+        // ReplaceCounterEffect.setCount, a halved draw, Orim's Cure taking five
+        // combat damage down to one.
+        EffectEvent outgoing =
+                incoming.toJson().equals(rendered.toJson()) ? null : rendered;
+        CardTraitBase ran = replacedBy instanceof CardTraitBase ctb ? ctb : null;
+        // Keyed through the same resolver as the record's own acting line, so
+        // both join the provenance sidecar identically. Usually it answers that
+        // same printed line, because ReplaceWith$ names an SVar on the card the
+        // replacement is printed on -- what the field carries that `ability`
+        // does not is that an ability ran at all, and the rarer case where the
+        // overriding ability was granted from somewhere else.
+        List<ProvenanceKey> ranKeys = ran == null ? List.of() : keysOf(ran);
+        String wireResult = EffectRecord.rewriteResult(result);
+        JVM_REWRITES.record(
+                modeOf(trait), wireResult, outgoing != null, !ranKeys.isEmpty(),
+                before, after);
         return new EffectRecord(
                 writer.nextRecordId(), writer.runId(),
                 RecordShardWriter.timestamp(), gameId,
@@ -433,29 +459,31 @@ public final class PatchedCollectors implements AutoCloseable {
                 .actor(controllerOf(source))
                 .ability(resolveKey(acting))
                 .state(snapshots.toJsonForTrait(source, referencedOf(source), incoming))
-                .payload("{\"incoming\":" + incoming.toJson()
-                        + ",\"outgoing\":" + outgoing.toJson() + "}");
+                .payload(EffectRecord.rewritePayload(
+                        incoming, outgoing, wireResult, ranKeys));
     }
 
     /**
-     * What the rewrite channel dropped, for the whole worker process.
+     * What the rewrite channel wrote, for the whole worker process.
      *
-     * <p>The rewrite class collapsed to 8 records in 55,296 once identity pairs
-     * stopped being written, against a 7% share of the intended mixture.
-     * Dropping them was right -- an incoming half byte-identical to its
-     * outgoing half is a row nothing can be learnt from -- but it left an
-     * unanswerable question: is what remains all there is, or is this
-     * normaliser simply unable to express what these replacements change? The
-     * counter existed and nothing printed it, so the question could not even be
-     * asked of a live run.
+     * <p>It counted drops until the payload could say which of the five
+     * {@code ReplacementResult}s happened. That rule took 87% of the
+     * candidates, and it had to: a substitution runs another ability rather
+     * than editing the parameter map, so "exile it instead" and "the
+     * replacement declined" arrived as the same pair of identical halves. With
+     * the result recorded there is nothing left to drop, so this counts what
+     * the channel produced instead — and the question it now answers, in the
+     * first hour of a run rather than at the end of one, is whether the channel
+     * filled: how many records, and in what proportions of result.
      *
-     * <p>The breakdown is what answers it. For every dropped pair the raw
-     * parameter maps are compared beside the rendered ones, and a key whose
-     * <em>value</em> moved while the rendered halves stayed identical names a
-     * parameter this collector does not read. A run whose dropped rewrites are
-     * mostly those is a normaliser gap with a list of keys to close it; a run
-     * whose dropped rewrites show no raw difference at all is a channel that is
-     * genuinely as small as it looks, and the mixture share is what should move.
+     * <p>The raw-parameter breakdown survives the change of subject, aimed at
+     * the records that carry no {@code outgoing}. A key whose <em>value</em>
+     * moved while the rendered halves stayed identical still names a parameter
+     * this collector does not read, and that is still the difference between
+     * "this replacement rewrote nothing" and "this normaliser cannot express
+     * what it rewrote". What is new is that such a record is now written rather
+     * than discarded, so the diagnostic says what a written record is missing
+     * rather than what a discarded one contained.
      *
      * <p>Per JVM rather than per game: one game's replacements are too few to
      * read a share off, and a worker plays many games. Synchronized because
@@ -471,37 +499,61 @@ public final class PatchedCollectors implements AutoCloseable {
         /** Games between two summaries, after the first. */
         private static final int GAMES_PER_SUMMARY = 10;
 
-        private final Map<String, long[]> droppedByMode = new java.util.TreeMap<>();
-        private final Map<String, long[]> writtenByMode = new java.util.TreeMap<>();
+        /**
+         * The result of a record that carries none.
+         *
+         * <p>Two causes, and the record cannot tell them apart: the replacement
+         * threw, or this worker is running against a Forge jar whose listener
+         * predates the argument. A run where this is the whole breakdown is the
+         * second one, and it is the shape to look for in the first summary a
+         * fresh deployment prints.
+         */
+        private static final String NO_RESULT = "?";
+
+        private final Map<String, long[]> byResult = new java.util.TreeMap<>();
+        private final Map<String, long[]> byModeAndResult = new java.util.TreeMap<>();
+        private final Map<String, long[]> rewrittenByMode = new java.util.TreeMap<>();
         private final Map<String, long[]> movedButUnread = new java.util.TreeMap<>();
-        private final Map<String, long[]> unchangedByMode = new java.util.TreeMap<>();
-        private long dropped;
-        private long written;
-        private long droppedWithNothingMoved;
+        private final Map<String, long[]> unreadableByMode = new java.util.TreeMap<>();
+        private long records;
+        private long rewritten;
+        private long named;
+        private long unreadable;
         private long games;
 
-        synchronized void written(String mode) {
-            written++;
-            count(writtenByMode, mode == null ? "?" : mode);
-        }
-
         /**
-         * One dropped pair, and which raw keys moved under the drop.
+         * One replacement, and what its record says.
          *
-         * <p>Compared as rendered strings rather than by {@code equals}: the
-         * engine deep-copies the containers of the incoming map and leaves the
-         * leaves as identity references, so a copied {@code Multiset} that was
-         * rewritten in place is a different object reading the same text when
-         * nothing changed and a different text when something did. Two distinct
-         * cards sharing one name read alike, which understates rather than
-         * invents -- the right way round for a diagnostic whose job is to say
-         * "there is more here than the record shows".
+         * <p>The raw maps are compared as rendered strings rather than by
+         * {@code equals}: the engine deep-copies the containers of the incoming
+         * map and leaves the leaves as identity references, so a copied
+         * {@code Multiset} that was rewritten in place is a different object
+         * reading the same text when nothing changed and a different text when
+         * something did. Two distinct cards sharing one name read alike, which
+         * understates rather than invents — the right way round for a diagnostic
+         * whose job is to say "there is more here than the record shows".
+         *
+         * @param rewritten whether the record carries an {@code outgoing}
+         * @param named     whether it names the ability that ran instead
          */
-        synchronized void dropped(
-                String mode, Object beforeParams, Object afterParams) {
-            dropped++;
+        synchronized void record(
+                String mode, String result, boolean rewritten, boolean named,
+                Object beforeParams, Object afterParams) {
+            records++;
             String modeName = mode == null ? "?" : mode;
-            count(droppedByMode, modeName);
+            String resultName = result == null ? NO_RESULT : result;
+            count(byResult, resultName);
+            count(byModeAndResult, modeName + "." + resultName);
+            if (named) {
+                this.named++;
+            }
+            if (rewritten) {
+                this.rewritten++;
+                count(rewrittenByMode, modeName);
+                // A record that rewrote something in place already shows what
+                // moved, so there is nothing for the gap diagnostic to find.
+                return;
+            }
             Map<String, Object> before = paramsByName(beforeParams);
             Map<String, Object> after = paramsByName(afterParams);
             Set<String> keys = new LinkedHashSet<>(before.keySet());
@@ -519,9 +571,9 @@ public final class PatchedCollectors implements AutoCloseable {
                     count(movedButUnread, entry);
                 }
             }
-            if (!moved) {
-                droppedWithNothingMoved++;
-                count(unchangedByMode, modeName);
+            if (moved) {
+                unreadable++;
+                count(unreadableByMode, modeName);
             }
         }
 
@@ -531,13 +583,13 @@ public final class PatchedCollectors implements AutoCloseable {
          * <p>The first game always, so a run that is wrong is visibly wrong a
          * minute after it starts rather than eight hours later; every tenth
          * after that, so a worker's log stays readable. A process that saw no
-         * replacement at all prints nothing -- that is what
+         * replacement at all prints nothing — that is what
          * {@code PatchHooks.report()} already says, and repeating it per game
          * would be noise.
          */
         synchronized void endOfGame() {
             games++;
-            if (dropped + written == 0) {
+            if (records == 0) {
                 return;
             }
             if (games == 1 || games % GAMES_PER_SUMMARY == 0) {
@@ -546,38 +598,46 @@ public final class PatchedCollectors implements AutoCloseable {
             }
         }
 
-        synchronized long dropped() {
-            return dropped;
+        synchronized long records() {
+            return records;
         }
 
-        synchronized long written() {
-            return written;
+        synchronized long rewritten() {
+            return rewritten;
+        }
+
+        synchronized long named() {
+            return named;
         }
 
         /** The rendered summary, its own method so a test can read it. */
         synchronized String summary() {
-            long total = dropped + written;
             StringBuilder out = new StringBuilder();
             out.append("Effect rewrites [worker, ").append(games)
                     .append(games == 1 ? " game]: " : " games]: ")
-                    .append(written).append(" written, ")
-                    .append(dropped).append(" dropped as identity (")
-                    .append(total == 0
-                            ? 0.0 : Math.round(1000.0 * dropped / total) / 10.0)
-                    .append("%)");
-            out.append("\n  dropped by mode: ").append(top(droppedByMode));
-            out.append("\n  written by mode: ").append(top(writtenByMode));
-            out.append("\n  raw parameters that moved with nothing to show for it: ")
+                    .append(records).append(" records, ")
+                    .append(rewritten).append(" rewrote a parameter in place (")
+                    .append(share(rewritten, records))
+                    .append("%), ").append(named)
+                    .append(" named the ability that ran instead");
+            // The headline of the run. A first summary whose results are all
+            // "?" is a listener the patched jar does not have; one that is all
+            // not_replaced is a format whose replacements never apply; one with
+            // no records at all never reaches here.
+            out.append("\n  by result: ").append(top(byResult));
+            out.append("\n  by mode and result: ").append(top(byModeAndResult));
+            out.append("\n  rewrote in place, by mode: ").append(top(rewrittenByMode));
+            // The normaliser gap, and the list of keys that would close it.
+            out.append("\n  ").append(unreadable)
+                    .append(" carried no outgoing while a raw parameter moved: ")
                     .append(top(movedButUnread));
-            out.append("\n  ").append(droppedWithNothingMoved)
-                    .append(" dropped with no raw parameter difference at all");
-            // Split by mode, because the whole-run total does not say which
-            // mode is a normaliser gap and which is genuinely an identity. The
-            // smoke run's 110 drops needed arithmetic across three lines to
-            // learn that 62 of Moved's 91 changed nothing at all and 29 changed
-            // only the ETB counter table; this line says it outright.
-            out.append("\n  of those, by mode: ").append(top(unchangedByMode));
+            out.append("\n  of those, by mode: ").append(top(unreadableByMode));
             return out.toString();
+        }
+
+        /** A percentage to one decimal, or zero rather than a division by it. */
+        private static double share(long part, long whole) {
+            return whole == 0 ? 0.0 : Math.round(1000.0 * part / whole) / 10.0;
         }
 
         private static void count(Map<String, long[]> into, String key) {

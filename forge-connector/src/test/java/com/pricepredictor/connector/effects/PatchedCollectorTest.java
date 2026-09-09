@@ -13,6 +13,7 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CounterType;
 import forge.game.replacement.ReplacementEffect;
+import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
@@ -438,9 +439,8 @@ class PatchedCollectorTest {
     @Test
     void aRewriteRecordNamesItsReplacementEffect() {
         // Rest in Peace rather than Paralyze: its replacement redirects a move,
-        // so the two halves differ and the record is written. Paralyze's is a
-        // CantHappen prevention, which changes no parameter at all -- see
-        // aRewriteThatChangedNothingObservableIsDroppedAndCounted.
+        // so this is the in-place rewrite the pair was always able to express,
+        // and every other field on the record can be read beside it.
         Card rest = TestCards.build("Rest in Peace");
         ReplacementEffect replacement =
                 rest.getCurrentState().getReplacementEffects().iterator().next();
@@ -448,7 +448,8 @@ class PatchedCollectorTest {
         String json = recording().rewriteRecord(
                 replacement,
                 Map.of("Card", rest, "Destination", ZoneType.Graveyard),
-                Map.of("Card", rest, "Destination", ZoneType.Exile)).toJson();
+                Map.of("Card", rest, "Destination", ZoneType.Exile),
+                ReplacementResult.Replaced, null).toJson();
 
         assertTrue(json.contains("\"kind\":\"rewrite\""), json);
         assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
@@ -464,24 +465,32 @@ class PatchedCollectorTest {
     }
 
     /**
-     * A prevention that changes no parameter is a real replacement all the same.
+     * A prevention that changes no parameter is a record, not a loss.
      *
-     * <p>Paralyze's "doesn't untap" is the shape: the engine records it as
-     * Skipped rather than by rewriting a value, so both halves read alike and
-     * the record is dropped. Telling it from a mode this collector cannot read
-     * needs the engine's ReplacementResult, which the hook does not hand over —
-     * so this is a documented loss, not an accident.
+     * <p>Paralyze's "doesn't untap" is the shape the whole contract is for: the
+     * engine skips the event rather than rewriting a value, so both halves read
+     * alike and the record used to be dropped. It was 87% of the channel. The
+     * result is what makes the row readable without an outgoing — {@code skipped}
+     * says outright what an identity pair could only imply — so the record is
+     * written, and its outgoing is null rather than a copy of its incoming.
      */
     @Test
-    void aPreventionThatRewritesNothingIsAmongTheDroppedOnes() {
+    void aPreventionThatRewritesNothingIsStillARecord() {
         Card paralyze = TestCards.build("Paralyze");
         ReplacementEffect prevention =
                 paralyze.getCurrentState().getReplacementEffects().iterator().next();
-        PatchedCollectors collector = recording();
 
-        assertNull(collector.rewriteRecord(
-                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze)));
-        assertEquals(1L, collector.identityRewrites());
+        EffectRecord record = recording().rewriteRecord(
+                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
+                ReplacementResult.Skipped, null);
+
+        assertNotNull(record, "a skipped replacement is this channel's negative");
+        String json = record.toJson();
+        assertTrue(json.contains("\"result\":\"skipped\""), json);
+        assertTrue(json.contains("\"outgoing\":null"),
+                "null, never a copy of incoming: " + json);
+        assertTrue(json.contains("\"replaced_by\":[]"),
+                "a skip returns above the ability that would have run: " + json);
     }
 
     /**
@@ -520,7 +529,8 @@ class PatchedCollectorTest {
         String json = recording().rewriteRecord(
                 replacement,
                 Map.of("Card", rest, "Destination", ZoneType.Graveyard),
-                Map.of("Card", rest, "Destination", ZoneType.Exile)).toJson();
+                Map.of("Card", rest, "Destination", ZoneType.Exile),
+                ReplacementResult.Replaced, null).toJson();
 
         assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
         assertTrue(json.contains("\"ability_unresolved\":null"), json);
@@ -734,7 +744,9 @@ class PatchedCollectorTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Destination", ZoneType.Exile);
 
-        EffectRecord record = recording().rewriteRecord(new FakeTrait("Moved"), before, after);
+        EffectRecord record = recording().rewriteRecord(
+                new FakeTrait("Moved"), before, after,
+                ReplacementResult.Updated, null);
 
         assertNotNull(record, "a replacement that redirected a card is a real rewrite");
         String json = record.toJson();
@@ -743,20 +755,25 @@ class PatchedCollectorTest {
     }
 
     /**
-     * A rewrite whose halves still read alike is dropped, not written.
+     * A rewrite whose halves read alike says so with a null, not with a copy.
      *
-     * <p>It is the same information-free row the first corpus was full of, and
-     * telling "the replacement changed nothing observable" from "this collector
-     * has no reading for the mode" needs the engine's ReplacementResult, which
-     * the hook does not hand over.
+     * <p>Writing the copy is what made the channel unreadable: 87% of the
+     * candidates were a substitution whose two halves were byte-identical
+     * because Forge substitutes by running another ability rather than by
+     * editing the map. Null says "not rewritten" outright, and the corpus
+     * validator judges an identity pair at zero rather than letting one parse.
      */
     @Test
-    void aRewriteThatChangedNothingObservableIsDroppedAndCounted() {
-        PatchedCollectors collector = recording();
+    void aRewriteThatChangedNoObservableParameterCarriesNoOutgoing() {
         Map<String, Object> params = Map.of("Card", TestCards.build("Mountain"));
 
-        assertNull(collector.rewriteRecord(new FakeTrait("Moved"), params, params));
-        assertEquals(1L, collector.identityRewrites());
+        String json = recording().rewriteRecord(
+                new FakeTrait("Moved"), params, params,
+                ReplacementResult.Replaced, null).toJson();
+
+        assertTrue(json.contains("\"outgoing\":null"), json);
+        assertFalse(json.contains("\"outgoing\":{"),
+                "never a copy of incoming: " + json);
     }
 
     /**
@@ -1022,8 +1039,9 @@ class PatchedCollectorTest {
         Map<String, Object> after = new LinkedHashMap<>(before);
         after.put("Number", 1);
 
-        EffectRecord record =
-                recording().rewriteRecord(new FakeTrait("DrawCards"), before, after);
+        EffectRecord record = recording().rewriteRecord(
+                new FakeTrait("DrawCards"), before, after,
+                ReplacementResult.Updated, null);
 
         assertNotNull(record, "a replacement that halved a draw is a real rewrite");
         String json = record.toJson();
@@ -1042,54 +1060,77 @@ class PatchedCollectorTest {
         assertTrue(json.contains("\"delta\":4"), json);
     }
 
-    // ── what the rewrite channel dropped ───────────────────────────────
+    // ── what the rewrite channel wrote ─────────────────────────────────
 
     /**
-     * A dropped pair names the parameters that moved under it.
+     * A record with no outgoing names the parameters that moved under it.
      *
-     * <p>The counter alone says the channel is small; this says whether it is
-     * small because replacements do little or because the normaliser cannot
-     * read what they did.
+     * <p>The count alone says the channel filled; this says whether the rows in
+     * it are as thin as they look or whether the normaliser cannot express what
+     * the replacement changed, and it hands over the key that would close the
+     * gap.
      */
     @Test
-    void aDroppedRewriteNamesTheParametersTheNormaliserDidNotRead() {
+    void aRecordWithNoOutgoingNamesTheParametersTheNormaliserDidNotRead() {
         PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
         Card card = TestCards.build("Mountain");
-        tally.dropped("Moved",
+        tally.record("Moved", "replaced", false, false,
                 Map.of("Card", card, "LibraryPosition", 0),
                 Map.of("Card", card, "LibraryPosition", -1));
 
         String summary = tally.summary();
         assertTrue(summary.contains("Moved.LibraryPosition=1"), summary);
-        assertTrue(summary.contains("0 dropped with no raw parameter"), summary);
+        assertTrue(summary.contains(
+                "1 carried no outgoing while a raw parameter moved"), summary);
     }
 
-    /** And one that moved nothing at all is counted apart from those. */
+    /** And one that moved nothing at all is not counted against the reader. */
     @Test
-    void aDropWithNothingMovedIsTheOtherAnswer() {
+    void aRecordThatMovedNothingIsNoNormaliserGap() {
         PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
-        tally.dropped("Untap", same, same);
+        tally.record("Untap", "skipped", false, false, same, same);
 
         String summary = tally.summary();
-        assertTrue(summary.contains("1 dropped with no raw parameter"), summary);
         assertTrue(summary.contains(
-                "moved with nothing to show for it: none"), summary);
+                "0 carried no outgoing while a raw parameter moved: none"), summary);
     }
 
-    /** The share is the headline, because 8 in 55,296 was the finding. */
+    /**
+     * The headline is the volume and the results, because that is the question.
+     *
+     * <p>The channel held 34 records in 1.88M against a 7% share of the
+     * mixture, and the operator needs to know in the first hour whether it
+     * filled. A breakdown that is all {@code ?} is a Forge jar whose listener
+     * predates the result argument, which reads identically to a wired one on
+     * every other line of the summary.
+     */
     @Test
-    void theSummaryLeadsWithTheDroppedShare() {
+    void theSummaryLeadsWithTheVolumeAndTheResults() {
         PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
         Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
-        tally.written("Moved");
+        tally.record("Moved", "updated", true, true, same, same);
         for (int i = 0; i < 9; i++) {
-            tally.dropped("Moved", same, same);
+            tally.record("Moved", "not_replaced", false, false, same, same);
         }
 
         String summary = tally.summary();
-        assertTrue(summary.contains("1 written, 9 dropped as identity (90.0%)"),
+        assertTrue(summary.contains(
+                "10 records, 1 rewrote a parameter in place (10.0%), "
+                        + "1 named the ability that ran instead"), summary);
+        assertTrue(summary.contains("by result: not_replaced=9, updated=1"), summary);
+        assertTrue(summary.contains("by mode and result: Moved.not_replaced=9"),
                 summary);
+    }
+
+    /** A listener that never learnt the result says so rather than guessing. */
+    @Test
+    void aResultlessRecordIsItsOwnRowInTheBreakdown() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
+        tally.record("Moved", null, false, false, same, same);
+
+        assertTrue(tally.summary().contains("by result: ?=1"), tally.summary());
     }
 
     /**
@@ -1114,7 +1155,7 @@ class PatchedCollectorTest {
 
     /** The live path feeds the tally, which is what makes it a live number. */
     @Test
-    void bothHalvesOfTheRewriteChannelReachTheWorkerTally() {
+    void everyReplacementReachesTheWorkerTally() {
         Card card = TestCards.build("Mountain");
         Map<String, Object> before = new LinkedHashMap<>(Map.of(
                 "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
@@ -1123,15 +1164,21 @@ class PatchedCollectorTest {
         after.put("Destination", ZoneType.Exile);
         // Deltas rather than absolutes: the tally is the worker's, so every
         // other test in this class has already contributed to it.
-        long droppedBefore = PatchedCollectors.JVM_REWRITES.dropped();
-        long writtenBefore = PatchedCollectors.JVM_REWRITES.written();
+        long recordsBefore = PatchedCollectors.JVM_REWRITES.records();
+        long rewrittenBefore = PatchedCollectors.JVM_REWRITES.rewritten();
         PatchedCollectors collector = recording();
 
-        collector.rewriteRecord(new FakeTrait("Moved"), before, after);
-        collector.rewriteRecord(new FakeTrait("Moved"), before, before);
+        collector.rewriteRecord(
+                new FakeTrait("Moved"), before, after,
+                ReplacementResult.Updated, null);
+        collector.rewriteRecord(
+                new FakeTrait("Moved"), before, before,
+                ReplacementResult.NotReplaced, null);
 
-        assertEquals(writtenBefore + 1, PatchedCollectors.JVM_REWRITES.written());
-        assertEquals(droppedBefore + 1, PatchedCollectors.JVM_REWRITES.dropped());
+        // Two records for two replacements: the one that declined is counted
+        // too, because it is no longer dropped.
+        assertEquals(recordsBefore + 2, PatchedCollectors.JVM_REWRITES.records());
+        assertEquals(rewrittenBefore + 1, PatchedCollectors.JVM_REWRITES.rewritten());
     }
 
     // ── coalescing the kinds that had none ─────────────────────────────
@@ -1574,30 +1621,33 @@ class PatchedCollectorTest {
         assertTrue(json.contains("\"to_state\":\"face_up\""), json);
     }
 
-    // ── what the rewrite channel drops, and why ─────────────────────────
+    // ── what the rewrite channel cannot express ─────────────────────────
 
     /**
-     * The identity tally separates an unreadable change from no change at all.
+     * The tally separates an unreadable change from no change at all.
      *
      * <p>The smoke run reported 110 drops, {@code Moved=91} among them, and
      * {@code 69 dropped with no raw parameter difference at all} — three lines
      * needing arithmetic across them to reach the one fact that decides what to
-     * do next: 62 of Moved's 91 changed nothing whatever and are genuinely
-     * identity rewrites, while 29 changed only the entry-counter table, which
-     * {@code zone_change} has no slot for. The per-mode line says it outright.
+     * do next: 62 of Moved's 91 changed nothing whatever, while 29 changed only
+     * the entry-counter table, which {@code zone_change} has no slot for. Those
+     * rows are all written now, so the question is no longer which to drop but
+     * which of them a reader is being short-changed on.
      */
     @Test
-    void theIdentityTallySeparatesAnUnreadableChangeFromNoChange() {
+    void theTallySeparatesAnUnreadableChangeFromNoChange() {
         PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
 
-        tally.dropped("Moved", Map.of("Destination", "Battlefield"),
+        tally.record("Moved", "replaced", false, true,
+                Map.of("Destination", "Battlefield"),
                 Map.of("Destination", "Battlefield"));
-        tally.dropped("Moved", Map.of("CounterMap", "{}"),
+        tally.record("Moved", "replaced", false, true,
+                Map.of("CounterMap", "{}"),
                 Map.of("CounterMap", "{P1P1=1}"));
 
         String summary = tally.summary();
         assertTrue(summary.contains(
-                "1 dropped with no raw parameter difference at all"), summary);
+                "1 carried no outgoing while a raw parameter moved"), summary);
         assertTrue(summary.contains("of those, by mode: Moved=1"), summary);
         assertTrue(summary.contains("Moved.CounterMap=1"), summary);
     }
@@ -1609,19 +1659,23 @@ class PatchedCollectorTest {
      * names {@code Untaps}, and the mode table was written from the trigger
      * vocabulary — so an untap replacement took the generic type, carried
      * nothing but its own name, and could not differ from itself however much
-     * it changed. Paralyze's is that mode. It still drops, because a prevention
-     * changes no parameter at all, but the drop is now a mode the table knows.
+     * it changed. Paralyze's is that mode. Its record still carries no outgoing,
+     * because a prevention changes no parameter at all, but the incoming half is
+     * now typed rather than generic.
      */
     @Test
     void anUntapReplacementIsSpelledTheReplacementSideWay() {
         Card paralyze = TestCards.build("Paralyze");
         ReplacementEffect prevention =
                 paralyze.getCurrentState().getReplacementEffects().iterator().next();
-        PatchedCollectors collector = recording();
 
         assertEquals("Untap", String.valueOf(prevention.getMode()));
-        assertNull(collector.rewriteRecord(
-                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze)));
+        String json = recording().rewriteRecord(
+                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze),
+                ReplacementResult.Skipped, null).toJson();
+
+        assertTrue(json.contains("\"mode\":\"Untap\""), json);
+        assertTrue(json.contains("\"outgoing\":null"), json);
     }
 
     /**

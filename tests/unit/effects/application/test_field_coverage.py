@@ -17,6 +17,8 @@ from effects.application.field_coverage import (
     constant_fields,
     field_coverage,
 )
+from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
     Candidate,
     CombatPayload,
@@ -28,6 +30,8 @@ from effects.domain.records import (
     PlayabilitySubkind,
     RecordKind,
     ResolutionPayload,
+    RewritePayload,
+    RewriteResult,
 )
 from effects.domain.state_snapshot import (
     CombatStatus,
@@ -168,6 +172,70 @@ class TestTheWalk:
             assert f"record.state.entities[].{spec.name}" not in coverage or True
         for spec in dataclasses.fields(GlobalState):
             assert f"record.state.global_.{spec.name}" in coverage
+
+
+class TestTheRewriteChannelIsNotExcused:
+    """The channel that was empty because its payload modelled the wrong thing.
+
+    ``rewrite`` held 34 records in 1.88M, and it would have been easy to read
+    that as format scarcity and put its fields on the excused list. It was not:
+    Forge substitutes by running a different ability, so ``incoming`` and
+    ``outgoing`` came back byte-identical and 87% of the channel was dropped.
+    ``result`` and ``replaced_by`` are what those records were trying to say, so
+    a corpus where they read constant is evidence about the *hook*, and the one
+    thing that must not happen is for the list to absorb them.
+    """
+
+    def _rewrite(self, record_id: str, **payload_kwargs) -> EffectRecord:
+        return _record(
+            RewritePayload(
+                incoming=Event(type=EventType.DAMAGE_DEALT,
+                               params={"amount": 3}),
+                **payload_kwargs,
+            ),
+            kind=RecordKind.REWRITE,
+            record_id=record_id,
+        )
+
+    def test_neither_new_field_is_on_the_excused_list(self):
+        for name in ("result", "replaced_by"):
+            path = f"record.payload<RewritePayload>.{name}"
+            assert path not in KNOWN_CONSTANT_FIELDS, (
+                f"{path} was constant because the hook passed nothing, which is "
+                "a dead channel rather than an unexercised one"
+            )
+
+    def test_the_walk_reaches_them(self):
+        coverage = field_coverage([self._rewrite("r1")])
+        assert "record.payload<RewritePayload>.result" in coverage
+        assert "record.payload<RewritePayload>.replaced_by" in coverage
+
+    def test_a_hook_that_passes_no_result_reads_as_a_constant_field(self):
+        """The shape of the pre-contract corpus, and what it should report."""
+        records = [self._rewrite("r1"), self._rewrite("r2")]
+        constant = constant_fields(field_coverage(records))
+        assert "record.payload<RewritePayload>.result" in constant
+        assert "record.payload<RewritePayload>.replaced_by" in constant
+
+    def test_a_wired_hook_clears_them(self):
+        records = [
+            self._rewrite("r1", result=RewriteResult.NOT_REPLACED),
+            self._rewrite("r2", result=RewriteResult.REPLACED, replaced_by=(
+                ProvenanceKey(
+                    script_file="cardsfolder/l/leyline_of_the_void.txt",
+                    face=0, trait_kind="replacement", index_within_kind=0,
+                ),
+            )),
+        ]
+        constant = constant_fields(field_coverage(records))
+        assert "record.payload<RewritePayload>.result" not in constant
+        assert "record.payload<RewritePayload>.replaced_by" not in constant
+
+    def test_a_null_outgoing_counts_as_unpopulated_rather_than_as_data(self):
+        """``outgoing`` gained a default, so "not rewritten" no longer reads as
+        a populated field the way a required one always did."""
+        coverage = field_coverage([self._rewrite("r1")])
+        assert coverage["record.payload<RewritePayload>.outgoing"].populated == 0
 
 
 class TestTheRatchet:

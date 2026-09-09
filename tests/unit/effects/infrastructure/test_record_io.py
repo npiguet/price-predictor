@@ -33,6 +33,7 @@ from effects.domain.records import (
     ResolutionOutcome,
     ResolutionPayload,
     RewritePayload,
+    RewriteResult,
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
@@ -149,8 +150,32 @@ ALL_KINDS = {
     "rewrite": dict(
         kind=RecordKind.REWRITE, moment=None,
         payload=RewritePayload(
-            incoming=Event(type=EventType.DAMAGE_DEALT, params={"amount": 3}),
-            outgoing=Event(type=EventType.DAMAGE_DEALT, params={"amount": 0}),
+            incoming=Event(type=EventType.DAMAGE_DEALT, params={"amount": 5}),
+            outgoing=Event(type=EventType.DAMAGE_DEALT, params={"amount": 1}),
+            result=RewriteResult.UPDATED,
+        ),
+    ),
+    # The shape most of the channel actually takes: Forge substitutes by
+    # running another ability, so nothing in the event's map is edited.
+    "rewrite-substituted": dict(
+        kind=RecordKind.REWRITE, moment=None,
+        payload=RewritePayload(
+            incoming=Event(type=EventType.ZONE_CHANGE, subjects=("E12",),
+                           params={"to_zone": "graveyard"}),
+            result=RewriteResult.REPLACED,
+            replaced_by=(
+                ProvenanceKey(
+                    script_file="cardsfolder/l/leyline_of_the_void.txt",
+                    face=0, trait_kind="replacement", index_within_kind=0,
+                ),
+            ),
+        ),
+    ),
+    "rewrite-declined": dict(
+        kind=RecordKind.REWRITE, moment=None,
+        payload=RewritePayload(
+            incoming=Event(type=EventType.DAMAGE_DEALT, params={"amount": 5}),
+            result=RewriteResult.NOT_REPLACED,
         ),
     ),
     "continuous": dict(
@@ -387,6 +412,124 @@ class TestTheProbedPerturbation:
         loaded = record_from_dict(wire)
         assert loaded.payload.probed_keyword is None
         assert loaded.payload.attackers == ("E12",)
+
+
+class TestTheRewriteResult:
+    """What the replacement did, and which ability did it.
+
+    ``{incoming, outgoing}`` alone modelled an edit-the-event mechanism Forge
+    does not have: it substitutes by running a *different* ability, so the two
+    maps came back byte-identical and 87% of the channel was dropped as
+    identity rewrites. These four fields are the whole of what those records
+    were trying to say, so a serializer bug here is the channel going quiet
+    again — and the corpus cannot be recollected.
+    """
+
+    def _rewrite(self, **payload_kwargs) -> EffectRecord:
+        return _record(
+            kind=RecordKind.REWRITE, moment=None,
+            payload=RewritePayload(
+                incoming=Event(type=EventType.DAMAGE_DEALT,
+                               subjects=("P1",), params={"amount": 5}),
+                **payload_kwargs,
+            ),
+        )
+
+    def test_an_in_place_edit_round_trips_both_halves_and_its_result(self):
+        """Orim's Cure taking 5 combat damage down to 1: a real rewrite."""
+        record = self._rewrite(
+            outgoing=Event(type=EventType.DAMAGE_DEALT, subjects=("P1",),
+                           params={"amount": 1}),
+            result=RewriteResult.UPDATED,
+        )
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded == record
+        assert loaded.payload.outgoing.params["amount"] == 1
+        assert loaded.payload.result is RewriteResult.UPDATED
+
+    def test_a_substitution_writes_null_rather_than_a_copy(self):
+        """The rule the channel's readability rests on: a record whose two
+        halves are identical says nothing, and null says "not rewritten"."""
+        key = ProvenanceKey(
+            script_file="cardsfolder/l/leyline_of_the_void.txt",
+            face=0, trait_kind="replacement", index_within_kind=0,
+        )
+        record = self._rewrite(result=RewriteResult.REPLACED, replaced_by=(key,))
+        wire = record_to_dict(record)
+        assert wire["payload"]["outgoing"] is None
+        assert wire["payload"]["result"] == "replaced"
+        loaded = record_from_dict(wire)
+        assert loaded.payload.outgoing is None
+        assert loaded.payload.replaced_by == (key,)
+
+    def test_a_declined_replacement_round_trips_as_a_negative(self):
+        """Every executeReplacement call writes a record, this one included:
+        the negatives are what teach when a replacement applies."""
+        record = self._rewrite(result=RewriteResult.NOT_REPLACED)
+        loaded = record_from_dict(record_to_dict(record))
+        assert loaded == record
+        assert loaded.payload.result is RewriteResult.NOT_REPLACED
+        assert loaded.payload.replaced_by == ()
+
+    @pytest.mark.parametrize("result", list(RewriteResult))
+    def test_every_result_survives_the_wire_in_its_snake_case_spelling(
+        self, result: RewriteResult,
+    ):
+        record = self._rewrite(result=result)
+        assert record_to_dict(record)["payload"]["result"] == result.value
+        assert result.value == result.value.lower()
+        assert record_from_dict(record_to_dict(record)).payload.result is result
+
+
+class TestARewriteShardCollectedBeforeTheResult:
+    """Both shapes coexist: the corpus is append-only.
+
+    A shard written before the hook passed a result carries
+    ``{incoming, outgoing}`` and nothing else, and its ``outgoing`` is usually
+    a copy of its ``incoming``. It has to keep reading, and it has to keep
+    reading as a *third* state -- not as ``not_replaced``, which would
+    reinterpret every one of those records as a replacement the collector
+    watched decline.
+    """
+
+    def _old_wire(self) -> dict:
+        wire = record_to_dict(
+            _record(
+                kind=RecordKind.REWRITE, moment=None,
+                payload=RewritePayload(
+                    incoming=Event(type=EventType.DAMAGE_DEALT,
+                                   params={"amount": 3}),
+                    outgoing=Event(type=EventType.DAMAGE_DEALT,
+                                   params={"amount": 3}),
+                ),
+            )
+        )
+        del wire["payload"]["result"]
+        del wire["payload"]["replaced_by"]
+        return wire
+
+    def test_it_still_parses(self):
+        loaded = record_from_dict(self._old_wire())
+        assert loaded.payload.incoming.params["amount"] == 3
+        assert loaded.payload.outgoing.params["amount"] == 3
+
+    def test_its_missing_result_is_none_and_not_not_replaced(self):
+        payload = record_from_dict(self._old_wire()).payload
+        assert payload.result is None
+        assert payload.result is not RewriteResult.NOT_REPLACED
+
+    def test_it_names_no_substituted_ability_rather_than_failing(self):
+        assert record_from_dict(self._old_wire()).payload.replaced_by == ()
+
+    def test_rewriting_it_writes_the_new_keys_explicitly(self):
+        """Reading an old line and writing it back yields the current shape
+        with nulls, rather than silently reproducing the old one."""
+        rewritten = record_to_dict(record_from_dict(self._old_wire()))
+        assert rewritten["payload"]["result"] is None
+        assert rewritten["payload"]["replaced_by"] == []
+        assert rewritten["payload"]["outgoing"] == {
+            **rewritten["payload"]["incoming"],
+        }
 
 
 class TestCompressedShards:

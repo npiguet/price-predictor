@@ -75,7 +75,7 @@ Effect payloads carry typed event lists: `{type, subjects (refs), params, durati
 |---|---|
 | `resolution` / `activation` | costs paid: mana by color, permanents tapped, life paid, cards sacrificed / discarded / exiled as costs; `outcome` ∈ {resolved, fizzled, partially_fizzled, declined, countered}, where `declined` is an optional effect the controller was offered and turned down. `resolved` and `partially_fizzled` have a linked effect half; `fizzled`, `countered`, and `declined` have none — the cost record stands alone |
 | `resolution` / `resolution` | attributed event list; attribution granularity is the sub-ability (the sidecar maps sub-ability links to lines — § Ability identity; the root line is the fallback) |
-| `rewrite` | incoming event, outgoing event (parameter maps deep-copied at the hook) |
+| `rewrite` | incoming event; outgoing event **or null where nothing was rewritten in place**; `result` ∈ {replaced, not_replaced, prevented, updated, skipped}; `replaced_by`, the provenance key(s) of the ability that ran instead (empty where none). One record per replacement evaluation, `not_replaced` included — those are the channel's negatives, the same role the trigger channel's non-fired evaluations play, and are deliberate rather than noise. Parameter maps deep-copied at the hook |
 | `continuous` | per-entity contributions (P/T boost, keywords, types, colors, name), coalesced per (game, static, board hash) — one record per stable board |
 | `combat` | declared attackers, block assignments, damage-assignment choices (inputs), damage-step event list (outcome); one record per damage step, so a first-strike combat produces two |
 | `trigger` | the event, fired flag; non-fired negatives drawn from same-event-type evaluations at roughly 1:1 |
@@ -84,6 +84,8 @@ Effect payloads carry typed event lists: `{type, subjects (refs), params, durati
 | `playability` / `blockers` | anchored attacker ref, per-entity legal-blocker bits with the responsible static's key on forbidden blocks where one applies, attacker `min_blockers` (cardinality constraints such as menace) |
 
 Verdicts are the rules-level checks only; the AI's policy judgments (e.g. "another time", "life in danger") are never recorded.
+
+**Why the `rewrite` payload is wider than `{incoming, outgoing}`.** That pair assumed a replacement edits the event's parameter map. Forge mostly does not: `ReplacementHandler` runs the `ReplaceWith$` ability and then records a `ReplacementResult`, and for `Prevented`, `Skipped` and `NotReplaced` it never touches the map. "Enters tapped", "if it would die, exile it instead" and "prevent that damage" are substitutions — a *different* ability runs — so the before/after maps the hook copied were byte-identical, and the collector was right to drop them. Measured on the corpus this feature is collecting: **34 rewrite records in 1.88M**, against a 7% `--kind-mix` share, with **87% of candidates dropped as identity**. The missing facts — which of the five results happened, and which ability ran instead — were available at the hook all along. The schema is fixed before collection and later stages may add `kind` values or snapshot tiers but never redefine a field; this obeys that. `incoming` keeps its meaning and type, `result` and `replaced_by` are new fields, and `outgoing` only *widens* to admit null, which is the honest spelling of the case the old shape expressed as a self-copy and then discarded. Full argument in `023-ability-effect-model/contracts/record-schema.md`.
 
 ## Collection caps and budgets
 
@@ -233,12 +235,21 @@ Each record kind is an input variant of this one surface:
 |---|---|---|
 | `resolution` / `activation` (cost half) | the outcome flag on `[ACT]` | per-entity cost outcomes (mana delta, tap state, life, zone outcomes); the verdict head's cost paid |
 | `resolution` / `resolution` (effect half) | targets, modes, announced values and the outcome flag on `[ACT]`; the targeted flags | per-entity fields; created-objects slots |
-| `rewrite` | pending-event overlay on the affected entities | per-entity fields; created-objects slots for token-creating rewrites |
+| `rewrite` | pending-event overlay on the affected entities | per-entity fields and created-objects slots, **derived from `outgoing` and therefore only where `outgoing` is non-null** — an in-place parameter edit. The substitution outcomes (`prevented`, `skipped`, most `replaced`) and every `not_replaced` carry a null `outgoing` and so supervise nothing here; the substituted ability's own effects arrive as its `resolution` record. `result` is the natural label for those records and **is not wired to a head** — see below |
 | `continuous` | the acting static's own layer-channel contributions masked from the entity inputs, structured features included (§ State snapshot) | per-entity contribution fields |
 | `trigger` | pending-event overlay | the verdict head's trigger-fired bit |
 | `playability` / `decision` | the candidate's `e` in `[ACT]` | the verdict head; per-entity target-legality bits |
 | `playability` / `attackers`, `blockers` | `[ACT]` empty; the anchored attacker via the source flag (`blockers`) | per-entity legality bits: attacker-legal, or blocker-legal with `min_blockers` at the anchored attacker |
 | `combat` | declared combat and the damage-assignment choices in the overlays, `[ACT]` empty | per-entity damage-step outcomes |
+
+**Open: `result` as a supervision target.** Most `rewrite` records now supervise nothing, because
+`derive_targets` reads the payload's events and a substitution has no rewritten event to read. `result`
+is a five-way categorical over exactly the records that are otherwise unsupervised, and it is a
+rules-level judgment about an ability — the same shape as the verdict head's playability bits and
+trigger-fired bit, which is where it would belong. It is recorded and **deliberately not wired**: this
+document does not describe a rewrite-result head, and adding one is a modelling decision with its own
+loss weight, class balance (`not_replaced` will dominate) and gate, not a consequence of the payload
+change. Until it is taken, `result` is corpus content the validator judges and the trainer ignores.
 
 ## Losses
 

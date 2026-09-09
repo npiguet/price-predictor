@@ -26,7 +26,10 @@ parses them as the strings they are. ``zone_change`` then gained a genuinely
 new key, ``library_position``: adding a param to a type's row widens what the
 type may carry and redefines nothing it already carried — and it has to happen
 *here first*, because a reader that does not know a key drops it, so a param a
-writer emits before the schema accepts it is invisible rather than wrong.
+writer emits before the schema accepts it is invisible rather than wrong. The
+``rewrite`` payload's ``outgoing`` then gained ``null``, alongside two new keys:
+a value a field may now take is a widening, and the records already written keep
+meaning what they meant, which is what makes it legal.
 Compatibility rule 1 forbids only the other direction — nothing here may change
 what an existing field *means*, because the
 corpus is append-only and a reinterpreted field silently reinterprets hours of
@@ -62,6 +65,7 @@ from effects.domain.records import (
     ResolutionOutcome,
     ResolutionPayload,
     RewritePayload,
+    RewriteResult,
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
@@ -346,7 +350,15 @@ def _payload_to_json(payload) -> dict:
         case RewritePayload():
             return {
                 "incoming": payload.incoming.as_dict(),
-                "outgoing": payload.outgoing.as_dict(),
+                # Written as null rather than as a copy of `incoming` when the
+                # replacement edited nothing. The two spellings are not
+                # interchangeable: a copy claims the event survived unchanged,
+                # null says the question does not apply.
+                "outgoing": (
+                    payload.outgoing.as_dict() if payload.outgoing else None
+                ),
+                "result": payload.result.value if payload.result else None,
+                "replaced_by": _keys_to_json(payload.replaced_by),
             }
         case ContinuousPayload():
             return {
@@ -444,9 +456,23 @@ def _payload_from_json(
             )
         return ResolutionPayload(events=_events_from_json(data.get("events")))
     if kind is RecordKind.REWRITE:
+        # Two shapes coexist in an append-only corpus. A shard collected before
+        # the outcome was passed to the hook carries `{incoming, outgoing}` with
+        # `outgoing` always an event — usually one byte-identical to
+        # `incoming`, because Forge substitutes by running another ability
+        # rather than by editing the event — and no `result`. Such a record
+        # reads as `result=None`, which is a third state and not `not_replaced`:
+        # it says the writer reported nothing, where `not_replaced` says the
+        # writer watched a replacement decline. A consumer that needs the
+        # distinction filters on `result is None`; one that does not can treat
+        # those records as the unreadable ones they always were.
+        outgoing = data.get("outgoing")
+        result = data.get("result")
         return RewritePayload(
             incoming=Event.from_dict(data["incoming"]),
-            outgoing=Event.from_dict(data["outgoing"]),
+            outgoing=Event.from_dict(outgoing) if outgoing else None,
+            result=RewriteResult(result) if result else None,
+            replaced_by=_keys_from_json(data.get("replaced_by")),
         )
     if kind is RecordKind.CONTINUOUS:
         return ContinuousPayload(

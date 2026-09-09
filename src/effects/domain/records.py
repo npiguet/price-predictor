@@ -8,6 +8,16 @@ alongside stage-four records. The four compatibility rules are stated in
 ``tests/unit/effects/domain/test_schema_compatibility.py``; there is no version
 field, so the tests are the enforcement.
 
+Rule 1 is what the ``rewrite`` payload's widening rests on, and it is worth
+spelling out because it looks like a redefinition and is not. ``incoming`` keeps
+its meaning exactly. ``outgoing`` gains ``None`` as a value it may take — the
+same widening ``attributed_to`` made when it gained its sentinels, and a reader
+that predates it still parses every record that carries an event. ``result`` and
+``replaced_by`` are added fields, absent on shards already collected, and a
+missing ``result`` reads as "the writer had no opinion" rather than as any of
+the five outcomes. Nothing a collected record already says is reinterpreted,
+which is the only thing rule 1 forbids.
+
 Pure dataclasses with no torch and no IO — serialization lives in
 ``infrastructure/record_io.py``, the same split
 ``draft/domain/draft_geometry.py`` makes against ``draft_record_io``.
@@ -65,6 +75,54 @@ class ResolutionOutcome(StrEnum):
     DECLINED = "declined"
     COUNTERED = "countered"
 
+
+class RewriteResult(StrEnum):
+    """What a replacement effect's handler reported, as Forge names it.
+
+    A closed vocabulary mirroring ``forge.game.replacement.ReplacementResult``
+    member for member, lower_snake_case for the wire.
+    ``tests/unit/effects/domain/test_records_us2.py`` pins it against that
+    enum's source in both directions, because a closed vocabulary with nothing
+    holding the two ends together is how a collector learns a value its reader
+    then raises on — and the corpus is append-only, so those records are lost.
+
+    This is the field that makes the ``rewrite`` channel readable at all. Only
+    ``Replaced`` and ``Updated`` can edit the event's parameter map, and only
+    then when the substituted ability happens to write one; every other outcome
+    is a bare ``return`` in ``executeReplacementInternal``. Without ``result``,
+    "enters tapped", "exile it instead" and "prevent that damage" all record as
+    an event that came out exactly as it went in.
+    """
+
+    REPLACED = "replaced"
+    NOT_REPLACED = "not_replaced"
+    PREVENTED = "prevented"
+    UPDATED = "updated"
+    SKIPPED = "skipped"
+
+
+#: Results the handler reaches by returning *above* the
+#: ``playSpellAbilityNoStack`` call, so no ability ran and nothing was written
+#: to the parameter map. A record of one of these carrying an ``outgoing`` or a
+#: ``replaced_by`` is a collector defect, not a rare game state.
+#:
+#: ``NotReplaced`` is deliberately absent though it too returns early: its
+#: prevention branch writes ``PreventedAmount`` into the map on the way out, so
+#: a ``not_replaced`` record legitimately carries an ``outgoing``.
+REWRITE_RESULTS_WITHOUT_ABILITY: frozenset[RewriteResult] = frozenset({
+    RewriteResult.PREVENTED,
+    RewriteResult.SKIPPED,
+})
+
+#: Results reachable only after the handler ran the ``ReplaceWith$`` ability —
+#: which is where ``replaced_by`` comes from. Not an invariant: a replacement
+#: scripted with ``ReplacementResult$`` returns one of these with no ability at
+#: all, so the share of these records naming a key is a number to watch rather
+#: than a rule to enforce.
+REWRITE_RESULTS_RUNNING_AN_ABILITY: frozenset[RewriteResult] = frozenset({
+    RewriteResult.REPLACED,
+    RewriteResult.UPDATED,
+})
 
 #: Outcomes whose cost half has no linked effect half, so it carries no
 #: ``link_id``. Only ``resolved`` and ``partially_fizzled`` reach resolution.
@@ -144,15 +202,42 @@ class ResolutionPayload:
 
 @dataclass(frozen=True, slots=True)
 class RewritePayload:
-    """``rewrite``: what a replacement effect received and what it emitted.
+    """``rewrite``: what a replacement effect received, and what it did.
 
     The parameter maps are deep-copied at the hook. The handler's own copy is
     shallow and replacements mutate nested structures in place, so a shallow
     copy would record the outgoing event in both slots.
+
+    ``incoming`` and ``outgoing`` alone modelled a mechanism Forge does not
+    have. Forge substitutes by *running a different ability*, not by editing the
+    event, so the before and after maps came back byte-identical on 87% of the
+    hook's calls and the channel collected 34 usable records in 1.88M. ``result``
+    and ``replaced_by`` carry what those records were actually saying, and
+    ``outgoing`` is ``None`` when the map was not edited rather than a copy of
+    ``incoming`` — a record whose two halves are identical says nothing, and
+    saying nothing is not the same as saying "unchanged".
+
+    ``result`` is ``None`` only on shards collected before it existed. That is
+    not ``not_replaced``: it means the collector had no opinion, where
+    ``not_replaced`` means the collector watched a replacement decline to apply.
+    Conflating them would reinterpret every pre-contract record as a negative.
     """
 
     incoming: Event
-    outgoing: Event
+    #: The rewritten event, or ``None`` when the parameter map was not edited.
+    outgoing: Event | None = None
+    #: Which of Forge's five replacement outcomes the handler reported;
+    #: ``None`` on a record written before the hook passed one.
+    result: RewriteResult | None = None
+    #: The ability that ran *instead*, keyed the same way the record's own
+    #: ``ability`` field is. Empty where none ran, and on the outcomes that
+    #: return before reaching one.
+    replaced_by: tuple[ProvenanceKey, ...] = field(default_factory=tuple)
+
+    @property
+    def rewritten(self) -> bool:
+        """Whether the event's parameter map was edited in place."""
+        return self.outgoing is not None
 
 
 @dataclass(frozen=True, slots=True)

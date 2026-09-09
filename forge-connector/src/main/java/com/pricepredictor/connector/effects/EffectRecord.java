@@ -23,6 +23,14 @@ import java.util.StringJoiner;
  * the corpus — new kinds become reachable, new snapshot tiers appear — but never
  * redefine a field, which is what lets a stage-one corpus stay trainable
  * alongside stage-four records.
+ *
+ * <p>{@link #rewritePayload} is the one place that widening has been exercised,
+ * and it obeys the rule rather than bending it: {@code incoming} keeps exactly
+ * the meaning it had, {@code outgoing} gains {@code null} the way a field gains
+ * a sentinel, and {@code result} and {@code replaced_by} are new keys. No
+ * already-collected record is reinterpreted — an old line that carries no
+ * {@code result} reads as "written before this contract", which is a third
+ * state and not one of the five results.
  */
 public final class EffectRecord {
 
@@ -41,6 +49,12 @@ public final class EffectRecord {
     public static final String OUTCOME_PARTIALLY_FIZZLED = "partially_fizzled";
     public static final String OUTCOME_DECLINED = "declined";
     public static final String OUTCOME_COUNTERED = "countered";
+
+    public static final String REWRITE_REPLACED = "replaced";
+    public static final String REWRITE_NOT_REPLACED = "not_replaced";
+    public static final String REWRITE_PREVENTED = "prevented";
+    public static final String REWRITE_UPDATED = "updated";
+    public static final String REWRITE_SKIPPED = "skipped";
 
     private final String recordId;
     private final String runId;
@@ -235,6 +249,82 @@ public final class EffectRecord {
             joiner.add(event.toJson());
         }
         return "{\"events\":" + joiner + "}";
+    }
+
+    /**
+     * ``{"incoming": ..., "outgoing": ...|null, "result": ..., "replaced_by": []}``
+     *
+     * <p>The pair alone could not express what a replacement does. Forge hardly
+     * ever edits an event's parameter map: {@code ReplacementHandler} substitutes
+     * by running the {@code ReplaceWith$} ability and returning a
+     * {@code ReplacementResult}, and its {@code Prevented}, {@code Skipped} and
+     * {@code NotReplaced} branches return without touching the map at all. So
+     * "enters tapped", "if it would die, exile it instead" and "prevent that
+     * damage" all arrived here as two byte-identical halves, and the channel
+     * held 34 records in 1.88M against a 7% share of the training mixture.
+     *
+     * <p>{@code outgoing} is {@code null} — never a copy of {@code incoming} —
+     * when the map was not edited in place. A record whose two halves read the
+     * same is what made this channel unreadable; null says "not rewritten"
+     * outright, and the corpus validator judges an identity pair at zero rather
+     * than letting it parse quietly.
+     *
+     * @param incoming    the event as the replacement received it
+     * @param outgoing    the rewritten event, or null where nothing was rewritten
+     * @param result      the wire spelling from {@link #rewriteResult}, or null
+     *                    where the engine returned no answer
+     * @param replacedBy  the ability that stood in for the event; empty when
+     *                    none ran, and always a list rather than null
+     */
+    public static String rewritePayload(
+            EffectEvent incoming, EffectEvent outgoing, String result,
+            List<ProvenanceKey> replacedBy) {
+        StringJoiner keys = new StringJoiner(",", "[", "]");
+        if (replacedBy != null) {
+            for (ProvenanceKey key : replacedBy) {
+                keys.add(key.toJson());
+            }
+        }
+        return "{\"incoming\":" + incoming.toJson()
+                + ",\"outgoing\":" + (outgoing == null ? "null" : outgoing.toJson())
+                + ",\"result\":" + Json.string(result)
+                + ",\"replaced_by\":" + keys + "}";
+    }
+
+    /**
+     * Forge's {@code ReplacementResult} in the spelling the corpus reads.
+     *
+     * <p>Lower snake case of the enum member, so {@code NotReplaced} becomes
+     * {@code not_replaced}. Converted rather than looked up in a table of the
+     * five known members on purpose: a sixth member added to Forge would take
+     * the same rule and reach the Python reader, which refuses a value its own
+     * closed enum does not have. That is a loud failure on the next shard, where
+     * a table would have quietly written null and turned a new outcome into the
+     * same "written before this contract" state an old shard reports.
+     *
+     * <p>Null in, null out. The engine has no answer to report in exactly one
+     * case — the replacement threw, and the hook notifies anyway rather than
+     * hiding it — and this side sees the same null when it is running against a
+     * Forge jar whose listener predates the two extra arguments.
+     */
+    public static String rewriteResult(Object result) {
+        if (result == null) {
+            return null;
+        }
+        String name = String.valueOf(result);
+        StringBuilder out = new StringBuilder(name.length() + 2);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) {
+                    out.append('_');
+                }
+                out.append(Character.toLowerCase(c));
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
     }
 
     /**

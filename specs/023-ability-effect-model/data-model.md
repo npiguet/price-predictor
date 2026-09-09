@@ -90,8 +90,9 @@ player ref of the causing object. `cause` also has its own row on `zone_change`,
 `sacrificed`, which is the set the validator measures its population over; it is the only thing
 separating two attackers' identical damage from one outcome written twice. `zone_change` additionally
 carries `library_position` — where in the library the card landed, counted from the top — because a
-`Moved` replacement that changes only that position is otherwise a rewrite whose two halves read alike
-and which is dropped as an identity.
+`Moved` replacement that changes only that position is otherwise a rewrite whose two halves read alike.
+That no longer causes a drop (the identity rule is gone with the widened `rewrite` payload), but it
+would still produce an `outgoing` indistinguishable from `incoming`, which is the same unreadability.
 
 Widening a row, or a nullable field's value set, is compatibility rule 1 and redefines nothing: a
 reader that predates the addition drops the key it does not know, which is why a param a writer emits
@@ -103,13 +104,21 @@ before the schema accepts it is invisible rather than wrong.
 |---|---|
 | `resolution` / `activation` | costs paid (mana by colour, permanents tapped, life, cards sacrificed/discarded/exiled); `outcome` ∈ {resolved, fizzled, partially_fizzled, declined, countered}. Only `resolved` and `partially_fizzled` have a linked effect half |
 | `resolution` / `resolution` | attributed event list; attribution granularity is the sub-ability, root line as fallback |
-| `rewrite` | incoming event, outgoing event (parameter maps deep-copied at the hook) |
+| `rewrite` | incoming event; outgoing event **or null** where the event was not rewritten in place; `result` ∈ {replaced, not_replaced, prevented, updated, skipped}; `replaced_by`, the key(s) of the ability that ran instead (empty where none). Written for every replacement evaluation, `not_replaced` included — the channel's negatives (parameter maps deep-copied at the hook) |
 | `continuous` | per-entity contributions (P/T boost, keywords, types, colours, name), coalesced per (game, static, board hash) |
 | `combat` | declared attackers, block assignments, damage-assignment choices (inputs), damage-step event list (outcome); one record per damage step |
 | `trigger` | the event, fired flag; non-fired negatives drawn from same-event-type evaluations at ~1:1 |
 | `playability` / `decision` | per candidate: ability key, rules verdict, legal-target refs, cost after adjustment, responsible static |
 | `playability` / `attackers` | legal-attacker refs; responsible static per forbidden attacker |
 | `playability` / `blockers` | anchored attacker ref, per-entity legal-blocker bits, responsible static, `min_blockers` |
+
+A `rewrite` record's `result` is nullable, and null is **not** `not_replaced`: it means the record
+predates the field, where `not_replaced` means the collector watched a replacement decline to apply.
+`prevented` and `skipped` return above the point where an ability could run, so both carry a null
+`outgoing` and an empty `replaced_by`; `not_replaced` may carry an `outgoing`, because its prevention
+branch writes `PreventedAmount` before returning. Widening the payload this way is compatibility rule
+1 and redefines nothing — `incoming` is untouched, `result` and `replaced_by` are added, and
+`outgoing` only gains `null` for the case the old shape wrote as a self-copy and then dropped.
 
 ### ProvenanceKey and the sidecar
 

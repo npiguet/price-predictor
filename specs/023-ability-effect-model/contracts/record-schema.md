@@ -153,9 +153,12 @@ is `stack`, because a channel that is mostly casts is reporting the stack rather
 `library_position` joins the row for the destination `from_zone`/`to_zone` cannot describe: where in
 the library the card landed, counted from the top. A `Moved` replacement that puts a card second from
 the top instead of into the graveyard changes only that, so without the slot the two halves of the
-rewrite serialize identically and the record is dropped as an identity — which is why `Moved` was 91
-of 110 dropped rewrites in the smoke run and had never once produced a written one. Absent wherever
-the destination is not a library. Adding a param to a type's row **widens the row and redefines
+rewrite serialize identically — which is why `Moved` was 91 of 110 dropped rewrites in the smoke run
+and had never once produced a written one. The identity drop that measured this is gone (see § A
+`rewrite` says which of five results happened), but the slot is still what the change needs: a real
+in-place edit whose only edited param has no slot writes an `outgoing` indistinguishable from
+`incoming`, which is the unreadable shape under a different name. Absent wherever the destination is
+not a library. Adding a param to a type's row **widens the row and redefines
 nothing** (compatibility rule 1).
 
 ### `cause` names the object that caused the event
@@ -177,7 +180,7 @@ fills the one its type's row declares.
 |---|---|
 | `resolution` / `activation` | `{costs: {mana_by_color, tapped, life, sacrificed, discarded, exiled}, outcome}` where `outcome` ∈ `resolved` \| `fizzled` \| `partially_fizzled` \| `declined` \| `countered`. Only `resolved` and `partially_fizzled` have a linked effect half |
 | `resolution` / `resolution` | `{events: Event[]}`; attribution granularity is the sub-ability, and the three states an event's `attributed_to` may report are above |
-| `rewrite` | `{incoming: Event, outgoing: Event}` (parameter maps deep-copied at the hook) |
+| `rewrite` | `{incoming: Event, outgoing: Event\|null, result, replaced_by: ProvenanceKey[]}` (parameter maps deep-copied at the hook). `result` ∈ `replaced` \| `not_replaced` \| `prevented` \| `updated` \| `skipped`; `outgoing` is null where the event was not rewritten in place; `replaced_by` keys the ability that ran instead, empty where none. One record per `executeReplacement` call, `not_replaced` included — see below |
 | `continuous` | `{contributions: [{entity, pt_boost, keywords, types, colors, name}], board_hash}` — one record per stable board |
 | `combat` | `{attackers, blocks, assignment_choices, events: Event[], probed_keyword, probed_entity}` — one record per damage step; the two probe fields are set only on a damage-step probe fork and name what was stripped and from whom |
 | `trigger` | `{event: Event, fired: bool}`; non-fired negatives drawn from same-event-type evaluations at ~1:1 |
@@ -187,6 +190,77 @@ fills the one its type's row declares.
 
 Verdicts are rules-level only. The AI's policy judgments ("another time", "life in danger") are never
 recorded.
+
+### A `rewrite` says which of five results happened, not just what changed
+
+```jsonc
+"payload": {
+  "incoming":    { /* Event */ },            // always
+  "outgoing":    { /* Event */ } | null,     // the rewritten event; null when the map was not edited
+  "result":      "replaced" | "not_replaced" | "prevented" | "updated" | "skipped",
+                                             // null only on a shard written before this contract
+  "replaced_by": [ /* ProvenanceKey[] */ ]   // the ability that ran instead; empty when none
+}
+```
+
+The original pair `{incoming, outgoing}` assumed a replacement edits the event's parameter map in
+place. Forge mostly does not. `ReplacementHandler.executeReplacementInternal` runs the `ReplaceWith$`
+ability — `playSpellAbilityNoStack(effectSA, true)` — and then writes only a `ReplacementResult` into
+the map; for `Prevented`, `Skipped` and `NotReplaced` it returns without touching the map at all. So
+"enters tapped", "if it would die, exile it instead" and "prevent that damage" are substitutions
+carried out by running a *different ability*, and the before/after maps the hook deep-copied were
+byte-identical. Only genuine in-place edits — `ReplaceCounterEffect.setCount`, damage amounts — ever
+differed; Orim's Cure cutting 5 combat damage to 1 is one, and reads correctly under either shape.
+
+What that cost is measurable: **34 written records in a 1.88M-record corpus**, against the trainer's
+7% `--kind-mix` share, with **87% of candidates dropped as identity rewrites**. The drop was correct
+under the old shape — a record whose two halves serialize alike carries no information — but the
+information was never in the payload to begin with. Which of the five results happened, and which
+ability ran instead, is available at the hook and was simply not passed.
+
+Hence:
+
+- **`outgoing` is null when nothing was rewritten in place**, not a copy of `incoming`. A pair of
+  identical halves is what made this channel unreadable; null says "not rewritten" honestly, and a
+  reader no longer has to compare two events to learn a negative fact.
+- **Every `executeReplacement` call writes a record**, `not_replaced` included. These are the rewrite
+  channel's negatives — the same role the `trigger` channel's non-fired evaluations play — and they
+  are what teaches *when* a replacement applies rather than only what it does. The identity-drop rule
+  is therefore gone: with `result` recorded there is no uninformative rewrite record.
+- `result` is the lower_snake_case spelling of Forge's `ReplacementResult` enum
+  (`{Replaced, NotReplaced, Prevented, Updated, Skipped}`), so `NotReplaced` becomes `not_replaced`.
+  The vocabulary is closed by that enum.
+- `replaced_by` keys `effectSA` — the substituted ability — through the same provenance resolver that
+  keys the record's own `ability` field, so the two are joinable against the sidecar identically.
+
+What each outcome may carry follows from where in `executeReplacementInternal` it returns, and that is
+what the validator judges:
+
+| Result | `outgoing` | `replaced_by` |
+|---|---|---|
+| `prevented`, `skipped` | **must be null** — both are bare returns *above* the `playSpellAbilityNoStack` call | **must be empty** — no ability ran |
+| `replaced`, `updated` | null unless the substituted ability edited a parameter in place | the substituted ability, **but legitimately empty** where the replacement is scripted with `ReplacementResult$`, which returns the outcome having run nothing. So the naming rate has a ceiling below 1 and is watched, not judged |
+| `not_replaced` | usually null, but **may be non-null**: the prevention branch writes `PreventedAmount` into the map before returning | empty |
+
+`outgoing` is never a copy of `incoming`. A record whose two halves are byte-identical cannot be told
+from a replacement that set a parameter back to its own value, and there is no such replacement — so
+the identity case is a defect in the writer, judged at zero.
+
+**`result` absent is not `not_replaced`.** A record with no `result` is one written before this
+contract, where the collector had no opinion; `not_replaced` is the collector watching a replacement
+decline to apply. Conflating them would silently reinterpret every pre-contract record as a negative,
+which is why the reader keeps the field nullable and the validator judges only records that carry one.
+
+**Why this is legal against a schema fixed before collection.** Compatibility rule 1 forbids changing
+an existing field's meaning or type; it permits adding fields. `incoming` keeps its meaning and type
+exactly. `result` and `replaced_by` are additions. `outgoing` is the one judgment call: it gains
+`null` as a value, which widens a value set the way the `attributed_to` sentinels did rather than
+redefining the field — it stays an Event-or-absent slot, and the reading a pre-change consumer would
+have given a null (`no rewritten event here`) is the reading the null now carries explicitly, because
+under the old shape that same case arrived as a copy that the collector then dropped. Corpora written
+before the change stay readable: they hold only genuine in-place edits, for which `outgoing` is
+non-null and `result` is absent. The change is not cosmetic and is not a repair of a bug — the old
+pair could not *express* a substitution, and substitution is how Forge implements most replacements.
 
 ### A contribution's `types` and `colors`
 

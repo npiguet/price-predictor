@@ -44,6 +44,7 @@ from effects.domain.records import (
     ResolutionOutcome,
     ResolutionPayload,
     RewritePayload,
+    RewriteResult,
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
@@ -166,6 +167,12 @@ def _mana(record_id: str, turn: int, **overrides):
 
 
 def _rewrite(record_id: str, ability=(_KEY,), **overrides):
+    """A genuine in-place edit: 3 damage down to 1, reported as ``Updated``.
+
+    The healthy default is the *rare* shape deliberately, because it is the one
+    that exercises every rewrite field at once. The substitutions and the
+    negatives that make up most of the channel are built per test.
+    """
     fields: dict = {
         "kind": RecordKind.REWRITE,
         "moment": None,
@@ -173,6 +180,8 @@ def _rewrite(record_id: str, ability=(_KEY,), **overrides):
         "payload": RewritePayload(
             incoming=Event(type=EventType.DAMAGE_DEALT, params={"amount": 3}),
             outgoing=Event(type=EventType.DAMAGE_DEALT, params={"amount": 1}),
+            result=RewriteResult.UPDATED,
+            replaced_by=(_KEY,),
         ),
     }
     fields.update(overrides)
@@ -1019,7 +1028,13 @@ class TestDuplicateEventsInsideOneRecord:
         assert _named(validate_corpus(records), "repeats an event").ok
 
     def test_a_rewrite_carrying_one_event_twice_is_not_a_duplicate(self):
-        """Incoming and outgoing are the same event by construction."""
+        """A pre-contract shard wrote the same event into both slots.
+
+        Those records are still in the corpus, so the event-duplication check
+        still has to ignore a rewrite's own pair — the *rewrite* checks are
+        what report the copy, and they report it as the collector defect it is
+        rather than as a duplicated outcome.
+        """
         same = Event(type=EventType.DAMAGE_DEALT, params={"amount": 3})
         records = _healthy() + [
             _rewrite(
@@ -1035,6 +1050,220 @@ class TestDuplicateEventsInsideOneRecord:
         ]
         loose = Thresholds(max_duplicate_event_rate=0.9)
         assert _named(validate_corpus(records, loose), "repeats an event").ok
+
+
+class TestRewriteRecordsSayWhatHappened:
+    """The field the whole channel hangs off.
+
+    Without ``result`` the payload models an edit-the-event mechanism Forge
+    does not have: it substitutes by running a different ability, so the before
+    and after maps come back byte-identical, 87% of the hook's calls were
+    dropped as identity rewrites, and the channel held 34 records in 1.88M
+    against a 7% share of the trainer's mix.
+    """
+
+    def _substitution(self, record_id: str, **payload_kwargs):
+        return _rewrite(
+            record_id,
+            payload=RewritePayload(
+                incoming=Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                               params={"to_zone": "graveyard"}),
+                **payload_kwargs,
+            ),
+        )
+
+    def test_a_healthy_window_reports_every_record_carrying_a_result(self):
+        finding = _named(validate_corpus(_healthy()), "which replacement result")
+        assert finding.ok
+        assert "2/2" in finding.measured
+        assert "updated 2" in finding.measured
+
+    def test_a_record_with_no_result_fails_and_says_which_two_causes(self):
+        records = _healthy() + [
+            self._substitution("run.0-L1.900", outgoing=None),
+        ]
+        finding = _named(validate_corpus(records), "which replacement result")
+        assert not finding.ok
+        assert "absent 1" in finding.measured
+        assert any("argument slot" in line for line in finding.detail)
+
+    def test_the_histogram_names_every_outcome_the_window_saw(self):
+        records = _healthy() + [
+            self._substitution(f"run.0-L1.{900 + index}", result=result)
+            for index, result in enumerate(
+                (RewriteResult.REPLACED, RewriteResult.PREVENTED,
+                 RewriteResult.SKIPPED, RewriteResult.NOT_REPLACED)
+            )
+        ]
+        measured = _named(
+            validate_corpus(records), "which replacement result"
+        ).measured
+        for name in ("replaced 1", "prevented 1", "skipped 1", "not_replaced 1"):
+            assert name in measured
+
+    def test_a_window_with_no_rewrites_says_so_rather_than_failing(self):
+        records = [r for r in _healthy() if r.kind is not RecordKind.REWRITE]
+        assert _named(validate_corpus(records), "which replacement result").ok
+
+
+class TestARewriteDoesNotCopyItsEvent:
+    """The defect that made the channel unreadable, now measured.
+
+    A record whose two halves are byte-identical cannot be told from a
+    replacement that changed a parameter back to its own value, and there is no
+    such thing. Null is the honest spelling.
+    """
+
+    def _copy(self, record_id: str, result=RewriteResult.REPLACED, **overrides):
+        same = Event(type=EventType.DAMAGE_DEALT, params={"amount": 4})
+        return _rewrite(
+            record_id,
+            payload=RewritePayload(incoming=same, outgoing=same, result=result),
+            **overrides,
+        )
+
+    def test_a_healthy_window_copies_nothing(self):
+        finding = _named(validate_corpus(_healthy()), "is not a copy of")
+        assert finding.ok
+        assert "0/2" in finding.measured
+
+    def test_a_copied_event_fails_and_names_the_record(self):
+        records = _healthy() + [self._copy("run.0-L1.900")]
+        finding = _named(validate_corpus(records), "is not a copy of")
+        assert not finding.ok
+        assert "1/3" in finding.measured
+        assert any("run.0-L1.900" in line for line in finding.detail)
+
+    def test_a_pre_contract_record_is_not_counted_against_the_writer(self):
+        """It had no null to write. Failing on its shards would report a
+        defect that was fixed rather than one that is present."""
+        same = Event(type=EventType.DAMAGE_DEALT, params={"amount": 4})
+        records = _healthy() + [
+            _rewrite(
+                "run.0-L1.900",
+                payload=RewritePayload(incoming=same, outgoing=same),
+            ),
+        ]
+        finding = _named(validate_corpus(records), "is not a copy of")
+        assert finding.ok
+        assert "0/2" in finding.measured, "the no-result record is not judged"
+
+    def test_a_genuine_edit_back_to_the_same_value_is_still_reported(self):
+        """There is no such replacement, so this is the collector, not Magic."""
+        records = _healthy() + [
+            self._copy("run.0-L1.900", result=RewriteResult.UPDATED),
+        ]
+        assert not _named(validate_corpus(records), "is not a copy of").ok
+
+
+class TestOutgoingAgreesWithTheResult:
+    """``prevented`` and ``skipped`` return above the ability call.
+
+    Both are bare ``return`` statements in ``executeReplacementInternal``: no
+    ability ran and nothing was written to the parameter map. A record of one
+    carrying a payload is a reflective listener reading a stale argument slot,
+    which nothing compiles against and so nothing else would catch.
+    """
+
+    def _with(self, record_id: str, result, **payload_kwargs):
+        return _rewrite(
+            record_id,
+            payload=RewritePayload(
+                incoming=Event(type=EventType.DAMAGE_DEALT,
+                               params={"amount": 3}),
+                result=result,
+                **payload_kwargs,
+            ),
+        )
+
+    def test_a_healthy_window_reports_none(self):
+        finding = _named(validate_corpus(_healthy()), "outgoing is null on")
+        assert finding.ok
+        assert finding.measured.startswith("0 ")
+
+    def test_a_prevented_record_carrying_an_outgoing_fails(self):
+        records = _healthy() + [
+            self._with(
+                "run.0-L1.900", RewriteResult.PREVENTED,
+                outgoing=Event(type=EventType.DAMAGE_DEALT,
+                               params={"amount": 0}),
+            ),
+        ]
+        finding = _named(validate_corpus(records), "outgoing is null on")
+        assert not finding.ok
+        assert any("run.0-L1.900" in line for line in finding.detail)
+
+    def test_a_skipped_record_naming_a_substituted_ability_fails(self):
+        records = _healthy() + [
+            self._with(
+                "run.0-L1.900", RewriteResult.SKIPPED, replaced_by=(_KEY,),
+            ),
+        ]
+        assert not _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_a_prevented_record_with_neither_passes(self):
+        records = _healthy() + [
+            self._with("run.0-L1.900", RewriteResult.PREVENTED),
+        ]
+        assert _named(validate_corpus(records), "outgoing is null on").ok
+
+    def test_not_replaced_may_carry_an_outgoing(self):
+        """Its prevention branch writes PreventedAmount into the map on the
+        way out, so this one is a real shape rather than a stale read."""
+        records = _healthy() + [
+            self._with(
+                "run.0-L1.900", RewriteResult.NOT_REPLACED,
+                outgoing=Event(type=EventType.DAMAGE_DEALT,
+                               params={"amount": 0}),
+            ),
+        ]
+        assert _named(validate_corpus(records), "outgoing is null on").ok
+
+
+class TestRewritesNameTheAbilityThatRanInstead:
+    """Watched, because a ``ReplacementResult$`` script runs no ability at all.
+
+    The ceiling is genuinely below 1 and nobody has measured how far, so this
+    reports the number and judges nothing until someone passes a floor.
+    """
+
+    def _substitution(self, record_id: str, **payload_kwargs):
+        payload_kwargs.setdefault("result", RewriteResult.REPLACED)
+        return _rewrite(
+            record_id,
+            payload=RewritePayload(
+                incoming=Event(type=EventType.ZONE_CHANGE, subjects=("E1",),
+                               params={"to_zone": "graveyard"}),
+                **payload_kwargs,
+            ),
+        )
+
+    def test_it_is_watched_by_default(self):
+        finding = _named(validate_corpus(_healthy()), "ran instead")
+        assert finding.watched
+        assert finding.ok
+        assert "watched, no floor" in finding.measured
+
+    def test_a_resolver_that_keys_nothing_reads_as_zero(self):
+        records = _healthy() + [self._substitution("run.0-L1.900")]
+        finding = _named(validate_corpus(records), "ran instead")
+        assert "2/3" in finding.measured
+        assert finding.ok, "watched findings never fail a run"
+
+    def test_a_floor_turns_the_measurement_into_a_verdict(self):
+        records = _healthy() + [self._substitution("run.0-L1.900")]
+        strict = Thresholds(min_rewrite_replaced_by_rate=0.9)
+        finding = _named(validate_corpus(records, strict), "ran instead")
+        assert not finding.watched
+        assert not finding.ok
+
+    def test_results_that_run_no_ability_are_outside_the_rate(self):
+        """``prevented`` never reaches an ability, so counting it would drag
+        the rate down and blame the resolver for the handler's control flow."""
+        records = _healthy() + [
+            self._substitution("run.0-L1.900", result=RewriteResult.PREVENTED),
+        ]
+        assert "2/2" in _named(validate_corpus(records), "ran instead").measured
 
 
 class TestTriggerNegatives:
