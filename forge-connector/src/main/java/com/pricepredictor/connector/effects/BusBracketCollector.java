@@ -22,10 +22,10 @@ import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
-import forge.game.event.GameEventZone;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,6 +47,14 @@ import java.util.StringJoiner;
  * than from the event, because the event carries a view and the provenance key
  * needs the model object.
  *
+ * <p>The cost half is <b>held</b> from the cast until the bracket closes, so it
+ * can be stamped with what actually became of the spell. Every other record this
+ * class writes goes out at the moment it describes; this one cannot, because
+ * {@code outcome} is a field of it and a spell that is countered before it
+ * resolves never publishes anything else the collector could attach the answer
+ * to. A cast still on the stack when the game ends is dropped rather than given
+ * one of the five outcomes it did not have.
+ *
  * <p>Damage steps get their own brackets, closed at the phase boundary, so a
  * first-strike combat writes two records — the only way a keyword that acts by
  * splitting the step is visible in the corpus at all.
@@ -61,13 +69,26 @@ public final class BusBracketCollector {
 
     /** The ability the open bracket attributes to, or null between brackets. */
     private SpellAbility resolving;
-    private List<ProvenanceKey> resolvingKeys = List.of();
+    private ProvenanceKey.Resolved resolvingKeys =
+            new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
     private String resolvingActor;
     private String openBracketState;
     private final List<EffectEvent> bracketEvents = new ArrayList<>();
+    private final Set<String> bracketEventKeys = new LinkedHashSet<>();
+
+    /**
+     * Casts whose outcome is not known yet, oldest first.
+     *
+     * <p>A list rather than a map because it is the stack: two spells can be
+     * waiting at once and the inner one resolves first, so a lookup runs from
+     * the newest end. Nothing here has been written yet — see
+     * {@link PendingActivation} for why the record has to wait.
+     */
+    private final List<PendingActivation> pendingActivations = new ArrayList<>();
 
     /** Combat damage accumulates into its own bracket, closed at the phase end. */
     private final List<EffectEvent> combatEvents = new ArrayList<>();
+    private final Set<String> combatEventKeys = new LinkedHashSet<>();
     /** The step's combat, read when its bracket opens rather than at flush. */
     private CombatShape combatShape = CombatShape.empty();
     /**
@@ -95,13 +116,40 @@ public final class BusBracketCollector {
     /** Told each combat record's id, for a probe that mirrors it. */
     private java.util.function.Consumer<String> onCombatRecord;
 
+    /**
+     * @param caps the run's collection caps, whose tier vector every collector
+     *             in the worker shares
+     *
+     * <p>The depth is the run's, not this collector's. Taken as an argument
+     * because that is what makes it impossible to pick one here: a hardcoded
+     * pair is how {@code combat} and {@code resolution} records came to carry
+     * {@code tiers=[1,2]} while every other kind carried {@code [1,2,3]}, which
+     * made the tier list say which collector wrote a record rather than what
+     * the run collected.
+     */
     public BusBracketCollector(
-            Game game, RecordShardWriter writer, String gameId) {
+            Game game, RecordShardWriter writer, String gameId,
+            PatchedCollectors.CollectionCaps caps) {
         this.game = game;
         this.writer = writer;
         this.gameId = gameId;
-        this.snapshots = new SnapshotBuilder(game);
+        this.snapshots = new SnapshotBuilder(game, caps.snapshotTierArray());
         this.mode = AttributionMode.detect();
+    }
+
+    /**
+     * The same collector for a caller that does not hold the run's caps.
+     *
+     * <p>Reads the run-level {@code effect.*} properties itself rather than
+     * choosing a depth, so the vector is still the run's however the collector
+     * was built. It exists only so the caller can be changed separately; a
+     * caller that already holds the caps — {@code GamePlayer} reads them once
+     * per match — should pass them.
+     */
+    public BusBracketCollector(
+            Game game, RecordShardWriter writer, String gameId) {
+        this(game, writer, gameId,
+                PatchedCollectors.CollectionCaps.fromSystemProperties());
     }
 
     /**
@@ -121,50 +169,123 @@ public final class BusBracketCollector {
         return recordsWritten;
     }
 
+    /** The depth this collector's snapshots are built at — the run's, not its own. */
+    int[] snapshotTiers() {
+        return snapshots.tiers();
+    }
+
     // ── brackets ────────────────────────────────────────────────────────
 
     /**
-     * A cast opens a bracket and writes the cost half.
+     * A cast opens a bracket and holds the cost half until its outcome is known.
      *
-     * <p>The cost half is written now rather than at resolution because a
-     * countered or fizzled spell never resolves, and the corpus needs the record
-     * that says what was paid regardless.
+     * <p>The costs are read <b>now</b> — {@link EffectRecord#costsJson} says why
+     * they are unreadable a moment later — but the record cannot be written yet,
+     * because {@code outcome} is a field of the cost half and the answer to it
+     * does not exist until the spell resolves or leaves the stack without
+     * resolving. Writing it here is why every one of the corpus's 4,989
+     * activation records said the literal {@code resolved}, and why 6.1% of
+     * link halves had no partner: a fizzled spell issued a {@code link_id} whose
+     * effect half never came.
      */
     @Subscribe
     public void onCast(GameEventSpellAbilityCast event) {
-        SpellAbility ability = game.getStack().peekAbility();
+        // Read through peek() rather than peekAbility(), which dereferences the
+        // top of an empty stack. The bus is not a promise about the stack.
+        var top = game.getStack().peek();
+        SpellAbility ability = top == null ? null : top.getSpellAbility();
+        // A spell taken off the stack without resolving publishes nothing this
+        // collector can tell from a resolution, so the absence is noticed
+        // whenever the stack is next observed. A new cast is one such moment.
+        reconcilePending();
+        beginBracket(ability);
+    }
+
+    /**
+     * Everything a cast does once the ability has been found on the stack.
+     *
+     * <p>Split from {@link #onCast} at the one line that reads the stack, so the
+     * rules that decide what a cost record eventually says can be exercised
+     * against a real ability without a game in progress — which is exactly what
+     * they were missing while the outcome was a literal.
+     */
+    void beginBracket(SpellAbility ability) {
         openBracket(ability);
         if (ability == null) {
             return;
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, EffectRecord.KIND_RESOLUTION, mode)
-                .moment(EffectRecord.MOMENT_ACTIVATION)
-                .actor(resolvingActor)
-                .ability(resolvingKeys)
-                .linkId(bracketLinkId())
-                .state(openBracketState)
-                .payload(EffectRecord.costPayload(ability, EffectRecord.OUTCOME_RESOLVED)));
+        pendingActivations.add(new PendingActivation(
+                ability.getId(), writer.nextRecordId(),
+                RecordShardWriter.timestamp(), EffectRecord.costsJson(ability),
+                actorOf(ability), keysOf(ability), openBracketState,
+                gameId + ".link." + ability.getId(), targetCount(ability)));
     }
 
-    /** A resolution closes the bracket and writes the effect half. */
+    /**
+     * A resolution closes the bracket, stamps the cost half and writes the
+     * effect half.
+     *
+     * <p>A fizzle writes no effect half at all. {@code MagicStack.resolveStack}
+     * skips resolution entirely when the targets are gone, so the alternative is
+     * a record claiming an empty event list for something that never ran — and
+     * a partnerless {@code link_id} on the cost half, which the schema bars.
+     */
     @Subscribe
     public void onResolved(GameEventSpellResolved event) {
-        if (resolving == null) {
-            bracketEvents.clear();
-            return;
+        endBracket(
+                event.spell() == null ? -1 : event.spell().getId(),
+                event.hasFizzled());
+        // The counterspell that removed something has just resolved, so this is
+        // the first moment its victim's absence from the stack is visible.
+        reconcilePending();
+    }
+
+    /**
+     * The half of {@link #onResolved} that does not read the stack.
+     *
+     * @param abilityId the ability the engine says has finished
+     * @param fizzled   whether it was removed for having no legal target left,
+     *                  in which case it never ran at all
+     */
+    void endBracket(int abilityId, boolean fizzled) {
+        // The bracket is a single slot, so a spell cast in response to another
+        // takes it over: when the outer one finally resolves the events that
+        // belong to it were never gathered. The cost half is still stamped with
+        // its real outcome; what it must not do is issue a link to an effect
+        // half nobody is going to write.
+        boolean bracketIsThisAbility = resolving != null && resolving.getId() == abilityId;
+        boolean writesEffectHalf = bracketIsThisAbility && !fizzled;
+
+        String link = settleActivation(
+                abilityId,
+                fizzled
+                        ? EffectRecord.OUTCOME_FIZZLED
+                        : outcomeOf(heldTargetsAtCast(abilityId),
+                                bracketIsThisAbility ? resolving : null),
+                writesEffectHalf);
+
+        if (writesEffectHalf) {
+            emit(new EffectRecord(
+                    writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                    gameId, EffectRecord.KIND_RESOLUTION, mode)
+                    .moment(EffectRecord.MOMENT_RESOLUTION)
+                    .actor(resolvingActor)
+                    .ability(resolvingKeys)
+                    .linkId(link)
+                    // Modes, X and the named card are set while the ability
+                    // resolves, so the block that carries them is re-read here
+                    // and spliced into the board captured at the cast.
+                    .state(SnapshotBuilder.spliceRefs(
+                            openBracketState, snapshots.refsJson(resolving)))
+                    .payload(EffectRecord.eventsPayload(bracketEvents)));
         }
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
-                gameId, EffectRecord.KIND_RESOLUTION, mode)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
-                .actor(resolvingActor)
-                .ability(resolvingKeys)
-                .linkId(event.hasFizzled() ? null : bracketLinkId())
-                .state(openBracketState)
-                .payload(EffectRecord.eventsPayload(bracketEvents)));
-        closeBracket();
+
+        if (bracketIsThisAbility) {
+            closeBracket();
+        } else if (resolving == null) {
+            bracketEvents.clear();
+            bracketEventKeys.clear();
+        }
     }
 
     /**
@@ -176,6 +297,10 @@ public final class BusBracketCollector {
     @Subscribe
     public void onPhase(GameEventTurnPhase event) {
         flushCombat();
+        // An effect that empties the stack -- ending the turn, ending combat --
+        // resolves nothing afterwards, so a phase boundary is the last chance
+        // to notice what it swept away.
+        reconcilePending();
     }
 
     @Subscribe
@@ -236,25 +361,27 @@ public final class BusBracketCollector {
         record(BusEvents.tapped(event));
     }
 
-    /** Zone changes, the workhorse outcome. */
-    @Subscribe
-    public void onZone(GameEventZone event) {
-        EffectEvent moved = BusEvents.zone(event);
-        if (moved != null) {
-            record(moved);
-        }
-    }
-
     /**
-     * A draw, a discard or a mill, which the bus has no event for.
+     * A card moving, and the draw, discard or mill it may also be.
      *
-     * <p>Each is a card moving between two zones and which of the three it is
-     * depends on where it came from, so it has to be classified from the pair.
+     * <p>The workhorse outcome, and it is read here rather than off
+     * {@code GameEventZone} because only this event is a <b>move</b>: the
+     * per-zone-list notification fires once for the zone left, once for the zone
+     * reached and once more for the stack, which is where the 13.68% of events
+     * that repeated another event in the same record came from, and it cannot
+     * say where a card came from at all.
+     *
+     * <p>Draws, discards and mills have no event of their own: each is a card
+     * moving between two zones and which of the three it is depends on the pair.
      * The head counts all three per player and none of those counters had ever
      * fired.
      */
     @Subscribe
     public void onCardChangeZone(GameEventCardChangeZone event) {
+        EffectEvent moved = BusEvents.cardMoved(event);
+        if (moved != null) {
+            record(moved);
+        }
         EffectEvent named = BusEvents.libraryMovement(event);
         if (named != null) {
             record(named);
@@ -346,41 +473,264 @@ public final class BusBracketCollector {
         EventAttribution.stamp(event, resolving);
         if (isCombatDamage()) {
             openCombatBracket();
-            combatEvents.add(event);
-            combatParticipants.addAll(event.subjects());
+            if (fileEvent(event, combatEvents, combatEventKeys)) {
+                combatParticipants.addAll(event.subjects());
+            }
         } else {
-            bracketEvents.add(event);
+            fileEvent(event, bracketEvents, bracketEventKeys);
         }
+    }
+
+    /**
+     * Outcomes a second identical report of cannot mean a second occurrence.
+     *
+     * <p>These describe a transition into a state a thing is either in or not:
+     * a card is on the battlefield, a permanent is tapped, an aura is attached.
+     * Told twice in one record, the second telling is the engine publishing the
+     * same change again — nothing in the record can distinguish it from the
+     * first, and nothing downstream can use it.
+     *
+     * <p>Everything else is deliberately absent, because for a quantitative
+     * outcome the repeat <b>is</b> the information: two creatures each dealing
+     * one damage to the same blocker render two identical {@code damage_dealt}
+     * events, and collapsing them would turn two damage into one.
+     */
+    private static final Set<String> IDEMPOTENT_EVENTS = Set.of(
+            EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED, EffectEvent.UNTAPPED,
+            EffectEvent.ATTACHED, EffectEvent.UNATTACHED, EffectEvent.PHASED,
+            EffectEvent.FACE_CHANGE, EffectEvent.DESTROYED,
+            EffectEvent.SACRIFICED, EffectEvent.REGENERATED);
+
+    /**
+     * Add an event to a bracket unless it repeats one already there.
+     *
+     * @return whether it was added
+     */
+    static boolean fileEvent(
+            EffectEvent event, List<EffectEvent> into, Set<String> seen) {
+        if (!IDEMPOTENT_EVENTS.contains(event.type())) {
+            into.add(event);
+            return true;
+        }
+        // Compared as the rendered line, so two events are the same when what
+        // the record says about them is the same -- subjects, params, duration
+        // and the clause they were attributed to, all of it.
+        if (!seen.add(event.toJson())) {
+            return false;
+        }
+        into.add(event);
+        return true;
     }
 
     private void openBracket(SpellAbility ability) {
         this.resolving = ability;
         this.resolvingKeys = keysOf(ability);
-        this.resolvingActor = ability == null || ability.getActivatingPlayer() == null
-                ? null
-                : SnapshotBuilder.playerId(ability.getActivatingPlayer());
+        this.resolvingActor = actorOf(ability);
         this.openBracketState = snapshots.toJson(ability, referencedOf(ability));
         this.bracketEvents.clear();
+        this.bracketEventKeys.clear();
     }
 
     private void closeBracket() {
         this.resolving = null;
-        this.resolvingKeys = List.of();
+        this.resolvingKeys =
+                new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
         this.resolvingActor = null;
         this.openBracketState = null;
         this.bracketEvents.clear();
+        this.bracketEventKeys.clear();
     }
 
-    private String bracketLinkId() {
-        return resolving == null ? null : gameId + ".link." + resolving.getId();
+    private static String actorOf(SpellAbility ability) {
+        return ability == null || ability.getActivatingPlayer() == null
+                ? null
+                : SnapshotBuilder.playerId(ability.getActivatingPlayer());
     }
 
-    private static List<ProvenanceKey> keysOf(SpellAbility ability) {
-        if (ability == null) {
-            return List.of();
+    // ── the outcome of a cast ───────────────────────────────────────────
+
+    /**
+     * A cast that has been observed but whose outcome is not settled.
+     *
+     * <p>Holds the rendered strings rather than the {@link SpellAbility},
+     * because what was paid lives on the ability object and its next activation
+     * clears it — the reason {@link EffectRecord#costsJson} must be called at
+     * the cast and nowhere later. The record id and the timestamp are taken at
+     * the cast too, so a held record still says when the spell was cast rather
+     * than when it stopped being on the stack.
+     */
+    private record PendingActivation(
+            int abilityId,
+            String recordId,
+            String timestamp,
+            String costsJson,
+            String actor,
+            ProvenanceKey.Resolved ability,
+            String state,
+            String linkId,
+            int targetsAtCast) {
+    }
+
+    /** Take the held cast for an ability id, newest first, or null. */
+    private PendingActivation takePending(int abilityId) {
+        for (int i = pendingActivations.size() - 1; i >= 0; i--) {
+            if (pendingActivations.get(i).abilityId() == abilityId) {
+                return pendingActivations.remove(i);
+            }
         }
-        ProvenanceKey key = ProvenanceKey.of(ability);
-        return key == null ? List.of() : List.of(key);
+        return null;
+    }
+
+    /** How many targets the held cast for an ability had when it was cast. */
+    private int heldTargetsAtCast(int abilityId) {
+        for (int i = pendingActivations.size() - 1; i >= 0; i--) {
+            if (pendingActivations.get(i).abilityId() == abilityId) {
+                return pendingActivations.get(i).targetsAtCast();
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Write a held cost half now that its outcome is known.
+     *
+     * <p>{@code linked} is separate from the outcome because they answer
+     * different questions: the outcome says what became of the spell, and
+     * {@code link_id} promises that an effect half carrying the same id exists.
+     * A resolution this collector could not describe -- the outer half of a
+     * nested pair -- is a {@code resolved} activation with no link, which is
+     * honest; issuing the link anyway is what left 306 halves dangling.
+     *
+     * @return the link the effect half may claim, or null when there is to be
+     *         no effect half or nothing was held for this ability
+     */
+    String settleActivation(int abilityId, String outcome, boolean linked) {
+        PendingActivation activation = takePending(abilityId);
+        if (activation == null) {
+            return null;
+        }
+        emitActivation(activation, outcome, linked);
+        return linked ? activation.linkId() : null;
+    }
+
+    private void emitActivation(
+            PendingActivation activation, String outcome, boolean linked) {
+        emit(new EffectRecord(
+                activation.recordId(), writer.runId(), activation.timestamp(),
+                gameId, EffectRecord.KIND_RESOLUTION, mode)
+                .moment(EffectRecord.MOMENT_ACTIVATION)
+                .actor(activation.actor())
+                .ability(activation.ability())
+                .linkId(linked ? activation.linkId() : null)
+                .state(activation.state())
+                .payload(EffectRecord.costPayload(activation.costsJson(), outcome)));
+    }
+
+    /**
+     * Whether a resolution lost some of its targets on the way.
+     *
+     * <p>{@code MagicStack.hasFizzled} strips the targets that became illegal
+     * from the ability before resolving it, and only then does the ability
+     * resolve — so comparing the count with the one read at the cast is the
+     * engine's own answer to "did part of this spell do nothing". Nothing else
+     * in the record distinguishes a Lightning Helix that hit from one whose
+     * creature had already died.
+     *
+     * <p>Only the root line's targets are compared. A partial fizzle confined to
+     * a sub-ability reads as {@code resolved}, which understates rather than
+     * invents. Losing <b>every</b> target without the engine calling it a fizzle
+     * is the {@code CantFizzle} case (Gilded Drake), where the spell still does
+     * what it does: that is {@code resolved} too.
+     */
+    static String outcomeOf(int targetsAtCast, SpellAbility resolved) {
+        if (resolved == null) {
+            return EffectRecord.OUTCOME_RESOLVED;
+        }
+        int surviving = targetCount(resolved);
+        return surviving > 0 && surviving < targetsAtCast
+                ? EffectRecord.OUTCOME_PARTIALLY_FIZZLED
+                : EffectRecord.OUTCOME_RESOLVED;
+    }
+
+    private static int targetCount(SpellAbility ability) {
+        return ability == null || ability.getTargets() == null
+                ? 0 : ability.getTargets().size();
+    }
+
+    /**
+     * Write off every held cast that has left the stack without resolving.
+     *
+     * <p>Counterspells, {@code CostExileFromStack}, a spell bounced off the
+     * stack and {@code MagicStack.clear} all take an entry away with no event
+     * this collector can tell apart from a resolution -- {@code finishResolving}
+     * publishes the same removal for a spell that resolved normally. So the
+     * question is asked of the stack itself, at every moment the stack can have
+     * changed: a held cast that is no longer on it and did not resolve was
+     * removed, and {@code countered} is what the schema calls that.
+     *
+     * <p>It is the nearest of the five outcomes rather than an exact one. A
+     * spell exiled off the stack by a cost was not countered in the rules sense;
+     * what the corpus needs to know, and what all of these share, is that the
+     * cost was paid and no effect followed.
+     */
+    private void reconcilePending() {
+        if (pendingActivations.isEmpty()) {
+            return;
+        }
+        Set<Integer> onStack = new LinkedHashSet<>();
+        for (var instance : game.getStack()) {
+            SpellAbility sa = instance == null ? null : instance.getSpellAbility();
+            if (sa != null) {
+                onStack.add(sa.getId());
+            }
+        }
+        writeOffRemoved(onStack);
+    }
+
+    /**
+     * The half of {@link #reconcilePending} that has already read the stack.
+     *
+     * @param onStack the ability ids still on the stack
+     * @return how many held casts were written off
+     */
+    int writeOffRemoved(Set<Integer> onStack) {
+        int removed = 0;
+        for (Iterator<PendingActivation> held = pendingActivations.iterator();
+                held.hasNext();) {
+            PendingActivation activation = held.next();
+            if (!onStack.contains(activation.abilityId())) {
+                held.remove();
+                emitActivation(activation, EffectRecord.OUTCOME_COUNTERED, false);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    /**
+     * Casts still waiting for an outcome, for a test that has to see the hold.
+     *
+     * <p>At the end of a game whatever is left here is dropped: a spell on the
+     * stack when the last player lost neither resolved nor was removed, and
+     * {@code outcome} has no member for it. Writing one of the five would be a
+     * claim about a game that stopped, so the count is reported instead.
+     */
+    long unresolvedActivations() {
+        return pendingActivations.size();
+    }
+
+    /**
+     * The acting line, or the reason there is none.
+     *
+     * <p>Resolved rather than keyed, because a record whose {@code ability} is
+     * empty and silent cannot be told apart from one the resolver failed on,
+     * and this collector writes most of the corpus's resolution records.
+     */
+    private static ProvenanceKey.Resolved keysOf(SpellAbility ability) {
+        if (ability == null) {
+            return new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
+        }
+        return ProvenanceKey.resolve(ability);
     }
 
     private static List<Card> referencedOf(SpellAbility ability) {
@@ -463,6 +813,7 @@ public final class BusBracketCollector {
             onCombatRecord.accept(recordId);
         }
         combatEvents.clear();
+        combatEventKeys.clear();
         combatParticipants.clear();
         combatShape = CombatShape.empty();
         combatState = null;

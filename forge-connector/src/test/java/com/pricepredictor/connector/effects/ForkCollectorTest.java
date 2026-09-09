@@ -1,7 +1,12 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import forge.game.ability.AbilityFactory;
+import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
@@ -9,6 +14,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -19,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * because the failure mode is a run that spends its whole simulation budget on
  * forks of one board.
  */
+@ExtendWith(ForgeExtension.class)
 class ForkCollectorTest {
 
     @TempDir
@@ -26,12 +34,13 @@ class ForkCollectorTest {
 
     private static CollectionCaps caps(
             int interventions, int probes, List<String> keywords) {
-        return new CollectionCaps(2000, 0.1, interventions, probes, keywords);
+        return new CollectionCaps(
+                2000, 0.1, interventions, probes, keywords, List.of(1, 2, 3), 0.1);
     }
 
     private ForkCollector collector(CollectionCaps caps) {
         return new ForkCollector(
-                null, new RecordShardWriter(tempDir, "run", 0), "run.0.0",
+                null, new RecordShardWriter(tempDir, "run", 0, "l1"), "run.0-l1.0",
                 caps, 42L);
     }
 
@@ -148,6 +157,97 @@ class ForkCollectorTest {
         assertFalse(collector.recordProbeBranch(
                 "lifelink", "run.0.1", "{}", "{}", "P0"));
         assertEquals(0L, collector.recordsWritten());
+    }
+
+
+    // ── an intervention chooses before it resolves ──────────────────────
+
+    /**
+     * A line with a target and nowhere to point it is abandoned.
+     *
+     * <p>The feature spec says an intervention resolves "with chosen targets and
+     * modes" and the first implementation chose neither: it set the activating
+     * player, pushed the ability and resolved it. A "deal 5 damage to target
+     * player" that resolves with no target does nothing, which is why none of
+     * the 88 sampled interventional records had a target and why the empty ones
+     * were Lava Axe, Disintegrate, Drain Life, Mind Control and their like.
+     *
+     * <p>Abandoning is the point: an empty-because-untargeted record and an
+     * empty-because-the-effect-did-nothing record are the same bytes, and a
+     * counterfactual nobody can read is worse than one never written.
+     */
+    @Test
+    void aTargetedLineWithNothingToTargetIsAbandoned() {
+        SpellAbility bolt = AbilityFactory.getAbility(
+                "AB$ DealDamage | Cost$ R | ValidTgts$ Creature | TgtPrompt$ x"
+                        + " | NumDmg$ 3",
+                TestCards.build("Fountain of Youth"));
+        // A game with nothing in it: every candidate list comes back empty,
+        // which is the shape of a board where the spell has no legal target.
+        bolt.setActivatingPlayer(new Player("nobody", TestCards.game(), 99));
+
+        assertFalse(collector(caps(2, 2, List.of())).chooseTargets(bolt));
+    }
+
+    /** A line that targets nothing needs nothing chosen. */
+    @Test
+    void aLineThatTargetsNothingIsReadyToResolve() {
+        SpellAbility gain = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
+                TestCards.build("Fountain of Youth"));
+
+        assertTrue(collector(caps(2, 2, List.of())).chooseTargets(gain));
+    }
+
+    /**
+     * An X the fork never paid is announced rather than left null.
+     *
+     * <p>A null X resolves as an X of zero, which is the same silence a missing
+     * target produces.
+     */
+    @Test
+    void anXSpellAnnouncesSomethingRatherThanNothing() {
+        SpellAbility drain = AbilityFactory.getAbility(
+                "AB$ LoseLife | Cost$ X B | Defined$ Player.Opponent | LifeAmount$ X",
+                TestCards.build("Fountain of Youth"));
+        assertTrue(drain.costHasX(), "the script has to have an X to announce");
+
+        collector(caps(2, 2, List.of())).announceX(drain);
+
+        assertEquals(1, drain.getXManaCostPaid());
+    }
+
+    @Test
+    void anAbilityWithNoXIsLeftAlone() {
+        SpellAbility gain = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1",
+                TestCards.build("Fountain of Youth"));
+
+        collector(caps(2, 2, List.of())).announceX(gain);
+
+        assertNull(gain.getXManaCostPaid());
+    }
+
+    // ── the held branch knows which step it came from ───────────────────
+
+    /**
+     * A branch carries the damage step it forked from.
+     *
+     * <p>Without it the branch is completed against whichever combat record
+     * comes next, and in the first corpus that was systematically the wrong one:
+     * every first-strike-step fork was empty, its step wrote no real record, and
+     * the branch was written against the regular step's.
+     */
+    @Test
+    void aHeldBranchNamesItsDamageStep() {
+        ForkCollector.HeldProbe held = new ForkCollector.HeldProbe(
+                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}",
+                ForkCollector.SUBSTEP_FIRST_STRIKE);
+
+        assertEquals("first_strike", held.substep());
+        // Spelled as the bracket collector spells it, because the two classes
+        // have to agree about which step they are describing.
+        assertEquals("regular", ForkCollector.SUBSTEP_REGULAR);
     }
 
     // ── the seeded source ───────────────────────────────────────────────

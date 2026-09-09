@@ -6,6 +6,8 @@ import com.pricepredictor.connector.ForgeEnvironmentInitializer;
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.MultiCard;
 import com.pricepredictor.connector.RulesParser;
+import forge.game.card.CardState;
+import forge.game.keyword.KeywordInterface;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,7 +17,9 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -237,6 +241,67 @@ class ProvenanceSidecarTest {
         assertTrue(json.contains("\"lines\":["), json);
         assertTrue(json.contains("\"dropped_keys\":["), json);
         assertTrue(json.endsWith("}"), json);
+    }
+
+    /**
+     * The converter and the resolver must compute one keyword ordinal.
+     *
+     * <p>This is the coupling guard for the keyword slot, and it compares the
+     * two sides keyword by keyword rather than as a set — both rules produce
+     * the ordinals 0..4 on a five-keyword card, so only the pairing shows a
+     * disagreement.
+     *
+     * <p>The runtime resolver keys a flashback or cycling ability to
+     * {@code keyword@N} through {@link ProvenanceKey#keywordIndex}. If the
+     * converter numbers the same keywords by any other rule, every such record
+     * names a key that is in neither {@code lines} nor {@code dropped_keys},
+     * which is the sidecar contract's fail-loudly case — a whole collection run
+     * of unjoinable keyword records. The two sides therefore have to come from
+     * one function, the same discipline {@code faceIndex} already enforces for
+     * faces.
+     *
+     * <p>Blast from the Past is the card that can tell them apart: with five
+     * printed keywords, the hash order of {@code KeywordCollection} — a
+     * {@code MultimapBuilder.hashKeys()} over an enum whose {@code hashCode()}
+     * is the identity hash, and so not reproducible from one JVM to the next —
+     * and the printed-text order genuinely disagree.
+     */
+    @Test
+    void everyKeywordKeyAgreesWithTheSharedOrdinal() {
+        Converted converted = convert("b/blast_from_the_past.txt");
+        CardState state = TestCards.build("Blast from the Past").getCurrentState();
+
+        Map<String, Integer> sharedOrdinal = new LinkedHashMap<>();
+        for (KeywordInterface keyword : state.getIntrinsicKeywords()) {
+            sharedOrdinal.put(keyword.getOriginal(),
+                    ProvenanceKey.keywordIndex(state, keyword));
+        }
+        assertEquals(5, sharedOrdinal.size(),
+                "Blast from the Past prints five keywords");
+
+        int compared = 0;
+        for (ProvenanceSidecar.Line line : converted.sidecar().lines()) {
+            // A keyword line's only script surface is its original text, which
+            // is what names the keyword the line's key is supposed to describe.
+            if (!"Keyword".equals(line.script().apiType())) continue;
+            Integer expected = sharedOrdinal.get(line.script().scriptText());
+            if (expected == null) continue;
+            for (ProvenanceKey key : line.provenance()) {
+                if (!ProvenanceKey.KIND_KEYWORD.equals(key.traitKind())) continue;
+                compared++;
+                assertEquals(expected, key.indexWithinKind(),
+                        "the sidecar numbered \"" + line.script().scriptText()
+                                + "\" as keyword@" + key.indexWithinKind()
+                                + " but ProvenanceKey.keywordIndex says keyword@"
+                                + expected + ". RulesParser.parseFace must compute"
+                                + " the ordinal with ProvenanceKey.keywordIndex("
+                                + "card.getCurrentState(), ki) rather than with a"
+                                + " running counter over card.getKeywords(), or"
+                                + " every keyword record in the next corpus names"
+                                + " a key the sidecar does not contain.");
+            }
+        }
+        assertTrue(compared > 0, "no keyword line was compared");
     }
 
     @Test

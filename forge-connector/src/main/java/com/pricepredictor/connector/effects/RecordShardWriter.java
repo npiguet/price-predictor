@@ -9,14 +9,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.time.Instant;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
 
 /**
  * One worker's append-only, gzip-compressed JSONL shard.
  *
- * <p>{@code {run_id}.{worker}.jsonl.gz}, one record per line. A shard per worker
- * rather than one shared file because records are far larger than a
- * match-outcome row, so concurrent appends would interleave mid-record.
+ * <p>{@code {run_id}.{worker}-{lifetime}.jsonl.gz}, one record per line. A shard
+ * per worker rather than one shared file because records are far larger than a
+ * match-outcome row, so concurrent appends would interleave mid-record; and a
+ * shard per <b>JVM lifetime</b> rather than per worker index because the
+ * supervisor recycles the longest-running worker every status interval and
+ * restarts crashed ones — roughly 530 JVMs over an eight-hour run. The two
+ * counters below restart at zero with the JVM, so without a lifetime token a
+ * restart reissues ids the previous JVM already used and dozens of unrelated
+ * games merge under one game_id.
  *
  * <p>Compressed because the corpus is the run's real cost on disk: a game
  * produces a few hundred records and several megabytes of JSON, so an overnight
@@ -36,9 +44,9 @@ import java.util.zip.GZIPOutputStream;
  * That is bounded by {@code BLOCK_RECORDS} and is worth it: these JVMs crash on
  * long games, but a few hundred records out of hundreds of thousands is noise.
  *
- * <p>Owns the two counters the record ids are built from. Both carry the worker
- * index, because workers count independently and their ids would otherwise
- * collide across a run's shards.
+ * <p>Owns the two counters the record ids are built from. Both carry the shard
+ * token — worker index and lifetime — because workers count independently and
+ * each JVM counts from zero.
  */
 public final class RecordShardWriter implements AutoCloseable {
 
@@ -53,8 +61,12 @@ public final class RecordShardWriter implements AutoCloseable {
 
     public static final String SUFFIX = ".jsonl.gz";
 
+    /** A lifetime token's alphabet: no dot and no hyphen, so an id still splits cleanly. */
+    private static final Pattern LIFETIME = Pattern.compile("[0-9a-z]{1,16}");
+
     private final String runId;
-    private final int worker;
+    /** {@code {worker}-{lifetime}}: this shard's identity and the middle segment of every id it issues. */
+    private final String shard;
     private final Path path;
     private final StringBuilder block = new StringBuilder();
     private int blockRecords;
@@ -62,10 +74,10 @@ public final class RecordShardWriter implements AutoCloseable {
     private long recordCounter;
     private long gameCounter;
 
-    public RecordShardWriter(Path directory, String runId, int worker) {
+    public RecordShardWriter(Path directory, String runId, int worker, String lifetime) {
         this.runId = runId;
-        this.worker = worker;
-        this.path = directory.resolve(runId + "." + worker + SUFFIX);
+        this.shard = worker + "-" + lifetime;
+        this.path = directory.resolve(runId + "." + shard + SUFFIX);
         try {
             Files.createDirectories(directory);
         } catch (IOException e) {
@@ -79,16 +91,38 @@ public final class RecordShardWriter implements AutoCloseable {
 
     /** Start a new game; returns its {@code game_id}. */
     public String nextGameId() {
-        return runId + "." + worker + "." + gameCounter++;
+        return runId + "." + shard + "." + gameCounter++;
     }
 
     /** The next {@code record_id}, unique across this run's shards. */
     public String nextRecordId() {
-        return runId + "." + worker + "." + recordCounter++;
+        return runId + "." + shard + "." + recordCounter++;
     }
 
     public String runId() {
         return runId;
+    }
+
+    /**
+     * A token unique to this JVM lifetime.
+     *
+     * <p>Base-36 start millis, so a directory listing is in start order, plus
+     * four random characters, so two JVMs that start in the same millisecond
+     * under one run id and worker index still differ. Minted here rather than
+     * handed down by the supervisor because several launchers spawn this worker
+     * and one that forgot to pass a token would silently reissue a previous
+     * JVM's ids.
+     */
+    public static String mintLifetime() {
+        return Long.toString(System.currentTimeMillis(), 36)
+                + Integer.toString(
+                        ThreadLocalRandom.current()
+                                .nextInt(36 * 36 * 36, 36 * 36 * 36 * 36), 36);
+    }
+
+    /** Whether {@code token} is safe to embed in a shard name and an id. */
+    public static boolean isValidLifetime(String token) {
+        return token != null && LIFETIME.matcher(token).matches();
     }
 
     /** ISO 8601 UTC, the timestamp format every corpus in this repo uses. */

@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
 import com.pricepredictor.connector.effects.PatchedCollectors.Contribution;
 import forge.card.CardChangedType;
@@ -8,14 +9,33 @@ import forge.card.ColorSet;
 import forge.card.RemoveType;
 import forge.card.StateChangedType;
 import forge.card.WordChangedType;
+import forge.game.ability.AbilityFactory;
+import forge.game.card.Card;
+import forge.game.card.CounterType;
+import forge.game.replacement.ReplacementEffect;
+import forge.game.spellability.AbilitySub;
+import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
+import forge.game.trigger.Trigger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -27,10 +47,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * whether a mana ability is still under its cap, and whether a static has
  * already been recorded on this board.
  */
+@ExtendWith(ForgeExtension.class)
 class PatchedCollectorTest {
 
+    @TempDir
+    Path tempDir;
+
     private static CollectionCaps caps(int manaCap, double playabilityRate) {
-        return new CollectionCaps(manaCap, playabilityRate, 2, 2, List.of());
+        return new CollectionCaps(
+                manaCap, playabilityRate, 2, 2, List.of(),
+                CollectionCaps.defaults().snapshotTiers(),
+                CollectionCaps.defaults().legalityRate());
     }
 
     private static PatchedCollectors collectors(CollectionCaps caps) {
@@ -53,6 +80,14 @@ class PatchedCollectorTest {
         assertEquals(2, defaults.interventionsPerGame());
         assertEquals(2, defaults.probesPerGame());
         assertTrue(defaults.probeKeywords().isEmpty());
+        // One depth for the whole run. Chosen per collector, it was a perfect
+        // proxy for the interventional flag -- tier 4 appeared on those records
+        // and on nothing else -- which is collection metadata the schema keeps
+        // out of the model's inputs.
+        assertEquals(List.of(1, 2, 3), defaults.snapshotTiers());
+        // The one class with no rate at all was 34.4% of the first corpus
+        // against a 5% training share.
+        assertEquals(0.1, defaults.legalityRate());
     }
 
     /**
@@ -69,7 +104,9 @@ class PatchedCollectorTest {
                 "effect.playability.rate", "0.5",
                 "effect.interventions.per.game", "3",
                 "effect.probes.per.game", "4",
-                "effect.probe.keywords", "wither, infect");
+                "effect.probe.keywords", "wither, infect",
+                "effect.snapshot.tiers", "1,2",
+                "effect.legality.rate", "0.25");
         properties.forEach(System::setProperty);
         try {
             CollectionCaps caps = CollectionCaps.fromSystemProperties();
@@ -78,6 +115,8 @@ class PatchedCollectorTest {
             assertEquals(3, caps.interventionsPerGame());
             assertEquals(4, caps.probesPerGame());
             assertEquals(List.of("wither", "infect"), caps.probeKeywords());
+            assertEquals(List.of(1, 2), caps.snapshotTiers());
+            assertEquals(0.25, caps.legalityRate());
         } finally {
             properties.keySet().forEach(System::clearProperty);
         }
@@ -89,6 +128,21 @@ class PatchedCollectorTest {
         // started by an older supervisor may set only some.
         CollectionCaps caps = CollectionCaps.fromSystemProperties();
         assertEquals(CollectionCaps.defaults(), caps);
+    }
+
+    @Test
+    void aMalformedTierVectorKeepsItsDefaultRatherThanFailing() {
+        // A worker that started with a typo in the vector collects the run's
+        // depth, not a partial one: a tier list that varies is exactly the
+        // defect the run-level value exists to prevent.
+        System.setProperty("effect.snapshot.tiers", "1,two,3");
+        try {
+            assertEquals(
+                    List.of(1, 2, 3),
+                    CollectionCaps.fromSystemProperties().snapshotTiers());
+        } finally {
+            System.clearProperty("effect.snapshot.tiers");
+        }
     }
 
     @Test
@@ -106,7 +160,8 @@ class PatchedCollectorTest {
     @Test
     void probesAreOffUntilKeywordsAreNamed() {
         assertFalse(CollectionCaps.defaults().probesEnabled());
-        assertTrue(new CollectionCaps(2000, 0.1, 2, 2, List.of("wither"))
+        assertTrue(new CollectionCaps(
+                2000, 0.1, 2, 2, List.of("wither"), List.of(1, 2, 3), 0.1)
                 .probesEnabled());
     }
 
@@ -312,6 +367,920 @@ class PatchedCollectorTest {
         PatchedCollectors.typeTokens(change, into);
         PatchedCollectors.typeTokens(change, into);
         assertEquals("\"creature\"", tokens(into, "types"));
+    }
+
+    // ── the trigger and rewrite records ──────────────────
+
+    /**
+     * A collector over a game nothing is played in.
+     *
+     * <p>Enough for a snapshot and a record id, which is all these need: what
+     * is under test is what the collector reads off the trait the hook hands
+     * it, and that read is the same whether or not a turn has been taken.
+     */
+    private PatchedCollectors recording() {
+        return new PatchedCollectors(
+                TestCards.game(),
+                new RecordShardWriter(tempDir, "run", 0, "l1"),
+                "run.0-l1.0", CollectionCaps.defaults(), 1L);
+    }
+
+    private static List<Trigger> triggersOf(Card card) {
+        List<Trigger> triggers = new ArrayList<>();
+        card.getCurrentState().getTriggers().forEach(triggers::add);
+        return triggers;
+    }
+
+    /**
+     * The defect the whole trigger channel had: 727,308 records that said only
+     * "some trigger saw this event". The hook hands over the {@link Trigger}
+     * itself and the handler dropped it, so the key and {@code refs.source}
+     * were null on every row of the first collected corpus.
+     */
+    @Test
+    void aTriggerRecordNamesItsTriggerLine() {
+        Card paralyze = TestCards.build("Paralyze");
+        List<Trigger> triggers = triggersOf(paralyze);
+        assertEquals(2, triggers.size(), "Paralyze declares two T: lines");
+
+        String json = recording()
+                .triggerRecord(triggers.get(1), Map.of(), true).toJson();
+
+        assertTrue(json.contains("\"trait_kind\":\"trigger\""), json);
+        assertTrue(json.contains("cardsfolder/p/paralyze.txt"), json);
+        assertTrue(json.contains("\"index_within_kind\":1"),
+                "the second T: line, not whichever was found first: " + json);
+        assertFalse(json.contains("\"ability\":null"), json);
+    }
+
+    /** And it names the permanent whose text acted, which is the join. */
+    @Test
+    void aTriggerRecordNamesItsHostEntity() {
+        Card paralyze = TestCards.build("Paralyze");
+        String entity = SnapshotBuilder.entityId(paralyze);
+
+        String json = recording()
+                .triggerRecord(triggersOf(paralyze).get(0), Map.of(), false).toJson();
+
+        assertTrue(json.contains("\"source\":\"" + entity + "\""), json);
+        // Tier 1 carries the host whatever zone it sits in. Without that a
+        // dies trigger names an entity id absent from state.entities, and the
+        // reader cannot follow a source it cannot find.
+        assertTrue(json.contains("\"id\":\"" + entity + "\""),
+                "the host must be in state.entities: " + json);
+    }
+
+    /**
+     * The other half of the same omission: 62,546 rewrite records that named
+     * no replacement effect, on the one hook every replacement passes through.
+     */
+    @Test
+    void aRewriteRecordNamesItsReplacementEffect() {
+        // Rest in Peace rather than Paralyze: its replacement redirects a move,
+        // so the two halves differ and the record is written. Paralyze's is a
+        // CantHappen prevention, which changes no parameter at all -- see
+        // aRewriteThatChangedNothingObservableIsDroppedAndCounted.
+        Card rest = TestCards.build("Rest in Peace");
+        ReplacementEffect replacement =
+                rest.getCurrentState().getReplacementEffects().iterator().next();
+
+        String json = recording().rewriteRecord(
+                replacement,
+                Map.of("Card", rest, "Destination", ZoneType.Graveyard),
+                Map.of("Card", rest, "Destination", ZoneType.Exile)).toJson();
+
+        assertTrue(json.contains("\"kind\":\"rewrite\""), json);
+        assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
+        assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
+        assertTrue(json.contains(
+                "\"source\":\"" + SnapshotBuilder.entityId(rest) + "\""), json);
+        // And it says what the replacement actually did, which is the whole of
+        // the rewrite channel's defect: a graveyard destination in, an exile
+        // destination out.
+        assertTrue(json.contains("\"incoming\":{\"type\":\"zone_change\""), json);
+        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
+        assertTrue(json.contains("\"to_zone\":\"exile\""), json);
+    }
+
+    /**
+     * A prevention that changes no parameter is a real replacement all the same.
+     *
+     * <p>Paralyze's "doesn't untap" is the shape: the engine records it as
+     * Skipped rather than by rewriting a value, so both halves read alike and
+     * the record is dropped. Telling it from a mode this collector cannot read
+     * needs the engine's ReplacementResult, which the hook does not hand over —
+     * so this is a documented loss, not an accident.
+     */
+    @Test
+    void aPreventionThatRewritesNothingIsAmongTheDroppedOnes() {
+        Card paralyze = TestCards.build("Paralyze");
+        ReplacementEffect prevention =
+                paralyze.getCurrentState().getReplacementEffects().iterator().next();
+        PatchedCollectors collector = recording();
+
+        assertNull(collector.rewriteRecord(
+                prevention, Map.of("Card", paralyze), Map.of("Card", paralyze)));
+        assertEquals(1L, collector.identityRewrites());
+    }
+
+    /**
+     * A hook whose signature drifted must yield a keyless record rather than a
+     * ClassCastException inside a dynamic proxy, which the engine would surface
+     * as an UndeclaredThrowableException in the middle of canRunTrigger.
+     */
+    @Test
+    void anArgumentThatIsNotATraitStillProducesARecord() {
+        String json = recording().triggerRecord("not a trait", Map.of(), true).toJson();
+
+        assertTrue(json.contains("\"ability\":[]"),
+                "an unattributable line is empty, not null: " + json);
+        assertTrue(json.contains("\"source\":null"), json);
+        // And it says why it is empty. Nothing that is not one of the five
+        // trait kinds can name a printed line, which is a different answer
+        // from a resolver that looked and failed.
+        assertTrue(json.contains("\"ability_unresolved\":\"unknown_kind\""), json);
+    }
+
+    // ── why an empty acting line is empty ──────────────────────────────
+
+    /**
+     * A record that names its line carries no reason, and the reverse.
+     *
+     * <p>The two fields are one statement in two halves. A reason beside a
+     * named line is a contradiction the Python reader refuses outright, so the
+     * collector may never write both.
+     */
+    @Test
+    void aRecordThatNamesItsLineCarriesNoReason() {
+        Card rest = TestCards.build("Rest in Peace");
+        ReplacementEffect replacement =
+                rest.getCurrentState().getReplacementEffects().iterator().next();
+
+        String json = recording().rewriteRecord(
+                replacement,
+                Map.of("Card", rest, "Destination", ZoneType.Graveyard),
+                Map.of("Card", rest, "Destination", ZoneType.Exile)).toJson();
+
+        assertTrue(json.contains("cardsfolder/r/rest_in_peace.txt"), json);
+        assertTrue(json.contains("\"ability_unresolved\":null"), json);
+    }
+
+    /**
+     * An engine-built card names no script file, and the record says which.
+     *
+     * <p>This is the whole point of the field: 3.1% of resolution records named
+     * no acting line and there was no way to ask whether that was The Monarch
+     * being The Monarch or the resolver having regressed. {@code engine_effect}
+     * is the expected answer and {@code unindexable} is the alarm, and the
+     * corpus could not tell them apart because nothing wrote either.
+     */
+    @Test
+    void anEngineBuiltLineSaysEngineEffectOnTheRecord() {
+        Card monarch = new Card(TestCards.nextCardId(), TestCards.game());
+        monarch.setName("The Monarch");
+        monarch.setGamePieceType(forge.card.GamePieceType.EFFECT);
+        SpellAbility draw = AbilityFactory.getAbility(
+                "DB$ Draw | Defined$ You | NumCards$ 1", monarch);
+        monarch.getCurrentState().addSpellAbility(draw);
+
+        String json = recording().triggerRecord(draw, Map.of(), true).toJson();
+
+        assertTrue(json.contains("\"ability\":[]"), json);
+        assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
+    }
+
+    // ── per-clause attribution ─────────────────────────
+
+    /** A three-clause line: gain life, then draw, then scry. */
+    private static SpellAbility threeClauseAbility() {
+        Card host = TestCards.build("Fountain of Youth");
+        host.setSVar("DBDraw",
+                "DB$ Draw | Defined$ You | NumCards$ 1 | SubAbility$ DBScry");
+        host.setSVar("DBScry", "DB$ Scry | Defined$ You | ScryNum$ 1");
+        SpellAbility root = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1"
+                        + " | SubAbility$ DBDraw", host);
+        assertNotNull(root.getSubAbility(), "the chain has to be three deep");
+        assertNotNull(root.getSubAbility().getSubAbility());
+        return root;
+    }
+
+    /**
+     * Each clause of a multi-clause line is its own index.
+     *
+     * <p>The engine's pointer was set only around the line the stack resolved,
+     * so every clause after the first was attributed to the root: 298 of 74,952
+     * events carried an {@code attributed_to} at all, and those were the dozen
+     * branching effects that resolve a sub-ability through
+     * {@code AbilityUtils.resolve}. "Put a counter" and "draw a card" are
+     * exactly the distinction the per-entity head learns, so a whole line
+     * attributed to its root teaches neither.
+     */
+    @Test
+    void eachClauseOfAMultiClauseAbilityAttributesToItself() {
+        SpellAbility root = threeClauseAbility();
+        AbilitySub first = (AbilitySub) root.getSubAbility();
+        AbilitySub second = (AbilitySub) first.getSubAbility();
+
+        assertEquals("0", EventAttribution.attributedTo(root, first));
+        assertEquals("1", EventAttribution.attributedTo(root, second));
+    }
+
+    /**
+     * The root acting and no pointer at all are different answers.
+     *
+     * <p>Both used to be null, which is why the 3.2% of events carrying an
+     * attribution could not be read: a single-clause ability legitimately has
+     * no sub-ability and the root is the right answer, and that looked exactly
+     * like the pointer failing to land. Separating them is what turns the rate
+     * into a measurement instead of a number.
+     */
+    @Test
+    void theRootActingAndNoPointerAreDifferentAnswers() {
+        SpellAbility root = threeClauseAbility();
+
+        assertEquals(EventAttribution.ROOT,
+                EventAttribution.attributedTo(root, root));
+        assertEquals(EventAttribution.UNRESOLVED,
+                EventAttribution.attributedTo(root, null));
+        assertNotEquals(EventAttribution.ROOT, EventAttribution.UNRESOLVED);
+    }
+
+    /** Neither sentinel can be mistaken for a chain index. */
+    @Test
+    void neitherSentinelReadsAsAClauseIndex() {
+        for (String sentinel
+                : List.of(EventAttribution.ROOT, EventAttribution.UNRESOLVED)) {
+            assertThrows(NumberFormatException.class,
+                    () -> Integer.parseInt(sentinel), sentinel);
+        }
+    }
+
+    /**
+     * A clause with no line above it names nothing a reader could join to.
+     *
+     * <p>Its index counts clauses of a chain this collector never saw, so the
+     * number would address a line in some other script. Saying so is the third
+     * state, not the root.
+     */
+    @Test
+    void aDetachedClauseCannotBePlacedAndSaysSo() {
+        SpellAbility root = threeClauseAbility();
+        AbilitySub orphan = (AbilitySub) root.getSubAbility();
+        orphan.setParent(null);
+
+        assertEquals(EventAttribution.UNRESOLVED,
+                EventAttribution.attributedTo(root, orphan));
+    }
+
+    /** And attribution never returns null, whatever it is handed. */
+    @Test
+    void attributionAlwaysNamesOneOfTheThreeStates() {
+        SpellAbility root = threeClauseAbility();
+
+        for (Object pointer
+                : new Object[]{null, "not an ability", root, root.getSubAbility()}) {
+            assertNotNull(EventAttribution.attributedTo(root, pointer),
+                    String.valueOf(pointer));
+        }
+    }
+
+    /** And an event stamped inside a clause carries that clause's index. */
+    @Test
+    void anEventCarriesTheClauseThatProducedIt() {
+        SpellAbility root = threeClauseAbility();
+        AbilitySub second = (AbilitySub) root.getSubAbility().getSubAbility();
+
+        String json = EventAttribution.stamp(
+                new EffectEvent(EffectEvent.CARD_DRAWN).subject("P0"),
+                root, second).toJson();
+
+        assertTrue(json.contains("\"attributed_to\":\"1\""), json);
+    }
+
+    /**
+     * A clause's own {@code Duration$} outranks the line's.
+     *
+     * <p>Both fields come from one read of the pointer, so they cannot describe
+     * different instants of a nested resolution.
+     */
+    @Test
+    void aClauseDeclaringItsOwnDurationOutranksTheLine() {
+        Card host = TestCards.build("Fountain of Youth");
+        host.setSVar("DBPump",
+                "DB$ Pump | Defined$ Self | NumAtt$ 1 | Duration$ Permanent");
+        SpellAbility root = AbilityFactory.getAbility(
+                "AB$ GainLife | Cost$ 1 | Defined$ You | LifeAmount$ 1"
+                        + " | SubAbility$ DBPump", host);
+
+        assertEquals(EventAttribution.PERMANENT,
+                EventAttribution.duration(root, root.getSubAbility()));
+        assertEquals(EventAttribution.INSTANT,
+                EventAttribution.duration(root, root));
+    }
+
+
+    // ── what a run parameter map says ──────────────────────────────────
+
+    /**
+     * A stand-in for a trait whose only readable property is its mode.
+     *
+     * <p>The collector reads the mode reflectively, so anything with the
+     * accessor exercises the same path. Using one here keeps these tests about
+     * the parameter reading rather than about which Forge trait happens to
+     * declare a given mode.
+     */
+    public record FakeTrait(String mode) {
+        public String getMode() {
+            return mode;
+        }
+    }
+
+    /** The event a trigger record carries, as rendered JSON. */
+    private String eventJson(String mode, Map<String, Object> params) {
+        String json = recording().triggerRecord(new FakeTrait(mode), params, true).toJson();
+        int at = json.indexOf("\"payload\":{\"event\":");
+        return json.substring(at + 19, json.indexOf(",\"fired\"", at));
+    }
+
+    /**
+     * A zone rewrite says which zones, from the values rather than the keys.
+     *
+     * <p>The whole rewrite channel was information-free because
+     * {@code describeParams} read the map's <b>key names</b>: it built both
+     * halves out of the mode plus a subject per entry, so incoming and outgoing
+     * were byte-identical on 100% of 62,546 records by construction.
+     */
+    @Test
+    void aMoveNamesTheZonesItWentBetween() {
+        String json = eventJson("Moved", Map.of(
+                "Origin", ZoneType.Hand,
+                "Destination", ZoneType.Graveyard,
+                "Card", TestCards.build("Mountain")));
+
+        assertTrue(json.contains("\"type\":\"zone_change\""), json);
+        assertTrue(json.contains("\"from_zone\":\"hand\""), json);
+        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
+    }
+
+    /** And a rewrite that changed the destination is two different halves. */
+    @Test
+    void aRewrittenDestinationMakesTheTwoHalvesDiffer() {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> before = new LinkedHashMap<>(Map.of(
+                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
+                "Card", card));
+        Map<String, Object> after = new LinkedHashMap<>(before);
+        after.put("Destination", ZoneType.Exile);
+
+        EffectRecord record = recording().rewriteRecord(new FakeTrait("Moved"), before, after);
+
+        assertNotNull(record, "a replacement that redirected a card is a real rewrite");
+        String json = record.toJson();
+        assertTrue(json.contains("\"to_zone\":\"graveyard\""), json);
+        assertTrue(json.contains("\"to_zone\":\"exile\""), json);
+    }
+
+    /**
+     * A rewrite whose halves still read alike is dropped, not written.
+     *
+     * <p>It is the same information-free row the first corpus was full of, and
+     * telling "the replacement changed nothing observable" from "this collector
+     * has no reading for the mode" needs the engine's ReplacementResult, which
+     * the hook does not hand over.
+     */
+    @Test
+    void aRewriteThatChangedNothingObservableIsDroppedAndCounted() {
+        PatchedCollectors collector = recording();
+        Map<String, Object> params = Map.of("Card", TestCards.build("Mountain"));
+
+        assertNull(collector.rewriteRecord(new FakeTrait("Moved"), params, params));
+        assertEquals(1L, collector.identityRewrites());
+    }
+
+    /**
+     * One card named three ways is one subject.
+     *
+     * <p>{@code Card}, {@code CardLKI} and {@code Affected} routinely all point
+     * at the same permanent, and reading every map entry as a subject gave
+     * 377 of 691 sampled trigger events a repeated one.
+     */
+    @Test
+    void oneCardNamedThreeWaysIsOneSubject() {
+        Card card = TestCards.build("Mountain");
+        String json = eventJson("Moved", Map.of(
+                "Card", card, "CardLKI", card, "Affected", card));
+
+        assertEquals(
+                "[\"" + SnapshotBuilder.entityId(card) + "\"]",
+                json.substring(json.indexOf("\"subjects\":") + 11,
+                        json.indexOf("]", json.indexOf("\"subjects\":")) + 1),
+                json);
+    }
+
+    /**
+     * {@code cause} is a ref, and never the list of key names it used to be.
+     *
+     * <p>The schema documents it as the entity or player that caused the event
+     * and the collector wrote a comma-joined list of {@code AbilityKey} names —
+     * a value that was near-constant per event type and named no cause at all.
+     */
+    @Test
+    void theCauseIsAnEntityRefRatherThanAListOfKeyNames() {
+        Card cause = TestCards.build("Lightning Bolt");
+        String json = eventJson("Moved", Map.of(
+                "Card", TestCards.build("Mountain"),
+                "Destination", ZoneType.Graveyard,
+                "Cause", cause));
+
+        assertTrue(json.contains(
+                "\"cause\":\"" + SnapshotBuilder.entityId(cause) + "\""), json);
+        assertFalse(json.contains("\"cause\":\"Card,"), json);
+        assertFalse(json.contains("Destination,"), json);
+    }
+
+    /** An unmapped mode carries its mode and says nothing it cannot support. */
+    @Test
+    void anUnmappedModeCarriesOnlyWhatItKnows() {
+        String json = eventJson("SomethingForgeCallsThis", Map.of());
+
+        assertTrue(json.contains("\"type\":\"state_flag_change\""), json);
+        assertTrue(json.contains("\"params\":{\"mode\":\"SomethingForgeCallsThis\"}"),
+                json);
+    }
+
+    @Test
+    void damageIsReadAsAnAmountACombatFlagAndASource() {
+        Card source = TestCards.build("Lightning Bolt");
+        String json = eventJson("DamageDone", Map.of(
+                "DamageAmount", 3,
+                "IsCombatDamage", Boolean.FALSE,
+                "DamageSource", source,
+                "Affected", TestCards.build("Mountain")));
+
+        assertTrue(json.contains("\"amount\":3"), json);
+        assertTrue(json.contains("\"combat\":false"), json);
+        assertTrue(json.contains(
+                "\"source\":\"" + SnapshotBuilder.entityId(source) + "\""), json);
+    }
+
+    /** Prevention arrives through the damage keys and is not damage dealt. */
+    @Test
+    void preventedDamageIsNotRecordedAsDamageDealt() {
+        String json = eventJson("DamageDone", Map.of(
+                "PreventedAmount", 2,
+                "Affected", TestCards.build("Mountain")));
+
+        assertTrue(json.contains("\"type\":\"damage_prevented\""), json);
+        assertTrue(json.contains("\"amount\":2"), json);
+    }
+
+    /**
+     * A counter map is flattened to the type and the number.
+     *
+     * <p>This is the one shape a counter replacement rewrites in place, so it is
+     * also the one the engine-side copy has to reach inside — a collector that
+     * reads it correctly still sees identity if the copy is one level deep.
+     */
+    @Test
+    void aCounterMapIsFlattenedToATypeAndADelta() {
+        com.google.common.collect.Multiset<CounterType> counters =
+                com.google.common.collect.LinkedHashMultiset.create();
+        counters.add(CounterType.getType("P1P1"), 2);
+        String json = eventJson("CounterAdded", Map.of(
+                "CounterMap", Map.of(Optional.empty(), counters),
+                "Affected", TestCards.build("Mountain")));
+
+        assertTrue(json.contains("\"type\":\"counter_change\""), json);
+        // Named the way the engine names it, which is the same spelling the
+        // observed counter events carry -- a reader must not have to know which
+        // collector wrote a record to know what "+1/+1" is called.
+        assertTrue(json.contains("\"counter_type\":\"+1/+1\""), json);
+        assertTrue(json.contains("\"delta\":2"), json);
+    }
+
+    // ── the trigger negative sample ────────────────────────────────────
+
+    /**
+     * Drive one mode's evaluations and count what the writer was offered.
+     *
+     * @param burst how many non-fired evaluations follow each firing
+     */
+    private static int[] driveTrigger(
+            PatchedCollectors collector, String mode, int burst, int firings) {
+        int[] kept = new int[2];
+        for (int firing = 0; firing < firings; firing++) {
+            if (collector.offerTriggerEvaluation(mode, true)) {
+                collector.keepTriggerEvaluation(mode, true);
+                kept[0]++;
+            }
+            for (int i = 0; i < burst; i++) {
+                if (collector.offerTriggerEvaluation(mode, false)) {
+                    collector.keepTriggerEvaluation(mode, false);
+                    kept[1]++;
+                }
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * The kept negatives track the kept positives, whatever the population is.
+     *
+     * <p>The first corpus used a fixed 2% rate and landed at 74:26 rather than
+     * 1:1, because a fixed rate cannot hold a ratio: the true population was
+     * 1:17.7 and it varies by mode, board and turn. Two modes with very
+     * different burst lengths are driven here, and both have to come out level
+     * — a fixed rate fails this by construction, at 1:0.8 for the short burst
+     * and 1:0.06 for the long one.
+     */
+    @Test
+    void negativesAreKeptAtAboutOneToOneWhateverTheBurstLength() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        int[] rare = driveTrigger(collector, "ChangesZone", 40, 200);
+        int[] common = driveTrigger(collector, "TapsForMana", 3, 200);
+
+        for (int[] kept : List.of(rare, common)) {
+            assertTrue(kept[0] > 0 && kept[1] > 0, "nothing was kept");
+            double ratio = (double) kept[1] / kept[0];
+            assertTrue(Math.abs(ratio - 1.0) < 0.1,
+                    "kept " + kept[0] + " fired against " + kept[1]
+                            + " not fired, a ratio of " + ratio);
+        }
+    }
+
+    /**
+     * The ratio holds over what reaches the shard, not over what was offered.
+     *
+     * <p>This is the 58:42 the corpus measured while the unit test above read
+     * 1:1. The difference is here: an offered negative is refused downstream by
+     * the duplicate check or the per-line flood cap far more often than a
+     * positive is, and under the old rate the deficit that leaves standing was
+     * repaid only at {@code deficit / estimated run length} — a lag a game's
+     * handful of firings per mode never works off. Three refusals in four is
+     * harsher than the corpus and the kept sets still come out level.
+     */
+    @Test
+    void negativesStayLevelEvenWhenMostOfThemAreRefusedDownstream() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        java.util.Random refusals = new java.util.Random(7);
+        int[] kept = new int[2];
+        for (int firing = 0; firing < 400; firing++) {
+            if (collector.offerTriggerEvaluation("ChangesZone", true)) {
+                collector.keepTriggerEvaluation("ChangesZone", true);
+                kept[0]++;
+            }
+            for (int i = 0; i < 20; i++) {
+                if (!collector.offerTriggerEvaluation("ChangesZone", false)) {
+                    continue;
+                }
+                // The record was built and then refused: nothing is kept, and
+                // the deficit it was drawn against is still owed.
+                if (refusals.nextInt(4) != 0) {
+                    continue;
+                }
+                collector.keepTriggerEvaluation("ChangesZone", false);
+                kept[1]++;
+            }
+        }
+        double ratio = (double) kept[1] / kept[0];
+        assertTrue(Math.abs(ratio - 1.0) < 0.1,
+                "kept " + kept[0] + " fired against " + kept[1]
+                        + " not fired, a ratio of " + ratio);
+    }
+
+    /**
+     * A deficit that cannot be filled costs a few offers, not all of them.
+     *
+     * <p>The price of offering on the deficit alone: a mode whose every acting
+     * line has hit its per-line cap owes a negative for ever, and each offer
+     * builds a snapshot on the hook that fires most often in the collector.
+     * The backoff is what keeps that bounded.
+     */
+    @Test
+    void aDeficitThatCanNeverBeFilledStopsSpendingWorkOnItself() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        collector.offerTriggerEvaluation("ChangesZone", true);
+        collector.keepTriggerEvaluation("ChangesZone", true);
+
+        int offered = 0;
+        for (int i = 0; i < 20_000; i++) {
+            if (collector.offerTriggerEvaluation("ChangesZone", false)) {
+                offered++;   // built, refused downstream, never kept
+            }
+        }
+        assertTrue(offered > 0, "the standing deficit is never abandoned");
+        assertTrue(offered < 100,
+                "20,000 unfillable evaluations built " + offered + " records");
+    }
+
+    /** A mode's balance is its own, so a busy mode cannot starve a quiet one. */
+    @Test
+    void oneModeDoesNotSpendAnothersBudget() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        driveTrigger(collector, "ChangesZone", 40, 200);
+        int[] quiet = driveTrigger(collector, "Untaps", 2, 5);
+
+        assertTrue(quiet[1] > 0,
+                "a quiet mode kept no negatives after a busy one ran");
+    }
+
+    /** A fired evaluation is always offered; only negatives are sampled. */
+    @Test
+    void everyFiredEvaluationIsOffered() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        for (int i = 0; i < 50; i++) {
+            assertTrue(collector.offerTriggerEvaluation("ChangesZone", true));
+        }
+    }
+
+    /** And a mode that never fires contributes no negatives, by construction. */
+    @Test
+    void aModeThatNeverFiresKeepsNoNegatives() {
+        PatchedCollectors collector = collectors(caps(1, 1.0));
+        for (int i = 0; i < 500; i++) {
+            assertFalse(collector.offerTriggerEvaluation("Untaps", false));
+        }
+    }
+
+    /**
+     * A replacement that halved a draw is a rewrite, not an identity pair.
+     *
+     * <p>The mode table was written from the trigger vocabulary, so 31 of
+     * Forge's 42 {@code ReplacementType}s rendered as the generic outcome
+     * carrying only their mode -- and an event with no value in it cannot
+     * differ from itself. Every rewrite of a draw, a mill, a token count or a
+     * life total was therefore dropped as an identity pair by construction,
+     * whatever the replacement actually did.
+     */
+    @Test
+    void aRewrittenQuantityOnTheReplacementSideIsNoLongerAnIdentityPair() {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> before = new LinkedHashMap<>(Map.of(
+                "Affected", card, "Number", 3));
+        Map<String, Object> after = new LinkedHashMap<>(before);
+        after.put("Number", 1);
+
+        EffectRecord record =
+                recording().rewriteRecord(new FakeTrait("DrawCards"), before, after);
+
+        assertNotNull(record, "a replacement that halved a draw is a real rewrite");
+        String json = record.toJson();
+        assertTrue(json.contains("\"type\":\"card_drawn\""), json);
+        assertTrue(json.contains("\"count\":3"), json);
+        assertTrue(json.contains("\"count\":1"), json);
+    }
+
+    /** And the replacement side's word for a life total is read as one. */
+    @Test
+    void theReplacementSpellingOfALifeAmountIsStillADelta() {
+        String json = eventJson("LifeReduced", Map.of(
+                "Affected", TestCards.build("Mountain"), "Amount", 4));
+
+        assertTrue(json.contains("\"type\":\"life_change\""), json);
+        assertTrue(json.contains("\"delta\":4"), json);
+    }
+
+    // ── what the rewrite channel dropped ───────────────────────────────
+
+    /**
+     * A dropped pair names the parameters that moved under it.
+     *
+     * <p>The counter alone says the channel is small; this says whether it is
+     * small because replacements do little or because the normaliser cannot
+     * read what they did.
+     */
+    @Test
+    void aDroppedRewriteNamesTheParametersTheNormaliserDidNotRead() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        Card card = TestCards.build("Mountain");
+        tally.dropped("Moved",
+                Map.of("Card", card, "LibraryPosition", 0),
+                Map.of("Card", card, "LibraryPosition", -1));
+
+        String summary = tally.summary();
+        assertTrue(summary.contains("Moved.LibraryPosition=1"), summary);
+        assertTrue(summary.contains("0 dropped with no raw parameter"), summary);
+    }
+
+    /** And one that moved nothing at all is counted apart from those. */
+    @Test
+    void aDropWithNothingMovedIsTheOtherAnswer() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
+        tally.dropped("Untap", same, same);
+
+        String summary = tally.summary();
+        assertTrue(summary.contains("1 dropped with no raw parameter"), summary);
+        assertTrue(summary.contains(
+                "moved with nothing to show for it: none"), summary);
+    }
+
+    /** The share is the headline, because 8 in 55,296 was the finding. */
+    @Test
+    void theSummaryLeadsWithTheDroppedShare() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        Map<String, Object> same = Map.of("Card", TestCards.build("Mountain"));
+        tally.written("Moved");
+        for (int i = 0; i < 9; i++) {
+            tally.dropped("Moved", same, same);
+        }
+
+        String summary = tally.summary();
+        assertTrue(summary.contains("1 written, 9 dropped as identity (90.0%)"),
+                summary);
+    }
+
+    /**
+     * A worker that saw no replacement says nothing.
+     *
+     * <p>Whether the hook is installed at all is {@code PatchHooks.report()}'s
+     * line, and repeating it once a game would be noise in every worker log.
+     */
+    @Test
+    void aGameWithNoReplacementPrintsNothing() {
+        PatchedCollectors.RewriteTally tally = new PatchedCollectors.RewriteTally();
+        java.io.PrintStream out = System.out;
+        java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
+        System.setOut(new java.io.PrintStream(captured));
+        try {
+            tally.endOfGame();
+        } finally {
+            System.setOut(out);
+        }
+        assertEquals("", captured.toString());
+    }
+
+    /** The live path feeds the tally, which is what makes it a live number. */
+    @Test
+    void bothHalvesOfTheRewriteChannelReachTheWorkerTally() {
+        Card card = TestCards.build("Mountain");
+        Map<String, Object> before = new LinkedHashMap<>(Map.of(
+                "Origin", ZoneType.Battlefield, "Destination", ZoneType.Graveyard,
+                "Card", card));
+        Map<String, Object> after = new LinkedHashMap<>(before);
+        after.put("Destination", ZoneType.Exile);
+        // Deltas rather than absolutes: the tally is the worker's, so every
+        // other test in this class has already contributed to it.
+        long droppedBefore = PatchedCollectors.JVM_REWRITES.dropped();
+        long writtenBefore = PatchedCollectors.JVM_REWRITES.written();
+        PatchedCollectors collector = recording();
+
+        collector.rewriteRecord(new FakeTrait("Moved"), before, after);
+        collector.rewriteRecord(new FakeTrait("Moved"), before, before);
+
+        assertEquals(writtenBefore + 1, PatchedCollectors.JVM_REWRITES.written());
+        assertEquals(droppedBefore + 1, PatchedCollectors.JVM_REWRITES.dropped());
+    }
+
+    // ── coalescing the kinds that had none ─────────────────────────────
+
+    @Test
+    void aDecisionOnAnUnchangedBoardIsWrittenOnce() {
+        PatchedCollectors collector = collectors(caps(2000, 1.0));
+        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{board}"));
+        assertFalse(collector.allowDistinctRecord("decision", "{payload}", "{board}"));
+    }
+
+    @Test
+    void aBoardThatMovedGetsItsOwnDecisionRecord() {
+        PatchedCollectors collector = collectors(caps(2000, 1.0));
+        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{life:20}"));
+        assertTrue(collector.allowDistinctRecord("decision", "{payload}", "{life:19}"));
+    }
+
+    /**
+     * Two copies of one anthem render one record.
+     *
+     * <p>The per-board coalescer cannot see this: the two statics have different
+     * ids, so it treats them as different questions, while their key, their
+     * contributions and their suppressed board are all the same.
+     */
+    @Test
+    void twoStaticsThatRenderIdenticallyAreWrittenOnce() {
+        PatchedCollectors collector = collectors(caps(2000, 1.0));
+        assertTrue(collector.allowContinuousRecord("11", "board-1"));
+        assertTrue(collector.allowContinuousRecord("12", "board-1"));
+        assertTrue(collector.allowDistinctRecord("continuous", "{anthem}", "{board}"));
+        assertFalse(collector.allowDistinctRecord("continuous", "{anthem}", "{board}"));
+    }
+
+    /** The legality cap still keys on its payload alone, deliberately. */
+    @Test
+    void aLegalityAnswerStillCoalescesOnItsPayloadAlone() {
+        PatchedCollectors collector = collectors(caps(2000, 1.0));
+        assertTrue(collector.allowLegalityRecord("blockers", "{payload}"));
+        assertFalse(collector.allowLegalityRecord("blockers", "{payload}"));
+        assertTrue(collector.allowLegalityRecord("attackers", "{payload}"));
+    }
+
+    /** One acting line is worth a couple of dozen looks in a game, not hundreds. */
+    @Test
+    void oneTriggerLineIsCappedPerGameAndPerVerdict() {
+        PatchedCollectors collector = collectors(caps(2000, 1.0));
+        int written = 0;
+        for (int i = 0; i < 100; i++) {
+            if (collector.allowTriggerLine("[key]", true)) {
+                written++;
+            }
+        }
+        assertEquals(24, written);
+        // The other verdict has its own budget: "fired" and "did not fire" are
+        // different observations of the same line.
+        assertTrue(collector.allowTriggerLine("[key]", false));
+    }
+
+    // ── the snapshot depth is a run-level value ────────────────────────
+
+    @Test
+    void theSnapshotDepthComesFromTheRunsCaps() {
+        CollectionCaps deep = new CollectionCaps(
+                1, 1.0, 2, 2, List.of(), List.of(1, 2, 3, 4), 0.1);
+        PatchedCollectors collector = new PatchedCollectors(
+                TestCards.game(),
+                new RecordShardWriter(tempDir, "run", 0, "l1"),
+                "run.0-l1.0", deep, 1L);
+
+        String json = collector.triggerRecord(
+                new FakeTrait("Moved"), Map.of(), true).toJson();
+
+        assertTrue(json.contains("\"tiers\":[1,2,3,4]"), json);
+    }
+
+    @Test
+    void theTierVectorReachesTheBuilderAsAPrefix() {
+        assertArrayEquals(
+                new int[]{1, 2, 3}, CollectionCaps.defaults().snapshotTierArray());
+    }
+
+    // ── held probe branches ────────────────────────────────────────────
+
+    private static ForkCollector.HeldProbe branch(String substep) {
+        return new ForkCollector.HeldProbe(
+                "trample", "E1", "{}", List.of(), "P0", "\"combat\":{}", substep);
+    }
+
+    private PatchedCollectors withForks(RecordShardWriter writer) {
+        CollectionCaps probing = new CollectionCaps(
+                1, 1.0, 2, 2, List.of("trample"), List.of(1, 2, 3), 0.1);
+        PatchedCollectors collector = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", probing, 1L);
+        collector.withForks(
+                new ForkCollector(null, writer, "run.0-l1.0", probing, 1L));
+        return collector;
+    }
+
+    /**
+     * A branch is completed only against its own damage step.
+     *
+     * <p>In the first corpus it was not: a branch forked at the first-strike
+     * step, where nothing was ever assigned, survived that step and was written
+     * against the regular step's record — so the sampled fork record whose phase
+     * was {@code combat_first_strike_damage} carried a {@code mirror_of} whose
+     * phase was {@code combat_damage}, and gate 2's difference compared a step
+     * that did not happen with one that did.
+     */
+    @Test
+    void aBranchIsCompletedOnlyAgainstItsOwnDamageStep() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            PatchedCollectors collector = withForks(writer);
+            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
+            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+
+            collector.writeHeldProbes("run.0-l1.9", ForkCollector.SUBSTEP_REGULAR);
+
+            assertEquals(1L, collector.recordsWritten());
+            assertEquals(1, collector.heldProbeCount(),
+                    "the first-strike branch must still be waiting for its own step");
+        }
+    }
+
+    /** With no substep named, the oldest held step is the one being written. */
+    @Test
+    void theOldestHeldStepIsTheOneACombatRecordCompletes() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            PatchedCollectors collector = withForks(writer);
+            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
+            collector.hold(branch(ForkCollector.SUBSTEP_REGULAR));
+
+            collector.writeHeldProbes("run.0-l1.9");
+
+            assertEquals(1L, collector.recordsWritten());
+            assertEquals(1, collector.heldProbeCount());
+        }
+    }
+
+    /** A branch whose step produced no record is dropped rather than mispaired. */
+    @Test
+    void aBranchFromAStepThatWroteNoRecordIsDropped() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
+            PatchedCollectors collector = withForks(writer);
+            collector.hold(branch(ForkCollector.SUBSTEP_FIRST_STRIKE));
+
+            assertEquals(1, collector.discardStaleProbes(ForkCollector.SUBSTEP_REGULAR));
+            assertEquals(0, collector.heldProbeCount());
+            assertEquals(0L, collector.recordsWritten());
+        }
     }
 
     // ── hook lookup ─────────────────────────────────────────────────────

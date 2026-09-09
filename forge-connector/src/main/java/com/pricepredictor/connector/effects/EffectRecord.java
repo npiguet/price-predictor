@@ -1,21 +1,17 @@
 package com.pricepredictor.connector.effects;
 
 import forge.card.MagicColor;
-import forge.card.mana.ManaCost;
-import forge.card.mana.ManaCostShard;
 import forge.game.card.Card;
-import forge.game.cost.Cost;
-import forge.game.cost.CostDiscard;
-import forge.game.cost.CostExile;
-import forge.game.cost.CostPart;
-import forge.game.cost.CostPartWithList;
-import forge.game.cost.CostPayLife;
-import forge.game.cost.CostSacrifice;
-import forge.game.cost.CostTapType;
+import forge.game.cost.CostTap;
+import forge.game.mana.Mana;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 
 
@@ -62,6 +58,7 @@ public final class EffectRecord {
     private boolean synthetic;
     private String actorPlayer;
     private List<ProvenanceKey> ability;
+    private String abilityUnresolved;
     private String stateJson = "{}";
     private String payloadJson = "{}";
 
@@ -126,9 +123,40 @@ public final class EffectRecord {
      * The acting line. Absent for {@code combat} and {@code playability}, where
      * no single line acts; several keys where the rendered line merged several
      * traits.
+     *
+     * <p>Prefer {@link #ability(ProvenanceKey.Resolved)} wherever a key was
+     * actually looked for: this form cannot say why an empty list is empty.
      */
     public EffectRecord ability(List<ProvenanceKey> keys) {
         this.ability = keys == null ? null : new ArrayList<>(keys);
+        return this;
+    }
+
+    /**
+     * The acting line, or the reason there is none — both set from one answer.
+     *
+     * <p>The two fields are written together and only together, because they
+     * are two halves of one statement and a record that got them out of step
+     * would be unreadable: a reason beside a named line is a contradiction, and
+     * an empty list with no reason is the ambiguity this field exists to
+     * remove. An empty {@code ability} alone conflates "the Monarch has no
+     * printed line in any tree, correctly" with "the resolver regressed", and
+     * that is what hid a broken resolver for a whole collection run.
+     *
+     * <p>A null answer is treated as {@code unknown_kind} rather than as no
+     * lookup at all: a caller reaching this method did look, so the record owes
+     * a reason.
+     */
+    public EffectRecord ability(ProvenanceKey.Resolved resolved) {
+        if (resolved != null && resolved.key() != null) {
+            this.ability = List.of(resolved.key());
+            this.abilityUnresolved = null;
+            return this;
+        }
+        this.ability = List.of();
+        String reason = resolved == null ? null : resolved.reason();
+        this.abilityUnresolved = reason == null
+                ? ProvenanceKey.UNRESOLVED_UNKNOWN_KIND : reason;
         return this;
     }
 
@@ -144,6 +172,22 @@ public final class EffectRecord {
 
     public String recordId() {
         return recordId;
+    }
+
+    /**
+     * The rendered state and payload, for a collector that coalesces.
+     *
+     * <p>A record is a duplicate of another when what it <b>says</b> repeats —
+     * the same board, the same answer — and its id and timestamp always differ.
+     * Reading the two rendered blocks is how a coalescer asks that question
+     * without reparsing the line it is about to write.
+     */
+    String stateJson() {
+        return stateJson;
+    }
+
+    String payloadJson() {
+        return payloadJson;
     }
 
     public String toJson() {
@@ -163,11 +207,17 @@ public final class EffectRecord {
                 + ",\"synthetic\":" + synthetic
                 + ",\"actor_player\":" + Json.string(actorPlayer)
                 + ",\"ability\":" + abilityJson()
+                + ",\"ability_unresolved\":" + Json.string(abilityUnresolved)
                 + ",\"state\":" + stateJson
                 + ",\"payload\":" + payloadJson + "}";
     }
 
-    private String abilityJson() {
+    /** Why {@link #abilityJson()} is empty, or null where it names a line. */
+    String abilityUnresolved() {
+        return abilityUnresolved;
+    }
+
+    String abilityJson() {
         if (ability == null) {
             return "null";
         }
@@ -190,90 +240,131 @@ public final class EffectRecord {
     /**
      * ``{"costs": {...}, "outcome": "..."}`` — a resolution cost half.
      *
-     * <p>Read after the cost has been paid, which is when a cast event fires,
-     * so the card lists are what was actually spent rather than what the cost
-     * asked for. A cost with no list part contributes nothing rather than an
-     * empty entry.
-     *
-     * <p>Mana is counted per colour with a hybrid shard counted under each
-     * colour it could have paid: the cost is what the card asks, and which half
-     * of a hybrid was used is not in it. Generic and X land under {@code C}.
+     * <p>Convenience for the common case where both halves are read at the same
+     * instant. A collector that defers the record until the outcome is known
+     * reads {@link #costsJson} at the cast and calls the two-string form later.
      */
     public static String costPayload(SpellAbility ability, String outcome) {
-        Cost cost = ability == null ? null : ability.getPayCosts();
-        StringJoiner mana = new StringJoiner(",", "{", "}");
-        List<String> tapped = new ArrayList<>();
-        List<String> sacrificed = new ArrayList<>();
-        List<String> discarded = new ArrayList<>();
-        List<String> exiled = new ArrayList<>();
-        int life = 0;
-
-        if (cost != null) {
-            ManaCost total = cost.getTotalMana();
-            for (char color : COST_COLORS) {
-                int count = shardCount(total, color);
-                if (count > 0) {
-                    mana.add(Json.string(String.valueOf(color)) + ":" + count);
-                }
-            }
-            int generic = total.getGenericCost()
-                    + (ability.getXManaCostPaid() == null
-                            ? 0 : ability.getXManaCostPaid() * total.countX());
-            if (generic > 0) {
-                mana.add("\"C\":" + generic);
-            }
-            for (CostPart part : cost.getCostParts()) {
-                if (part instanceof CostPayLife payLife) {
-                    life += amountOf(payLife, ability);
-                } else if (part instanceof CostPartWithList listed) {
-                    // Four different questions about one card list, told apart
-                    // by which cost part produced it.
-                    List<String> into =
-                            part instanceof CostSacrifice ? sacrificed
-                            : part instanceof CostDiscard ? discarded
-                            : part instanceof CostExile ? exiled
-                            : part instanceof CostTapType ? tapped
-                            : null;
-                    if (into != null) {
-                        for (Card card : listed.getCardList()) {
-                            into.add(SnapshotBuilder.entityId(card));
-                        }
-                    }
-                }
-            }
-        }
-        return "{\"costs\":{\"mana_by_color\":" + mana
-                + ",\"tapped\":" + Json.stringArray(tapped)
-                + ",\"life\":" + life
-                + ",\"sacrificed\":" + Json.stringArray(sacrificed)
-                + ",\"discarded\":" + Json.stringArray(discarded)
-                + ",\"exiled\":" + Json.stringArray(exiled) + "},"
-                + "\"outcome\":" + Json.string(outcome) + "}";
-
+        return costPayload(costsJson(ability), outcome);
     }
 
-    private static final char[] COST_COLORS = {'W', 'U', 'B', 'R', 'G'};
-
-    /** How many shards of a cost could be paid with this colour. */
-    private static int shardCount(ManaCost cost, char color) {
-        byte mask = MagicColor.fromName(String.valueOf(color));
-        int count = 0;
-        for (ManaCostShard shard : cost) {
-            if ((shard.getColorMask() & mask) != 0) {
-                count++;
-            }
-        }
-        return count;
+    /**
+     * The same payload from a costs object read earlier.
+     *
+     * <p>The two halves become knowable at different moments: what was paid is
+     * only readable while the cast event is being published, and whether the
+     * spell resolved, fizzled or was countered is only readable later. Holding
+     * the rendered costs string is what lets one record carry both without
+     * keeping a reference to a {@link SpellAbility} whose paid lists the next
+     * activation will overwrite.
+     */
+    public static String costPayload(String costsJson, String outcome) {
+        return "{\"costs\":" + costsJson
+                + ",\"outcome\":" + Json.string(outcome) + "}";
     }
 
-    private static int amountOf(CostPayLife part, SpellAbility ability) {
-        try {
-            return Integer.parseInt(part.getAmount());
-        } catch (NumberFormatException | NullPointerException e) {
-            // An X or a script variable; the announced value is the record's
-            // business and the amount is not readable here without evaluating.
-            return 0;
+    /** What a cost payload says when there is no ability to read. */
+    private static final String NO_COSTS =
+            "{\"mana_by_color\":{},\"tapped\":[],\"life\":0,"
+                    + "\"sacrificed\":[],\"discarded\":[],\"exiled\":[]}";
+
+    /**
+     * What was actually paid, as the costs object alone.
+     *
+     * <p><b>Read at the cast event and nowhere later.</b> Everything here lives
+     * on the {@link SpellAbility} object and is cleared by its next activation
+     * ({@code PlaySpellAbility} resets the paid hash, {@code CostPartMana}
+     * clears the paying mana), so a deferred record must hold this string
+     * rather than the ability.
+     *
+     * <p>Deliberately not read off {@code getPayCosts()}, which is what the
+     * first collected corpus did and why {@code tapped}, {@code sacrificed},
+     * {@code discarded} and {@code exiled} were empty on all 940,973 activation
+     * records. Two independent reasons, both in the engine:
+     * {@code CostAdjustment.adjust} pays a {@code cost.copy()}, so the parts
+     * hanging off the ability are never the ones that were paid; and
+     * {@code CostPayment} calls {@code resetLists()} on every list part the
+     * moment payment completes, which is before the cast event fires. The paid
+     * hash and the paying-mana list are where the payment survives, and are
+     * what the rest of Forge reads.
+     *
+     * <p>Mana is counted one entry per {@link Mana} actually spent, so a hybrid
+     * paid as blue counts under {@code U} and under nothing else — where the
+     * printed cost the corpus used to read counted it under both halves, and
+     * ignored reductions and X entirely.
+     */
+    public static String costsJson(SpellAbility ability) {
+        if (ability == null) {
+            return NO_COSTS;
         }
+        Map<Byte, Integer> mana = new LinkedHashMap<>();
+        if (ability.getPayingMana() != null) {
+            for (Mana spent : ability.getPayingMana()) {
+                if (spent != null) {
+                    mana.merge(spent.getColor(), 1, Integer::sum);
+                }
+            }
+        }
+        StringJoiner manaJson = new StringJoiner(",", "{", "}");
+        // WUBRGC rather than the order the mana happened to be spent in: two
+        // payments of the same cost must render the same bytes, because a
+        // record that differs only in key order defeats every duplicate check
+        // downstream.
+        for (byte color : MagicColor.WUBRGC) {
+            Integer count = mana.get(color);
+            if (count != null && count > 0) {
+                manaJson.add(Json.string(MagicColor.toShortString(color))
+                        + ":" + count);
+            }
+        }
+        return "{\"mana_by_color\":" + manaJson
+                + ",\"tapped\":" + Json.stringArray(tappedFor(ability))
+                + ",\"life\":" + ability.getAmountLifePaid()
+                + ",\"sacrificed\":" + Json.stringArray(paid(ability, "Sacrificed"))
+                + ",\"discarded\":" + Json.stringArray(paid(ability, "Discarded"))
+                + ",\"exiled\":" + Json.stringArray(paid(ability, "Exiled")) + "}";
+    }
+
+    /**
+     * The cards one cost channel took, by the engine's own hash key.
+     *
+     * <p>{@code CostSacrifice}, {@code CostDiscard}, {@code CostExile} and
+     * {@code CostTapType} each report what they took under the name this looks
+     * up ({@code getHashForLKIList}), and the entries are last-known-information
+     * copies whose id is preserved — so the entity id still names the object the
+     * snapshot describes.
+     */
+    private static List<String> paid(SpellAbility ability, String hashKey) {
+        Set<String> ids = new LinkedHashSet<>();
+        Iterable<Card> cards = ability.getPaidList(hashKey);
+        if (cards != null) {
+            for (Card card : cards) {
+                if (card != null) {
+                    ids.add(SnapshotBuilder.entityId(card));
+                }
+            }
+        }
+        return new ArrayList<>(ids);
+    }
+
+    /**
+     * Everything this activation tapped, the host included.
+     *
+     * <p>{@code CostTap} — the bare {@code T} symbol, and much the commonest tap
+     * cost there is — taps the host directly and is a plain {@code CostPart}
+     * with no card list, so it could never have reached this field however the
+     * paid lists were read. It is asked for by type rather than through
+     * {@code hasTapCost()}, whose flag is only refreshed when a {@code Cost} is
+     * copied.
+     */
+    private static List<String> tappedFor(SpellAbility ability) {
+        Set<String> ids = new LinkedHashSet<>(paid(ability, "Tapped"));
+        if (ability.getPayCosts() != null
+                && ability.getPayCosts().hasSpecificCostType(CostTap.class)
+                && ability.getHostCard() != null) {
+            ids.add(SnapshotBuilder.entityId(ability.getHostCard()));
+        }
+        return new ArrayList<>(ids);
     }
 
 }

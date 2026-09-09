@@ -6,6 +6,7 @@ import forge.card.CardTypeView;
 import forge.card.ColorSet;
 import forge.card.MagicColor;
 import forge.game.Game;
+import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.GameEntity;
 import forge.game.card.CardCollectionView;
@@ -44,8 +45,12 @@ import java.util.StringJoiner;
  *       list and an uncollected tier are otherwise identical.</li>
  * </ul>
  *
- * <p>Stage one writes tiers 1 and 2: every referenced object in whatever zone it
- * sits, plus the global state, the battlefield, and command-zone effect cards.
+ * <p>The tier vector is a property of the collection run, not of the caller.
+ * Tiers 1 and 2 -- every referenced object in whatever zone it sits, plus the
+ * global state, the battlefield and command-zone effect cards -- are what a
+ * snapshot is; tiers 3 and 4 widen it to the unreferenced stack and to hand and
+ * graveyard. Which of them a run collects is decided once and passed in, for the
+ * reason the constructor gives.
  */
 public final class SnapshotBuilder {
 
@@ -55,20 +60,108 @@ public final class SnapshotBuilder {
     public static final int TIER_UNREFERENCED_STACK = 3;
     public static final int TIER_UNREFERENCED_HAND_GRAVEYARD = 4;
 
-    private static final int[] STAGE_ONE_TIERS = {TIER_REFERENCED, TIER_CORE};
-
     private static final char[] COLORS = {'W', 'U', 'B', 'R', 'G'};
+
+    /**
+     * The key the refs block opens with, and the key that follows it.
+     *
+     * <p>Published because a collector that re-reads refs at a later moment than
+     * the rest of the snapshot splices the block back in by these two markers.
+     * They are constants here, and the state is assembled from them in
+     * {@link #stateJson}, so a key reorder that compiles cannot silently break
+     * the splice.
+     */
+    public static final String REFS_KEY = ",\"refs\":";
+    public static final String AFTER_REFS_KEY = ",\"pending_event\":";
+
+    /**
+     * A rendered state with its refs block replaced by a later reading.
+     *
+     * <p>The board must be captured before the ability resolves, but the modes
+     * a charm chose, the X it announced and the card, colour or type its
+     * controller named are set by the engine <b>during</b> resolution — so a
+     * snapshot taken at the cast carries an empty refs block for exactly the
+     * abilities whose choice is the interesting part of the effect. Re-rendering
+     * the whole snapshot at resolution is not the alternative: that would
+     * describe the board the ability had already changed, which is the one thing
+     * a pre-event snapshot must not do.
+     *
+     * <p>Lives here rather than in a collector because the markers it splices
+     * between are this class's, and a second collector doing the same string
+     * edit by hand is how two readings drift. A state missing either marker is
+     * returned unchanged: the splice widens a record, and a caller left with
+     * cast-time refs is better off than one handed a corrupt state.
+     */
+    public static String spliceRefs(String state, String refs) {
+        if (state == null || refs == null) {
+            return state;
+        }
+        int open = state.indexOf(REFS_KEY);
+        if (open < 0) {
+            return state;
+        }
+        int close = state.indexOf(AFTER_REFS_KEY, open + REFS_KEY.length());
+        if (close < 0) {
+            return state;
+        }
+        return state.substring(0, open) + REFS_KEY + refs + state.substring(close);
+    }
 
     private final Game game;
     private final int[] tiers;
 
-    public SnapshotBuilder(Game game) {
-        this(game, STAGE_ONE_TIERS);
-    }
-
+    /**
+     * @param tiers the inclusion tiers this <b>run</b> collects
+     *
+     * <p>There is deliberately no constructor that picks a default depth. The
+     * tier vector is a run-level property -- the feature spec adds tier 3 and
+     * then tier 4 by stage, not by call site -- and a convenience constructor is
+     * how that turned into a per-call-site choice: interventional forks asked for
+     * four tiers while every other collector asked for two or three, so
+     * {@code state.tiers} containing 4 identified {@code interventional} exactly,
+     * and a flag the schema bars from ever being a model input had a perfect
+     * proxy sitting in the state. Making every construction state its depth is
+     * what stops the next call site from reintroducing it.
+     */
     public SnapshotBuilder(Game game, int[] tiers) {
         this.game = game;
         this.tiers = tiers.clone();
+        requirePrefix(this.tiers);
+    }
+
+    /**
+     * Reject a tier vector that is not a prefix of the four tiers.
+     *
+     * <p>Tiers are cumulative -- 3 widens 2, 4 widens 3 -- so a set with a hole
+     * in it describes no collection anyone could run, and the renderer would
+     * still write it into {@code state.tiers} as though it had. Tier 2 is
+     * required as well as merely declared: the battlefield and the command zone
+     * go into every snapshot unconditionally, so a vector omitting 2 would tell
+     * a reader the board was uncollected while the board sits in
+     * {@code entities}.
+     */
+    private static void requirePrefix(int[] tiers) {
+        boolean prefix = tiers.length >= 2 && tiers.length <= 4;
+        for (int i = 0; prefix && i < tiers.length; i++) {
+            prefix = tiers[i] == i + 1;
+        }
+        if (!prefix) {
+            throw new IllegalArgumentException(
+                    "snapshot tiers must be a prefix of [1,2,3,4] holding at"
+                            + " least 1 and 2, got "
+                            + java.util.Arrays.toString(tiers));
+        }
+    }
+
+    /**
+     * The depth this builder renders at.
+     *
+     * <p>Readable so a collector's wiring can be checked where the vector lands
+     * rather than where it was read: the tier-4 leak was a value that looked
+     * right at every call site and was overridden inside the constructor.
+     */
+    int[] tiers() {
+        return tiers.clone();
     }
 
     /** The entity id an event's subject and the snapshot both use. */
@@ -88,7 +181,7 @@ public final class SnapshotBuilder {
      *                   they sit in (tier 1)
      */
     public String toJson(SpellAbility acting, Iterable<Card> referenced) {
-        return toJson(acting, referenced, null);
+        return toJson(acting, referenced, null, null, null);
     }
 
     /**
@@ -100,7 +193,7 @@ public final class SnapshotBuilder {
      */
     public String toJson(
             SpellAbility acting, Iterable<Card> referenced, Long withoutStatic) {
-        return toJson(acting, referenced, withoutStatic, null);
+        return toJson(acting, referenced, withoutStatic, null, null);
     }
 
     /**
@@ -114,6 +207,31 @@ public final class SnapshotBuilder {
     public String toJson(
             SpellAbility acting, Iterable<Card> referenced, Long withoutStatic,
             EffectEvent pending) {
+        return toJson(acting, referenced, withoutStatic, pending, null);
+    }
+
+    /**
+     * Render the snapshot for a record whose acting line is not a spell ability.
+     *
+     * <p>A trigger and a replacement effect are traits, not {@link SpellAbility}
+     * instances, so neither can be the {@code acting} argument -- but both have a
+     * host card, and that is what {@code refs.source} names: the join that lets
+     * the record say which permanent's text acted. Neither has targets or
+     * announced values at the moment it is recorded, so the rest of the refs
+     * block is legitimately empty.
+     *
+     * <p>Deliberately not an overload of {@code toJson}: a {@code null} literal
+     * at one of the existing call sites would become ambiguous between a
+     * {@link SpellAbility} and a {@link Card}.
+     */
+    public String toJsonForTrait(
+            Card sourceCard, Iterable<Card> referenced, EffectEvent pending) {
+        return toJson(null, referenced, null, pending, sourceCard);
+    }
+
+    private String toJson(
+            SpellAbility acting, Iterable<Card> referenced, Long withoutStatic,
+            EffectEvent pending, Card sourceOverride) {
         Set<Card> entities = new LinkedHashSet<>();
         if (referenced != null) {
             for (Card card : referenced) {
@@ -152,13 +270,32 @@ public final class SnapshotBuilder {
             tierJson.add(String.valueOf(tier));
         }
 
-        return "{\"global\":" + globalToJson()
-                + ",\"players\":" + playerJson
-                + ",\"entities\":" + entityJson
-                + ",\"refs\":" + refsToJson(acting)
-                + ",\"pending_event\":"
-                + (pending == null ? "null" : pending.toJson())
-                + ",\"tiers\":" + tierJson + "}";
+        return stateJson(
+                globalToJson(), playerJson.toString(), entityJson.toString(),
+                refsJson(acting, sourceOverride),
+                pending == null ? "null" : pending.toJson(),
+                tierJson.toString());
+    }
+
+    /**
+     * The snapshot's blocks, in the order the record schema fixes.
+     *
+     * <p>Assembled here rather than inline so that the one ordering another
+     * collector depends on -- {@link #REFS_KEY} immediately before
+     * {@link #AFTER_REFS_KEY}, with nothing between them but the refs block --
+     * is stated once and can be asserted without a running game. A splice that
+     * finds those two markers missing falls back to the unspliced state, which
+     * is a silent degradation, so the adjacency is the part worth pinning.
+     */
+    static String stateJson(
+            String global, String players, String entities, String refs,
+            String pendingEvent, String tiers) {
+        return "{\"global\":" + global
+                + ",\"players\":" + players
+                + ",\"entities\":" + entities
+                + REFS_KEY + refs
+                + AFTER_REFS_KEY + pendingEvent
+                + ",\"tiers\":" + tiers + "}";
     }
 
     private String globalToJson() {
@@ -686,10 +823,28 @@ public final class SnapshotBuilder {
         return letters;
     }
 
-    /** Targets, source and announced values for the acting ability. */
-    private String refsToJson(SpellAbility acting) {
+    /**
+     * Targets, source and announced values for the acting ability.
+     *
+     * <p>Public because the refs block is the one part of a snapshot that is not
+     * read at the same moment as the rest. The board has to be captured before
+     * the ability resolves, but a resolution-time choice -- a named card, a
+     * chosen colour -- does not exist until the engine asks for it, so a
+     * collector re-renders this block alone at resolution and splices it back
+     * into the state it already holds.
+     */
+    public String refsJson(SpellAbility acting) {
+        return refsJson(acting, null);
+    }
+
+    /**
+     * @param sourceOverride the host card of an acting line that is not a spell
+     *                       ability; used only when {@code acting} is null, so
+     *                       an acting ability still names its own host
+     */
+    private String refsJson(SpellAbility acting, Card sourceOverride) {
         StringJoiner targets = new StringJoiner(",", "[", "]");
-        String source = null;
+        String source = sourceOverride == null ? null : entityId(sourceOverride);
         Integer x = null;
         if (acting != null) {
             if (acting.getHostCard() != null) {
@@ -704,8 +859,9 @@ public final class SnapshotBuilder {
                     }
                 }
             }
-            if (acting.hasParam("X") || acting.getXManaCostPaid() != null) {
-                x = acting.getXManaCostPaid();
+            x = acting.getXManaCostPaid();
+            if (x == null) {
+                x = announcedX(acting);
             }
         }
         return "{\"targets\":" + targets
@@ -713,6 +869,39 @@ public final class SnapshotBuilder {
                 + ",\"modes\":" + modesJson(acting)
                 + ",\"x\":" + (x == null ? "null" : x)
                 + ",\"choices\":" + choicesJson(acting) + "}";
+    }
+
+    /**
+     * X when it was not paid into the mana cost.
+     *
+     * <p>{@code getXManaCostPaid()} answers only for an X the caster paid as
+     * mana, and that is the minority form. The common one is
+     * {@code SVar:X:Count$...} with the parameter key {@code NumDmg} or
+     * {@code Amount} holding the literal {@code X}: the ability has no {@code X}
+     * parameter at all and the announced value lives only in the SVar. So an X
+     * read from the mana payment alone is absent on exactly the cards whose X is
+     * the interesting part of the effect.
+     *
+     * <p>Computed rather than read, because a {@code Count$} SVar is an
+     * expression over the board and only the engine knows what it comes to. One
+     * that cannot be answered from this record's moment is recorded as absent
+     * rather than as zero -- a zero would say the caster announced nothing,
+     * which is a different claim.
+     */
+    private static Integer announcedX(SpellAbility acting) {
+        Card host = acting.getHostCard();
+        if (host == null) {
+            return null;
+        }
+        String amount = acting.getSVar("X");
+        if (amount == null || amount.isEmpty()) {
+            return null;
+        }
+        try {
+            return AbilityUtils.calculateAmount(host, amount, acting);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**

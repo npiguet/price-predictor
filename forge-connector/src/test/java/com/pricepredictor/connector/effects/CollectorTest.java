@@ -31,56 +31,56 @@ class CollectorTest {
     // ── the shard writer ────────────────────────────────────────────────
 
     @Test
-    void aShardIsNamedForItsRunAndWorker() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run-uuid", 4)) {
+    void aShardIsNamedForItsRunWorkerAndLifetime() {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run-uuid", 4, "l1")) {
             assertEquals(
-                    "run-uuid.4.jsonl.gz", writer.path().getFileName().toString());
+                    "run-uuid.4-l1.jsonl.gz", writer.path().getFileName().toString());
         }
     }
 
     @Test
     void recordIdsCarryTheWorkerIndexAndCountUp() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 7)) {
-            assertEquals("run.7.0", writer.nextRecordId());
-            assertEquals("run.7.1", writer.nextRecordId());
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 7, "l1")) {
+            assertEquals("run.7-l1.0", writer.nextRecordId());
+            assertEquals("run.7-l1.1", writer.nextRecordId());
         }
     }
 
     @Test
     void gameIdsCountSeparatelyFromRecordIds() {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.nextRecordId();
             writer.nextRecordId();
-            assertEquals("run.0.0", writer.nextGameId());
+            assertEquals("run.0-l1.0", writer.nextGameId());
         }
     }
 
     @Test
     void twoWorkersProduceDisjointIds() {
-        try (RecordShardWriter first = new RecordShardWriter(tempDir, "run", 0);
-             RecordShardWriter second = new RecordShardWriter(tempDir, "run", 1)) {
+        try (RecordShardWriter first = new RecordShardWriter(tempDir, "run", 0, "l1");
+             RecordShardWriter second = new RecordShardWriter(tempDir, "run", 1, "l1")) {
             assertNotEquals(first.nextRecordId(), second.nextRecordId());
         }
     }
 
     @Test
     void writesAreOneLineEach() throws IOException {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.write("{\"a\":1}");
             writer.write("{\"a\":2}");
         }
-        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), readShard("run.0"));
+        assertEquals(List.of("{\"a\":1}", "{\"a\":2}"), readShard("run.0-l1"));
     }
 
     @Test
     void aSecondWriterAppendsRatherThanTruncating() throws IOException {
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.write("{\"a\":1}");
         }
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.write("{\"a\":2}");
         }
-        assertEquals(2, readShard("run.0").size());
+        assertEquals(2, readShard("run.0-l1").size());
     }
 
     @Test
@@ -88,14 +88,14 @@ class CollectorTest {
         // Each writer contributes its own member, so appending is valid gzip
         // rather than a second stream glued onto the first. That is what lets a
         // killed worker truncate the last member and leave the rest readable.
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.write("{\"a\":1}");
         }
-        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1")) {
             writer.write("{\"a\":2}");
         }
         byte[] bytes = Files.readAllBytes(
-                tempDir.resolve("run.0" + RecordShardWriter.SUFFIX));
+                tempDir.resolve("run.0-l1" + RecordShardWriter.SUFFIX));
         int members = 0;
         for (int i = 0; i + 1 < bytes.length; i++) {
             // gzip's magic number, which starts every member.
@@ -110,11 +110,11 @@ class CollectorTest {
     void aFullBlockIsFlushedWithoutClosing() throws IOException {
         // The worker loops until it is killed, so a shard that only wrote on
         // close would be empty for the whole run.
-        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0);
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         for (int i = 0; i < RecordShardWriter.BLOCK_RECORDS; i++) {
             writer.write("{\"a\":" + i + "}");
         }
-        assertEquals(RecordShardWriter.BLOCK_RECORDS, readShard("run.0").size());
+        assertEquals(RecordShardWriter.BLOCK_RECORDS, readShard("run.0-l1").size());
     }
 
     /** The shard's lines, decompressed. */
@@ -130,7 +130,7 @@ class CollectorTest {
     @Test
     void theDirectoryIsCreated() {
         Path nested = tempDir.resolve("output/effects/records");
-        try (RecordShardWriter writer = new RecordShardWriter(nested, "run", 0)) {
+        try (RecordShardWriter writer = new RecordShardWriter(nested, "run", 0, "l1")) {
             assertTrue(Files.isDirectory(nested));
             assertNotNull(writer.path());
         }
@@ -197,7 +197,8 @@ class CollectorTest {
                 .moment(EffectRecord.MOMENT_ACTIVATION)
                 // No ability: a countered spell's costs are still readable in
                 // a real game, but the record's shape does not depend on them.
-                .payload(EffectRecord.costPayload(null, EffectRecord.OUTCOME_COUNTERED))
+                .payload(EffectRecord.costPayload(
+                        EffectRecord.costsJson(null), EffectRecord.OUTCOME_COUNTERED))
                 .toJson();
         assertTrue(json.contains("\"link_id\":null"), json);
         assertTrue(json.contains("\"outcome\":\"countered\""), json);
@@ -220,6 +221,95 @@ class CollectorTest {
                         new ProvenanceKey("cardsfolder/a/x.txt", 0, "static", 1)))
                 .toJson();
         assertEquals(2, json.split("\"trait_kind\"", -1).length - 1, json);
+    }
+
+    /**
+     * A trigger record names its acting line, and says so in the envelope.
+     *
+     * <p>Guards the wire shape the collector now fills: the whole first corpus
+     * carried {@code "ability": null} on all 727,308 trigger records, and the
+     * field rule exempts only {@code combat} and {@code playability} -- a
+     * trigger is a single acting line.
+     */
+    @Test
+    void aTriggerRecordNamesItsActingLine() {
+        String json = record(EffectRecord.KIND_TRIGGER)
+                .ability(List.of(new ProvenanceKey(
+                        "cardsfolder/g/grave_titan.txt", 0,
+                        ProvenanceKey.KIND_TRIGGER, 0)))
+                .toJson();
+
+        assertFalse(json.contains("\"ability\":null"), json);
+        assertTrue(json.contains("\"trait_kind\":\"trigger\""), json);
+        assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
+    }
+
+    /** And a rewrite record names the replacement effect that rewrote. */
+    @Test
+    void aRewriteRecordNamesItsReplacement() {
+        String json = record(EffectRecord.KIND_REWRITE)
+                .ability(List.of(new ProvenanceKey(
+                        "cardsfolder/p/paralyze.txt", 0,
+                        ProvenanceKey.KIND_REPLACEMENT, 0)))
+                .toJson();
+
+        assertTrue(json.contains("\"trait_kind\":\"replacement\""), json);
+    }
+
+    /**
+     * A line that could not be attributed renders empty rather than absent.
+     *
+     * <p>The two are different answers -- "no line acts here" against "a line
+     * acted and we could not name it" -- and a reader that folds them together
+     * cannot measure the second.
+     */
+    @Test
+    void anUnattributableLineIsEmptyRatherThanNull() {
+        assertTrue(record(EffectRecord.KIND_TRIGGER).ability(List.of()).toJson()
+                .contains("\"ability\":[]"));
+        assertTrue(record(EffectRecord.KIND_COMBAT).toJson()
+                .contains("\"ability\":null"));
+    }
+
+    /**
+     * And an empty line says why it is empty.
+     *
+     * <p>"No printed line exists, correctly" and "the resolver regressed" were
+     * the same row for a whole collection run. The two fields are set from one
+     * answer so they cannot be written out of step: a reason beside a named
+     * line is a contradiction the reader refuses outright.
+     */
+    @Test
+    void anEmptyLineSaysWhyItIsEmpty() {
+        String json = record(EffectRecord.KIND_TRIGGER)
+                .ability(new ProvenanceKey.Resolved(
+                        null, ProvenanceKey.UNRESOLVED_ENGINE_EFFECT))
+                .toJson();
+
+        assertTrue(json.contains("\"ability\":[]"), json);
+        assertTrue(json.contains("\"ability_unresolved\":\"engine_effect\""), json);
+    }
+
+    @Test
+    void aNamedLineCarriesNoReason() {
+        String json = record(EffectRecord.KIND_TRIGGER)
+                .ability(new ProvenanceKey.Resolved(new ProvenanceKey(
+                        "cardsfolder/g/grave_titan.txt", 0,
+                        ProvenanceKey.KIND_TRIGGER, 0), null))
+                .toJson();
+
+        assertTrue(json.contains("cardsfolder/g/grave_titan.txt"), json);
+        assertTrue(json.contains("\"ability_unresolved\":null"), json);
+    }
+
+    /** A caller that looked and got nothing back still owes a reason. */
+    @Test
+    void aLookupThatCameBackWithNothingAtAllStillNamesAReason() {
+        String json = record(EffectRecord.KIND_TRIGGER)
+                .ability((ProvenanceKey.Resolved) null)
+                .toJson();
+
+        assertTrue(json.contains("\"ability_unresolved\":\"unknown_kind\""), json);
     }
 
     // ── events ──────────────────────────────────────────────────────────

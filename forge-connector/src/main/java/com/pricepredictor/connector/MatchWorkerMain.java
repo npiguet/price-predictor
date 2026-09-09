@@ -2,6 +2,7 @@ package com.pricepredictor.connector;
 
 import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
+import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
 
 import java.nio.file.Path;
@@ -36,6 +37,16 @@ import java.util.function.IntPredicate;
  *       Default 4. Only meaningful when {@code -Dside.b.decks.file} is also set.</li>
  *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
  *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
+ *   <li>{@code -Deffect.worker.lifetime=<token>} — pins the per-JVM token that makes
+ *       record and game ids unique across worker restarts. Minted from the clock
+ *       when absent, which is the normal case; only a test should set it.</li>
+ *   <li>{@code -Deffect.snapshot.tiers=1,2,3} — the inclusion depth every snapshot
+ *       in the run is built at, as a prefix of {@code 1,2,3,4}. A run-level
+ *       property rather than a per-collector one: a depth that varies by record
+ *       kind puts collection metadata into {@code state.tiers}, where a model can
+ *       read it. Parsed by {@code PatchedCollectors.CollectionCaps} along with the
+ *       rest of the {@code effect.*} caps, which that record documents; echoed at
+ *       startup because it is also the largest single lever on shard size.</li>
  * </ul>
  *
  * <p>The worker is terminated externally by the Python supervisor (process.terminate()).
@@ -58,7 +69,8 @@ public class MatchWorkerMain {
             String sideBDecksFile,
             int sideBWeight,
             Path effectRecordsDir,
-            int workerIndex) {
+            int workerIndex,
+            String workerLifetime) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -127,11 +139,29 @@ public class MatchWorkerMain {
         int workerIndex = parseIntProp(
                 "effect.worker.index", 0, v -> v >= 0, "must be >= 0");
 
+        // The supervisor recycles the longest-running worker every status interval
+        // and restarts anything that crashes, so one run is hundreds of JVM
+        // lifetimes per worker slot. Every counter the shard writer keeps restarts
+        // at zero with the JVM, so the shard token has to name the lifetime as well
+        // as the slot; without it a run's record and game ids repeat once per
+        // restart and unrelated games merge under one game_id. Minted here rather
+        // than required from the launcher so no spawn site can omit it; the
+        // property exists only so a test can pin the value.
+        String workerLifetime = System.getProperty("effect.worker.lifetime");
+        if (workerLifetime == null) {
+            workerLifetime = RecordShardWriter.mintLifetime();
+        } else if (!RecordShardWriter.isValidLifetime(workerLifetime)) {
+            System.err.println(
+                    "Error: -Deffect.worker.lifetime must match [0-9a-z]{1,16}, got: "
+                            + workerLifetime);
+            System.exit(2);
+        }
+
         return new WorkerConfig(
                 outputFileProp == null ? null : Path.of(outputFileProp),
                 runId, bestOf, sideAProp, sideBProp, sideBWeight,
                 effectRecordsProp == null ? null : Path.of(effectRecordsProp),
-                workerIndex);
+                workerIndex, workerLifetime);
     }
 
     /**
@@ -194,10 +224,17 @@ public class MatchWorkerMain {
         RecordShardWriter effectRecords = null;
         if (config.collectsEffectRecords()) {
             effectRecords = new RecordShardWriter(
-                    config.effectRecordsDir(), config.runId(), config.workerIndex());
+                    config.effectRecordsDir(), config.runId(), config.workerIndex(),
+                    config.workerLifetime());
+            // The tier vector is echoed beside the mode because both are
+            // properties of the whole shard that nothing in a record's content
+            // reveals: a run collected at a different depth is not comparable
+            // with this one, and the depth is what its size is mostly made of.
             System.out.println(
                     "Effect records: " + effectRecords.path()
-                            + " [mode=" + AttributionMode.detect().wireValue() + "]");
+                            + " [mode=" + AttributionMode.detect().wireValue()
+                            + ", tiers=" + PatchedCollectors.CollectionCaps
+                                    .fromSystemProperties().snapshotTiers() + "]");
             // The mode is one hook's answer, so a partly-applied patch still
             // reads "patched" while a channel this run meant to collect is
             // quietly empty. This is what names that.

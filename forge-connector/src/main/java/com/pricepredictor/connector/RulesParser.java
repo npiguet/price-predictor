@@ -230,7 +230,16 @@ public class RulesParser {
         Set<String> classLevelDescriptions = new HashSet<>();
 
         // --- Keywords — route to variants ---
-        int keywordIndex = 0;
+        // The keyword ordinal is asked of ProvenanceKey rather than counted
+        // here, because the collector asks the same question of the same method
+        // at runtime and the two answers have to be the same number. A running
+        // counter over getKeywords() is not that number: the iteration order is
+        // KeywordCollection's, which is hash order over an enum and differs
+        // between the convert JVM and the collect JVM. Counted here, the two
+        // sides produced keys that were in range on both and named different
+        // keywords — a silent wrong join rather than a loud failure. A keyword
+        // with no intrinsic ordinal (a granted one) records no key at all,
+        // which is the honest answer and the one the collector gives for it.
         for (KeywordInterface ki : card.getKeywords()) {
             Keyword kw = ki.getKeyword();
             int before = abilities.size();
@@ -246,13 +255,15 @@ public class RulesParser {
                 abilities.add(StandardKeyword.of(ki, kw));
             }
             if (recorder != null) {
+                int keywordIndex =
+                        ProvenanceKey.keywordIndex(card.getCurrentState(), ki);
                 recorder.attributeKeyword(
                         List.copyOf(abilities.subList(before, abilities.size())),
-                        new ProvenanceKey(scriptFile, faceIndex,
+                        keywordIndex < 0 ? null : new ProvenanceKey(
+                                scriptFile, faceIndex,
                                 ProvenanceKey.KIND_KEYWORD, keywordIndex),
                         ki.getOriginal());
             }
-            keywordIndex++;
         }
 
         // --- Spell abilities — route to variants ---

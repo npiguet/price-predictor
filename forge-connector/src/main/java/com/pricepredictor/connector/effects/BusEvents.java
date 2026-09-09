@@ -10,7 +10,6 @@ import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventSurveil;
-import forge.game.event.GameEventZone;
 import forge.game.zone.ZoneType;
 
 import java.util.ArrayList;
@@ -72,20 +71,56 @@ final class BusEvents {
     }
 
     /**
-     * A zone change, or null when the event names no card.
+     * One completed move, with both ends of it.
      *
-     * <p>The bus's zone event names the zone rather than the card, so the
-     * destination comes from the event and the subject from the card it moved.
+     * <p>Read from {@code GameEventCardChangeZone}, which fires once per move
+     * and carries the zone the card left as well as the one it reached. It
+     * replaces the per-zone-list notification {@code GameEventZone}, which is
+     * not a move at all: {@code Zone.remove} publishes one for the zone the
+     * card left, {@code Zone.add} another for the zone it reached and
+     * {@code MagicStack} a third for the stack, so one cast rendered three
+     * events of which the first named a destination the card never reached and
+     * the third repeated the second verbatim. That triple fire is where every
+     * exact-duplicate event measured in a record came from, and reading the
+     * move instead is the only way {@code from_zone} — a documented parameter
+     * of the event type that nothing had ever written — gets filled at all.
+     *
+     * <p>Null when neither end is known, which is a move this collector has
+     * nothing to say about rather than a move to nowhere.
+     *
+     * <p>Also null for a move <b>onto</b> the stack. That move is a spell being
+     * cast, and the cast already has a record of its own — the activation half,
+     * with the costs that were paid. Filed as an outcome it is worse than
+     * redundant: it lands in whichever bracket happens to be open, so an
+     * opponent's instant cast in response reads as something the resolving
+     * ability did. It was 54% of the whole zone_change channel. A move
+     * <i>off</i> the stack is kept, because that one is an outcome — the
+     * permanent arriving, or the spell going to the graveyard — and now says
+     * {@code from_zone=stack} where before it said nothing.
      */
-    static EffectEvent zone(GameEventZone event) {
+    static EffectEvent cardMoved(GameEventCardChangeZone event) {
         if (event.card() == null) {
+            return null;
+        }
+        String from = zoneName(event.from());
+        String to = zoneName(event.to());
+        if (from == null && to == null) {
+            return null;
+        }
+        if (event.to() != null && event.to().zoneType() == ZoneType.Stack) {
             return null;
         }
         return new EffectEvent(EffectEvent.ZONE_CHANGE)
                 .subject("E" + event.card().getId())
-                .param("to_zone", event.zoneType() == null
-                        ? null
-                        : event.zoneType().name().toLowerCase(Locale.ROOT));
+                .param("from_zone", from)
+                .param("to_zone", to);
+    }
+
+    private static String zoneName(forge.game.zone.ZoneView zone) {
+        if (zone == null || zone.zoneType() == null) {
+            return null;
+        }
+        return zone.zoneType().name().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -98,7 +133,7 @@ final class BusEvents {
      *
      * <p>The subject is the <b>player</b>, not the card, because that is whose
      * count it is. A zone-change event for the card itself is recorded
-     * separately by {@link #zone}.
+     * separately by {@link #cardMoved}.
      */
     static EffectEvent libraryMovement(GameEventCardChangeZone event) {
         if (event.card() == null || event.card().getOwner() == null

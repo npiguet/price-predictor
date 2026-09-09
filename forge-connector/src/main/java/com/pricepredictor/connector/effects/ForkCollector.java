@@ -5,12 +5,19 @@ import forge.ai.simulation.GameCopier;
 import forge.ai.simulation.GameSimulator;
 import forge.ai.simulation.GameStateEvaluator;
 import forge.game.Game;
+import forge.game.GameEntity;
+import forge.game.ability.AbilityUtils;
+import forge.game.ability.ApiType;
+import forge.game.ability.effects.CharmEffect;
 import forge.game.card.Card;
 import forge.game.player.Player;
+import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -47,6 +54,15 @@ public final class ForkCollector {
     /** At most this many forks may target one real resolution (FR-040). */
     public static final int MAX_FORKS_PER_RESOLUTION = 2;
 
+    /**
+     * The two damage steps, spelled as the bracket collector spells them.
+     *
+     * <p>A held branch and the real record it mirrors must agree about which
+     * step they describe, and the two are written by different classes.
+     */
+    public static final String SUBSTEP_FIRST_STRIKE = "first_strike";
+    public static final String SUBSTEP_REGULAR = "regular";
+
     private final Game game;
     private final RecordShardWriter writer;
     private final String gameId;
@@ -54,6 +70,8 @@ public final class ForkCollector {
     private final int interventionsPerGame;
     private final int probesPerGame;
     private final List<String> probeKeywords;
+    /** The run's snapshot depth, the same on every record this writes. */
+    private final int[] snapshotTiers;
     private final Random random;
 
     private int interventionsUsed;
@@ -72,6 +90,13 @@ public final class ForkCollector {
         this.interventionsPerGame = caps.interventionsPerGame();
         this.probesPerGame = caps.probesPerGame();
         this.probeKeywords = List.copyOf(caps.probeKeywords());
+        // The run's tier vector, not this collector's own idea of one. Choosing
+        // it here is what made state.tiers a perfect proxy for the
+        // interventional flag: tier 4 appeared on the 55,661 interventional
+        // records of the first corpus and on nothing else, so a model handed
+        // the tier list could read collection metadata the schema forbids as
+        // an input.
+        this.snapshotTiers = caps.snapshotTierArray();
         // Seeded so both branches of a probe see the same shuffles: a
         // difference between them has to be the keyword, not the draw.
         this.random = new Random(seed);
@@ -222,19 +247,18 @@ public final class ForkCollector {
         // The fork's own state, not the live game's, and read *before* the
         // resolution: the record's state is the board the ability acted on, and
         // reading it after would hand the model the answer.
-        SnapshotBuilder snapshots = new SnapshotBuilder(fork, new int[]{
-                SnapshotBuilder.TIER_REFERENCED,
-                SnapshotBuilder.TIER_CORE,
-                SnapshotBuilder.TIER_UNREFERENCED_STACK,
-                // Tier 4 arrives with stage three: unreferenced hand and
-                // graveyard, which a forced resolution needs because the
-                // intervention chose from cards nobody was going to play.
-                SnapshotBuilder.TIER_UNREFERENCED_HAND_GRAVEYARD,
-        });
+        SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
         String state = snapshots.toJson(forked, referencedOf(forked));
 
         List<EffectEvent> events = forceResolution(fork, forked, actor);
-        if (events == null) {
+        if (events == null || events.isEmpty()) {
+            // An empty event list is not an observation. "The ability resolved
+            // and did nothing" and "the ability never got to act" render the
+            // same record, and the first corpus could not tell them apart —
+            // 24 of the 88 sampled interventions were empty and every one of
+            // them was a targeted spell that resolved with no target. A
+            // counterfactual nobody can read is worse than one that was never
+            // written, so this drops it and counts it.
             discarded++;
             return false;
         }
@@ -278,10 +302,15 @@ public final class ForkCollector {
      */
     private List<EffectEvent> forceResolution(
             Game fork, SpellAbility ability, Player actor) {
-        ForkEventSink sink = new ForkEventSink();
+        ForkEventSink sink = new ForkEventSink(fork);
         fork.subscribeToEvents(sink);
         try {
             ability.setActivatingPlayer(actor);
+            chooseModes(ability);
+            if (!chooseTargets(ability)) {
+                return null;
+            }
+            announceX(ability);
             fork.copyLastState();
             fork.getStack().add(ability);
             GameSimulator.resolveStack(fork, actor.getWeakestOpponent());
@@ -292,6 +321,94 @@ public final class ForkCollector {
             // paid — and a card that throws is one this fork cannot describe.
             // Discarding is right; failing the worker is not.
             return null;
+        }
+    }
+
+
+    /**
+     * Pick this fork's modes, where the line is modal.
+     *
+     * <p>At random from the legal options, out of the fork's own seeded source,
+     * rather than through the AI. That is the same decision the cost bypass
+     * above makes and for the same reason: the corpus wants what the effect
+     * <b>does</b>, and asking the AI which mode is good would reproduce exactly
+     * the selection bias the intervention exists to escape. Seeded so both
+     * branches of a probe and a rerun of a game make the same choice.
+     */
+    void chooseModes(SpellAbility ability) {
+        if (ability.getApi() != ApiType.Charm || ability.getChosenList() != null) {
+            return;
+        }
+        List<AbilitySub> options = CharmEffect.makePossibleOptions(ability);
+        if (options == null || options.isEmpty()) {
+            return;
+        }
+        int wanted = AbilityUtils.calculateAmount(
+                ability.getHostCard(),
+                ability.getParamOrDefault("CharmNum", "1"), ability);
+        wanted = Math.max(1, Math.min(wanted, options.size()));
+        List<AbilitySub> shuffled = new ArrayList<>(options);
+        Collections.shuffle(shuffled, random);
+        List<AbilitySub> chosen = new ArrayList<>(shuffled.subList(0, wanted));
+        ability.setChosenList(chosen);
+        CharmEffect.chainAbilities(ability, chosen);
+    }
+
+    /**
+     * Give every targeting clause of the chain legal targets.
+     *
+     * <p>The feature spec says an intervention resolves "with chosen targets and
+     * modes" and the first implementation chose neither: it set the activating
+     * player, pushed the ability and resolved it. A "deal 5 damage to target
+     * player" that resolves with no target does nothing, which is why every one
+     * of the 88 sampled interventional records had an empty {@code refs.targets}
+     * and why the empty ones were Lava Axe, Disintegrate, Drain Life, Mind
+     * Control and their like.
+     *
+     * <p>The whole {@code getSubAbility()} chain, not just the root: a sub-ability
+     * targets independently, and a chain whose second clause has no target
+     * resolves into the same silence.
+     *
+     * @return false when some clause has no legal target at all, which is an
+     *         intervention with no counterfactual to record rather than one
+     *         that did nothing
+     */
+    boolean chooseTargets(SpellAbility ability) {
+        for (SpellAbility clause = ability; clause != null;
+                clause = clause.getSubAbility()) {
+            if (!clause.usesTargeting()) {
+                continue;
+            }
+            clause.resetTargets();
+            List<GameEntity> candidates =
+                    clause.getTargetRestrictions().getAllCandidates(clause);
+            List<GameEntity> shuffled = new ArrayList<>(candidates);
+            Collections.shuffle(shuffled, random);
+            for (GameEntity candidate : shuffled) {
+                if (!clause.canAddMoreTarget()) {
+                    break;
+                }
+                clause.getTargets().add(candidate);
+            }
+            if (!clause.isMinTargetChosen()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Announce an X the fork never paid.
+     *
+     * <p>An X spell whose X is null resolves as an X of zero, which is the same
+     * silence a missing target produces. One is the smallest value that makes
+     * the effect happen at all; what value the corpus actually wants is an open
+     * question, and a bigger one would have to be justified against mana the
+     * fork deliberately never paid.
+     */
+    void announceX(SpellAbility ability) {
+        if (ability.costHasX() && ability.getXManaCostPaid() == null) {
+            ability.setXManaCostPaid(1);
         }
     }
 
@@ -418,8 +535,8 @@ public final class ForkCollector {
 
         // The state is the board as the step began, with the keyword already
         // gone: that is the input the counterfactual answers for.
-        SnapshotBuilder snapshots = new SnapshotBuilder(fork);
-        ForkEventSink sink = new ForkEventSink();
+        SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
+        ForkEventSink sink = new ForkEventSink(fork);
         fork.subscribeToEvents(sink);
         String state;
         CombatShape shape;
@@ -440,6 +557,14 @@ public final class ForkCollector {
             if (fork.getCombat().assignCombatDamage(firstStrike)) {
                 shape.addAssignment(fork.getCombat(), null);
                 fork.getCombat().dealAssignedDamage();
+                // And then let the deaths happen. Damage alone kills nothing;
+                // a creature with lethal damage on it leaves the battlefield
+                // during state-based actions, and stopping before them made the
+                // branch systematically miss every death the real step had —
+                // biasing the difference gate 2 computes towards "the keyword
+                // changed nothing". The same call Forge's own simulator makes
+                // after resolving a stack.
+                fork.getAction().checkStateEffects(false, new HashSet<>());
             }
         } catch (RuntimeException | StackOverflowError e) {
             // A stripped keyword reaches combat states ordinary play does not.
@@ -450,7 +575,8 @@ public final class ForkCollector {
         return new HeldProbe(
                 PatchedCollectors.normalizeKeyword(keyword),
                 SnapshotBuilder.entityId(carrier), state, sink.events(),
-                SnapshotBuilder.playerId(perspective), shape.fields());
+                SnapshotBuilder.playerId(perspective), shape.fields(),
+                firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR);
     }
 
     /**
@@ -460,10 +586,18 @@ public final class ForkCollector {
      * The probe's own budget was already spent taking the fork, so a branch
      * that is never completed still counted — the cost was the simulation, not
      * the write.
+     *
+     * <p>{@code substep} names the damage step this branched from, spelled the
+     * way the bracket collector spells it. Without it a branch taken at the
+     * first-strike step was completed against whichever combat record came
+     * next: in the first corpus that was the <b>regular</b> step's record, so
+     * gate 2 was reading a counterfactual for a step that did not happen
+     * against a real record for a different one.
      */
     public record HeldProbe(
             String keyword, String carrier, String state,
-            List<EffectEvent> events, String actor, String combatFields) {
+            List<EffectEvent> events, String actor, String combatFields,
+            String substep) {
 
         /**
          * The branch's payload, naming what was perturbed.
@@ -522,9 +656,14 @@ public final class ForkCollector {
 
     // ── plumbing ────────────────────────────────────────────────────────
 
-    private static List<ProvenanceKey> keysOf(SpellAbility ability) {
-        ProvenanceKey key = ProvenanceKey.of(ability);
-        return key == null ? List.of() : List.of(key);
+    /** The acting line, or the reason there is none — see the sibling in
+     *  {@link BusBracketCollector}: a fork's record is as entitled to say why
+     *  it has no line as a real one. */
+    private static ProvenanceKey.Resolved keysOf(SpellAbility ability) {
+        if (ability == null) {
+            return new ProvenanceKey.Resolved(null, ProvenanceKey.UNRESOLVED_UNKNOWN_KIND);
+        }
+        return ProvenanceKey.resolve(ability);
     }
 
     private static List<Card> referencedOf(SpellAbility ability) {
