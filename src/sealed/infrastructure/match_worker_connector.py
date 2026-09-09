@@ -65,9 +65,11 @@ class MatchWorkerConnector:
                 instrumentation rides matches that were going to be played
                 anyway and costs no extra simulation. Absent, the worker
                 behaves exactly as it does today.
-            worker_index: This worker's index, which the shard filename and
-                every record id carry — workers count independently, so their
-                ids would otherwise collide across a run's shards.
+            worker_index: This worker's slot, which the shard filename and
+                every record id carry. The id's other half — the JVM lifetime —
+                is minted by the worker itself, because this process is
+                restarted many times per run and a supervisor-supplied number
+                would be one more thing a launcher could forget.
             collection_caps: Per-worker collection caps, as produced by
                 ``effects.domain.collection_caps.as_system_properties``. Only
                 meaningful alongside ``effect_records_dir``; the worker falls
@@ -112,6 +114,17 @@ class MatchWorkerConnector:
             main_class="com.pricepredictor.connector.MatchWorkerMain",
             classpath=build_forge_classpath(),
             system_properties=system_properties,
+            # 1200m is containment, not a memory budget. Forge misbehaves late
+            # in a JVM's life — runaway allocation, loops that do not
+            # terminate — and a small heap turns that into an early, cheap
+            # death that ForgeWorkerPool restarts, instead of one worker
+            # dragging the machine down hours into a run. The price is a
+            # handful of GC crashes per overnight run, which is accepted:
+            # a crashed worker costs the block of records in flight and
+            # nothing else. Raising it hides the pathology rather than
+            # containing it, and it is paired with the pool's recycle
+            # (ForgeWorkerPool._kill_oldest_worker) — the two are one measure,
+            # not two knobs.
             xmx="1200m",
         )
 

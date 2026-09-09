@@ -1,0 +1,1019 @@
+"""Invariants a shard directory must hold, measured rather than asserted.
+
+Run this on the **first few minutes** of a collection pass, not on the finished
+corpus. The first collected corpus took eight hours and twelve defects were
+found afterwards by reading it; every one of them was already visible in the
+first minute of shards, and none of them raised anything. A collector that
+writes a field as a literal, or reuses an id, or picks its snapshot depth per
+call site produces records that parse cleanly, satisfy every contract test, and
+are worthless.
+
+So this reports numbers, not verdicts: each invariant prints what it measured,
+because "the duplicate rate is 4.3%" is actionable in a way that "duplicates:
+FAIL" is not, and because a run that barely clears a threshold is something an
+operator needs to see before spending eight hours on it.
+
+**Measuring and judging are separate.** A :class:`Finding` that carries no
+threshold reports ``[WATCH]`` and never fails a run: some numbers — how often an
+event says where a card came from, how many resolution events name a producing
+clause — are worth watching every pass without being a verdict, and the ones
+whose thresholds default to ``None`` become verdicts the moment an operator
+passes a floor. The opposite mistake is the more expensive one: the "each
+game_id names one game" check failed 168 of 177 games on a *healthy* smoke
+corpus, and an invariant that fails on every good run teaches an operator to
+skip the whole checklist.
+
+Streaming, one pass, over :func:`~effects.infrastructure.record_io.read_shard`
+so shard discovery, gzip-member recovery and the trailing-partial-line rule stay
+in the reader where they already live. Memory is proportional to the window:
+every ``record_id``, one digest per record and every distinct provenance key are
+held, which is why the window is minutes and why ``--limit`` exists.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from effects.domain.event_schema import Event, EventType, attribution_kind
+from effects.domain.provenance import ProvenanceKey
+from effects.domain.records import (
+    KINDS_WITHOUT_ACTING_ABILITY,
+    ActivationPayload,
+    CollectionMode,
+    CombatPayload,
+    EffectRecord,
+    Moment,
+    PlayabilityAttackersPayload,
+    PlayabilityBlockersPayload,
+    PlayabilityDecisionPayload,
+    ResolutionPayload,
+    RewritePayload,
+    TriggerPayload,
+)
+
+#: Envelope fields that differ between two otherwise identical records because
+#: of *when* they were written rather than *what* they say. Blanked before
+#: hashing, so the duplicate rate counts "the same observation twice in one
+#: game". ``mode`` joins them because it is constant within a run, and keeping
+#: it would only make a degraded and a patched run incomparable.
+_IDENTITY_FIELDS = (
+    "record_id", "run_id", "timestamp", "game_id",
+    "link_id", "mirror_of", "variant_of", "mode",
+)
+
+#: The six cost channels, in the order the schema lists them.
+_COST_FIELDS = (
+    "mana_by_color", "tapped", "life", "sacrificed", "discarded", "exiled",
+)
+
+#: The channels a window with enough activations in it must have exercised.
+#: Not all six: sacrifice, discard and exile costs are genuinely rare in a
+#: sealed limited pool and life payment nearly so, and a check that cries wolf
+#: on those is a check an operator learns to skip. Mana and tapping are paid
+#: many times a game by every deck, so a window that has neither is reporting
+#: on a collector rather than on a format — which is exactly what the first
+#: corpus did: 14.7M records, `tapped` populated zero times.
+_COST_FIELDS_ALWAYS_PAID = ("mana_by_color", "tapped")
+
+#: How many offending examples a finding's detail carries. Enough to recognise a
+#: pattern, few enough that a broken run's report still fits on a screen.
+_EXAMPLES = 5
+
+
+@dataclass(frozen=True, slots=True)
+class Thresholds:
+    """Where each measured rate stops being acceptable.
+
+    Defaults are set against the first corpus's measurements, so a run that
+    reproduces any of its defects fails rather than squeaking through: it keyed
+    59% of its resolution records, duplicated 4.3% of the corpus, paired 48% of
+    its link ids, and held 804 ``game_id`` values for 31,662 games.
+
+    A field typed ``float | None`` defaults to ``None``, which means *watch this
+    number, do not judge it*. Those are the channels whose healthy value is not
+    yet known — a ``zone_change`` out of nowhere is legitimate for a card made
+    rather than moved — so pinning a floor before the collector settles would
+    make the report a wolf-crier. Passing a floor turns the measurement into a
+    verdict without changing what is measured.
+    """
+
+    #: Share of records that must resolve their acting line to a printed key.
+    min_keyed_rate: float = 0.95
+    #: Share of records that may be byte-identical to an earlier record of the
+    #: same kind in the same game.
+    max_duplicate_rate: float = 0.02
+    #: Share of link ids that may lack exactly one activation and one
+    #: resolution half. A worker killed mid-game truncates its last block, so a
+    #: few unpaired halves at the tail of a window are expected.
+    max_unpaired_link_rate: float = 0.02
+    #: Distinct entity names one game may show. Two forty-card sealed decks
+    #: plus tokens sit far below this; the first corpus averaged about 460 per
+    #: ``game_id``, because dozens of unrelated games shared one.
+    max_names_per_game: int = 120
+    #: Activation records a window needs before a dead cost channel means
+    #: anything. Under this, a channel reading zero is scarcity; over it, it is
+    #: a channel nothing writes to.
+    min_cost_evidence: int = 200
+    #: How far a snapshot's turn may sit below the highest already seen in its
+    #: game. Records are written when they are observed but carry the snapshot
+    #: of the moment they describe, so a deferred half can legitimately lag by
+    #: a turn; a *game boundary* shows up as a jump of many turns, not of one.
+    turn_jump_tolerance: int = 1
+    #: Share of a record's own events that may repeat another event in the same
+    #: record. Two identical outcomes on identical subjects inside one
+    #: resolution are one outcome written twice; the smoke corpus duplicated
+    #: 13.68% of its events this way while its *record* duplicate rate read
+    #: 0.00%, which is why the record-level check alone could not see it.
+    max_duplicate_event_rate: float = 0.02
+    #: Share of trigger records that may report ``fired = true``. The negatives
+    #: are drawn from same-event-type evaluations at a ~1:1 target, so a window
+    #: far above this is a sampler that stopped drawing them — and a corpus of
+    #: positives teaches the base rate rather than the condition.
+    max_trigger_fired_share: float = 0.65
+    #: Share of ``zone_change`` events that must say ``from_zone``. ``None``
+    #: watches the number without judging it.
+    min_zone_change_from_zone_rate: float | None = None
+    #: Share of resolution events that must name a producing clause — a
+    #: sub-ability index, the root line, or an explicit ``unresolved``. ``None``
+    #: watches the number without judging it.
+    min_attributed_rate: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Finding:
+    """One invariant's result: what it measured, and whether that is allowed.
+
+    ``watched`` is the separation the module docstring argues for: a watched
+    finding has a measurement and no threshold, prints ``[WATCH]``, and cannot
+    fail a run. It reports everything a judged finding reports — the number is
+    the point — so promoting one to a verdict is a threshold, never a new
+    measurement.
+    """
+
+    name: str
+    ok: bool
+    measured: str
+    detail: tuple[str, ...] = ()
+    watched: bool = False
+
+    def lines(self) -> tuple[str, ...]:
+        tag = "WATCH" if self.watched else ("PASS" if self.ok else "FAIL")
+        head = f"[{tag}] {self.name}: {self.measured}"
+        return (head, *(f"         {line}" for line in self.detail))
+
+
+def validate_corpus(
+    records: Iterable[EffectRecord],
+    thresholds: Thresholds | None = None,
+    sidecars=None,
+) -> list[Finding]:
+    """Every invariant, measured over one pass of ``records``.
+
+    ``sidecars`` is a :class:`~effects.infrastructure.sidecar_io.SidecarCache`
+    (anything with its ``get(script_file)``) and is what makes the keyword-join
+    check possible at all. ``None`` reports that check as *unchecked* rather
+    than as holding: a converted tree that is not on this machine is not
+    evidence that the corpus joins.
+    """
+    tally = _Tally()
+    for record in records:
+        tally.add(record)
+    return tally.findings(thresholds or Thresholds(), sidecars)
+
+
+def read_window(directory: Path, limit: int = 0) -> Iterator[EffectRecord]:
+    """The first ``limit`` records under ``directory``; 0 reads all of them.
+
+    Imported lazily, like the rest of the application layer's infrastructure
+    reach, so the domain tests do not pay for the reader.
+    """
+    from effects.infrastructure.record_io import iter_shards, read_shard
+
+    seen = 0
+    for shard in iter_shards(Path(directory)):
+        for record in read_shard(shard):
+            yield record
+            seen += 1
+            if limit and seen >= limit:
+                return
+
+
+# ── the pass ────────────────────────────────────────────────────────────
+
+
+def _kind_label(record: EffectRecord) -> str:
+    """``resolution/activation``, ``playability/decision``, or a bare kind.
+
+    The discriminated kinds are counted apart because their collectors are
+    different code: an activation half and an effect half share a ``kind`` and
+    nothing else, so a defect in one would be diluted by the other.
+    """
+    discriminator = record.moment or record.subkind
+    return (
+        f"{record.kind.value}/{discriminator.value}"
+        if discriminator else record.kind.value
+    )
+
+
+def _blake(data) -> bytes:
+    return hashlib.blake2b(
+        json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8"),
+        digest_size=16,
+    ).digest()
+
+
+def _digest(record: EffectRecord) -> bytes:
+    """A record's content, identity stripped, as 16 bytes.
+
+    Rendered through the writer rather than hashed field by field, so a field
+    added later is covered without being added here — the same reason
+    ``field_coverage`` walks the dataclasses.
+    """
+    from effects.infrastructure.record_io import record_to_dict
+
+    data = record_to_dict(record)
+    for name in _IDENTITY_FIELDS:
+        data.pop(name, None)
+    return _blake(data)
+
+
+def _own_events(record: EffectRecord) -> tuple[Event, ...]:
+    """The events a record lists as its own outcomes.
+
+    Resolution and combat payloads only. A ``trigger`` carries the event it
+    evaluated rather than one it caused, and a ``rewrite`` carries one event
+    twice by construction — counting either as a repeat would report a
+    duplicate on every healthy record of those kinds.
+    """
+    payload = record.payload
+    if isinstance(payload, (ResolutionPayload, CombatPayload)):
+        return payload.events
+    return ()
+
+
+def _all_events(record: EffectRecord) -> tuple[Event, ...]:
+    """Every event anywhere in a record, for the per-type field measurements.
+
+    Wider than :func:`_own_events`, because "does a ``zone_change`` say where
+    the card came from" is a question about how the collector fills that type's
+    params, and it fills them the same way for every kind that carries one.
+    """
+    payload = record.payload
+    if isinstance(payload, (ResolutionPayload, CombatPayload)):
+        return payload.events
+    if isinstance(payload, TriggerPayload):
+        return (payload.event,)
+    if isinstance(payload, RewritePayload):
+        return (payload.incoming, payload.outgoing)
+    return ()
+
+
+def _provenance_keys(record: EffectRecord) -> Iterator[ProvenanceKey]:
+    """Every printed-line key a record names, except emblems.
+
+    Emblems are excluded deliberately rather than by oversight: an emblem's
+    traits are built by the engine and key to a script path that exists in no
+    converted tree, so joining them would report a mismatch on every healthy
+    corpus that happens to resolve a planeswalker ultimate.
+    """
+    if record.ability:
+        yield from record.ability
+    for entity in record.state.entities:
+        yield from entity.printed
+        yield from entity.granted_attached
+        yield from entity.granted_temporary.abilities
+    payload = record.payload
+    if isinstance(payload, PlayabilityDecisionPayload):
+        for candidate in payload.candidates:
+            yield from candidate.ability
+            yield from candidate.responsible_static
+    elif isinstance(
+        payload, (PlayabilityAttackersPayload, PlayabilityBlockersPayload)
+    ):
+        for forbidden in payload.forbidden:
+            yield from forbidden.responsible_static
+
+
+def _is_deferred_mana_record(record: EffectRecord) -> bool:
+    """A resolution half the mana reservoir held back until the game ended.
+
+    Mana activations are reservoir-sampled (Algorithm R) and flushed at
+    ``close()``, because which one survives is not known until the game is
+    over. The snapshot is taken when the mana was *made*, so a flushed record
+    lands after records from every later turn and reads as a backward turn jump
+    — on 168 of 177 games in a healthy smoke corpus. Exempting it is what keeps
+    the game-boundary check worth reading; not exempting it taught an operator
+    to ignore the whole report.
+
+    Recognised by the payload rather than by the acting card. The reservoir
+    holds mana abilities and a basic land is merely the commonest one, so a
+    resolution half whose every event is ``mana_produced`` is the case, whoever
+    printed the line. Narrow on purpose: a record that also does something else
+    is not one of these, and an activation half is not exempt at all — nothing
+    defers those, so a backward jump on one is still a game boundary.
+    """
+    payload = record.payload
+    return (
+        record.moment is Moment.RESOLUTION
+        and isinstance(payload, ResolutionPayload)
+        and bool(payload.events)
+        and all(event.type is EventType.MANA_PRODUCED for event in payload.events)
+    )
+
+
+#: :func:`_join_result` for a key whose source tree this run was not given —
+#: a stage-four corpus names ``variant-scripts`` keys, and a validate run
+#: without ``--variant-scripts`` has nothing to join them against. Unchecked,
+#: never a mismatch: absence of a tree is not evidence about the corpus.
+_UNCHECKED = object()
+
+
+def _join_result(sidecars, key: ProvenanceKey):
+    """``None`` where ``key`` joins, :data:`_UNCHECKED`, or why it does not.
+
+    ``row_for`` already encodes the join rule — a dropped or runtime-only key
+    resolves to no line and is *not* a failure — so this only has to sort its
+    exceptions into "this run cannot say" and "this key is wrong", and turn the
+    second into a line an operator can act on.
+    """
+    try:
+        sidecars.path_for(key.script_file)
+    except KeyError:
+        return _UNCHECKED
+    try:
+        sidecars.get(key.script_file).row_for(key)
+    except FileNotFoundError:
+        return f"{key.script_file}: no sidecar beside the converted card"
+    except KeyError as exc:
+        return f"{key.script_file} {key.trait_kind}[{key.index_within_kind}]: {exc}"
+    return None
+
+
+@dataclass(slots=True)
+class _Game:
+    """What one ``game_id`` has shown so far."""
+
+    max_turn: int = 0
+    backward_jump: int = 0
+    names: set[str] = field(default_factory=set)
+    digests: set[bytes] = field(default_factory=set)
+
+
+class _Tally:
+    """Running counts for every invariant, filled by one pass."""
+
+    def __init__(self) -> None:
+        self.total = 0
+        self.record_ids: set[str] = set()
+        self.duplicate_ids = 0
+        self.duplicate_id_examples: list[str] = []
+        self.games: dict[str, _Game] = defaultdict(_Game)
+        self.by_kind: Counter[str] = Counter()
+        self.duplicates_by_kind: Counter[str] = Counter()
+        self.tiers_by_kind: dict[str, Counter[tuple[int, ...]]] = defaultdict(Counter)
+        self.links: dict[str, list[str]] = defaultdict(list)
+        self.outcomes: Counter[str] = Counter()
+        self.activations = 0
+        self.cost_fields: Counter[str] = Counter()
+        self.costs_populated = 0
+        #: label -> [records, ``ability`` present, ``ability`` non-empty]
+        self.acting: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
+        self.unresolved: Counter[str] = Counter()
+        #: Records whose ``ability`` is empty and which say nothing about why.
+        self.silent_empty_ability = 0
+        self.silent_empty_examples: list[str] = []
+        self.modes: Counter[str] = Counter()
+        self.mode_examples: dict[str, str] = {}
+        self.mana_flush_exempt = 0
+        #: Every distinct printed-line key the window named, joined once.
+        self.keys: set[ProvenanceKey] = set()
+        self.events_seen = 0
+        self.duplicate_events = 0
+        self.duplicate_events_by_type: Counter[str] = Counter()
+        self.zone_changes = 0
+        self.zone_changes_with_from = 0
+        self.zone_change_to: Counter[str] = Counter()
+        self.resolution_events = 0
+        self.attribution: Counter[str] = Counter()
+        self.triggers: Counter[bool] = Counter()
+        #: evaluated trigger mode -> [fired, evaluated]
+        self.trigger_modes: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+        self.probe_forks = 0
+        self.probed_keywords: Counter[str] = Counter()
+        self.interventions = 0
+
+    def add(self, record: EffectRecord) -> None:
+        self.total += 1
+        label = _kind_label(record)
+        self.by_kind[label] += 1
+        self.modes[record.mode.value] += 1
+        self.mode_examples.setdefault(record.mode.value, record.record_id)
+
+        if record.record_id in self.record_ids:
+            self.duplicate_ids += 1
+            if len(self.duplicate_id_examples) < _EXAMPLES:
+                self.duplicate_id_examples.append(record.record_id)
+        else:
+            self.record_ids.add(record.record_id)
+
+        game = self.games[record.game_id]
+        game.names.update(entity.name for entity in record.state.entities)
+        if _is_deferred_mana_record(record):
+            # Its snapshot is older than the game it was written into, in both
+            # directions: it must neither report a jump nor raise the high-water
+            # mark a later record is measured against.
+            self.mana_flush_exempt += 1
+        else:
+            turn = record.state.global_.turn
+            if turn < game.max_turn:
+                game.backward_jump = max(game.backward_jump, game.max_turn - turn)
+            game.max_turn = max(game.max_turn, turn)
+
+        digest = _digest(record)
+        if digest in game.digests:
+            self.duplicates_by_kind[label] += 1
+        else:
+            game.digests.add(digest)
+
+        self.tiers_by_kind[label][
+            tuple(sorted(int(tier) for tier in record.state.tiers))
+        ] += 1
+
+        if record.link_id is not None:
+            self.links[record.link_id].append(
+                record.moment.value if record.moment else "?"
+            )
+
+        if record.kind not in KINDS_WITHOUT_ACTING_ABILITY:
+            counts = self.acting[label]
+            counts[0] += 1
+            counts[1] += record.ability is not None
+            counts[2] += bool(record.ability)
+            if record.ability_unresolved:
+                self.unresolved[record.ability_unresolved] += 1
+            elif record.ability is not None and not record.ability:
+                self.silent_empty_ability += 1
+                if len(self.silent_empty_examples) < _EXAMPLES:
+                    self.silent_empty_examples.append(f"{record.record_id} ({label})")
+
+        self.keys.update(_provenance_keys(record))
+        self._add_events(record)
+
+        payload = record.payload
+        if isinstance(payload, ActivationPayload):
+            self.activations += 1
+            self.outcomes[payload.outcome.value] += 1
+            self._add_costs(payload)
+        elif isinstance(payload, TriggerPayload):
+            self.triggers[payload.fired] += 1
+            # The engine's own name for the hook, where it wrote one: the
+            # vocabulary is a closed set of outcomes and Forge has some two
+            # hundred trigger modes, so this is the only per-mode axis there is.
+            mode = payload.event.params.get("mode") or payload.event.type.value
+            counts = self.trigger_modes[str(mode)]
+            counts[0] += payload.fired
+            counts[1] += 1
+        elif isinstance(payload, CombatPayload) and record.is_probe:
+            self.probe_forks += 1
+            if payload.probed_keyword:
+                self.probed_keywords[payload.probed_keyword] += 1
+        if record.interventional:
+            self.interventions += 1
+
+    def _add_events(self, record: EffectRecord) -> None:
+        seen: set[bytes] = set()
+        for event in _own_events(record):
+            digest = _blake(event.as_dict())
+            self.events_seen += 1
+            if digest in seen:
+                self.duplicate_events += 1
+                self.duplicate_events_by_type[event.type.value] += 1
+            else:
+                seen.add(digest)
+        for event in _all_events(record):
+            if event.type is EventType.ZONE_CHANGE:
+                self.zone_changes += 1
+                self.zone_changes_with_from += bool(event.params.get("from_zone"))
+                self.zone_change_to[str(event.params.get("to_zone"))] += 1
+        if isinstance(record.payload, ResolutionPayload):
+            for event in record.payload.events:
+                self.resolution_events += 1
+                self.attribution[attribution_kind(event.attributed_to)] += 1
+
+    def _add_costs(self, payload: ActivationPayload) -> None:
+        costs = payload.costs
+        paid = {
+            "mana_by_color": bool(costs.mana_by_color),
+            "tapped": bool(costs.tapped),
+            "life": costs.life != 0,
+            "sacrificed": bool(costs.sacrificed),
+            "discarded": bool(costs.discarded),
+            "exiled": bool(costs.exiled),
+        }
+        for name, filled in paid.items():
+            self.cost_fields[name] += filled
+        self.costs_populated += any(paid.values())
+
+    # ── the report ──────────────────────────────────────────────────────
+
+    def findings(self, limits: Thresholds, sidecars=None) -> list[Finding]:
+        return [
+            self._unique_record_ids(),
+            self._one_game_per_game_id(limits),
+            self._links_pair(limits),
+            *self._acting_lines(limits),
+            self._empty_ability_says_why(),
+            self._keys_join_their_sidecar(sidecars),
+            self._collected_patched(),
+            self._outcome_varies(),
+            self._costs_carry_something(limits),
+            self._uniform_tiers(),
+            self._duplicates(limits),
+            self._duplicate_events(limits),
+            self._trigger_negatives(limits),
+            self._zone_changes_say_where_from(limits),
+            self._resolution_events_name_a_clause(limits),
+            self._probe_forks_were_taken(),
+        ]
+
+    def _unique_record_ids(self) -> Finding:
+        rate = self.duplicate_ids / self.total if self.total else 0.0
+        return Finding(
+            name="record_id is unique across the run's shards",
+            ok=self.duplicate_ids == 0,
+            measured=(
+                f"{self.duplicate_ids} repeats of {len(self.record_ids)} "
+                f"distinct ids over {self.total} records ({rate:.1%})"
+            ),
+            detail=tuple(f"repeated: {rid}" for rid in self.duplicate_id_examples),
+        )
+
+    def _one_game_per_game_id(self, limits: Thresholds) -> Finding:
+        jumped = {
+            gid: game.backward_jump for gid, game in self.games.items()
+            if game.backward_jump > limits.turn_jump_tolerance
+        }
+        crowded = {
+            gid: len(game.names) for gid, game in self.games.items()
+            if len(game.names) > limits.max_names_per_game
+        }
+        widest = max((len(g.names) for g in self.games.values()), default=0)
+        detail = [
+            f"{gid} steps back {jump} turns"
+            for gid, jump in sorted(jumped.items())[:_EXAMPLES]
+        ] + [
+            f"{gid} shows {count} distinct card names"
+            for gid, count in sorted(crowded.items())[:_EXAMPLES]
+        ]
+        return Finding(
+            name="each game_id names one game",
+            ok=not jumped and not crowded,
+            measured=(
+                f"{len(self.games)} game ids; {len(jumped)} span a backward "
+                f"turn jump, {len(crowded)} exceed "
+                f"{limits.max_names_per_game} distinct card names "
+                f"(widest {widest}); {self.mana_flush_exempt} records exempted "
+                "as deferred mana-reservoir flushes"
+            ),
+            detail=tuple(detail),
+        )
+
+    def _links_pair(self, limits: Thresholds) -> Finding:
+        want = sorted((Moment.ACTIVATION.value, Moment.RESOLUTION.value))
+        paired = sum(
+            1 for halves in self.links.values() if sorted(halves) == want
+        )
+        total = len(self.links)
+        unpaired = total - paired
+        rate = unpaired / total if total else 0.0
+        sizes = Counter(len(halves) for halves in self.links.values())
+        return Finding(
+            name="every link_id joins one activation to one resolution",
+            ok=rate <= limits.max_unpaired_link_rate,
+            measured=(
+                f"{paired}/{total} link ids paired, {unpaired} unpaired "
+                f"({rate:.1%}, limit {limits.max_unpaired_link_rate:.1%})"
+            ),
+            detail=tuple(
+                f"{count} link ids carry {size} half(s)"
+                for size, count in sorted(sizes.items())
+            ),
+        )
+
+    def _acting_lines(self, limits: Thresholds) -> list[Finding]:
+        """One finding per group of kinds whose records do name a line.
+
+        Split into "the field is there at all" and "a key resolved", because
+        the two failures need different fixes and look identical in a corpus: a
+        collector that never calls ``.ability(...)`` writes ``null`` on every
+        record of its kind, while a resolver that cannot reach a printed line
+        writes an empty list. The first corpus had both, on different kinds.
+        """
+        groups = {
+            "trigger and rewrite": ("trigger", "rewrite"),
+            "resolution": ("resolution/activation", "resolution/resolution"),
+            "continuous": ("continuous",),
+        }
+        out: list[Finding] = []
+        for name, labels in groups.items():
+            seen = sum(self.acting[label][0] for label in labels)
+            present = sum(self.acting[label][1] for label in labels)
+            keyed = sum(self.acting[label][2] for label in labels)
+            title = f"{name} records name an acting line"
+            if not seen:
+                out.append(Finding(
+                    name=title, ok=True,
+                    measured="no records of this kind in the window",
+                ))
+                continue
+            keyed_rate = keyed / seen
+            out.append(Finding(
+                name=title,
+                ok=present == seen and keyed_rate >= limits.min_keyed_rate,
+                measured=(
+                    f"{present}/{seen} carry the field, {keyed}/{seen} resolve "
+                    f"to a key ({keyed_rate:.1%}, floor "
+                    f"{limits.min_keyed_rate:.1%})"
+                ),
+                detail=tuple(
+                    f"unresolved: {reason} x {count}"
+                    for reason, count in sorted(self.unresolved.items())
+                ),
+            ))
+        return out
+
+    def _empty_ability_says_why(self) -> Finding:
+        """An empty ``ability`` that carries no reason is unreadable evidence.
+
+        "The Monarch has no printed line in any tree" and "the resolver
+        regressed" both write ``ability: []``, and nothing tells them apart
+        after the fact — that ambiguity hid a broken resolver for a whole
+        collection run. ``ability_unresolved`` is the field that separates
+        them, so an empty ability without one says nothing at all.
+        """
+        empty = self.silent_empty_ability + sum(self.unresolved.values())
+        return Finding(
+            name="every empty ability says why it is empty",
+            ok=self.silent_empty_ability == 0,
+            measured=(
+                f"{self.silent_empty_ability} of {empty} empty abilities carry "
+                "no ability_unresolved reason"
+            ),
+            detail=tuple(
+                f"silent: {example}" for example in self.silent_empty_examples
+            ) or tuple(
+                f"reason {reason}: {count}"
+                for reason, count in sorted(self.unresolved.items())
+            ),
+        )
+
+    def _keys_join_their_sidecar(self, sidecars) -> Finding:
+        """Every provenance key the window names resolves in its own sidecar.
+
+        This is the check that would have caught the launch blocker: the
+        converter and the collector numbered a card's keywords differently, so
+        records joined *silently* to the wrong printed line. Every key resolved
+        to some row — just not the row the card prints — and nothing downstream
+        could notice, because a wrong row is indistinguishable from a right one
+        until a human reads the text beside a record.
+
+        ``keyword`` keys carry the verdict: they are the kind that disagreed,
+        and the only kind whose ordinal is derived rather than positional. Every
+        other kind is measured and reported without failing the run, because a
+        mismatch there has a cause a keyword mismatch does not — a reconversion
+        between collection and training — and the number is what an operator
+        needs either way.
+        """
+        title = "keyword provenance keys join their sidecar"
+        if sidecars is None:
+            return Finding(
+                name=title, ok=True, watched=True,
+                measured=(
+                    f"{len(self.keys)} distinct keys, none checked: no converted "
+                    "tree was readable (pass --cards-folder)"
+                ),
+            )
+        checked: Counter[str] = Counter()
+        unjoinable: Counter[str] = Counter()
+        unchecked: Counter[str] = Counter()
+        examples: list[str] = []
+        ordered = sorted(
+            self.keys,
+            key=lambda k: (k.script_file, k.trait_kind, k.index_within_kind),
+        )
+        for key in ordered:
+            result = _join_result(sidecars, key)
+            if result is _UNCHECKED:
+                unchecked[key.tree] += 1
+                continue
+            checked[key.trait_kind] += 1
+            if result is None:
+                continue
+            unjoinable[key.trait_kind] += 1
+            if len(examples) < _EXAMPLES:
+                examples.append(result)
+        keywords = checked.get("keyword", 0)
+        broken = unjoinable.get("keyword", 0)
+        skipped = sum(unchecked.values())
+        detail = [
+            f"{kind}: {unjoinable[kind]}/{count} unjoinable"
+            for kind, count in sorted(checked.items())
+        ] + [
+            f"{count} keys in {tree}, a tree this run was not given"
+            for tree, count in sorted(unchecked.items())
+        ] + examples
+        return Finding(
+            name=title,
+            ok=broken == 0,
+            measured=(
+                f"{broken}/{keywords} keyword keys fail to join; "
+                f"{sum(unjoinable.values())}/{sum(checked.values())} over all "
+                f"trait kinds, {skipped} unchecked"
+            ),
+            detail=tuple(detail),
+        )
+
+    def _collected_patched(self) -> Finding:
+        """A degraded run silently loses four record kinds.
+
+        ``mode`` is detected per run by probing for the patch hooks, so one
+        stock checkout in the pool writes a corpus that parses, validates and
+        trains — with no mana records, no per-clause attribution, no trigger
+        cause channel and no replacement hook. The mixed case is the dangerous
+        one: the missing kinds read as scarcity.
+        """
+        shown = ", ".join(
+            f"{name} {count}" for name, count in sorted(self.modes.items())
+        ) or "none"
+        degraded = self.total - self.modes.get(CollectionMode.PATCHED.value, 0)
+        return Finding(
+            name="every record was collected in patched mode",
+            ok=degraded == 0,
+            measured=f"{degraded}/{self.total} not patched ({shown})",
+            detail=tuple(
+                f"first {name} record: {self.mode_examples[name]}"
+                for name in sorted(self.modes)
+                if name != CollectionMode.PATCHED.value
+            ),
+        )
+
+    def _outcome_varies(self) -> Finding:
+        shown = ", ".join(
+            f"{name} {count}" for name, count in sorted(self.outcomes.items())
+        ) or "none"
+        return Finding(
+            name="outcome takes more than one value",
+            # An empty window cannot answer this. Reported as holding rather
+            # than as broken, the same way an absent kind is: a window with no
+            # activation records has nothing to say about their outcomes, and a
+            # check that fails on silence teaches an operator to ignore it.
+            ok=len(self.outcomes) > 1 or self.activations == 0,
+            measured=(
+                f"{len(self.outcomes)} distinct over {self.activations} "
+                f"activation records: {shown}"
+            ),
+            detail=() if len(self.outcomes) > 1 else (
+                "a real game counters or fizzles something, so one value means "
+                "the collector is writing a literal",
+            ),
+        )
+
+    def _costs_carry_something(self, limits: Thresholds) -> Finding:
+        shown = ", ".join(
+            f"{name} {self.cost_fields[name]}" for name in _COST_FIELDS
+        )
+        dead = [
+            name for name in _COST_FIELDS_ALWAYS_PAID
+            if not self.cost_fields[name]
+        ]
+        enough = self.activations >= limits.min_cost_evidence
+        # Nothing paid anywhere is a defect at any size; a single dead channel
+        # only means something once the window is big enough for its absence to
+        # be about the collector rather than about the pool.
+        broken = self.activations and (
+            not self.costs_populated or (enough and dead)
+        )
+        detail: tuple[str, ...] = ()
+        if broken:
+            detail = (
+                f"never populated over {self.activations} activation records: "
+                + ", ".join(dead or _COST_FIELDS),
+                "reading a Cost object whose parts were never the ones paid "
+                "looks exactly like this",
+            )
+        elif dead and not enough:
+            detail = (
+                f"{', '.join(dead)} unexercised, but {self.activations} "
+                f"activation records is under the {limits.min_cost_evidence} "
+                "this would need to mean anything",
+            )
+        return Finding(
+            name="cost fields are not all empty",
+            ok=not broken,
+            measured=(
+                f"{self.costs_populated}/{self.activations} activation records "
+                f"paid something ({shown})"
+            ),
+            detail=detail,
+        )
+
+    def _uniform_tiers(self) -> Finding:
+        """Snapshot depth is a run-level property, so one vector or none.
+
+        A depth chosen per collector makes ``state.tiers`` a proxy for how the
+        record was collected — in the first corpus tier 4 appeared on the
+        interventional records and nowhere else, which is a perfect predictor
+        of a field the schema forbids the model to see.
+        """
+        seen: Counter[tuple[int, ...]] = Counter()
+        for counts in self.tiers_by_kind.values():
+            seen.update(counts)
+        detail = [
+            f"{label}: " + ", ".join(
+                f"{list(tiers)} x {count}"
+                for tiers, count in sorted(counts.items())
+            )
+            for label, counts in sorted(self.tiers_by_kind.items())
+        ]
+        return Finding(
+            name="snapshot tier depth is uniform across kinds",
+            ok=len(seen) <= 1,
+            measured=(
+                f"{len(seen)} distinct tier vectors over "
+                f"{len(self.tiers_by_kind)} kind groups"
+            ),
+            detail=tuple(detail) if len(seen) > 1 else (),
+        )
+
+    def _duplicates(self, limits: Thresholds) -> Finding:
+        worst = 0.0
+        detail = []
+        for label, count in sorted(self.by_kind.items()):
+            duplicates = self.duplicates_by_kind[label]
+            rate = duplicates / count if count else 0.0
+            worst = max(worst, rate)
+            detail.append(f"{label}: {duplicates}/{count} ({rate:.1%})")
+        total_dupes = sum(self.duplicates_by_kind.values())
+        overall = total_dupes / self.total if self.total else 0.0
+        return Finding(
+            name="exact duplicates within a game stay rare, per kind",
+            ok=worst <= limits.max_duplicate_rate,
+            measured=(
+                f"{total_dupes}/{self.total} overall ({overall:.1%}); worst "
+                f"kind {worst:.1%}, limit {limits.max_duplicate_rate:.1%}"
+            ),
+            detail=tuple(detail),
+        )
+
+    def _duplicate_events(self, limits: Thresholds) -> Finding:
+        """The duplication the record-level check cannot see.
+
+        Two byte-identical events inside one record are one outcome written
+        twice — same subjects, same params, same clause — and the record around
+        them is unique, so the per-kind duplicate rate reads 0.00% while 13.68%
+        of the corpus's events are repeats. A model trained on that learns that
+        abilities deal their damage twice.
+        """
+        rate = self.duplicate_events / self.events_seen if self.events_seen else 0.0
+        return Finding(
+            name="no record repeats an event inside itself",
+            ok=rate <= limits.max_duplicate_event_rate,
+            measured=(
+                f"{self.duplicate_events}/{self.events_seen} events repeat "
+                f"another in the same record ({rate:.2%}, limit "
+                f"{limits.max_duplicate_event_rate:.2%})"
+            ),
+            detail=tuple(
+                f"{event_type}: {count}"
+                for event_type, count in
+                self.duplicate_events_by_type.most_common(_EXAMPLES)
+            ),
+        )
+
+    def _trigger_negatives(self, limits: Thresholds) -> Finding:
+        """Fired against not-fired, aggregate and per evaluated mode.
+
+        Per mode as well, because the aggregate hides the failure this exists to
+        catch: a sampler that draws no negatives for one trigger mode is
+        invisible behind every other mode's balance, and the model then learns
+        that mode's base rate instead of its condition.
+        """
+        fired = self.triggers[True]
+        total = fired + self.triggers[False]
+        share = fired / total if total else 0.0
+        skewed = sorted(
+            (
+                (counts[0] / counts[1], mode, counts)
+                for mode, counts in self.trigger_modes.items()
+            ),
+            reverse=True,
+        )
+        return Finding(
+            name="trigger records draw negatives against positives",
+            ok=not total or share <= limits.max_trigger_fired_share,
+            measured=(
+                f"{fired}:{total - fired} fired:not-fired over {total} trigger "
+                f"records ({share:.1%} fired, ceiling "
+                f"{limits.max_trigger_fired_share:.1%})"
+            ),
+            detail=tuple(
+                f"{mode}: {counts[0]}:{counts[1] - counts[0]} ({rate:.1%} fired)"
+                for rate, mode, counts in skewed[:_EXAMPLES]
+            ),
+        )
+
+    def _zone_changes_say_where_from(self, limits: Thresholds) -> Finding:
+        """Where a card came from, and how often "the stack" is where it went.
+
+        A ``zone_change`` without ``from_zone`` says a card arrived somewhere
+        and not what left: nothing separates a graveyard recursion from a token
+        entering. Watched rather than judged by default, because some arrivals
+        genuinely have no origin — a card *made* rather than moved — so the
+        healthy share is not yet known. The ``to_zone=stack`` share rides along
+        because a channel that is mostly casts is reporting the stack rather
+        than the board.
+        """
+        floor = limits.min_zone_change_from_zone_rate
+        rate = (
+            self.zone_changes_with_from / self.zone_changes
+            if self.zone_changes else 0.0
+        )
+        to_stack = self.zone_change_to.get("stack", 0)
+        stack_rate = to_stack / self.zone_changes if self.zone_changes else 0.0
+        limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
+        return Finding(
+            name="zone_change events say where the card came from",
+            ok=floor is None or not self.zone_changes or rate >= floor,
+            watched=floor is None,
+            measured=(
+                f"{self.zone_changes_with_from}/{self.zone_changes} carry "
+                f"from_zone ({rate:.1%}, {limit}); {to_stack} say "
+                f"to_zone=stack ({stack_rate:.1%})"
+            ),
+            detail=tuple(
+                f"to_zone={zone}: {count}"
+                for zone, count in self.zone_change_to.most_common(_EXAMPLES)
+            ),
+        )
+
+    def _resolution_events_name_a_clause(self, limits: Thresholds) -> Finding:
+        """The tri-state attribution pointer, broken out by what it says.
+
+        ``absent`` is the state that says nothing: a writer that predates the
+        sentinels wrote ``null`` for "the root line acted" and for "the pointer
+        did not land" alike, and the corpus is append-only, so the two can never
+        be separated afterwards. The rate below is the share saying *something*
+        — a sub-ability index, the root, or an explicit unresolved — which is
+        the number that moves when the attribution channel is wired.
+        """
+        floor = limits.min_attributed_rate
+        named = self.resolution_events - self.attribution.get("absent", 0)
+        rate = named / self.resolution_events if self.resolution_events else 0.0
+        limit = "watched, no floor" if floor is None else f"floor {floor:.1%}"
+        return Finding(
+            name="resolution events name what produced them",
+            ok=floor is None or not self.resolution_events or rate >= floor,
+            watched=floor is None,
+            measured=(
+                f"{named}/{self.resolution_events} resolution events name a "
+                f"clause ({rate:.1%}, {limit})"
+            ),
+            detail=tuple(
+                f"{state}: {count}"
+                for state, count in sorted(self.attribution.items())
+            ),
+        )
+
+    def _probe_forks_were_taken(self) -> Finding:
+        """Whether the probe path ran at all, and on which keywords.
+
+        ``--probe-keywords`` defaults to empty and empty takes no fork, so the
+        whole path can have unit tests and no runtime evidence whatever — which
+        is what the smoke corpus showed: zero probe forks in 55,296 records.
+        Watched rather than judged, because a run that deliberately names no
+        keyword is not a broken run; the number is here so an operator who
+        *meant* to probe finds out in minutes rather than at evaluation.
+        """
+        shown = ", ".join(
+            f"{keyword} {count}"
+            for keyword, count in self.probed_keywords.most_common()
+        ) or "none"
+        return Finding(
+            name="probe forks were taken",
+            ok=True,
+            watched=True,
+            measured=(
+                f"{self.probe_forks} damage-step probe forks, "
+                f"{self.interventions} interventional forks; keywords probed: "
+                f"{shown}"
+            ),
+            detail=() if self.probe_forks else (
+                "zero probes means --probe-keywords was empty; that flag, not "
+                "--probes-per-game, is what turns the path on",
+            ),
+        )

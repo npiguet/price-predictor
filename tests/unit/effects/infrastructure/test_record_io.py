@@ -273,34 +273,67 @@ class TestForwardCompatibility:
         data["collector_build"] = "2027.1"
         assert "extra_fields" not in record_from_dict(data).model_input_fields()
 
+    def test_ability_unresolved_round_trips(self):
+        record = _record(ability=(), ability_unresolved="engine_effect")
+        assert record_from_dict(record_to_dict(record)) == record
+
+    def test_a_shard_written_before_the_field_reads_as_no_reason(self):
+        """The corpus is append-only, so a line without the key still parses."""
+        data = record_to_dict(_record())
+        del data["ability_unresolved"]
+        restored = record_from_dict(data)
+        assert restored.ability_unresolved is None
+        assert restored.extra_fields == {}
+
 
 class TestShardDirectory:
-    def test_a_shard_is_named_for_its_run_and_worker(self, tmp_path):
-        assert shard_path(tmp_path, "run-uuid", 4).name == "run-uuid.4.jsonl"
+    def test_a_shard_is_named_for_its_run_worker_and_lifetime(self, tmp_path):
+        assert (
+            shard_path(tmp_path, "run-uuid", 4, "L1").name
+            == "run-uuid.4-L1.jsonl"
+        )
+
+    def test_two_lifetimes_of_one_worker_are_two_shards(self, tmp_path):
+        """The counters restart with the JVM, so the shard has to restart too.
+
+        A supervisor recycles the longest-running worker on a timer and
+        restarts crashed ones, so one worker slot is hundreds of JVMs per run.
+        Sharing a file across them is what let a restart reissue ids the
+        previous JVM had already used.
+        """
+        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
+            writer.write(_record(record_id="run.0-L1.0"))
+        with ShardWriter(tmp_path, "run", 0, "L2") as writer:
+            writer.write(_record(record_id="run.0-L2.0"))
+        assert len(iter_shards(tmp_path)) == 2
+        loaded = list(read_records(tmp_path))
+        assert len({r.record_id for r in loaded}) == 2
+        assert {r.worker for r in loaded} == {"0"}
+        assert {r.lifetime for r in loaded} == {"L1", "L2"}
 
     def test_a_writer_creates_its_directory(self, tmp_path):
         target = tmp_path / "records"
-        with ShardWriter(target, "run-uuid", 0) as writer:
+        with ShardWriter(target, "run-uuid", 0, "L1") as writer:
             writer.write(_record())
-        assert (target / "run-uuid.0.jsonl").exists()
+        assert (target / "run-uuid.0-L1.jsonl").exists()
 
     def test_written_records_read_back(self, tmp_path):
         records = [_record(record_id=f"run.0.{i}") for i in range(3)]
-        with ShardWriter(tmp_path, "run", 0) as writer:
+        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
             for record in records:
                 writer.write(record)
         assert list(read_records(tmp_path)) == records
 
     def test_a_writer_appends_rather_than_truncating(self, tmp_path):
-        with ShardWriter(tmp_path, "run", 0) as writer:
+        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record(record_id="run.0.1"))
-        with ShardWriter(tmp_path, "run", 0) as writer:
+        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record(record_id="run.0.2"))
         assert count_records(tmp_path) == 2
 
     def test_every_shard_in_the_directory_is_loaded(self, tmp_path):
         for worker in (0, 1, 2):
-            with ShardWriter(tmp_path, "run", worker) as writer:
+            with ShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
         assert {r.worker for r in read_records(tmp_path)} == {"0", "1", "2"}
 
@@ -413,12 +446,12 @@ class TestCompressedShards:
 
     def test_an_uncompressed_shard_still_reads(self, tmp_path):
         """The corpus is append-only, so shards predating compression stay."""
-        with ShardWriter(tmp_path, "old", 0) as writer:
+        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
             writer.write(_record(record_id="old.0.1"))
         assert [r.record_id for r in read_records(tmp_path)] == ["old.0.1"]
 
     def test_both_spellings_load_together(self, tmp_path):
-        with ShardWriter(tmp_path, "old", 0) as writer:
+        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
             writer.write(_record(record_id="old.0.1"))
         self._write_members(
             tmp_path / "new.1.jsonl.gz", [[self._line("new.1.1")]],
@@ -428,7 +461,7 @@ class TestCompressedShards:
         }
 
     def test_counting_covers_both_spellings(self, tmp_path):
-        with ShardWriter(tmp_path, "old", 0) as writer:
+        with ShardWriter(tmp_path, "old", 0, "L1") as writer:
             writer.write(_record(record_id="old.0.1"))
         self._write_members(
             tmp_path / "new.1.jsonl.gz",
@@ -446,13 +479,13 @@ class TestCompressedShards:
 
     def test_shards_are_read_in_name_order(self, tmp_path):
         for worker in (2, 0, 1):
-            with ShardWriter(tmp_path, "run", worker) as writer:
+            with ShardWriter(tmp_path, "run", worker, f"L{worker}") as writer:
                 writer.write(_record(record_id=f"run.{worker}.1"))
         assert [r.worker for r in read_records(tmp_path)] == ["0", "1", "2"]
 
     def test_a_trailing_partial_line_is_skipped(self, tmp_path):
         """A JVM crash mid-write is expected, not exceptional."""
-        path = shard_path(tmp_path, "run", 0)
+        path = shard_path(tmp_path, "run", 0, "L1")
         path.parent.mkdir(parents=True, exist_ok=True)
         good = format_record_line(_record(record_id="run.0.1"))
         truncated = format_record_line(_record(record_id="run.0.2"))[:40]
@@ -461,7 +494,7 @@ class TestCompressedShards:
         assert [r.record_id for r in loaded] == ["run.0.1"]
 
     def test_a_partial_line_is_left_on_disk_rather_than_repaired(self, tmp_path):
-        path = shard_path(tmp_path, "run", 0)
+        path = shard_path(tmp_path, "run", 0, "L1")
         path.parent.mkdir(parents=True, exist_ok=True)
         content = format_record_line(_record())[:40]
         path.write_text(content, encoding="utf-8")
@@ -473,12 +506,12 @@ class TestCompressedShards:
 
     def test_non_jsonl_files_in_the_directory_are_ignored(self, tmp_path):
         (tmp_path / "notes.txt").write_text("not a shard", encoding="utf-8")
-        with ShardWriter(tmp_path, "run", 0) as writer:
+        with ShardWriter(tmp_path, "run", 0, "L1") as writer:
             writer.write(_record())
         assert count_records(tmp_path) == 1
 
     def test_blank_lines_are_ignored(self, tmp_path):
-        path = shard_path(tmp_path, "run", 0)
+        path = shard_path(tmp_path, "run", 0, "L1")
         path.parent.mkdir(parents=True, exist_ok=True)
         line = format_record_line(_record())
         path.write_text(f"{line}\n\n{line}\n", encoding="utf-8")

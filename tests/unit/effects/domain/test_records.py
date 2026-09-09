@@ -146,6 +146,44 @@ class TestActingAbility:
         assert len(record.ability) == 2
 
 
+class TestAbilityUnresolved:
+    """Why no key was found, where a line was looked for and not reached.
+
+    An empty ``ability`` alone conflates two different things — the Monarch has
+    no printed line in any tree and never will, while a resolver that cannot
+    reach one is a bug — and that ambiguity is what let a broken resolver
+    survive a whole eight-hour collection run without a single failure.
+    """
+
+    def test_an_unresolved_record_names_why(self, make_record):
+        record = make_record(ability=(), ability_unresolved="engine_effect")
+        assert record.ability_unresolved == "engine_effect"
+
+    def test_a_record_cannot_both_name_a_line_and_fail_to_find_one(
+        self, make_record,
+    ):
+        with pytest.raises(ValueError, match="could not find one"):
+            make_record(ability_unresolved="unindexable")
+
+    def test_a_kind_that_looks_for_no_line_reports_no_reason(self, make_record):
+        with pytest.raises(ValueError, match="look for no acting line"):
+            make_record(
+                kind=RecordKind.COMBAT, ability=None,
+                ability_unresolved="engine_effect",
+            )
+
+    def test_the_reason_comes_from_the_closed_vocabulary(self, make_record):
+        with pytest.raises(ValueError, match="closed vocabulary"):
+            make_record(ability=(), ability_unresolved="dunno")
+
+    def test_it_is_collection_metadata_and_never_a_model_input(
+        self, make_record,
+    ):
+        record = make_record(ability=(), ability_unresolved="engine_effect")
+        assert "ability_unresolved" in COLLECTION_METADATA_FIELDS
+        assert "ability_unresolved" not in record.model_input_fields()
+
+
 class TestDiscriminators:
     def test_moment_belongs_to_the_resolution_kind(self, make_record):
         with pytest.raises(ValueError, match="moment is the resolution kind"):
@@ -181,9 +219,9 @@ class TestDiscriminators:
 
 
 class TestCollectionMetadataStaysOutOfTheModel:
-    def test_the_four_metadata_fields_are_named(self):
+    def test_the_metadata_fields_are_named(self):
         assert COLLECTION_METADATA_FIELDS == {
-            "mode", "interventional", "fork", "synthetic",
+            "mode", "interventional", "fork", "synthetic", "ability_unresolved",
         }
 
     def test_no_metadata_field_reaches_the_model_input_projection(
@@ -206,8 +244,22 @@ class TestCollectionMetadataStaysOutOfTheModel:
 
 
 class TestIdentity:
-    def test_record_id_carries_the_worker_index(self, make_record):
-        assert make_record(record_id="run-uuid.4.10237").worker == "4"
+    def test_record_id_carries_the_worker_slot_and_the_jvm_lifetime(
+        self, make_record,
+    ):
+        record = make_record(record_id="run-uuid.4-mk3p9x2q.10237")
+        assert record.worker == "4"
+        assert record.lifetime == "mk3p9x2q"
+
+    def test_a_pre_lifetime_id_still_reads_as_its_worker(self, make_record):
+        """The corpus is append-only, so shards written before the segment stay.
+
+        They report no lifetime rather than failing: the worker slot is still
+        in the id, and it is the only half those shards ever had.
+        """
+        record = make_record(record_id="run-uuid.4.10237")
+        assert record.worker == "4"
+        assert record.lifetime == ""
 
     def test_a_record_is_immutable_once_written(self, make_record):
         record = make_record()

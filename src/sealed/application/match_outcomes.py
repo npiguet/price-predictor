@@ -64,7 +64,15 @@ class MatchOutcomeSupervisor:
 
     @property
     def run_id(self) -> str:
-        """UUID generated once at construction, shared across all worker restarts."""
+        """UUID generated once at construction, shared across all worker restarts.
+
+        It namespaces a run, not a process: the pool recycles the
+        longest-running worker every status interval and restarts crashed ones,
+        so the JVM behind a slot is replaced hundreds of times while this value
+        and the slot index both stay put. Whatever a worker counts from zero
+        therefore has to name its own JVM lifetime — the effect-record shard
+        writer does, with a token it mints for itself.
+        """
         return self._run_id
 
     def run(self) -> None:
@@ -85,6 +93,8 @@ class MatchOutcomeSupervisor:
             side_b_decks_path=self._side_b_decks_path,
             side_b_decks_weight=self._side_b_decks_weight,
             effect_records_dir=self._effect_records_dir,
+            # The slot, not the process: a respawn passes the same number, so
+            # this cannot be what makes a restarted worker's ids distinct.
             worker_index=worker_id,
             collection_caps=self._collection_caps,
         )

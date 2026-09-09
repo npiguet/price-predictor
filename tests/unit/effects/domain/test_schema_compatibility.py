@@ -52,6 +52,10 @@ _FROZEN_ENVELOPE: dict[str, str] = {
     "fork": "bool",
     "synthetic": "bool",
     "ability": "tuple[ProvenanceKey, ...] | None",
+    # Added after the first collected corpus, under rule 1: an empty `ability`
+    # could not tell "no printed line exists" (an engine-built card) from "the
+    # resolver failed", which is how a resolver bug survived a whole run.
+    "ability_unresolved": "str | None",
     "extra_fields": "dict",
 }
 
@@ -143,7 +147,7 @@ class TestRuleThreeTiersAreAdditive:
 class TestRuleFourMetadataNeverBecomesAModelInput:
     def test_the_metadata_set_is_the_one_the_contract_names(self):
         assert COLLECTION_METADATA_FIELDS == {
-            "mode", "interventional", "fork", "synthetic",
+            "mode", "interventional", "fork", "synthetic", "ability_unresolved",
         }
 
     def test_every_metadata_field_is_a_real_envelope_field(self):

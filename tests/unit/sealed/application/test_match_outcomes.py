@@ -314,6 +314,34 @@ class TestSupervisorRunId:
         assert len(set(run_ids)) == 1, "run_id must be identical across worker starts"
         assert run_ids[0] == supervisor.run_id
 
+    def test_a_respawned_slot_is_started_with_the_same_arguments(self, tmp_path):
+        """Nothing the supervisor passes distinguishes two lifetimes of one slot.
+
+        The pool recycles the longest-running worker every status interval and
+        restarts crashed ones, always under the same run id and the same slot
+        index. This pins that, because it is the reason the effect-record shard
+        writer has to mint a per-JVM lifetime token of its own: the counters it
+        stamps into record and game ids restart at zero with the JVM, and the
+        run id and slot index cannot tell the two runs of zero apart.
+        """
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=3,
+            effect_records_dir=tmp_path / "records",
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+        supervisor._start_worker(0)  # the same slot, a new JVM
+
+        first, second = fake_connector.start.call_args_list
+        assert first.kwargs == second.kwargs
+        assert first.args == second.args
+        assert first.kwargs["worker_index"] == 0
+
     def test_run_ids_differ_between_supervisor_instances(self, tmp_path):
         out1 = tmp_path / "out1.txt"
         out2 = tmp_path / "out2.txt"

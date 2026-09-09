@@ -12,11 +12,15 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.event_schema import (
+    ATTRIBUTION_ROOT,
+    ATTRIBUTION_SENTINELS,
+    ATTRIBUTION_UNRESOLVED,
     EFFECT_API_EVENTS,
     EVENT_PARAMS,
     EXCLUDED_EFFECT_APIS,
     Event,
     EventType,
+    attribution_kind,
     event_types_for,
 )
 from effects.domain.forge_effect_apis import (
@@ -135,3 +139,48 @@ class TestEventNormalization:
             duration="end_of_turn",
         )
         assert event.duration == "end_of_turn"
+
+
+class TestAttributionIsTriState:
+    """The three states an ``attributed_to`` may report, and the fourth that
+    is not one of them.
+
+    One spelling covered "the root line acted" and "the pointer did not land"
+    for a whole collection run, so 96.8% of resolution events said nothing and
+    a dead attribution channel looked exactly like a working one on a corpus of
+    simple spells. The sentinels separate them; ``None`` stays what a writer
+    that predates them left behind, and means *unknown* rather than *root*.
+    """
+
+    def test_a_chain_index_reads_as_a_sub_ability(self):
+        assert attribution_kind("0") == "sub_ability"
+        assert attribution_kind("2") == "sub_ability"
+
+    def test_the_two_sentinels_read_as_themselves(self):
+        assert attribution_kind(ATTRIBUTION_ROOT) == "root"
+        assert attribution_kind(ATTRIBUTION_UNRESOLVED) == "unresolved"
+
+    def test_null_is_unknown_and_not_the_root(self):
+        """The whole point of adding the sentinels, asserted rather than assumed."""
+        assert attribution_kind(None) == "absent"
+
+    def test_the_four_states_are_distinct(self):
+        seen = {
+            attribution_kind(value)
+            for value in ("3", ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED, None)
+        }
+        assert len(seen) == 4
+
+    def test_a_sentinel_is_not_mistakable_for_a_chain_index(self):
+        assert all(not value.isdigit() for value in ATTRIBUTION_SENTINELS)
+
+    def test_a_sentinel_survives_the_wire_form_unchanged(self):
+        """Widening a value set, not redefining the field: it stays a string."""
+        event = Event(
+            type=EventType.DAMAGE_DEALT,
+            subjects=("E1",),
+            attributed_to=ATTRIBUTION_UNRESOLVED,
+        )
+        assert Event.from_dict(event.as_dict()).attributed_to == (
+            ATTRIBUTION_UNRESOLVED
+        )

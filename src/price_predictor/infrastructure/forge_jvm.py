@@ -204,7 +204,11 @@ class ForgeWorkerPool:
     lines are part of both commands' operator contract and must not drift.
     """
 
-    STATUS_INTERVAL = 60  # seconds between status reports
+    #: Seconds between status reports, and therefore how often the
+    #: longest-running worker is recycled — see :meth:`_kill_oldest_worker`,
+    #: which explains what that recycle defends against. Do not lengthen it to
+    #: win throughput.
+    STATUS_INTERVAL = 60
 
     def __init__(
         self,
@@ -283,7 +287,13 @@ class ForgeWorkerPool:
         self._shutdown_event.set()
 
     def _monitor_worker(self, worker_id: int) -> None:
-        """Monitor one worker, restarting it on crash until shutdown."""
+        """Monitor one worker, restarting it on crash until shutdown.
+
+        The restart reuses the same ``worker_id``, because the id names a pool
+        slot and not a process. Together with the timed recycle that makes one
+        slot hundreds of JVMs over a run, so nothing a worker counts from zero
+        may be namespaced by the slot alone.
+        """
         while not self._shutdown_event.is_set():
             try:
                 proc = self._spawn_worker(worker_id)
@@ -389,6 +399,17 @@ class ForgeWorkerPool:
         holding a slot indefinitely. Recycling the oldest one each status interval
         bounds how long any single match can occupy a worker. Introduced in commit
         eda4505.
+
+        This is containment, not tuning, and it is one measure with the worker's
+        small ``-Xmx`` (see MatchWorkerConnector.start): Forge degrades late in a
+        JVM's life, and a small heap plus a hard recycle bounds that instead of
+        letting one worker consume a run. So restarts are the normal operating
+        condition, not an accident — an eight-hour collection run is roughly 530
+        JVM lifetimes across six slots, some of them killed mid-game. Anything a
+        worker counts from zero must therefore be namespaced by the JVM lifetime
+        rather than by the worker slot; effect-record ids are, via the lifetime
+        token in RecordShardWriter. Do not lengthen or remove this interval to
+        win throughput: what it contains costs far more than the restarts do.
         """
         with self._processes_lock:
             alive = [(p, t) for p, t in self._start_times.items() if p.poll() is None]

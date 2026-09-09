@@ -127,8 +127,8 @@ class TestSubcommandTable:
         action = next(a for a in parser._actions if isinstance(a.choices, dict))
         assert set(action.choices) == {
             "build-vocab", "extract-keyword-definitions", "collect-coverage",
-            "field-coverage", "collect-variants", "train-effect-model",
-            "encode-abilities", "evaluate-effect-model",
+            "field-coverage", "validate-corpus", "collect-variants",
+            "train-effect-model", "encode-abilities", "evaluate-effect-model",
         }
 
     def test_an_unknown_flag_is_rejected(self):

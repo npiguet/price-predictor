@@ -198,6 +198,42 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
 }
 
 
+#: ``attributed_to`` when the acting line's own top-level clause produced the
+#: event, rather than one of its sub-abilities.
+ATTRIBUTION_ROOT = "root"
+
+#: ``attributed_to`` when the collector looked for a producing clause and the
+#: pointer named nothing on the acting chain. Distinct from :data:`ATTRIBUTION_ROOT`
+#: because the two are different facts and were spelled the same for a whole
+#: collection run: a null meant "the root acted" and "the pointer did not land"
+#: at once, so 96.8% of resolution events said nothing at all and there was no
+#: way to tell a working attribution channel from a dead one.
+ATTRIBUTION_UNRESOLVED = "unresolved"
+
+#: The sentinels, apart from a sub-ability's chain index.
+ATTRIBUTION_SENTINELS: frozenset[str] = frozenset(
+    {ATTRIBUTION_ROOT, ATTRIBUTION_UNRESOLVED}
+)
+
+
+def attribution_kind(attributed_to: str | None) -> str:
+    """Which of the four things an event's ``attributed_to`` is saying.
+
+    ``absent`` is the pre-tri-state spelling and means *unknown*, not *root*:
+    shards collected before the sentinels existed wrote ``null`` for both the
+    root line and a pointer that did not land, and the corpus is append-only, so
+    the ambiguity cannot be resolved after the fact — only reported apart from
+    the records that do say.
+    """
+    if attributed_to is None:
+        return "absent"
+    if attributed_to == ATTRIBUTION_ROOT:
+        return "root"
+    if attributed_to == ATTRIBUTION_UNRESOLVED:
+        return "unresolved"
+    return "sub_ability"
+
+
 @dataclass(frozen=True, slots=True)
 class Event:
     """One attributed outcome inside an effect payload.
@@ -205,8 +241,22 @@ class Event:
     ``subjects`` are entity or player refs, never names — the snapshot carries
     the identities. ``duration`` is ``None`` for an immediate outcome and names
     the end condition (``end_of_turn``, ``your_next_turn``, ``permanent``) for a
-    continuous one. ``attributed_to`` is the sub-ability link path that produced
-    it, or the root line where the link does not resolve.
+    continuous one.
+
+    ``attributed_to`` is tri-state, and the three states are what
+    :func:`attribution_kind` reads back:
+
+    ======================  ==================================================
+    a chain index (``"2"``) the sub-ability at that position produced it
+    ``root``                the acting line's own clause produced it
+    ``unresolved``          a producing clause was sought and the pointer
+                            named nothing on this chain
+    ======================  ==================================================
+
+    ``None`` is none of the three: it is what a writer that predates the
+    sentinels left behind, and it means *unknown*. Widening the value set
+    rather than redefining the field is compatibility rule 1 — a reader that
+    predates the sentinels still parses them as the strings they are.
     """
 
     type: EventType
@@ -220,7 +270,13 @@ class Event:
     #: produced it, kept because Forge has some two hundred trigger modes and
     #: this vocabulary is a closed set of outcomes: mapping every one would be
     #: a table nobody could keep true, and carrying the name loses nothing.
-    #: ``cause`` is the run-parameter key list the hook was called with.
+    #: ``cause`` is the entity or player ref of the object that caused the
+    #: event, or absent where the hook names none. It is kept here as well as
+    #: in ``EVENT_PARAMS`` so a type that has no ``cause`` row may still carry
+    #: one; the two spellings the schema once had — a ref here, a comma-joined
+    #: list of Forge run-parameter *key names* in the collector — could not both
+    #: be true, and the key list was the accident: it was near-constant per
+    #: event type and named no cause at all.
     PROVENANCE_PARAMS: ClassVar[frozenset[str]] = frozenset({"mode", "cause"})
 
     def __post_init__(self) -> None:

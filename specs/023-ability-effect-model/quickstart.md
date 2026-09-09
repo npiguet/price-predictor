@@ -118,7 +118,30 @@ perturbation against; naming none takes no probe at all. Forks are the only expe
 each costs a game copy that re-parses every card from its script — so the per-game budgets are the
 throttle, not the keyword list.
 
-**Checks**:
+**`--probes-per-game` is a budget, not a switch.** Without `--probe-keywords` it buys nothing, and a
+run that omits the keyword list collects a corpus with zero probe forks in it — which is what the
+55,296-record smoke corpus was, with nothing saying so until gate 2 had no engine-side branch to
+compare against. Every collecting command therefore prints its probe state before the first worker
+spawns:
+
+```
+Damage-step probes DISABLED: --probe-keywords is empty, so the --probes-per-game 2 budget buys no fork at all. Pass --probe-keywords <keyword>[,<keyword>...] to take any.
+```
+
+`validate-corpus` reports the probe count as a watched number for the same reason, so a run that
+*meant* to probe is caught in its first minutes rather than at evaluation.
+
+**Checks** — run the first one *while the pass is still young*, not after it:
+
+```bash
+python -m effects validate-corpus --effect-records output/effects/records/ --limit 50000
+```
+
+Every defect the first eight-hour run produced was already visible in its first minute of shards.
+Read the `[WATCH]` lines as well as the verdicts: they carry the probe count, the `zone_change`
+`from_zone` share and the `attributed_to` breakdown, none of which fails a run and all of which say
+whether a channel is wired.
+
 - `output/effects/records/` fills with `{run_id}.{worker}.jsonl.gz` shards.
 - Every record carries the same `mode`, and it is the one the checkout offers: `patched` after the
   engine patch, `degraded` without it, printed by each worker at startup. A run cannot mix the two —
@@ -178,8 +201,8 @@ observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted
 | `--mana-cap` | 1 | Records per unique mana ability **per game**, drawn uniformly from that game's activations rather than taken first — a land's first tap is turn one against an empty board, and taking it would make every mana record describe the same early game. Keyed on the mana produced, so a dual land's colours each record. |
 | `--playability-rate` | 0.1 | Share of decision points sampled. The legality subkinds are coalesced on their rendered payload instead, since the AI re-asks who may block while it evaluates. |
 | `--interventions-per-game` | 2 | Forced resolutions per game. Off unless the flag is given. |
-| `--probes-per-game` | 2 | Damage-step probes per game. |
-| `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means no probe is ever taken, whatever the budget. |
+| `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
+| `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
 
 ## 4. Collect the cards self-play never deals
 

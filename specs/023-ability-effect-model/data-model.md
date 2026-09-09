@@ -17,10 +17,10 @@ The unit of training. One observed game event or decision point.
 
 | Field | Type | Rules |
 |---|---|---|
-| `record_id` | str | `{run_id}.{worker}.{counter}`; unique across the run's shards |
+| `record_id` | str | `{run_id}.{worker}-{lifetime}.{counter}`; unique across the run's shards |
 | `run_id` | str (UUID) | the collecting invocation |
 | `timestamp` | str | ISO 8601 UTC |
-| `game_id` | str | `{run_id}.{worker}.{game counter}`; the join key for a checkpoint's recorded split |
+| `game_id` | str | `{run_id}.{worker}-{lifetime}.{game counter}`; the join key for a checkpoint's recorded split |
 | `kind` | enum | `resolution` \| `rewrite` \| `continuous` \| `combat` \| `trigger` \| `playability` |
 | `moment` | enum? | `resolution` kind only: `activation` \| `resolution` |
 | `subkind` | enum? | `playability` kind only: `decision` \| `attackers` \| `blockers` |
@@ -31,16 +31,19 @@ The unit of training. One observed game event or decision point.
 | `interventional`, `fork`, `synthetic` | bool | collection metadata |
 | `actor_player` | player ref | acting controller; active player for `combat`; the deciding player for `playability` |
 | `ability` | ProvenanceKey[]? | the acting line; the chosen `option` line on modal resolutions; absent for `combat` and `playability` |
+| `ability_unresolved` | str? | collection metadata: why `ability` came back empty on a kind that does name a line — `engine_effect` \| `no_card_state` \| `unknown_kind` \| `unindexable` |
 | `state` | StateSnapshot | pre-event |
 | `payload` | per-kind object | see below |
 
 **Invariants**
 
-- `mode`, `interventional`, `fork`, and `synthetic` are metadata and never reach the model.
+- `mode`, `interventional`, `fork`, `synthetic` and `ability_unresolved` are metadata and never reach
+  the model.
 - A probe record is `kind = combat`, `fork = true`, `interventional = false`.
 - An interventional resolution is `kind = resolution`, `interventional = true`, `fork = true`, no
   `link_id`, and has no activation partner.
-- `record_id` and `game_id` both carry the worker index, because workers count independently.
+- `record_id` and `game_id` carry the worker slot, because workers count independently, and the JVM
+  lifetime, because the pool recycles workers on a timer and each new JVM counts from zero.
 - Records are append-only. Later stages add kinds and snapshot tiers; they never redefine a field.
 
 **State transitions**: none. A record is immutable once written.
@@ -72,6 +75,12 @@ The unit of training. One observed game event or decision point.
 trigger types, bus events, and bracket diffs; the canonical member list and per-type field
 normalization live in `effects/domain/event_schema.py`, guarded by a checked-in completeness test that
 maps every Forge effect API class to a covered type or an explicit exclusion.
+
+`attributed_to` is tri-state: a sub-ability chain index (`"2"`), the sentinel `"root"` where the acting
+line's own clause acted, or the sentinel `"unresolved"` where a clause was sought and the pointer named
+nothing on this chain. `null` is none of the three and means **unknown** — it is what a writer that
+predates the sentinels left behind, and it covered `root` and `unresolved` at once, which made a dead
+attribution channel indistinguishable from a working one.
 
 ### Per-kind payloads
 

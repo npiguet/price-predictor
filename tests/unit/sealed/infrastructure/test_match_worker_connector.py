@@ -217,3 +217,65 @@ class TestMatchWorkerConnectorBestOf:
         connector = MatchWorkerConnector()
         with pytest.raises(ValueError, match="positive odd integer"):
             connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=-3)
+
+
+class TestMatchWorkerConnectorEffectRecords:
+    """``effect_records_dir`` / ``worker_index`` reach the worker, and the
+    per-JVM half of a record id deliberately does not.
+
+    The pool restarts a worker slot hundreds of times per run, so anything this
+    launcher passes is by definition the same for every lifetime of that slot.
+    That is why the shard writer mints its own lifetime token: a token handed
+    down from here would be constant across restarts and would reissue the
+    previous JVM's record and game ids, which is exactly what the first
+    collected corpus did.
+    """
+
+    def _cmd(self, tmp_path, mock_popen, **kwargs):
+        connector = MatchWorkerConnector()
+        mock_popen.return_value = MagicMock()
+        connector.start(
+            tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF, **kwargs
+        )
+        return mock_popen.call_args[0][0]
+
+    def test_records_dir_and_worker_index_passed_as_system_properties(
+        self, tmp_path, stub_classpath
+    ):
+        records = tmp_path / "effects" / "records"
+        with patch("subprocess.Popen") as mock_popen:
+            cmd = self._cmd(
+                tmp_path, mock_popen, effect_records_dir=records, worker_index=3
+            )
+        assert f"-Deffect.records.dir={records}" in cmd
+        assert "-Deffect.worker.index=3" in cmd
+
+    def test_the_lifetime_token_is_never_supplied_by_the_launcher(
+        self, tmp_path, stub_classpath
+    ):
+        # -Deffect.worker.lifetime exists so a test can pin the token. A
+        # launcher setting it would pin one value for every restart of the
+        # slot, which is the defect the token was added to fix.
+        with patch("subprocess.Popen") as mock_popen:
+            cmd = self._cmd(
+                tmp_path,
+                mock_popen,
+                effect_records_dir=tmp_path / "records",
+                worker_index=0,
+            )
+        assert not any(arg.startswith("-Deffect.worker.lifetime") for arg in cmd)
+
+    def test_a_respawned_slot_is_launched_identically(self, tmp_path, stub_classpath):
+        # Two lifetimes of one slot, from the supervisor's point of view. Nothing
+        # here tells them apart, so nothing the worker counts from zero may be
+        # namespaced by what this command line carries.
+        records = tmp_path / "records"
+        with patch("subprocess.Popen") as mock_popen:
+            first = self._cmd(
+                tmp_path, mock_popen, effect_records_dir=records, worker_index=2
+            )
+        with patch("subprocess.Popen") as mock_popen:
+            second = self._cmd(
+                tmp_path, mock_popen, effect_records_dir=records, worker_index=2
+            )
+        assert first == second

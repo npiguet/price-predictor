@@ -74,6 +74,7 @@ join — and the mismatch is the one condition that must fail loudly.
 | A rendered line merged from several runtime traits carries **several** provenance keys | the join is many-to-one, never assumed one-to-one |
 | A trait whose line was deduplicated away maps to **no** line, and its key is listed in `dropped_keys` | expected, not an error. A record naming it is kept, and the record simply has no line to join to — it still supervises through its state and payload |
 | A record names a provenance key that is in neither `lines` nor `dropped_keys` | fail loudly — the sidecar does not describe the card the record was collected against, i.e. a reconversion between collection and training |
+| A record whose `ability` is empty and whose `ability_unresolved` is `engine_effect` | expected, not an error, and **not** a `dropped_keys` case: the acting card is engine-built (The Monarch, The Initiative, dungeons, emblems, speed) and has no script file in any tree, so there is no sidecar to drop from. A sentinel `script_file` would turn that honest answer into a hard join failure, inverting the rule above |
 | An event attributed to a sub-ability link absent from `sub_ability_links` falls back to the **root line** | attribution never drops an event |
 | `script_text` is the stage-four primary encoding surface | every command that encodes reads it here and needs no Forge-cardsfolder path of its own |
 | `role_spans` are character ranges over the **converted prose** | roles are `cost` \| `effect` \| `trigger-condition` \| `target-spec` |
@@ -92,13 +93,46 @@ Keys come from the trait accessors, verified present in Forge 2.0.15-SNAPSHOT
 | `getOriginalHost()` | the card whose state hosts the trait. **For a granted trait this is the recipient, not the donor** — `CardTraitBase.getOriginalHost()` returns `getCardState().getCard()` — so it must not be used to key granted abilities; use the grantor accessors below |
 | `isCopiedTrait()` | copy detection |
 | `getGrantorStatic()` | **`SpellAbility` only**, and does not survive copies |
+| `getTrigger()` | the trigger a wrapped or `Execute$`-SVar ability belongs to |
+| `getReplacementEffect()` | the replacement effect an ability belongs to |
+| `getRootAbility()` | the head of a sub-ability chain |
+| `getOriginalMapParams()` | the structural fingerprint a `copy()` preserves, since `putParam` writes only `mapParams` |
+| `Card.getEffectSourceAbility()` | the ability that created an effect card, which owns its printed line |
 
-Fallback chain, in order:
+Fallback chain, in order. Each step is tried only after the ones above it miss, and the structural
+match refuses to answer when it is ambiguous — **no key beats a wrong key**:
 
-1. **Granted abilities** resolve through the grantor accessors to the donor card's printed line.
-2. **Copied abilities** resolve through the original-ability back-reference (set only for copies).
-3. **Copy-spell effects** (Fork, Reverberate) carry only a copied flag, so they resolve through the
-   stack object's source card.
+1. **Unwrap** a triggered ability's wrapper, then a sub-ability to its root.
+2. **Trigger- and replacement-borne abilities** key to the trait that owns them (`getTrigger()`,
+   `getReplacementEffect()`), not to the `Execute$` SVar ability, which is a member of no trait slice.
+3. **Keyword-derived traits** key to their keyword's ordinal (see below).
+4. **The trait where it stands**, located by identity in its own `CardState` slice.
+5. **The trait where it stands**, located by *structure*: the unique member of the slice with the same
+   class and the same `getOriginalMapParams()`. This is what reaches an alternative-cost or
+   extra-keyword-cost copy, which carries no back-reference at all.
+6. **Granted abilities** resolve through the grantor accessors to the donor card's printed line.
+7. **Copied abilities** resolve through the original-ability back-reference.
+8. **Effect cards** resolve through `Card.getEffectSourceAbility()` to the ability that created them.
+9. Give up, and record *why* in the record's `ability_unresolved`.
+
+Step 4 alone was the whole chain's identity test in stage one, and it fails for every activated ability
+the stack hands back: `MagicStack.add` replaces a non-mana activated ability with a fresh copy before
+pushing it, so identity finds nothing and the key is null. Mana abilities return before that copy,
+which is why land mana abilities keyed and Fountain of Youth did not.
+
+### Keyword ordinals
+
+`index_within_kind` for `trait_kind = keyword` is the position of the keyword's printed text in the
+trait's own `CardState.getIntrinsicKeywords()` **sorted by that text**. Not the position in
+`getKeywords()`: `KeywordCollection` is a `MultimapBuilder.hashKeys()` over the `Keyword` enum, whose
+`hashCode()` is the identity hash, so that order differs between the convert JVM and the collect JVM —
+an ordinal neither side could reproduce. Restricting it to intrinsics also correctly refuses a *granted*
+keyword, which names no printed line on the card that received it.
+
+Both sides compute it from one shared function, `ProvenanceKey.keywordIndex`, the same discipline
+`faceIndex`/`faceOrder` already enforce for faces. The two are coupled: the moment the runtime emits
+`keyword@N`, the sidecars must have been rebuilt by the fixed converter, or every such record trips the
+fail-loudly rule below.
 
 ## Trees
 

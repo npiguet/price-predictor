@@ -1,15 +1,31 @@
 """JSONL shard IO for the effect-record corpus.
 
-One ``{run_id}.{worker}.jsonl`` shard per worker, all read as a directory. One
-shard per worker rather than one shared file because records are far larger than
-a match-outcome row, so cross-process appends would interleave mid-record; and
-line-oriented rather than columnar because the writers are Forge JVMs that are
-expected to crash mid-write, which is exactly what a line format survives.
+One ``{run_id}.{worker}-{lifetime}.jsonl`` shard per worker JVM, all read as a
+directory. One shard per worker rather than one shared file because records are
+far larger than a match-outcome row, so cross-process appends would interleave
+mid-record; and line-oriented rather than columnar because the writers are Forge
+JVMs that are expected to crash mid-write, which is exactly what a line format
+survives.
+
+A shard per JVM *lifetime*, not per worker slot: the supervisor recycles workers
+on a timer, and the ids inside a shard are counters that restart with the JVM.
 
 Serialization lives here; the in-memory shapes are the pure dataclasses in
 ``effects/domain/``. Every conversion is written out rather than reflected from
 the dataclass, because the wire format is a frozen contract and a field renamed
 in Python must not silently rename itself in a corpus that cannot be rebuilt.
+
+**Widening a field's value set is not redefining the field**, and most of what a
+collector fix changes is the former. ``outcome`` gained no new member when the
+writer stopped hardcoding ``resolved``: the enum always held all five and the
+corpus only ever showed one. ``zone_change`` gained no new param when
+``from_zone`` started being written; the key was already in ``EVENT_PARAMS`` and
+always empty. ``attributed_to`` gained two sentinel *values* (``root``,
+``unresolved``) and stayed a nullable string, so a reader that predates them
+parses them as the strings they are. Compatibility rule 1 forbids only the other
+direction — nothing here may change what an existing field *means*, because the
+corpus is append-only and a reinterpreted field silently reinterprets hours of
+records that cannot be recollected.
 """
 
 from __future__ import annotations
@@ -69,7 +85,8 @@ _JSON_SEPARATORS = (",", ":")  # compact, newline-free
 _KNOWN_ENVELOPE_KEYS = frozenset({
     "record_id", "run_id", "timestamp", "game_id", "kind", "moment", "subkind",
     "link_id", "mirror_of", "variant_of", "mode", "interventional", "fork",
-    "synthetic", "actor_player", "ability", "state", "payload",
+    "synthetic", "actor_player", "ability", "ability_unresolved", "state",
+    "payload",
 })
 
 
@@ -513,6 +530,7 @@ def record_to_dict(record: EffectRecord) -> dict:
         "ability": (
             _keys_to_json(record.ability) if record.ability is not None else None
         ),
+        "ability_unresolved": record.ability_unresolved,
         "state": _snapshot_to_json(record.state),
         "payload": _payload_to_json(record.payload),
     }
@@ -547,6 +565,7 @@ def record_from_dict(data: dict) -> EffectRecord:
         fork=data.get("fork", False),
         synthetic=data.get("synthetic", False),
         ability=_keys_from_json(ability) if ability is not None else None,
+        ability_unresolved=data.get("ability_unresolved"),
         extra_fields={
             k: v for k, v in data.items() if k not in _KNOWN_ENVELOPE_KEYS
         },
@@ -569,9 +588,15 @@ def append_record(out: IO[str], record: EffectRecord) -> None:
     out.flush()
 
 
-def shard_path(directory: Path, run_id: str, worker: int) -> Path:
-    """``{run_id}.{worker}.jsonl`` under ``directory``."""
-    return Path(directory) / f"{run_id}.{worker}.jsonl"
+def shard_path(directory: Path, run_id: str, worker: int, lifetime: str) -> Path:
+    """``{run_id}.{worker}-{lifetime}.jsonl`` under ``directory``.
+
+    ``lifetime`` is required rather than defaulted: a caller that does not say
+    which JVM lifetime it is writing would reopen a previous one's shard and
+    reissue ids it already used, which is the defect the segment exists to
+    prevent.
+    """
+    return Path(directory) / f"{run_id}.{worker}-{lifetime}.jsonl"
 
 
 class ShardWriter:
@@ -581,8 +606,10 @@ class ShardWriter:
     leaves at most a trailing partial line, which every reader here skips.
     """
 
-    def __init__(self, directory: Path, run_id: str, worker: int) -> None:
-        self.path = shard_path(directory, run_id, worker)
+    def __init__(
+        self, directory: Path, run_id: str, worker: int, lifetime: str,
+    ) -> None:
+        self.path = shard_path(directory, run_id, worker, lifetime)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._handle: IO[str] | None = None
 

@@ -1043,16 +1043,47 @@ def _add_effect_record_flags(parser: argparse.ArgumentParser) -> None:
         default=EFFECT_PROBES_PER_GAME,
         help=(
             "Damage-step probe forks per game. Default:"
-            f" {EFFECT_PROBES_PER_GAME}."
+            f" {EFFECT_PROBES_PER_GAME}. A budget, not a switch: it buys"
+            " nothing unless --probe-keywords names a keyword."
         ),
     )
     parser.add_argument(
         "--probe-keywords",
-        default="",
+        default=EFFECT_PROBE_KEYWORDS,
         help=(
-            "Comma-separated canary-failing keywords to probe. Empty (the"
-            " default) takes no probe fork at all, whatever the build state."
+            "Comma-separated canary-failing keywords to probe. REQUIRED to get"
+            " any probe at all: empty (the default) takes no fork whatever"
+            " --probes-per-game says. e.g. --probe-keywords"
+            " first_strike,double_strike,deathtouch,lifelink,trample,"
+            "indestructible,wither,infect"
         ),
+    )
+
+
+def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
+    """The startup line a collecting run prints about its probe budget.
+
+    ``--probes-per-game`` reads like the switch and is not: the budget is spent
+    only on keywords ``--probe-keywords`` names, and it names none by default.
+    A run launched without it produces a corpus with zero probe forks in it —
+    the smoke corpus was exactly that, 55,296 records and no probe evidence at
+    all — and nothing said so until gate 2 had nothing to check its model-side
+    perturbation against. So the absence is announced at startup rather than
+    left to a flag table an operator reads once.
+
+    Restated here rather than imported from ``effects``, like the cap defaults
+    above and for the same reason: this package never imports that one.
+    """
+    named = [word.strip() for word in probe_keywords.split(",") if word.strip()]
+    if not named:
+        return (
+            "Damage-step probes DISABLED: --probe-keywords is empty, so the"
+            f" --probes-per-game {probes_per_game} budget buys no fork at all."
+            " Pass --probe-keywords <keyword>[,<keyword>...] to take any."
+        )
+    return (
+        f"Damage-step probes: up to {probes_per_game} per game on"
+        f" {', '.join(named)}"
     )
 
 
@@ -1756,6 +1787,12 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
     effect_records_dir = Path(effect_records) if effect_records else None
     if effect_records_dir is not None:
         print(f"Collecting effect records into {effect_records_dir}")
+        print(
+            announce_probe_state(
+                getattr(args, "probe_keywords", EFFECT_PROBE_KEYWORDS),
+                getattr(args, "probes_per_game", EFFECT_PROBES_PER_GAME),
+            )
+        )
 
     supervisor = MatchOutcomeSupervisor(
         worker_count=args.workers,

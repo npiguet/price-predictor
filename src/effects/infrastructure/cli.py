@@ -38,6 +38,25 @@ DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
 DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
+#: Thresholds `validate-corpus` holds a fresh shard directory to. Set from the
+#: first collected corpus's measurements, so a run reproducing any of its
+#: defects fails rather than squeaking through.
+DEFAULT_MIN_KEYED_RATE = 0.95
+DEFAULT_MAX_DUPLICATE_RATE = 0.02
+DEFAULT_MAX_UNPAIRED_LINK_RATE = 0.02
+DEFAULT_MAX_NAMES_PER_GAME = 120
+DEFAULT_TURN_JUMP_TOLERANCE = 1
+DEFAULT_MIN_COST_EVIDENCE = 200
+DEFAULT_MAX_DUPLICATE_EVENT_RATE = 0.02
+DEFAULT_MAX_TRIGGER_FIRED_SHARE = 0.65
+
+#: The two rates `validate-corpus` measures and does not judge unless asked.
+#: Their healthy value is not yet known — a `zone_change` for a card *made*
+#: rather than moved has no origin to report — so a default floor would fail
+#: every run, which is the failure mode the whole command exists to avoid.
+DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE = None
+DEFAULT_MIN_ATTRIBUTED_RATE = None
+
 #: Caps and budgets, shared by every collecting supervisor (FR-028).
 CAP_DEFAULTS: dict[str, object] = {
     "mana_cap": DEFAULT_MANA_CAP,
@@ -85,14 +104,44 @@ def _add_cap_flags(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--probes-per-game", type=int, default=CAP_DEFAULTS["probes_per_game"],
-        help="Damage-step probe forks per game (default: 2)",
+        help=(
+            "Damage-step probe forks per game (default: 2). A budget, not a "
+            "switch: it buys nothing unless --probe-keywords names a keyword."
+        ),
     )
     parser.add_argument(
         "--probe-keywords", type=str, default=CAP_DEFAULTS["probe_keywords"],
         help=(
-            "Comma-separated canary-failing keywords to probe. Empty (the "
-            "default) takes no probe fork at all, whatever the build state."
+            "Comma-separated canary-failing keywords to probe. REQUIRED to get "
+            "any probe at all: empty (the default) takes no fork whatever "
+            "--probes-per-game says, and the run reports zero probes hours "
+            "later. e.g. --probe-keywords "
+            "first_strike,double_strike,deathtouch,lifelink,trample,"
+            "indestructible,wither,infect"
         ),
+    )
+
+
+def announce_probe_state(probe_keywords: str, probes_per_game: int) -> str:
+    """The startup line every collecting supervisor prints about probes.
+
+    ``--probes-per-game`` reads like the switch and is not: the budget is
+    spent only on keywords ``--probe-keywords`` names, and it names none by
+    default. A run launched without it collects a corpus with zero probe forks
+    in it — the smoke corpus had exactly that, 55,296 records and no probe
+    evidence at all — and nothing said so until gate 2 had nothing to check
+    against. So the absence is announced rather than left to the flag table.
+    """
+    named = [word.strip() for word in probe_keywords.split(",") if word.strip()]
+    if not named:
+        return (
+            "Damage-step probes DISABLED: --probe-keywords is empty, so the "
+            f"--probes-per-game {probes_per_game} budget buys no fork at all. "
+            "Pass --probe-keywords <keyword>[,<keyword>...] to take any."
+        )
+    return (
+        f"Damage-step probes: up to {probes_per_game} per game on "
+        f"{', '.join(named)}"
     )
 
 
@@ -247,6 +296,7 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
     from effects.application.collect_coverage import CollectCoverageConfig
     from effects.application.collect_coverage import run as collect
 
+    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
     config = CollectCoverageConfig(
         effect_records=Path(args.effect_records),
         cards_folders=resolve_cards_folders(args.cards_folders),
@@ -331,6 +381,190 @@ def run_field_coverage(args: argparse.Namespace) -> int:
     return 0
 
 
+# ── validate-corpus ─────────────────────────────────────────────────────
+
+
+def _validate_corpus_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "validate-corpus",
+        help=(
+            "Check a shard directory against the corpus invariants and fail "
+            "loudly on any that a collector is breaking"
+        ),
+    )
+    parser.set_defaults(func=run_validate_corpus)
+    parser.add_argument(
+        "--effect-records", type=str, default=DEFAULT_RECORDS_DIR,
+        help=f"Shard directory to read (default: {DEFAULT_RECORDS_DIR})",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0,
+        help=(
+            "Stop after this many records (default: 0, read everything). The "
+            "point of this command is to run on the first few minutes of a "
+            "pass, and every record id is held in memory while it runs."
+        ),
+    )
+    parser.add_argument(
+        "--min-keyed-rate", type=float, default=DEFAULT_MIN_KEYED_RATE,
+        help=(
+            "Share of records naming a line that must resolve it to a printed "
+            f"key (default: {DEFAULT_MIN_KEYED_RATE})"
+        ),
+    )
+    parser.add_argument(
+        "--max-duplicate-rate", type=float, default=DEFAULT_MAX_DUPLICATE_RATE,
+        help=(
+            "Share of a kind's records that may repeat an earlier record of "
+            f"the same kind in the same game (default: {DEFAULT_MAX_DUPLICATE_RATE})"
+        ),
+    )
+    parser.add_argument(
+        "--max-unpaired-link-rate", type=float,
+        default=DEFAULT_MAX_UNPAIRED_LINK_RATE,
+        help=(
+            "Share of link ids that may lack one activation and one resolution "
+            f"half (default: {DEFAULT_MAX_UNPAIRED_LINK_RATE})"
+        ),
+    )
+    parser.add_argument(
+        "--max-names-per-game", type=int, default=DEFAULT_MAX_NAMES_PER_GAME,
+        help=(
+            "Distinct card names one game_id may show before it is reading as "
+            f"more than one game (default: {DEFAULT_MAX_NAMES_PER_GAME})"
+        ),
+    )
+    parser.add_argument(
+        "--min-cost-evidence", type=int, default=DEFAULT_MIN_COST_EVIDENCE,
+        help=(
+            "Activation records needed before a cost channel reading zero "
+            "means the collector rather than the pool (default: "
+            f"{DEFAULT_MIN_COST_EVIDENCE})"
+        ),
+    )
+    parser.add_argument(
+        "--turn-jump-tolerance", type=int, default=DEFAULT_TURN_JUMP_TOLERANCE,
+        help=(
+            "Turns a snapshot may sit below the highest already seen in its "
+            f"game before that reads as a game boundary (default: "
+            f"{DEFAULT_TURN_JUMP_TOLERANCE}). Deferred mana-reservoir flushes "
+            "are exempt and the report says how many were exempted."
+        ),
+    )
+    parser.add_argument(
+        "--max-duplicate-event-rate", type=float,
+        default=DEFAULT_MAX_DUPLICATE_EVENT_RATE,
+        help=(
+            "Share of events that may repeat another event in the same record "
+            f"(default: {DEFAULT_MAX_DUPLICATE_EVENT_RATE}). Distinct from "
+            "--max-duplicate-rate, which compares whole records and read zero "
+            "on a corpus that duplicated one event in seven"
+        ),
+    )
+    parser.add_argument(
+        "--max-trigger-fired-share", type=float,
+        default=DEFAULT_MAX_TRIGGER_FIRED_SHARE,
+        help=(
+            "Share of trigger records that may report fired=true (default: "
+            f"{DEFAULT_MAX_TRIGGER_FIRED_SHARE}); the negative sampler targets "
+            "~1:1, and the report breaks the ratio down per evaluated mode"
+        ),
+    )
+    parser.add_argument(
+        "--min-zone-change-from-zone-rate", type=float,
+        default=DEFAULT_MIN_ZONE_CHANGE_FROM_ZONE_RATE,
+        help=(
+            "Share of zone_change events that must carry from_zone. Unset by "
+            "default: the rate is measured and reported as [WATCH] without "
+            "failing the run"
+        ),
+    )
+    parser.add_argument(
+        "--min-attributed-rate", type=float,
+        default=DEFAULT_MIN_ATTRIBUTED_RATE,
+        help=(
+            "Share of resolution events that must name a producing clause. "
+            "Unset by default: measured and reported as [WATCH] without "
+            "failing the run"
+        ),
+    )
+    _add_cards_folder(parser)
+
+
+def run_validate_corpus(args: argparse.Namespace) -> int:
+    """Measure every corpus invariant over a window and exit non-zero on any breach.
+
+    Meant for the first few minutes of a collection pass rather than for a
+    finished corpus: the defects it looks for are all present in the first
+    minute of shards, and finding them there costs minutes instead of the eight
+    hours the first run spent producing 14.7M unusable records. Every invariant
+    prints its measurement whether it passed or not, because the number is what
+    tells an operator whether a fix worked or merely moved.
+    """
+    from effects.application.validate_corpus import (
+        Thresholds,
+        read_window,
+        validate_corpus,
+    )
+    from effects.infrastructure.record_io import iter_shards
+
+    root = Path(args.effect_records)
+    shards = iter_shards(root)
+    if not shards:
+        print(f"no shards under {root}")
+        return 1
+
+    thresholds = Thresholds(
+        min_keyed_rate=args.min_keyed_rate,
+        max_duplicate_rate=args.max_duplicate_rate,
+        max_unpaired_link_rate=args.max_unpaired_link_rate,
+        max_names_per_game=args.max_names_per_game,
+        min_cost_evidence=args.min_cost_evidence,
+        turn_jump_tolerance=args.turn_jump_tolerance,
+        max_duplicate_event_rate=args.max_duplicate_event_rate,
+        max_trigger_fired_share=args.max_trigger_fired_share,
+        min_zone_change_from_zone_rate=args.min_zone_change_from_zone_rate,
+        min_attributed_rate=args.min_attributed_rate,
+    )
+    sidecars = _sidecars_for_validation(args)
+    findings = validate_corpus(read_window(root, args.limit), thresholds, sidecars)
+
+    window = f" (first {args.limit} records)" if args.limit else ""
+    print(f"{len(shards)} shards under {root}{window}\n")
+    for finding in findings:
+        for line in finding.lines():
+            print(line)
+    failed = [finding for finding in findings if not finding.ok]
+    watched = sum(1 for finding in findings if finding.watched)
+    judged = len(findings) - watched
+    if failed:
+        print(f"\n{len(failed)} of {judged} judged invariants broken:")
+        for finding in failed:
+            print(f"  {finding.name}")
+        return 1
+    print(f"\nall {judged} judged invariants hold ({watched} watched, not judged)")
+    return 0
+
+
+def _sidecars_for_validation(args: argparse.Namespace):
+    """A ``SidecarCache`` over the converted trees, or None where none exist.
+
+    None rather than an empty cache, because the two say different things in
+    the report: a cache whose every lookup fails reads as a corpus that does
+    not join, when the truth is that this machine has no converted tree to join
+    against. The keyword-join check reports "not checked" for that, and holds
+    only over the trees it could actually read.
+    """
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    roots = {
+        path.name: path
+        for path in resolve_cards_folders(args.cards_folders)
+        if path.is_dir()
+    }
+    return SidecarCache(roots) if roots else None
+
+
 # ── collect-variants ────────────────────────────────────────────────────
 
 
@@ -383,6 +617,7 @@ def run_collect_variants(args: argparse.Namespace) -> int:
     from effects.application.collect_variants import CollectVariantsConfig
     from effects.application.collect_variants import run as collect
 
+    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
     return collect(CollectVariantsConfig(
         effect_records=Path(args.effect_records),
         forge_cards_path=Path(args.forge_cards_path),
@@ -669,6 +904,7 @@ _SUBCOMMAND_BUILDERS = (
     _extract_keyword_definitions_parser,
     _collect_coverage_parser,
     _field_coverage_parser,
+    _validate_corpus_parser,
     _collect_variants_parser,
     _train_effect_model_parser,
     _encode_abilities_parser,

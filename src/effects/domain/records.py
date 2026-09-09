@@ -77,9 +77,21 @@ PARTNERLESS_OUTCOMES: frozenset[ResolutionOutcome] = frozenset({
 #: Envelope fields that describe how a record was collected. They must never
 #: reach the model as inputs (FR-018): a model that can see ``fork`` learns to
 #: predict differently on forks, which is exactly the confound the forks exist
-#: to avoid.
+#: to avoid. ``ability_unresolved`` belongs here for the same reason: it says
+#: why the collector could not name a line, which is a fact about the resolver
+#: and not about the game.
 COLLECTION_METADATA_FIELDS: frozenset[str] = frozenset({
-    "mode", "interventional", "fork", "synthetic",
+    "mode", "interventional", "fork", "synthetic", "ability_unresolved",
+})
+
+#: Why a record that does name an acting line carries no key for it. A closed
+#: vocabulary, because the point of the field is to separate "no printed line
+#: exists" from "the resolver failed": an engine-built card (the Monarch, a
+#: dungeon, an emblem) has no script file in any tree and never will, while
+#: ``unindexable`` is the signature of a resolver bug and must not appear in a
+#: healthy run at all.
+UNRESOLVED_REASONS: frozenset[str] = frozenset({
+    "engine_effect", "no_card_state", "unknown_kind", "unindexable",
 })
 
 #: Kinds where no single line acts, so the envelope carries no ``ability``.
@@ -302,8 +314,10 @@ class EffectRecord:
     """One JSONL line: an observed game event or decision point.
 
     Immutable once written. ``record_id`` and ``game_id`` both carry the worker
-    index because workers count independently, and ``game_id`` is the join key
-    for a checkpoint's recorded split.
+    slot and the JVM lifetime it counted in, because workers count
+    independently and each JVM counts from zero; ``game_id`` is the join key
+    for a checkpoint's recorded split, so a repeated one merges unrelated
+    games.
 
     Three flag signatures distinguish how a record was produced, and the probe's
     ``interventional = False`` is what separates it from an intervention by
@@ -339,6 +353,13 @@ class EffectRecord:
     #: traits. On a modal resolution this is the chosen ``option`` line's key,
     #: not the parent ``spell`` line's (FR-017).
     ability: tuple[ProvenanceKey, ...] | None = None
+    #: Why ``ability`` came back empty on a kind that does name a line, from
+    #: :data:`UNRESOLVED_REASONS`. Set only where there was a line to look for
+    #: and none was found, so an empty ``ability`` alone no longer conflates
+    #: "the Monarch has no printed line anywhere" with "the resolver regressed"
+    #: — the ambiguity that hid a broken resolver for a whole collection run.
+    #: Collection metadata; never a model input.
+    ability_unresolved: str | None = None
     #: Envelope keys a newer writer added that this code does not model, kept
     #: verbatim so reading and rewriting a shard is lossless. This is the
     #: mechanism behind compatibility rule 1: an added field must survive a
@@ -378,6 +399,26 @@ class EffectRecord:
             raise ValueError(
                 f"{self.kind.value} records have no single acting line, so they "
                 "carry no ability"
+            )
+        if self.ability_unresolved is None:
+            return
+        # A reason without a failed lookup is a contradiction, and a reason on
+        # a kind that names no line is a category error — both would make the
+        # field unreadable as the diagnostic it exists to be.
+        if self.kind in KINDS_WITHOUT_ACTING_ABILITY:
+            raise ValueError(
+                f"{self.kind.value} records look for no acting line, so they "
+                f"cannot report ability_unresolved={self.ability_unresolved!r}"
+            )
+        if self.ability:
+            raise ValueError(
+                "a record cannot both name an acting line and say it could not "
+                f"find one (ability_unresolved={self.ability_unresolved!r})"
+            )
+        if self.ability_unresolved not in UNRESOLVED_REASONS:
+            raise ValueError(
+                f"ability_unresolved={self.ability_unresolved!r} is outside the "
+                f"closed vocabulary {sorted(UNRESOLVED_REASONS)}"
             )
 
     def _check_flags(self) -> None:
@@ -422,8 +463,19 @@ class EffectRecord:
 
     @property
     def worker(self) -> str:
-        """The worker index this record's ids were counted by."""
-        return self.record_id.split(".")[-2]
+        """The worker slot this record's ids were counted by."""
+        return self.record_id.split(".")[-2].split("-")[0]
+
+    @property
+    def lifetime(self) -> str:
+        """The worker JVM lifetime the ids were counted in.
+
+        Empty on a shard written before ids carried one. The counters restart
+        at zero in every worker JVM and a collection run is hundreds of JVMs
+        per slot, so this is the segment that makes ``record_id`` and
+        ``game_id`` unique rather than merely per-worker.
+        """
+        return self.record_id.split(".")[-2].partition("-")[2]
 
     def model_input_fields(self) -> dict:
         """The envelope fields the model may see.

@@ -16,6 +16,7 @@ stay green.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import time
 import uuid
@@ -85,7 +86,14 @@ def test_collection_writes_records_under_one_attribution_mode(
 
     shards = iter_shards(records_dir)
     assert shards, "no shard was written"
-    assert shards[0].name.endswith(".0.jsonl.gz"), shards[0].name
+    # {run_id}.{worker}-{lifetime}.jsonl.gz. The lifetime is minted by the
+    # worker JVM, not by the launcher, so it is matched rather than named: it
+    # is what keeps a restarted worker from reissuing the ids of the JVM it
+    # replaced, and one worker run means exactly one of them.
+    assert len(shards) == 1, [shard.name for shard in shards]
+    assert re.fullmatch(r".+\.0-[0-9a-z]{1,16}\.jsonl\.gz", shards[0].name), (
+        shards[0].name
+    )
 
     kinds = {record.kind.value for record in records}
     assert "resolution" in kinds, f"no resolution records; saw {kinds}"
@@ -97,10 +105,16 @@ def test_collection_writes_records_under_one_attribution_mode(
     assert len(modes) == 1, f"a single run reported both modes: {modes}"
     assert modes <= {"degraded", "patched"}, modes
 
-    # Ids carry the worker index and are unique across the shard.
+    # Ids carry the worker slot and the JVM lifetime, and are unique across the
+    # shard. One worker run is one lifetime, so the second half is constant
+    # here — but it has to be there, because it is the only thing that keeps
+    # the next lifetime of slot 0 from counting over these ids again.
     ids = [record.record_id for record in records]
     assert len(ids) == len(set(ids))
     assert all(record.worker == "0" for record in records)
+    lifetimes = {record.lifetime for record in records}
+    assert len(lifetimes) == 1, lifetimes
+    assert lifetimes != {""}, "ids carry no lifetime segment"
 
     # Every record names the game it came from, which is the split's join key.
     assert all(record.game_id for record in records)

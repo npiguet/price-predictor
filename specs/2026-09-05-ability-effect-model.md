@@ -14,7 +14,7 @@ The ability effect model is a pretrained model of what each card ability does in
 
 # Corpus
 
-Location: `output/effects/records/`, shard files named `{run_id}.{worker}.jsonl`, one JSON record per line, append-only. Readers load every `*.jsonl` in the directory and tolerate a trailing partial line.
+Location: `output/effects/records/`, shard files named `{run_id}.{worker}-{lifetime}.jsonl`, one per worker JVM lifetime, one JSON record per line, append-only. Readers load every `*.jsonl` in the directory and tolerate a trailing partial line.
 
 The record schema is fixed before stage one (§ Stages); later stages widen the corpus without invalidating earlier records.
 
@@ -22,8 +22,8 @@ The record schema is fixed before stage one (§ Stages); later stages widen the 
 
 | Field | Contents |
 |---|---|
-| `record_id` | `{run_id}.{worker}.{counter}` — unique across the run's shards |
-| `run_id`, `timestamp`, `game_id` | run UUID, ISO 8601 UTC, and `{run_id}.{worker}.{game counter}`; `record_id` and `game_id` both carry the worker index, since each worker counts independently |
+| `record_id` | `{run_id}.{worker}-{lifetime}.{counter}` — unique across the run's shards |
+| `run_id`, `timestamp`, `game_id` | run UUID, ISO 8601 UTC, and `{run_id}.{worker}-{lifetime}.{game counter}`; both carry the worker slot, since each worker counts independently, and the JVM lifetime, since each worker JVM counts from zero and is replaced hundreds of times per run |
 | `kind` | `resolution` \| `rewrite` \| `continuous` \| `combat` \| `trigger` \| `playability` |
 | `moment` | `resolution` kind only: `activation` (cost half) \| `resolution` (effect half) |
 | `subkind` | `playability` kind only: `decision` \| `attackers` \| `blockers` |
@@ -37,7 +37,7 @@ The record schema is fixed before stage one (§ Stages); later stages widen the 
 | `state` | pre-event state snapshot |
 | `payload` | per-kind object holding the fields below |
 
-`mode`, `interventional`, `fork`, and `synthetic` never reach the model. Probe records (§ Collectors) are combat records with `fork = true` and `interventional = false`. Interventional resolutions are resolution records with both `interventional = true` and `fork = true`, storing the fork's own state.
+`mode`, `interventional`, `fork`, `synthetic`, and `ability_unresolved` (why an acting line could not be keyed) never reach the model. Probe records (§ Collectors) are combat records with `fork = true` and `interventional = false`. Interventional resolutions are resolution records with both `interventional = true` and `fork = true`, storing the fork's own state.
 
 ## State snapshot
 
@@ -127,6 +127,20 @@ All collectors write the one schema. Instrumentation is opt-in per run: `python 
 - **Interventional resolutions.** From stage three, these run Forge's game simulator on a fork with chosen targets/modes: unaffordable candidates go through the play-without-paying-mana path, the ability is located on the copy and verified through the provenance key, and the record stores the fork's state. Force-resolving drains the fork's stack, so fork records attribute by bracket. An intervention writes the effect half only: the forced cast pays no real cost, so no activation record is written and the effect half carries no `link_id`. Every intervention counts against `--interventions-per-game`; within that budget, at most 2 forks (a fixed constant, independent of the flag) target the same real resolution.
 - **Probes.** Stage three, contingent per keyword on the damage-step canary: fork at declare-blockers after blocks lock, strip one keyword from one participant below the layer system (with the keyword-cache refresh), resolve the damage step. Both branches run under an installed seeded random source restored in a `finally`; one concurrent game per JVM while probes are on. The fork branch is recorded as an ordinary combat record with `fork = true`; the real-vs-fork diff is computed only at evaluation time.
 - **Budgets and guards.** Every fork counts against its per-game budget flag. Each fork's copy is score-checked against the live game at creation, before any perturbation (Forge's copy-score guard); a mismatch logs a warning and discards the fork — it still counts against the budget, and no record is written.
+
+## The operating condition: workers are short-lived on purpose
+
+Every collecting supervisor runs its Forge workers under `-Xmx1200m` and kills the longest-running one every status interval (60 s), restarting it immediately. **Neither is a tuning knob.** Forge misbehaves late in a JVM's life — loops that do not terminate, allocation that grows without bound — and the two together are the containment: a small heap turns a runaway worker into an early, cheap death the pool restarts, and the hard recycle bounds the damage of the pathologies that do not allocate. Raising the heap or lengthening the interval hides the pathology rather than containing it, and costs far more than the restarts do. They are one measure, and a proposal to remove either has to explain what contains Forge instead.
+
+The price is paid and accepted: a handful of GC crashes per overnight run, and a crashed worker costs the block of records in flight and nothing else.
+
+**The consequence a reader has to draw from this is about correctness, not throughput.** Restarts are the normal operating condition, not an accident: an eight-hour collection run is roughly 530 JVM lifetimes across six worker slots, and many of them are killed mid-game with `taskkill /F /T`, which runs no JVM shutdown hook. So:
+
+- **Anything a worker counts from zero must be namespaced by the JVM lifetime, not by the worker slot.** The first collected corpus was not: `record_id` and `game_id` were `{run_id}.{worker}.{counter}` over counters living in one JVM's heap, so every restart reissued ids the previous lifetime had already used — 71–75% of record ids were repeats, and 804 `game_id` values covered 31,662 games, which merged unrelated games under the corpus's own join key. The lifetime segment in the id is what fixes that, and any future per-process counter needs the same treatment.
+- **Game boundaries do not coincide with process boundaries.** A game can be cut in half by a kill, and the next lifetime starts mid-nothing. A reader must never infer a game boundary from a file boundary, and a record's game must be readable from the record.
+- **Resume logic must survive a JVM killed mid-game.** A shard ends at its last complete 256-record block, so the last ≤255 records of every lifetime — about 0.5% of a run, always the tail of a game — are simply absent. Any resume that assumes a clean shutdown wrote a marker is wrong.
+- **A validator, not a post-mortem, is what catches this.** `python -m effects validate-corpus` measures these invariants over the first few minutes of a pass, because every defect above was already visible in the first minute of shards and none of them raised anything for eight hours.
+- **A check that cries wolf is worse than no check.** The validator's own game-boundary invariant failed 168 of 177 games on a *healthy* corpus, because mana activations are reservoir-sampled and flushed at game end carrying the snapshot of the turn the mana was made. That is the documented behaviour of the mana collector, not a defect, and an operator who sees it fail every run stops reading the whole checklist. So the case is exempted precisely — a resolution half whose every event is `mana_produced`, and nothing else — and the report says how many records the exemption covered. For the same reason a check with no settled threshold prints `[WATCH]` and cannot fail a run: the number is reported every pass, and it becomes a verdict when an operator passes a floor rather than by guessing one now.
 
 # Synthetic script variants
 
@@ -377,6 +391,22 @@ python -m effects extract-keyword-definitions
 python -m sealed match-outcomes
     [--effect-records DIR]       no default; the instrumentation opt-in
     [cap/budget flags]           § Collection caps and budgets
+
+python -m effects validate-corpus
+    [--effect-records DIR]       default output/effects/records/
+    [--limit N]                  default 0 (all); run it on the first minutes of a pass
+    [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/;
+                                 the sidecars the corpus's provenance keys join against
+    [--min-keyed-rate F]         default 0.95
+    [--max-duplicate-rate F]     default 0.02
+    [--max-unpaired-link-rate F] default 0.02
+    [--max-names-per-game N]     default 120
+    [--min-cost-evidence N]      default 200
+    [--turn-jump-tolerance N]    default 1
+    [--max-duplicate-event-rate F]        default 0.02 (events inside one record)
+    [--max-trigger-fired-share F]         default 0.65
+    [--min-zone-change-from-zone-rate F]  unset; measured and watched, not judged
+    [--min-attributed-rate F]             unset; measured and watched, not judged
 
 python -m effects collect-coverage
     [--effect-records DIR]       default output/effects/records/

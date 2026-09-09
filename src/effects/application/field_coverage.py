@@ -63,9 +63,13 @@ class FieldCoverage:
 #: whether it is unwired or merely unexercised, and only the source says which.
 #: Everything below was confirmed by reading the writer. Fields that are
 #: constant only because one run is one run -- ``mode``, ``run_id``,
-#: ``mirror_of`` without ``--probe-keywords``, ``synthetic`` before stage four
-#: -- are deliberately absent, because listing them would fail the test on the
-#: corpus that does exercise them.
+#: ``mirror_of``, ``probed_keyword`` and ``probed_entity`` without
+#: ``--probe-keywords``, ``synthetic`` before stage four -- are deliberately
+#: absent, because listing them would fail the test on the corpus that does
+#: exercise them. The probe fields have read constant on every corpus collected
+#: so far, and that is a launch flag rather than a dead channel: it is
+#: ``validate-corpus``, reporting the probe count as a watched number in the
+#: first minutes of a pass, that tells the two apart -- not this list.
 #:
 #: The list only shrinks. Implementing one makes the coverage test fail until it
 #: is removed, which is what stops a fixed field from quietly staying on a list
@@ -81,7 +85,26 @@ KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
     # Eight cards in Forge write the name layer from a static, the head has no
     # field for a name, and it is open-vocabulary unlike every other channel.
     "record.payload<ContinuousPayload>.contributions[].name",
+    # ── collected, but the format cannot exercise it ──
+    # An emblem is a planeswalker ultimate's leavings, and a sealed limited pool
+    # essentially never resolves one. The collector reads all four trait lists
+    # off each command-zone emblem card, so this field being constant is
+    # evidence about the format rather than about the wiring — and because the
+    # list is asserted in one direction only, the day a corpus does contain an
+    # emblem the coverage test fails and this entry comes off.
+    "record.state.global_.emblems",
 })
+
+#: Deliberately NOT listed above, and they must not be added: an activation's
+#: ``outcome``, every field of its ``costs``, an event's ``attributed_to``, and
+#: a record's ``ability_unresolved``. All four read as constant in a collected
+#: corpus, and all four are collector defects rather than format scarcity — the
+#: outcome was a hardcoded literal, the cost lists were read off a Cost object
+#: whose parts were never the ones paid, the attribution pointer was set only
+#: for the stack root, and ``ability_unresolved`` was declared and never
+#: written, so an empty ``ability`` still could not say why it was empty.
+#: Listing any of them would have made a broken channel look like a known one,
+#: which is the exact failure this list is shaped to avoid.
 
 
 def field_coverage(records: Iterable[EffectRecord]) -> dict[str, FieldCoverage]:
