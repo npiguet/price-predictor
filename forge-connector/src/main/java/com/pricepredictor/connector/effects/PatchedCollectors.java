@@ -353,6 +353,11 @@ public final class PatchedCollectors implements AutoCloseable {
                 clauseHandler())) {
             installed.add("clause-events");
         }
+        if (PatchHooks.install(
+                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
+                outcomeHandler())) {
+            installed.add("effect-outcome");
+        }
         return installed.size();
     }
 
@@ -373,6 +378,8 @@ public final class PatchedCollectors implements AutoCloseable {
                 PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener");
         PatchHooks.uninstall(
                 PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+        PatchHooks.uninstall(
+                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
         installed.clear();
         // Last, and outside the hook teardown: the question the tally answers
         // is about the run, so it is asked once per game whatever the game did.
@@ -1518,6 +1525,111 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             return null;
         };
+    }
+
+    // ── outcome records (what an effect computed and discarded) ─────────
+
+    /**
+     * The last event {@link #outcomeHandler()} built, whether or not a
+     * bracket was wired to receive it.
+     *
+     * <p>{@link #outcomeHandler()} always forwards to {@link #bracket} the
+     * way {@link #clauseHandler()} does, so this field is not part of the
+     * production path -- it exists only so the argument-order contract can be
+     * pinned by this hook's own test without also standing up a {@code Game}
+     * and a {@code BusBracketCollector} the way {@code ClauseContractTest}
+     * does for the clause hook.
+     */
+    private EffectEvent lastClauseEvent;
+
+    /** The last event {@link #outcomeHandler()} built, for this hook's own test. */
+    EffectEvent lastClauseEvent() {
+        return lastClauseEvent;
+    }
+
+    /**
+     * An effect's own account of what it did.
+     *
+     * <p>Bound by argument position, because {@code PatchHooks} installs a
+     * proxy rather than compiling against the interface: 0 is the ability, 1
+     * the event type, 2 the parameters.
+     *
+     * <p>The event type is a plain string the effect names for itself rather
+     * than an enum this side switches on -- {@code EffectRecordOutcomes}'s own
+     * javadoc explains why: "the caller names the event type, which keeps the
+     * vocabulary in the collector that consumes it". The vocabulary as of this
+     * writing: {@code EffectEvent.COIN_FLIPPED}, {@code EffectEvent.CLASH_RESOLVED},
+     * {@code EffectEvent.VOTE_TAKEN}, {@code EffectEvent.PILES_MADE},
+     * {@code EffectEvent.DUNGEON_VENTURED}, {@code EffectEvent.SPELL_COPIED},
+     * {@code EffectEvent.PERMANENT_COPIED}, {@code EffectEvent.CARD_MADE} and
+     * {@code EffectEvent.RESTRICTION_CHANGE} from an effect directly, plus
+     * {@code EffectEvent.CARD_REVEALED} and {@code EffectEvent.DAMAGE_PREVENTED}
+     * from the two engine choke points in {@code GameAction.reveal} and
+     * {@code ReplacementHandler.runSingleReplaceDamageEffect} -- both of which
+     * report with a null ability, so the bracket attributes them to whatever is
+     * resolving, exactly as it does for a bus event. A future effect can add to
+     * this vocabulary with no change on this side.
+     *
+     * <p>One params entry is not a parameter: {@code "subjects"}, carrying the
+     * raw Card/Player list a restriction-change loop walked (Detain, Goad,
+     * MustBlock), is pulled out and converted to refs on
+     * {@link EffectEvent#subject}, not left as a generic param. The schema's
+     * {@code restriction_change} row normalizes only {@code restriction} and
+     * {@code value} -- a raw {@code subjects} entry left in {@code params}
+     * would fail the per-type allow-list in the Python {@code EventRecord}'s
+     * own construction, which is a different field from the event's top-level
+     * {@code subjects} array this converts it into.
+     *
+     * <p>Package-private rather than private, the same reason
+     * {@code clauseHandler} is: that argument order has no compiler behind it
+     * either, so this hook's own test calls it directly, the way
+     * {@code ClauseContractTest} calls {@code clauseHandler}.
+     */
+    InvocationHandler outcomeHandler() {
+        return (proxy, method, args) -> {
+            if (!"onOutcome".equals(method.getName()) || args == null || args.length < 3) {
+                return null;
+            }
+            if (!(args[1] instanceof String type)) {
+                return null;
+            }
+            EffectEvent event = new EffectEvent(type);
+            if (args[0] instanceof SpellAbility sa && sa.getHostCard() != null) {
+                event.subject(SnapshotBuilder.entityId(sa.getHostCard()));
+            }
+            if (args[2] instanceof Map<?, ?> params) {
+                for (Map.Entry<?, ?> entry : params.entrySet()) {
+                    if ("subjects".equals(entry.getKey())) {
+                        addOutcomeSubjects(event, entry.getValue());
+                        continue;
+                    }
+                    event.param(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            lastClauseEvent = event;
+            if (bracket != null) {
+                bracket.recordClauseEvent(event);
+            }
+            return null;
+        };
+    }
+
+    /**
+     * Converts a raw Card/Player list reported under the {@code "subjects"}
+     * params key into the event's own subject refs -- see
+     * {@link #outcomeHandler()} for why that key is not a generic param.
+     */
+    private static void addOutcomeSubjects(EffectEvent event, Object value) {
+        if (!(value instanceof Iterable<?> subjects)) {
+            return;
+        }
+        for (Object subject : subjects) {
+            if (subject instanceof Card card) {
+                event.subject(SnapshotBuilder.entityId(card));
+            } else if (subject instanceof Player player) {
+                event.subject(SnapshotBuilder.playerId(player));
+            }
+        }
     }
 
     // ── mana records ────────────────────────────────────────────────────

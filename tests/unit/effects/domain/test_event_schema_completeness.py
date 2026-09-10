@@ -444,14 +444,8 @@ _CONNECTOR_EFFECTS = (
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
 KNOWN_UNEMITTED: frozenset[str] = frozenset({
-    "ability_change", "card_made", "card_revealed", "choice_made",
-    "clash_resolved", "coin_flipped", "continuous_effect_created",
-    "damage_healed",
-    "dungeon_ventured",
-    "permanent_copied",
-    "piles_made",
-    "restriction_change", "targets_changed",
-    "vote_taken",
+    "ability_change", "choice_made", "continuous_effect_created",
+    "damage_healed", "targets_changed",
 })
 
 

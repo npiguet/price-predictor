@@ -29,6 +29,7 @@ public final class PatchHooks {
     static final String REPLACEMENT_HANDLER =
             "forge.game.replacement.ReplacementHandler";
     static final String ABILITY_UTILS = "forge.game.ability.AbilityUtils";
+    static final String EFFECT_RECORD_OUTCOMES = "forge.game.ability.EffectRecordOutcomes";
     static final String AI_CONTROLLER = "forge.ai.AiController";
     static final String ABILITY_MANA_PART =
             "forge.game.spellability.AbilityManaPart";
@@ -126,7 +127,10 @@ public final class PatchHooks {
                     "a combat record's assignment_choices"),
             new Hook(PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",
                     "the declined outcome: an optional effect the controller "
-                    + "was offered and turned down"));
+                    + "was offered and turned down"),
+            new Hook(EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener",
+                    "the outcomes an effect computes and discards: a coin's "
+                    + "result, a clash's winner, a vote's tally, a pile's size"));
 
     /** The required hooks this checkout does not have. */
     public static List<Hook> missing() {

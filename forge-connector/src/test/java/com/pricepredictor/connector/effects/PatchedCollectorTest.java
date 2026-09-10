@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -1399,6 +1400,10 @@ class PatchedCollectorTest {
                 "setEffectRecordClauseListener").present()) {
             available++;
         }
+        if (PatchHooks.find(PatchHooks.EFFECT_RECORD_OUTCOMES,
+                "setEffectRecordOutcomeListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
             assertEquals(available, collector.install());
             assertEquals(available, collector.installedHooks().size());
@@ -1711,5 +1716,108 @@ class PatchedCollectorTest {
         assertTrue(blocked.contains("\"type\":\"became_blocked\""), blocked);
         assertTrue(blocked.contains("\"subjects\":[\"" + attackerId + "\"]"), blocked);
         assertTrue(blocked.contains("\"blockers\":[\"" + blockerId + "\"]"), blocked);
+    }
+
+    // ── outcome hook argument order (Task 7) ─────────────────────────────
+
+    /**
+     * Forge's outcome listener, copied argument for argument rather than
+     * imported: the connector compiles against stock Forge, where
+     * {@code EffectRecordOutcomes.EffectRecordOutcomeListener} does not
+     * exist, and a test that imported it would stop this module building on
+     * an unpatched checkout. See {@code ClauseContractTest.ListenerShape} for
+     * the same pattern on the clause hook.
+     */
+    public interface OutcomeListenerShape {
+        void onOutcome(SpellAbility sa, String eventType, Map<String, Object> params);
+    }
+
+    private static Method methodNamed(Class<?> shape, String name) {
+        for (Method method : shape.getMethods()) {
+            if (method.getName().equals(name)) {
+                return method;
+            }
+        }
+        throw new AssertionError(shape + " declares no " + name);
+    }
+
+    /**
+     * The stand-in above is what Forge declares, position by position.
+     *
+     * <p>Reflective, so an unpatched checkout skips the assertion rather than
+     * failing it -- the same degradation every hook lookup makes.
+     */
+    @Test
+    void theOutcomeStandInIsForgesOwnDeclaration() {
+        PatchHooks.Lookup setter = PatchHooks.find(
+                PatchHooks.EFFECT_RECORD_OUTCOMES, "setEffectRecordOutcomeListener");
+        if (!setter.present()) {
+            return;
+        }
+        Class<?> declared = setter.method().getParameterTypes()[0];
+        Class<?>[] theirs = methodNamed(declared, "onOutcome").getParameterTypes();
+        Class<?>[] ours = methodNamed(OutcomeListenerShape.class, "onOutcome").getParameterTypes();
+        assertEquals(ours.length, theirs.length, "onOutcome arity");
+        for (int i = 0; i < theirs.length; i++) {
+            assertEquals(ours[i], theirs[i], "onOutcome argument " + i);
+        }
+    }
+
+    /**
+     * The hook binds by argument position, and no compiler checks that. A
+     * reorder in Forge is invisible to both compilers and must fail here
+     * rather than in a corpus -- which is why this uses a real, distinct
+     * {@link SpellAbility} rather than null for position 0: a null would not
+     * notice a swap between the ability and either of the other two
+     * arguments, only {@link #theOutcomeStandInIsForgesOwnDeclaration} would,
+     * and that test is reflective and skips on an unpatched checkout.
+     */
+    @Test
+    void anOutcomeReportBecomesAnEventOfThatType() throws Throwable {
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "vote_taken", Map.of("tally", Map.of("beast", 2))});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("vote_taken", written.type());
+        assertEquals(Map.of("beast", 2), written.params().get("tally"));
+        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), written.subjects());
+    }
+
+    /**
+     * {@code "subjects"} in the params map is not a generic parameter, even
+     * though Detain/Goad/MustBlock report it as a params entry (see
+     * {@code EffectRecordOutcomes.note} call sites in
+     * {@code GoadEffect}/{@code DetainEffect}/{@code MustBlockEffect}): the
+     * schema's {@code restriction_change} row normalizes only
+     * {@code restriction} and {@code value}, so a raw {@code subjects} entry
+     * left in {@code params} would fail the per-type param allow-list on the
+     * Python side. The handler converts it to the event's own top-level
+     * subject refs instead.
+     */
+    @Test
+    void restrictionChangeSubjectsBecomeEventSubjectsNotAParam() throws Throwable {
+        Card goaded1 = TestCards.build("Sol Ring");
+        Card goaded2 = TestCards.build("Mox Pearl");
+        SpellAbility sa = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{sa, "restriction_change",
+                        Map.of("restriction", "goad", "value", true,
+                                "subjects", List.of(goaded1, goaded2))});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("restriction_change", written.type());
+        assertEquals("goad", written.params().get("restriction"));
+        assertEquals(Boolean.TRUE, written.params().get("value"));
+        assertNull(written.params().get("subjects"), "subjects must not leak into params");
+        assertTrue(written.subjects().containsAll(List.of(
+                SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2))),
+                written.subjects().toString());
     }
 }

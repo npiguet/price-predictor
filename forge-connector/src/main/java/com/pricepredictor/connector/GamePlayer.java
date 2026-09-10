@@ -83,6 +83,33 @@ public class GamePlayer {
     }
 
     /**
+     * The two AI-controlled seats a match registers.
+     *
+     * <p>Both {@link LobbyPlayerAi} instances are built with a null
+     * {@code Set<AIOption>}, which matters beyond style: {@code AiController}
+     * only enters full- or hybrid-simulation mode when an {@code AIOption} is
+     * set, and every effect-record listener installed by
+     * {@code PatchedCollectors} is a plain JVM-wide static with no
+     * {@code Game} reference. If simulation ever ran during collection, the
+     * hooks could not tell a hypothetical resolution — replayed against a
+     * {@code GameCopier} clone purely to evaluate it — from a real one, and
+     * hypothetical events would enter the corpus indistinguishable from real
+     * ones. {@code GamePlayerTest} pins this against what this method
+     * actually builds, not a re-declaration of the constant, because that is
+     * the only thing that would notice a future edit passing an
+     * {@code AIOption} here.
+     *
+     * <p>Package-private so that test can call it directly rather than
+     * playing a match.
+     */
+    static List<RegisteredPlayer> registeredPlayers(Deck deckA, Deck deckB) {
+        return List.of(
+                new RegisteredPlayer(deckA).setPlayer(new LobbyPlayerAi(LOBBY_NAME_A, null)),
+                new RegisteredPlayer(deckB).setPlayer(new LobbyPlayerAi(LOBBY_NAME_B, null))
+        );
+    }
+
+    /**
      * Play a match and return per-game detail plus wall-clock duration in seconds.
      * Games in which {@code game.getOutcome().getWinningLobbyPlayer()} is null (draws
      * or aborted games) are skipped and do not appear in the returned list.
@@ -92,10 +119,7 @@ public class GamePlayer {
      * {@code cards-played.txt}.
      */
     public PlayedMatch playMatch(Deck deckA, Deck deckB) {
-        var players = List.of(
-                new RegisteredPlayer(deckA).setPlayer(new LobbyPlayerAi(LOBBY_NAME_A, null)),
-                new RegisteredPlayer(deckB).setPlayer(new LobbyPlayerAi(LOBBY_NAME_B, null))
-        );
+        var players = registeredPlayers(deckA, deckB);
 
         var rules = new GameRules(GameType.Sealed);
         rules.setGamesPerMatch(gamesPerMatch);

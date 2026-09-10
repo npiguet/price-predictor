@@ -28,6 +28,7 @@ public final class EffectEvent {
     public static final String REGENERATED = "regenerated";
     public static final String PHASED = "phased";
     public static final String TOKEN_CREATED = "token_created";
+    public static final String PERMANENT_COPIED = "permanent_copied";
     public static final String LIFE_CHANGE = "life_change";
     public static final String DAMAGE_DEALT = "damage_dealt";
     public static final String DAMAGE_PREVENTED = "damage_prevented";
@@ -51,6 +52,7 @@ public final class EffectEvent {
     public static final String CARD_DISCARDED = "card_discarded";
     public static final String CARD_MILLED = "card_milled";
     public static final String CARD_LOOKED_AT = "card_looked_at";
+    public static final String CARD_REVEALED = "card_revealed";
     public static final String LIBRARY_REORDERED = "library_reordered";
     public static final String LIBRARY_SHUFFLED = "library_shuffled";
     public static final String MANA_PRODUCED = "mana_produced";
@@ -63,6 +65,10 @@ public final class EffectEvent {
     public static final String BECAME_BLOCKED = "became_blocked";
     public static final String COMBAT_ENDED = "combat_ended";
     public static final String COIN_FLIPPED = "coin_flipped";
+    public static final String CLASH_RESOLVED = "clash_resolved";
+    public static final String VOTE_TAKEN = "vote_taken";
+    public static final String PILES_MADE = "piles_made";
+    public static final String DUNGEON_VENTURED = "dungeon_ventured";
     public static final String DICE_ROLLED = "dice_rolled";
     public static final String DAY_NIGHT_CHANGED = "day_night_changed";
     public static final String PLAYER_WON = "player_won";
