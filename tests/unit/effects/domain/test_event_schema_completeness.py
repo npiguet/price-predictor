@@ -269,8 +269,11 @@ _CONNECTOR_EFFECTS = (
     / "connector" / "effects"
 )
 
-#: Types the writer cannot emit yet. Shrinks as each is wired; a type added
-#: here needs a reason in the same commit.
+#: Types with no reference in the connector's Java source. Distinct from
+#: ``damage_prevented`` and ``spell_copied``, which are referenced but never
+#: fire in corpus data (wired, not yet fired). This set shrinks as each type
+#: is moved from unreferenced to emitted; a type silently added or removed here
+#: fails the test, which is the point.
 KNOWN_UNEMITTED: frozenset[str] = frozenset({
     "ability_change", "card_made", "card_revealed", "choice_made",
     "clash_resolved", "coin_flipped", "continuous_effect_created",
@@ -284,11 +287,19 @@ KNOWN_UNEMITTED: frozenset[str] = frozenset({
 
 
 def _emitted_event_types() -> set[str]:
-    """Every event type some collector actually constructs.
+    """Event types whose constants are referenced in the connector's Java source.
 
-    A constant declared in ``EffectEvent`` and referenced nowhere else is a
-    name, not a channel: ``day_night_changed`` had a constant for months and no
-    code path that built one.
+    This is a textual static scan—it finds ``EffectEvent.CONSTANT_NAME`` in
+    code without distinguishing whether that code is on a live path or dead code.
+    A type may be referenced but never fired: across 10.1M corpus records,
+    ``damage_prevented`` and ``spell_copied`` appear zero times despite being
+    referenced in ``PatchedCollectors.java``. Conversely, a type unreferenced
+    in source (e.g. ``day_night_changed``) is truly unreachable. This test
+    guards against the under-count direction only—the corpus-empirical gap is
+    deeper and cannot be caught by static analysis; ``KNOWN_UNEMITTED`` records
+    both: the 27 types with no reference, and separately documents the 2 that
+    are referenced-but-unfired, reconciling 29 corpus-observed unreachable
+    against 27 statically unreferenced.
     """
     header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
     constants = dict(re.findall(
@@ -308,10 +319,17 @@ def _emitted_event_types() -> set[str]:
 class TestEveryDeclaredTypeIsReachable:
     """The vocabulary and the writer are one contract.
 
-    ``test_every_effect_api_maps_to_an_event`` asserts the *map* is total: every
-    Forge effect API names an event type or an explicit exclusion. It passed
-    while 29 of 60 declared types were unreachable, because a mapping to a type
-    nothing emits is still a mapping. This is the other half.
+    ``test_every_effect_api_is_mapped_or_excluded`` (in ``TestCoverage``) asserts
+    the *map* is total: every Forge effect API names an event type or an explicit
+    exclusion. It passed while 29 of 60 declared types were unreachable in the
+    corpus, because a mapping to a type nothing emits is still a mapping. That
+    test cannot catch the gap; this is the other half. A corpus analysis of 10.1M
+    records found 29 types with zero occurrences—27 of them (in ``KNOWN_UNEMITTED``)
+    are not referenced anywhere in the connector's source code. The other 2
+    (``damage_prevented``, ``spell_copied``) are referenced but never fired, wired
+    but unfired. This test guards the under-count—types truly unreachable—and
+    statically documents the over-count, so no new type can slip into either set
+    without failing the test.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):
