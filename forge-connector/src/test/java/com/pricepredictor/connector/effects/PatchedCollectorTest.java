@@ -10,15 +10,20 @@ import forge.card.RemoveType;
 import forge.card.StateChangedType;
 import forge.card.WordChangedType;
 import forge.StaticData;
+import forge.ai.LobbyPlayerAi;
+import forge.deck.Deck;
 import forge.game.Game;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.Match;
 import forge.game.ability.AbilityFactory;
+import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.card.CounterType;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
+import forge.game.player.RegisteredPlayer;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.AbilitySub;
@@ -2072,7 +2077,35 @@ class PatchedCollectorTest {
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
 
-    // ── final-fix-3.md item 1: a null-ability outcome's own game signal ──
+    // ── final-fix-3.md item 1 / final-fix-4.md item 1: a null-ability ────
+    // ── outcome's own game signal, at the shapes production reaches ──────
+
+    /**
+     * A game whose phase handler is genuinely mid combat-damage step -- the
+     * one production shape a live {@code damage_prevented} reaches with
+     * neither the fork flag nor the resolving-clause pointer set: {@code
+     * Combat.dealAssignedDamage} is a turn-based action, so no resolution
+     * bracket is ever open around it and the pointer never names anything.
+     *
+     * <p>Its own game rather than the shared {@link TestCards#game()}: the
+     * phase is what routes an event into the combat bracket ({@code
+     * BusBracketCollector.isCombatDamage}), and a shared game left mid
+     * combat-damage would route every other test's events there too --
+     * {@code BusBracketCollectorTest.gameInACombatDamageStep} makes the same
+     * choice for the same reason.
+     */
+    private static Game gameInACombatDamageStep() {
+        Deck deck = new Deck();
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("a", null)),
+                new RegisteredPlayer(deck).setPlayer(new LobbyPlayerAi("b", null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Game game = new Game(
+                players, rules, new Match(rules, players, "PatchedCollectorTest"));
+        game.getPhaseHandler().devModeSet(
+                PhaseType.COMBAT_DAMAGE, game.getPlayers().get(0));
+        return game;
+    }
 
     /**
      * The critical regression. {@code GameAction.reveal}'s {@code
@@ -2092,10 +2125,158 @@ class PatchedCollectorTest {
      * asserts on what actually reaches the shard instead, the way {@link
      * #anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} already does for
      * the ability-bearing case.
+     *
+     * <p>final-fix-4.md item 1: replaces the previous version of this test,
+     * which opened a resolution bracket for an ability nothing was actually
+     * resolving -- a synthetic composite ("pointer null" and "bracket open")
+     * production never produces. Real combat damage reaches this method with
+     * <em>no</em> bracket open at all, which is the shape used here.
      */
     @Test
-    void aNullAbilityOutcomeFromTheLiveGameStillReachesTheShard() throws Throwable {
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+    void aNullAbilityOutcomeDuringLiveCombatDamageReachesTheShard() throws Throwable {
+        Game game = gameInACombatDamageStep();
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    game, writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    game, writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+
+                // Flushes the combat bracket the null-ability report above
+                // opened, the way BusBracketCollectorTest
+                // .theCombatThatEndedTheGameIsWritten does for the same reason:
+                // a game ending in combat damage never reaches the ordinary
+                // phase-boundary flush.
+                bracket.finishGame(Set.of());
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("damage_prevented"),
+                "a live combat-damage prevention must still reach the shard: " + shard);
+    }
+
+    /**
+     * final-fix-4.md item 1 (Critical guard gap): pins the resolving-clause
+     * pointer branch directly, which nothing did before this test existed.
+     * {@code return !ForkCollector.isForkRunningOnThisThread();} -- the exact
+     * single-signal version the report built and discarded to demonstrate the
+     * naive-fail-open trap -- passed every test in this class, because no
+     * test ever set the pointer: the combat-damage test above leaves it null
+     * by construction, and the probe test below only ever exercises the flag.
+     * So did dropping the {@link PatchedCollectors#belongsToLiveGame(CardTraitBase)}
+     * delegate and returning {@code true} whenever the pointer is merely
+     * non-null. This resolves a real ability -- through {@code
+     * AbilityUtils.resolve}, not a synthesized call -- so the pointer is
+     * genuinely set the way {@code ForkCollector.forceResolution}'s own
+     * forced ability sets it, and installs a real {@code
+     * EffectRecordClauseListener} (the same reflective seam {@link
+     * PatchedCollectors#install()} itself uses) to fire the null-ability
+     * report from {@code onClauseResolving}, while the pointer names the
+     * fork's own ability.
+     *
+     * <p>The live game's own bracket is opened for an unrelated live ability
+     * around the fork's resolution, purely so the buffered event has
+     * somewhere to flush to -- {@code BusBracketCollector} only ever writes
+     * {@code bracketEvents} on a matching {@code endBracket}, discarding them
+     * unflushed otherwise (confirmed by hand: this test read back an empty
+     * shard under both the correct implementation and the naive one before
+     * this bracket was added, which is not evidence of anything). This
+     * mirrors {@code anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}'s
+     * own live bracket, opened for the same reason. It answers a different
+     * question than which ability the pointer names: the pointer is set (and
+     * read) entirely inside {@code AbilityUtils.resolve(forkAbility)}, which
+     * runs nested inside this bracket but neither reads nor writes it.
+     */
+    @Test
+    void aForksAbilitysNullAbilityOutcomeIsDroppedWhileItIsGenuinelyResolving() throws Throwable {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Card forkHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
+                null, TestCards.nextCardId(), fork);
+        Player forkActor = new Player("fork-actor", fork, 93001);
+        Player forkTarget = new Player("fork-target", fork, 93002);
+        SpellAbility forkAbility = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
+        forkAbility.setActivatingPlayer(forkActor);
+        forkAbility.resetTargets();
+        forkAbility.getTargets().add(forkTarget);
+        SpellAbility flushAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(flushAbility);
+
+                boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
+                        "setEffectRecordClauseListener", (proxy, method, args) -> {
+                            if ("onClauseResolving".equals(method.getName())) {
+                                try {
+                                    collectors.outcomeHandler().invoke(null,
+                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                                } catch (Throwable t) {
+                                    throw new RuntimeException(t);
+                                }
+                            }
+                            return null;
+                        });
+                if (!installed) {
+                    // Reflective, so an unpatched checkout skips the assertion
+                    // rather than failing it -- the same degradation every
+                    // other hook lookup in this suite makes.
+                    return;
+                }
+                try {
+                    AbilityUtils.resolve(forkAbility);
+                } finally {
+                    PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+                }
+                bracket.endBracket(flushAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertFalse(shard.contains("damage_prevented"),
+                "a fork ability's own null-ability outcome, reported while it "
+                        + "is genuinely resolving, must not reach the live shard: " + shard);
+    }
+
+    /**
+     * The admitting half of the same pin: a <em>live</em> ability's own
+     * null-ability outcome, reported while the pointer genuinely names it
+     * (not null, not a fork), must be admitted. Where the fork test above
+     * fires from {@code intervene}'s own phase-boundary timing (no live
+     * resolution in flight), this fires while that same live ability's own
+     * bracket is open -- production's shape for a live reveal or damage
+     * prevention nested inside a live spell's own resolution.
+     */
+    @Test
+    void aLiveAbilitysNullAbilityOutcomeIsAdmittedWhileItIsGenuinelyResolving() throws Throwable {
+        SpellAbility liveAbility = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", TestCards.build("Grizzly Bears"));
+        Player liveActor = new Player("live-actor", TestCards.game(), 93003);
+        Player liveTarget = new Player("live-target", TestCards.game(), 93004);
+        liveAbility.setActivatingPlayer(liveActor);
+        liveAbility.resetTargets();
+        liveAbility.getTargets().add(liveTarget);
+
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try {
@@ -2106,10 +2287,27 @@ class PatchedCollectorTest {
                 collectors.withBracket(bracket);
                 bracket.beginBracket(liveAbility);
 
-                collectors.outcomeHandler().invoke(null,
-                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
-                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
-
+                boolean installed = PatchHooks.install(PatchHooks.ABILITY_UTILS,
+                        "setEffectRecordClauseListener", (proxy, method, args) -> {
+                            if ("onClauseResolving".equals(method.getName())) {
+                                try {
+                                    collectors.outcomeHandler().invoke(null,
+                                            methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                            new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                                } catch (Throwable t) {
+                                    throw new RuntimeException(t);
+                                }
+                            }
+                            return null;
+                        });
+                if (!installed) {
+                    return;
+                }
+                try {
+                    AbilityUtils.resolve(liveAbility);
+                } finally {
+                    PatchHooks.uninstall(PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
+                }
                 bracket.endBracket(liveAbility.getId(), false);
             }
         } finally {
@@ -2118,7 +2316,8 @@ class PatchedCollectorTest {
 
         String shard = String.join("\n", readShard(path));
         assertTrue(shard.contains("damage_prevented"),
-                "a null-ability outcome from the live game must still reach it: " + shard);
+                "a live ability's own null-ability outcome, reported while it "
+                        + "is genuinely resolving, must reach the shard: " + shard);
     }
 
     /**
@@ -2127,17 +2326,16 @@ class PatchedCollectorTest {
      * ForkCollector.probe}'s own combat-damage counterfactual fires this same
      * {@code null}-ability {@code damage_prevented} report -- {@code
      * Combat.dealAssignedDamage} always passes a null cause, live or forked.
-     * Unlike {@code forceResolution} (covered by the resolving-clause pointer,
-     * since a forced ability resolves through the normal path), a probe's
-     * damage step is a turn-based action with no ability resolving and
-     * nothing on the pointer, which is why {@link
-     * ForkCollector#isProbeRunningOnThisThread()} exists. {@link
-     * ForkCollector#runAsProbeForTest} stands in for that call without
-     * needing a real combat to fork.
+     * A probe's damage step is a turn-based action with no ability resolving
+     * and nothing on the resolving-clause pointer, which is why {@link
+     * ForkCollector#isForkRunningOnThisThread()} exists. {@link
+     * ForkCollector#runAsForkForTest} stands in for that call without needing
+     * a real combat to fork. No live bracket is open, matching a probe's own
+     * timing: like {@code intervene}, it does not run nested inside a live
+     * resolution.
      */
     @Test
     void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
-        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
         RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
         Path path = writer.path();
         try {
@@ -2146,9 +2344,8 @@ class PatchedCollectorTest {
             try (PatchedCollectors collectors = new PatchedCollectors(
                     TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
                 collectors.withBracket(bracket);
-                bracket.beginBracket(liveAbility);
 
-                ForkCollector.runAsProbeForTest(() -> {
+                ForkCollector.runAsForkForTest(() -> {
                     try {
                         collectors.outcomeHandler().invoke(null,
                                 methodNamed(OutcomeListenerShape.class, "onOutcome"),
@@ -2161,8 +2358,6 @@ class PatchedCollectorTest {
                 assertNotNull(collectors.lastClauseEvent(),
                         "the event must still be built -- only its delivery to "
                                 + "the live bracket is gated");
-
-                bracket.endBracket(liveAbility.getId(), false);
             }
         } finally {
             writer.close();
