@@ -14,12 +14,16 @@ import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
+import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventSurveil;
+import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
+import forge.game.event.GameEventPlayerRadiation;
+import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSpellAbilityCast;
 import forge.game.event.GameEventSpellResolved;
 import forge.game.event.GameEventTurnPhase;
@@ -400,6 +404,30 @@ public final class BusBracketCollector {
     @Subscribe
     public void onCounters(GameEventCardCounters event) {
         record(BusEvents.counters(event));
+    }
+
+    /** Energy, and any other player counter the vocabulary learns to name. */
+    @Subscribe
+    public void onPlayerCounters(GameEventPlayerCounters event) {
+        EffectEvent counter = BusEvents.playerCounter(event);
+        if (counter != null) {
+            record(counter);
+        }
+    }
+
+    @Subscribe
+    public void onRadiation(GameEventPlayerRadiation event) {
+        record(BusEvents.radiation(event));
+    }
+
+    @Subscribe
+    public void onSpeed(GameEventSpeedChanged event) {
+        record(BusEvents.speed(event));
+    }
+
+    @Subscribe
+    public void onDayTime(GameEventDayTimeChanged event) {
+        record(BusEvents.dayTime(event));
     }
 
     @Subscribe

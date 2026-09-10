@@ -32,6 +32,7 @@ public final class EffectEvent {
     public static final String DAMAGE_DEALT = "damage_dealt";
     public static final String DAMAGE_PREVENTED = "damage_prevented";
     public static final String POISON_CHANGE = "poison_change";
+    public static final String ENERGY_CHANGE = "energy_change";
     public static final String RADIATION_CHANGE = "radiation_change";
     public static final String COUNTER_CHANGE = "counter_change";
     public static final String PT_CHANGE = "pt_change";
@@ -144,6 +145,11 @@ public final class EffectEvent {
 
     public List<String> subjects() {
         return subjects;
+    }
+
+    /** The normalized params a reader can check a specific key of, rather than {@link #toJson()}. */
+    public Map<String, Object> params() {
+        return params;
     }
 
     public String toJson() {

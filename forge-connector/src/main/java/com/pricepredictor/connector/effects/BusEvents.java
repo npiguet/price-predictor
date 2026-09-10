@@ -6,10 +6,14 @@ import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardTapped;
+import forge.game.event.GameEventDayTimeChanged;
+import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
+import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventScry;
+import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
@@ -103,6 +107,60 @@ final class BusEvents {
         return new EffectEvent(EffectEvent.POISON_CHANGE)
                 .subject("P" + event.receiver().getId())
                 .param("delta", event.amount());
+    }
+
+    /**
+     * A player counter, for the one kind the vocabulary names.
+     *
+     * <p>Energy, and only energy: poison has its own bus event and its own
+     * factory, and a counter this has no reading for is skipped rather than
+     * guessed at — an event type invented here is one no reader accepts. A
+     * null type is the bulk reset Forge fires when a player's whole counter
+     * set is replaced at once — {@code Player.clearCounters} and the
+     * {@code Multiset} overload {@code GameCopier} and {@code GameSnapshot}
+     * use to copy a player's counters onto a fresh game both name no single
+     * counter — which is even less of a reading than an unmapped type, so it
+     * is skipped the same way rather than risking a {@code
+     * NullPointerException} on {@code event.type()}.
+     *
+     * <p>The delta is {@code amount - oldValue}, not {@code amount} alone.
+     * Despite its name, {@code GameEventPlayerCounters.amount()} is fired with
+     * the counter's new total rather than the change: {@code
+     * Player.setCounters} computes the real delta as {@code num - old} for the
+     * sibling poison and radiation events two lines below the same fire site,
+     * from the same two values. Reading {@code amount} alone would make a
+     * second Aether Hub tap in the same game record the player's cumulative
+     * energy as if it had all arrived at once.
+     */
+    static EffectEvent playerCounter(GameEventPlayerCounters event) {
+        if (event.type() == null) {
+            return null;
+        }
+        String type = event.type().getName().toUpperCase(Locale.ROOT);
+        if (!"ENERGY".equals(type)) {
+            return null;
+        }
+        return new EffectEvent(EffectEvent.ENERGY_CHANGE)
+                .subject("P" + event.receiver().getId())
+                .param("delta", event.amount() - event.oldValue());
+    }
+
+    static EffectEvent radiation(GameEventPlayerRadiation event) {
+        return new EffectEvent(EffectEvent.RADIATION_CHANGE)
+                .subject("P" + event.receiver().getId())
+                .param("delta", event.change());
+    }
+
+    static EffectEvent speed(GameEventSpeedChanged event) {
+        return new EffectEvent(EffectEvent.SPEED_CHANGED)
+                .subject("P" + event.player().getId())
+                .param("delta", event.newValue() - event.oldValue());
+    }
+
+    /** Day and night are a property of the game, so this event names no subject. */
+    static EffectEvent dayTime(GameEventDayTimeChanged event) {
+        return new EffectEvent(EffectEvent.DAY_NIGHT_CHANGED)
+                .param("to", event.daytime() ? "day" : "night");
     }
 
     static EffectEvent counters(GameEventCardCounters event) {

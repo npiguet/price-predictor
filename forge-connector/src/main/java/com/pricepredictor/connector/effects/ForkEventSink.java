@@ -10,10 +10,14 @@ import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
+import forge.game.event.GameEventDayTimeChanged;
+import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
+import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventScry;
+import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
@@ -126,6 +130,33 @@ final class ForkEventSink {
     @Subscribe
     public void onCounters(GameEventCardCounters event) {
         file(BusEvents.counters(event));
+    }
+
+    /**
+     * Energy, read the same way the bracket collector reads it — see
+     * {@code BusBracketCollector.onPlayerCounters}. Kept in step by {@link
+     * ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}, so this
+     * one cannot drift from that one the way the sink's whole subscription
+     * list once did.
+     */
+    @Subscribe
+    public void onPlayerCounters(GameEventPlayerCounters event) {
+        file(BusEvents.playerCounter(event));
+    }
+
+    @Subscribe
+    public void onRadiation(GameEventPlayerRadiation event) {
+        file(BusEvents.radiation(event));
+    }
+
+    @Subscribe
+    public void onSpeed(GameEventSpeedChanged event) {
+        file(BusEvents.speed(event));
+    }
+
+    @Subscribe
+    public void onDayTime(GameEventDayTimeChanged event) {
+        file(BusEvents.dayTime(event));
     }
 
     @Subscribe
