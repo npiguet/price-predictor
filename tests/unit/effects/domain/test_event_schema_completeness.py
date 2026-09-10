@@ -10,6 +10,7 @@ stops describing it cannot be repaired without recollecting.
 from __future__ import annotations
 
 import ast
+import os
 import re
 from pathlib import Path
 
@@ -36,10 +37,34 @@ from effects.domain.forge_effect_apis import (
     REPLACEMENT_TYPES,
     TRIGGER_TYPES,
 )
+from price_predictor.infrastructure.forge_jvm import forge_dir
 
-_FORGE_GAME = Path(r"C:/Users/nicol/IdeaProjects/forge") / (
-    "forge-game/src/main/java/forge/game"
-)
+
+def _resolve_forge_root(env=None) -> Path:
+    """The sibling Forge checkout this file's drift tests read from (F5).
+
+    Resolved the way scripts/regenerate_forge_api_list.py resolves its own
+    --forge default: the sibling-checkout convention every JVM-launching path
+    in this repo already assumes (forge_jvm.forge_dir, "../forge" relative to
+    this repo), not one machine's home directory. The previous default was an
+    absolute path hardcoded to one contributor's checkout, so on any other
+    machine -- including CI -- the checkout was never "absent", it was just
+    never found, and all six drift tests below skipped and reported green
+    while checking nothing. FORGE_CHECKOUT overrides it for a layout that
+    differs, the same role --forge plays for the regenerate script; unlike
+    that script's other callers, which spawn a JVM and fail loudly on a wrong
+    guess, a wrong guess here only skips silently, so being able to override
+    it explicitly matters more, not less. A blank override (an exported but
+    empty FORGE_CHECKOUT) falls back to the default rather than resolving to
+    the empty path.
+    """
+    if env is None:
+        env = os.environ
+    override = env.get("FORGE_CHECKOUT")
+    return Path(override) if override else forge_dir()
+
+
+_FORGE_GAME = _resolve_forge_root() / "forge-game/src/main/java/forge/game"
 
 # Matches an enum constant of the shape ``Name (SomeClass.class)`` -- the same
 # pattern scripts/regenerate_forge_api_list.py uses to build the checked-in
@@ -71,6 +96,45 @@ def _live_game_events() -> set[str] | None:
     if not event_dir.exists():
         return None
     return {p.stem for p in event_dir.glob("GameEvent*.java") if p.stem != "GameEvent"}
+
+
+class TestForgeCheckoutResolution:
+    """F5: the checkout has to resolve without per-machine configuration --
+    that was the bug -- and still be overridable for a layout that differs.
+
+    Pinned directly against ``_resolve_forge_root`` rather than only through
+    ``_FORGE_GAME`` (computed once at import time): the override is exactly
+    the kind of fallback branch a corpus can pass over quietly, the same
+    "referenced but never runs" shape this whole effort exists to end, one
+    level up inside the fix itself.
+    """
+
+    def test_defaults_to_the_sibling_checkout_convention(self):
+        """The same ../forge every other JVM-launching path in this repo
+        assumes (price_predictor.infrastructure.forge_jvm.forge_dir) --
+        never one machine's home directory."""
+        assert _resolve_forge_root({}) == forge_dir()
+
+    def test_forge_checkout_overrides_the_default(self, tmp_path):
+        override = str(tmp_path / "somewhere-else")
+        assert _resolve_forge_root({"FORGE_CHECKOUT": override}) == Path(override)
+
+    def test_a_blank_override_falls_back_to_the_default(self):
+        """An exported-but-empty FORGE_CHECKOUT must not resolve to Path(''),
+        which is the current directory -- silently swapping in a nonsense
+        checkout is worse than ignoring the blank."""
+        assert _resolve_forge_root({"FORGE_CHECKOUT": ""}) == forge_dir()
+
+    def test_the_present_sibling_checkout_is_actually_found(self):
+        """The concrete regression: a present checkout at the conventional
+        location must resolve, not just compute a plausible-looking path.
+        Skips rather than fails where no sibling checkout exists (CI without
+        one, say) -- this test is about resolution, not about requiring the
+        checkout to exist."""
+        root = _resolve_forge_root({})
+        if not root.exists():
+            pytest.skip("no ../forge checkout beside this one")
+        assert (root / "forge-game" / "src" / "main" / "java" / "forge" / "game").is_dir()
 
 
 class TestTheCheckedInListsMatchForge:
