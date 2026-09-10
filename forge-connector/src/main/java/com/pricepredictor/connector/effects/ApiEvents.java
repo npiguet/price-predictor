@@ -37,18 +37,20 @@ final class ApiEvents {
 
     /** What an emitter needs from before the clause ran, or null when nothing. */
     @FunctionalInterface
-    private interface Memo {
+    interface Memo {
         Object take(SpellAbility sa, Card host);
     }
 
     /** The event, given the clause and whatever its memo captured. */
     @FunctionalInterface
-    private interface Emitter {
+    interface Emitter {
         EffectEvent emit(SpellAbility sa, Card host, Object memo);
     }
 
-    /** @param eventType named in the once-only failure line an emitter's throw prints */
-    private record Rule(String eventType, Memo memo, Emitter emitter) {
+    /**
+     * @param eventType named in the once-only failure line an emitter's throw prints
+     */
+    record Rule(String eventType, Memo memo, Emitter emitter) {
     }
 
     /**
@@ -198,13 +200,47 @@ final class ApiEvents {
                     (sa, host, memo) -> retargeted(sa)))
     );
 
-    /** What the emitter for this clause needs from before it runs, if anything. */
+    /**
+     * What the emitter for this clause needs from before it runs, if anything.
+     *
+     * <p>Contained the way {@link #after} is (final-fix-1.md F3): a memo reads
+     * engine state before the clause has resolved, which can throw on an
+     * edge-case board the same way an emitter can. Left uncontained, the
+     * throw used to propagate out of this call before
+     * {@code PatchedCollectors.clauseHandler()}'s own {@code
+     * clauseMemos.push(...)} ever ran, so the {@code Deque} that hook pairs
+     * pushes and pops through went one push short: the next sibling or
+     * enclosing clause's {@code onClauseResolved} then popped <em>this</em>
+     * clause's absent memo and got someone else's instead, and the clause
+     * that should have received that memo popped an empty deque and got
+     * {@code null} in its place -- one throw, two clauses misattributed.
+     *
+     * <p>Catching here and always returning (a real memo or {@code null})
+     * keeps {@code clauseMemos.push(...)} unconditional: a memo-less API and
+     * a memo that failed both read back as {@code null} to the caller, which
+     * is indistinguishable to the deque and is exactly what keeps it
+     * balanced. The alternative -- skip this push, and have the matching pop
+     * skip too -- was rejected: nothing about the failure is visible at
+     * {@code onClauseResolved} time except by consulting a second piece of
+     * state kept in lockstep with this one, and that second state would
+     * itself have to be pushed unconditionally to stay balanced, which is
+     * this fix again with extra steps.
+     */
     static Object before(SpellAbility sa) {
         Rule rule = ruleFor(sa);
         if (rule == null || rule.memo() == null) {
             return null;
         }
-        return rule.memo().take(sa, sa.getHostCard());
+        try {
+            return rule.memo().take(sa, sa.getHostCard());
+        } catch (RuntimeException e) {
+            // Reported through the same once-per-JVM latch after() uses: a
+            // memo that fails must not look identical to "this mechanic
+            // never happens", the exact failure this whole plan exists to
+            // end.
+            reportEmitterFailure(rule.eventType(), e);
+            return null;
+        }
     }
 
     /** The event this clause promises, or null when its API promises none. */
@@ -276,11 +312,49 @@ final class ApiEvents {
         return keys;
     }
 
+    /**
+     * Test-only override, consulted ahead of {@link #RULES} so this hook's
+     * own test can force one API's {@link Memo} to throw without a Forge
+     * state that genuinely fails.
+     *
+     * <p>No real script is known to make a memo throw: {@code
+     * AbilityUtils.getDefinedPlayers}/{@code getDefinedCards} degrade to an
+     * empty list for every unrecognized {@code Defined$} token this branch's
+     * own review found rather than throwing, so there is no real card to
+     * reach for -- and reaching for one anyway would risk exactly the trap
+     * this branch's own test bar warns against, a test that hand-feeds the
+     * code a state the engine never produces. This mirrors {@code
+     * EffectRecordClauseHookTest}'s {@code ThrowingListener} on the sibling
+     * hook in the forge repo: a deliberately-throwing test double standing
+     * in for a fault the engine could produce, used to prove the container
+     * around it, not to prove anything about the fault itself.
+     *
+     * <p>Keyed by API name, not global, so a test can make one clause of a
+     * multi-clause chain fail while its sibling keeps using the real rule
+     * from {@link #RULES} unmodified -- the shape {@code
+     * nestedClausesDoNotCrossTheirMemos} already established for the
+     * non-throwing case. Empty in production; nothing but
+     * {@code ClauseContractTest} calls the setter below.
+     */
+    private static final Map<String, Rule> RULE_OVERRIDES_FOR_TEST = new java.util.HashMap<>();
+
+    /** Package-private seam for this hook's own test; production code never calls it. */
+    static void setRuleOverrideForTest(String apiName, Rule rule) {
+        RULE_OVERRIDES_FOR_TEST.put(apiName, rule);
+    }
+
+    /** Package-private seam for this hook's own test; production code never calls it. */
+    static void clearRuleOverridesForTest() {
+        RULE_OVERRIDES_FOR_TEST.clear();
+    }
+
     private static Rule ruleFor(SpellAbility sa) {
         if (sa == null || sa.getApi() == null) {
             return null;
         }
-        return RULES.get(sa.getApi().name());
+        String name = sa.getApi().name();
+        Rule override = RULE_OVERRIDES_FOR_TEST.get(name);
+        return override != null ? override : RULES.get(name);
     }
 
     private static int amount(SpellAbility sa, Card host, String key, String fallback) {
