@@ -254,7 +254,19 @@ class WorkerLogFiles:
         return self._directory / f"{self._run_id}.{worker_id}.log"
 
     def get(self, worker_id: int) -> IO[bytes]:
-        """The open handle for ``worker_id``, rotating first past the cap."""
+        """The open handle for ``worker_id``, rotating first past the cap.
+
+        Never raises (final-fix-3.md item 5, widened final-fix-4.md item 6):
+        every filesystem call in here -- the rotation's own ``close()``, the
+        rename, ``mkdir`` and the final ``open`` -- is guarded, because any of
+        them raising uncaught used to propagate out of ``spawn_worker`` into
+        ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``, which
+        respawns immediately with no backoff: a tight respawn/print loop
+        instead of a log that degraded. ``open("ab")`` is at least as likely
+        to fail as the rename on Windows (a directory permission problem, or
+        another process holding the path), so it needed the same guard, not
+        just the rename.
+        """
         path = self.path_for(worker_id)
         handle = self._open.get(worker_id)
         if handle is not None:
@@ -264,13 +276,21 @@ class WorkerLogFiles:
                 too_big = False
             if not too_big:
                 return handle
-            handle.close()
-            # Dropped before the rotation is attempted, not after (final-fix-
+            try:
+                handle.close()
+            except OSError:
+                # Already unusable either way -- close() is documented to
+                # release the underlying resource even when the OS call
+                # itself fails -- so this is not worth degrading over; fall
+                # through to reopen below.
+                pass
+            # Dropped before rotation is attempted, not after (final-fix-
             # 3.md item 5): a handle this method has already closed must
             # never be handed back out of ``_open`` on some later call, which
             # is what a raise between here and the reassignment below used to
-            # risk -- close() succeeding is what makes the handle unusable,
-            # not whether the rename that follows does.
+            # risk -- close() succeeding (or failing; see above) is what
+            # makes the handle unusable, not whether the rename that follows
+            # does.
             del self._open[worker_id]
             try:
                 rotated = path.with_name(path.name + ".1")
@@ -279,18 +299,27 @@ class WorkerLogFiles:
             except OSError as exc:
                 # A logging failure must degrade quietly, never take down
                 # collection (item 5): on Windows especially, a rename can
-                # lose to a concurrent reader with the file still open, and
-                # this uncaught used to propagate out of spawn_worker into
-                # ForgeWorkerPool._monitor_worker's bare `except Exception`,
-                # which respawns immediately with no backoff -- a tight
-                # respawn/print loop instead of a log that just missed one
-                # rotation. Falls through to reopen ``path`` below either
-                # way: rotated or not, it is where this worker's next lines
-                # belong.
+                # lose to a concurrent reader with the file still open. Falls
+                # through to reopen ``path`` below either way: rotated or
+                # not, it is where this worker's next lines belong.
                 print(f"Could not rotate worker log {path}: {exc}")
 
-        self._directory.mkdir(parents=True, exist_ok=True)
-        handle = path.open("ab")
+        try:
+            self._directory.mkdir(parents=True, exist_ok=True)
+            handle = path.open("ab")
+        except OSError as exc:
+            # The directory could not be created, or the file could not be
+            # opened (permissions, another process holding it, a path that
+            # briefly disappeared under a concurrent rotation elsewhere).
+            # Degrading to a destination that always exists and is always
+            # writable -- matching the DEVNULL every worker's stdio wrote to
+            # before F4 gave it a real one -- is what keeps this from taking
+            # the whole worker down; a worker whose log is lost is still a
+            # worker collecting real records, and that is the failure this
+            # class exists to avoid trading away.
+            print(f"Could not open worker log {path}: {exc}; "
+                  f"this worker's log is discarded for this handle")
+            handle = open(os.devnull, "ab")  # noqa: SIM115 - lifetime is _open's
         self._open[worker_id] = handle
         return handle
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -212,7 +213,26 @@ class TestWorkerLogFiles:
         propagate out of ``get`` -- which ``spawn_worker`` calls directly --
         into ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``,
         which retries with no backoff: a tight respawn/print loop instead of
-        a log that just missed one rotation."""
+        a log that just missed one rotation.
+
+        Also covers what used to be a separate test
+        (``test_a_rotation_failure_does_not_leave_a_closed_handle_registered``,
+        folded in here per final-fix-4.md item 7): that test passed against an
+        implementation with the ``try/except`` around the rename but no
+        ``del self._open[worker_id]`` ahead of it, because ``get`` always
+        reassigns ``self._open[worker_id]`` before returning on every path
+        that does not raise -- once the rename itself cannot escape
+        unconditionally, nothing before this method's last two lines can
+        still be watching to notice a missing ``del``. What the ``del`` still
+        guards is a handle leaking out to a call between the failed close and
+        the reassignment, which a single-threaded test cannot observe by
+        calling ``get`` again (a second real rotation could kick in once the
+        writes below push the file back over the cap, returning a third,
+        equally valid handle rather than exposing a stale one). Reading
+        ``logs._open`` directly below -- after the patched block, before any
+        further write -- is what actually pins "not still the closed one",
+        without that confound.
+        """
         logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
         first = logs.get(0)
         first.write(b"0123456789 - more than ten bytes")
@@ -228,31 +248,11 @@ class TestWorkerLogFiles:
             # the oversized file is still the live one, appended to rather
             # than replaced.
             assert not (tmp_path / "run-1.0.log.1").exists()
+            # The registry holds the fresh handle, not a stale reference to
+            # the one this method already closed.
+            assert logs._open[0] is second
             second.write(b"more, past the cap the failed rotation left it at")
             second.flush()  # a closed-handle bug would raise ValueError here
-        finally:
-            logs.close_all()
-
-    def test_a_rotation_failure_does_not_leave_a_closed_handle_registered(
-        self, tmp_path,
-    ):
-        """The other half of the same finding: a handle this class already
-        closed must never be handed back out by a later, unrelated call --
-        which is what leaving it in ``_open`` across the failed rename used
-        to risk."""
-        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
-        first = logs.get(0)
-        first.write(b"0123456789 - more than ten bytes")
-        first.flush()
-
-        with patch("pathlib.Path.rename", side_effect=OSError("boom")):
-            logs.get(0)
-
-        # No patch active now: a plain get() must return the handle opened
-        # inside the patched call, not resurrect the closed one from before it.
-        third = logs.get(0)
-        try:
-            assert third.closed is False
         finally:
             logs.close_all()
 
@@ -263,6 +263,86 @@ class TestWorkerLogFiles:
         first.flush()
 
         with patch("pathlib.Path.rename", side_effect=OSError("boom")):
+            logs.get(0)
+        logs.close_all()
+
+        assert "boom" in capsys.readouterr().out
+
+    def test_a_failed_close_during_rotation_still_degrades_rather_than_raising(
+        self, tmp_path,
+    ):
+        """final-fix-4.md item 6: ``handle.close()`` itself, immediately ahead
+        of the rename, was still unguarded -- only the rename and the stat
+        above it were. A ``close()`` that raises must not stop rotation (or
+        the eventual reopen) from completing.
+
+        ``_io.BufferedWriter`` is a C-level, immutable type -- neither
+        ``patch.object(type(first), "close", ...)`` nor an instance-level
+        patch can override its ``close`` (Python itself raises ``TypeError:
+        cannot set 'close' attribute of immutable type``), so this swaps a
+        thin wrapper into ``logs``'s own registry instead: a legitimate
+        white-box substitution for a real handle whose ``close()`` raises,
+        matching real file semantics (the resource is still released even
+        when the underlying OS call fails) by closing the real handle before
+        raising.
+        """
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
+        first = logs.get(0)
+        first.write(b"0123456789 - more than ten bytes")
+        first.flush()
+
+        class RaisingCloseHandle:
+            def __init__(self, real):
+                self._real = real
+                self.closed = False
+
+            def close(self):
+                self._real.close()
+                self.closed = True
+                raise OSError("boom")
+
+            def write(self, data):
+                return self._real.write(data)
+
+            def flush(self):
+                self._real.flush()
+
+        logs._open[0] = RaisingCloseHandle(first)
+
+        second = logs.get(0)  # must not raise, despite close() raising above
+        try:
+            assert second is not first
+            assert second.closed is False
+            second.write(b"still writable after a close() that raised")
+            second.flush()
+        finally:
+            logs.close_all()
+
+    def test_an_unopenable_log_falls_back_to_a_discarded_destination(
+        self, tmp_path,
+    ):
+        """final-fix-4.md item 6: ``mkdir``/``open`` were unguarded entirely --
+        only the rotation half of ``get`` degraded. ``open("ab")`` is at least
+        as likely to fail as the rename (a permissions problem, another
+        process holding the path), and the worker calling ``get`` must still
+        receive a valid, writable handle rather than an exception that reaches
+        ``ForgeWorkerPool._monitor_worker``'s tight respawn loop -- matching
+        the DEVNULL destination every worker's stdio wrote to before F4 gave
+        it a real one.
+        """
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        with patch.object(Path, "open", side_effect=OSError("boom")):
+            handle = logs.get(0)  # must not raise
+        try:
+            assert handle.closed is False
+            handle.write(b"discarded, but must not raise")
+            handle.flush()
+        finally:
+            logs.close_all()
+
+    def test_an_unopenable_log_is_reported(self, tmp_path, capsys):
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        with patch.object(Path, "open", side_effect=OSError("boom")):
             logs.get(0)
         logs.close_all()
 
