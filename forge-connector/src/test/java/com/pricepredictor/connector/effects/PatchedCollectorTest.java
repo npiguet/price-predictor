@@ -2636,6 +2636,77 @@ class PatchedCollectorTest {
                 "live mana production must reach the shard: " + lines);
     }
 
+    /**
+     * final-fix-4.md item 5: a fork candidate rejected on identity must not
+     * have drawn from the shared {@code sampler} on its way to being
+     * rejected -- checking identity before the {@code caps.playabilityRate()}
+     * draw is what this pins, not just what the diff shows.
+     *
+     * <p>Both collectors share one seed (1) and one {@code playabilityRate}
+     * (0.5). {@code new Random(1L)}'s first two draws are
+     * {@code 0.7309, 0.4101} (measured, not assumed -- printed once from a
+     * throwaway {@code Random(1L)} while writing this test): a solo live
+     * candidate draws only the first (0.7309 &gt; 0.5, sampled out). If the
+     * identity check ran <em>after</em> the draw, the fork candidate ahead of
+     * it would consume that first draw before being dropped on identity, and
+     * the live candidate behind it would draw the second (0.4101 &le; 0.5,
+     * sampled in) -- a live record appearing only because a fork candidate
+     * happened to precede it. Checked first, the fork candidate never reaches
+     * the sampler at all, and the live candidate's own draw -- and therefore
+     * its own outcome -- is identical whether or not the fork one ran ahead
+     * of it.
+     */
+    @Test
+    void aRejectedForkCandidateDoesNotShiftTheLiveSampleStream() throws Throwable {
+        Card liveCard = TestCards.build("Grizzly Bears");
+        SpellAbility liveCandidate = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
+        CollectionCaps halfRate = new CollectionCaps(
+                CollectionCaps.defaults().manaCap(), 0.5,
+                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
+                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(),
+                CollectionCaps.defaults().legalityRate());
+
+        RecordShardWriter soloWriter = new RecordShardWriter(tempDir, "solo", 0, "l1");
+        Path soloPath = soloWriter.path();
+        try (PatchedCollectors solo = new PatchedCollectors(
+                TestCards.game(), soloWriter, "solo.0-l1.0", halfRate, 1L)) {
+            solo.playabilityHandler().invoke(null,
+                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    new Object[]{liveCandidate, true, true, true});
+        } finally {
+            soloWriter.close();
+        }
+        boolean soloAdmitted = readShard(soloPath).stream()
+                .anyMatch(l -> l.contains("\"kind\":\"playability\""));
+
+        Card forkCard = forkHost("Grizzly Bears");
+        SpellAbility forkCandidate = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
+        RecordShardWriter pairedWriter = new RecordShardWriter(tempDir, "paired", 0, "l1");
+        Path pairedPath = pairedWriter.path();
+        try (PatchedCollectors paired = new PatchedCollectors(
+                TestCards.game(), pairedWriter, "paired.0-l1.0", halfRate, 1L)) {
+            paired.playabilityHandler().invoke(null,
+                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    new Object[]{forkCandidate, true, true, true});
+            paired.playabilityHandler().invoke(null,
+                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    new Object[]{liveCandidate, true, true, true});
+        } finally {
+            pairedWriter.close();
+        }
+        List<String> pairedLines = readShard(pairedPath);
+        boolean pairedAdmitted = pairedLines.stream()
+                .anyMatch(l -> l.contains("\"kind\":\"playability\""));
+
+        assertEquals(soloAdmitted, pairedAdmitted,
+                "a rejected fork candidate ahead of it must not change whether the "
+                        + "live candidate behind it is sampled in: solo=" + soloAdmitted
+                        + " paired=" + pairedAdmitted + " lines=" + pairedLines);
+    }
+
+
     private static List<String> readShard(Path path) throws Exception {
         // A collector that never delivered a single record never opens the
         // shard file at all (RecordShardWriter creates it lazily), which the

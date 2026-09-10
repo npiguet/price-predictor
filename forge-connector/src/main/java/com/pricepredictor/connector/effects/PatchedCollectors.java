@@ -925,6 +925,23 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 4) {
                 return null;
             }
+            // final-fix-3.md item 2 / final-fix-4.md item 5: checked before the
+            // sampler draw below, not after -- a fork's own candidates are
+            // evaluated for playability too (ForkCollector.forceResolution's
+            // chooseTargets, and GameSimulator's own AI decisions, both ask the
+            // same AiController this hook is installed on), and letting one
+            // consume from the shared `sampler` before being dropped would
+            // re-randomise the live sample stream for every other subkind that
+            // draws from it (legality, trigger negatives, the mana reservoir) --
+            // exactly the cost triggerFireHandler's own identity check already
+            // avoids by running first. A null candidate is pre-existing,
+            // unrelated behaviour (the record still names no ability) and is
+            // left alone.
+            SpellAbility candidate =
+                    args[0] instanceof SpellAbility sa ? sa : null;
+            if (candidate != null && !belongsToLiveGame(candidate)) {
+                return null;
+            }
             if (sampler.nextDouble() > caps.playabilityRate()) {
                 return null;
             }
@@ -940,17 +957,6 @@ public final class PatchedCollectors implements AutoCloseable {
             List<ProvenanceKey> candidateKeys = List.of();
             StringJoiner legalTargets = new StringJoiner(",", "[", "]");
             String manaCost = null;
-            SpellAbility candidate =
-                    args[0] instanceof SpellAbility sa ? sa : null;
-            // final-fix-3.md item 2: a fork's own candidates are evaluated for
-            // playability too (ForkCollector.forceResolution's chooseTargets,
-            // and GameSimulator's own AI decisions, both ask the same
-            // AiController this hook is installed on). A null candidate is
-            // pre-existing, unrelated behaviour (the record still names no
-            // ability) and is left alone.
-            if (candidate != null && !belongsToLiveGame(candidate)) {
-                return null;
-            }
             if (candidate != null) {
                 candidateKeys = keysOf(candidate);
                 for (String id : legalTargetsOf(candidate)) {
