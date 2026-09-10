@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.ability.AbilityFactory;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -157,6 +159,71 @@ class ClauseContractTest {
 
         String effectHalf = readShard(path).get(1);
         assertFalse(effectHalf.contains("\"type\":\"turn_added\""), effectHalf);
+    }
+
+    // ── the mechanism: nested memos do not cross ─────────────────────────
+
+    /**
+     * Every rule in {@code ApiEvents} passed a null {@code Memo} until the
+     * critical fix that gave {@code AddTurn}/{@code SkipTurn}/{@code
+     * SkipPhase} a real one (the targeted-player list, captured before
+     * resolution): before that, the {@code ThreadLocal<Deque<Object>>} this
+     * handler keeps was only ever exercised on its always-empty path, and a
+     * LIFO-pairing bug in it would first surface in Task 7 — someone else's
+     * task, building the first production rule that genuinely needs one.
+     * Pinned here instead, on the two real rules that supply one now.
+     *
+     * <p>Drives the documented firing order for a two-clause ability --
+     * {@code resolving(root)}, {@code resolving(sub)}, {@code
+     * resolved(sub, false)}, {@code resolved(root, false)} -- with the outer
+     * clause ({@code AddTurn}) targeting one player and the inner
+     * ({@code SkipTurn}) targeting a different one, so a crossed pop would
+     * hand one clause's event the other's memo and produce an assertion
+     * failure rather than an accidental pass.
+     */
+    @Test
+    void nestedClausesDoNotCrossTheirMemos() throws Throwable {
+        SpellAbility outer = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1",
+                TestCards.build("Grizzly Bears"));
+        SpellAbility inner = AbilityFactory.getAbility(
+                "SP$ SkipTurn | ValidTgts$ Player | NumTurns$ 1",
+                TestCards.build("Runeclaw Bear"));
+        Player outerTarget = new Player("outer-target", TestCards.game(), 92001);
+        Player innerTarget = new Player("inner-target", TestCards.game(), 92002);
+        outer.resetTargets();
+        outer.getTargets().add(outerTarget);
+        inner.resetTargets();
+        inner.getTargets().add(innerTarget);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        BusBracketCollector bracket = new BusBracketCollector(
+                TestCards.game(), writer, "run.0-l1.0", PatchedCollectors.CollectionCaps.defaults());
+        try (PatchedCollectors collector = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0",
+                PatchedCollectors.CollectionCaps.defaults(), 1L)) {
+            collector.withBracket(bracket);
+            InvocationHandler handler = collector.clauseHandler();
+            bracket.beginBracket(outer);
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+                    new Object[]{outer});
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolving"),
+                    new Object[]{inner});
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                    new Object[]{inner, false});
+            handler.invoke(null, methodNamed(ListenerShape.class, "onClauseResolved"),
+                    new Object[]{outer, false});
+            bracket.endBracket(outer.getId(), false);
+        } finally {
+            writer.close();
+        }
+
+        String effectHalf = readShard(path).get(1);
+        assertTrue(effectHalf.contains("\"type\":\"turn_added\",\"subjects\":[\""
+                + SnapshotBuilder.playerId(outerTarget) + "\"]"), effectHalf);
+        assertTrue(effectHalf.contains("\"type\":\"turn_skipped\",\"subjects\":[\""
+                + SnapshotBuilder.playerId(innerTarget) + "\"]"), effectHalf);
     }
 
     // ── plumbing ────────────────────────────────────────────────────────

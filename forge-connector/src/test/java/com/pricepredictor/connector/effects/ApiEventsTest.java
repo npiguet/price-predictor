@@ -1,9 +1,13 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.ability.AbilityFactory;
+import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -94,5 +98,128 @@ class ApiEventsTest {
         EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
 
         assertEquals(EffectEvent.OWNERSHIP_CHANGE, event.type());
+    }
+
+    /**
+     * {@code SpellAbilityEffect.getPlayers} ({@code SpellAbilityEffect.java:314})
+     * splits a {@code " & "}-joined {@code Defined}/{@code DefinedPlayer} and
+     * unions each token; a rule that read the raw string as one token would
+     * hand it to {@code AbilityUtils.getDefinedPlayers} unrecognized. No real
+     * {@code GainOwnership} card uses this today, but the fix is exercised
+     * directly rather than left an untested approximation.
+     */
+    @Test
+    void ownershipDefinedPlayerSplitsOnAmpersand() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ GainOwnership | ValidTgts$ Card | DefinedPlayer$ You & You",
+                TestCards.build("Grizzly Bears"));
+        Player activator = new Player("activator", TestCards.game(), 91501);
+        sa.setActivatingPlayer(activator);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(SnapshotBuilder.playerId(activator), event.params().get("owner"));
+    }
+
+    // ── subject is who the effect affects, not who cast it ──────────────
+
+    /**
+     * Eon Frolicker: {@code DB$ AddTurn | ValidTgts$ Opponent | NumTurns$ 1}
+     * -- not reachable through {@link TestCards#scriptedAbility}, the same
+     * way Blinding Angel's {@code SkipPhase} is not (it is a triggered
+     * ability's {@code Execute$}), so built directly. {@code
+     * AddTurnEffect.resolve} iterates {@code getTargetPlayers(sa)}, and
+     * {@code ValidTgts$ Opponent} guarantees the targeted player is never the
+     * activator: this is the engine's own common case, not an edge one.
+     */
+    @Test
+    void anExtraTurnNamesTheTargetedPlayerNotTheActivator() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Opponent | NumTurns$ 1",
+                TestCards.build("Grizzly Bears"));
+        Player activator = new Player("activator", TestCards.game(), 91001);
+        Player targeted = new Player("targeted", TestCards.game(), 91002);
+        sa.setActivatingPlayer(activator);
+        sa.resetTargets();
+        sa.getTargets().add(targeted);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+    }
+
+    /**
+     * {@code getTargetPlayers} returns every target, not one: two players
+     * targeted must read as two subjects, not the first with the second
+     * silently dropped.
+     */
+    @Test
+    void anExtraTurnNamesEveryTargetedPlayerNotJustTheFirst() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1",
+                TestCards.build("Grizzly Bears"));
+        Player first = new Player("first", TestCards.game(), 91101);
+        Player second = new Player("second", TestCards.game(), 91102);
+        sa.resetTargets();
+        sa.getTargets().add(first);
+        sa.getTargets().add(second);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(
+                List.of(SnapshotBuilder.playerId(first), SnapshotBuilder.playerId(second)),
+                event.subjects());
+    }
+
+    /** Same rule shape as {@code AddTurn}; {@code SkipTurnEffect.resolve} matches it. */
+    @Test
+    void aSkippedTurnNamesTheTargetedPlayerNotTheActivator() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ SkipTurn | ValidTgts$ Opponent | NumTurns$ 1",
+                TestCards.build("Grizzly Bears"));
+        Player activator = new Player("activator", TestCards.game(), 91201);
+        Player targeted = new Player("targeted", TestCards.game(), 91202);
+        sa.setActivatingPlayer(activator);
+        sa.resetTargets();
+        sa.getTargets().add(targeted);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+    }
+
+    /** Same rule shape again; {@code SkipPhaseEffect.resolve} matches it too. */
+    @Test
+    void aSkippedPhaseNamesTheTargetedPlayerNotTheActivator() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ SkipPhase | ValidTgts$ Opponent | Phase$ BeginCombat",
+                TestCards.build("Grizzly Bears"));
+        Player activator = new Player("activator", TestCards.game(), 91301);
+        Player targeted = new Player("targeted", TestCards.game(), 91302);
+        sa.setActivatingPlayer(activator);
+        sa.resetTargets();
+        sa.getTargets().add(targeted);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+    }
+
+    /**
+     * {@code AddPhaseEffect.resolve} reads {@code sa.getActivatingPlayer()}
+     * exclusively and has no targeting or {@code Defined$} concept -- unlike
+     * its three siblings above, the activator genuinely is the subject here,
+     * and this pins that the fix was not generalized to a rule that never
+     * needed it.
+     */
+    @Test
+    void anAddedPhaseNamesTheActivator() {
+        SpellAbility sa = TestCards.scriptedAbility("Full Throttle", "AddPhase");
+        Player activator = new Player("activator", TestCards.game(), 91401);
+        sa.setActivatingPlayer(activator);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
     }
 }
