@@ -66,7 +66,6 @@ class EventType(StrEnum):
     TYPE_CHANGE = "type_change"
     COLOR_CHANGE = "color_change"
     TEXT_CHANGE = "text_change"
-    NAME_CHANGE = "name_change"
     ABILITY_CHANGE = "ability_change"
     CONTROL_CHANGE = "control_change"
     OWNERSHIP_CHANGE = "ownership_change"
@@ -83,7 +82,6 @@ class EventType(StrEnum):
     BLOCKERS_DECLARED = "blockers_declared"
     BECAME_BLOCKED = "became_blocked"
     REMOVED_FROM_COMBAT = "removed_from_combat"
-    DAMAGE_ASSIGNMENT_ORDERED = "damage_assignment_ordered"
     COMBAT_ENDED = "combat_ended"
 
     # ── stack and spells ───────────────────────────────────────────────
@@ -97,7 +95,6 @@ class EventType(StrEnum):
     TRIGGER_FIRED = "trigger_fired"
     REPLACEMENT_APPLIED = "replacement_applied"
     CONTINUOUS_EFFECT_CREATED = "continuous_effect_created"
-    COST_ADJUSTED = "cost_adjusted"
 
     # ── turn structure ─────────────────────────────────────────────────
     PHASE_ADDED = "phase_added"
@@ -169,7 +166,6 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     # colors_removed is additive: the head has a colors_lost field and the type
     # carried no way to say a colour went away, so nothing ever reached it.
     EventType.COLOR_CHANGE: ("colors", "colors_removed", "overwrite"),
-    EventType.NAME_CHANGE: ("name",),
     EventType.ABILITY_CHANGE: ("abilities", "removed"),
     EventType.CONTROL_CHANGE: ("controller",),
     EventType.OWNERSHIP_CHANGE: ("owner",),
@@ -181,13 +177,11 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.ATTACKERS_DECLARED: ("defender",),
     EventType.BLOCKERS_DECLARED: ("blocked",),
     EventType.BECAME_BLOCKED: ("blockers",),
-    EventType.DAMAGE_ASSIGNMENT_ORDERED: ("order",),
     EventType.SPELL_CAST: ("without_paying", "from_zone"),
     EventType.SPELL_COPIED: ("count", "new_targets"),
     EventType.TARGETS_CHANGED: ("targets",),
     EventType.X_CHANGED: ("value",),
     EventType.CONTINUOUS_EFFECT_CREATED: ("layers",),
-    EventType.COST_ADJUSTED: ("delta",),
     EventType.PHASE_ADDED: ("phase", "count"),
     EventType.PHASE_SKIPPED: ("phase",),
     EventType.TURN_ADDED: ("count",),
@@ -202,6 +196,23 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.DICE_ROLLED: ("sides", "results"),
     EventType.CLASH_RESOLVED: ("won",),
     EventType.PILES_MADE: ("piles", "chosen"),
+}
+
+
+#: Event types the vocabulary once declared, and where the fact they named is
+#: actually recorded. Retired rather than wired: each would have given one fact
+#: two spellings, and a reader comparing a corpus against the vocabulary would
+#: have read their absence as a collection failure.
+#:
+#: Removing a declared type is safe in exactly one direction: no corpus has ever
+#: contained one, because nothing could emit them.
+SUPERSEDED_EVENT_TYPES: dict[str, str] = {
+    "cost_adjusted":
+        "playability/decision payload, candidates[].cost_after_adjustment",
+    "damage_assignment_ordered":
+        "combat payload, assignment_choices",
+    "name_change":
+        "continuous payload, contributions[].name",
 }
 
 

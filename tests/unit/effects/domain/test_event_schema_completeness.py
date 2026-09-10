@@ -22,6 +22,7 @@ from effects.domain.event_schema import (
     EFFECT_API_EVENTS,
     EVENT_PARAMS,
     EXCLUDED_EFFECT_APIS,
+    SUPERSEDED_EVENT_TYPES,
     Event,
     EventType,
     attribution_kind,
@@ -277,9 +278,9 @@ _CONNECTOR_EFFECTS = (
 KNOWN_UNEMITTED: frozenset[str] = frozenset({
     "ability_change", "card_made", "card_revealed", "choice_made",
     "clash_resolved", "coin_flipped", "continuous_effect_created",
-    "cost_adjusted", "damage_assignment_ordered", "damage_healed",
+    "damage_healed",
     "day_night_changed", "dungeon_ventured",
-    "energy_change", "name_change", "ownership_change", "permanent_copied",
+    "energy_change", "ownership_change", "permanent_copied",
     "phase_added", "phase_skipped", "piles_made", "radiation_change",
     "restriction_change", "speed_changed", "targets_changed",
     "turn_added", "turn_skipped", "vote_taken", "x_changed",
@@ -342,4 +343,33 @@ class TestEveryDeclaredTypeIsReachable:
 
     def test_the_known_list_names_only_declared_types(self):
         assert set(KNOWN_UNEMITTED) <= set(EVENT_PARAMS)
+
+
+class TestSupersededTypes:
+    """A type the record carries under another name is not an event.
+
+    ``cost_adjusted`` is the playability decision's ``cost_after_adjustment``,
+    ``damage_assignment_ordered`` is the combat payload's
+    ``assignment_choices``, and a name change is a continuous effect's ``name``
+    contribution. Emitting them as events would give one fact two spellings and
+    let a reader believe a corpus without them was incomplete.
+    """
+
+    def test_the_superseded_types_are_out_of_the_vocabulary(self):
+        for retired in SUPERSEDED_EVENT_TYPES:
+            assert retired not in EVENT_PARAMS
+
+    def test_each_names_where_the_information_lives(self):
+        assert SUPERSEDED_EVENT_TYPES == {
+            "cost_adjusted":
+                "playability/decision payload, candidates[].cost_after_adjustment",
+            "damage_assignment_ordered":
+                "combat payload, assignment_choices",
+            "name_change":
+                "continuous payload, contributions[].name",
+        }
+
+    def test_no_effect_api_maps_to_a_superseded_type(self):
+        for events in EFFECT_API_EVENTS.values():
+            assert not (set(events) & set(SUPERSEDED_EVENT_TYPES))
 
