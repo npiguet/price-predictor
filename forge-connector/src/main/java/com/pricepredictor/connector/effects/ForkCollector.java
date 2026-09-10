@@ -73,45 +73,65 @@ public final class ForkCollector {
     public static final int TURN_UNKNOWN = -1;
 
     /**
-     * Marks this thread as running a probe's own combat damage, for
-     * {@code PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}
-     * (final-fix-3.md item 1).
+     * Marks this thread as running one of this class's two forks -- an
+     * {@link #intervene interventional resolution} or a {@link #probe
+     * damage-step probe} -- for {@code
+     * PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}
+     * (final-fix-3.md item 1; widened final-fix-4.md item 2).
      *
-     * <p>That check's first signal — the resolving-clause pointer — names the
-     * fork's own ability during {@link #forceResolution}, because a forced
-     * ability resolves through the normal {@code AbilityUtils.resolve} path
-     * and that path sets the pointer. It names nothing during this class's
-     * own {@link #probe}: {@code Combat.dealAssignedDamage} is a turn-based
-     * action, not a resolution — see the comment above the sink in
-     * {@link #probe} — so the pointer reads exactly as it does during the
-     * <em>live</em> game's own combat-damage step: empty. A null-ability
-     * {@code damage_prevented} report from that call (Combat.java always
-     * passes a null cause for combat damage, live or forked) is therefore
-     * ambiguous between "the live game's combat" and "this probe's combat" by
-     * the pointer alone, and this flag is what breaks the tie.
+     * <p>Originally scoped to only {@link #probe}'s own
+     * {@code Combat.dealAssignedDamage} call (final-fix-3.md item 1's first
+     * pass), on the reasoning that the resolving-clause pointer already
+     * covered {@link #intervene}: a forced ability resolves through the
+     * normal {@code AbilityUtils.resolve} path, which sets that pointer to
+     * the fork's own ability. Widened to both methods' <em>entire</em> bodies
+     * (final-fix-4.md item 2) once the re-review priced the gap correctly:
+     * the pointer is null for every segment of a fork outside
+     * {@code AbilityUtils.resolve} itself -- {@link #intervene}'s own
+     * {@code GameCopier}/score-check/{@code findInFork} setup,
+     * {@link #forceResolution}'s pre-push {@code chooseModes}/
+     * {@code chooseTargets}/{@code announceX}, and inside
+     * {@code GameSimulator.resolveStack}, its own
+     * {@code checkStateEffects}/{@code addAllTriggeredAbilitiesToStack} calls
+     * -- and nothing currently reachable from those segments fires a
+     * null-ability outcome only because no emitter happens to sit there
+     * today. A future one would have found the same hole {@link #probe}'s
+     * damage step did: null ability, null pointer, indistinguishable from the
+     * live game's own turn-based actions.
+     *
+     * <p>With the flag now covering everything either method does, "a fork is
+     * running on this thread" is by itself a sufficient answer for every fork
+     * mechanism this class has today, so {@code
+     * nullAbilityOutcomeBelongsToLiveGame} checks it first -- the
+     * resolving-clause pointer is not needed to make this flag correct, only
+     * kept behind it as a second, independent signal (final-fix-4.md item 2
+     * says to keep both) as insurance against a future fork mechanism that
+     * resolves an ability without going through this flag's two entry
+     * points.
      *
      * <p>A saved/restored value rather than a bare set/clear, matching
      * {@code AbilityUtils}' own {@code EFFECT_RECORD_SUB_ABILITY} pattern:
-     * {@link #probe} is not currently reentrant, but restoring the prior
-     * value rather than assuming it was {@code false} costs nothing and does
-     * not depend on that staying true.
+     * neither {@link #intervene} nor {@link #probe} is currently reentrant
+     * (and they are never called nested inside each other), but restoring the
+     * prior value rather than assuming it was {@code false} costs nothing and
+     * does not depend on that staying true.
      */
-    private static final ThreadLocal<Boolean> PROBE_RUNNING =
+    private static final ThreadLocal<Boolean> FORK_RUNNING =
             ThreadLocal.withInitial(() -> Boolean.FALSE);
 
-    /** Whether a {@link #probe} is dealing its own combat damage on this thread. */
-    static boolean isProbeRunningOnThisThread() {
-        return PROBE_RUNNING.get();
+    /** Whether an {@link #intervene} or a {@link #probe} is running on this thread. */
+    static boolean isForkRunningOnThisThread() {
+        return FORK_RUNNING.get();
     }
 
     /** Package-private seam for the null-ability gate's own test; production code never calls it. */
-    static void runAsProbeForTest(Runnable action) {
-        boolean was = PROBE_RUNNING.get();
-        PROBE_RUNNING.set(true);
+    static void runAsForkForTest(Runnable action) {
+        boolean was = FORK_RUNNING.get();
+        FORK_RUNNING.set(true);
         try {
             action.run();
         } finally {
-            PROBE_RUNNING.set(was);
+            FORK_RUNNING.set(was);
         }
     }
 
@@ -267,74 +287,84 @@ public final class ForkCollector {
         if (!mayIntervene(realResolutionId)) {
             return false;
         }
-        // Counted before the score check, so a discarded fork still spends its
-        // budget.
-        interventionsUsed++;
-        forksPerResolution.merge(realResolutionId, 1, Integer::sum);
-
-        GameCopier copier;
-        Game fork;
+        // Flags this thread for the whole of this method (final-fix-4.md item
+        // 2), not just forceResolution's own GameSimulator.resolveStack call --
+        // see FORK_RUNNING's own javadoc for why the narrower scope left a
+        // real, if currently unreachable, hole.
+        boolean wasForkRunning = FORK_RUNNING.get();
+        FORK_RUNNING.set(true);
         try {
-            // Both inside the guard: the copier's own constructor reads the
-            // game, so a game it cannot read fails here rather than at makeCopy.
-            copier = new GameCopier(game);
-            fork = copier.makeCopy();
-        } catch (RuntimeException e) {
-            discarded++;
-            return false;
-        }
-        Player perspective = ability.getActivatingPlayer() != null
-                ? ability.getActivatingPlayer()
-                : game.getPhaseHandler().getPlayerTurn();
-        if (perspective == null || !scoreCheck(fork, perspective)) {
-            discarded++;
-            return false;
-        }
+            // Counted before the score check, so a discarded fork still spends its
+            // budget.
+            interventionsUsed++;
+            forksPerResolution.merge(realResolutionId, 1, Integer::sum);
 
-        SpellAbility forked = findInFork(copier, fork, ability);
-        Player actor = forked == null ? null : mappedPlayer(copier, perspective);
-        if (forked == null || actor == null) {
-            discarded++;
-            return false;
+            GameCopier copier;
+            Game fork;
+            try {
+                // Both inside the guard: the copier's own constructor reads the
+                // game, so a game it cannot read fails here rather than at makeCopy.
+                copier = new GameCopier(game);
+                fork = copier.makeCopy();
+            } catch (RuntimeException e) {
+                discarded++;
+                return false;
+            }
+            Player perspective = ability.getActivatingPlayer() != null
+                    ? ability.getActivatingPlayer()
+                    : game.getPhaseHandler().getPlayerTurn();
+            if (perspective == null || !scoreCheck(fork, perspective)) {
+                discarded++;
+                return false;
+            }
+
+            SpellAbility forked = findInFork(copier, fork, ability);
+            Player actor = forked == null ? null : mappedPlayer(copier, perspective);
+            if (forked == null || actor == null) {
+                discarded++;
+                return false;
+            }
+
+            // The fork's own state, not the live game's, and read *before* the
+            // resolution: the record's state is the board the ability acted on, and
+            // reading it after would hand the model the answer.
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
+            String state = snapshots.toJson(forked, referencedOf(forked));
+
+            List<EffectEvent> events = forceResolution(fork, forked, actor);
+            if (events == null || events.isEmpty()) {
+                // An empty event list is not an observation. "The ability resolved
+                // and did nothing" and "the ability never got to act" render the
+                // same record, and the first corpus could not tell them apart —
+                // 24 of the 88 sampled interventions were empty and every one of
+                // them was a targeted spell that resolved with no target. A
+                // counterfactual nobody can read is worse than one that was never
+                // written, so this drops it and counts it.
+                discarded++;
+                return false;
+            }
+
+            emit(new EffectRecord(
+                    writer.nextRecordId(), writer.runId(),
+                    RecordShardWriter.timestamp(), gameId,
+                    EffectRecord.KIND_RESOLUTION, mode)
+                    .moment(EffectRecord.MOMENT_RESOLUTION)
+                    .interventional(true)
+                    .fork(true)
+                    // No link_id: the effect half is written alone, because there
+                    // was no real activation to pair it with.
+                    .actor(SnapshotBuilder.playerId(perspective))
+                    // The *live* ability's keys, not the fork's. A provenance key
+                    // names a printed line, which the copy shares — but keying off
+                    // the copy would make the record's identity depend on a game
+                    // that no longer exists.
+                    .ability(keysOf(ability))
+                    .state(state)
+                    .payload(EffectRecord.eventsPayload(events)));
+            return true;
+        } finally {
+            FORK_RUNNING.set(wasForkRunning);
         }
-
-        // The fork's own state, not the live game's, and read *before* the
-        // resolution: the record's state is the board the ability acted on, and
-        // reading it after would hand the model the answer.
-        SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
-        String state = snapshots.toJson(forked, referencedOf(forked));
-
-        List<EffectEvent> events = forceResolution(fork, forked, actor);
-        if (events == null || events.isEmpty()) {
-            // An empty event list is not an observation. "The ability resolved
-            // and did nothing" and "the ability never got to act" render the
-            // same record, and the first corpus could not tell them apart —
-            // 24 of the 88 sampled interventions were empty and every one of
-            // them was a targeted spell that resolved with no target. A
-            // counterfactual nobody can read is worse than one that was never
-            // written, so this drops it and counts it.
-            discarded++;
-            return false;
-        }
-
-        emit(new EffectRecord(
-                writer.nextRecordId(), writer.runId(),
-                RecordShardWriter.timestamp(), gameId,
-                EffectRecord.KIND_RESOLUTION, mode)
-                .moment(EffectRecord.MOMENT_RESOLUTION)
-                .interventional(true)
-                .fork(true)
-                // No link_id: the effect half is written alone, because there
-                // was no real activation to pair it with.
-                .actor(SnapshotBuilder.playerId(perspective))
-                // The *live* ability's keys, not the fork's. A provenance key
-                // names a printed line, which the copy shares — but keying off
-                // the copy would make the record's identity depend on a game
-                // that no longer exists.
-                .ability(keysOf(ability))
-                .state(state)
-                .payload(EffectRecord.eventsPayload(events)));
-        return true;
     }
 
     /**
@@ -559,71 +589,70 @@ public final class ForkCollector {
         if (!mayProbe(keyword) || carrier == null) {
             return null;
         }
-        // Counted before the score check, like an intervention: a copy that
-        // systematically fails must not retry until the game ends.
-        probesUsed++;
-
-        GameCopier copier;
-        Game fork;
+        // Flags this thread for the whole of this method (final-fix-4.md item
+        // 2), not just the dealAssignedDamage call -- see FORK_RUNNING's own
+        // javadoc for why the narrower scope left a real, if currently
+        // unreachable, hole.
+        boolean wasForkRunning = FORK_RUNNING.get();
+        FORK_RUNNING.set(true);
         try {
-            copier = new GameCopier(game);
-            fork = copier.makeCopy();
-        } catch (RuntimeException e) {
-            discarded++;
-            return null;
-        }
-        Player perspective = game.getPhaseHandler() == null
-                ? null : game.getPhaseHandler().getPlayerTurn();
-        if (perspective == null || !scoreCheck(fork, perspective)) {
-            discarded++;
-            return null;
-        }
+            // Counted before the score check, like an intervention: a copy that
+            // systematically fails must not retry until the game ends.
+            probesUsed++;
 
-        Card forkCarrier;
-        try {
-            forkCarrier = copier.find(carrier);
-        } catch (RuntimeException e) {
-            forkCarrier = null;
-        }
-        if (forkCarrier == null || fork.getCombat() == null) {
-            discarded++;
-            return null;
-        }
+            GameCopier copier;
+            Game fork;
+            try {
+                copier = new GameCopier(game);
+                fork = copier.makeCopy();
+            } catch (RuntimeException e) {
+                discarded++;
+                return null;
+            }
+            Player perspective = game.getPhaseHandler() == null
+                    ? null : game.getPhaseHandler().getPlayerTurn();
+            if (perspective == null || !scoreCheck(fork, perspective)) {
+                discarded++;
+                return null;
+            }
 
-        // The state is the board as the step began, with the keyword already
-        // gone: that is the input the counterfactual answers for.
-        SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
-        // No root: a damage step is a turn-based action, not a resolution, so
-        // this branch's events attribute the way the observed combat record's
-        // do -- from the resolving-clause pointer alone, which names nothing.
-        ForkEventSink sink = new ForkEventSink(fork, null);
-        fork.subscribeToEvents(sink);
-        String state;
-        CombatShape shape;
-        try {
-            // Through the layer system rather than off the printed list: the
-            // keyword may be printed, equipped or granted until end of turn,
-            // and a removal layer takes it away in all three cases the way the
-            // rules would.
-            forkCarrier.addChangedCardKeywords(
-                    null, List.of(keyword), false,
-                    fork.getNextTimestamp(), null);
-            state = snapshots.toJson(null, List.of());
-            fork.getCombat().removeAbsentCombatants();
-            // Who is blocking whom, before the damage removes any of them; the
-            // assignment only exists after. Gate 2 reads this branch against
-            // the record it mirrors, so both are read the same way.
-            shape = CombatShape.of(fork.getCombat());
-            if (fork.getCombat().assignCombatDamage(firstStrike)) {
-                shape.addAssignment(fork.getCombat(), null);
-                // Flagged for PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()
-                // (final-fix-3.md item 1): dealAssignedDamage's damage_prevented
-                // reports, if any, carry no ability and no resolving-clause
-                // pointer to check identity against -- see PROBE_RUNNING's own
-                // javadoc.
-                boolean wasProbeRunning = PROBE_RUNNING.get();
-                PROBE_RUNNING.set(true);
-                try {
+            Card forkCarrier;
+            try {
+                forkCarrier = copier.find(carrier);
+            } catch (RuntimeException e) {
+                forkCarrier = null;
+            }
+            if (forkCarrier == null || fork.getCombat() == null) {
+                discarded++;
+                return null;
+            }
+
+            // The state is the board as the step began, with the keyword already
+            // gone: that is the input the counterfactual answers for.
+            SnapshotBuilder snapshots = new SnapshotBuilder(fork, snapshotTiers);
+            // No root: a damage step is a turn-based action, not a resolution, so
+            // this branch's events attribute the way the observed combat record's
+            // do -- from the resolving-clause pointer alone, which names nothing.
+            ForkEventSink sink = new ForkEventSink(fork, null);
+            fork.subscribeToEvents(sink);
+            String state;
+            CombatShape shape;
+            try {
+                // Through the layer system rather than off the printed list: the
+                // keyword may be printed, equipped or granted until end of turn,
+                // and a removal layer takes it away in all three cases the way the
+                // rules would.
+                forkCarrier.addChangedCardKeywords(
+                        null, List.of(keyword), false,
+                        fork.getNextTimestamp(), null);
+                state = snapshots.toJson(null, List.of());
+                fork.getCombat().removeAbsentCombatants();
+                // Who is blocking whom, before the damage removes any of them; the
+                // assignment only exists after. Gate 2 reads this branch against
+                // the record it mirrors, so both are read the same way.
+                shape = CombatShape.of(fork.getCombat());
+                if (fork.getCombat().assignCombatDamage(firstStrike)) {
+                    shape.addAssignment(fork.getCombat(), null);
                     fork.getCombat().dealAssignedDamage();
                     // And then let the deaths happen. Damage alone kills nothing;
                     // a creature with lethal damage on it leaves the battlefield
@@ -633,28 +662,28 @@ public final class ForkCollector {
                     // changed nothing". The same call Forge's own simulator makes
                     // after resolving a stack.
                     fork.getAction().checkStateEffects(false, new HashSet<>());
-                } finally {
-                    PROBE_RUNNING.set(wasProbeRunning);
                 }
+            } catch (RuntimeException | StackOverflowError e) {
+                // A stripped keyword reaches combat states ordinary play does not.
+                // Discarding is right; failing the worker is not.
+                discarded++;
+                return null;
             }
-        } catch (RuntimeException | StackOverflowError e) {
-            // A stripped keyword reaches combat states ordinary play does not.
-            // Discarding is right; failing the worker is not.
-            discarded++;
-            return null;
+            return new HeldProbe(
+                    PatchedCollectors.normalizeKeyword(keyword),
+                    SnapshotBuilder.entityId(carrier), state, sink.events(),
+                    SnapshotBuilder.playerId(perspective), shape.fields(),
+                    firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR,
+                    // The *live* game's turn, which is also the fork's: the copier
+                    // carries the counter across (GameCopier hands it to
+                    // devModeSet), and the corpus agrees -- not one of the 1,788
+                    // interventional forks, written the instant they are taken,
+                    // ever named a turn behind the record before it. Read here so
+                    // the branch remembers the step it belongs to.
+                    liveTurn());
+        } finally {
+            FORK_RUNNING.set(wasForkRunning);
         }
-        return new HeldProbe(
-                PatchedCollectors.normalizeKeyword(keyword),
-                SnapshotBuilder.entityId(carrier), state, sink.events(),
-                SnapshotBuilder.playerId(perspective), shape.fields(),
-                firstStrike ? SUBSTEP_FIRST_STRIKE : SUBSTEP_REGULAR,
-                // The *live* game's turn, which is also the fork's: the copier
-                // carries the counter across (GameCopier hands it to
-                // devModeSet), and the corpus agrees -- not one of the 1,788
-                // interventional forks, written the instant they are taken,
-                // ever named a turn behind the record before it. Read here so
-                // the branch remembers the step it belongs to.
-                liveTurn());
     }
 
     /**

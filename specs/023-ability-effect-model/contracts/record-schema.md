@@ -445,23 +445,46 @@ above are covered by one of them:
   attacker/defender) — before ever handing an event to the bracket or the writer. `GameCopier` builds
   every copied `Card` against a new `Game` object, so a fork's card carries a different `Game` than the
   live one by construction, and each check compares the two by reference and drops anything that does not
-  match. An argument shaped unexpectedly (the wrong type, or missing a host) is left alone rather than
-  dropped: none of the eight listeners' real callers ever hand over that shape, so treating it as
-  unidentifiable-but-live costs nothing today and avoids a second class of silent loss for a state that
-  should not occur.
+  match. What happens when an argument cannot be identified splits along the two overloads, not evenly
+  across all eight listeners (final-fix-4.md item 4 corrects this section, which previously said the
+  opposite): for the six handlers keyed on `CardTraitBase.getHostCard()`, an argument of the *wrong type*
+  (not a `SpellAbility`/`ReplacementEffect`/`Trigger` at all) is left alone, but a `CardTraitBase` of the
+  right type with *no host card* is dropped — `belongsToLiveGame` returns `false` for a null host exactly
+  as it does for a different game, and the surrounding `instanceof` pattern only lets the wrong-type case
+  through uncompared. `combatLegalityHandler`'s `GameEntity` overload has no equivalent right-type-but-
+  unidentifiable case at all — every real `Card`/`Player` carries a `Game` — so it fails open only on the
+  wrong type. None of the eight listeners' real callers ever hand over either unidentifiable shape, so
+  which direction each one degrades in costs nothing today; it is documented here because the direction
+  itself, not just its unreachability, must be stated correctly.
 - **A null ability, resolved another way**: `outcomeHandler()`'s two production null-ability sources
   (`GameAction.reveal`'s `card_revealed`, ruling R10; `ReplacementHandler
   .runSingleReplaceDamageEffect`'s two `damage_prevented` sites, rulings R11/R12) report with no
   `SpellAbility` at all, on the live game exactly as on a fork, so the argument-identity check above has
   nothing to compare. Simply admitting every null-ability outcome would readmit exactly what the checks
-  above exist to keep out: `ForkCollector.forceResolution`'s forced ability can itself reveal or prevent
-  damage with a null ability, and `ForkCollector.probe`'s damage step always does (`Combat`'s own cause is
-  null for combat damage, live or forked). Two signals, tried in order: the resolving-clause pointer
-  (`AbilityUtils.getEffectRecordSubAbility`) names the fork's own ability during `forceResolution`, because
-  a forced ability resolves through the normal resolution path that sets it; it names nothing during
-  `probe`'s damage step, a turn-based action nested inside no resolution, so `ForkCollector
-  .isProbeRunningOnThisThread()` — a thread flag `probe` itself sets around that one call — is what the
-  live game's own combat-damage step and a probe's are told apart by when the pointer has nothing to say.
+  above exist to keep out: `ForkCollector.intervene`'s forced ability can itself reveal or prevent damage
+  with a null ability, and `ForkCollector.probe`'s damage step always does (`Combat`'s own cause is null
+  for combat damage, live or forked). Two signals, tried in this order (reversed from final-fix-3.md's
+  first pass — final-fix-4.md item 2):
+  1. `ForkCollector.isForkRunningOnThisThread()` — a thread flag set around the *entirety* of both
+     `intervene` and `probe`, not only `probe`'s own damage-dealing call as first shipped. The narrower
+     scope left every segment of a fork outside `AbilityUtils.resolve` uncovered — `intervene`'s own
+     `GameCopier`/score-check setup, `forceResolution`'s pre-push `chooseModes`/`chooseTargets`/
+     `announceX`, and `GameSimulator.resolveStack`'s own `checkStateEffects`/
+     `addAllTriggeredAbilitiesToStack` — latent only because no null-ability emitter happened to sit in any
+     of them yet. Checked first because, widened this way, it is by itself sufficient for every fork
+     mechanism this class has today.
+  2. The resolving-clause pointer (`AbilityUtils.getEffectRecordSubAbility`), when the flag is false. Kept
+     as a second, independent signal rather than removed — insurance against a future fork mechanism that
+     resolves an ability without going through `intervene`/`probe` — not because the flag needs it: it
+     names the fork's own ability during `intervene`'s forced resolution (a forced ability resolves through
+     the normal resolution path, which sets it) but names nothing during `probe`'s damage step, a
+     turn-based action nested inside no resolution, so it cannot by itself tell a probe's combat damage
+     from the live game's own.
+
+  A `"source"` Card carried by `damage_prevented`'s own params (raw, before `outcomeRefOf` converts it) was
+  considered as a third, narrower signal and not added: with the flag now covering both fork mechanisms
+  wholesale, there is no remaining gap it would close, and it could not cover `card_revealed` at all (that
+  type's params carry no card).
 
 Without these checks, a default-configuration collection run would mix a fork's hypothetical `vote_taken`
 or `coin_flipped` into the real game's records, or a probe's hypothetical `damage_prevented` into it —

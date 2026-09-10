@@ -1619,7 +1619,7 @@ public final class PatchedCollectors implements AutoCloseable {
 
     /**
      * Whether a null-ability outcome belongs to the live game (final-fix-3.md
-     * item 1).
+     * item 1; widened final-fix-4.md item 2).
      *
      * <p>{@link #outcomeHandler()}'s two production null-ability sources --
      * {@code GameAction.reveal}'s six-argument funnel (ruling R10) and
@@ -1629,55 +1629,59 @@ public final class PatchedCollectors implements AutoCloseable {
      * always, on the live game exactly as on a fork: {@link
      * #belongsToLiveGame(CardTraitBase)} has nothing to compare, and simply
      * keeping every null-ability outcome would readmit exactly what that
-     * method exists to keep out, since a fork reaches this same {@code null}
-     * two ways (see below). Two signals, tried in order, because the first
-     * does not hold on every path:
+     * method exists to keep out.
+     *
+     * <p>Two signals, checked in this order:
      *
      * <ol>
+     *   <li>{@link ForkCollector#isForkRunningOnThisThread()}. Set around the
+     *   whole of {@code ForkCollector.intervene} and {@code
+     *   ForkCollector.probe} -- both this class's only two fork mechanisms --
+     *   so "a fork is running on this thread" is by construction true for
+     *   every null-ability outcome a fork can produce today, whichever of the
+     *   two produces it and whichever segment of either it fires from. Tried
+     *   first because, unlike the pointer below, it does not depend on the
+     *   call happening to be nested inside an ability resolution.
      *   <li>The resolving-clause pointer ({@code
      *   AbilityUtils.getEffectRecordSubAbility}, read via {@link
-     *   PatchHooks#currentSubAbility()}). Every ability resolves through
-     *   {@code AbilityUtils.resolve}/{@code resolveApiAbility}, live or
-     *   forked alike, and both set this pointer to the ability currently
-     *   resolving before running its body -- including {@code
-     *   ForkCollector.forceResolution}, which places its ability directly on
-     *   the fork's stack and lets {@code GameSimulator.resolveStack} (in turn
-     *   {@code MagicStack.resolveStack}) run it through that same path. So
-     *   when a forced reveal or a forced ability's damage prevention fires
-     *   {@code note(null, ...)}, the pointer names the <em>fork's</em>
-     *   ability, and delegating to {@link #belongsToLiveGame(CardTraitBase)}
-     *   rejects it correctly -- the same way it already does for the
-     *   ability-bearing case.
-     *   <li>{@link ForkCollector#isProbeRunningOnThisThread()}, when the
-     *   pointer is null. Verified before relying on the pointer alone: it is
-     *   null here for a reason, not just absent. {@code
-     *   Combat.dealAssignedDamage} -- the live game's own combat-damage step
-     *   ({@code PhaseHandler.java}) <em>and</em> {@code ForkCollector.probe}'s
-     *   damage-step counterfactual -- is a turn-based action, never nested
-     *   inside an ability resolution, so neither leaves anything on the
-     *   pointer for this to read; {@code ForkCollector.probe}'s own javadoc
-     *   says as much ("a damage step is a turn-based action, not a
-     *   resolution... the resolving-clause pointer... names nothing"). A null
-     *   pointer therefore cannot tell the live game's own combat-damage
-     *   prevention from a probe's, which is exactly the shape
-     *   {@code damage_prevented} takes on both: {@code cause} is always
-     *   {@code null} for combat damage (Combat.java), so this is not a rare
-     *   corner, it is the routine one. {@code ForkCollector.probe} marks the
-     *   thread itself for the one turn-based action it performs, which is
-     *   the signal this reads when the pointer has nothing to offer.
+     *   PatchHooks#currentSubAbility()}), when the flag is false. Every
+     *   ability resolves through {@code AbilityUtils.resolve}/{@code
+     *   resolveApiAbility}, live or forked alike, and both set this pointer to
+     *   the ability currently resolving before running its body. Kept as a
+     *   second, independent signal instead of removed now that the flag alone
+     *   is sufficient for both of this class's current fork mechanisms:
+     *   insurance against a future one that resolves an ability without going
+     *   through {@code intervene}/{@code probe}. When the flag is true this
+     *   branch is redundant with it (both cover the resolving case), not a
+     *   second opinion; it only does independent work when the flag is false.
      * </ol>
      *
-     * <p>{@code card_revealed} never reaches the second branch in practice --
-     * {@code GameAction.reveal} is only ever called while some ability is
-     * resolving, so the pointer always has an answer for it -- but the check
-     * is written to hold for both known null-ability types rather than lean
-     * on that.
+     * <p>Neither signal fires for a real combat-damage prevention on the live
+     * game -- {@code Combat.dealAssignedDamage} is a turn-based action, never
+     * inside an ability resolution and never inside a fork -- which is the
+     * intended "belongs to the live game" default this method falls through
+     * to.
+     *
+     * <p><b>Why not also use {@code damage_prevented}'s own {@code "source"}
+     * param</b> (a raw {@code Card}, held at {@link #outcomeRefOf} before it is
+     * converted to a ref -- the reviewer's suggestion, final-fix-4.md item 2):
+     * considered and not added. With the flag now covering the entirety of
+     * both fork mechanisms, there is no remaining path where {@code source}
+     * would catch a fork this method's two signals miss -- it would be a
+     * third check for a gap that is already closed, not a narrower one. It is
+     * also not general: {@code card_revealed}'s params carry no card at all
+     * (just a count and a zone name), so a {@code source}-keyed check could
+     * only ever cover one of the two known null-ability types, where the flag
+     * and the pointer both cover either.
      */
     private boolean nullAbilityOutcomeBelongsToLiveGame() {
+        if (ForkCollector.isForkRunningOnThisThread()) {
+            return false;
+        }
         if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {
             return belongsToLiveGame(resolving);
         }
-        return !ForkCollector.isProbeRunningOnThisThread();
+        return true;
     }
 
     /**
