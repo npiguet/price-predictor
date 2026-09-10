@@ -2521,6 +2521,121 @@ class PatchedCollectorTest {
                 "a fork's own mana production must not land in the live shard: " + lines);
     }
 
+    // ── final-fix-4.md item 3: a positive test behind each of those gates ──
+    //
+    // triggerFireHandler, playabilityHandler, combatLegalityHandler and
+    // manaHandler are invoked nowhere in the test tree except the four
+    // fork-rejection tests above -- the existing triggerRecord(...)-style
+    // tests call the record builder directly and never reach the handler
+    // (InvocationHandler) these gates actually live in. A gate with only a
+    // negative test behind it can fail closed for everything, live included,
+    // and every one of those tests would still pass. rewriteHandler and
+    // confirmHandler already have positive coverage elsewhere in this class
+    // and in BusBracketCollectorTest respectively (this file's own
+    // theHandlerReadsEachArgumentOffItsOwnPosition and friends predate item 2
+    // and already drive the live handler directly), so only these four need
+    // one here.
+
+    @Test
+    void aLiveTriggerEvaluationReachesTheShard() throws Throwable {
+        Card liveCard = TestCards.build("Paralyze");
+        Trigger liveTrigger = liveCard.getCurrentState().getTriggers().get(0);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            collectors.triggerFireHandler().invoke(null,
+                    methodNamed(TriggerFireListenerShape.class, "onConditionEvaluated"),
+                    new Object[]{liveTrigger, Map.of(), true});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"trigger\"")),
+                "a live trigger evaluation must reach the shard: " + lines);
+    }
+
+    @Test
+    void aLivePlayabilityCandidateReachesTheShard() throws Throwable {
+        Card liveCard = TestCards.build("Grizzly Bears");
+        SpellAbility liveCandidate = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", liveCard);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        // playabilityRate forced to 1.0, matching final-fix-4.md item 5's own
+        // fix: at the default 0.1 this record would be sampled out at random
+        // roughly nine times in ten, and a flaky pass here is exactly as
+        // uninformative as the vacuous one item 3 exists to close.
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
+            collectors.playabilityHandler().invoke(null,
+                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    new Object[]{liveCandidate, true, true, true});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertTrue(lines.stream().anyMatch(l -> l.contains("\"kind\":\"playability\"")),
+                "a live playability candidate must reach the shard: " + lines);
+    }
+
+    @Test
+    void aLiveAttackerLegalityAnswerReachesTheShard() throws Throwable {
+        Player liveDefender = new Player("live-defender", TestCards.game(), 93101);
+        Card candidate = TestCards.build("Grizzly Bears");
+        // legalityRate forced to 1.0, for the same reason as the playability
+        // test above: the default 0.1 samples this subkind after the dedup
+        // check, and a run at the default rate could pass vacuously.
+        CollectionCaps fullLegalityRate = new CollectionCaps(
+                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
+                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
+                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 1.0);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+            collectors.combatLegalityHandler().invoke(null,
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
+                    new Object[]{liveDefender, List.of(candidate), List.of(candidate)});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertTrue(lines.stream().anyMatch(l -> l.contains("\"subkind\":\"attackers\"")),
+                "a live defender's legality answer must reach the shard: " + lines);
+    }
+
+    @Test
+    void aLiveManaProductionReachesTheShard() throws Throwable {
+        SpellAbility liveAbility = AbilityFactory.getAbility(
+                "AB$ Mana | Cost$ T | Produced$ G", TestCards.build("Llanowar Elves"));
+        Player livePlayer = new Player("live-player", TestCards.game(), 93102);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            collectors.manaHandler().invoke(null,
+                    methodNamed(ManaListenerShape.class, "onManaProduced"),
+                    new Object[]{liveAbility, livePlayer, "G"});
+            // manaHandler holds records in the reservoir rather than writing
+            // them immediately (PatchedCollectors#manaReservoir); only
+            // flushMana(), called from close(), writes them out.
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertTrue(lines.stream().anyMatch(l -> l.contains("mana_produced")),
+                "live mana production must reach the shard: " + lines);
+    }
+
     private static List<String> readShard(Path path) throws Exception {
         // A collector that never delivered a single record never opens the
         // shard file at all (RecordShardWriter creates it lazily), which the
