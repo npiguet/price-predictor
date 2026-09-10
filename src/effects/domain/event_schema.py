@@ -203,7 +203,14 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.SPEED_CHANGED: ("delta",),
     EventType.CHOICE_MADE: ("choice_kind", "value"),
     EventType.VOTE_TAKEN: ("options", "tally"),
-    EventType.COIN_FLIPPED: ("results",),
+    # called distinguishes the two genuinely different result vocabularies
+    # coin_flipped carries: heads/tails (NoCall$ True -- no caller, so
+    # nothing to win or lose against) versus win/loss (every other shape).
+    # The token sets are disjoint, so the dialect is inferable from the
+    # values alone -- but a reader computing a win rate from results ==
+    # "win" would silently drop every NoCall flip and have no signal that
+    # it did. False for NoCall, true otherwise.
+    EventType.COIN_FLIPPED: ("results", "called"),
     EventType.DICE_ROLLED: ("sides", "results"),
     EventType.CLASH_RESOLVED: ("won",),
     EventType.PILES_MADE: ("piles", "chosen"),
