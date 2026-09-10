@@ -270,8 +270,13 @@ class ApiEventsTest {
      * collects {@code getTargets()} only from links where
      * {@code usesTargeting()} is true -- so this builds the same two-link
      * shape: a targeting root ({@code Pump}, standing in for Ral Zarek's
-     * {@code RollDice}) with a non-targeting {@code SkipTurn} wired on as its
+     * {@code FlipCoin}) with a non-targeting {@code SkipTurn} wired on as its
      * sub-ability.
+     *
+     * <p>The real card wires its clause with {@code HeadsSubAbility$} rather
+     * than {@code SubAbility$}, but {@code setAdditionalAbility} calls the same
+     * {@code setParent} this test's {@code setSubAbility} does, so the parent
+     * link {@code getAllTargetChoices} walks is the identical one.
      */
     @Test
     void aSkippedTurnThroughDefinedTargetedNamesTheRootsTarget() {
