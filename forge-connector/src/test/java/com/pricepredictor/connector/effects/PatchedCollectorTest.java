@@ -393,20 +393,37 @@ class PatchedCollectorTest {
      * reflectively-read {@code Card.getChangedCardNames} rather than a
      * hand-built stand-in, because the defect this guards against is exactly
      * the gap between "compiles against a plausible shape" and "the engine
-     * ever produces this". The asserted name is not Grizzly Bears' own --
-     * this card never carries it -- so a regression back to reading
-     * {@code card.getName()} instead of the contributed change fails here
-     * rather than passing by coincidence.
+     * ever produces this".
+     *
+     * <p>Two competing entries, not one: with a single rename in the table,
+     * {@code card.getName()} -- which walks every entry and returns the last
+     * overwrite -- answers the same string as that one static's own cell, so
+     * a {@code contribution(...).name(card.getName())} implementation
+     * (whole-card, not this cell) would pass unnoticed. The later static
+     * ({@code winningStatic}) is what {@code getName()} reports; asserting
+     * that the earlier one ({@code supersededStatic}) still carries its own,
+     * superseded name is what only a per-cell read can produce. This also
+     * covers two statics renaming the same card, which otherwise had no test
+     * at all.
      */
     @Test
     void aChangedNameContributesTheNewName() {
         Card card = TestCards.build("Grizzly Bears");
-        long staticId = 4321L;
-        card.addChangedName("Contributed-Name-Not-Printed", false, 7L, staticId);
+        long supersededStatic = 1111L;
+        long winningStatic = 2222L;
+        card.addChangedName("Superseded-By-Later-Static", false, 3L, supersededStatic);
+        card.addChangedName("Winning-Name", false, 7L, winningStatic);
+        // The premise the whole-card shortcut would rely on, and get wrong
+        // for the superseded static below.
+        assertEquals("Winning-Name", card.getName());
+
         Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
         PatchedCollectors.nameContributions(card, byStatic, "E1");
-        Contribution into = byStatic.get(staticId).get("E1");
-        assertEquals("\"Contributed-Name-Not-Printed\"", nameField(into));
+
+        assertEquals("\"Superseded-By-Later-Static\"",
+                nameField(byStatic.get(supersededStatic).get("E1")));
+        assertEquals("\"Winning-Name\"",
+                nameField(byStatic.get(winningStatic).get("E1")));
     }
 
     /**
