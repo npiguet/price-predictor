@@ -59,13 +59,16 @@ class ClauseContractTest {
 
     /**
      * Static, and shared with production: without a reset here, whichever
-     * test trips {@code ApiEvents}' emitter-failure latch first -- in this
-     * class or, within one JVM, {@code ApiEventsTest} -- leaves every test
-     * after it unable to see its own "did this print" outcome.
+     * test trips {@code ApiEvents}' emitter-failure or memo-failure latch
+     * first -- in this class or, within one JVM, {@code ApiEventsTest} --
+     * leaves every test after it unable to see its own "did this print"
+     * outcome. Two latches since final-fix-3.md item 4 (they no longer share
+     * one), so both are reset here.
      */
     @BeforeEach
     void resetEmitterFailureLatch() {
         ApiEvents.resetEmitterFailureLatchForTest();
+        ApiEvents.resetMemoFailureLatchForTest();
     }
 
     /**

@@ -234,11 +234,10 @@ final class ApiEvents {
         try {
             return rule.memo().take(sa, sa.getHostCard());
         } catch (RuntimeException e) {
-            // Reported through the same once-per-JVM latch after() uses: a
-            // memo that fails must not look identical to "this mechanic
-            // never happens", the exact failure this whole plan exists to
-            // end.
-            reportEmitterFailure(rule.eventType(), e);
+            // Own report, own latch (final-fix-3.md item 4) -- a memo that
+            // fails must not look identical to "this mechanic never
+            // happens", the exact failure this whole plan exists to end.
+            reportMemoFailure(rule.eventType(), e);
             return null;
         }
     }
@@ -293,6 +292,47 @@ final class ApiEvents {
     /** Package-private seam for this hook's own test; production code never calls it. */
     static void resetEmitterFailureLatchForTest() {
         EMITTER_FAILURE_REPORTED.set(false);
+    }
+
+    /** Set the first time any rule's memo throws, so the line below prints once. */
+    private static final AtomicBoolean MEMO_FAILURE_REPORTED = new AtomicBoolean(false);
+
+    /**
+     * As {@link #reportEmitterFailure}, for a rule's memo instead of its
+     * emitter (final-fix-3.md item 4).
+     *
+     * <p>Previously routed through {@link #reportEmitterFailure} itself,
+     * which is wrong on two counts once F4 made these lines reachable by a
+     * human operator rather than only by a test. First, the wording: a memo
+     * ({@link #before}) and an emitter ({@link #after}) are two different
+     * halves of one {@link Rule} -- the memo reads engine state
+     * <em>before</em> a clause resolves, the emitter builds the event
+     * <em>after</em> -- so a report naming "the emitter" for a memo failure
+     * sends whoever reads it to the wrong function, with confidence; a wrong
+     * name is worse than no name at all. Second, the shared {@code
+     * AtomicBoolean}: {@link #EMITTER_FAILURE_REPORTED} latching on a memo
+     * failure would silence a later, unrelated, genuine emitter failure on a
+     * different clause for the rest of the JVM's run -- two independent
+     * failure modes in two independent pieces of code should not be able to
+     * mute each other. A dedicated latch is also this branch's own
+     * convention rather than an exception to it: {@code
+     * AbilityUtils.CLAUSE_LISTENER_FAILURE_REPORTED}, {@code
+     * EffectRecordOutcomes.OUTCOME_LISTENER_FAILURE_REPORTED} and {@code
+     * PatchedCollectors.UNKNOWN_OUTCOME_TYPE_REPORTED} are each their own
+     * latch for their own diagnostic, not one shared across unrelated
+     * failure classes.
+     */
+    static void reportMemoFailure(String eventType, RuntimeException e) {
+        if (MEMO_FAILURE_REPORTED.compareAndSet(false, true)) {
+            System.err.println("ApiEvents: the memo for \"" + eventType
+                    + "\" threw and was ignored; further memo failures will "
+                    + "not be logged: " + e);
+        }
+    }
+
+    /** Package-private seam for this hook's own test; production code never calls it. */
+    static void resetMemoFailureLatchForTest() {
+        MEMO_FAILURE_REPORTED.set(false);
     }
 
     /**

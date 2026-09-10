@@ -20,6 +20,7 @@ import java.util.TreeMap;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -32,14 +33,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ApiEventsTest {
 
     /**
-     * The failure latch is static, shared with production: without a reset
-     * here, whichever test trips it first leaves every test after it --
-     * including ones that never touch the latch, and any later test class in
-     * the same JVM -- unable to see its own "did this print" outcome.
+     * The failure latches are static, shared with production: without a
+     * reset here, whichever test trips one first leaves every test after it --
+     * including ones that never touch that latch, and any later test class in
+     * the same JVM -- unable to see its own "did this print" outcome. Two
+     * latches since final-fix-3.md item 4 (emitter and memo failures no
+     * longer share one), so both are reset here.
      */
     @BeforeEach
     void resetEmitterFailureLatch() {
         ApiEvents.resetEmitterFailureLatchForTest();
+        ApiEvents.resetMemoFailureLatchForTest();
     }
 
     @Test
@@ -651,5 +655,136 @@ class ApiEventsTest {
         }
 
         assertEquals("", captured.toString());
+    }
+
+    // ── final-fix-3.md item 4: the memo half's own report ────────────────
+
+    /** As {@link #anEmitterFailureIsReportedExactlyOnceOnStderr}, for the memo half. */
+    @Test
+    void aMemoFailureIsReportedExactlyOnceOnStderr() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
+            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
+            ApiEvents.reportMemoFailure("x_changed", new RuntimeException("boom again"));
+        } finally {
+            System.setErr(original);
+        }
+
+        String output = captured.toString();
+        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
+        assertEquals(1, lineCount, "exactly one report despite three throws: " + output);
+        assertTrue(output.contains("turn_added"), output);
+        assertTrue(output.contains("boom"), output);
+    }
+
+    /**
+     * The wording fix itself: a memo failure must name the memo, not the
+     * emitter -- before this fix, {@link ApiEvents#before} routed its catch
+     * through {@link ApiEvents#reportEmitterFailure}, which unconditionally
+     * printed "the emitter for ... threw" regardless of which half actually
+     * failed, sending an operator to the wrong function.
+     */
+    @Test
+    void aMemoFailureNamesTheMemoNotTheEmitter() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("boom"));
+        } finally {
+            System.setErr(original);
+        }
+
+        String output = captured.toString();
+        assertTrue(output.contains("the memo for"), output);
+        assertFalse(output.contains("the emitter for"), output);
+    }
+
+    /**
+     * The latch-independence fix: before this, both halves shared {@code
+     * EMITTER_FAILURE_REPORTED}, so a memo failure on one clause silenced a
+     * later, unrelated, genuine emitter failure on a different one for the
+     * rest of the JVM's run. Reversed here: a memo failure first must not
+     * stop a later emitter failure from printing its own line, and vice
+     * versa.
+     */
+    @Test
+    void aMemoFailureDoesNotSilenceALaterEmitterFailure() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("memo boom"));
+            ApiEvents.reportEmitterFailure("x_changed", new RuntimeException("emitter boom"));
+        } finally {
+            System.setErr(original);
+        }
+
+        String output = captured.toString();
+        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
+        assertEquals(2, lineCount, "one report from each latch, independently: " + output);
+        assertTrue(output.contains("memo boom"), output);
+        assertTrue(output.contains("emitter boom"), output);
+    }
+
+    /**
+     * The wiring, not just the message: {@link ApiEvents#before} itself,
+     * when a real rule's memo throws, must report through {@link
+     * ApiEvents#reportMemoFailure} rather than {@link
+     * ApiEvents#reportEmitterFailure} -- the actual pre-fix defect, which a
+     * test that only calls {@code reportMemoFailure} directly (the two tests
+     * above) cannot see, since it never exercises {@code before}'s own catch
+     * block. Same throwing-memo shape {@code
+     * ClauseContractTest.aThrowingMemoDoesNotDesyncTheSiblingsPop} uses.
+     */
+    @Test
+    void beforeReportsAThrowingMemoAsAMemoNotAnEmitter() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ SkipTurn | ValidTgts$ Player | NumTurns$ 1",
+                TestCards.build("Runeclaw Bear"));
+        ApiEvents.setRuleOverrideForTest("SkipTurn", new ApiEvents.Rule(
+                EffectEvent.TURN_SKIPPED,
+                (s, host) -> {
+                    throw new IllegalStateException("boom (memo)");
+                },
+                (s, host, memo) -> new EffectEvent(EffectEvent.TURN_SKIPPED)));
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            Object memo = ApiEvents.before(sa);
+            assertNull(memo, "a failed memo still reads back as null");
+        } finally {
+            System.setErr(original);
+            ApiEvents.clearRuleOverridesForTest();
+        }
+
+        String output = captured.toString();
+        assertTrue(output.contains("the memo for"), output);
+        assertFalse(output.contains("the emitter for"), output);
+    }
+
+    /** The same, in the other order, since neither latch is checked first by construction. */
+    @Test
+    void anEmitterFailureDoesNotSilenceALaterMemoFailure() {
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            ApiEvents.reportEmitterFailure("x_changed", new RuntimeException("emitter boom"));
+            ApiEvents.reportMemoFailure("turn_added", new RuntimeException("memo boom"));
+        } finally {
+            System.setErr(original);
+        }
+
+        String output = captured.toString();
+        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
+        assertEquals(2, lineCount, "one report from each latch, independently: " + output);
+        assertTrue(output.contains("memo boom"), output);
+        assertTrue(output.contains("emitter boom"), output);
     }
 }
