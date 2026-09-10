@@ -35,6 +35,54 @@ from effects.domain.forge_effect_apis import (
     TRIGGER_TYPES,
 )
 
+_FORGE_API_TYPE = Path(r"C:/Users/nicol/IdeaProjects/forge") / (
+    "forge-game/src/main/java/forge/game/ability/ApiType.java"
+)
+
+
+def _live_api_names() -> set[str] | None:
+    """Forge's own enum member names, or None when no checkout is beside us.
+
+    Anchored on the ``.class`` literal rather than a bare ``(`` after the name:
+    Forge's own formatting is inconsistent about the space before the paren
+    (``FlipCoin(FlipCoinEffect.class)`` has none, most members do), and a
+    regex that requires the space silently drops the ones that lack it -- the
+    same way the checked-in list silently drops live members. Anchoring on
+    ``.class`` instead catches every member regardless of that spacing while
+    still skipping the enum's own constructor overloads, whose parameter list
+    is never a bare ``Xxx.class``.
+    """
+    if not _FORGE_API_TYPE.exists():
+        return None
+    return set(re.findall(
+        r"^\s+([A-Za-z]+)\s*\(\s*[A-Za-z]+\.class",
+        _FORGE_API_TYPE.read_text(encoding="utf-8"), re.M,
+    ))
+
+
+class TestTheApiListMatchesForge:
+    """The checked-in list is a snapshot of an enum, and snapshots rot.
+
+    It is checked in so the suite needs no JVM, which is right -- and it means
+    nothing compares it to Forge unless a test does. The list had drifted in
+    both directions -- names it held that Forge had since renamed away from,
+    and live members it had never gained -- and the completeness tests below
+    stayed green throughout, because they only ever compared the mapping
+    against this same checked-in list, never against Forge itself.
+    """
+
+    def test_every_checked_in_api_exists_in_forge(self):
+        live = _live_api_names()
+        if live is None:
+            pytest.skip("no ../forge checkout beside this one")
+        assert set(EFFECT_APIS) - live == set()
+
+    def test_every_forge_api_is_checked_in(self):
+        live = _live_api_names()
+        if live is None:
+            pytest.skip("no ../forge checkout beside this one")
+        assert live - set(EFFECT_APIS) == set()
+
 
 class TestCoverage:
     def test_every_effect_api_is_mapped_or_excluded(self):

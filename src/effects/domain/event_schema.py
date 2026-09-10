@@ -9,13 +9,17 @@ about what an event is called or which parameters it carries.
 Types name **observable outcomes**, not the script API that produced them. Two
 effects that both move a card to the graveyard emit ``zone_change``, and the
 model learns one field group for it. That is the whole reason the vocabulary is
-smaller than Forge's 203 effect classes.
+smaller than Forge's own effect-API list (``EFFECT_APIS`` in
+:mod:`effects.domain.forge_effect_apis`, a test asserts the size relationship
+rather than a count copied here to go stale).
 
-:data:`EFFECT_API_EVENTS` maps every one of those classes to the types it can
-produce, and :data:`EXCLUDED_EFFECT_APIS` records the ones that produce none,
-each with its reason. ``test_event_schema_completeness`` asserts the two together
-cover the checked-in class list, so a Forge upgrade that adds an effect API fails
-the fast suite rather than silently going unrecorded.
+:data:`EFFECT_API_EVENTS` maps every one of those APIs -- keyed by its
+``ApiType`` enum member name, the name Forge looks an effect up by at runtime,
+not the effect class that implements it -- to the types it can produce, and
+:data:`EXCLUDED_EFFECT_APIS` records the ones that produce none, each with its
+reason. ``test_event_schema_completeness`` asserts the two together cover the
+checked-in API list, so a Forge upgrade that adds an effect API fails the fast
+suite rather than silently going unrecorded.
 """
 
 from __future__ import annotations
@@ -387,11 +391,11 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "ChangeZoneAll": (EventType.ZONE_CHANGE,),
     "ChangeZoneResolve": (EventType.ZONE_CHANGE,),
     "ChooseCard": _CHOICE,
-    "ChooseCardName": _CHOICE,
+    "NameCard": _CHOICE,  # was ChooseCardName, the effect class name
     "ChooseColor": _CHOICE,
     "ChooseDirection": _CHOICE,
     "ChooseEvenOdd": _CHOICE,
-    "ChooseGeneric": _CHOICE,
+    "GenericChoice": _CHOICE,  # was ChooseGeneric, the effect class name
     "ChooseNumber": _CHOICE,
     "ChoosePlayer": _CHOICE,
     "ChooseSource": _CHOICE,
@@ -408,27 +412,29 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "Connive": (
         EventType.CARD_DRAWN, EventType.CARD_DISCARDED, EventType.COUNTER_CHANGE,
     ),
-    "ControlExchange": (EventType.CONTROL_CHANGE,),
-    "ControlExchangeVariant": (EventType.CONTROL_CHANGE,),
-    "ControlGain": (EventType.CONTROL_CHANGE,),
-    "ControlGainVariant": (EventType.CONTROL_CHANGE,),
+    "ExchangeControl": (EventType.CONTROL_CHANGE,),  # was ControlExchange
+    "ExchangeControlVariant": (EventType.CONTROL_CHANGE,),  # was ControlExchangeVariant
+    "GainControl": (EventType.CONTROL_CHANGE,),  # was ControlGain
+    "GainControlVariant": (EventType.CONTROL_CHANGE,),  # was ControlGainVariant
     "ControlSpell": (EventType.CONTROL_CHANGE,),
     "CopyPermanent": (EventType.PERMANENT_COPIED, EventType.TOKEN_CREATED),
     "CopySpellAbility": (EventType.SPELL_COPIED,),
     "Counter": (EventType.SPELL_COUNTERED, EventType.ZONE_CHANGE),
-    "CountersMove": (EventType.COUNTER_CHANGE,),
-    "CountersMultiply": (EventType.COUNTER_CHANGE,),
-    "CountersProliferate": (EventType.COUNTER_CHANGE,),
-    "CountersPut": (EventType.COUNTER_CHANGE,),
-    "CountersPutAll": (EventType.COUNTER_CHANGE,),
-    "CountersPutOrRemove": (EventType.COUNTER_CHANGE,),
-    "CountersRemove": (EventType.COUNTER_CHANGE,),
-    "CountersRemoveAll": (EventType.COUNTER_CHANGE,),
+    "MoveCounter": (EventType.COUNTER_CHANGE,),  # was CountersMove
+    "MultiplyCounter": (EventType.COUNTER_CHANGE,),  # was CountersMultiply
+    "Proliferate": (EventType.COUNTER_CHANGE,),  # was CountersProliferate
+    "PutCounter": (EventType.COUNTER_CHANGE,),  # was CountersPut
+    "PutCounterAll": (EventType.COUNTER_CHANGE,),  # was CountersPutAll
+    "AddOrRemoveCounter": (EventType.COUNTER_CHANGE,),  # was CountersPutOrRemove
+    "RemoveCounter": (EventType.COUNTER_CHANGE,),  # was CountersRemove
+    "RemoveCounterAll": (EventType.COUNTER_CHANGE,),  # was CountersRemoveAll
     "DamageAll": (EventType.DAMAGE_DEALT,),
-    "DamageBase": (EventType.DAMAGE_DEALT,),
-    "DamageDeal": (EventType.DAMAGE_DEALT,),
-    "DamageEach": (EventType.DAMAGE_DEALT,),
-    "DamagePrevent": (
+    # DamageBase (DamageBaseEffect) is dropped, not renamed: it is an abstract
+    # superclass of DamageAll/DealDamage/EachDamage/Fight with no ApiType
+    # member of its own, so `sa.getApi().name()` can never equal "DamageBase".
+    "DealDamage": (EventType.DAMAGE_DEALT,),  # was DamageDeal
+    "EachDamage": (EventType.DAMAGE_DEALT,),  # was DamageEach
+    "PreventDamage": (  # was DamagePrevent
         EventType.DAMAGE_PREVENTED, EventType.CONTINUOUS_EFFECT_CREATED,
     ),
     "DamageResolve": (EventType.DAMAGE_DEALT,),
@@ -467,9 +473,9 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "FlipCoin": (EventType.COIN_FLIPPED,),
     "FlipOntoBattlefield": (EventType.ZONE_CHANGE, EventType.FACE_CHANGE),
     "Fog": (EventType.DAMAGE_PREVENTED, EventType.CONTINUOUS_EFFECT_CREATED),
-    "GameDraw": (EventType.GAME_DRAWN,),
-    "GameLoss": (EventType.PLAYER_LOST,),
-    "GameWin": (EventType.PLAYER_WON,),
+    "GameDrawn": (EventType.GAME_DRAWN,),  # was GameDraw
+    "LosesGame": (EventType.PLAYER_LOST,),  # was GameLoss
+    "WinsGame": (EventType.PLAYER_WON,),  # was GameWin
     "Goad": (EventType.RESTRICTION_CHANGE,),
     "Haunt": (EventType.ATTACHED, EventType.ZONE_CHANGE),
     "HealDamage": (EventType.DAMAGE_HEALED,),
@@ -479,16 +485,23 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "ImmediateTrigger": (EventType.DELAYED_TRIGGER_CREATED,),
     "Incubate": (EventType.TOKEN_CREATED, EventType.COUNTER_CHANGE),
     "Intensify": (EventType.COUNTER_CHANGE,),
+    # Grants a real activated ability (cost-gated, resolve() mutates state) that
+    # makes a static ability's continuous effect stop applying to a player or
+    # card until end of turn -- the same shape of fact as Detain/Goad/MustBlock,
+    # just granting an exemption instead of adding a restriction. Reachable in
+    # sealed/draft: Damping Engine, Leonin Arbiter, Lost in Thought and
+    # Volrath's Curse all grant it (StaticAbilityContinuous.IgnoreEffectCost).
+    "InternalIgnoreEffect": (EventType.RESTRICTION_CHANGE,),
     "InternalRadiation": (
         EventType.CARD_MILLED, EventType.LIFE_CHANGE, EventType.RADIATION_CHANGE,
     ),
     "Investigate": (EventType.TOKEN_CREATED,),
     "Learn": (EventType.ZONE_CHANGE, EventType.CARD_DISCARDED, EventType.CARD_DRAWN),
-    "LifeExchange": (EventType.LIFE_CHANGE,),
-    "LifeExchangeVariant": (EventType.LIFE_CHANGE,),
-    "LifeGain": (EventType.LIFE_CHANGE,),
-    "LifeLose": (EventType.LIFE_CHANGE,),
-    "LifeSet": (EventType.LIFE_CHANGE,),
+    "ExchangeLife": (EventType.LIFE_CHANGE,),  # was LifeExchange
+    "ExchangeLifeVariant": (EventType.LIFE_CHANGE,),  # was LifeExchangeVariant
+    "GainLife": (EventType.LIFE_CHANGE,),  # was LifeGain
+    "LoseLife": (EventType.LIFE_CHANGE,),  # was LifeLose
+    "SetLife": (EventType.LIFE_CHANGE,),  # was LifeSet
     "LookAt": (EventType.CARD_LOOKED_AT,),
     "LosePerpetual": (
         EventType.KEYWORD_CHANGE, EventType.PT_CHANGE, EventType.ABILITY_CHANGE,
@@ -497,7 +510,9 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "Mana": (EventType.MANA_PRODUCED,),
     "ManaReflected": (EventType.MANA_PRODUCED,),
     "Manifest": (EventType.FACE_CHANGE, EventType.ZONE_CHANGE),
-    "ManifestBase": (EventType.FACE_CHANGE, EventType.ZONE_CHANGE),
+    # ManifestBase (ManifestBaseEffect) is dropped, not renamed: it is an
+    # abstract superclass of Cloak/Manifest/ManifestDread with no ApiType
+    # member of its own.
     "ManifestDread": (
         EventType.CARD_LOOKED_AT, EventType.FACE_CHANGE, EventType.ZONE_CHANGE,
     ),
@@ -508,18 +523,24 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "Mutate": (
         EventType.ZONE_CHANGE, EventType.ABILITY_CHANGE, EventType.PT_CHANGE,
     ),
-    "OwnershipGain": (EventType.OWNERSHIP_CHANGE,),
+    "GainOwnership": (EventType.OWNERSHIP_CHANGE,),  # was OwnershipGain
     "PeekAndReveal": (EventType.CARD_LOOKED_AT, EventType.CARD_REVEALED),
-    "Permanent": (EventType.ZONE_CHANGE,),
+    # Permanent (PermanentEffect) is dropped, not renamed: PermanentCreature
+    # and PermanentNoncreature both extend it, but no ApiType member points at
+    # it directly.
     "PermanentCreature": (EventType.ZONE_CHANGE,),
     "PermanentNoncreature": (EventType.ZONE_CHANGE,),
     "Phases": (EventType.PHASED,),
     "Play": (EventType.SPELL_CAST, EventType.ZONE_CHANGE),
     "PlayLandVariant": (EventType.SPELL_CAST, EventType.ZONE_CHANGE),
     "Poison": (EventType.POISON_CHANGE,),
-    "PowerExchange": (EventType.PT_CHANGE, EventType.CONTINUOUS_EFFECT_CREATED),
-    "Protect": _PUMP,
-    "ProtectAll": _PUMP,
+    # was PowerExchange; PowerExchangeEffect.resolve() schedules an
+    # addUntilCommand that reverts the swap at end of turn unless the duration
+    # is Permanent/Perpetual, so CONTINUOUS_EFFECT_CREATED is a real second
+    # outcome here, not carried over by rename alone.
+    "ExchangePower": (EventType.PT_CHANGE, EventType.CONTINUOUS_EFFECT_CREATED),
+    "Protection": _PUMP,  # was Protect
+    "ProtectionAll": _PUMP,  # was ProtectAll
     "Pump": _PUMP,
     "PumpAll": _PUMP,
     "Radiation": (EventType.RADIATION_CHANGE,),
@@ -531,7 +552,7 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "RemoveFromGame": (EventType.ZONE_CHANGE,),
     "RemoveFromMatch": (EventType.PLAYER_REMOVED,),
     "ReorderZone": (EventType.LIBRARY_REORDERED, EventType.LIBRARY_SHUFFLED),
-    "Replace": (EventType.REPLACEMENT_APPLIED,),
+    "ReplaceEffect": (EventType.REPLACEMENT_APPLIED,),  # was Replace
     "ReplaceCounter": (EventType.REPLACEMENT_APPLIED, EventType.COUNTER_CHANGE),
     "ReplaceDamage": (EventType.REPLACEMENT_APPLIED, EventType.DAMAGE_DEALT),
     "ReplaceMana": (EventType.REPLACEMENT_APPLIED, EventType.MANA_PRODUCED),
@@ -558,7 +579,11 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "TapAll": (EventType.TAPPED,),
     "TapOrUntap": (EventType.TAPPED, EventType.UNTAPPED),
     "TapOrUntapAll": (EventType.TAPPED, EventType.UNTAPPED),
-    "TextBoxExchange": (EventType.TEXT_CHANGE, EventType.ABILITY_CHANGE),
+    # was TextBoxExchange; TextBoxExchangeEffect swaps SpellAbilities,
+    # Triggers, ReplacementEffects, StaticAbilities and Keywords (ABILITY_CHANGE)
+    # and calls updateChangedText() on both cards (TEXT_CHANGE) -- both are
+    # real outcomes of the swap, not carried over by rename alone.
+    "ExchangeTextBox": (EventType.TEXT_CHANGE, EventType.ABILITY_CHANGE),
     "TimeTravel": (EventType.COUNTER_CHANGE,),
     "Token": (EventType.TOKEN_CREATED,),
     "TwoPiles": (EventType.PILES_MADE,),
@@ -569,7 +594,7 @@ EFFECT_API_EVENTS: dict[str, tuple[EventType, ...]] = {
     "Venture": (EventType.DUNGEON_VENTURED,),
     "VillainousChoice": (EventType.CHOICE_MADE,),
     "Vote": (EventType.VOTE_TAKEN,),
-    "ZoneExchange": (EventType.ZONE_CHANGE,),
+    "ExchangeZone": (EventType.ZONE_CHANGE,),  # was ZoneExchange
 }
 
 # APIs that produce no event of their own. Each reason is one of three kinds:
@@ -583,8 +608,20 @@ EXCLUDED_EFFECT_APIS: dict[str, str] = {
         "modal selection; the chosen option line is the record's acting ability "
         "and its own sub-ability produces the events (FR-017)"
     ),
-    "CleanUp": "removes the effect's own bookkeeping when its duration ends",
-    "DetachedCard": "constructs an off-game card object for another effect to use",
+    "Cleanup": "removes the effect's own bookkeeping when its duration ends",  # was CleanUp
+    "CompanionChoose": (
+        "wraps the pregame companion-selection prompt in a no-op ability "
+        "(SpellAbility.EmptySa, whose resolve() is empty) purely so the choice "
+        "has an sa to record against; the choice has no in-game effect of its own"
+    ),
+    "InternalLegendaryRule": (
+        "wraps the legend-rule which-one-to-keep prompt in the same no-op "
+        "EmptySa as CompanionChoose; the state-based action moves the rest to "
+        "the graveyard on its own path, not through this ability's resolution"
+    ),
+    # DetachedCardEffect is dropped, not excluded under its old name: it
+    # extends Card, not SpellAbilityEffect, and has no ApiType member at all --
+    # `sa.getApi()` can never be this class regardless of formatting.
     "Repeat": "control flow; the repeated sub-ability produces the events",
     "RepeatEach": "control flow; the repeated sub-ability produces the events",
     "StoreSVar": "writes a script variable; changes no game state",
@@ -609,7 +646,10 @@ EXCLUDED_EFFECT_APIS: dict[str, str] = {
         "controls another player's turn (Mindslaver); the controlled player's "
         "own actions are recorded under their own acting ability"
     ),
-    "CountersNote": "notes a counter count into a script variable for later use",
+    # CountersNoteEffect is dropped, not excluded under its old name: its
+    # ApiType entry is commented out in Forge (`//NoteCounters (...)`), so it
+    # is not a live member -- the class survives only as a helper other
+    # effects (ChangeZoneEffect, EffectEffect) call directly.
 }
 
 
