@@ -243,14 +243,42 @@ for whoever owns that run, informed by the card counts above, not something fold
 task.
 
 **Idempotent dedup for `regenerated`.** `EffectEvent.REGENERATED` is also in
-`BusBracketCollector.IDEMPOTENT_EVENTS` (`:596-600`) — a set of subjects-only, state-transition types
-(alongside `zone_change`, `tapped`, `destroyed`, `sacrificed`, `phased`, and others) where a second
-byte-identical report within one resolution bracket is treated as the engine re-publishing the same
-change rather than a second occurrence. That reference was inert while `regenerated` had no emitter and is
-load-bearing now. It is the intended behaviour, not an accident: `regenerated` carries no params beyond its
-subject, so two genuinely separate regenerations of the *same* card with the *same* attribution in one
-bracket would render byte-identical and be indistinguishable from a duplicate publication regardless — the
-same tradeoff the other params-less state-transition types already accept, and for the same reason.
+`BusBracketCollector.IDEMPOTENT_EVENTS` (`:645-649`) — a set where a second byte-identical report within
+one bracket is treated as the engine re-publishing the same change rather than a second occurrence. That
+reference was inert while `regenerated` had no emitter and is load-bearing now. The decision is to keep it
+there; an earlier draft of this paragraph justified that by treating `regenerated` as one more
+subjects-only, state-transition type like its neighbours (`tapped`, `destroyed`, `sacrificed`, `phased`),
+and **that comparison is wrong, not merely imprecise.**
+
+`destroyed`/`sacrificed` are one-shot by construction — the object changes zones and stops being the same
+object — and `tapped` has a real re-fire guard (`Card.tap`: `if (tapped) { return false; }`). Regeneration
+has neither. `RegenerationEffect.resolve()` runs *inside* a `Destroy` replacement: it is the shield being
+**consumed**, not the ability granting one. Shields are granted separately, by
+`RegenerateEffect.createRegenerationEffect` (`RegenerateEffect.java:66-118`), which builds one independent
+command-zone `Effect` + `ReplacementEffect` per activation and calls `c.incShieldCount()` for each — two
+activations on one creature make two independent shields, each able to fire its own
+`GameEventCardRegenerated`. The engine itself treats repeated regeneration as a real, distinguishable
+fact: `Card.regeneratedThisTurn` (`Card.java:291`, `:3536-3543`) is an *incrementing counter*, exposed to
+card scripts as `RegeneratedThisTurn` X-math (`AbilityUtils.java:2329-2330`). So this dedup **can**, in
+principle, drop a genuine second occurrence rather than only a duplicate publication of the first — the
+premise the other members of `IDEMPOTENT_EVENTS` actually satisfy does not hold for this one.
+
+**The decision to keep the dedup stands anyway, for reasons that hold regardless of that fact rather than
+because a repeat is impossible.** A combat bracket is one per damage step — first strike and the regular
+step are different brackets, flushed at the phase boundary (`BusBracketCollector.java:onPhase`) — so the
+textbook "regenerate through first strike, then again in the regular step" lands in two brackets and is
+never compared. And a second destroy check driven by a separately-resolving ability changes
+`attributed_to` (`EventAttribution.stamp`, called from `record`), which breaks the rendered-line equality
+`fileEvent` dedups on. Nobody has constructed, or ruled out, a same-bracket, same-attribution double from
+reasoning about the code alone — it would need two purely-SBA-driven destroy passes on the same card with
+nothing resolving in between.
+
+**That is an open question static reasoning cannot settle, and it is now a question a corpus run can
+answer — the channel that would let anyone measure it did not exist before this task wired it.** The
+method is this branch's own, turned on itself: over a real collection, group `regenerated` events by
+bracket and check whether any single card's entity ref appears twice within one. A future pass with
+`--probe-keywords` or a plain `collect-coverage` window large enough to gather a few hundred `regenerated`
+events would settle this empirically rather than by further argument.
 
 ### `attributed_to` is tri-state
 

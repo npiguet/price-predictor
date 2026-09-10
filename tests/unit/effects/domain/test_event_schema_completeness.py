@@ -488,8 +488,11 @@ _CONNECTOR_EFFECTS = (
 #: ``EVENT_PARAMS`` row, so a bus subscription satisfies the schema on its own.
 #: ``EffectEvent.REGENERATED`` also has a second, non-emitting reference this scan
 #: finds -- ``BusBracketCollector.IDEMPOTENT_EVENTS`` -- which was inert while the
-#: type had no emitter and is load-bearing now: see the report for why
-#: idempotent dedup is the intended behaviour, not a side effect nobody chose.
+#: type had no emitter and is load-bearing now: kept deliberately, not a side
+#: effect nobody chose, but not because a second regeneration is impossible --
+#: it is not. See the docstring above ``IDEMPOTENT_EVENTS`` itself for why it
+#: stays anyway, and the open question a corpus run (not static reasoning) can
+#: now settle.
 #:
 #: Populated again as of the Task 10 fix round, and that is not a regression.
 #: The guard this dict feeds used to compare against ``set(EVENT_PARAMS)`` --

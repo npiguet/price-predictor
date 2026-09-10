@@ -609,6 +609,38 @@ public final class BusBracketCollector {
      * outcome the repeat <b>is</b> the information: two creatures each dealing
      * one damage to the same blocker render two identical {@code damage_dealt}
      * events, and collapsing them would turn two damage into one.
+     *
+     * <p><b>{@code REGENERATED} does not actually fit the "in-or-out state"
+     * reasoning above, unlike its neighbours here.</b> {@code destroyed} and
+     * {@code sacrificed} are one-shot by construction — the object changes
+     * zones and stops being the same object — and {@code tapped} has a real
+     * re-fire guard ({@code Card.tap} returns false when already tapped).
+     * Regeneration has neither: {@code RegenerationEffect.resolve()} is a
+     * shield being <i>consumed</i>, not the ability granting one, and shields
+     * are granted separately, one independent command-zone
+     * {@code ReplacementEffect} per activation ({@code
+     * RegenerateEffect.createRegenerationEffect}) — two activations on one
+     * creature make two shields, each able to fire its own event. The engine
+     * itself treats repeated regeneration as a real, distinguishable fact:
+     * {@code Card.regeneratedThisTurn} is an incrementing counter, exposed to
+     * card scripts as {@code RegeneratedThisTurn} X-math. So this dedup
+     * <i>can</i>, in principle, drop a genuine second occurrence rather than
+     * only a duplicate publication of the first.
+     *
+     * <p>It stays anyway, for reasons that hold regardless of that fact
+     * rather than because a repeat is impossible: a combat bracket is one per
+     * damage step — first strike and the regular step are different brackets,
+     * flushed at the phase boundary ({@link #onPhase}) — so the textbook
+     * "regenerate through first strike, then again in the regular step" lands
+     * in two brackets and is never compared. And a second destroy check
+     * driven by a separately-resolving ability changes {@code attributed_to}
+     * (stamped in {@link #record(EffectEvent, String)}), which breaks the
+     * rendered-line equality {@link #fileEvent} dedups on. Nobody has
+     * constructed, or ruled out, a same-bracket same-attribution double from
+     * reasoning about the code alone — that is an open question static
+     * analysis cannot settle, and one a corpus run now can, since this event
+     * did not fire at all before this task: look for brackets that contain a
+     * {@code regenerated} event and check whether any single card carries two.
      */
     private static final Set<String> IDEMPOTENT_EVENTS = Set.of(
             EffectEvent.ZONE_CHANGE, EffectEvent.TAPPED, EffectEvent.UNTAPPED,
