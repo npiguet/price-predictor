@@ -265,9 +265,29 @@ class WorkerLogFiles:
             if not too_big:
                 return handle
             handle.close()
-            rotated = path.with_name(path.name + ".1")
-            rotated.unlink(missing_ok=True)
-            path.rename(rotated)
+            # Dropped before the rotation is attempted, not after (final-fix-
+            # 3.md item 5): a handle this method has already closed must
+            # never be handed back out of ``_open`` on some later call, which
+            # is what a raise between here and the reassignment below used to
+            # risk -- close() succeeding is what makes the handle unusable,
+            # not whether the rename that follows does.
+            del self._open[worker_id]
+            try:
+                rotated = path.with_name(path.name + ".1")
+                rotated.unlink(missing_ok=True)
+                path.rename(rotated)
+            except OSError as exc:
+                # A logging failure must degrade quietly, never take down
+                # collection (item 5): on Windows especially, a rename can
+                # lose to a concurrent reader with the file still open, and
+                # this uncaught used to propagate out of spawn_worker into
+                # ForgeWorkerPool._monitor_worker's bare `except Exception`,
+                # which respawns immediately with no backoff -- a tight
+                # respawn/print loop instead of a log that just missed one
+                # rotation. Falls through to reopen ``path`` below either
+                # way: rotated or not, it is where this worker's next lines
+                # belong.
+                print(f"Could not rotate worker log {path}: {exc}")
 
         self._directory.mkdir(parents=True, exist_ok=True)
         handle = path.open("ab")

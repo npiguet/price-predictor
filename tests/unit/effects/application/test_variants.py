@@ -19,6 +19,7 @@ import pytest
 from effects.application.collect_variants import (
     DEFAULT_VARIANT_VOLUME,
     CollectVariantsConfig,
+    GeneratedVariant,
     generate_variants,
     perturb_script,
     variant_budget,
@@ -339,3 +340,95 @@ class TestPairingLoss:
 def test_variant_name_derives_from_its_source():
     assert variant_name("Lightning Bolt", 0) == "Lightning Bolt Variant 0"
     assert variant_name("Lightning Bolt", 1) != variant_name("Lightning Bolt", 0)
+
+
+class TestRunClosesTheSupervisor:
+    """final-fix-3.md item 5: same finding, same fix shape as
+    ``collect_coverage.run`` (see ``TestRunClosesTheSupervisor`` in
+    ``test_coverage.py`` for the full rationale) -- ``run()`` built a
+    ``CollectorSupervisor`` and played a round through it, but never called
+    ``.stop()``, so the worker log handles opened for F4's latched
+    effect-record failure reporters stayed open until the interpreter exited
+    on its own.
+    """
+
+    def _config(self, tmp_path, **overrides):
+        forge_cards = tmp_path / "forge-cards"
+        forge_cards.mkdir()
+        variant_scripts = tmp_path / "variant-scripts"
+        return CollectVariantsConfig(
+            effect_records=tmp_path / "records",
+            forge_cards_path=forge_cards,
+            variant_scripts=variant_scripts,
+            **overrides,
+        )
+
+    def _patch_prerequisites(self, monkeypatch, variant):
+        """Everything ``run()`` needs before it ever reaches the supervisor,
+        stood in for rather than exercised for real: the corpus size, the
+        variant generator (which otherwise reads real Forge card scripts) and
+        the sidecar writer (which otherwise needs a real JVM)."""
+        from unittest.mock import MagicMock
+
+        import effects.application.collect_variants as collect_variants
+        import effects.infrastructure.record_io as record_io
+        import effects.infrastructure.variant_sidecar_connector as sidecar_module
+
+        monkeypatch.setattr(record_io, "count_records", lambda path: 1000)
+        monkeypatch.setattr(
+            collect_variants, "generate_variants",
+            lambda *a, **k: [variant],
+        )
+        sidecar = MagicMock()
+        sidecar.run.return_value = 0
+        monkeypatch.setattr(
+            sidecar_module, "VariantSidecarConnector",
+            MagicMock(return_value=sidecar),
+        )
+        return collect_variants
+
+    def test_stop_runs_after_an_ordinary_round(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import effects.infrastructure.collector_connector as collector_connector
+
+        variant = GeneratedVariant(
+            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
+            path=tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt",
+            perturbation="numeric",
+        )
+        collect_variants = self._patch_prerequisites(monkeypatch, variant)
+        supervisor = MagicMock()
+        monkeypatch.setattr(
+            collector_connector, "CollectorSupervisor",
+            MagicMock(return_value=supervisor),
+        )
+
+        code = collect_variants.run(self._config(tmp_path))
+
+        assert code == 0
+        supervisor.play_round.assert_called_once()
+        supervisor.stop.assert_called_once()
+
+    def test_stop_runs_even_if_the_round_raises(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+
+        import effects.infrastructure.collector_connector as collector_connector
+
+        variant = GeneratedVariant(
+            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
+            path=tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt",
+            perturbation="numeric",
+        )
+        collect_variants = self._patch_prerequisites(monkeypatch, variant)
+        supervisor = MagicMock()
+        supervisor.play_round.side_effect = RuntimeError("boom")
+        monkeypatch.setattr(
+            collector_connector, "CollectorSupervisor",
+            MagicMock(return_value=supervisor),
+        )
+
+        with pytest.raises(RuntimeError, match="boom"):
+            collect_variants.run(self._config(tmp_path))
+
+        supervisor.stop.assert_called_once()

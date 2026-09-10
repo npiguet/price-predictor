@@ -227,8 +227,13 @@ def run(config: CollectVariantsConfig) -> int:
         worker_count=config.workers, effect_records=config.effect_records,
         caps=config.caps,
     )
-    supervisor.play_round(
-        {v.name: 1.0 for v in variants}, Path(config.variant_scripts),
-        decks=config.decks_per_round,
-    )
+    try:
+        supervisor.play_round(
+            {v.name: 1.0 for v in variants}, Path(config.variant_scripts),
+            decks=config.decks_per_round,
+        )
+    finally:
+        # Closes the worker log files and shuts the pool down (final-fix-3.md
+        # item 5) -- see collect_coverage.run's identical finally for why.
+        supervisor.stop()
     return 0

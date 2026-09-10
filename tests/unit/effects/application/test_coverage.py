@@ -275,3 +275,79 @@ class TestHeldOutExclusion:
 @pytest.mark.parametrize("records,target,expected", [(0, 50, False), (50, 50, True)])
 def test_satisfied_is_records_at_or_above_target(records, target, expected):
     assert CardCoverage("x", records=records).satisfied(target) is expected
+
+
+class TestRunClosesTheSupervisor:
+    """final-fix-3.md item 5: ``CollectorSupervisor.stop()`` -- the only
+    caller of ``WorkerLogFiles.close_all()`` -- was never invoked by
+    ``run()``, so a coverage run's worker log handles (opened for exactly the
+    latched effect-record failure reporters F4 exists to make visible to an
+    operator) stayed open until the interpreter exited on its own, not when
+    the run itself finished.
+    """
+
+    def _config(self, tmp_path, **overrides):
+        cardsfolder = tmp_path / "cardsfolder"
+        cardsfolder.mkdir()
+        (cardsfolder / "bears.txt").write_text(
+            "name: Grizzly Bears\ntypes: creature\n", encoding="utf-8",
+        )
+        overrides.setdefault("target_records", 0)
+        return CollectCoverageConfig(
+            cards_folders=(cardsfolder,),
+            effect_records=tmp_path / "records",
+            **overrides,
+        )
+
+    def test_stop_runs_even_though_no_round_was_ever_needed(
+        self, tmp_path, monkeypatch,
+    ):
+        """``target_records=0`` satisfies every card before the ``while``
+        loop's first check, so ``play_round`` is never called -- proving
+        ``stop()`` is not merely tacked on after the last round, but wraps
+        the supervisor's whole lifetime regardless of how many rounds ran."""
+        from unittest.mock import MagicMock
+
+        import effects.application.collect_coverage as collect_coverage
+        import effects.infrastructure.collector_connector as collector_connector
+
+        monkeypatch.setattr(
+            collect_coverage, "consult_castability", lambda names, folder: {},
+        )
+        supervisor = MagicMock()
+        monkeypatch.setattr(
+            collector_connector, "CollectorSupervisor",
+            MagicMock(return_value=supervisor),
+        )
+
+        code = collect_coverage.run(self._config(tmp_path))
+
+        assert code == 0
+        supervisor.play_round.assert_not_called()
+        supervisor.stop.assert_called_once()
+
+    def test_stop_runs_even_if_a_round_raises(self, tmp_path, monkeypatch):
+        """The property a bare call after the loop cannot give: a round that
+        raises must still close the log handles and shut the pool down
+        before the exception is let through, not leave the handles open on
+        the way out."""
+        from unittest.mock import MagicMock
+
+        import effects.application.collect_coverage as collect_coverage
+        import effects.infrastructure.collector_connector as collector_connector
+
+        monkeypatch.setattr(
+            collect_coverage, "consult_castability", lambda names, folder: {},
+        )
+        supervisor = MagicMock()
+        supervisor.play_round.side_effect = RuntimeError("boom")
+        monkeypatch.setattr(
+            collector_connector, "CollectorSupervisor",
+            MagicMock(return_value=supervisor),
+        )
+
+        with pytest.raises(RuntimeError, match="boom"):
+            collect_coverage.run(self._config(tmp_path, target_records=50))
+
+        supervisor.play_round.assert_called_once()
+        supervisor.stop.assert_called_once()

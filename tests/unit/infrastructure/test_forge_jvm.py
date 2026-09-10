@@ -206,6 +206,68 @@ class TestWorkerLogFiles:
         assert b"generation 1" in backup
         assert b"generation 0" not in backup
 
+    def test_a_rotation_failure_degrades_rather_than_raising(self, tmp_path):
+        """final-fix-3.md item 5: on Windows especially, a rename can lose to
+        a concurrent reader with the file still open. Unguarded, that used to
+        propagate out of ``get`` -- which ``spawn_worker`` calls directly --
+        into ``ForgeWorkerPool._monitor_worker``'s bare ``except Exception``,
+        which retries with no backoff: a tight respawn/print loop instead of
+        a log that just missed one rotation."""
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
+        first = logs.get(0)
+        first.write(b"0123456789 - more than ten bytes")
+        first.flush()
+
+        with patch("pathlib.Path.rename", side_effect=OSError("boom")):
+            second = logs.get(0)  # must not raise
+        try:
+            assert second is not first
+            assert first.closed
+            assert second.closed is False
+            # Rotation failed, so nothing was moved to a ".1" backup --
+            # the oversized file is still the live one, appended to rather
+            # than replaced.
+            assert not (tmp_path / "run-1.0.log.1").exists()
+            second.write(b"more, past the cap the failed rotation left it at")
+            second.flush()  # a closed-handle bug would raise ValueError here
+        finally:
+            logs.close_all()
+
+    def test_a_rotation_failure_does_not_leave_a_closed_handle_registered(
+        self, tmp_path,
+    ):
+        """The other half of the same finding: a handle this class already
+        closed must never be handed back out by a later, unrelated call --
+        which is what leaving it in ``_open`` across the failed rename used
+        to risk."""
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
+        first = logs.get(0)
+        first.write(b"0123456789 - more than ten bytes")
+        first.flush()
+
+        with patch("pathlib.Path.rename", side_effect=OSError("boom")):
+            logs.get(0)
+
+        # No patch active now: a plain get() must return the handle opened
+        # inside the patched call, not resurrect the closed one from before it.
+        third = logs.get(0)
+        try:
+            assert third.closed is False
+        finally:
+            logs.close_all()
+
+    def test_a_rotation_failure_is_reported(self, tmp_path, capsys):
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
+        first = logs.get(0)
+        first.write(b"0123456789 - more than ten bytes")
+        first.flush()
+
+        with patch("pathlib.Path.rename", side_effect=OSError("boom")):
+            logs.get(0)
+        logs.close_all()
+
+        assert "boom" in capsys.readouterr().out
+
     def test_close_all_closes_every_open_handle(self, tmp_path):
         logs = WorkerLogFiles(tmp_path, "run-1")
         handles = [logs.get(i) for i in range(3)]

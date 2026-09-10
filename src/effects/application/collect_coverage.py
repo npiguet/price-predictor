@@ -313,29 +313,38 @@ def run(config: CollectCoverageConfig) -> int:
         worker_count=config.workers, effect_records=config.effect_records,
         caps=config.caps,
     )
-    round_number = 0
-    while not is_complete(coverage, config.target_records):
-        round_number += 1
-        previous = {name: card.records for name, card in coverage.items()}
-        weights = rank_by_consult(
-            deck_weights(coverage, config.target_records), verdicts,
-        )
-        if not weights:
-            break
-        supervisor.play_round(
-            weights, cards_folder, decks=config.decks_per_round,
-        )
-        for name, count in count_coverage(
-            read_records(config.effect_records)
-        ).items():
-            if name in coverage:
-                coverage[name].records = count
-        retired = retire_stalled(
-            coverage, previous, no_progress_rounds=config.no_progress_rounds,
-        )
-        logger.info("%s", round_summary(
-            round_number, coverage, config.target_records, retired,
-        ))
+    try:
+        round_number = 0
+        while not is_complete(coverage, config.target_records):
+            round_number += 1
+            previous = {name: card.records for name, card in coverage.items()}
+            weights = rank_by_consult(
+                deck_weights(coverage, config.target_records), verdicts,
+            )
+            if not weights:
+                break
+            supervisor.play_round(
+                weights, cards_folder, decks=config.decks_per_round,
+            )
+            for name, count in count_coverage(
+                read_records(config.effect_records)
+            ).items():
+                if name in coverage:
+                    coverage[name].records = count
+            retired = retire_stalled(
+                coverage, previous, no_progress_rounds=config.no_progress_rounds,
+            )
+            logger.info("%s", round_summary(
+                round_number, coverage, config.target_records, retired,
+            ))
+    finally:
+        # Closes the worker log files and shuts the pool down (final-fix-3.md
+        # item 5). Without this, the only latched effect-record failure
+        # reporters this run has (ApiEvents.reportEmitterFailure and its
+        # siblings, F4) never surface: their handles stay open, unflushed
+        # and unclosed, until the interpreter exits on its own -- a
+        # collection run that gets killed or piped never sees them at all.
+        supervisor.stop()
 
     report = residues(coverage, config.target_records)
     logger.info("%s", report.render(config.target_records))
