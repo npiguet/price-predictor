@@ -1,6 +1,8 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.Direction;
+import forge.game.EvenOdd;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.player.Player;
@@ -13,6 +15,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -319,26 +324,113 @@ class ApiEventsTest {
      * null} for an unset colour -- it returns {@code ""} -- so that check is
      * always true and would report <em>every</em> clause routed through
      * {@code choice()} as a colour choice, this one included, regardless of
-     * which of the eleven {@code choice_made} APIs actually ran.
+     * which of the {@code choice_made} APIs actually ran.
      *
-     * <p>This is also the only test in the suite that exercises a {@code
-     * choice_kind} other than {@code "color"}, so it is what would catch
-     * that regression -- and it doubles as the sector coverage Ruling R18
-     * added the {@code ChooseSector} rule for: {@code
-     * ChooseSectorEffect.resolve()} calls {@code setChosenSector}, verified
-     * directly against {@code ChooseSectorEffect.java} and {@code
-     * Card.getChosenSector()} rather than assumed.
+     * <p>This is also the only single-API test in the suite that exercises a
+     * {@code choice_kind} other than {@code "color"}, so it is what would
+     * catch that regression on its own (the broader {@code
+     * everyChoiceMadeApiHasAReadableChoice} guard below would too, across
+     * every branch at once).
+     *
+     * <p>Originally pointed at {@code ChooseSector}: fix round 1 removed that
+     * rule (see the comment in {@code ApiEvents.RULES} above {@code
+     * HealDamage} -- {@code event_schema.py} excludes it as unreachable in
+     * this corpus's sealed/draft pools), so this now points at {@code
+     * ChooseDirection} instead, which stayed. {@code
+     * ChooseDirectionEffect.resolve()} always calls {@code
+     * setChosenDirection}, verified directly against {@code
+     * ChooseDirectionEffect.java} rather than assumed.
      */
     @Test
-    void aChosenSectorIsAChoiceNotAMiscolouredOne() {
-        SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseSector", TestCards.build("Grizzly Bears"));
-        sa.getHostCard().setChosenSector("UpperDeck");
+    void aChosenDirectionIsAChoiceNotAMiscolouredOne() {
+        SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseDirection", TestCards.build("Grizzly Bears"));
+        sa.getHostCard().setChosenDirection(Direction.Left);
 
         EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
 
         assertEquals(EffectEvent.CHOICE_MADE, event.type());
-        assertEquals("sector", event.params().get("choice_kind"));
-        assertEquals("UpperDeck", event.params().get("value"));
+        assertEquals("direction", event.params().get("choice_kind"));
+        assertEquals("Left", event.params().get("value"));
+    }
+
+    /**
+     * The general form of the bug class in the test above and in Ruling
+     * R18's missed branches: for every {@code RULES} entry the schema
+     * declares as {@code choice_made} (fixture keys asserted equal to {@code
+     * ApiEvents.choiceMadeApiKeysForTest()}, read live off the table rather
+     * than hand-counted), simulate that API's own effect class writing its
+     * one host field, and require {@code choice()} to read it back as that
+     * API's own kind. An invariant, not a count: it keeps holding as rules
+     * are added, and it fails loudly -- either on the set comparison, if a
+     * new {@code choice_made} API has no fixture yet, or on the per-API
+     * assertions, if a fixture exists but the matching {@code choice()}
+     * branch does not -- the moment either half drifts from the other.
+     *
+     * <p>{@code ChooseSector} is deliberately not a key here: fix round 1
+     * removed it from {@code RULES} entirely (see the comment there), so it
+     * is correctly absent from {@code choiceMadeApiKeysForTest()} too, not
+     * an exemption carved out of this test.
+     *
+     * <p>Each fixture calls the exact setter that API's real effect class
+     * calls: {@code ChooseColorEffect.setChosenColors}, {@code
+     * ChooseTypeEffect.setChosenType}, {@code ChooseCardEffect}/{@code
+     * ChooseSourceEffect.setChosenCards} (both share the one accessor, so
+     * both correctly read back as {@code "cards"}), {@code
+     * ChooseCardNameEffect.addNamedCard}, {@code
+     * ChooseNumberEffect.setChosenNumber}, {@code
+     * ChoosePlayerEffect.setChosenPlayer}, {@code
+     * ChooseDirectionEffect.setChosenDirection}, {@code
+     * ChooseEvenOddEffect.setChosenEvenOdd}, and {@code
+     * ChooseGenericEffect}'s {@code SetChosenMode$ True} path's {@code
+     * setChosenMode} -- on a fresh host each time, so one API's fixture
+     * cannot leak into another's read.
+     */
+    @Test
+    void everyChoiceMadeApiHasAReadableChoice() {
+        record ChoiceFixture(String expectedKind, Consumer<Card> mutate) {
+        }
+
+        Map<String, ChoiceFixture> fixtures = new TreeMap<>();
+        fixtures.put("ChooseColor", new ChoiceFixture("color",
+                host -> host.setChosenColors(List.of("blue"))));
+        fixtures.put("ChooseType", new ChoiceFixture("type",
+                host -> host.setChosenType("Goblin")));
+        fixtures.put("ChooseCard", new ChoiceFixture("cards",
+                host -> host.setChosenCards(List.of(TestCards.build("Grizzly Bears")))));
+        fixtures.put("ChooseSource", new ChoiceFixture("cards",
+                host -> host.setChosenCards(List.of(TestCards.build("Grizzly Bears")))));
+        fixtures.put("NameCard", new ChoiceFixture("card_name",
+                host -> host.addNamedCard("Grizzly Bears")));
+        fixtures.put("ChooseNumber", new ChoiceFixture("number",
+                host -> host.setChosenNumber(3)));
+        fixtures.put("ChoosePlayer", new ChoiceFixture("player",
+                host -> host.setChosenPlayer(new Player("chooser", TestCards.game(), 93001))));
+        fixtures.put("ChooseDirection", new ChoiceFixture("direction",
+                host -> host.setChosenDirection(Direction.Left)));
+        fixtures.put("ChooseEvenOdd", new ChoiceFixture("even_odd",
+                host -> host.setChosenEvenOdd(EvenOdd.Odd)));
+        fixtures.put("GenericChoice", new ChoiceFixture("mode",
+                host -> host.setChosenMode("Abzan")));
+
+        assertEquals(fixtures.keySet(), ApiEvents.choiceMadeApiKeysForTest(),
+                "the fixture table above and RULES's live choice_made keys have "
+                        + "drifted apart -- add a fixture (and, if it is new, a "
+                        + "choice() branch to read it) for whichever API changed");
+
+        for (Map.Entry<String, ChoiceFixture> fixture : fixtures.entrySet()) {
+            Card host = TestCards.build("Grizzly Bears");
+            SpellAbility sa = AbilityFactory.getAbility("SP$ " + fixture.getKey(), host);
+            fixture.getValue().mutate().accept(host);
+
+            EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+            assertNotNull(event, fixture.getKey() + " -- choice() reported nothing");
+            assertEquals(EffectEvent.CHOICE_MADE, event.type(), fixture.getKey());
+            assertEquals(
+                    fixture.getValue().expectedKind(), event.params().get("choice_kind"),
+                    fixture.getKey());
+            assertNotNull(event.params().get("value"), fixture.getKey() + " -- empty value");
+        }
     }
 
     /**

@@ -102,19 +102,33 @@ final class ApiEvents {
 
             // ── Task 8: choices, healed damage, granted abilities, retargets ──
             //
-            // Ruling R18 (task-8-brief.md). Two keys below are NOT spelled like their
-            // effect classes, and a third API was missing entirely from an earlier
-            // draft. Verified against ApiType.java before use:
+            // Ruling R18 (task-8-brief.md) corrected two keys below that were NOT
+            // spelled like their effect classes. Verified against ApiType.java
+            // before use:
             //   NameCard      (ApiType.java:135) declares ChooseCardNameEffect.class
             //   GenericChoice (ApiType.java:109) declares ChooseGenericEffect.class
-            //   ChooseSector  (ApiType.java:54)  was absent from an earlier draft
             // A rule keyed by the CLASS stem matches nothing and fails silently.
+            //
+            // R18 also added a ChooseSector entry here, on the reasoning that it fits
+            // choice_made and that leaving it out would be a voluntary omission. That
+            // check covered ApiType.java and the Card accessor but never the Python
+            // schema, which already had the answer -- see the comment below
+            // GenericChoice, where that entry would otherwise sit. Fix round 1 removed
+            // it.
             //
             // The brief's sample code for every entry below constructed `Rule` with
             // only two arguments (a memo-or-null, then the emitter), omitting the
             // eventType this record actually declares first -- that does not compile
             // against the real three-argument Rule above, so each entry here supplies
             // the real constant the same way every pre-existing rule already does.
+            //
+            // GenericChoice, ChooseDirection, ChooseEvenOdd and NameCard are not
+            // optional extras needing a judgment call: all four are present in
+            // event_schema.py's EFFECT_API_EVENTS (mapped to CHOICE_MADE) and absent
+            // from EXCLUDED_EFFECT_APIS, so the schema itself declares that these APIs
+            // produce choice_made. A rule that matches here and reads nothing back
+            // would be worse than one left out of this table entirely -- it looks
+            // wired. Their choice() read branches, below, are required, not optional.
             Map.entry("ChooseColor", new Rule(EffectEvent.CHOICE_MADE, null,
                     (sa, host, memo) -> choice(sa, host))),
             Map.entry("ChooseType", new Rule(EffectEvent.CHOICE_MADE, null,
@@ -135,8 +149,20 @@ final class ApiEvents {
                     (sa, host, memo) -> choice(sa, host))),
             Map.entry("GenericChoice", new Rule(EffectEvent.CHOICE_MADE, null,
                     (sa, host, memo) -> choice(sa, host))),
-            Map.entry("ChooseSector", new Rule(EffectEvent.CHOICE_MADE, null,
-                    (sa, host, memo) -> choice(sa, host))),
+
+            // ChooseSector is deliberately NOT wired here. Ruling R18 added it after
+            // checking ApiType.java (a real member, ApiType.java:54) and
+            // Card.getChosenSector() (a real accessor -- ChooseSectorEffect.java:13
+            // calls setChosenSector) -- but never checked the Python schema, which
+            // already had the answer: event_schema.py's EXCLUDED_EFFECT_APIS carries
+            //   "ChooseSector": "Unfinity attraction; not reachable in sealed or draft"
+            // with ChooseSector correspondingly absent from EFFECT_API_EVENTS. This
+            // corpus is collected from sealed and draft pools only, which never
+            // include Unfinity's silver-bordered attraction cards, so the clause this
+            // would read can never actually run here. If ChooseSector caught your eye
+            // in ApiType.java and you are about to re-add it the way R18 did: don't,
+            // without re-checking the schema first -- everyChoiceMadeApiHasAReadableChoice
+            // in ApiEventsTest will fail the moment you do, which is the point.
             Map.entry("HealDamage", new Rule(EffectEvent.DAMAGE_HEALED, DAMAGE_BEFORE,
                     (sa, host, memo) -> new EffectEvent(EffectEvent.DAMAGE_HEALED)
                             .param("amount", memo instanceof Integer n ? n : 0))),
@@ -214,6 +240,23 @@ final class ApiEvents {
     /** Package-private seam for this hook's own test; production code never calls it. */
     static void resetEmitterFailureLatchForTest() {
         EMITTER_FAILURE_REPORTED.set(false);
+    }
+
+    /**
+     * Package-private seam for {@code ApiEventsTest}'s {@code choice_made}
+     * completeness guard: every live {@code RULES} key whose declared event
+     * type is {@code choice_made}, read off the table itself rather than
+     * hand-copied, so a new one wired in later is picked up automatically
+     * instead of the guard quietly checking a stale list.
+     */
+    static java.util.Set<String> choiceMadeApiKeysForTest() {
+        java.util.Set<String> keys = new java.util.TreeSet<>();
+        for (Map.Entry<String, Rule> entry : RULES.entrySet()) {
+            if (EffectEvent.CHOICE_MADE.equals(entry.getValue().eventType())) {
+                keys.add(entry.getKey());
+            }
+        }
+        return keys;
     }
 
     private static Rule ruleFor(SpellAbility sa) {
@@ -347,27 +390,40 @@ final class ApiEvents {
      * {@code ""} rather than {@code null}. A bare {@code != null} check
      * against either would always be true, which for the colour branch --
      * checked first -- would report <i>every</i> clause routed through this
-     * method as a colour choice, sector and number and all. {@code
+     * method as a colour choice, direction and number and all. {@code
      * hasChosenColor()} is what {@code Card} itself defines for this
      * distinction, so this reads that instead; the named-card branch was
      * already guarded correctly by its paired {@code !isEmpty()} check.
      *
-     * <p>The sector, direction, even/odd and mode branches are not in the
-     * brief's sample for this method, though the {@code ChooseSector},
-     * {@code ChooseDirection}, {@code ChooseEvenOdd} and {@code
-     * GenericChoice} rules above all route through it. {@code
-     * ChooseSectorEffect.resolve()} calls {@code setChosenSector} (Ruling
-     * R18's own justification for that rule), {@code
+     * <p>The direction, even/odd and mode branches are not in the brief's
+     * sample for this method, though the {@code ChooseDirection}, {@code
+     * ChooseEvenOdd} and {@code GenericChoice} rules above all route through
+     * it. These are not optional extras: {@code event_schema.py}'s {@code
+     * EFFECT_API_EVENTS} maps all three (and {@code NameCard}) to {@code
+     * CHOICE_MADE} and excludes none of them, so the schema itself declares
+     * that these APIs produce {@code choice_made} -- a rule that matches and
+     * then reads nothing back would be worse than one left out of {@code
+     * RULES} entirely, because it looks wired. {@code
      * ChooseDirectionEffect.resolve()} always calls {@code
      * setChosenDirection}, and {@code ChooseEvenOddEffect.resolve()} always
      * calls {@code setChosenEvenOdd} -- the identical "dedicated accessor
-     * that stays there" shape as the six branches already read, so leaving
-     * them unread would have made those three rules permanently silent (and,
-     * before the colour fix above, silently wrong instead). {@code
+     * that stays there" shape as the six branches already read. {@code
      * GenericChoice} only reaches its branch for the {@code SetChosenMode$
      * True} scripts (Tarkir's Sieges, Fallout's Hoover Dam, 15 real cards);
      * the rest resolve a chosen sub-ability directly and leave no scalar on
-     * the host to describe which one.
+     * the host to describe which one -- the schema still declares the API,
+     * so the branch is what makes the reachable subset of it reachable.
+     *
+     * <p>A {@code ChooseSector} branch reading {@code getChosenSector()}
+     * lived here briefly too. Removed along with the {@code RULES} entry
+     * (see the comment above {@code HealDamage}) once it turned out {@code
+     * event_schema.py} already excludes {@code ChooseSector} as unreachable
+     * in this corpus's sealed/draft pools -- so the accessor is still real,
+     * but nothing in {@code RULES} routes to this method carrying that API
+     * any more, and the branch would have been dead weight at best and a
+     * stale-state misattribution risk at worst (a host that happened to
+     * carry a leftover {@code chosenSector} from something else entirely
+     * would have outranked a later, real choice on the same card).
      */
     private static EffectEvent choice(SpellAbility sa, Card host) {
         if (host == null) {
@@ -393,9 +449,6 @@ final class ApiEvents {
         } else if (host.getChosenCards() != null && !host.getChosenCards().isEmpty()) {
             kind = "cards";
             value = String.valueOf(host.getChosenCards().size());
-        } else if (host.getChosenSector() != null) {
-            kind = "sector";
-            value = host.getChosenSector();
         } else if (host.getChosenDirection() != null) {
             kind = "direction";
             value = host.getChosenDirection().name();
