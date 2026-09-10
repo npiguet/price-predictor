@@ -56,15 +56,26 @@ def enum_members(path: Path) -> list[str]:
 def class_stem_pairs(path: Path) -> dict[str, str]:
     """Each live member's own effect class, ``Effect``-suffix stripped.
 
-    First occurrence in the enum wins where more than one member shares a
-    class -- ApiType's three internal ``Charm`` aliases all name
-    ``CharmEffect``, and ``Charm`` itself, the self-consistent pairing, is the
-    one the enum lists first.
+    Where several members share a class -- ApiType's three internal ``Charm``
+    aliases all name ``CharmEffect``, alongside ``Charm`` itself -- prefer the
+    member whose name equals the stem outright over "whichever the enum
+    happens to list first". The self-consistent pairing is correct on its own
+    terms (a class named ``CharmEffect`` really is ``Charm``'s own class), not
+    merely lucky about today's ordering; relying on file order instead would
+    make this function's one correctness property a fact about Forge's
+    formatting rather than one this function enforces, and a future reorder
+    could silently turn the printed rename table into a wrong suggestion
+    (``Charm -> CompanionChoose``) for the one artifact meant to be derived
+    rather than hand-typed. Falling back to first-seen only when no member
+    matches the stem keeps every class resolving to some member.
     """
-    pairs: dict[str, str] = {}
+    by_stem: dict[str, list[str]] = {}
     for member, cls in _ENUM_CONSTANT.findall(path.read_text(encoding="utf-8")):
-        pairs.setdefault(cls.removesuffix("Effect"), member)
-    return pairs
+        by_stem.setdefault(cls.removesuffix("Effect"), []).append(member)
+    return {
+        stem: stem if stem in members else members[0]
+        for stem, members in by_stem.items()
+    }
 
 
 def main() -> int:
