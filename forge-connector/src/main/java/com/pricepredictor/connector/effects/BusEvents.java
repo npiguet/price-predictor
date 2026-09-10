@@ -5,6 +5,7 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventPlayerCounters;
@@ -13,6 +14,7 @@ import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventScry;
+import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
 import forge.game.player.PlayerView;
@@ -173,6 +175,47 @@ final class BusEvents {
     static EffectEvent dayTime(GameEventDayTimeChanged event) {
         return new EffectEvent(EffectEvent.DAY_NIGHT_CHANGED)
                 .param("to", event.daytime() ? "day" : "night");
+    }
+
+    /**
+     * A regeneration shield doing its job: heal, tap, remove from combat.
+     *
+     * <p>Read off the bus rather than through the mode table {@code
+     * describeParams} consults, because that table's {@code "Regenerated"}
+     * entry names no real Forge mode — {@code TriggerType} and {@code
+     * ReplacementType} spell regeneration's own trigger and replacement modes
+     * differently, so the entry can never match at runtime. It is a dead
+     * reference, the same shape as the original {@code damage_prevented} /
+     * {@code spell_copied} finding, not a live path serving a different
+     * purpose. {@code RegenerationEffect.resolve()} (fire site: {@code
+     * RegenerationEffect.java:49}, the only one in the engine) publishes this
+     * once per card actually regenerated.
+     *
+     * <p>Multiple subjects in principle — the record type wraps a collection —
+     * though the one fire site always passes a single card; read generically
+     * rather than assume that stays true.
+     */
+    static EffectEvent regenerated(GameEventCardRegenerated event) {
+        EffectEvent built = new EffectEvent(EffectEvent.REGENERATED);
+        for (CardView card : event.cards()) {
+            built.subject(cardRef(card));
+        }
+        return built;
+    }
+
+    /**
+     * A library shuffled, named by the player whose library it was.
+     *
+     * <p>{@code Player.shuffle(SpellAbility)} fires this once (fire site:
+     * {@code Player.java:1627}, the only one in the engine), whatever scripted
+     * the shuffle — a fetchland, a scripted "shuffle your library" effect, the
+     * end-of-search shuffle after a tutor. No cause rides the event because
+     * none is named: the record carries only the player, so unlike {@code
+     * radiation}/{@code poisoned} this has no {@code causeOf} counterpart.
+     */
+    static EffectEvent libraryShuffled(GameEventShuffle event) {
+        return new EffectEvent(EffectEvent.LIBRARY_SHUFFLED)
+                .subject(playerRef(event.player()));
     }
 
     static EffectEvent counters(GameEventCardCounters event) {

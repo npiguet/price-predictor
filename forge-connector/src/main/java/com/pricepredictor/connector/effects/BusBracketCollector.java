@@ -11,12 +11,14 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
 import forge.game.event.GameEventScry;
+import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSurveil;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
@@ -428,6 +430,21 @@ public final class BusBracketCollector {
     @Subscribe
     public void onDayTime(GameEventDayTimeChanged event) {
         record(BusEvents.dayTime(event));
+    }
+
+    /**
+     * A regeneration shield doing its job. No named cause: see {@link
+     * BusEvents#regenerated}.
+     */
+    @Subscribe
+    public void onRegenerated(GameEventCardRegenerated event) {
+        record(BusEvents.regenerated(event));
+    }
+
+    /** A library shuffled. No named cause: see {@link BusEvents#libraryShuffled}. */
+    @Subscribe
+    public void onShuffle(GameEventShuffle event) {
+        record(BusEvents.libraryShuffled(event));
     }
 
     @Subscribe

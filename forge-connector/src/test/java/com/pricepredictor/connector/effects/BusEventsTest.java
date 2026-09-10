@@ -1,10 +1,13 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
+import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerRadiation;
+import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.player.Player;
 import org.junit.jupiter.api.Test;
@@ -107,5 +110,29 @@ class BusEventsTest {
                 new GameEventSpeedChanged(player, 1, 3)).params().get("delta"));
         assertEquals(3, BusEvents.radiation(
                 new GameEventPlayerRadiation(player, player, 3)).params().get("delta"));
+    }
+
+    /**
+     * Regeneration and shuffle, the two types the mode table's own dead and
+     * misfiled entries left unreachable — {@code "Regenerated"} matches no
+     * real Forge trigger or replacement mode, and reading the bus instead is
+     * what makes the type reachable at all.
+     */
+    @Test
+    void aRegeneratedCardNamesTheCard() {
+        Card card = TestCards.build("Runeclaw Bear");
+
+        EffectEvent event = BusEvents.regenerated(new GameEventCardRegenerated(card));
+
+        assertEquals(EffectEvent.REGENERATED, event.type());
+        assertEquals(List.of("E" + card.getId()), event.subjects());
+    }
+
+    @Test
+    void aShuffleNamesThePlayer() {
+        EffectEvent event = BusEvents.libraryShuffled(new GameEventShuffle(player));
+
+        assertEquals(EffectEvent.LIBRARY_SHUFFLED, event.type());
+        assertEquals(List.of("P" + player.getId()), event.subjects());
     }
 }

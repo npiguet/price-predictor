@@ -8,6 +8,7 @@ import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardCounters;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
@@ -17,6 +18,7 @@ import forge.game.event.GameEventPlayerLivesChanged;
 import forge.game.event.GameEventPlayerPoisoned;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventScry;
+import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
 import forge.game.spellability.SpellAbility;
@@ -157,6 +159,22 @@ final class ForkEventSink {
     @Subscribe
     public void onDayTime(GameEventDayTimeChanged event) {
         file(BusEvents.dayTime(event));
+    }
+
+    /**
+     * A regeneration shield doing its job, read the same way the bracket
+     * collector reads it — see {@code BusBracketCollector.onRegenerated}. Kept
+     * in step by {@link ForkEventSinkTest#aForkHearsEveryOutcomeAnObservedRecordHears}.
+     */
+    @Subscribe
+    public void onRegenerated(GameEventCardRegenerated event) {
+        file(BusEvents.regenerated(event));
+    }
+
+    /** A library shuffled, read the same way — see {@code BusBracketCollector.onShuffle}. */
+    @Subscribe
+    public void onShuffle(GameEventShuffle event) {
+        file(BusEvents.libraryShuffled(event));
     }
 
     @Subscribe
