@@ -448,10 +448,10 @@ KNOWN_UNEMITTED: frozenset[str] = frozenset({
     "clash_resolved", "coin_flipped", "continuous_effect_created",
     "damage_healed",
     "dungeon_ventured",
-    "ownership_change", "permanent_copied",
-    "phase_added", "phase_skipped", "piles_made",
+    "permanent_copied",
+    "piles_made",
     "restriction_change", "targets_changed",
-    "turn_added", "turn_skipped", "vote_taken", "x_changed",
+    "vote_taken",
 })
 
 
