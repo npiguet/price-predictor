@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import forge.StaticData;
 import forge.ai.LobbyPlayerAi;
 import forge.deck.Deck;
 import forge.game.Game;
@@ -10,6 +11,7 @@ import forge.game.GameType;
 import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.card.CardFactory;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventPlayerRadiation;
@@ -739,6 +741,54 @@ class BusBracketCollectorTest {
         collector.endBracket(bolt.getId(), false);
 
         assertTrue(written().get(0).contains("\"outcome\":\"declined\""));
+    }
+
+    // ── final-fix-3.md item 2: another game's confirmation ──────────────
+
+    /**
+     * final-fix-3.md item 2: a refusal reported for an ability belonging to a
+     * DIFFERENT {@code Game} -- exactly {@code ForkCollector.forceResolution}'s
+     * shape, since {@code GameSimulator.resolveStack} runs the forced ability
+     * through the same {@code PlayerControllerAi.confirmAction}/{@code
+     * confirmBidAction} this hook is installed on, regardless of how this
+     * game's own two lobby seats were registered -- must not mark the live
+     * bracket's own open resolution {@code declined}. {@code GameCopier}
+     * builds every copied {@code Card} against a new {@code Game} object, so a
+     * fork's ability's own host card already carries a different {@code Game}
+     * than this collector's.
+     *
+     * <p>Companion to {@code PatchedCollectorTest
+     * .anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} and {@code
+     * ClauseContractTest.aClauseFromAnotherGameDoesNotReachThisGamesBracket},
+     * which cover the same fix on {@code PatchedCollectors}'s two hooks; this
+     * one is on {@code BusBracketCollector} because {@code confirmHandler} is
+     * declared there instead.
+     */
+    @Test
+    void aDeclinedConfirmationFromAnotherGameDoesNotReachTheLiveBracket() throws IOException {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Card forkHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
+                null, TestCards.nextCardId(), fork);
+        SpellAbility forkAbility = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
+
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        ConfirmListener listener = (ConfirmListener) Proxy.newProxyInstance(
+                ConfirmListener.class.getClassLoader(),
+                new Class<?>[]{ConfirmListener.class},
+                collector.confirmHandler());
+
+        collector.beginBracket(bolt);
+        // A fork's own confirmation, declined -- must not touch this bracket.
+        listener.onConfirm(forkAbility, false);
+        collector.endBracket(bolt.getId(), false);
+
+        assertTrue(written().get(0).contains("\"outcome\":\"resolved\""),
+                "a fork's own declined confirmation must not mark the live "
+                        + "bracket's ability declined: " + written());
     }
 
     /**

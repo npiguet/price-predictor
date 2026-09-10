@@ -966,11 +966,34 @@ public final class BusBracketCollector {
                     || args.length < 2) {
                 return null;
             }
-            if (Boolean.FALSE.equals(args[1])) {
+            // final-fix-3.md item 2: this hook is a JVM static like the other
+            // five that had no game check, and PlayerControllerAi.confirmAction
+            // is exactly what a fork's own forced resolution asks when it
+            // pays a cost or resolves an optional clause (GameSimulator builds
+            // its own PlayerControllerAi over the forked Game, but the static
+            // listener it calls is this game's). args[0] is declared
+            // SpellAbility on Forge's side; a value this cannot identify is
+            // left alone rather than newly dropped.
+            if (Boolean.FALSE.equals(args[1])
+                    && (!(args[0] instanceof SpellAbility sa) || belongsToLiveGame(sa))) {
                 noteDeclined();
             }
             return null;
         };
+    }
+
+    /**
+     * As {@code PatchedCollectors#belongsToLiveGame(CardTraitBase)}, kept as
+     * this class's own copy rather than shared: each collector class in this
+     * package already keeps its own small per-{@code SpellAbility} helpers
+     * ({@code keysOf}, {@code referencedOf}) rather than a shared utility, and
+     * this one needs only the {@code SpellAbility} shape {@link
+     * #confirmHandler()} calls it with, not the wider {@code CardTraitBase}
+     * {@code PatchedCollectors} also needs for its rewrite/trigger hooks.
+     */
+    private boolean belongsToLiveGame(SpellAbility ability) {
+        Card host = ability.getHostCard();
+        return host != null && host.getGame() == game;
     }
 
     /** Record a refusal against the open bracket, if there is one. */

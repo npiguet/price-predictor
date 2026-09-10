@@ -417,6 +417,17 @@ public final class PatchedCollectors implements AutoCloseable {
                     || args.length < 3) {
                 return null;
             }
+            // final-fix-3.md item 2: a fork's own replacements resolve
+            // through this same JVM-static hook (ForkCollector.forceResolution
+            // runs the fork's forced ability through the real resolution
+            // pipeline, which is where replacements apply). args[0] is
+            // declared ReplacementEffect on Forge's side -- always a
+            // CardTraitBase with a real host -- so a positively-identified
+            // other game is dropped; anything this cannot identify is left
+            // alone rather than newly dropped.
+            if (args[0] instanceof CardTraitBase trait && !belongsToLiveGame(trait)) {
+                return null;
+            }
             EffectRecord record = rewriteRecord(
                     args[0], args[1], args[2],
                     args.length > 3 ? args[3] : null,
@@ -715,11 +726,26 @@ public final class PatchedCollectors implements AutoCloseable {
      * about when. Drawn at roughly 1:1 by sampling the negatives, since a turn
      * evaluates far more conditions than it fires.
      *
+     *
+     * <p>Package-private rather than private (final-fix-3.md item 2), the same
+     * reason {@link #rewriteHandler()} already is: the argument order has no
+     * compiler behind it, so this hook's own game-identity test calls it with
+     * a synthesized argument array.
      */
-    private InvocationHandler triggerFireHandler() {
+    InvocationHandler triggerFireHandler() {
         return (proxy, method, args) -> {
             if (!"onConditionEvaluated".equals(method.getName()) || args == null
                     || args.length < 3) {
+                return null;
+            }
+            // final-fix-3.md item 2: checked first, before this evaluation can
+            // spend any of the mode's negative-sampling budget (offer/keep
+            // below) -- a fork's trigger evaluations must not skew the live
+            // game's ratio bookkeeping any more than they must reach its
+            // shard. args[0] is declared Trigger on Forge's side, always a
+            // CardTraitBase with a real host; anything this cannot identify
+            // is left alone rather than newly dropped.
+            if (args[0] instanceof CardTraitBase trait && !belongsToLiveGame(trait)) {
                 return null;
             }
             boolean fired = Boolean.TRUE.equals(args[2]);
@@ -888,8 +914,12 @@ public final class PatchedCollectors implements AutoCloseable {
      * candidate at every priority, which would otherwise swamp the corpus. The
      * {@code attackers} and {@code blockers} subkinds are always logged: they
      * fire once per combat, not once per candidate.
+     *
+     * <p>Package-private rather than private (final-fix-3.md item 2), the same
+     * reason {@link #rewriteHandler()} already is: this hook's own
+     * game-identity test calls it with a synthesized argument array.
      */
-    private InvocationHandler playabilityHandler() {
+    InvocationHandler playabilityHandler() {
         return (proxy, method, args) -> {
             if (!"onCandidate".equals(method.getName()) || args == null
                     || args.length < 4) {
@@ -912,6 +942,15 @@ public final class PatchedCollectors implements AutoCloseable {
             String manaCost = null;
             SpellAbility candidate =
                     args[0] instanceof SpellAbility sa ? sa : null;
+            // final-fix-3.md item 2: a fork's own candidates are evaluated for
+            // playability too (ForkCollector.forceResolution's chooseTargets,
+            // and GameSimulator's own AI decisions, both ask the same
+            // AiController this hook is installed on). A null candidate is
+            // pre-existing, unrelated behaviour (the record still names no
+            // ability) and is left alone.
+            if (candidate != null && !belongsToLiveGame(candidate)) {
+                return null;
+            }
             if (candidate != null) {
                 candidateKeys = keysOf(candidate);
                 for (String id : legalTargetsOf(candidate)) {
@@ -1019,20 +1058,33 @@ public final class PatchedCollectors implements AutoCloseable {
      * the retained set is a uniform sample of distinct board answers rather
      * than one weighted by how often the AI re-asked. The cap alone still left
      * these at 34.4% of the first corpus against a 5% training share.
+     *
+     * <p>Package-private rather than private (final-fix-3.md item 2), the same
+     * reason {@link #rewriteHandler()} already is: this hook's own
+     * game-identity test calls it with a synthesized argument array.
      */
-    private InvocationHandler combatLegalityHandler() {
+    InvocationHandler combatLegalityHandler() {
         return (proxy, method, args) -> {
             if (args == null) {
                 return null;
             }
+            // final-fix-3.md item 2: no CardTraitBase here -- the acting
+            // argument is the GameEntity itself (defender/attacker), so
+            // identity comes straight off it rather than through a host card.
+            // Wrong-type or null is left alone rather than newly dropped;
+            // emitAttackers/emitBlockers already tolerate both.
             if ("onAttackersComputed".equals(method.getName()) && args.length >= 3) {
-                emitAttackers(args[0], asCards(args[1]), asCards(args[2]));
+                if (!(args[0] instanceof GameEntity defender) || belongsToLiveGame(defender)) {
+                    emitAttackers(args[0], asCards(args[1]), asCards(args[2]));
+                }
             } else if ("onBlockersComputed".equals(method.getName())
                     && args.length >= 4) {
-                emitBlockers(
-                        args[0] instanceof Card attacker ? attacker : null,
-                        asCards(args[1]), asCards(args[2]),
-                        args[3] instanceof Integer min ? min : 0);
+                if (!(args[0] instanceof GameEntity attacker) || belongsToLiveGame(attacker)) {
+                    emitBlockers(
+                            args[0] instanceof Card attackerCard ? attackerCard : null,
+                            asCards(args[1]), asCards(args[2]),
+                            args[3] instanceof Integer min ? min : 0);
+                }
             }
             return null;
         };
@@ -1878,8 +1930,12 @@ public final class PatchedCollectors implements AutoCloseable {
      * cast and no resolution for it and the corpus has no effect half at all.
      * That is what leaves the role-polarity probe unrunnable: paying {@code R}
      * is observable from stage one, producing it is not.
+     *
+     * <p>Package-private rather than private (final-fix-3.md item 2), the same
+     * reason {@link #rewriteHandler()} already is: this hook's own
+     * game-identity test calls it with a synthesized argument array.
      */
-    private InvocationHandler manaHandler() {
+    InvocationHandler manaHandler() {
         return (proxy, method, args) -> {
             if (!"onManaProduced".equals(method.getName()) || args == null
                     || args.length < 3) {
@@ -1887,7 +1943,11 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             SpellAbility ability = args[0] instanceof SpellAbility sa ? sa : null;
             String produced = String.valueOf(args[2]);
-            if (ability == null || produced.isEmpty()) {
+            // final-fix-3.md item 2: a fork's own mana abilities can resolve
+            // through the inline path too (forceResolution's forced ability,
+            // or costs it pays along the way), and this hook is a JVM static
+            // like the others.
+            if (ability == null || produced.isEmpty() || !belongsToLiveGame(ability)) {
                 return null;
             }
             String key = manaAbilityText(ability, produced);

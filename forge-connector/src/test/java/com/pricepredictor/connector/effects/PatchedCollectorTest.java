@@ -2173,6 +2173,159 @@ class PatchedCollectorTest {
                 "a probe's own combat-damage report must not land in the live game's record: " + shard);
     }
 
+    // ── final-fix-3.md item 2: the other four handlers ───────────────────
+
+    private interface TriggerFireListenerShape {
+        void onConditionEvaluated(Trigger trigger, Map<Object, Object> runParams, boolean fired);
+    }
+
+    private interface PlayabilityListenerShape {
+        void onCandidate(SpellAbility candidate, boolean canPlay, boolean affordable,
+                boolean hasLegalTarget);
+    }
+
+    private interface CombatLegalityListenerShape {
+        void onAttackersComputed(Object defender, List<Card> candidates, List<Card> legal);
+    }
+
+    private interface ManaListenerShape {
+        void onManaProduced(SpellAbility ability, Player player, String produced);
+    }
+
+    /**
+     * A fork's own host card, on a fresh {@code Game} no live collector was
+     * built over -- the shape {@code GameCopier} produces (every copied
+     * {@code Card} is built against the new, forked {@code Game}), reused by
+     * each of the four handler tests below.
+     */
+    private static Card forkHost(String name) {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        return CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard(name),
+                null, TestCards.nextCardId(), fork);
+    }
+
+    /**
+     * final-fix-3.md item 2: {@code triggerFireHandler} had no game check at
+     * all before this fix. A fork's own trigger evaluations
+     * ({@code GameSimulator.resolveStack} runs the forced ability's triggers
+     * through the real {@code TriggerHandler}) must not reach the live shard.
+     */
+    @Test
+    void aTriggerEvaluationFromAnotherGameDoesNotReachTheShard() throws Throwable {
+        Card forkCard = forkHost("Paralyze");
+        Trigger forkTrigger = forkCard.getCurrentState().getTriggers().get(0);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            collectors.triggerFireHandler().invoke(null,
+                    methodNamed(TriggerFireListenerShape.class, "onConditionEvaluated"),
+                    new Object[]{forkTrigger, Map.of(), true});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertEquals(List.of(), lines,
+                "a fork's own trigger evaluation must not land in the live shard: " + lines);
+    }
+
+    /**
+     * final-fix-3.md item 2: {@code playabilityHandler} had no game check
+     * either. {@code caps(0, 1.0)} forces {@code playabilityRate} to 1.0 so
+     * the sampling gate ahead of the game check cannot flakily hide it.
+     */
+    @Test
+    void aPlayabilityCandidateFromAnotherGameDoesNotReachTheShard() throws Throwable {
+        Card forkCard = forkHost("Grizzly Bears");
+        SpellAbility forkCandidate = AbilityFactory.getAbility(
+                "AB$ Pump | Cost$ 1 | NumAtt$ +1 | NumDef$ +1", forkCard);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", caps(0, 1.0), 1L)) {
+            collectors.playabilityHandler().invoke(null,
+                    methodNamed(PlayabilityListenerShape.class, "onCandidate"),
+                    new Object[]{forkCandidate, true, true, true});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertEquals(List.of(), lines,
+                "a fork's own playability candidate must not land in the live shard: " + lines);
+    }
+
+    /**
+     * final-fix-3.md item 2: {@code combatLegalityHandler} had no game check
+     * either. The defender is the acting {@code GameEntity} this hook hands
+     * over; the candidate/legal lists may be any real card, since only the
+     * defender's own game identity is what the fix reads.
+     */
+    @Test
+    void anAttackerLegalityAnswerFromAnotherGamesDefenderDoesNotReachTheShard() throws Throwable {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Player forkDefender = new Player("fork-defender", fork, 92301);
+        Card candidate = TestCards.build("Grizzly Bears");
+        // legalityRate forced to 1.0: the default (0.1) samples this subkind
+        // after the dedup check, so a run at the default rate could pass
+        // vacuously -- the record dropped by chance rather than by the gate
+        // under test.
+        CollectionCaps fullLegalityRate = new CollectionCaps(
+                CollectionCaps.defaults().manaCap(), CollectionCaps.defaults().playabilityRate(),
+                CollectionCaps.defaults().interventionsPerGame(), CollectionCaps.defaults().probesPerGame(),
+                CollectionCaps.defaults().probeKeywords(), CollectionCaps.defaults().snapshotTiers(), 1.0);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", fullLegalityRate, 1L)) {
+            collectors.combatLegalityHandler().invoke(null,
+                    methodNamed(CombatLegalityListenerShape.class, "onAttackersComputed"),
+                    new Object[]{forkDefender, List.of(candidate), List.of(candidate)});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertEquals(List.of(), lines,
+                "another game's defender must not land in the live shard: " + lines);
+    }
+
+    /**
+     * final-fix-3.md item 2: {@code manaHandler} had no game check either.
+     * Held in {@link PatchedCollectors#manaReservoir} rather than written
+     * immediately, so the collector must be closed (which flushes it) before
+     * the shard can be read.
+     */
+    @Test
+    void manaProducedByAnotherGamesAbilityDoesNotReachTheShard() throws Throwable {
+        Card forkCard = forkHost("Llanowar Elves");
+        SpellAbility forkAbility = AbilityFactory.getAbility(
+                "AB$ Mana | Cost$ T | Produced$ G", forkCard);
+        Player forkPlayer = new Player("fork-player", forkCard.getGame(), 92302);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collectors = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+            collectors.manaHandler().invoke(null,
+                    methodNamed(ManaListenerShape.class, "onManaProduced"),
+                    new Object[]{forkAbility, forkPlayer, "G"});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertTrue(lines.stream().noneMatch(l -> l.contains("mana_produced")),
+                "a fork's own mana production must not land in the live shard: " + lines);
+    }
+
     private static List<String> readShard(Path path) throws Exception {
         // A collector that never delivered a single record never opens the
         // shard file at all (RecordShardWriter creates it lazily), which the

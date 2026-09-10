@@ -2,8 +2,14 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import com.pricepredictor.connector.effects.PatchedCollectors.CollectionCaps;
+import forge.StaticData;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
+import forge.game.card.CardFactory;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.SpellAbility;
@@ -348,6 +354,51 @@ class RewriteContractTest {
         assertTrue(line.contains("\"result\":\"not_replaced\""), line);
     }
 
+    // ── final-fix-3.md item 2: another game's replacement ───────────────
+
+    /**
+     * final-fix-3.md item 2: a replacement reported for an effect belonging
+     * to a DIFFERENT {@code Game} -- exactly {@code
+     * ForkCollector.forceResolution}'s shape, since a forced ability's own
+     * replacements run through {@code GameSimulator.resolveStack}'s real
+     * resolution pipeline -- must not reach the live shard. This hook had no
+     * game check at all before this fix (unlike the clause/outcome hooks,
+     * which F2 already protected); {@code rewriteHandler} is a plain JVM
+     * static exactly like the other five this brief's item 2 covers.
+     *
+     * <p>Companion to {@code ClauseContractTest
+     * .aClauseFromAnotherGameDoesNotReachThisGamesBracket} and {@code
+     * PatchedCollectorTest.anOutcomeFromAnotherGameDoesNotReachThisGamesBracket}.
+     */
+    @Test
+    void aReplacementFromAnotherGameDoesNotReachTheShard() throws Throwable {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Card forkHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Rest in Peace"),
+                null, TestCards.nextCardId(), fork);
+        ReplacementEffect forkReplacement =
+                forkHost.getCurrentState().getReplacementEffects().iterator().next();
+        Map<String, Object> params = Map.of(
+                "Card", forkHost, "Destination", ZoneType.Graveyard);
+
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try (PatchedCollectors collector = new PatchedCollectors(
+                TestCards.game(), writer, "run.0-l1.0",
+                CollectionCaps.defaults(), 1L)) {
+            InvocationHandler handler = collector.rewriteHandler();
+            handler.invoke(null, onReplacement(ListenerShape.class), new Object[]{
+                    forkReplacement, params, params, ReplacementResult.Replaced, null});
+        } finally {
+            writer.close();
+        }
+
+        List<String> lines = readShard(path);
+        assertEquals(List.of(), lines,
+                "a fork's own replacement must not land in the live game's shard: " + lines);
+    }
+
     // ── plumbing ────────────────────────────────────────────────────────
 
     private PatchedCollectors recording() {
@@ -382,6 +433,12 @@ class RewriteContractTest {
     }
 
     private static List<String> readShard(Path path) throws Exception {
+        // A collector that never delivered a single record never opens the
+        // shard file at all (RecordShardWriter creates it lazily), which
+        // aReplacementFromAnotherGameDoesNotReachTheShard hits exactly.
+        if (!Files.exists(path)) {
+            return List.of();
+        }
         try (var gzip = new GZIPInputStream(Files.newInputStream(path));
                 var reader = new BufferedReader(
                         new InputStreamReader(gzip, StandardCharsets.UTF_8))) {

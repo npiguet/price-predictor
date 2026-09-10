@@ -412,34 +412,62 @@ starts passing an `AIOption` here fails a test rather than silently poisoning ev
 once.
 
 What is not true: that no simulated resolution ever happens during collection. Stage three's
-`ForkCollector` copies the live game (`GameCopier`) and forces a candidate ability to resolve on the copy
-— an interventional resolution, taken by default (`--interventions-per-game` defaults to 2) — and
-`ForkCollector.forceResolution` hands that copy to `GameSimulator.resolveStack`, which builds its own
-`PlayerControllerAi` and unconditionally calls `setUseSimulation(AIOption.USE_FULL_SIMULATION)`,
-regardless of how the two lobby seats were registered. So a fork's ability resolves through the exact
-same `AbilityUtils`/`EffectRecordOutcomes` machinery a real resolution does, under full simulation, every
-time collection takes an intervention.
+`ForkCollector` copies the live game (`GameCopier`) two ways, both taken by default:
 
-Every effect-record listener this plan installs (the outcome channel, the clause hook, the rewrite
-listener) is a plain JVM-wide static with no `Game` reference of its own, so by construction none of them
-can tell a fork's resolution from the live game's just by being called. Two different mechanisms are what
-actually keep a fork's events out of the live game's records:
+- **An interventional resolution** (`--interventions-per-game` defaults to 2): `ForkCollector
+  .forceResolution` forces a candidate ability onto the copy's stack and hands the copy to
+  `GameSimulator.resolveStack`, which builds its own `PlayerControllerAi` and unconditionally calls
+  `setUseSimulation(AIOption.USE_FULL_SIMULATION)`, regardless of how the two lobby seats were
+  registered. So a forced ability resolves through the exact same `AbilityUtils`/`EffectRecordOutcomes`
+  machinery a real resolution does, under full simulation, every time collection takes an intervention.
+- **A damage-step probe** (`--probe-keywords`, off unless named): `ForkCollector.probe` strips one
+  keyword from a copy and calls `Combat.assignCombatDamage`/`dealAssignedDamage` on it directly — a
+  turn-based action, not a resolution, so it never touches `GameSimulator` or an `AIOption` at all, but it
+  is exactly as much a fork as the first kind.
+
+Every effect-record listener this plan installs — the clause hook, the outcome hook, the rewrite listener,
+the trigger-fire listener, the mana listener, the playability listener, the combat-legality listener and
+the confirm listener, eight in total — is a plain JVM-wide static with no `Game` reference of its own, so
+by construction none of them can tell a fork's resolution from the live game's just by being called. Three
+mechanisms are what actually keep a fork's events out of the live game's records, and all eight listeners
+above are covered by one of them:
 
 - **Bus-derived events**: `ForkEventSink` subscribes to the *fork's own* `Game` object's event bus, not
   the live game's, so a fork's `GameEventCardDamaged` and friends never reach the live game's
   `BusBracketCollector` in the first place — there is no shared channel for them to leak through.
-- **The clause hook and the outcome hook**: because these two are not bus subscriptions, that separation
-  does not reach them. `PatchedCollectors.clauseHandler()` and `outcomeHandler()` instead check the
-  resolving ability's own game identity before ever handing its event to the bracket: `GameCopier` builds
-  every copied `Card` against a new `Game` object, so a fork's ability's host card carries a different
-  `Game` than the live one by construction, and the handlers compare the two by reference and drop
-  anything that does not match.
+- **An ability-, replacement- or trigger-bearing argument**: `PatchedCollectors.clauseHandler()`,
+  `outcomeHandler()` (when the reporting ability is non-null), `rewriteHandler()`, `triggerFireHandler()`,
+  `manaHandler()`, `playabilityHandler()` and `combatLegalityHandler()`, and `BusBracketCollector
+  .confirmHandler()`, each check the acting argument's own game identity — `belongsToLiveGame`, one
+  overload keyed on `CardTraitBase.getHostCard()` (covers `SpellAbility`, `ReplacementEffect` and
+  `Trigger`, which is why the rewrite and trigger-fire hooks share it with the clause/outcome hooks rather
+  than needing their own), one keyed on `GameEntity` directly (the combat-legality hook's
+  attacker/defender) — before ever handing an event to the bracket or the writer. `GameCopier` builds
+  every copied `Card` against a new `Game` object, so a fork's card carries a different `Game` than the
+  live one by construction, and each check compares the two by reference and drops anything that does not
+  match. An argument shaped unexpectedly (the wrong type, or missing a host) is left alone rather than
+  dropped: none of the eight listeners' real callers ever hand over that shape, so treating it as
+  unidentifiable-but-live costs nothing today and avoids a second class of silent loss for a state that
+  should not occur.
+- **A null ability, resolved another way**: `outcomeHandler()`'s two production null-ability sources
+  (`GameAction.reveal`'s `card_revealed`, ruling R10; `ReplacementHandler
+  .runSingleReplaceDamageEffect`'s two `damage_prevented` sites, rulings R11/R12) report with no
+  `SpellAbility` at all, on the live game exactly as on a fork, so the argument-identity check above has
+  nothing to compare. Simply admitting every null-ability outcome would readmit exactly what the checks
+  above exist to keep out: `ForkCollector.forceResolution`'s forced ability can itself reveal or prevent
+  damage with a null ability, and `ForkCollector.probe`'s damage step always does (`Combat`'s own cause is
+  null for combat damage, live or forked). Two signals, tried in order: the resolving-clause pointer
+  (`AbilityUtils.getEffectRecordSubAbility`) names the fork's own ability during `forceResolution`, because
+  a forced ability resolves through the normal resolution path that sets it; it names nothing during
+  `probe`'s damage step, a turn-based action nested inside no resolution, so `ForkCollector
+  .isProbeRunningOnThisThread()` — a thread flag `probe` itself sets around that one call — is what the
+  live game's own combat-damage step and a probe's are told apart by when the pointer has nothing to say.
 
-Without that check, a default-configuration collection run would mix a fork's hypothetical `vote_taken` or
-`coin_flipped` into the real game's records — indistinguishably, since nothing marks a leaked event as
-hypothetical. Task 7's `GamePlayerTest` AIOption guard is still correct, and stays; it is just narrower
-than this section used to claim: it proves the two lobby seats never simulate, not that collection as a
-whole never does.
+Without these checks, a default-configuration collection run would mix a fork's hypothetical `vote_taken`
+or `coin_flipped` into the real game's records, or a probe's hypothetical `damage_prevented` into it —
+indistinguishably, since nothing marks a leaked event as hypothetical. Task 7's `GamePlayerTest` AIOption
+guard is still correct, and stays; it is just narrower than this section used to claim: it proves the two
+lobby seats never simulate, not that collection as a whole never does.
 
 ## Payloads
 
