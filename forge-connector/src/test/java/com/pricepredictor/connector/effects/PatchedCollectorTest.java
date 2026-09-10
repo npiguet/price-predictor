@@ -1395,6 +1395,10 @@ class PatchedCollectorTest {
                 "setEffectRecordCombatListener").present()) {
             available++;
         }
+        if (PatchHooks.find(PatchHooks.ABILITY_UTILS,
+                "setEffectRecordClauseListener").present()) {
+            available++;
+        }
         try (PatchedCollectors collector = collectors(CollectionCaps.defaults())) {
             assertEquals(available, collector.install());
             assertEquals(available, collector.installedHooks().size());

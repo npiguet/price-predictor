@@ -567,6 +567,19 @@ public final class BusBracketCollector {
     }
 
     /**
+     * An event an effect API described rather than the bus announced.
+     *
+     * <p>Package-private because {@code PatchedCollectors} owns the clause hook
+     * and this collector owns the open bracket: the event belongs to whatever
+     * resolution is in flight, which only this class knows.
+     */
+    void recordClauseEvent(EffectEvent event) {
+        if (event != null) {
+            record(event);
+        }
+    }
+
+    /**
      * Outcomes a second identical report of cannot mean a second occurrence.
      *
      * <p>These describe a transition into a state a thing is either in or not:

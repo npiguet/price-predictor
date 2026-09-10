@@ -20,7 +20,9 @@ import forge.game.zone.ZoneType;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.lang.reflect.InvocationHandler;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -68,6 +70,12 @@ public final class PatchedCollectors implements AutoCloseable {
     private final Set<String> interveneSeen = new LinkedHashSet<>();
     /** Stage three's forks, or null when the run takes none. */
     private ForkCollector forks;
+    /**
+     * The bracket this game's clause events are filed into, or null when none
+     * is wired: {@code recordClauseEvent} is the door, and only the bracket
+     * collector for this same game knows which resolution is open.
+     */
+    private BusBracketCollector bracket;
     /** Probe branches waiting for the combat record they mirror. */
     private final List<ForkCollector.HeldProbe> heldProbes = new ArrayList<>();
     /** Boards a continuous static has already been recorded on, for coalescing. */
@@ -261,6 +269,18 @@ public final class PatchedCollectors implements AutoCloseable {
         this.forks = forks;
     }
 
+    /**
+     * Give the clause-event hook somewhere to file what it builds.
+     *
+     * <p>Optional in the same sense {@link #withForks} is: on a checkout
+     * without the hook, or a caller that never wires this, {@code install()}
+     * still installs the listener where the patch offers it, and the handler's
+     * null check just means nothing is ever filed.
+     */
+    public void withBracket(BusBracketCollector bracket) {
+        this.bracket = bracket;
+    }
+
     public long recordsWritten() {
         return recordsWritten + (forks == null ? 0 : forks.recordsWritten());
     }
@@ -328,6 +348,11 @@ public final class PatchedCollectors implements AutoCloseable {
                 combatLegalityHandler())) {
             installed.add("combat-legality");
         }
+        if (PatchHooks.install(
+                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener",
+                clauseHandler())) {
+            installed.add("clause-events");
+        }
         return installed.size();
     }
 
@@ -346,6 +371,8 @@ public final class PatchedCollectors implements AutoCloseable {
                 PatchHooks.ABILITY_MANA_PART, "setEffectRecordManaListener");
         PatchHooks.uninstall(
                 PatchHooks.AI_CONTROLLER, "setEffectRecordCombatListener");
+        PatchHooks.uninstall(
+                PatchHooks.ABILITY_UTILS, "setEffectRecordClauseListener");
         installed.clear();
         // Last, and outside the hook teardown: the question the tally answers
         // is about the run, so it is asked once per game whatever the game did.
@@ -1437,6 +1464,60 @@ public final class PatchedCollectors implements AutoCloseable {
     /** Branches taken and not yet completed. */
     public int heldProbeCount() {
         return heldProbes.size();
+    }
+
+    // ── clause events (an API's own parameters) ─────────────────────────
+
+    /**
+     * The events an effect API promises, taken from the clause that ran.
+     *
+     * <p>The memo is kept per thread and not per collector: a clause can resolve
+     * another, and the engine runs games on more than one thread.
+     */
+    private final ThreadLocal<Deque<Object>> clauseMemos =
+            ThreadLocal.withInitial(ArrayDeque::new);
+
+    /**
+     * Dispatches by method name on a listener this side never compiles
+     * against, so the argument order below is a runtime contract rather than
+     * one the compiler enforces: {@code onClauseResolving} is called with
+     * {@code args[0]} the clause; {@code onClauseResolved} with
+     * {@code args[0]} the same clause and {@code args[1]} whether it threw.
+     *
+     * <p>Package-private rather than private, which none of the other
+     * handlers but {@link #rewriteHandler} needs to be: that argument order
+     * has no compiler behind it either, so {@code ClauseContractTest} calls
+     * this with a synthesized argument array in the compiler's place.
+     */
+    InvocationHandler clauseHandler() {
+        return (proxy, method, args) -> {
+            if (args == null || args.length == 0
+                    || !(args[0] instanceof SpellAbility clause)) {
+                return null;
+            }
+            if ("onClauseResolving".equals(method.getName())) {
+                clauseMemos.get().push(
+                        java.util.Optional.ofNullable(ApiEvents.before(clause)));
+                return null;
+            }
+            if (!"onClauseResolved".equals(method.getName())) {
+                return null;
+            }
+            Deque<Object> memos = clauseMemos.get();
+            Object memo = memos.isEmpty() ? null : memos.pop();
+            boolean threw = args.length > 1 && Boolean.TRUE.equals(args[1]);
+            if (threw) {
+                // A clause that threw did not finish, and an event claiming it
+                // did would be a fact the game never contained.
+                return null;
+            }
+            Object value = memo instanceof java.util.Optional<?> opt
+                    ? opt.orElse(null) : memo;
+            if (bracket != null) {
+                bracket.recordClauseEvent(ApiEvents.after(clause, value));
+            }
+            return null;
+        };
     }
 
     // ── mana records ────────────────────────────────────────────────────

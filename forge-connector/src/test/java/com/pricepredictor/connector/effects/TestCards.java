@@ -7,6 +7,7 @@ import forge.game.GameType;
 import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
+import forge.game.spellability.SpellAbility;
 import forge.item.IPaperCard;
 import forge.item.PaperToken;
 
@@ -68,5 +69,21 @@ final class TestCards {
             throw new AssertionError("token script not in the database: " + scriptStem);
         }
         return CardFactory.getCard(paper, null, nextCardId++, GAME);
+    }
+
+    /** The first ability on a card whose API matches, for the emitter tests. */
+    static SpellAbility scriptedAbility(String cardName, String api) {
+        Card card = build(cardName);
+        for (SpellAbility sa : card.getCurrentState().getSpellAbilities()) {
+            if (sa.getApi() != null && api.equals(sa.getApi().name())) {
+                return sa;
+            }
+            for (SpellAbility sub = sa.getSubAbility(); sub != null; sub = sub.getSubAbility()) {
+                if (sub.getApi() != null && api.equals(sub.getApi().name())) {
+                    return sub;
+                }
+            }
+        }
+        throw new AssertionError("no " + api + " ability on " + cardName);
     }
 }

@@ -132,6 +132,10 @@ public class GamePlayer {
                 // hook and the game plays exactly as it did before.
                 patched = new PatchedCollectors(
                         game, effectRecords, gameId, caps, gameSeed);
+                // Where an effect API's own parameters describe its outcome,
+                // the clause hook files the event through the same bracket
+                // the bus-derived events land in.
+                patched.withBracket(bracket);
                 if (caps.interventionsPerGame() > 0 || caps.probesEnabled()) {
                     // Stage three. Nothing is copied unless a budget says so,
                     // because a fork costs a game copy and a stack resolution.

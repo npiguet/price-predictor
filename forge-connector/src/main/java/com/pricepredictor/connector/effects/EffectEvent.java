@@ -68,6 +68,14 @@ public final class EffectEvent {
     public static final String PLAYER_WON = "player_won";
     public static final String PLAYER_LOST = "player_lost";
     public static final String SPEED_CHANGED = "speed_changed";
+    public static final String TURN_ADDED = "turn_added";
+    public static final String TURN_SKIPPED = "turn_skipped";
+    public static final String PHASE_ADDED = "phase_added";
+    public static final String PHASE_SKIPPED = "phase_skipped";
+    public static final String X_CHANGED = "x_changed";
+    public static final String OWNERSHIP_CHANGE = "ownership_change";
+    public static final String CARD_MADE = "card_made";
+    public static final String RESTRICTION_CHANGE = "restriction_change";
 
     private final String type;
     private final List<String> subjects = new ArrayList<>();

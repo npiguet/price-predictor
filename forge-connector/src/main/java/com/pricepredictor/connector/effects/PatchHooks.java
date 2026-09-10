@@ -100,6 +100,8 @@ public final class PatchHooks {
                     + "it returned and which ability stood in for the event"),
             new Hook(ABILITY_UTILS, "getEffectRecordSubAbility",
                     "per-clause attribution: an event's attributed_to"),
+            new Hook(ABILITY_UTILS, "setEffectRecordClauseListener",
+                    "the events an effect API describes but the bus never announces"),
             new Hook(AI_CONTROLLER, "setEffectRecordPlayabilityListener",
                     "playability records, the decision subkind"),
             new Hook(AI_CONTROLLER, "setEffectRecordCombatListener",
