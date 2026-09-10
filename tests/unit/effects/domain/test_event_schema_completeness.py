@@ -443,10 +443,7 @@ _CONNECTOR_EFFECTS = (
 #: fire in corpus data (wired, not yet fired). This set shrinks as each type
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
-KNOWN_UNEMITTED: frozenset[str] = frozenset({
-    "ability_change", "choice_made", "continuous_effect_created",
-    "damage_healed", "targets_changed",
-})
+KNOWN_UNEMITTED: frozenset[str] = frozenset()
 
 
 def _emitted_event_types() -> set[str]:

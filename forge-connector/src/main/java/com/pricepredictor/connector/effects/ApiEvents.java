@@ -50,6 +50,25 @@ final class ApiEvents {
     private record Rule(String eventType, Memo memo, Emitter emitter) {
     }
 
+    /**
+     * Damage on the clause's targets, before it heals any of it away.
+     *
+     * <p>Declared ahead of {@link #RULES} on purpose: a static field read by
+     * simple name from another field's own initializer has to be declared
+     * first or the reference is an illegal forward reference and the class
+     * does not compile at all -- unlike the emitter lambdas below, which call
+     * methods declared later in this file with no such restriction.
+     */
+    private static final Memo DAMAGE_BEFORE = (sa, host) -> {
+        int total = 0;
+        if (sa.getTargets() != null) {
+            for (Card card : sa.getTargets().getTargetCards()) {
+                total += card.getDamage();
+            }
+        }
+        return total;
+    };
+
     private static final Map<String, Rule> RULES = Map.ofEntries(
             Map.entry("AddTurn", new Rule(EffectEvent.TURN_ADDED,
                     (sa, host) -> affectedPlayers(sa),
@@ -79,7 +98,61 @@ final class ApiEvents {
                             .param("value", amount(sa, host, "Value", "0")))),
             Map.entry("GainOwnership", new Rule(EffectEvent.OWNERSHIP_CHANGE, null, (sa, host, memo) ->
                     new EffectEvent(EffectEvent.OWNERSHIP_CHANGE)
-                            .param("owner", ownerOf(sa))))
+                            .param("owner", ownerOf(sa)))),
+
+            // ── Task 8: choices, healed damage, granted abilities, retargets ──
+            //
+            // Ruling R18 (task-8-brief.md). Two keys below are NOT spelled like their
+            // effect classes, and a third API was missing entirely from an earlier
+            // draft. Verified against ApiType.java before use:
+            //   NameCard      (ApiType.java:135) declares ChooseCardNameEffect.class
+            //   GenericChoice (ApiType.java:109) declares ChooseGenericEffect.class
+            //   ChooseSector  (ApiType.java:54)  was absent from an earlier draft
+            // A rule keyed by the CLASS stem matches nothing and fails silently.
+            //
+            // The brief's sample code for every entry below constructed `Rule` with
+            // only two arguments (a memo-or-null, then the emitter), omitting the
+            // eventType this record actually declares first -- that does not compile
+            // against the real three-argument Rule above, so each entry here supplies
+            // the real constant the same way every pre-existing rule already does.
+            Map.entry("ChooseColor", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseType", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseCard", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("NameCard", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseNumber", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChoosePlayer", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseDirection", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseEvenOdd", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseSource", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("GenericChoice", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("ChooseSector", new Rule(EffectEvent.CHOICE_MADE, null,
+                    (sa, host, memo) -> choice(sa, host))),
+            Map.entry("HealDamage", new Rule(EffectEvent.DAMAGE_HEALED, DAMAGE_BEFORE,
+                    (sa, host, memo) -> new EffectEvent(EffectEvent.DAMAGE_HEALED)
+                            .param("amount", memo instanceof Integer n ? n : 0))),
+            Map.entry("Animate", new Rule(EffectEvent.ABILITY_CHANGE, null, (sa, host, memo) ->
+                    new EffectEvent(EffectEvent.ABILITY_CHANGE)
+                            .param("abilities", sa.getParamOrDefault("Abilities", ""))
+                            .param("removed", sa.hasParam("RemoveAllAbilities")))),
+            Map.entry("AnimateAll", new Rule(EffectEvent.ABILITY_CHANGE, null, (sa, host, memo) ->
+                    new EffectEvent(EffectEvent.ABILITY_CHANGE)
+                            .param("abilities", sa.getParamOrDefault("Abilities", ""))
+                            .param("removed", sa.hasParam("RemoveAllAbilities")))),
+            Map.entry("Effect", new Rule(EffectEvent.CONTINUOUS_EFFECT_CREATED, null, (sa, host, memo) ->
+                    new EffectEvent(EffectEvent.CONTINUOUS_EFFECT_CREATED)
+                            .param("layers", sa.getParamOrDefault("StaticAbilities", "")))),
+            Map.entry("ChangeTargets", new Rule(EffectEvent.TARGETS_CHANGED, null,
+                    (sa, host, memo) -> retargeted(sa)))
     );
 
     /** What the emitter for this clause needs from before it runs, if anything. */
@@ -255,5 +328,115 @@ final class ApiEvents {
             players.addAll(AbilityUtils.getDefinedPlayers(sa.getHostCard(), token, sa));
         }
         return players;
+    }
+
+    /**
+     * The choice a Choose* clause left on its host, as a kind and a value.
+     *
+     * <p>Reads whichever dedicated accessor the clause populated, in a fixed
+     * priority order -- the API that actually ran is not consulted, only what
+     * state it left behind, so a choice left on the host by an earlier clause
+     * in the same chain can in principle outrank a later clause that
+     * legitimately produced no reading of its own. This mirrors the
+     * approximation {@link #ownerOf} already accepts for {@code
+     * GainOwnership}'s single-scalar shape rather than introducing a new one.
+     *
+     * <p><b>{@code getChosenColor()} and {@code getNamedCard()} never return
+     * {@code null}</b> -- an unset colour reads back as {@code ""} ({@code
+     * Card.getChosenColor}), the same way an unset named card reads back as
+     * {@code ""} rather than {@code null}. A bare {@code != null} check
+     * against either would always be true, which for the colour branch --
+     * checked first -- would report <i>every</i> clause routed through this
+     * method as a colour choice, sector and number and all. {@code
+     * hasChosenColor()} is what {@code Card} itself defines for this
+     * distinction, so this reads that instead; the named-card branch was
+     * already guarded correctly by its paired {@code !isEmpty()} check.
+     *
+     * <p>The sector, direction, even/odd and mode branches are not in the
+     * brief's sample for this method, though the {@code ChooseSector},
+     * {@code ChooseDirection}, {@code ChooseEvenOdd} and {@code
+     * GenericChoice} rules above all route through it. {@code
+     * ChooseSectorEffect.resolve()} calls {@code setChosenSector} (Ruling
+     * R18's own justification for that rule), {@code
+     * ChooseDirectionEffect.resolve()} always calls {@code
+     * setChosenDirection}, and {@code ChooseEvenOddEffect.resolve()} always
+     * calls {@code setChosenEvenOdd} -- the identical "dedicated accessor
+     * that stays there" shape as the six branches already read, so leaving
+     * them unread would have made those three rules permanently silent (and,
+     * before the colour fix above, silently wrong instead). {@code
+     * GenericChoice} only reaches its branch for the {@code SetChosenMode$
+     * True} scripts (Tarkir's Sieges, Fallout's Hoover Dam, 15 real cards);
+     * the rest resolve a chosen sub-ability directly and leave no scalar on
+     * the host to describe which one.
+     */
+    private static EffectEvent choice(SpellAbility sa, Card host) {
+        if (host == null) {
+            return null;
+        }
+        String kind = null;
+        String value = null;
+        if (host.hasChosenColor()) {
+            kind = "color";
+            value = host.getChosenColor();
+        } else if (host.getChosenType() != null && !host.getChosenType().isEmpty()) {
+            kind = "type";
+            value = host.getChosenType();
+        } else if (host.getChosenNumber() != null) {
+            kind = "number";
+            value = String.valueOf(host.getChosenNumber());
+        } else if (host.getNamedCard() != null && !host.getNamedCard().isEmpty()) {
+            kind = "card_name";
+            value = host.getNamedCard();
+        } else if (host.getChosenPlayer() != null) {
+            kind = "player";
+            value = SnapshotBuilder.playerId(host.getChosenPlayer());
+        } else if (host.getChosenCards() != null && !host.getChosenCards().isEmpty()) {
+            kind = "cards";
+            value = String.valueOf(host.getChosenCards().size());
+        } else if (host.getChosenSector() != null) {
+            kind = "sector";
+            value = host.getChosenSector();
+        } else if (host.getChosenDirection() != null) {
+            kind = "direction";
+            value = host.getChosenDirection().name();
+        } else if (host.getChosenEvenOdd() != null) {
+            kind = "even_odd";
+            value = host.getChosenEvenOdd().name();
+        } else if (host.getChosenMode() != null && !host.getChosenMode().isEmpty()) {
+            kind = "mode";
+            value = host.getChosenMode();
+        }
+        if (kind == null) {
+            // The clause chose something this has no reading for. An event
+            // naming the choice kind "?" would train the head on a distinction
+            // the corpus cannot make.
+            return null;
+        }
+        return new EffectEvent(EffectEvent.CHOICE_MADE)
+                .param("choice_kind", kind)
+                .param("value", value);
+    }
+
+    /**
+     * What the retargeted spells point at now.
+     *
+     * <p>Read after the clause rather than reported by it, because a spell it
+     * retargeted is still on the stack carrying its new {@code TargetChoices}
+     * -- this is the one outcome in this group that survives on an object
+     * other than the host.
+     */
+    private static EffectEvent retargeted(SpellAbility sa) {
+        List<String> targets = new ArrayList<>();
+        if (sa.getTargets() != null) {
+            for (SpellAbility changed : sa.getTargets().getTargetSpells()) {
+                if (changed.getTargets() == null) {
+                    continue;
+                }
+                for (Card card : changed.getTargets().getTargetCards()) {
+                    targets.add(SnapshotBuilder.entityId(card));
+                }
+            }
+        }
+        return new EffectEvent(EffectEvent.TARGETS_CHANGED).param("targets", targets);
     }
 }

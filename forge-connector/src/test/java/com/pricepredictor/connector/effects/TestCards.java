@@ -5,6 +5,7 @@ import forge.game.Game;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.Match;
+import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.spellability.SpellAbility;
@@ -85,5 +86,27 @@ final class TestCards {
             }
         }
         throw new AssertionError("no " + api + " ability on " + cardName);
+    }
+
+    /**
+     * A {@code SpellAbility} built directly from script text, for an API with
+     * no route through {@link #scriptedAbility} at all.
+     *
+     * <p>{@code HealDamage} is the case this exists for (Ruling R15,
+     * task-8-brief.md): it appears in exactly two cards in the whole
+     * cardsfolder, and neither is reachable this way -- {@code
+     * pyramids.txt}'s is buried behind a {@code Charm}'s {@code Choices$} into
+     * a {@code DB$ Effect}'s {@code ReplacementEffects$}, and {@code
+     * wolverine_fierce_fighter.txt}'s sits behind a replacement effect's
+     * {@code ReplaceWith$}; {@code scriptedAbility} walks root abilities and
+     * {@code SubAbility$} chains only, and reaches neither.
+     *
+     * <p>A thin wrapper over {@code AbilityFactory.getAbility(text, host)} --
+     * the same call {@link #scriptedAbility} itself ends in -- against a
+     * generic host, since the text alone (no {@code Cost$}, no targeting) is
+     * everything the API under test needs.
+     */
+    static SpellAbility abilityFromText(String text) {
+        return AbilityFactory.getAbility(text, build("Grizzly Bears"));
     }
 }

@@ -2,6 +2,7 @@ package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
 import forge.game.ability.AbilityFactory;
+import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
@@ -294,6 +295,137 @@ class ApiEventsTest {
 
         assertEquals(EffectEvent.TURN_SKIPPED, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(targeted)), event.subjects());
+    }
+
+    // ── Task 8: choices, healed damage, granted abilities, retargets ────
+
+    @Test
+    void aChosenColourIsAChoice() {
+        SpellAbility sa = TestCards.scriptedAbility("Akroma's Blessing", "ChooseColor");
+        Object memo = ApiEvents.before(sa);
+        sa.getHostCard().setChosenColors(com.google.common.collect.ImmutableList.of("red"));
+
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.CHOICE_MADE, event.type());
+        assertEquals("color", event.params().get("choice_kind"));
+        assertEquals("red", event.params().get("value"));
+    }
+
+    /**
+     * {@code choice()}'s first branch checks {@code host.hasChosenColor()}.
+     * The brief's original draft checked {@code host.getChosenColor() !=
+     * null} instead; {@code Card.getChosenColor()} never returns {@code
+     * null} for an unset colour -- it returns {@code ""} -- so that check is
+     * always true and would report <em>every</em> clause routed through
+     * {@code choice()} as a colour choice, this one included, regardless of
+     * which of the eleven {@code choice_made} APIs actually ran.
+     *
+     * <p>This is also the only test in the suite that exercises a {@code
+     * choice_kind} other than {@code "color"}, so it is what would catch
+     * that regression -- and it doubles as the sector coverage Ruling R18
+     * added the {@code ChooseSector} rule for: {@code
+     * ChooseSectorEffect.resolve()} calls {@code setChosenSector}, verified
+     * directly against {@code ChooseSectorEffect.java} and {@code
+     * Card.getChosenSector()} rather than assumed.
+     */
+    @Test
+    void aChosenSectorIsAChoiceNotAMiscolouredOne() {
+        SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseSector", TestCards.build("Grizzly Bears"));
+        sa.getHostCard().setChosenSector("UpperDeck");
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.CHOICE_MADE, event.type());
+        assertEquals("sector", event.params().get("choice_kind"));
+        assertEquals("UpperDeck", event.params().get("value"));
+    }
+
+    /**
+     * HealDamageEffect calls healDamage() and leaves zero behind, so the amount
+     * exists only before the clause. This is the case the before-half of the
+     * hook was added for.
+     *
+     * <p>Ruling R15: {@code HealDamage} has no reachable card script at all
+     * ({@code TestCards.scriptedAbility} walks root abilities and {@code
+     * SubAbility$} chains only, and both real cardsfolder usages sit behind
+     * a {@code Charm}/replacement-effect shape it cannot follow), so the
+     * ability is built directly from text via {@link TestCards#abilityFromText}.
+     */
+    @Test
+    void healedDamageIsReadFromBeforeTheClause() {
+        SpellAbility sa = TestCards.abilityFromText("DB$ HealDamage | Defined$ Targeted");
+        Card target = TestCards.build("Grizzly Bears");
+        target.setDamage(3);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+
+        Object memo = ApiEvents.before(sa);
+        target.setDamage(0);
+
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.DAMAGE_HEALED, event.type());
+        assertEquals(3, event.params().get("amount"));
+    }
+
+    /**
+     * Dragonshift: {@code SP$ Animate | ... | RemoveAllAbilities$ True | ...},
+     * a root ability. No reachable root-level Animate/AnimateAll script in
+     * the cardsfolder pairs with an {@code Abilities$} grant list (the
+     * common shapes use {@code Keywords$}, {@code staticAbilities$} or
+     * {@code Triggers$} instead), so {@code abilities} here is the {@code ""}
+     * fallback; {@code removed} is the distinct, identifiable value this
+     * card actually pins.
+     */
+    @Test
+    void anAnimateClauseNamesWhetherItStrippedAbilities() {
+        SpellAbility sa = TestCards.scriptedAbility("Dragonshift", "Animate");
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.ABILITY_CHANGE, event.type());
+        assertEquals(true, event.params().get("removed"));
+    }
+
+    /** Impractical Joke: {@code SP$ Effect | StaticAbilities$ STCantPrevent | ...}. */
+    @Test
+    void anEffectClauseNamesItsStaticAbilities() {
+        SpellAbility sa = TestCards.scriptedAbility("Impractical Joke", "Effect");
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.CONTINUOUS_EFFECT_CREATED, event.type());
+        assertEquals("STCantPrevent", event.params().get("layers"));
+    }
+
+    /**
+     * Wild Ricochet: {@code SP$ ChangeTargets | TargetType$ Spell | ...}, a
+     * root ability -- built and inspected directly rather than resolved,
+     * since resolution needs a live {@code SpellAbilityStackInstance} this
+     * harness does not construct. The retarget helper reads {@code
+     * sa.getTargets().getTargetSpells()} (the spell(s) the clause itself
+     * targets) and then each one's own, post-change targets, so wiring a
+     * hand-built "changed" ability directly onto {@code sa}'s targets and
+     * giving that ability its own new target exercises the same read a real
+     * resolution would leave behind.
+     */
+    @Test
+    void changeTargetsNamesWhatTheRetargetedSpellPointsAtNow() {
+        SpellAbility sa = TestCards.scriptedAbility("Wild Ricochet", "ChangeTargets");
+        SpellAbility changed = AbilityFactory.getAbility(
+                "SP$ Pump | ValidTgts$ Creature | NumAtt$ +0 | NumDef$ +0",
+                TestCards.build("Grizzly Bears"));
+        Card newTarget = TestCards.build("Runeclaw Bear");
+        changed.resetTargets();
+        changed.getTargets().add(newTarget);
+        sa.resetTargets();
+        sa.getTargets().add(changed);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.TARGETS_CHANGED, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(newTarget)), event.params().get("targets"));
     }
 
     // ── the once-latched failure report ──────────────────────────────────

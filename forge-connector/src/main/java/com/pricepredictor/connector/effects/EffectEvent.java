@@ -82,6 +82,29 @@ public final class EffectEvent {
     public static final String OWNERSHIP_CHANGE = "ownership_change";
     public static final String CARD_MADE = "card_made";
     public static final String RESTRICTION_CHANGE = "restriction_change";
+    public static final String CHOICE_MADE = "choice_made";
+    public static final String DAMAGE_HEALED = "damage_healed";
+    /**
+     * What an {@code Animate}/{@code AnimateAll} clause was scripted to grant.
+     *
+     * <p>Carries the <b>scripted</b> text of the clause, not what the layer
+     * system finally applied -- that is not knowable at the clause. The
+     * applied result is recorded separately, in a {@code continuous} record's
+     * contributions, so a reader of this event alone should not mistake it
+     * for the applied result; the pair is complete only across both record
+     * kinds.
+     */
+    public static final String ABILITY_CHANGE = "ability_change";
+    /**
+     * What an {@code Effect} clause was scripted to add as a continuous
+     * effect.
+     *
+     * <p>Same limitation as {@link #ABILITY_CHANGE}: this is the scripted
+     * {@code StaticAbilities$} text, not the applied result, which lives in a
+     * {@code continuous} record's contributions instead.
+     */
+    public static final String CONTINUOUS_EFFECT_CREATED = "continuous_effect_created";
+    public static final String TARGETS_CHANGED = "targets_changed";
 
     private final String type;
     private final List<String> subjects = new ArrayList<>();
