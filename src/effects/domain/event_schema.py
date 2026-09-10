@@ -150,6 +150,13 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.CARD_MADE: ("card_name", "to_zone", "count"),
     EventType.LIFE_CHANGE: ("delta",),
     EventType.DAMAGE_DEALT: ("amount", "combat", "source", "excess"),
+    # Prevention is implemented entirely as replacement effects in Forge, so
+    # this and the `rewrite` record for the same replacement are two views of
+    # ONE engine event, one call frame apart: the `rewrite` record is written
+    # from inside executeReplacement, before the engine computes the prevented
+    # amount this row carries. They are not independent evidence of the same
+    # prevention -- a reader that treats a `damage_prevented` row and its
+    # sibling `rewrite` row as two confirming signals will double-count it.
     EventType.DAMAGE_PREVENTED: ("amount", "source"),
     EventType.DAMAGE_HEALED: ("amount",),
     EventType.POISON_CHANGE: ("delta",),
