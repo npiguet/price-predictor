@@ -2643,14 +2643,19 @@ class PatchedCollectorTest {
      * draw is what this pins, not just what the diff shows.
      *
      * <p>Both collectors share one seed (1) and one {@code playabilityRate}
-     * (0.5). {@code new Random(1L)}'s first two draws are
-     * {@code 0.7309, 0.4101} (measured, not assumed -- printed once from a
-     * throwaway {@code Random(1L)} while writing this test): a solo live
-     * candidate draws only the first (0.7309 &gt; 0.5, sampled out). If the
-     * identity check ran <em>after</em> the draw, the fork candidate ahead of
-     * it would consume that first draw before being dropped on identity, and
-     * the live candidate behind it would draw the second (0.4101 &le; 0.5,
-     * sampled in) -- a live record appearing only because a fork candidate
+     * (0.5). The sampler is <em>not</em> {@code new Random(1L)}: it is
+     * {@code new Random(scramble(seed))}, and {@code scramble} is SplitMix64's
+     * finalizer, so the draws are those of {@code Random(scramble(1L))} --
+     * {@code 0.9245, 0.1142}, not {@code Random(1L)}'s {@code 0.7309, 0.4101}.
+     * An earlier version of this comment cited the latter; the conclusion held
+     * either way, which is exactly why the wrong constants survived. Do not
+     * try to reproduce them against the real {@code sampler}.
+     *
+     * <p>A solo live candidate draws only the first (0.9245 &gt; 0.5, sampled
+     * out). If the identity check ran <em>after</em> the draw, the fork
+     * candidate ahead of it would consume that first draw before being dropped
+     * on identity, and the live candidate behind it would draw the second
+     * (0.1142 &le; 0.5, sampled in) -- a live record appearing only because a fork candidate
      * happened to precede it. Checked first, the fork candidate never reaches
      * the sampler at all, and the live candidate's own draw -- and therefore
      * its own outcome -- is identical whether or not the fork one ran ahead
