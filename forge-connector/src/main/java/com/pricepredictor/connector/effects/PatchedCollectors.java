@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The four record kinds the engine patch unlocks.
@@ -1548,37 +1549,95 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
+     * The outcome types an effect is allowed to name, built from the
+     * {@code EffectEvent} constants themselves rather than listed in prose.
+     *
+     * <p>{@code test_event_schema_completeness.py}'s
+     * {@code _emitted_event_types()} is a <em>textual</em> scan for
+     * {@code EffectEvent.<NAME>} in this package's source, and a javadoc
+     * listing satisfies that scan exactly as well as this set does — which
+     * was the defect: before this set existed, all nine types this task
+     * wired were referenced only inside a comment, so deleting an effect's
+     * {@code note(...)} call, or misspelling the event name, would go
+     * unnoticed by the guard built specifically to catch that, one level up
+     * from where this whole plan started. This set is what
+     * {@link #outcomeHandler()} actually validates incoming types against,
+     * so the reference is load-bearing code, not prose a rename can silently
+     * strand.
+     *
+     * <p>{@code CARD_REVEALED} and {@code DAMAGE_PREVENTED} come from the two
+     * engine choke points ({@code GameAction.reveal},
+     * {@code ReplacementHandler.runSingleReplaceDamageEffect}); the other
+     * nine, from an effect directly.
+     */
+    private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
+            EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
+            EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
+            EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
+            EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED);
+
+    /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
+    private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();
+
+    /**
+     * Prints one line to stderr the first time {@link #outcomeHandler()}
+     * receives a type outside {@link #KNOWN_OUTCOME_TYPES}, then stays quiet
+     * for every one after it — the same latched-once treatment
+     * {@code ApiEvents.reportEmitterFailure} and
+     * {@code AbilityUtils.reportClauseListenerFailure} give their own hooks'
+     * failures, for the same reason: a deleted {@code note(...)} call or a
+     * misspelled event name must not go dark silently, which is the exact
+     * founding failure mode this whole plan exists to end, recreated one
+     * level up.
+     */
+    private static void reportUnknownOutcomeType(String type) {
+        if (UNKNOWN_OUTCOME_TYPE_REPORTED.compareAndSet(false, true)) {
+            System.err.println("PatchedCollectors: outcomeHandler() received "
+                    + "an outcome type not in KNOWN_OUTCOME_TYPES (\"" + type
+                    + "\"); further unrecognized types will not be logged. A "
+                    + "renamed or deleted EffectRecordOutcomes.note(...) call "
+                    + "in Forge would produce exactly this.");
+        }
+    }
+
+    /** Package-private seam for this hook's own test; production code never calls it. */
+    static void resetUnknownOutcomeTypeLatchForTest() {
+        UNKNOWN_OUTCOME_TYPE_REPORTED.set(false);
+    }
+
+    /**
      * An effect's own account of what it did.
      *
      * <p>Bound by argument position, because {@code PatchHooks} installs a
      * proxy rather than compiling against the interface: 0 is the ability, 1
-     * the event type, 2 the parameters.
+     * the event type, 2 the parameters. The event type is a plain string the
+     * effect names for itself rather than an enum this side switches on --
+     * {@code EffectRecordOutcomes}'s own javadoc explains why: "the caller
+     * names the event type, which keeps the vocabulary in the collector that
+     * consumes it" -- checked against {@link #KNOWN_OUTCOME_TYPES}, the real
+     * vocabulary.
      *
-     * <p>The event type is a plain string the effect names for itself rather
-     * than an enum this side switches on -- {@code EffectRecordOutcomes}'s own
-     * javadoc explains why: "the caller names the event type, which keeps the
-     * vocabulary in the collector that consumes it". The vocabulary as of this
-     * writing: {@code EffectEvent.COIN_FLIPPED}, {@code EffectEvent.CLASH_RESOLVED},
-     * {@code EffectEvent.VOTE_TAKEN}, {@code EffectEvent.PILES_MADE},
-     * {@code EffectEvent.DUNGEON_VENTURED}, {@code EffectEvent.SPELL_COPIED},
-     * {@code EffectEvent.PERMANENT_COPIED}, {@code EffectEvent.CARD_MADE} and
-     * {@code EffectEvent.RESTRICTION_CHANGE} from an effect directly, plus
-     * {@code EffectEvent.CARD_REVEALED} and {@code EffectEvent.DAMAGE_PREVENTED}
-     * from the two engine choke points in {@code GameAction.reveal} and
-     * {@code ReplacementHandler.runSingleReplaceDamageEffect} -- both of which
-     * report with a null ability, so the bracket attributes them to whatever is
-     * resolving, exactly as it does for a bus event. A future effect can add to
-     * this vocabulary with no change on this side.
-     *
-     * <p>One params entry is not a parameter: {@code "subjects"}, carrying the
-     * raw Card/Player list a restriction-change loop walked (Detain, Goad,
-     * MustBlock), is pulled out and converted to refs on
-     * {@link EffectEvent#subject}, not left as a generic param. The schema's
-     * {@code restriction_change} row normalizes only {@code restriction} and
-     * {@code value} -- a raw {@code subjects} entry left in {@code params}
-     * would fail the per-type allow-list in the Python {@code EventRecord}'s
-     * own construction, which is a different field from the event's top-level
-     * {@code subjects} array this converts it into.
+     * <p>Two params entries are not generic parameters:
+     * <ul>
+     *   <li>{@code "subjects"}, carrying the raw Card/Player list a
+     *   restriction-change loop walked (Detain, Goad, MustBlock), is pulled
+     *   out and converted to refs on {@link EffectEvent#subject} instead --
+     *   the schema's {@code restriction_change} row normalizes only
+     *   {@code restriction} and {@code value}, so a raw {@code subjects}
+     *   entry left in {@code params} would fail the per-type allow-list in
+     *   the Python {@code EventRecord}'s own construction. Its presence also
+     *   means the acting ability's own host is <em>not</em> added as a
+     *   default subject below: Detain/Goad/MustBlock's host is the spell or
+     *   permanent that cast the restriction, not one of the cards it landed
+     *   on, and stating otherwise would double it into a subject list a
+     *   reader counts against.
+     *   <li>{@code "source"} (currently only {@code damage_prevented}),
+     *   carrying a raw Card, is converted to an entity ref the same way --
+     *   every other producer of a {@code source} key ({@code damage_dealt},
+     *   and the trigger-derived {@code damage_prevented}) renders one, and a
+     *   display name here would silently fail a join against those refs and
+     *   collide two sources sharing a name.
+     * </ul>
      *
      * <p>Package-private rather than private, the same reason
      * {@code clauseHandler} is: that argument order has no compiler behind it
@@ -1593,14 +1652,28 @@ public final class PatchedCollectors implements AutoCloseable {
             if (!(args[1] instanceof String type)) {
                 return null;
             }
+            if (!KNOWN_OUTCOME_TYPES.contains(type)) {
+                reportUnknownOutcomeType(type);
+                return null;
+            }
+            // An effect that supplies its own "subjects" is authoritative
+            // about who this outcome happened to; the host is a fallback
+            // default for the effects that supply nothing, not an addition
+            // on top of an explicit list (see the "subjects" bullet above).
+            boolean explicitSubjects = args[2] instanceof Map<?, ?> paramsMap
+                    && paramsMap.containsKey("subjects");
             EffectEvent event = new EffectEvent(type);
-            if (args[0] instanceof SpellAbility sa && sa.getHostCard() != null) {
+            if (!explicitSubjects && args[0] instanceof SpellAbility sa && sa.getHostCard() != null) {
                 event.subject(SnapshotBuilder.entityId(sa.getHostCard()));
             }
             if (args[2] instanceof Map<?, ?> params) {
                 for (Map.Entry<?, ?> entry : params.entrySet()) {
                     if ("subjects".equals(entry.getKey())) {
                         addOutcomeSubjects(event, entry.getValue());
+                        continue;
+                    }
+                    if ("source".equals(entry.getKey())) {
+                        event.param("source", outcomeRefOf(entry.getValue()));
                         continue;
                     }
                     event.param(String.valueOf(entry.getKey()), entry.getValue());
@@ -1630,6 +1703,24 @@ public final class PatchedCollectors implements AutoCloseable {
                 event.subject(SnapshotBuilder.playerId(player));
             }
         }
+    }
+
+    /**
+     * Converts a raw Card/Player reported under the {@code "source"} params
+     * key into an entity/player ref -- see {@link #outcomeHandler()} for why
+     * that key is not a generic param. Anything else passes through
+     * unconverted, which is what lets a future producer of a differently
+     * shaped {@code source} degrade to its own {@code String.valueOf} rather
+     * than being silently dropped.
+     */
+    private static Object outcomeRefOf(Object value) {
+        if (value instanceof Card card) {
+            return SnapshotBuilder.entityId(card);
+        }
+        if (value instanceof Player player) {
+            return SnapshotBuilder.playerId(player);
+        }
+        return value;
     }
 
     // ── mana records ────────────────────────────────────────────────────

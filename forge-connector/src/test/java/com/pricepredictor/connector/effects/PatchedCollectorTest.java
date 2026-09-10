@@ -19,10 +19,13 @@ import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.game.trigger.Trigger;
 import forge.game.trigger.TriggerHandler;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -1732,6 +1735,14 @@ class PatchedCollectorTest {
         void onOutcome(SpellAbility sa, String eventType, Map<String, Object> params);
     }
 
+    @BeforeEach
+    void resetUnknownOutcomeTypeLatch() {
+        // Static, and shared with the production path: without a reset here,
+        // whichever test trips it first leaves every test after it in this
+        // class unable to see its own "did this print" outcome.
+        PatchedCollectors.resetUnknownOutcomeTypeLatchForTest();
+    }
+
     private static Method methodNamed(Class<?> shape, String name) {
         for (Method method : shape.getMethods()) {
             if (method.getName().equals(name)) {
@@ -1797,6 +1808,14 @@ class PatchedCollectorTest {
      * left in {@code params} would fail the per-type param allow-list on the
      * Python side. The handler converts it to the event's own top-level
      * subject refs instead.
+     *
+     * <p>Exact match, not {@code containsAll}: {@code restriction_change}'s
+     * acting card (the host, "Alchemist's Gambit" here) must not appear in
+     * the subject list alongside the two cards actually goaded --
+     * {@code outcomeHandler} skips the default host-subject when an effect
+     * supplies its own {@code "subjects"}, and an earlier version of this
+     * test used {@code containsAll}, which cannot tell "exactly these two"
+     * from "these two, plus an extra false one".
      */
     @Test
     void restrictionChangeSubjectsBecomeEventSubjectsNotAParam() throws Throwable {
@@ -1816,8 +1835,89 @@ class PatchedCollectorTest {
         assertEquals("goad", written.params().get("restriction"));
         assertEquals(Boolean.TRUE, written.params().get("value"));
         assertNull(written.params().get("subjects"), "subjects must not leak into params");
-        assertTrue(written.subjects().containsAll(List.of(
-                SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2))),
-                written.subjects().toString());
+        assertEquals(List.of(
+                SnapshotBuilder.entityId(goaded1), SnapshotBuilder.entityId(goaded2)),
+                written.subjects(),
+                "exactly the two goaded cards -- not the acting host as well");
+    }
+
+    /**
+     * An outcome type outside {@link PatchedCollectors#outcomeHandler()}'s
+     * known set is exactly the failure this whole plan exists to end,
+     * recreated one level up: before this check existed, all nine of this
+     * task's types were referenced only inside a javadoc comment, which
+     * satisfies the completeness guard's textual scan just as well as real
+     * code -- so a deleted {@code note(...)} call or a misspelled event name
+     * would go dark and the guard built to notice would say nothing. A
+     * recognized type still writes an event; an unrecognized one does not,
+     * and is reported exactly once.
+     */
+    @Test
+    void anUnrecognizedOutcomeTypeWritesNoEventAndIsReportedOnce() throws Throwable {
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(captured, true));
+        try {
+            collectors.outcomeHandler().invoke(null, onOutcome,
+                    new Object[]{null, "dungeon_entered", Map.of()});
+            collectors.outcomeHandler().invoke(null, onOutcome,
+                    new Object[]{null, "dungeon_entered", Map.of()});
+            collectors.outcomeHandler().invoke(null, onOutcome,
+                    new Object[]{null, "another_unknown_type", Map.of()});
+        } finally {
+            System.setErr(original);
+        }
+
+        assertNull(collectors.lastClauseEvent(), "an unrecognized type must not become an event");
+        String output = captured.toString();
+        long lineCount = output.isBlank() ? 0 : output.strip().lines().count();
+        assertEquals(1, lineCount, "exactly one report despite three unrecognized types: " + output);
+        assertTrue(output.contains("dungeon_entered"), "the report names the first unrecognized type: " + output);
+    }
+
+    /** The complement: every type this task actually wired is recognized. */
+    @Test
+    void everyWiredOutcomeTypeIsRecognized() throws Throwable {
+        PatchedCollectors collectors = recording();
+        Method onOutcome = methodNamed(OutcomeListenerShape.class, "onOutcome");
+        List<String> wired = List.of(
+                EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
+                EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
+                EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
+                EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED);
+
+        for (String type : wired) {
+            collectors.outcomeHandler().invoke(null, onOutcome, new Object[]{null, type, Map.of()});
+            assertEquals(type, collectors.lastClauseEvent().type());
+        }
+    }
+
+    /**
+     * {@code damage_prevented}'s {@code "source"} is converted to an entity
+     * ref, matching every other producer of a {@code source} key
+     * ({@code damage_dealt}, and the trigger-derived {@code damage_prevented}
+     * via {@code subjectOf}). Forge passes the {@code Card} itself rather
+     * than a display name for exactly this conversion -- a display name
+     * would silently fail a join against those refs, and collide two sources
+     * sharing a name.
+     */
+    @Test
+    void damagePreventedSourceBecomesAnEntityRef() throws Throwable {
+        Card source = TestCards.build("Grizzly Bears");
+        PatchedCollectors collectors = recording();
+
+        collectors.outcomeHandler().invoke(null,
+                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                new Object[]{null, "damage_prevented",
+                        Map.of("amount", 3, "source", source)});
+
+        EffectEvent written = collectors.lastClauseEvent();
+        assertEquals("damage_prevented", written.type());
+        assertEquals(3, written.params().get("amount"));
+        assertEquals(SnapshotBuilder.entityId(source), written.params().get("source"),
+                "a ref like damage_dealt's, not a display name");
     }
 }
