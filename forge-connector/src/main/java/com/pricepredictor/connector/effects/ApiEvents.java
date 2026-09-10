@@ -1,5 +1,6 @@
 package com.pricepredictor.connector.effects;
 
+import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
 import forge.game.player.Player;
@@ -51,20 +52,36 @@ final class ApiEvents {
     }
 
     /**
-     * Damage on the clause's targets, before it heals any of it away.
+     * Damage on the clause's affected cards, before it heals any of it away.
      *
      * <p>Declared ahead of {@link #RULES} on purpose: a static field read by
      * simple name from another field's own initializer has to be declared
      * first or the reference is an illegal forward reference and the class
-     * does not compile at all -- unlike the emitter lambdas below, which call
-     * methods declared later in this file with no such restriction.
+     * does not compile at all -- unlike the emitter lambdas below (and
+     * {@link #affectedCards}, which this memo's lambda body calls), which
+     * call methods declared later in this file with no such restriction.
+     *
+     * <p>Fixed in fix round 2 (task-8-fix-2.md, Finding 1). The original
+     * version read {@code sa.getTargets().getTargetCards()} directly --
+     * the clause's own {@code TargetChoices}. But {@code
+     * HealDamageEffect.resolve()} finds its cards through {@code
+     * SpellAbilityEffect.getTargetCards(sa)}, which consults {@code
+     * sa.getTargets()} only when {@code sa.usesTargeting()} is true, and
+     * neither real {@code HealDamage} card in the cardsfolder declares any
+     * targeting on the clause itself -- both use {@code Defined$
+     * Replaced*}, resolved through a replacement effect's {@code
+     * getReplacingObject}, which never touches {@code sa.getTargets()}. So
+     * the direct read found the clause's own (always-empty, per {@code
+     * SpellAbility.targetChosen}'s eager initialisation) {@code
+     * TargetChoices} on every real firing and reported {@code amount: 0} --
+     * a wrong value indistinguishable from a real "healed an undamaged
+     * creature," worse than a missing record because nothing downstream
+     * could tell the two apart.
      */
     private static final Memo DAMAGE_BEFORE = (sa, host) -> {
         int total = 0;
-        if (sa.getTargets() != null) {
-            for (Card card : sa.getTargets().getTargetCards()) {
-                total += card.getDamage();
-            }
+        for (Card card : affectedCards(sa)) {
+            total += card.getDamage();
         }
         return total;
     };
@@ -374,6 +391,36 @@ final class ApiEvents {
     }
 
     /**
+     * The cards a clause with no dedicated targeting concept of its own
+     * acts on -- {@link #affectedPlayers}'s gate, mirrored for cards rather
+     * than players, because {@code HealDamage} is exactly that shape:
+     * {@code SpellAbilityEffect.getCards} (which {@code
+     * HealDamageEffect.resolve()} calls through {@code getTargetCards(sa)})
+     * reads {@code sa.getTargets()} only when {@code sa.usesTargeting()}
+     * is true, and otherwise falls back to a {@code " & "}-split {@code
+     * Defined$}, defaulted to {@code "Self"} ({@code
+     * SpellAbilityEffect.java:257,265}) -- the same default used here, not
+     * a different one invented for this file.
+     */
+    private static List<Card> affectedCards(SpellAbility sa) {
+        if (sa.usesTargeting()) {
+            List<Card> targeted = new ArrayList<>();
+            sa.getTargets().getTargetCards().forEach(targeted::add);
+            return targeted;
+        }
+        return definedCards(sa, sa.getParamOrDefault("Defined", "Self"));
+    }
+
+    /** {@link #definedPlayers}, mirrored for cards via {@code AbilityUtils.getDefinedCards}. */
+    private static List<Card> definedCards(SpellAbility sa, String def) {
+        List<Card> cards = new ArrayList<>();
+        for (String token : def.split(" & ")) {
+            cards.addAll(AbilityUtils.getDefinedCards(sa.getHostCard(), token, sa));
+        }
+        return cards;
+    }
+
+    /**
      * The choice a Choose* clause left on its host, as a kind and a value.
      *
      * <p>Reads whichever dedicated accessor the clause populated, in a fixed
@@ -477,6 +524,23 @@ final class ApiEvents {
      * retargeted is still on the stack carrying its new {@code TargetChoices}
      * -- this is the one outcome in this group that survives on an object
      * other than the host.
+     *
+     * <p>Fixed in fix round 2 (task-8-fix-2.md, Finding 2) to read {@code
+     * getTargetEntities()} rather than only {@code getTargetCards()}.
+     * Redirecting a burn spell at a <em>player</em> is the classic use of
+     * this mechanic -- Deflection, Misdirection and Bolt Bend are all real
+     * and all reach {@code ChangeTargetsEffect}'s default "choose any new
+     * legal target" branch, which retargets at a player as readily as a
+     * card. {@code getTargetCards()} filters to {@code Card} instances
+     * only, so a {@code Player} target was silently dropped and the event
+     * still fired with an empty {@code targets} list -- the channel looked
+     * wired while reporting nothing distinguishable from "retargeted at
+     * nothing." {@code SnapshotBuilder.stackExtrasJson} already reads
+     * mixed-entity targets the same way (a {@code GameEntity} loop plus an
+     * {@code instanceof} branch, rather than {@code SnapshotBuilder}'s
+     * separate {@code entityId(Card)}/{@code playerId(Player)} overloads
+     * folded into one serializer), so this follows that file's own
+     * precedent rather than inventing a second style for the same problem.
      */
     private static EffectEvent retargeted(SpellAbility sa) {
         List<String> targets = new ArrayList<>();
@@ -485,8 +549,12 @@ final class ApiEvents {
                 if (changed.getTargets() == null) {
                     continue;
                 }
-                for (Card card : changed.getTargets().getTargetCards()) {
-                    targets.add(SnapshotBuilder.entityId(card));
+                for (GameEntity target : changed.getTargets().getTargetEntities()) {
+                    if (target instanceof Card card) {
+                        targets.add(SnapshotBuilder.entityId(card));
+                    } else if (target instanceof Player player) {
+                        targets.add(SnapshotBuilder.playerId(player));
+                    }
                 }
             }
         }

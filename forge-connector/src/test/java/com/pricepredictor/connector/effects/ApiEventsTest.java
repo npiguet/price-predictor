@@ -438,24 +438,50 @@ class ApiEventsTest {
      * exists only before the clause. This is the case the before-half of the
      * hook was added for.
      *
-     * <p>Ruling R15: {@code HealDamage} has no reachable card script at all
-     * ({@code TestCards.scriptedAbility} walks root abilities and {@code
-     * SubAbility$} chains only, and both real cardsfolder usages sit behind
-     * a {@code Charm}/replacement-effect shape it cannot follow), so the
-     * ability is built directly from text via {@link TestCards#abilityFromText}.
+     * <p>Rewritten in fix round 2 (task-8-fix-2.md, Finding 1). The original
+     * version called {@code sa.resetTargets(); sa.getTargets().add(target);}
+     * directly on the {@code HealDamage} clause -- a state the real engine
+     * never produces for this API: {@code HealDamageEffect.resolve()} reads
+     * its cards through {@code SpellAbilityEffect.getTargetCards(sa)}, which
+     * only consults {@code sa.getTargets()} when {@code sa.usesTargeting()}
+     * is true, and neither real cardsfolder usage declares any targeting on
+     * the {@code HealDamage} clause itself -- {@code pyramids.txt}'s is
+     * {@code Defined$ ReplacedCard}, {@code wolverine_fierce_fighter.txt}'s
+     * is {@code Defined$ ReplacedTarget}. The old test was internally
+     * consistent and would still have passed with {@code DAMAGE_BEFORE}
+     * reading {@code sa.getTargets()} unconditionally, which is exactly the
+     * bug: confirmed by reverting {@code ApiEvents}'s fix and re-running
+     * this rewritten test first -- it failed with {@code amount=0} against
+     * {@code assertEquals(3, ...)}, the same silent-wrong-zero the finding
+     * describes, before the fix was applied.
+     *
+     * <p>Builds the shape production actually uses instead: no {@code
+     * ValidTgts$}/{@code Tgt$} on the {@code HealDamage} clause itself
+     * (matching both real cards), resolving its card through {@code
+     * Defined$ Targeted} instead -- the same {@code getAllTargetChoices()}
+     * mechanism {@link #aSkippedTurnThroughDefinedTargetedNamesTheRootsTarget}
+     * already exercises and pins for players, mirrored here for a card, so
+     * the healed creature is a different object than the sub-ability's own
+     * host and a hardcoded {@code sa.getHostCard()} shortcut could not pass
+     * this by coincidence.
      */
     @Test
     void healedDamageIsReadFromBeforeTheClause() {
-        SpellAbility sa = TestCards.abilityFromText("DB$ HealDamage | Defined$ Targeted");
-        Card target = TestCards.build("Grizzly Bears");
+        SpellAbility root = AbilityFactory.getAbility(
+                "SP$ Pump | ValidTgts$ Creature | NumAtt$ +0 | NumDef$ +0",
+                TestCards.build("Grizzly Bears"));
+        SpellAbility sub = AbilityFactory.getAbility(
+                "DB$ HealDamage | Defined$ Targeted", root.getHostCard());
+        root.setSubAbility((AbilitySub) sub);
+        Card target = TestCards.build("Runeclaw Bear");
         target.setDamage(3);
-        sa.resetTargets();
-        sa.getTargets().add(target);
+        root.resetTargets();
+        root.getTargets().add(target);
 
-        Object memo = ApiEvents.before(sa);
+        Object memo = ApiEvents.before(sub);
         target.setDamage(0);
 
-        EffectEvent event = ApiEvents.after(sa, memo);
+        EffectEvent event = ApiEvents.after(sub, memo);
 
         assertEquals(EffectEvent.DAMAGE_HEALED, event.type());
         assertEquals(3, event.params().get("amount"));
@@ -518,6 +544,67 @@ class ApiEventsTest {
 
         assertEquals(EffectEvent.TARGETS_CHANGED, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(newTarget)), event.params().get("targets"));
+    }
+
+    /**
+     * Finding 2 (task-8-fix-2.md): redirecting a burn spell at a
+     * <em>player</em> is the classic use of {@code ChangeTargets} --
+     * Deflection, Misdirection and Bolt Bend are all real, and all reach
+     * {@code ChangeTargetsEffect}'s default "choose any new legal target"
+     * branch (no {@code RandomTarget}/{@code DefinedMagnet}/{@code
+     * ChangeSingleTarget} param), which can retarget at a player as readily
+     * as a card. The original {@code retargeted()} iterated only {@code
+     * getTargetCards()}, which {@code TargetChoices} filters to {@code Card}
+     * instances -- a {@code Player} target was silently dropped, and the
+     * event still fired with {@code targets: []}, so the channel looked
+     * wired while reporting nothing distinguishable from "retargeted at
+     * nothing."
+     *
+     * <p>Confirmed this failed against the pre-fix code before fixing it:
+     * {@code event.params().get("targets")} was {@code []}, not the
+     * targeted player's id.
+     */
+    @Test
+    void changeTargetsNamesARetargetedPlayerNotJustCards() {
+        SpellAbility sa = TestCards.scriptedAbility("Deflection", "ChangeTargets");
+        SpellAbility changed = AbilityFactory.getAbility(
+                "SP$ DealDamage | ValidTgts$ Any | NumDmg$ 3",
+                TestCards.build("Grizzly Bears"));
+        Player newTarget = new Player("redirect-target", TestCards.game(), 94001);
+        changed.resetTargets();
+        changed.getTargets().add(newTarget);
+        sa.resetTargets();
+        sa.getTargets().add(changed);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.TARGETS_CHANGED, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(newTarget)), event.params().get("targets"));
+    }
+
+    /**
+     * Finding 3, minor (task-8-fix-2.md): {@code ChooseNumberEffect.java:90}
+     * calls {@code setChosenNumber(chosen, true)} -- the secret variant that
+     * skips the trackable view update -- when {@code Secretly$} is set and
+     * {@code KeepSecret$} is not. The general guard's {@code ChooseNumber}
+     * fixture only exercises the plain setter; both variants write the same
+     * {@code chosenNumber} field
+     * ({@code setChosenNumber(int, boolean)}), so {@code choice()} was
+     * already correct either way -- this is coverage for that claim, not a
+     * fix for a bug, and it passes unchanged on both sides of this round's
+     * other two fixes.
+     */
+    @Test
+    void aSecretlyChosenNumberIsStillAChoice() {
+        Card host = TestCards.build("Grizzly Bears");
+        host.setChosenNumber(7, true);
+        SpellAbility sa = AbilityFactory.getAbility("SP$ ChooseNumber", host);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.CHOICE_MADE, event.type());
+        assertEquals("number", event.params().get("choice_kind"));
+        assertEquals("7", event.params().get("value"));
     }
 
     // ── the once-latched failure report ──────────────────────────────────
