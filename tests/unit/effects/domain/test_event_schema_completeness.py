@@ -295,12 +295,12 @@ def _emitted_event_types() -> set[str]:
     A type may be referenced but never fired: across 10.1M corpus records,
     ``damage_prevented`` and ``spell_copied`` appear zero times despite being
     referenced in ``PatchedCollectors.java``. Conversely, a type unreferenced
-    in source (e.g. ``day_night_changed``) is truly unreachable. This test
-    guards against the under-count direction only—the corpus-empirical gap is
-    deeper and cannot be caught by static analysis; ``KNOWN_UNEMITTED`` records
-    both: the 27 types with no reference, and separately documents the 2 that
-    are referenced-but-unfired, reconciling 29 corpus-observed unreachable
-    against 27 statically unreferenced.
+    in source is truly unreachable. This test guards against the under-count
+    direction only—the corpus-empirical gap is deeper and cannot be caught by
+    static analysis: some declared types may be referenced but unfired. The
+    unreferenced types are recorded in ``KNOWN_UNEMITTED`` and shrink as each
+    is wired and emitted; the referenced-but-unfired gap is separately
+    documented here, so both gaps can be tracked independently.
     """
     header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
     constants = dict(re.findall(
@@ -322,15 +322,15 @@ class TestEveryDeclaredTypeIsReachable:
 
     ``test_every_effect_api_is_mapped_or_excluded`` (in ``TestCoverage``) asserts
     the *map* is total: every Forge effect API names an event type or an explicit
-    exclusion. It passed while 29 of 60 declared types were unreachable in the
-    corpus, because a mapping to a type nothing emits is still a mapping. That
-    test cannot catch the gap; this is the other half. A corpus analysis of 10.1M
-    records found 29 types with zero occurrences—27 of them (in ``KNOWN_UNEMITTED``)
-    are not referenced anywhere in the connector's source code. The other 2
-    (``damage_prevented``, ``spell_copied``) are referenced but never fired, wired
-    but unfired. This test guards the under-count—types truly unreachable—and
-    statically documents the over-count, so no new type can slip into either set
-    without failing the test.
+    exclusion. It passed while some declared types were unreachable in the corpus,
+    because a mapping to a type nothing emits is still a mapping. That test cannot
+    catch the gap; this is the other half. The gap has two parts: types not
+    referenced in the connector source (unreachable; recorded in ``KNOWN_UNEMITTED``)
+    and types referenced but never fired in the corpus (wired but unfired; tracked
+    separately). A corpus analysis of 10.1M records found two such wired-but-unfired
+    types: ``damage_prevented`` and ``spell_copied``. This test guards against
+    unreachable types gaining one unexpectedly, and ``KNOWN_UNEMITTED`` shrinks as
+    each is wired and starts emitting.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):
