@@ -375,6 +375,62 @@ class PatchedCollectorTest {
         assertEquals("\"creature\"", tokens(into, "types"));
     }
 
+    // ── continuous name channel ──────────────────────────────────────────
+
+    /** {@code "name"} is the last field {@link Contribution#toJson()} writes. */
+    private static String nameField(Contribution into) {
+        String json = into.toJson();
+        int at = json.indexOf("\"name\":");
+        return json.substring(at + "\"name\":".length(), json.length() - 1);
+    }
+
+    /**
+     * The channel this task exists for: {@code contributions[].name} is
+     * declared and listed in {@code KNOWN_CONSTANT_FIELDS} because it had
+     * never carried a value in any corpus.
+     *
+     * <p>Goes through the real {@code Card.addChangedName} and the real,
+     * reflectively-read {@code Card.getChangedCardNames} rather than a
+     * hand-built stand-in, because the defect this guards against is exactly
+     * the gap between "compiles against a plausible shape" and "the engine
+     * ever produces this". The asserted name is not Grizzly Bears' own --
+     * this card never carries it -- so a regression back to reading
+     * {@code card.getName()} instead of the contributed change fails here
+     * rather than passing by coincidence.
+     */
+    @Test
+    void aChangedNameContributesTheNewName() {
+        Card card = TestCards.build("Grizzly Bears");
+        long staticId = 4321L;
+        card.addChangedName("Contributed-Name-Not-Printed", false, 7L, staticId);
+        Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
+        PatchedCollectors.nameContributions(card, byStatic, "E1");
+        Contribution into = byStatic.get(staticId).get("E1");
+        assertEquals("\"Contributed-Name-Not-Printed\"", nameField(into));
+    }
+
+    /**
+     * The channel's other half: most statics contribute no name, and null is
+     * the correct, meaningful answer there -- not an empty string, and not a
+     * dropped key.
+     */
+    @Test
+    void aCardWithNoNameChangeRendersNullName() {
+        Card card = TestCards.build("Grizzly Bears");
+        Map<Long, Map<String, Contribution>> byStatic = new LinkedHashMap<>();
+        PatchedCollectors.nameContributions(card, byStatic, "E1");
+        assertTrue(byStatic.isEmpty(), "no static wrote a name, so nothing is filed");
+        assertEquals("null", nameField(new Contribution("E1")));
+    }
+
+    @Test
+    void anUnreadableNameEntryContributesNoName() {
+        // Guessing here would report every unrelated object as a rename.
+        Contribution into = new Contribution("E1");
+        PatchedCollectors.nameTokens(new Object(), into);
+        assertEquals("null", nameField(into));
+    }
+
     // ── the trigger and rewrite records ──────────────────
 
     /**

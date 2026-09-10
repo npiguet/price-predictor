@@ -123,6 +123,8 @@ public final class PatchHooks {
                     "removing the acting static's colours from a continuous snapshot"),
             new Hook(CARD, "getKeywordsWithout",
                     "removing the acting static's keywords from a continuous snapshot"),
+            new Hook(CARD, "getChangedCardNames",
+                    "a continuous contribution's name"),
             new Hook(COMBAT, "getAssignedDamage",
                     "a combat record's assignment_choices"),
             new Hook(PLAYER_CONTROLLER_AI, "setEffectRecordConfirmListener",

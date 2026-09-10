@@ -1902,6 +1902,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 contribution(byStatic, cell.getColumnKey(), entity)
                         .boost(cell.getValue().getLeft(), cell.getValue().getRight());
             }
+            nameContributions(card, byStatic, entity);
             for (Table.Cell<Long, Long, KeywordsChange> cell
                     : card.getChangedCardKeywords().cellSet()) {
                 Contribution into = contribution(byStatic, cell.getColumnKey(), entity);
@@ -1995,6 +1996,29 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
+     * A card's name contribution, filed under the static that wrote it.
+     *
+     * <p>Reflective because {@code getChangedCardNames} is the patch's own
+     * accessor. Unlike the type and colour "ByStatic" readers above, that
+     * table is not split across layers -- it is keyed (timestamp, static id)
+     * exactly like {@code boostPT} -- so its shape here is the P/T loop's
+     * rather than theirs: the raw table, filtered by column key directly
+     * instead of pre-grouped on the Forge side.
+     */
+    static void nameContributions(
+            Card card, Map<Long, Map<String, Contribution>> byStatic, String entity) {
+        if (!(PatchHooks.read(card, "getChangedCardNames")
+                instanceof Table<?, ?, ?> names)) {
+            return;
+        }
+        for (Table.Cell<?, ?, ?> cell : names.cellSet()) {
+            if (cell.getColumnKey() instanceof Long staticId) {
+                nameTokens(cell.getValue(), contribution(byStatic, staticId, entity));
+            }
+        }
+    }
+
+    /**
      * What one type-layer entry does, as tokens.
      *
      * <p>Read off the change object rather than diffed out of the applied type
@@ -2085,6 +2109,21 @@ public final class PatchedCollectors implements AutoCloseable {
     }
 
     /**
+     * What one name-layer entry does: the whole contribution is the name
+     * itself, unlike a type or colour token, and a card either has a static
+     * overwriting its name or it does not -- {@code newName} is null on
+     * every entry that only ever set {@code addNonLegendaryCreatureNames}.
+     *
+     * <p>Reflective, because the record it belongs to is the patch's own
+     * nested type and this side cannot name it.
+     */
+    static void nameTokens(Object change, Contribution into) {
+        if (PatchHooks.read(change, "newName") instanceof String name) {
+            into.name(name);
+        }
+    }
+
+    /**
      * What the board looks like, for coalescing.
      *
      * <p>Names and computed power/toughness of everything in play. Two boards
@@ -2139,6 +2178,12 @@ public final class PatchedCollectors implements AutoCloseable {
         // not. Insertion-ordered so a "=" marker stays ahead of what it marks.
         private final Set<String> types = new LinkedHashSet<>();
         private final Set<String> colors = new LinkedHashSet<>();
+        // Unlike the token sets above, a name contribution is a single value:
+        // a static either overwrites the name or it does not, so the last
+        // write standing is the answer rather than an accumulation. Null for
+        // the statics that are not one of the handful that rename anything --
+        // that is the correct, meaningful answer, not a missing one.
+        private String name;
 
         Contribution(String entity) {
             this.entity = entity;
@@ -2167,13 +2212,19 @@ public final class PatchedCollectors implements AutoCloseable {
             }
         }
 
+        void name(String value) {
+            if (value != null && !value.isEmpty()) {
+                name = value;
+            }
+        }
+
         String toJson() {
             return "{\"entity\":" + Json.string(entity)
                     + ",\"pt_boost\":[" + power + "," + toughness + "]"
                     + ",\"keywords\":" + tokenJson(keywords)
                     + ",\"types\":" + tokenJson(types)
                     + ",\"colors\":" + tokenJson(colors)
-                    + ",\"name\":null}";
+                    + ",\"name\":" + Json.string(name) + "}";
         }
 
         private static String tokenJson(Set<String> tokens) {

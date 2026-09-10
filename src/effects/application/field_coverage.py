@@ -82,9 +82,6 @@ KNOWN_CONSTANT_FIELDS: frozenset[str] = frozenset({
     # cantBeCastStatic that Forge does not have, and only about a quarter of
     # forbidden creatures find a static even where the hook exists.
     "record.payload<PlayabilityDecisionPayload>.candidates[].responsible_static",
-    # Eight cards in Forge write the name layer from a static, the head has no
-    # field for a name, and it is open-vocabulary unlike every other channel.
-    "record.payload<ContinuousPayload>.contributions[].name",
     # ── collected, but the format cannot exercise it ──
     # An emblem is a planeswalker ultimate's leavings, and a sealed limited pool
     # essentially never resolves one. The collector reads all four trait lists
