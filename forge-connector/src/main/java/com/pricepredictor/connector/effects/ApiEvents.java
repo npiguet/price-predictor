@@ -122,13 +122,25 @@ final class ApiEvents {
      * clause -- a real playthrough resolves thousands of them, and a broken
      * rule would flood the log for the whole run instead of announcing itself
      * once.
+     *
+     * <p>Package-private rather than private, the same reason {@code
+     * clauseHandler} is: forcing a rule to throw reliably would mean
+     * contriving a malformed script value or a null host card, and this is
+     * what {@code AbilityUtils} does instead for the hook's other end --
+     * {@code EffectRecordClauseHookTest} calls {@code
+     * reportClauseListenerFailure} through a seam, not through a real throw.
      */
-    private static void reportEmitterFailure(String eventType, RuntimeException e) {
+    static void reportEmitterFailure(String eventType, RuntimeException e) {
         if (EMITTER_FAILURE_REPORTED.compareAndSet(false, true)) {
             System.err.println("ApiEvents: the emitter for \"" + eventType
                     + "\" threw and was ignored; further emitter failures will "
                     + "not be logged: " + e);
         }
+    }
+
+    /** Package-private seam for this hook's own test; production code never calls it. */
+    static void resetEmitterFailureLatchForTest() {
+        EMITTER_FAILURE_REPORTED.set(false);
     }
 
     private static Rule ruleFor(SpellAbility sa) {
