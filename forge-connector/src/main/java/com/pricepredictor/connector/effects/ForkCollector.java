@@ -72,6 +72,49 @@ public final class ForkCollector {
      */
     public static final int TURN_UNKNOWN = -1;
 
+    /**
+     * Marks this thread as running a probe's own combat damage, for
+     * {@code PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()}
+     * (final-fix-3.md item 1).
+     *
+     * <p>That check's first signal — the resolving-clause pointer — names the
+     * fork's own ability during {@link #forceResolution}, because a forced
+     * ability resolves through the normal {@code AbilityUtils.resolve} path
+     * and that path sets the pointer. It names nothing during this class's
+     * own {@link #probe}: {@code Combat.dealAssignedDamage} is a turn-based
+     * action, not a resolution — see the comment above the sink in
+     * {@link #probe} — so the pointer reads exactly as it does during the
+     * <em>live</em> game's own combat-damage step: empty. A null-ability
+     * {@code damage_prevented} report from that call (Combat.java always
+     * passes a null cause for combat damage, live or forked) is therefore
+     * ambiguous between "the live game's combat" and "this probe's combat" by
+     * the pointer alone, and this flag is what breaks the tie.
+     *
+     * <p>A saved/restored value rather than a bare set/clear, matching
+     * {@code AbilityUtils}' own {@code EFFECT_RECORD_SUB_ABILITY} pattern:
+     * {@link #probe} is not currently reentrant, but restoring the prior
+     * value rather than assuming it was {@code false} costs nothing and does
+     * not depend on that staying true.
+     */
+    private static final ThreadLocal<Boolean> PROBE_RUNNING =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    /** Whether a {@link #probe} is dealing its own combat damage on this thread. */
+    static boolean isProbeRunningOnThisThread() {
+        return PROBE_RUNNING.get();
+    }
+
+    /** Package-private seam for the null-ability gate's own test; production code never calls it. */
+    static void runAsProbeForTest(Runnable action) {
+        boolean was = PROBE_RUNNING.get();
+        PROBE_RUNNING.set(true);
+        try {
+            action.run();
+        } finally {
+            PROBE_RUNNING.set(was);
+        }
+    }
+
     private final Game game;
     private final RecordShardWriter writer;
     private final String gameId;
@@ -573,15 +616,26 @@ public final class ForkCollector {
             shape = CombatShape.of(fork.getCombat());
             if (fork.getCombat().assignCombatDamage(firstStrike)) {
                 shape.addAssignment(fork.getCombat(), null);
-                fork.getCombat().dealAssignedDamage();
-                // And then let the deaths happen. Damage alone kills nothing;
-                // a creature with lethal damage on it leaves the battlefield
-                // during state-based actions, and stopping before them made the
-                // branch systematically miss every death the real step had —
-                // biasing the difference gate 2 computes towards "the keyword
-                // changed nothing". The same call Forge's own simulator makes
-                // after resolving a stack.
-                fork.getAction().checkStateEffects(false, new HashSet<>());
+                // Flagged for PatchedCollectors.nullAbilityOutcomeBelongsToLiveGame()
+                // (final-fix-3.md item 1): dealAssignedDamage's damage_prevented
+                // reports, if any, carry no ability and no resolving-clause
+                // pointer to check identity against -- see PROBE_RUNNING's own
+                // javadoc.
+                boolean wasProbeRunning = PROBE_RUNNING.get();
+                PROBE_RUNNING.set(true);
+                try {
+                    fork.getCombat().dealAssignedDamage();
+                    // And then let the deaths happen. Damage alone kills nothing;
+                    // a creature with lethal damage on it leaves the battlefield
+                    // during state-based actions, and stopping before them made the
+                    // branch systematically miss every death the real step had —
+                    // biasing the difference gate 2 computes towards "the keyword
+                    // changed nothing". The same call Forge's own simulator makes
+                    // after resolving a stack.
+                    fork.getAction().checkStateEffects(false, new HashSet<>());
+                } finally {
+                    PROBE_RUNNING.set(wasProbeRunning);
+                }
             }
         } catch (RuntimeException | StackOverflowError e) {
             // A stripped keyword reaches combat states ordinary play does not.

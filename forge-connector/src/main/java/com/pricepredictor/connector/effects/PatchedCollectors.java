@@ -714,6 +714,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * model would learn the base rate of a trigger type firing and nothing
      * about when. Drawn at roughly 1:1 by sampling the negatives, since a turn
      * evaluates far more conditions than it fires.
+     *
      */
     private InvocationHandler triggerFireHandler() {
         return (proxy, method, args) -> {
@@ -1486,7 +1487,8 @@ public final class PatchedCollectors implements AutoCloseable {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
-     * Whether a clause belongs to the game this collector is installed for.
+     * Whether a clause, replacement, trigger or mana ability belongs to the
+     * game this collector is installed for.
      *
      * <p>{@link #clauseHandler()} and {@link #outcomeHandler()} are wired to
      * Forge's clause and outcome hooks, which are plain JVM statics with no
@@ -1502,7 +1504,7 @@ public final class PatchedCollectors implements AutoCloseable {
      * of mine that treated this path as already inert). {@link ForkEventSink}
      * keeps a fork's own <em>bus</em> events out of this game's records by
      * subscribing to the fork's own {@code Game} instead of this one, but
-     * these two hooks are not bus subscriptions, so that separation never
+     * these hooks are not bus subscriptions, so that separation never
      * reaches them -- without this check, a fork's {@code vote_taken} or
      * {@code coin_flipped} lands in the live game's bracket with nothing
      * marking it as hypothetical.
@@ -1525,22 +1527,105 @@ public final class PatchedCollectors implements AutoCloseable {
      * defaults for a state that should not occur.
      *
      * <p>Checked in the handlers themselves, immediately before each one's
-     * existing {@code bracket != null} delivery gate, rather than inside
-     * {@link BusBracketCollector#recordClauseEvent}: that method only ever
-     * receives the already-built {@code EffectEvent}, not the
+     * existing {@code bracket != null} (or, for {@link #rewriteHandler()} and
+     * {@link #triggerFireHandler()}, sampling/dedup) delivery gate, rather
+     * than inside {@link BusBracketCollector#recordClauseEvent}: that method
+     * only ever receives the already-built {@code EffectEvent}, not the
      * {@code SpellAbility} that produced it, so checking there would mean
      * widening a documented, two-call-site contract just to re-derive
      * something both callers already have in scope. Both hooks' push/pop
      * bookkeeping in {@link #clauseMemos} is untouched by this: a fork's
      * clause still pushes and pops its own memo exactly as a live one does,
      * so this fix cannot desynchronize the deque F3 balances.
+     *
+     * <p>Typed {@link CardTraitBase} rather than {@link SpellAbility} (final-
+     * fix-3.md item 2): {@code SpellAbility}, {@code ReplacementEffect} and
+     * {@code Trigger} all extend it and all declare {@code getHostCard()} on
+     * it, so {@link #rewriteHandler()} and {@link #triggerFireHandler()} --
+     * whose acting argument is a {@code ReplacementEffect}/{@code Trigger},
+     * never a {@code SpellAbility} -- reuse this same check rather than a
+     * near-duplicate. Every existing caller passes a {@code SpellAbility},
+     * which still satisfies the widened parameter unchanged.
      */
-    private boolean belongsToLiveGame(SpellAbility ability) {
+    private boolean belongsToLiveGame(CardTraitBase ability) {
         if (ability == null) {
             return false;
         }
         Card host = ability.getHostCard();
         return host != null && host.getGame() == game;
+    }
+
+    /**
+     * As {@link #belongsToLiveGame(CardTraitBase)}, for {@link
+     * #combatLegalityHandler()}: the attacker/defender Forge hands that hook
+     * is a {@code Card} or {@code Player} directly, never a trait with a
+     * host, so the game comes straight off the {@code GameEntity} itself.
+     */
+    private boolean belongsToLiveGame(GameEntity entity) {
+        return entity != null && entity.getGame() == game;
+    }
+
+    /**
+     * Whether a null-ability outcome belongs to the live game (final-fix-3.md
+     * item 1).
+     *
+     * <p>{@link #outcomeHandler()}'s two production null-ability sources --
+     * {@code GameAction.reveal}'s six-argument funnel (ruling R10) and
+     * {@code ReplacementHandler.runSingleReplaceDamageEffect}'s two
+     * {@code damage_prevented} sites (rulings R11/R12) -- call
+     * {@code EffectRecordOutcomes.note} with a literal {@code null} ability,
+     * always, on the live game exactly as on a fork: {@link
+     * #belongsToLiveGame(CardTraitBase)} has nothing to compare, and simply
+     * keeping every null-ability outcome would readmit exactly what that
+     * method exists to keep out, since a fork reaches this same {@code null}
+     * two ways (see below). Two signals, tried in order, because the first
+     * does not hold on every path:
+     *
+     * <ol>
+     *   <li>The resolving-clause pointer ({@code
+     *   AbilityUtils.getEffectRecordSubAbility}, read via {@link
+     *   PatchHooks#currentSubAbility()}). Every ability resolves through
+     *   {@code AbilityUtils.resolve}/{@code resolveApiAbility}, live or
+     *   forked alike, and both set this pointer to the ability currently
+     *   resolving before running its body -- including {@code
+     *   ForkCollector.forceResolution}, which places its ability directly on
+     *   the fork's stack and lets {@code GameSimulator.resolveStack} (in turn
+     *   {@code MagicStack.resolveStack}) run it through that same path. So
+     *   when a forced reveal or a forced ability's damage prevention fires
+     *   {@code note(null, ...)}, the pointer names the <em>fork's</em>
+     *   ability, and delegating to {@link #belongsToLiveGame(CardTraitBase)}
+     *   rejects it correctly -- the same way it already does for the
+     *   ability-bearing case.
+     *   <li>{@link ForkCollector#isProbeRunningOnThisThread()}, when the
+     *   pointer is null. Verified before relying on the pointer alone: it is
+     *   null here for a reason, not just absent. {@code
+     *   Combat.dealAssignedDamage} -- the live game's own combat-damage step
+     *   ({@code PhaseHandler.java}) <em>and</em> {@code ForkCollector.probe}'s
+     *   damage-step counterfactual -- is a turn-based action, never nested
+     *   inside an ability resolution, so neither leaves anything on the
+     *   pointer for this to read; {@code ForkCollector.probe}'s own javadoc
+     *   says as much ("a damage step is a turn-based action, not a
+     *   resolution... the resolving-clause pointer... names nothing"). A null
+     *   pointer therefore cannot tell the live game's own combat-damage
+     *   prevention from a probe's, which is exactly the shape
+     *   {@code damage_prevented} takes on both: {@code cause} is always
+     *   {@code null} for combat damage (Combat.java), so this is not a rare
+     *   corner, it is the routine one. {@code ForkCollector.probe} marks the
+     *   thread itself for the one turn-based action it performs, which is
+     *   the signal this reads when the pointer has nothing to offer.
+     * </ol>
+     *
+     * <p>{@code card_revealed} never reaches the second branch in practice --
+     * {@code GameAction.reveal} is only ever called while some ability is
+     * resolving, so the pointer always has an answer for it -- but the check
+     * is written to hold for both known null-ability types rather than lean
+     * on that.
+     */
+    private boolean nullAbilityOutcomeBelongsToLiveGame() {
+        if (PatchHooks.currentSubAbility() instanceof SpellAbility resolving) {
+            return belongsToLiveGame(resolving);
+        }
+        return !ForkCollector.isProbeRunningOnThisThread();
     }
 
     /**
@@ -1738,7 +1823,10 @@ public final class PatchedCollectors implements AutoCloseable {
                 }
             }
             lastClauseEvent = event;
-            if (bracket != null && args[0] instanceof SpellAbility sa && belongsToLiveGame(sa)) {
+            boolean liveGame = args[0] instanceof SpellAbility sa
+                    ? belongsToLiveGame(sa)
+                    : nullAbilityOutcomeBelongsToLiveGame();
+            if (bracket != null && liveGame) {
                 bracket.recordClauseEvent(event);
             }
             return null;

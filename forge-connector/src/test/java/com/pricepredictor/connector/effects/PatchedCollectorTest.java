@@ -18,6 +18,7 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.card.CounterType;
+import forge.game.player.Player;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
 import forge.game.spellability.AbilitySub;
@@ -2071,7 +2072,115 @@ class PatchedCollectorTest {
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
 
+    // ── final-fix-3.md item 1: a null-ability outcome's own game signal ──
+
+    /**
+     * The critical regression. {@code GameAction.reveal}'s {@code
+     * card_revealed} and {@code ReplacementHandler}'s {@code
+     * damage_prevented} (rulings R10, R11/R12) report through {@code
+     * EffectRecordOutcomes.note} with a literal {@code null} ability,
+     * <em>always</em> -- F2's {@code args[0] instanceof SpellAbility} gate
+     * (final-fix-1.md) makes that {@code instanceof} false unconditionally,
+     * which silently dropped both channels on the live game, not just on a
+     * fork.
+     *
+     * <p>Every pre-existing null-ability outcome test (e.g. {@code
+     * damagePreventedSourceBecomesAnEntityRef} above) asserts on {@link
+     * PatchedCollectors#lastClauseEvent()}, which is set unconditionally
+     * above the delivery gate and so cannot see this class of bug -- that is
+     * exactly why 689/689 stayed green while the channel was dead. This
+     * asserts on what actually reaches the shard instead, the way {@link
+     * #anOutcomeFromAnotherGameDoesNotReachThisGamesBracket} already does for
+     * the ability-bearing case.
+     */
+    @Test
+    void aNullAbilityOutcomeFromTheLiveGameStillReachesTheShard() throws Throwable {
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("damage_prevented"),
+                "a null-ability outcome from the live game must still reach it: " + shard);
+    }
+
+    /**
+     * The trap the finding warns against: failing open on {@code null}
+     * readmits exactly what the gate exists to exclude, because {@code
+     * ForkCollector.probe}'s own combat-damage counterfactual fires this same
+     * {@code null}-ability {@code damage_prevented} report -- {@code
+     * Combat.dealAssignedDamage} always passes a null cause, live or forked.
+     * Unlike {@code forceResolution} (covered by the resolving-clause pointer,
+     * since a forced ability resolves through the normal path), a probe's
+     * damage step is a turn-based action with no ability resolving and
+     * nothing on the pointer, which is why {@link
+     * ForkCollector#isProbeRunningOnThisThread()} exists. {@link
+     * ForkCollector#runAsProbeForTest} stands in for that call without
+     * needing a real combat to fork.
+     */
+    @Test
+    void aNullAbilityOutcomeFromAProbesOwnCombatDoesNotReachTheLiveShard() throws Throwable {
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                ForkCollector.runAsProbeForTest(() -> {
+                    try {
+                        collectors.outcomeHandler().invoke(null,
+                                methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                                new Object[]{null, "damage_prevented", Map.of("amount", 3)});
+                    } catch (Throwable t) {
+                        throw new RuntimeException(t);
+                    }
+                });
+
+                assertNotNull(collectors.lastClauseEvent(),
+                        "the event must still be built -- only its delivery to "
+                                + "the live bracket is gated");
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertFalse(shard.contains("damage_prevented"),
+                "a probe's own combat-damage report must not land in the live game's record: " + shard);
+    }
+
     private static List<String> readShard(Path path) throws Exception {
+        // A collector that never delivered a single record never opens the
+        // shard file at all (RecordShardWriter creates it lazily), which the
+        // item-2 fork-rejection tests above hit exactly -- matching
+        // BusBracketCollectorTest#written()'s own guard for the same reason.
+        if (!Files.exists(path)) {
+            return List.of();
+        }
         try (var gzip = new GZIPInputStream(Files.newInputStream(path));
                 var reader = new BufferedReader(
                         new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
