@@ -157,22 +157,64 @@ subscription accounts for the other 4, and the three retirements above for the l
 what "previously unreachable" means throughout this contract.
 
 **A declared type nothing emits is indistinguishable, in a corpus, from one that is merely rare — which
-is exactly the state those 29 types were in, silently, before it was noticed.** Two checks now stand
-where that silence was, and neither is sufficient alone:
+is exactly the state those 29 types were in, silently, before it was noticed.** Two checks stand where
+that silence was, and neither is sufficient alone — and the first of them had its own version of the same
+blind spot, discovered by running the second against a real collection.
 
 - `test_no_declared_type_is_unreachable_by_surprise` (`test_event_schema_completeness.py`) statically
-  scans the connector's Java source for a reference to each type's constant and fails if a declared type
-  gains or loses one unexpectedly; `KNOWN_UNEMITTED` names the types with no reference at all (empty as
-  of this contract). It catches a type nothing in the source points at. It **cannot** catch a type
-  referenced from code that never runs: `damage_prevented` and `spell_copied` were both referenced in
-  `PatchedCollectors.java` for the whole of a 10.1M-record corpus while firing zero times, and a scan
-  that never executes the code it reads has no way to see that.
+  scans the connector's Java source for a reference to each type's constant and fails if the declared
+  vocabulary's set of unreferenced types changes unexpectedly. **It now checks against the full 78-member
+  `EventType` vocabulary; until a Task 10 fix round it checked against `set(EVENT_PARAMS)` — 57 of the 78,
+  every type with its own per-type params row — so the 21 types that carry no params beyond their
+  subjects were never compared at all, referenced or not.** That was this plan's own founding failure
+  mode ("the guard scans for references, not fires") recurring one level up, inside the guard itself: a
+  check that never looks at a fifth of the vocabulary gives false assurance about exactly the thing it
+  exists to assure. Widening it surfaced 15 types that were unreachable and unchecked for the entire life
+  of this plan, not broken by widening it — `KNOWN_UNEMITTED` (in the test file, not empty as an earlier
+  draft of this contract said) names all 15 with the producing Forge effect API and a card count for
+  each, from `ability_activated` (2 cards) and `combat_ended` (1 card) up to `delayed_trigger_created`
+  (757 cards, `DelayedTrigger`/`ImmediateTrigger` combined — the largest count of any type in
+  `KNOWN_UNEMITTED`) and `monarch_changed` (60 cards, a whole named mechanic). Even at its full width, this scan
+  **cannot** catch a type referenced from code that never runs on the path a reader would expect: see
+  "Six declared types that do not fire" below.
 - `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has
   calibrated would fail every smoke run. What it must not do, and does not do, is stay silent — every
   run's report names exactly which declared types it did and did not observe, which is where the gap the
-  static guard cannot see has somewhere to show up.
+  static guard cannot see, however wide, has somewhere to show up. This is why it is a permanent
+  counterpart to the static guard rather than a one-off measurement: no widening of the guard's *domain*
+  closes the *reference-vs-fire* gap, because a reference is a reference regardless of what it is for.
+
+### Six declared types that do not fire
+
+`damage_prevented` and `spell_copied` were the first two types found in this shape — referenced in
+`PatchedCollectors.java`, passing the static guard, firing zero times across a 10.1M-record corpus because
+the reference was to dead code. A Task 10 fix-round measurement against a fresh 54,016-record run found
+four more with the identical shape, except the reference is to *live* code serving a different purpose: a
+table in `PatchedCollectors.java` that translates a **triggered ability's** Forge trigger mode name (e.g.
+`"Countered"`, `"TokenCreated"`, `"RollDice"`, `"Regenerated"`) into an event type for a `trigger`-kind
+record's own `event` field — i.e. it covers a card that *reacts* to one of these things happening
+elsewhere, never the resolving ability's own announcement that it did the thing. None of the six has an
+entry in `ApiEvents.RULES` or an `EffectRecordOutcomes.note` call, the two mechanisms this contract
+describes above as covering "every other declared type":
+
+| Type | Producing API | Cards in the sealed/draft pool | Traced this run |
+|---|---|---|---|
+| `spell_countered` | `Counter` | 514 | 3 plain `Counterspell` resolutions, 0 hits, of 38 total |
+| `token_created` | `Token` (+6 more APIs) | 3,345 (`Token` alone) | 469 resolutions, 0 hits |
+| `regenerated` | `Regenerate`/`Regeneration` | 269 / 3 | 61 resolutions, 0 hits |
+| `dice_rolled` | `RollDice` | 131 | 6 resolutions (Hoarding Ogre), 0 hits |
+| `library_shuffled` | `Shuffle` (+2 more) | 65 | 2 resolutions (Elixir of Immortality), 0 hits |
+| `player_won` | `WinsGame` | 42 | 1 resolution (Laboratory Maniac), 0 hits |
+
+`token_created` and `spell_countered` are among the most commonly-scripted effect APIs in the entire
+card pool — a reader who has not seen this table would reasonably assume both are present in a corpus and
+train on their absence without ever being told. They are not present. This is a **documented gap, not a
+to-do**: wiring these six is real new scope — new hooks, new call sites, new tests, the same shape of work
+Tasks 5–8 each got a task for — and is deliberately left undone here. Whether to spend it before the next
+collection run is a decision for whoever owns that run, informed by the card counts above, not something
+folded into a documentation task.
 
 ### `attributed_to` is tri-state
 

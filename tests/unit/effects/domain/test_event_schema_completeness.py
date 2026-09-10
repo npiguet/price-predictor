@@ -263,6 +263,16 @@ class TestVocabulary:
         assert all(v == v.lower() and " " not in v for v in values)
 
     def test_every_normalized_type_is_a_real_event_type(self):
+        """``EVENT_PARAMS``'s keys are well-formed, nothing more.
+
+        Narrower than it sounds next to ``TestEveryDeclaredTypeIsReachable``: this
+        only checks that a type with a params row is a real ``EventType`` member,
+        not that every declared member is reachable. ``EVENT_PARAMS`` keys are
+        written as ``EventType.X`` literals, so this is close to tautological in
+        practice — the reachability question is answered by
+        ``test_no_declared_type_is_unreachable_by_surprise``, over the full
+        vocabulary, not this one.
+        """
         assert set(EVENT_PARAMS) <= set(EventType)
 
     def test_the_vocabulary_is_smaller_than_forges_api_list(self):
@@ -438,28 +448,109 @@ _CONNECTOR_EFFECTS = (
     / "connector" / "effects"
 )
 
-#: Types with no reference in the connector's Java source. Distinct from
-#: ``damage_prevented`` and ``spell_copied``, which are referenced but never
-#: fire in corpus data (wired, not yet fired). This set shrinks as each type
+#: Types with no reference anywhere in the connector's Java source. Distinct from
+#: ``damage_prevented`` and ``spell_copied`` (and, as of this comment,
+#: ``token_created``, ``dice_rolled``, ``spell_countered``, ``regenerated``,
+#: ``library_shuffled`` and ``player_won``), which all *are* referenced somewhere
+#: yet never fire in corpus data (wired, not yet fired -- this scan structurally
+#: cannot see that; ``event_type_coverage`` in ``validate_corpus.py``, run against
+#: a real collection, is the only thing that can). This set shrinks as each type
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
-KNOWN_UNEMITTED: frozenset[str] = frozenset()
+#:
+#: Populated again as of the Task 10 fix round, and that is not a regression.
+#: The guard this dict feeds used to compare against ``set(EVENT_PARAMS)`` --
+#: 57 of the vocabulary's 78 declared types, every type with its own per-type
+#: params row -- so the 21 types that carry no params beyond their subjects were
+#: invisible to it: referenced or not, checked or not, they could never appear
+#: in ``unreachable`` because they were never in the set being subtracted from.
+#: Widening the guard to ``set(EventType)`` is what surfaced the 15 below; they
+#: were unreachable and unchecked for the entire life of this plan, not broken by
+#: widening it. Going from ``frozenset()`` to a populated mapping is the set
+#: finally being honest about a gap that predates this plan and was invisible the
+#: whole time it ran.
+#:
+#: Values are the reason: the producing Forge effect API(s), whether an emission
+#: path exists (``ApiEvents.RULES`` in the connector, or an explicit
+#: ``EffectRecordOutcomes.note`` call -- none of these 15 have either), and how
+#: many cards in the sealed/draft pool script that API, read directly from
+#: ``forge-gui/res/cardsfolder`` rather than estimated.
+KNOWN_UNEMITTED: dict[str, str] = {
+    "ability_activated":
+        "ActivateAbility: no ApiEvents.RULES entry, no outcome-note call; "
+        "2 cards script it",
+    "combat_ended":
+        "EndCombatPhase: no ApiEvents.RULES entry, no outcome-note call; "
+        "1 card scripts it",
+    "delayed_trigger_created":
+        "DelayedTrigger/ImmediateTrigger: no ApiEvents.RULES entry, no "
+        "outcome-note call; 445 + 312 = 757 cards, the largest count of any "
+        "type in this dict",
+    "game_drawn":
+        "GameDrawn: no ApiEvents.RULES entry, no outcome-note call; "
+        "2 cards script it",
+    "game_restarted":
+        "RestartGame: no ApiEvents.RULES entry, no outcome-note call; "
+        "1 card scripts it",
+    "initiative_taken":
+        "TakeInitiative: no ApiEvents.RULES entry, no outcome-note call; "
+        "23 cards script it",
+    "monarch_changed":
+        "BecomeMonarch: no ApiEvents.RULES entry, no outcome-note call; "
+        "60 cards script it -- a whole named mechanic (Monarch), not a corner case",
+    "player_removed":
+        "RemoveFromMatch: no ApiEvents.RULES entry, no outcome-note call; "
+        "2 cards script it",
+    "removed_from_combat":
+        "ChangeCombatants/RemoveFromCombat: no ApiEvents.RULES entry, no "
+        "outcome-note call; 9 + 28 = 37 cards",
+    "replacement_applied":
+        "The six Replace* APIs (ReplaceEffect, ReplaceCounter, ReplaceDamage, "
+        "ReplaceMana, ReplaceSplitDamage, ReplaceToken): no ApiEvents.RULES "
+        "entry, no outcome-note call; ~304 cards combined",
+    "ring_tempts":
+        "RingTemptsYou: no ApiEvents.RULES entry, no outcome-note call; "
+        "49 cards script it (set-gated: Lord of the Rings only)",
+    "text_change":
+        "ChangeText/ExchangeTextBox: no ApiEvents.RULES entry, no outcome-note "
+        "call; 12 + 2 = 14 cards",
+    "trigger_fired":
+        "No Forge effect API maps to it at all -- absent from EFFECT_API_EVENTS "
+        "entirely. Its only plausible source is the trigger-fire hook itself, "
+        "which already reports through the trigger record kind's own `fired` "
+        "flag rather than this type",
+    "turn_ended":
+        "EndTurn: no ApiEvents.RULES entry, no outcome-note call; "
+        "9 cards script it",
+    "turn_order_reversed":
+        "ReverseTurnOrder: no ApiEvents.RULES entry, no outcome-note call; "
+        "3 cards script it",
+}
 
 
 def _emitted_event_types() -> set[str]:
     """Event types whose constants are referenced in the connector's Java source.
 
     This is a textual static scan—it finds ``EffectEvent.CONSTANT_NAME`` in
-    code without distinguishing whether that code is on a live path or dead code.
-    A type may be referenced but never fired: across 10.1M corpus records,
-    ``damage_prevented`` and ``spell_copied`` appear zero times despite being
-    referenced in ``PatchedCollectors.java``. Conversely, a type unreferenced
-    in source is truly unreachable. This test guards against the under-count
-    direction only—the corpus-empirical gap is deeper and cannot be caught by
-    static analysis: some declared types may be referenced but unfired. The
-    unreferenced types are recorded in ``KNOWN_UNEMITTED`` and shrink as each
-    is wired and emitted; the referenced-but-unfired gap is separately
-    documented here, so both gaps can be tracked independently.
+    code without distinguishing whether that code is on a live path or dead code,
+    and without distinguishing an emitter that builds the type from one that only
+    *translates a trigger mode name* into it for a different record kind. A type
+    may be referenced but never fired from an ability's own resolution: across
+    10.1M corpus records, ``damage_prevented`` and ``spell_copied`` appeared zero
+    times despite being referenced in ``PatchedCollectors.java``, and a Task 10
+    fix-round measurement found the same shape in four more types whose only
+    reference is a trigger-mode-name table, not an outcome emitter
+    (``token_created``, ``dice_rolled``, ``spell_countered``, ``regenerated``,
+    ``library_shuffled``, ``player_won`` — six in total). Conversely, a type
+    unreferenced in source is truly unreachable. This test guards against the
+    under-count direction only—the corpus-empirical gap is deeper and cannot be
+    caught by static analysis: some declared types may be referenced but unfired.
+    The unreferenced types are recorded in ``KNOWN_UNEMITTED`` and shrink as each
+    is wired and emitted; the referenced-but-unfired gap cannot be recorded here
+    at all — a reference is a reference regardless of what it is for — which is
+    why ``event_type_coverage`` in ``validate_corpus.py``, run against a real
+    collection, exists as this scan's permanent counterpart rather than a one-off
+    check.
     """
     header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
     constants = dict(re.findall(
@@ -477,23 +568,45 @@ def _emitted_event_types() -> set[str]:
 
 
 class TestEveryDeclaredTypeIsReachable:
-    """The vocabulary and the writer are one contract.
+    """The vocabulary and the writer are one contract — the *whole* vocabulary.
 
     ``test_every_effect_api_is_mapped_or_excluded`` (in ``TestCoverage``) asserts
     the *map* is total: every Forge effect API names an event type or an explicit
     exclusion. It passed while some declared types were unreachable in the corpus,
     because a mapping to a type nothing emits is still a mapping. That test cannot
-    catch the gap; this is the other half. The gap has two parts: types not
-    referenced in the connector source (unreachable; recorded in ``KNOWN_UNEMITTED``)
-    and types referenced but never fired in the corpus (wired but unfired; tracked
-    separately). A corpus analysis of 10.1M records found two such wired-but-unfired
-    types: ``damage_prevented`` and ``spell_copied``. This test guards against
-    unreachable types gaining one unexpectedly, and ``KNOWN_UNEMITTED`` shrinks as
-    each is wired and starts emitting.
+    catch the gap; this is the other half. The gap has two parts, and this class
+    only fully covers one of them as of the Task 10 fix round that widened it:
+
+    1. **Never checked.** Types not referenced anywhere in the connector source.
+       Recorded in ``KNOWN_UNEMITTED``, each with the producing API and a card
+       count read from the pool, and shrinks as each is wired and starts emitting.
+       Until this fix round, this class compared against ``set(EVENT_PARAMS)`` —
+       57 of the vocabulary's 78 declared types, every type with its own per-type
+       params row. The 21 types that carry no params beyond their subjects
+       (``delayed_trigger_created``, ``monarch_changed``, and 19 more) were
+       invisible to it *by construction*, whichever way the comparison came out:
+       "the guard scans for references, not fires" was the founding limitation
+       this whole plan named, and a guard that never even looks at a fifth of the
+       vocabulary is the same failure mode one level up, inside the guard itself.
+       It compares against ``set(EventType)`` now — the full declared vocabulary,
+       not a subset of it.
+    2. **Referenced but unfired.** Types the guard finds a reference to and
+       therefore cannot flag, no matter how wide its domain, because the
+       reference is real: a trigger-mode-name translation table, not an outcome
+       emitter for the ability's own resolution. A corpus analysis of 10.1M
+       records found two: ``damage_prevented`` and ``spell_copied``. A Task 10
+       fix-round measurement against a fresh 54,016-record run found four more
+       hiding behind the widening in (1) — ``token_created``, ``dice_rolled``,
+       ``spell_countered``, ``regenerated``, ``library_shuffled``, ``player_won``,
+       six in total, documented with their card counts in the spec rather than
+       here, because no static scan — however wide — can see this class. Only a
+       corpus measurement can, which is what makes ``event_type_coverage`` in
+       ``validate_corpus.py`` this test's permanent counterpart rather than a
+       one-off check that stops mattering once the guard is fixed.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):
-        unreachable = set(EVENT_PARAMS) - _emitted_event_types()
+        unreachable = set(EventType) - _emitted_event_types()
         assert unreachable == set(KNOWN_UNEMITTED), (
             "declared-but-unemitted types changed; wired: "
             f"{sorted(set(KNOWN_UNEMITTED) - unreachable)}, newly unreachable: "
@@ -501,7 +614,15 @@ class TestEveryDeclaredTypeIsReachable:
         )
 
     def test_the_known_list_names_only_declared_types(self):
-        assert set(KNOWN_UNEMITTED) <= set(EVENT_PARAMS)
+        """Against the full vocabulary, not just the params-bearing subset.
+
+        ``EVENT_PARAMS`` would reject this list outright now: most of
+        ``KNOWN_UNEMITTED`` is params-less types by construction (that is the
+        gap the widened guard exists to see), so checking against
+        ``set(EVENT_PARAMS)`` here would fail on every entry rather than catch a
+        real mistake.
+        """
+        assert set(KNOWN_UNEMITTED) <= set(EventType)
 
 
 class TestSupersededTypes:
