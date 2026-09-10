@@ -9,8 +9,14 @@ import forge.card.ColorSet;
 import forge.card.RemoveType;
 import forge.card.StateChangedType;
 import forge.card.WordChangedType;
+import forge.StaticData;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.card.CardFactory;
 import forge.game.card.CounterType;
 import forge.game.replacement.ReplacementEffect;
 import forge.game.replacement.ReplacementResult;
@@ -24,9 +30,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.zip.GZIPInputStream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1992,5 +2003,79 @@ class PatchedCollectorTest {
         assertEquals(3, written.params().get("amount"));
         assertEquals(SnapshotBuilder.entityId(source), written.params().get("source"),
                 "a ref like damage_dealt's, not a display name");
+    }
+
+    // ── F2: another game's ability must not reach this game's bracket ────
+
+    /**
+     * F2: an outcome reported for an ability that belongs to a DIFFERENT
+     * {@code Game} -- exactly the shape {@code ForkCollector.forceResolution}
+     * produces, since {@code GameSimulator.resolveStack} runs the real
+     * resolution pipeline against a {@code GameCopier} clone under
+     * {@code AIOption.USE_FULL_SIMULATION} regardless of how this game's own
+     * lobby seats were registered (ruling R31) -- must not reach the live
+     * game's bracket. {@code GameCopier} builds every copied {@code Card}
+     * against a new {@code Game} object, so a fork's ability's own host card
+     * already carries a different {@code Game} than this collector's.
+     *
+     * <p>{@code vote_taken} and {@code coin_flipped} (the concrete types
+     * named in final-fix-1.md F2) are both outcome-hook types, so this
+     * exercises {@link PatchedCollectors#outcomeHandler()} rather than the
+     * clause hook -- {@code ClauseContractTest} covers the clause hook's own
+     * half of the same fix.
+     *
+     * <p>{@code lastClauseEvent()} is asserted non-null first: it is set
+     * unconditionally, before the (now gated) delivery to the bracket, so
+     * this also proves the event was genuinely built and rejected by the
+     * game-identity check -- not merely never reached because of some other,
+     * unrelated failure this test would then wrongly credit to the fix.
+     */
+    @Test
+    void anOutcomeFromAnotherGameDoesNotReachThisGamesBracket() throws Throwable {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Card forkHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
+                null, TestCards.nextCardId(), fork);
+        SpellAbility forkAbility = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
+
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{forkAbility, "vote_taken", Map.of("tally", Map.of("beast", 2))});
+
+                assertNotNull(collectors.lastClauseEvent(),
+                        "the event must still be built -- only its delivery to "
+                                + "the live bracket is gated");
+                assertEquals("vote_taken", collectors.lastClauseEvent().type());
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertFalse(shard.contains("vote_taken"),
+                "a fork's outcome must not land in the live game's record: " + shard);
+    }
+
+    private static List<String> readShard(Path path) throws Exception {
+        try (var gzip = new GZIPInputStream(Files.newInputStream(path));
+                var reader = new BufferedReader(
+                        new InputStreamReader(gzip, StandardCharsets.UTF_8))) {
+            return reader.lines().toList();
+        }
     }
 }

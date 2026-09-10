@@ -399,18 +399,47 @@ those as a `card_revealed` would misreport it worse than omitting it does. Clash
 `revealTo` call this corpus can say, without qualification, is a genuine reveal — always from the
 library, always to everyone.
 
-### Collection never runs against a simulated game
+### The two lobby seats never run simulated, and forks that do are kept out of real records
+
+This section previously claimed collection as a whole never runs against a simulated game. That was
+wrong (ruling R31) and is corrected here.
+
+What is still true, unconditionally: the two lobby seats' own game never runs under Forge's AI full- or
+hybrid-simulation modes. `AiController` only enters those modes when an `AIOption` is set, and the
+connector's player setup builds both seats with a null `Set<AIOption>` — a test reads that off the actual
+player instances the connector builds, not off a re-declaration of the constant, so a future edit that
+starts passing an `AIOption` here fails a test rather than silently poisoning every collection channel at
+once.
+
+What is not true: that no simulated resolution ever happens during collection. Stage three's
+`ForkCollector` copies the live game (`GameCopier`) and forces a candidate ability to resolve on the copy
+— an interventional resolution, taken by default (`--interventions-per-game` defaults to 2) — and
+`ForkCollector.forceResolution` hands that copy to `GameSimulator.resolveStack`, which builds its own
+`PlayerControllerAi` and unconditionally calls `setUseSimulation(AIOption.USE_FULL_SIMULATION)`,
+regardless of how the two lobby seats were registered. So a fork's ability resolves through the exact
+same `AbilityUtils`/`EffectRecordOutcomes` machinery a real resolution does, under full simulation, every
+time collection takes an intervention.
 
 Every effect-record listener this plan installs (the outcome channel, the clause hook, the rewrite
-listener) is a plain JVM-wide static with no `Game` reference of its own. Forge's AI full- and
-hybrid-simulation modes deep-copy the `Game` and run the real resolution pipeline against the clone
-purely to evaluate a candidate move; if that mode ran during a collected game, the same static listeners
-would fire for a hypothetical resolution exactly as for a real one, and the corpus would hold
-hypothetical events indistinguishable from real ones. `AiController` only enters that mode when an
-`AIOption` is set, and the connector's player setup builds both seats with a null `Set<AIOption>` — a
-test now reads that off the actual player instances the connector builds, not off a re-declaration of the
-constant, so a future edit that starts passing an `AIOption` fails a test rather than silently poisoning
-every collection channel at once.
+listener) is a plain JVM-wide static with no `Game` reference of its own, so by construction none of them
+can tell a fork's resolution from the live game's just by being called. Two different mechanisms are what
+actually keep a fork's events out of the live game's records:
+
+- **Bus-derived events**: `ForkEventSink` subscribes to the *fork's own* `Game` object's event bus, not
+  the live game's, so a fork's `GameEventCardDamaged` and friends never reach the live game's
+  `BusBracketCollector` in the first place — there is no shared channel for them to leak through.
+- **The clause hook and the outcome hook**: because these two are not bus subscriptions, that separation
+  does not reach them. `PatchedCollectors.clauseHandler()` and `outcomeHandler()` instead check the
+  resolving ability's own game identity before ever handing its event to the bracket: `GameCopier` builds
+  every copied `Card` against a new `Game` object, so a fork's ability's host card carries a different
+  `Game` than the live one by construction, and the handlers compare the two by reference and drop
+  anything that does not match.
+
+Without that check, a default-configuration collection run would mix a fork's hypothetical `vote_taken` or
+`coin_flipped` into the real game's records — indistinguishably, since nothing marks a leaked event as
+hypothetical. Task 7's `GamePlayerTest` AIOption guard is still correct, and stays; it is just narrower
+than this section used to claim: it proves the two lobby seats never simulate, not that collection as a
+whole never does.
 
 ## Payloads
 

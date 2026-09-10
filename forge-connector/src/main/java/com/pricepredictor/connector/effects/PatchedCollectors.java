@@ -1486,6 +1486,64 @@ public final class PatchedCollectors implements AutoCloseable {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Whether a clause belongs to the game this collector is installed for.
+     *
+     * <p>{@link #clauseHandler()} and {@link #outcomeHandler()} are wired to
+     * Forge's clause and outcome hooks, which are plain JVM statics with no
+     * {@code Game} reference of their own -- whichever resolution fires them
+     * last wins. {@code ForkCollector.forceResolution} fires them too:
+     * {@code GameSimulator.resolveStack} builds its own
+     * {@code PlayerControllerAi} and unconditionally calls
+     * {@code setUseSimulation(AIOption.USE_FULL_SIMULATION)}, regardless of
+     * how this game's own two lobby seats were registered, so a forked
+     * ability resolves through the exact same
+     * {@code AbilityUtils.resolveApiAbility} these hooks are installed
+     * against (ruling R31, final-fix-1.md F2 -- reversing an earlier ruling
+     * of mine that treated this path as already inert). {@link ForkEventSink}
+     * keeps a fork's own <em>bus</em> events out of this game's records by
+     * subscribing to the fork's own {@code Game} instead of this one, but
+     * these two hooks are not bus subscriptions, so that separation never
+     * reaches them -- without this check, a fork's {@code vote_taken} or
+     * {@code coin_flipped} lands in the live game's bracket with nothing
+     * marking it as hypothetical.
+     *
+     * <p>Game identity is the check because it needs no cooperation from
+     * {@code ForkCollector} or {@code GameSimulator}, neither of which know
+     * this class exists: {@code GameCopier} builds every copied {@code Card}
+     * against a new {@code Game} object ({@code new Card(id, paperCard,
+     * newGame)}), so a fork's clause's own host card already carries the
+     * answer. Compared by reference, the same way
+     * {@code SpellAbility.setActivatingPlayer} itself already compares
+     * players ("don't use equals because player might be from simulation")
+     * -- a copied {@code Game} is never {@code equals} to the live one by
+     * accident, only by being the same object. A clause with no identifiable
+     * host is treated as not belonging here rather than let through by
+     * default: on the real resolution path a host card is always present
+     * (the same assumption {@code AbilityUtils.resolveApiAbilityBody}
+     * already makes, unconditionally dereferencing it), so this branch is
+     * never live in production and only ever chooses the safer of two
+     * defaults for a state that should not occur.
+     *
+     * <p>Checked in the handlers themselves, immediately before each one's
+     * existing {@code bracket != null} delivery gate, rather than inside
+     * {@link BusBracketCollector#recordClauseEvent}: that method only ever
+     * receives the already-built {@code EffectEvent}, not the
+     * {@code SpellAbility} that produced it, so checking there would mean
+     * widening a documented, two-call-site contract just to re-derive
+     * something both callers already have in scope. Both hooks' push/pop
+     * bookkeeping in {@link #clauseMemos} is untouched by this: a fork's
+     * clause still pushes and pops its own memo exactly as a live one does,
+     * so this fix cannot desynchronize the deque F3 balances.
+     */
+    private boolean belongsToLiveGame(SpellAbility ability) {
+        if (ability == null) {
+            return false;
+        }
+        Card host = ability.getHostCard();
+        return host != null && host.getGame() == game;
+    }
+
+    /**
      * Dispatches by method name on a listener this side never compiles
      * against, so the argument order below is a runtime contract rather than
      * one the compiler enforces: {@code onClauseResolving} is called with
@@ -1521,7 +1579,7 @@ public final class PatchedCollectors implements AutoCloseable {
             }
             Object value = memo instanceof java.util.Optional<?> opt
                     ? opt.orElse(null) : memo;
-            if (bracket != null) {
+            if (bracket != null && belongsToLiveGame(clause)) {
                 bracket.recordClauseEvent(ApiEvents.after(clause, value));
             }
             return null;
@@ -1680,7 +1738,7 @@ public final class PatchedCollectors implements AutoCloseable {
                 }
             }
             lastClauseEvent = event;
-            if (bracket != null) {
+            if (bracket != null && args[0] instanceof SpellAbility sa && belongsToLiveGame(sa)) {
                 bracket.recordClauseEvent(event);
             }
             return null;
