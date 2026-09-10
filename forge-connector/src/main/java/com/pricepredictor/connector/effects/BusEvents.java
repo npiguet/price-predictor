@@ -75,6 +75,18 @@ final class BusEvents {
         return playerRef(event.source());
     }
 
+    /**
+     * The player the bus says irradiated this player, or null.
+     *
+     * <p>{@code GameEventPlayerRadiation} names its source the same way
+     * {@code GameEventPlayerPoisoned} does — both are fired from
+     * {@code Player.setCounters}, one line apart, from the same {@code source}
+     * local — so it is read the same way.
+     */
+    static String causeOf(GameEventPlayerRadiation event) {
+        return playerRef(event.source());
+    }
+
     private static String cardRef(CardView view) {
         return view == null ? null : "E" + view.getId();
     }

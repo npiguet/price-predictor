@@ -12,7 +12,9 @@ import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventPlayerRadiation;
 import forge.game.phase.PhaseType;
+import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.Zone;
@@ -461,6 +463,35 @@ class BusBracketCollectorTest {
         assertTrue(
                 effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
                 effectHalf);
+    }
+
+    /**
+     * Radiation names the player who irradiated this one, not the open bracket.
+     *
+     * <p>{@code GameEventPlayerRadiation} carries a {@code source} the same way
+     * {@code GameEventPlayerPoisoned} does, one line away in
+     * {@code Player.setCounters} from the same local — but {@code onRadiation}
+     * was calling the single-arg {@code record()}, so every radiation event
+     * fell back to the bracket's generic cause instead of the irradiating
+     * player Forge actually names.
+     */
+    @Test
+    void radiationNamesThePlayerWhoCausedIt() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        Player source = new Player("irradiator", TestCards.game(), 501);
+        Player receiver = new Player("irradiated", TestCards.game(), 502);
+
+        collector.beginBracket(bolt);
+        collector.onRadiation(new GameEventPlayerRadiation(receiver, source, 3));
+        collector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertTrue(effectHalf.contains("\"cause\":\"P" + source.getId() + "\""),
+                effectHalf);
+        assertFalse(
+                effectHalf.contains("\"cause\":\"E" + bolt.getHostCard().getId() + "\""),
+                "the bus named a source, and it outranks the bracket");
     }
 
     /**

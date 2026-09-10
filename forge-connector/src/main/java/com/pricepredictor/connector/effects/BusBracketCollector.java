@@ -417,7 +417,7 @@ public final class BusBracketCollector {
 
     @Subscribe
     public void onRadiation(GameEventPlayerRadiation event) {
-        record(BusEvents.radiation(event));
+        record(BusEvents.radiation(event), BusEvents.causeOf(event));
     }
 
     @Subscribe
