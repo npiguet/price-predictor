@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import forge.LobbyPlayer;
+import forge.game.Game;
 import forge.game.card.CardView;
 import forge.game.event.GameEventCardAttachment;
 import forge.game.event.GameEventCardChangeZone;
@@ -8,6 +10,7 @@ import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
@@ -17,6 +20,7 @@ import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.event.GameEventSurveil;
+import forge.game.player.Player;
 import forge.game.player.PlayerView;
 import forge.game.zone.ZoneType;
 
@@ -216,6 +220,47 @@ final class BusEvents {
     static EffectEvent libraryShuffled(GameEventShuffle event) {
         return new EffectEvent(EffectEvent.LIBRARY_SHUFFLED)
                 .subject(playerRef(event.player()));
+    }
+
+    /**
+     * The game's own outcome, resolved back to the winning {@link Player}.
+     *
+     * <p>{@code GameEventGameOutcome} names the winner only by {@code
+     * winningPlayerName} -- a {@code LobbyPlayer}'s display name, not a ref --
+     * so it is matched back against {@code game.getPlayers()} here rather than
+     * carried through as a name: every other subject on this branch is an
+     * entity or player ref, and Task 7 shipped {@code damage_prevented.source}
+     * as a display name once, which silently dropped every row a reader joined
+     * to {@code state.entities}.
+     *
+     * <p>Null on a draw: {@code winningPlayerName} is null whenever {@code
+     * GameOutcome.getWinningLobbyPlayer()} is, and a {@code player_won} with no
+     * winner would be a false record -- {@code game_drawn} is the type for
+     * that outcome, and it is not this task's scope.
+     *
+     * <p>No {@link #causeOf} counterpart, the same as {@link #regenerated} and
+     * {@link #libraryShuffled}: the record carries only the winner, because
+     * Forge's own outcome names no separate cause of the win.
+     *
+     * <p>Two players sharing a lobby name is not a shape this connector's own
+     * worker setup produces -- {@code GamePlayer.LOBBY_NAME_A}/{@code _B} are
+     * always distinct strings -- but nothing enforces that in general, so a
+     * collision is broken by taking the first match in {@code
+     * game.getPlayers()}'s own order rather than guessing further.
+     */
+    static EffectEvent gameOutcome(GameEventGameOutcome event, Game game) {
+        String winnerName = event.winningPlayerName();
+        if (winnerName == null) {
+            return null;
+        }
+        for (Player player : game.getPlayers()) {
+            LobbyPlayer lobby = player.getLobbyPlayer();
+            if (lobby != null && winnerName.equals(lobby.getName())) {
+                return new EffectEvent(EffectEvent.PLAYER_WON)
+                        .subject(SnapshotBuilder.playerId(player));
+            }
+        }
+        return null;
     }
 
     static EffectEvent counters(GameEventCardCounters event) {

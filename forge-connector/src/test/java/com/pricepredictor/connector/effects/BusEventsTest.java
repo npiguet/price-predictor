@@ -1,15 +1,23 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.ai.LobbyPlayerAi;
+import forge.deck.Deck;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CounterEnumType;
 import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventDayTimeChanged;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSpeedChanged;
 import forge.game.player.Player;
+import forge.game.player.RegisteredPlayer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -134,5 +142,80 @@ class BusEventsTest {
 
         assertEquals(EffectEvent.LIBRARY_SHUFFLED, event.type());
         assertEquals(List.of("P" + player.getId()), event.subjects());
+    }
+
+    // ── player_won: name resolved back to the real Player, not carried as-is ──
+
+    /**
+     * A real two-player game, each seat a distinct lobby name -- the shape
+     * {@code GamePlayer.registeredPlayers} itself builds, minus the deck.
+     */
+    private static Game twoPlayerGame(String nameA, String nameB) {
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameA, null)),
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi(nameB, null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Match match = new Match(rules, players, "bus-events-test");
+        return new Game(players, rules, match);
+    }
+
+    /**
+     * {@code computeWinningPlayerName} returns null when {@code
+     * GameOutcome.getWinningLobbyPlayer()} does -- a draw -- and a {@code
+     * player_won} with no winner would be a false record.
+     */
+    @Test
+    void aDrawNamesNoWinner() {
+        GameEventGameOutcome draw = new GameEventGameOutcome(4, List.of("Draw"), null, "");
+
+        assertNull(BusEvents.gameOutcome(draw, TestCards.game()));
+    }
+
+    /**
+     * The winner is a NAME on the event, and every other subject on this
+     * branch is a ref -- resolved back to the real {@link Player} by matching
+     * {@code getLobbyPlayer().getName()}, the same defect shape Task 7 shipped
+     * once already ({@code damage_prevented.source}).
+     */
+    @Test
+    void theWinnerResolvesToTheMatchingPlayersRef() {
+        Game game = twoPlayerGame("p1", "p2");
+        Player p1 = game.getPlayers().stream()
+                .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
+                .findFirst().orElseThrow();
+        GameEventGameOutcome event = new GameEventGameOutcome(
+                4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 ");
+
+        EffectEvent built = BusEvents.gameOutcome(event, game);
+
+        assertEquals(EffectEvent.PLAYER_WON, built.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(p1)), built.subjects());
+    }
+
+    /** A winning name this game cannot resolve to any seat produces nothing. */
+    @Test
+    void aWinningNameNoSeatMatchesProducesNoEvent() {
+        Game game = twoPlayerGame("p1", "p2");
+        GameEventGameOutcome event = new GameEventGameOutcome(
+                4, List.of("nobody has won"), "a name nobody at this table has", "");
+
+        assertNull(BusEvents.gameOutcome(event, game));
+    }
+
+    /**
+     * Two players sharing a lobby name is not a shape this connector's own
+     * worker setup produces, but the resolution has to do something rather
+     * than throw -- the first match in {@code game.getPlayers()}'s own order.
+     */
+    @Test
+    void aSharedLobbyNameResolvesToTheFirstMatchingSeat() {
+        Game game = twoPlayerGame("same", "same");
+        Player first = game.getPlayers().get(0);
+        GameEventGameOutcome event = new GameEventGameOutcome(
+                4, List.of("same has won"), "same", "");
+
+        EffectEvent built = BusEvents.gameOutcome(event, game);
+
+        assertEquals(List.of(SnapshotBuilder.playerId(first)), built.subjects());
     }
 }

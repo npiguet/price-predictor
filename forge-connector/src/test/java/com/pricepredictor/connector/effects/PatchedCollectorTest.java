@@ -2077,6 +2077,159 @@ class PatchedCollectorTest {
                 "a fork's outcome must not land in the live game's record: " + shard);
     }
 
+    // ── task-11: spell_countered, token_created, dice_rolled reach the ───
+    // ── live shard, below the gate (not just lastClauseEvent()) ──────────
+
+    /**
+     * Below the gate, the way task-11-brief.md's "what the brief cannot know"
+     * §1 requires: {@code lastClauseEvent()} is set unconditionally before the
+     * (gated) delivery to the bracket, so a test that stops there cannot tell
+     * a working live channel from one the gate silently swallowed -- exactly
+     * how two dead channels passed 702 green tests before. This asserts on
+     * what {@link #readShard} actually reads back from disk.
+     */
+    @Test
+    void spellCounteredReachesTheLiveShard() throws Throwable {
+        Card counteredCard = TestCards.build("Grizzly Bears");
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{liveAbility, "spell_countered",
+                                Map.of("subjects", List.of(counteredCard))});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("\"type\":\"spell_countered\""), shard);
+        assertTrue(shard.contains(SnapshotBuilder.entityId(counteredCard)), shard);
+    }
+
+    /** Same shape as {@link #spellCounteredReachesTheLiveShard}, for token_created. */
+    @Test
+    void tokenCreatedReachesTheLiveShard() throws Throwable {
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{liveAbility, "token_created", Map.of(
+                                "token_script_id", "Soldier Token",
+                                "characteristics", Map.of(
+                                        "power", 1, "toughness", 1, "types", "Creature Soldier"),
+                                "count", 4)});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("\"type\":\"token_created\""), shard);
+        assertTrue(shard.contains("\"count\":4"), shard);
+    }
+
+    /** Same shape as {@link #spellCounteredReachesTheLiveShard}, for dice_rolled. */
+    @Test
+    void diceRolledReachesTheLiveShard() throws Throwable {
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{liveAbility, "dice_rolled", Map.of(
+                                "sides", 6,
+                                "results", List.of(Map.of("natural", 3, "final", 5)))});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("\"type\":\"dice_rolled\""), shard);
+        assertTrue(shard.contains("\"sides\":6"), shard);
+    }
+
+    /**
+     * F2's own falsifier, reused for one of task-11's three types rather than
+     * re-proving the (type-agnostic) gate itself: a fork's {@code
+     * token_created} must not land in the live game's record either.
+     */
+    @Test
+    void aForkedTokenCreatedDoesNotReachTheLiveShard() throws Throwable {
+        GameRules forkRules = new GameRules(GameType.Constructed);
+        Game fork = new Game(List.of(), forkRules, new Match(forkRules, List.of(), "fork"));
+        Card forkHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Grizzly Bears"),
+                null, TestCards.nextCardId(), fork);
+        SpellAbility forkAbility = AbilityFactory.getAbility(
+                "SP$ AddTurn | ValidTgts$ Player | NumTurns$ 1", forkHost);
+
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{forkAbility, "token_created", Map.of(
+                                "token_script_id", "Soldier Token",
+                                "characteristics", Map.of(),
+                                "count", 2)});
+
+                assertNotNull(collectors.lastClauseEvent(),
+                        "the event must still be built -- only its delivery to "
+                                + "the live bracket is gated");
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertFalse(shard.contains("token_created"),
+                "a fork's outcome must not land in the live game's record: " + shard);
+    }
+
     // ── final-fix-3.md item 1 / final-fix-4.md item 1: a null-ability ────
     // ── outcome's own game signal, at the shapes production reaches ──────
 

@@ -1773,13 +1773,20 @@ public final class PatchedCollectors implements AutoCloseable {
      * <p>{@code CARD_REVEALED} and {@code DAMAGE_PREVENTED} come from the two
      * engine choke points ({@code GameAction.reveal},
      * {@code ReplacementHandler.runSingleReplaceDamageEffect}); the other
-     * nine, from an effect directly.
+     * twelve, from an effect directly. {@code SPELL_COUNTERED} ({@code
+     * CounterEffect}), {@code TOKEN_CREATED} ({@code TokenEffectBase}, shared
+     * by the six token-making effects) and {@code DICE_ROLLED} ({@code
+     * RollDiceEffect}) are Task 11's three -- the other one of Task 11's four,
+     * {@code PLAYER_WON}, is a bus subscription (see {@code
+     * BusBracketCollector#onGameOutcome}), not an outcome-hook type, and does
+     * not belong here.
      */
     private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
             EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
             EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
             EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
-            EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED);
+            EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED, EffectEvent.SPELL_COUNTERED,
+            EffectEvent.TOKEN_CREATED, EffectEvent.DICE_ROLLED);
 
     /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
     private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();

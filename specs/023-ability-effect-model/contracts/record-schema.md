@@ -141,7 +141,7 @@ types Forge already broadcasts on its own game-event bus with nothing more than 
 `energy_change`, `radiation_change`, `speed_changed`, `day_night_changed` from the original plan, and
 `regenerated`/`library_shuffled`, added by a Task 10 fix round once a review found the engine already
 broadcasting both (`GameEventCardRegenerated`, `GameEventShuffle`) into a void — see "Four declared types
-that do not fire" below for why those two moved here rather than staying documented gaps. `energy_change`
+found not firing, now wired" below for why those two moved here rather than staying documented gaps. `energy_change`
 is the channel's canary, since Aether Hub is the cheapest sealed-legal card that exercises it. A **clause hook
 plus an API-emitter table** covers the rest: `ApiEvents` in `forge-connector` wraps every `SpellAbility`
 resolution, and a table keyed by the effect's `ApiType` name — not its effect class, so a Forge rename
@@ -179,7 +179,7 @@ blind spot, discovered by running the second against a real collection.
   (757 cards, `DelayedTrigger`/`ImmediateTrigger` combined — the largest count of any type in
   `KNOWN_UNEMITTED`) and `monarch_changed` (60 cards, a whole named mechanic). Even at its full width, this scan
   **cannot** catch a type referenced from code that never runs on the path a reader would expect, in either
-  of two distinct sub-shapes: see "Four declared types that do not fire" below.
+  of two distinct sub-shapes: see "Four declared types found not firing, now wired" below.
 - `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has
@@ -189,7 +189,7 @@ blind spot, discovered by running the second against a real collection.
   counterpart to the static guard rather than a one-off measurement: no widening of the guard's *domain*
   closes the *reference-vs-fire* gap, because a reference is a reference regardless of what it is for.
 
-### Four declared types that do not fire
+### Four declared types found not firing, now wired
 
 `damage_prevented` and `spell_copied` were the first two types found referenced by the static guard while
 firing zero times across a 10.1M-record corpus — the reference was to *dead* code in `PatchedCollectors.java`
@@ -221,26 +221,48 @@ because both are wired directly off the bus instead (see "The vocabulary's reach
 Task 4's pattern, not new scope, since neither type carries an `EVENT_PARAMS` row and Forge was already
 broadcasting both.
 
-None of the remaining four has an entry in `ApiEvents.RULES` or an `EffectRecordOutcomes.note` call, the
-two mechanisms this contract describes above as covering "every other declared type":
+At the time of that measurement none of the remaining four had an entry in `ApiEvents.RULES` or an
+`EffectRecordOutcomes.note` call, the two mechanisms this contract describes above as covering "every
+other declared type". `token_created` and `spell_countered` were, and remain, among the most
+commonly-scripted effect APIs in the entire card pool (`Token` alone scripted by 3,345 cards, `Counter` by
+514), which is exactly why their absence from a corpus was the kind of gap a reader would not think to
+check for.
 
-| Type | Producing API | Cards in the sealed/draft pool | Traced this run |
-|---|---|---|---|
-| `spell_countered` | `Counter` | 514 | 3 plain `Counterspell` resolutions, 0 hits, of 38 total |
-| `token_created` | `Token` (+6 more APIs) | 3,345 (`Token` alone) | 469 resolutions, 0 hits |
-| `dice_rolled` | `RollDice` | 131 | 6 resolutions (Hoarding Ogre), 0 hits |
-| `player_won` | `WinsGame` | 42 | 1 resolution (Laboratory Maniac), 0 hits |
+**Task 11 wired all four**, closing the gap this section used to document rather than leaving it as a
+to-do:
 
-`token_created` and `spell_countered` are among the most commonly-scripted effect APIs in the entire
-card pool — a reader who has not seen this table would reasonably assume both are present in a corpus and
-train on their absence without ever being told. They are not present. This is a **documented gap, not a
-to-do**: wiring these four is real new scope — new hooks, new call sites, new tests, the same shape of work
-Tasks 5–8 each got a task for — and is deliberately left undone here. `regenerated` and `library_shuffled`
-were **not** the same shape of scope, which is exactly why they moved out of this table instead of staying
-in it: neither needed a new hook, only a bus subscription in the pattern Task 4 already built and this
-contract already documents. Whether to wire the remaining four before the next collection run is a decision
-for whoever owns that run, informed by the card counts above, not something folded into a documentation
-task.
+- `spell_countered` — `EffectRecordOutcomes.note` from `CounterEffect.resolve()`, fired once per spell
+  `removeFromStack` actually reports removed, never for one merely targeted (uncounterable, or a target
+  already off the stack). Subjects-only, the countered card as an entity ref.
+- `token_created` — `EffectRecordOutcomes.note` from `TokenEffectBase.makeTokenTable(TokenCreateTable, …)`,
+  the method shared by all six token-making effects (`Amass`, `Endure`, `Incubate`, `Investigate`,
+  `Recruit`, `Token` itself, and `CopyPermanent`'s token copies) rather than `TokenEffect` alone — script
+  id and characteristics are read off the created `Card` itself (the same convention
+  `SnapshotBuilder.entityToJson` already uses: `token_script_id = card.isToken() ? card.getName() : null`),
+  which is in scope at that one shared site for every caller, not "one frame away" the way it would be from
+  any single effect. `count` is `allTokens.size()`, the engine's own tally of what actually entered play —
+  a `CreateToken` replacement (Doubling Season) can change it from what was requested, the same
+  `cards.size()` vs `madeCards.size()` shape Task 7 shipped once already.
+- `dice_rolled` — `EffectRecordOutcomes.note` from `RollDiceEffect.rollDiceForPlayer()`, once `resultsList`
+  is fully settled. `results` carries **both** the natural and the final value per die, paired rather than
+  as two parallel lists, because a die can be modified after it is rolled (Xenosquirrel, Night Shift, the
+  Vedalken Exchange swap, a uniform `Modifier$`) and a reader given only one reading could never recover
+  the other.
+- `player_won` — a bus subscription (`GameEventGameOutcome`), Task 4's pattern and not new hook scope,
+  wired on **both** `BusBracketCollector` and `ForkEventSink` (`ForkEventSinkTest`'s reflection guard
+  catches wiring only one). Emits nothing on a draw (`winningPlayerName` is null exactly when
+  `GameOutcome.getWinningLobbyPlayer()` is). The event names the winner only by lobby-player display name,
+  not a ref, so `BusEvents.gameOutcome` resolves it back to the real `Player` by matching
+  `getLobbyPlayer().getName()` against `game.getPlayers()` — the same `damage_prevented.source` defect
+  shape Task 7 shipped once, a name where every sibling subject is a ref. No `causeOf` overload: like
+  `regenerated`/`library_shuffled`, Forge's own outcome names no separate cause of the win.
+
+The taxonomy above (dead reference vs. reactive-trigger vs. replacement-mode) is unchanged and still
+accurate as *why the static guard's reference could not be trusted* — none of the mode-table entries it
+describes were touched, because the four types now fire through an entirely different, correct path.
+`regenerated` and `library_shuffled` were not the same shape of scope as these four and moved out of this
+table for a different reason (no new hook, only a bus subscription already documented above); these four
+needed new hooks and call sites, which is what Task 11 added.
 
 **Idempotent dedup for `regenerated`.** `EffectEvent.REGENERATED` is also in
 `BusBracketCollector.IDEMPOTENT_EVENTS` (`:645-649`) — a set where a second byte-identical report within

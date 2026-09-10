@@ -725,12 +725,18 @@ class TestEveryDeclaredTypeIsReachable:
        live-but-different-purpose) — both are wired directly off the bus now,
        the same pattern as ``energy_change``/``radiation_change``/
        ``speed_changed``/``day_night_changed``, and no longer belong in this
-       list at all. The remaining four are documented with their card counts in
-       the spec rather than here, because no static scan — however wide — can
-       see this class. Only a corpus measurement can, which is what makes
-       ``event_type_coverage`` in ``validate_corpus.py`` this test's permanent
-       counterpart rather than a one-off check that stops mattering once the
-       guard is fixed.
+       list at all. The other four -- ``spell_countered``, ``token_created``
+       and ``dice_rolled`` via ``EffectRecordOutcomes.note`` from the
+       resolving effect itself, ``player_won`` off the bus the same way
+       ``regenerated``/``library_shuffled`` are -- were wired by a Task 11 fix
+       round; the taxonomy above is unchanged and still true of the mode-table
+       references that never fired, it just no longer describes the whole
+       story for any of the four. This class, and the guard it backs, could
+       not have caught any of it either way: no static scan, however wide, can
+       see whether a reference is on a path that actually runs. Only a corpus
+       measurement can, which is what makes ``event_type_coverage`` in
+       ``validate_corpus.py`` this test's permanent counterpart rather than a
+       one-off check that stops mattering once the guard is fixed.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):

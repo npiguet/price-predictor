@@ -14,6 +14,7 @@ import forge.game.card.Card;
 import forge.game.card.CardFactory;
 import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerRadiation;
 import forge.game.phase.PhaseType;
 import forge.game.player.Player;
@@ -511,6 +512,58 @@ class BusBracketCollectorTest {
                 .toJson();
 
         assertFalse(json.contains("cause"), json);
+    }
+
+    /**
+     * The game's own outcome reaches the shard resolved to the winner's ref,
+     * not the display name Forge names it by -- see {@code
+     * BusEvents#gameOutcome}. Bound to its own two-player game rather than
+     * {@code TestCards.game()} (which registers no players at all), so the
+     * winning name has a real seat to resolve against.
+     */
+    @Test
+    void theGameOutcomeNamesTheWinningPlayerAsARef() throws IOException {
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p1", null)),
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p2", null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Match match = new Match(rules, players, "outcome-shard-test");
+        Game outcomeGame = new Game(players, rules, match);
+        Player p1 = outcomeGame.getPlayers().stream()
+                .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
+                .findFirst().orElseThrow();
+        Card boltHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Lightning Bolt"),
+                null, outcomeGame);
+        SpellAbility bolt = AbilityFactory.getAbility(
+                "SP$ DealDamage | Cost$ R | ValidTgts$ Any | TgtPrompt$ Choose"
+                        + " | NumDmg$ 3", boltHost);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        BusBracketCollector outcomeCollector = new BusBracketCollector(
+                outcomeGame, writer, "run.0-l1.0", CollectionCaps.defaults());
+
+        outcomeCollector.beginBracket(bolt);
+        outcomeCollector.onGameOutcome(new GameEventGameOutcome(
+                4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 "));
+        outcomeCollector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertTrue(effectHalf.contains("\"type\":\"player_won\""), effectHalf);
+        assertTrue(effectHalf.contains(SnapshotBuilder.playerId(p1)), effectHalf);
+    }
+
+    /** A draw reaches the collector and writes nothing -- no bracket, no shard growth. */
+    @Test
+    void aDrawnGameOutcomeWritesNothing() throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+
+        collector.beginBracket(bolt);
+        collector.onGameOutcome(new GameEventGameOutcome(4, List.of("Draw"), null, ""));
+        collector.endBracket(bolt.getId(), false);
+
+        String effectHalf = written().get(1);
+        assertFalse(effectHalf.contains("player_won"), effectHalf);
     }
 
     // ── the end of the game ─────────────────────────────────────────────

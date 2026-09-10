@@ -12,6 +12,7 @@ import forge.game.event.GameEventCardRegenerated;
 import forge.game.event.GameEventCardStatsChanged;
 import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventDayTimeChanged;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
 import forge.game.event.GameEventPlayerLivesChanged;
@@ -175,6 +176,16 @@ final class ForkEventSink {
     @Subscribe
     public void onShuffle(GameEventShuffle event) {
         file(BusEvents.libraryShuffled(event));
+    }
+
+    /**
+     * The game ended, read the same way — see {@code
+     * BusBracketCollector.onGameOutcome}. {@code file} already skips a null
+     * event (a draw, or a winning name this fork's own game cannot resolve).
+     */
+    @Subscribe
+    public void onGameOutcome(GameEventGameOutcome event) {
+        file(BusEvents.gameOutcome(event, fork));
     }
 
     @Subscribe

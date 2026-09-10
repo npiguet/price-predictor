@@ -17,6 +17,7 @@ import forge.game.event.GameEventCardTapped;
 import forge.game.event.GameEventCombatEnded;
 import forge.game.event.GameEventDayTimeChanged;
 import forge.game.event.GameEventGameFinished;
+import forge.game.event.GameEventGameOutcome;
 import forge.game.event.GameEventScry;
 import forge.game.event.GameEventShuffle;
 import forge.game.event.GameEventSurveil;
@@ -445,6 +446,21 @@ public final class BusBracketCollector {
     @Subscribe
     public void onShuffle(GameEventShuffle event) {
         record(BusEvents.libraryShuffled(event));
+    }
+
+    /**
+     * The game ended. No named cause, the same as {@link #onRegenerated}/
+     * {@link #onShuffle}: see {@link BusEvents#gameOutcome}. Null on a draw
+     * or when the winning name resolves to no player in this game -- checked
+     * here, the same as every other {@code BusEvents} factory that can
+     * return null (see {@link #onAttachment}, {@link #onPlayerCounters}).
+     */
+    @Subscribe
+    public void onGameOutcome(GameEventGameOutcome event) {
+        EffectEvent outcome = BusEvents.gameOutcome(event, game);
+        if (outcome != null) {
+            record(outcome);
+        }
     }
 
     @Subscribe
