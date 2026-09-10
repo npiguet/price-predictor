@@ -9,6 +9,9 @@ stops describing it cannot be repaired without recollecting.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from effects.domain.event_schema import (
@@ -255,3 +258,70 @@ class TestAttributionIsTriState:
         assert Event.from_dict(event.as_dict()).attributed_to == (
             ATTRIBUTION_UNRESOLVED
         )
+
+
+#: The connector's effects package, read as text. A type the writer never names
+#: cannot appear in a corpus however many games are played, and that is
+#: invisible from the corpus itself: "rare" and "unreachable" look identical.
+_CONNECTOR_EFFECTS = (
+    Path(__file__).resolve().parents[4]
+    / "forge-connector" / "src" / "main" / "java" / "com" / "pricepredictor"
+    / "connector" / "effects"
+)
+
+#: Types the writer cannot emit yet. Shrinks as each is wired; a type added
+#: here needs a reason in the same commit.
+KNOWN_UNEMITTED: frozenset[str] = frozenset({
+    "ability_change", "card_made", "card_revealed", "choice_made",
+    "clash_resolved", "coin_flipped", "continuous_effect_created",
+    "cost_adjusted", "damage_assignment_ordered", "damage_healed",
+    "day_night_changed", "dungeon_ventured",
+    "energy_change", "name_change", "ownership_change", "permanent_copied",
+    "phase_added", "phase_skipped", "piles_made", "radiation_change",
+    "restriction_change", "speed_changed", "targets_changed",
+    "turn_added", "turn_skipped", "vote_taken", "x_changed",
+})
+
+
+def _emitted_event_types() -> set[str]:
+    """Every event type some collector actually constructs.
+
+    A constant declared in ``EffectEvent`` and referenced nowhere else is a
+    name, not a channel: ``day_night_changed`` had a constant for months and no
+    code path that built one.
+    """
+    header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
+    constants = dict(re.findall(
+        r'public static final String ([A-Z_]+)\s*=\s*"([a-z_]+)"', header,
+    ))
+    emitted: set[str] = set()
+    for path in _CONNECTOR_EFFECTS.glob("*.java"):
+        if path.name == "EffectEvent.java":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for name, value in constants.items():
+            if re.search(rf"EffectEvent\.{name}\b", text):
+                emitted.add(value)
+    return emitted
+
+
+class TestEveryDeclaredTypeIsReachable:
+    """The vocabulary and the writer are one contract.
+
+    ``test_every_effect_api_maps_to_an_event`` asserts the *map* is total: every
+    Forge effect API names an event type or an explicit exclusion. It passed
+    while 29 of 60 declared types were unreachable, because a mapping to a type
+    nothing emits is still a mapping. This is the other half.
+    """
+
+    def test_no_declared_type_is_unreachable_by_surprise(self):
+        unreachable = set(EVENT_PARAMS) - _emitted_event_types()
+        assert unreachable == set(KNOWN_UNEMITTED), (
+            "declared-but-unemitted types changed; wired: "
+            f"{sorted(set(KNOWN_UNEMITTED) - unreachable)}, newly unreachable: "
+            f"{sorted(unreachable - set(KNOWN_UNEMITTED))}"
+        )
+
+    def test_the_known_list_names_only_declared_types(self):
+        assert set(KNOWN_UNEMITTED) <= set(EVENT_PARAMS)
+
