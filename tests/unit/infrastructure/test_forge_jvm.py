@@ -9,6 +9,7 @@ import pytest
 
 from price_predictor.infrastructure import forge_jvm
 from price_predictor.infrastructure.forge_jvm import (
+    WorkerLogFiles,
     build_forge_classpath,
     build_jvm_command,
     resolve_connector_jar,
@@ -100,3 +101,124 @@ class TestBuildJvmCommand:
         )
         main_index = cmd.index("com.example.Main")
         assert cmd[main_index + 1 :] == ["--set", "RVR", "--size", "10"]
+
+
+class TestWorkerLogFiles:
+    """F4: a real, findable destination for the five latched effect-record
+    failure reporters, in place of the DEVNULL every collecting worker wrote
+    to before."""
+
+    def test_get_creates_the_directory_and_a_file_named_by_run_and_worker(
+        self, tmp_path,
+    ):
+        logs = WorkerLogFiles(tmp_path / "records", "run-1")
+        handle = logs.get(3)
+        try:
+            assert handle.closed is False
+            path = tmp_path / "records" / "run-1.3.log"
+            assert path.exists()
+            assert logs.path_for(3) == path
+        finally:
+            logs.close_all()
+
+    def test_a_restart_reuses_the_same_handle(self, tmp_path):
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        first = logs.get(0)
+        second = logs.get(0)
+        try:
+            assert first is second
+        finally:
+            logs.close_all()
+
+    def test_different_workers_get_different_files(self, tmp_path):
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        try:
+            assert logs.get(0) is not logs.get(1)
+            assert logs.path_for(0) != logs.path_for(1)
+        finally:
+            logs.close_all()
+
+    def test_two_runs_never_share_a_file(self, tmp_path):
+        """A fresh run_id per invocation is what keeps a long-lived
+        ``effect_records_dir`` from accumulating one never-rotated file
+        across every collection ever run into it."""
+        a = WorkerLogFiles(tmp_path, "run-a")
+        b = WorkerLogFiles(tmp_path, "run-b")
+        assert a.path_for(0) != b.path_for(0)
+
+    def test_a_line_written_by_a_child_process_is_on_disk_after_a_restart(
+        self, tmp_path,
+    ):
+        """Stands in for what a real worker does: write through the handle
+        Popen was given, exit, and the next Popen call reuses the slot's log
+        rather than losing what was already written to it."""
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        first = logs.get(0)
+        first.write(b"reporter line from JVM lifetime 1\n")
+        first.flush()
+
+        second = logs.get(0)  # the same slot, a new JVM
+        second.write(b"reporter line from JVM lifetime 2\n")
+        second.flush()
+        logs.close_all()
+
+        content = logs.path_for(0).read_text(encoding="utf-8")
+        assert "lifetime 1" in content
+        assert "lifetime 2" in content
+
+    def test_rotates_past_the_cap_and_keeps_one_backup_generation(self, tmp_path):
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=10)
+        first = logs.get(0)
+        first.write(b"0123456789 - more than ten bytes")
+        first.flush()
+
+        second = logs.get(0)
+        try:
+            assert second is not first
+            assert first.closed
+            backup = tmp_path / "run-1.0.log.1"
+            assert backup.exists()
+            assert b"more than ten bytes" in backup.read_bytes()
+            # The rotated-in replacement starts empty, not appended past the cap.
+            assert logs.path_for(0).stat().st_size == 0
+        finally:
+            logs.close_all()
+
+    def test_a_second_rotation_replaces_the_first_backup_rather_than_accumulating(
+        self, tmp_path,
+    ):
+        # Each iteration's get(0) writes past max_bytes, so the *next*
+        # iteration's get(0) is what rotates it out: after 3 iterations,
+        # generation 2 is still the live file and generation 1 -- not 0 -- is
+        # the backup, replaced rather than joined by an earlier one.
+        logs = WorkerLogFiles(tmp_path, "run-1", max_bytes=5)
+        for i in range(3):
+            handle = logs.get(0)
+            handle.write(f"generation {i} is over five bytes long".encode())
+            handle.flush()
+        logs.close_all()
+
+        # Exactly current + one backup, however many rotations happened.
+        matches = sorted(tmp_path.glob("run-1.0.log*"))
+        assert [p.name for p in matches] == ["run-1.0.log", "run-1.0.log.1"]
+        assert b"generation 2" in (tmp_path / "run-1.0.log").read_bytes()
+        backup = (tmp_path / "run-1.0.log.1").read_bytes()
+        assert b"generation 1" in backup
+        assert b"generation 0" not in backup
+
+    def test_close_all_closes_every_open_handle(self, tmp_path):
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        handles = [logs.get(i) for i in range(3)]
+
+        logs.close_all()
+
+        assert all(h.closed for h in handles)
+
+    def test_close_all_is_safe_to_call_twice(self, tmp_path):
+        logs = WorkerLogFiles(tmp_path, "run-1")
+        logs.get(0)
+        logs.close_all()
+        logs.close_all()  # must not raise
+
+    def test_close_all_with_nothing_ever_opened_is_a_noop(self, tmp_path):
+        WorkerLogFiles(tmp_path, "run-1").close_all()  # must not raise

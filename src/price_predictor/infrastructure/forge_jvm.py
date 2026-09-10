@@ -15,6 +15,7 @@ import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import IO
 
 CONNECTOR_JAR_NAME = "forge-connector-1.0.0-SNAPSHOT-jar-with-dependencies.jar"
 
@@ -183,6 +184,104 @@ def kill_process_tree(proc: subprocess.Popen) -> None:
             proc.kill()
         except Exception:
             pass
+
+
+class WorkerLogFiles:
+    """Persistent, size-capped stdout/stderr destinations for a worker pool.
+
+    Built for the two supervisors whose workers can trip one of this repo's
+    five latched effect-record failure reporters (``ApiEvents.
+    reportEmitterFailure`` and its four siblings) -- lines that must reach an
+    operator, because a Forge upgrade that silently breaks an emitter would
+    otherwise look identical to a mechanic sealed play never uses.
+    ``MatchWorkerConnector.start`` already threads a ``log_file`` through to
+    ``subprocess.Popen`` (mirroring ``evaluation_connector.py``'s own
+    ``_spawn``); this class is what supplies one, since neither supervisor's
+    ``spawn_worker`` callback otherwise carries state across
+    :class:`ForgeWorkerPool`'s restarts -- it is called fresh, with only a
+    worker index, every time a slot is (re)spawned.
+
+    One file per worker slot, not per JVM lifetime: the pool restarts a slot
+    many times over a long run (roughly 530 JVM lifetimes across 6 slots
+    over an eight-hour collection run -- see
+    ``ForgeWorkerPool._kill_oldest_worker``), and a reporter line from any one
+    of them has to survive to the end of the run, so the file is opened once
+    and reused across every restart of that slot rather than reopened per
+    JVM -- the same "open once, reuse across restarts" shape
+    ``evaluation_connector.py`` uses for its own per-split worker logs.
+
+    Reuse is still bounded, because unlike a fixed number of validation
+    splits, a collection run has no natural end: reused forever would let
+    ordinary per-match chatter (a "N matches generated" line every ten
+    matches, a full stack trace on each non-fatal match error) grow without
+    limit across hundreds of restarts. Past ``max_bytes`` the current file is
+    rotated to ``.1`` (replacing any previous one) and a fresh file opened,
+    which bounds one slot to ``2 * max_bytes`` on disk instead of an
+    open-ended append.
+    """
+
+    #: Twelve workers at two generations of the default cap is 480 MiB at the
+    #: extreme -- a sliver of what one collection run's shards already
+    #: occupy ("7,000 games is under a gigabyte" of compressed shards, per
+    #: specs/023-ability-effect-model/quickstart.md) -- and the ordinary case
+    #: (a handful of restarts' worth of startup banners and progress lines)
+    #: uses far less.
+    DEFAULT_MAX_BYTES = 20 * 1024 * 1024
+
+    def __init__(
+        self,
+        directory: Path,
+        run_id: str,
+        *,
+        max_bytes: int = DEFAULT_MAX_BYTES,
+    ) -> None:
+        self._directory = Path(directory)
+        self._run_id = run_id
+        self._max_bytes = max_bytes
+        self._open: dict[int, IO[bytes]] = {}
+
+    def path_for(self, worker_id: int) -> Path:
+        """Where this worker's current log lives, whether or not it exists yet.
+
+        ``{run_id}.{worker}.log``, deliberately one component short of a
+        shard's own ``{run_id}.{worker}-{lifetime}.jsonl`` (record_io.
+        shard_path): the lifetime token is minted inside the JVM, so a file
+        this class opens before spawning it can never carry one. Landing in
+        the same directory as the shards it corresponds to, under a name the
+        shard pattern makes recognisable at a glance, is what makes it
+        findable after the fact without knowing in advance that it exists.
+        """
+        return self._directory / f"{self._run_id}.{worker_id}.log"
+
+    def get(self, worker_id: int) -> IO[bytes]:
+        """The open handle for ``worker_id``, rotating first past the cap."""
+        path = self.path_for(worker_id)
+        handle = self._open.get(worker_id)
+        if handle is not None:
+            try:
+                too_big = path.stat().st_size > self._max_bytes
+            except OSError:
+                too_big = False
+            if not too_big:
+                return handle
+            handle.close()
+            rotated = path.with_name(path.name + ".1")
+            rotated.unlink(missing_ok=True)
+            path.rename(rotated)
+
+        self._directory.mkdir(parents=True, exist_ok=True)
+        handle = path.open("ab")
+        self._open[worker_id] = handle
+        return handle
+
+    def close_all(self) -> None:
+        """Close every handle opened so far. Safe to call more than once."""
+        for handle in self._open.values():
+            try:
+                handle.close()
+            except OSError:
+                pass
+        self._open.clear()
 
 
 class ForgeWorkerPool:

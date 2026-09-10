@@ -371,6 +371,82 @@ class TestSupervisorRunId:
         assert kwargs.get("run_id") == supervisor.run_id
 
 
+class TestSupervisorWorkerLogs:
+    """F4: a worker can only trip one of the five latched effect-record
+    failure reporters while effect-record collection is on, so that is the
+    one case ``_start_worker`` gives it a real log destination instead of
+    DEVNULL -- a plain match-outcomes run keeps discarding everything, per
+    the deliberate I/O-avoidance note on ``_start_worker`` itself."""
+
+    def test_no_log_file_without_effect_records_dir(self, tmp_path):
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(worker_count=1, output_path=output_file, best_of=3)
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+
+        assert fake_connector.start.call_args.kwargs.get("log_file") is None
+
+    def test_a_real_log_file_when_effect_records_dir_is_set(self, tmp_path):
+        records = tmp_path / "records"
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=3,
+            effect_records_dir=records,
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+
+        log_file = fake_connector.start.call_args.kwargs.get("log_file")
+        assert log_file is not None
+        assert log_file.closed is False
+        assert (records / f"{supervisor.run_id}.0.log").exists()
+
+    def test_a_respawned_slot_reuses_the_same_log_file(self, tmp_path):
+        records = tmp_path / "records"
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=3,
+            effect_records_dir=records,
+        )
+
+        fake_connector = MagicMock()
+        fake_connector.start.return_value = FakeProcess(pid=1000, returncode=0)
+        supervisor._connector = fake_connector
+
+        supervisor._start_worker(0)
+        supervisor._start_worker(0)  # same slot, a new JVM
+
+        first, second = fake_connector.start.call_args_list
+        assert first.kwargs["log_file"] is second.kwargs["log_file"]
+
+    def test_run_closes_the_worker_logs_when_the_pool_finishes(self, tmp_path):
+        records = tmp_path / "records"
+        output_file = tmp_path / "match-outcomes.txt"
+        supervisor = MatchOutcomeSupervisor(
+            worker_count=1, output_path=output_file, best_of=3,
+            effect_records_dir=records,
+        )
+        opened: list = []
+
+        def fake_start_worker(worker_id):
+            opened.append(supervisor._worker_logs.get(worker_id))
+            supervisor._shutdown_event.set()
+            return FakeProcess(pid=1000, returncode=0)
+
+        supervisor._start_worker = fake_start_worker
+        supervisor.run()
+
+        assert opened and all(handle.closed for handle in opened)
+
+
 class TestSupervisorBestOf:
     """Supervisor stores best_of and forwards it to every worker start."""
 

@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Mapping
 from pathlib import Path
 
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
 from sealed.infrastructure.match_worker_connector import (
     DEFAULT_SIDE_B_DECKS_WEIGHT,
     MatchWorkerConnector,
@@ -54,6 +54,16 @@ class MatchOutcomeSupervisor:
         self._collection_caps = collection_caps
         self._run_id = str(uuid.uuid4())
         self._connector = MatchWorkerConnector()
+        # Only constructed when a shard directory is: a plain match-outcomes
+        # run keeps _start_worker's original discard-everything behaviour, and
+        # never needs anything else, because Forge only calls the five latched
+        # effect-record failure reporters (ApiEvents.reportEmitterFailure and
+        # its siblings) behind EffectRecordOutcomes.isObserved() -- true only
+        # once effect-record collection is on (F4).
+        self._worker_logs = (
+            WorkerLogFiles(effect_records_dir, self._run_id)
+            if effect_records_dir is not None else None
+        )
         # The lambda re-reads self._start_worker per spawn so tests (and any
         # caller) can patch it after construction.
         self._pool = ForgeWorkerPool(
@@ -77,18 +87,34 @@ class MatchOutcomeSupervisor:
 
     def run(self) -> None:
         """Start all workers and block until shutdown."""
-        self._pool.run()
+        try:
+            self._pool.run()
+        finally:
+            if self._worker_logs is not None:
+                self._worker_logs.close_all()
 
     def _start_worker(self, worker_id: int) -> subprocess.Popen:
-        """Start one Java worker subprocess. Worker stdout/stderr are discarded —
-        the supervisor's own status reports are the only operator-facing output.
-        Forge is verbose enough that capturing per-worker logs (with concurrent
-        appenders + AV scanning) becomes a measurable I/O bottleneck on long runs.
+        """Start one Java worker subprocess.
+
+        Without ``--effect-records``, stdout/stderr are discarded — the
+        supervisor's own status reports are the only operator-facing output,
+        and Forge is verbose enough that capturing per-worker logs (with
+        concurrent appenders + AV scanning) becomes a measurable I/O
+        bottleneck on long runs. A run collecting effect records is
+        different: it is the one case where a worker can trip one of this
+        branch's five latched effect-record failure reporters, so it gets a
+        real, size-capped destination instead (F4; see
+        ``price_predictor.infrastructure.forge_jvm.WorkerLogFiles``).
         """
+        log_file = (
+            self._worker_logs.get(worker_id) if self._worker_logs is not None
+            else None
+        )
         proc = self._connector.start(
             self._output_path,
             run_id=self._run_id,
             best_of=self._best_of,
+            log_file=log_file,
             side_a_decks_path=self._side_a_decks_path,
             side_b_decks_path=self._side_b_decks_path,
             side_b_decks_weight=self._side_b_decks_weight,

@@ -58,6 +58,15 @@ Without the hooks a run collects three of the eight sampling classes and stamps 
 answer, so a half-rebased branch still reports `patched` while a channel this run meant to collect is
 quietly empty; the second line names any required hook that is missing and what it costs.
 
+Workers run detached, so that startup banner is never on a terminal you're watching — it, and
+everything else a worker prints (including the one-line reports the five latched effect-record
+failure reporters give when an emitter or listener misbehaves), lands in
+`{run_id}.{worker}.log` next to that worker's shards, under whichever directory you pointed
+`--effect-records` at. Each is capped at 20 MiB with one rotated `.log.1` backup per worker, so a
+long run cannot fill a disk with them. **Read these after every run, not just when something looks
+wrong** — a reporter line prints once per worker JVM and does not repeat, so it is easy to miss if
+you only check when throughput drops.
+
 ## 1. Convert, with sidecars and token scripts
 
 ```bash
@@ -179,6 +188,10 @@ Read the `[WATCH]` lines as well as the verdicts: they carry the probe count, th
 whether a channel is wired.
 
 - `output/effects/records/` fills with `{run_id}.{worker}.jsonl.gz` shards.
+- The same directory fills with `{run_id}.{worker}.log` files, one per worker slot, carrying
+  everything that worker printed — including any of the five latched effect-record failure
+  reporters. See "Put the sibling checkout on the hooks branch" above for what they are and how
+  they're capped.
 - Every record carries the same `mode`, and it is the one the checkout offers: `patched` after the
   engine patch, `degraded` without it, printed by each worker at startup. A run cannot mix the two —
   the mode is probed once per worker.
@@ -269,6 +282,11 @@ with the fewest records, and rounds play until every card is satisfied or retire
 split of the model it feeds. On a first pass there is no checkpoint yet, so either run step 6 once on
 the self-play corpus and come back, or omit the flag and accept that this corpus cannot be used to
 evaluate a model split afterwards.
+
+Every worker here collects effect records unconditionally (there is no plain mode to fall back to,
+unlike step 3), so it writes the same `{run_id}.{worker}.log` per-worker logs described in step 3's
+checks, into the same `--effect-records` directory — a fresh `run_id` per invocation, so this
+command's logs and step 3's never collide even when both target `output/effects/records/`.
 
 The run reports two residues — cards judged uncastable, and castable cards short of `--target-records`.
 An **interventional resolution** is the answer to both: it forks the game at a phase boundary, puts an

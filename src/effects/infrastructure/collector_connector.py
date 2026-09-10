@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
-from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool, WorkerLogFiles
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
 
 logger = logging.getLogger(__name__)
@@ -47,6 +47,13 @@ class CollectorSupervisor:
         self._caps = caps or CollectionCaps()
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
+        # Every worker here runs with effect-record collection on by
+        # construction (records-only mode, see start_worker), so any of the
+        # five latched effect-record failure reporters (ApiEvents.
+        # reportEmitterFailure and its siblings) can fire on it. Without a
+        # real destination they print into DEVNULL and a broken emitter is
+        # indistinguishable from a mechanic that simply never occurred (F4).
+        self._worker_logs = WorkerLogFiles(self._effect_records, self._run_id)
 
     @property
     def run_id(self) -> str:
@@ -63,6 +70,7 @@ class CollectorSupervisor:
             None,
             run_id=self._run_id,
             best_of=COVERAGE_BEST_OF,
+            log_file=self._worker_logs.get(worker_id),
             effect_records_dir=self._effect_records,
             worker_index=worker_id,
             collection_caps=self._caps.as_system_properties(),
@@ -90,6 +98,7 @@ class CollectorSupervisor:
         self._pool.run()
 
     def stop(self) -> None:
+        self._worker_logs.close_all()
         if self._pool is not None:
             self._pool.shutdown()
             self._pool = None
