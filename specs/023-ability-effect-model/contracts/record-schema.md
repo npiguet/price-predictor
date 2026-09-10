@@ -136,10 +136,13 @@ them as events too would give one fact two spellings, and a corpus without them 
 rather than correct. Removing a declared type is safe in exactly one direction — no corpus has ever
 contained one, because nothing could emit it.
 
-Every other declared type is reachable by one of two mechanisms. A **bus subscription** covers the four
+Every other declared type is reachable by one of two mechanisms. A **bus subscription** covers the six
 types Forge already broadcasts on its own game-event bus with nothing more than a listener:
-`energy_change`, `radiation_change`, `speed_changed`, `day_night_changed`; `energy_change` is the
-channel's canary, since Aether Hub is the cheapest sealed-legal card that exercises it. A **clause hook
+`energy_change`, `radiation_change`, `speed_changed`, `day_night_changed` from the original plan, and
+`regenerated`/`library_shuffled`, added by a Task 10 fix round once a review found the engine already
+broadcasting both (`GameEventCardRegenerated`, `GameEventShuffle`) into a void — see "Four declared types
+that do not fire" below for why those two moved here rather than staying documented gaps. `energy_change`
+is the channel's canary, since Aether Hub is the cheapest sealed-legal card that exercises it. A **clause hook
 plus an API-emitter table** covers the rest: `ApiEvents` in `forge-connector` wraps every `SpellAbility`
 resolution, and a table keyed by the effect's `ApiType` name — not its effect class, so a Forge rename
 costs a missing event rather than a compile error — says which event, if any, that API produces and how
@@ -175,8 +178,8 @@ blind spot, discovered by running the second against a real collection.
   each, from `ability_activated` (2 cards) and `combat_ended` (1 card) up to `delayed_trigger_created`
   (757 cards, `DelayedTrigger`/`ImmediateTrigger` combined — the largest count of any type in
   `KNOWN_UNEMITTED`) and `monarch_changed` (60 cards, a whole named mechanic). Even at its full width, this scan
-  **cannot** catch a type referenced from code that never runs on the path a reader would expect: see
-  "Six declared types that do not fire" below.
+  **cannot** catch a type referenced from code that never runs on the path a reader would expect, in either
+  of two distinct sub-shapes: see "Four declared types that do not fire" below.
 - `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has
@@ -186,35 +189,68 @@ blind spot, discovered by running the second against a real collection.
   counterpart to the static guard rather than a one-off measurement: no widening of the guard's *domain*
   closes the *reference-vs-fire* gap, because a reference is a reference regardless of what it is for.
 
-### Six declared types that do not fire
+### Four declared types that do not fire
 
-`damage_prevented` and `spell_copied` were the first two types found in this shape — referenced in
-`PatchedCollectors.java`, passing the static guard, firing zero times across a 10.1M-record corpus because
-the reference was to dead code. A Task 10 fix-round measurement against a fresh 54,016-record run found
-four more with the identical shape, except the reference is to *live* code serving a different purpose: a
-table in `PatchedCollectors.java` that translates a **triggered ability's** Forge trigger mode name (e.g.
-`"Countered"`, `"TokenCreated"`, `"RollDice"`, `"Regenerated"`) into an event type for a `trigger`-kind
-record's own `event` field — i.e. it covers a card that *reacts* to one of these things happening
-elsewhere, never the resolving ability's own announcement that it did the thing. None of the six has an
-entry in `ApiEvents.RULES` or an `EffectRecordOutcomes.note` call, the two mechanisms this contract
-describes above as covering "every other declared type":
+`damage_prevented` and `spell_copied` were the first two types found referenced by the static guard while
+firing zero times across a 10.1M-record corpus — the reference was to *dead* code in `PatchedCollectors.java`
+that never runs. A Task 10 fix-round measurement against a fresh 54,016-record run found four more types
+with a reference that is real, live code, but still not an outcome emitter for the resolving ability's own
+announcement — in **two distinct sub-shapes**, not one, which an earlier draft of this contract conflated:
+
+- **Reactive-trigger mode, not the ability's own outcome.** `spell_countered` and `token_created` are
+  referenced by a live *trigger* mode name — `"Countered"`, `"TokenCreated"`/`"TokenCreatedOnce"`, all real
+  `TriggerType` members — reached from `PatchedCollectors.triggerRecord` (`:862-865`), which fires for a
+  card that *reacts* to a counter or a token appearing elsewhere, never for the countering/token-making
+  ability's own resolution.
+- **Replacement mode, not a trigger at all.** `dice_rolled` and `player_won` are referenced by a live
+  *replacement* mode name instead — `"RollDice"` (`ReplacementType.java:46`) and `"GameWin"`
+  (`ReplacementType.java:34`) — reached from `PatchedCollectors.rewriteRecord` (`:461-467`), not
+  `triggerRecord` at all, despite both mode-name spellings sitting in the same flat table (divided only by
+  a comment, `PatchedCollectors.java:2832`). Firing needs a replacement effect that intercepts the roll or
+  the win already in progress; there is no reactive-trigger path for these two, and no ability's-own-outcome
+  path either.
+
+Two further candidates surfaced by the same measurement, `regenerated` and `library_shuffled`, turned out
+**not** to belong in this table on closer reading, in two different directions. `"Regenerated"` in the mode
+table (`PatchedCollectors.java:2831`) matches no real `TriggerType` or `ReplacementType` member at all —
+`grep -ic regen` returns 0 in both enums — so it is not "live code, different purpose" but a **dead
+reference**, the same defect shape as `damage_prevented`/`spell_copied`. `"Shuffled"` (for
+`library_shuffled`) *is* a real trigger mode, so that half of the original claim held; the type was
+genuinely in this category. Both are now moot for this table regardless of which correction applied,
+because both are wired directly off the bus instead (see "The vocabulary's reachability promise" above) —
+Task 4's pattern, not new scope, since neither type carries an `EVENT_PARAMS` row and Forge was already
+broadcasting both.
+
+None of the remaining four has an entry in `ApiEvents.RULES` or an `EffectRecordOutcomes.note` call, the
+two mechanisms this contract describes above as covering "every other declared type":
 
 | Type | Producing API | Cards in the sealed/draft pool | Traced this run |
 |---|---|---|---|
 | `spell_countered` | `Counter` | 514 | 3 plain `Counterspell` resolutions, 0 hits, of 38 total |
 | `token_created` | `Token` (+6 more APIs) | 3,345 (`Token` alone) | 469 resolutions, 0 hits |
-| `regenerated` | `Regenerate`/`Regeneration` | 269 / 3 | 61 resolutions, 0 hits |
 | `dice_rolled` | `RollDice` | 131 | 6 resolutions (Hoarding Ogre), 0 hits |
-| `library_shuffled` | `Shuffle` (+2 more) | 65 | 2 resolutions (Elixir of Immortality), 0 hits |
 | `player_won` | `WinsGame` | 42 | 1 resolution (Laboratory Maniac), 0 hits |
 
 `token_created` and `spell_countered` are among the most commonly-scripted effect APIs in the entire
 card pool — a reader who has not seen this table would reasonably assume both are present in a corpus and
 train on their absence without ever being told. They are not present. This is a **documented gap, not a
-to-do**: wiring these six is real new scope — new hooks, new call sites, new tests, the same shape of work
-Tasks 5–8 each got a task for — and is deliberately left undone here. Whether to spend it before the next
-collection run is a decision for whoever owns that run, informed by the card counts above, not something
-folded into a documentation task.
+to-do**: wiring these four is real new scope — new hooks, new call sites, new tests, the same shape of work
+Tasks 5–8 each got a task for — and is deliberately left undone here. `regenerated` and `library_shuffled`
+were **not** the same shape of scope, which is exactly why they moved out of this table instead of staying
+in it: neither needed a new hook, only a bus subscription in the pattern Task 4 already built and this
+contract already documents. Whether to wire the remaining four before the next collection run is a decision
+for whoever owns that run, informed by the card counts above, not something folded into a documentation
+task.
+
+**Idempotent dedup for `regenerated`.** `EffectEvent.REGENERATED` is also in
+`BusBracketCollector.IDEMPOTENT_EVENTS` (`:596-600`) — a set of subjects-only, state-transition types
+(alongside `zone_change`, `tapped`, `destroyed`, `sacrificed`, `phased`, and others) where a second
+byte-identical report within one resolution bracket is treated as the engine re-publishing the same
+change rather than a second occurrence. That reference was inert while `regenerated` had no emitter and is
+load-bearing now. It is the intended behaviour, not an accident: `regenerated` carries no params beyond its
+subject, so two genuinely separate regenerations of the *same* card with the *same* attribution in one
+bracket would render byte-identical and be indistinguishable from a duplicate publication regardless — the
+same tradeoff the other params-less state-transition types already accept, and for the same reason.
 
 ### `attributed_to` is tri-state
 

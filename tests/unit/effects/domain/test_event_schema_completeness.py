@@ -449,14 +449,47 @@ _CONNECTOR_EFFECTS = (
 )
 
 #: Types with no reference anywhere in the connector's Java source. Distinct from
-#: ``damage_prevented`` and ``spell_copied`` (and, as of this comment,
-#: ``token_created``, ``dice_rolled``, ``spell_countered``, ``regenerated``,
-#: ``library_shuffled`` and ``player_won``), which all *are* referenced somewhere
-#: yet never fire in corpus data (wired, not yet fired -- this scan structurally
-#: cannot see that; ``event_type_coverage`` in ``validate_corpus.py``, run against
-#: a real collection, is the only thing that can). This set shrinks as each type
+#: three other shapes a declared type can be missing in, none of which belong in
+#: this dict because a reference genuinely exists for each:
+#:
+#: - ``damage_prevented`` and ``spell_copied``, referenced in dead code that never
+#:   runs (``PatchedCollectors.java``, wired, not yet fired).
+#: - ``spell_countered`` and ``token_created``, referenced by a live reactive
+#:   trigger's own mode name (``"Countered"``, ``"TokenCreated"``/
+#:   ``"TokenCreatedOnce"`` -- all real ``TriggerType`` members) -- a card that
+#:   *reacts* to a counter or a token appearing, never the resolving ability's own
+#:   announcement.
+#: - ``dice_rolled`` and ``player_won``, referenced by a live *replacement*
+#:   mode name instead -- ``"RollDice"``/``"GameWin"`` are real ``ReplacementType``
+#:   members (not ``TriggerType``, despite sitting in the same mode table), reached
+#:   from ``rewriteRecord`` rather than ``triggerRecord``. Firing needs a
+#:   replacement effect that intercepts the roll or the win in progress, not a
+#:   reactive trigger and not the rolling/winning ability's own resolution.
+#:
+#: All six are wired somewhere, just not for an ability's own resolution to
+#: announce what it did -- this scan structurally cannot see that gap, distinguish
+#: its two sub-shapes, or distinguish either from a type that fires normally.
+#: ``event_type_coverage`` in ``validate_corpus.py``, run against a real
+#: collection, is the only thing that can. This set shrinks as each remaining type
 #: is moved from unreferenced to emitted; a type silently added or removed here
 #: fails the test, which is the point.
+#:
+#: ``regenerated`` and ``library_shuffled`` were originally filed as two more
+#: instances of the "referenced but unfired" shape above, and that turned out to
+#: be wrong for one of them on closer reading: ``"Regenerated"`` in the mode table
+#: matches no real ``TriggerType`` or ``ReplacementType`` member at all -- it is a
+#: dead entry, the same defect shape as ``damage_prevented``/``spell_copied``, not
+#: a live reference serving a different purpose. ``"Shuffled"`` (for
+#: ``library_shuffled``) *is* a real trigger mode, so that half of the original
+#: claim held. Both types are now wired directly off the bus instead
+#: (``GameEventCardRegenerated``, ``GameEventShuffle`` -- Task 4's pattern,
+#: already used for ``energy_change``/``radiation_change``/``speed_changed``/
+#: ``day_night_changed``), which needed no schema change: neither type has an
+#: ``EVENT_PARAMS`` row, so a bus subscription satisfies the schema on its own.
+#: ``EffectEvent.REGENERATED`` also has a second, non-emitting reference this scan
+#: finds -- ``BusBracketCollector.IDEMPOTENT_EVENTS`` -- which was inert while the
+#: type had no emitter and is load-bearing now: see the report for why
+#: idempotent dedup is the intended behaviour, not a side effect nobody chose.
 #:
 #: Populated again as of the Task 10 fix round, and that is not a regression.
 #: The guard this dict feeds used to compare against ``set(EVENT_PARAMS)`` --
@@ -534,23 +567,39 @@ def _emitted_event_types() -> set[str]:
     This is a textual static scan—it finds ``EffectEvent.CONSTANT_NAME`` in
     code without distinguishing whether that code is on a live path or dead code,
     and without distinguishing an emitter that builds the type from one that only
-    *translates a trigger mode name* into it for a different record kind. A type
-    may be referenced but never fired from an ability's own resolution: across
-    10.1M corpus records, ``damage_prevented`` and ``spell_copied`` appeared zero
-    times despite being referenced in ``PatchedCollectors.java``, and a Task 10
-    fix-round measurement found the same shape in four more types whose only
-    reference is a trigger-mode-name table, not an outcome emitter
-    (``token_created``, ``dice_rolled``, ``spell_countered``, ``regenerated``,
-    ``library_shuffled``, ``player_won`` — six in total). Conversely, a type
-    unreferenced in source is truly unreachable. This test guards against the
-    under-count direction only—the corpus-empirical gap is deeper and cannot be
-    caught by static analysis: some declared types may be referenced but unfired.
-    The unreferenced types are recorded in ``KNOWN_UNEMITTED`` and shrink as each
-    is wired and emitted; the referenced-but-unfired gap cannot be recorded here
-    at all — a reference is a reference regardless of what it is for — which is
-    why ``event_type_coverage`` in ``validate_corpus.py``, run against a real
-    collection, exists as this scan's permanent counterpart rather than a one-off
-    check.
+    *translates a trigger or replacement mode name* into it for a different
+    record kind. A type may be referenced but never fired from an ability's own
+    resolution, in three different ways that all look identical to this scan:
+
+    - **Dead reference.** ``damage_prevented`` and ``spell_copied`` were
+      referenced in ``PatchedCollectors.java`` code that never runs, across a
+      10.1M-record corpus, without firing once. ``"Regenerated"`` in the
+      mode table (for ``regenerated``) was the same shape — it matched no real
+      Forge mode at all — until a Task 10 fix round wired ``regenerated``
+      directly off the bus instead, the same way it wired ``library_shuffled``
+      (whose own table entry, unlike ``"Regenerated"``, was a real trigger mode
+      that simply served a different purpose — see below).
+    - **Reactive trigger, not the ability's own outcome.** ``spell_countered``
+      and ``token_created`` are referenced by a live trigger mode name
+      (``"Countered"``, ``"TokenCreated"``/``"TokenCreatedOnce"``) that fires
+      for a card *reacting* to a counter or a token appearing, never for the
+      resolving ability's own announcement.
+    - **Replacement mode, not a trigger at all.** ``dice_rolled`` and
+      ``player_won`` are referenced by a live *replacement* mode name
+      (``"RollDice"``, ``"GameWin"`` — real ``ReplacementType`` members, reached
+      from ``rewriteRecord`` rather than ``triggerRecord``), which fires only
+      when a replacement effect intercepts the roll or the win in progress.
+
+    Conversely, a type unreferenced in source is truly unreachable. This test
+    guards against the under-count direction only—the corpus-empirical gap is
+    deeper and cannot be caught by static analysis: some declared types may be
+    referenced but unfired, in any of the three shapes above. The unreferenced
+    types are recorded in ``KNOWN_UNEMITTED`` and shrink as each is wired and
+    emitted; the referenced-but-unfired gap cannot be recorded here at all — a
+    reference is a reference regardless of what it is for — which is why
+    ``event_type_coverage`` in ``validate_corpus.py``, run against a real
+    collection, exists as this scan's permanent counterpart rather than a
+    one-off check.
     """
     header = (_CONNECTOR_EFFECTS / "EffectEvent.java").read_text(encoding="utf-8")
     constants = dict(re.findall(
@@ -592,17 +641,29 @@ class TestEveryDeclaredTypeIsReachable:
        not a subset of it.
     2. **Referenced but unfired.** Types the guard finds a reference to and
        therefore cannot flag, no matter how wide its domain, because the
-       reference is real: a trigger-mode-name translation table, not an outcome
-       emitter for the ability's own resolution. A corpus analysis of 10.1M
-       records found two: ``damage_prevented`` and ``spell_copied``. A Task 10
-       fix-round measurement against a fresh 54,016-record run found four more
-       hiding behind the widening in (1) — ``token_created``, ``dice_rolled``,
-       ``spell_countered``, ``regenerated``, ``library_shuffled``, ``player_won``,
-       six in total, documented with their card counts in the spec rather than
-       here, because no static scan — however wide — can see this class. Only a
-       corpus measurement can, which is what makes ``event_type_coverage`` in
-       ``validate_corpus.py`` this test's permanent counterpart rather than a
-       one-off check that stops mattering once the guard is fixed.
+       reference is real — just not an outcome emitter for the ability's own
+       resolution. A corpus analysis of 10.1M records found two:
+       ``damage_prevented`` and ``spell_copied``, both referenced in dead code.
+       A Task 10 fix-round measurement against a fresh 54,016-record run found
+       four more hiding behind the widening in (1), in two further sub-shapes:
+       ``spell_countered``/``token_created`` are referenced by a live
+       *reactive-trigger* mode name (a card reacting to the outcome, not the
+       ability announcing it), and ``dice_rolled``/``player_won`` by a live
+       *replacement* mode name (a replacement effect intercepting the roll or
+       the win, reached from ``rewriteRecord`` rather than ``triggerRecord`` —
+       not a trigger at all, despite sitting in the same mode table). A fifth
+       and sixth, ``regenerated`` and ``library_shuffled``, were provisionally
+       filed here too and turned out to need the fix-round's first category
+       instead for one of them (``regenerated``'s table entry is dead, not
+       live-but-different-purpose) — both are wired directly off the bus now,
+       the same pattern as ``energy_change``/``radiation_change``/
+       ``speed_changed``/``day_night_changed``, and no longer belong in this
+       list at all. The remaining four are documented with their card counts in
+       the spec rather than here, because no static scan — however wide — can
+       see this class. Only a corpus measurement can, which is what makes
+       ``event_type_coverage`` in ``validate_corpus.py`` this test's permanent
+       counterpart rather than a one-off check that stops mattering once the
+       guard is fixed.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):
