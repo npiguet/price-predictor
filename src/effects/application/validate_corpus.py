@@ -314,6 +314,58 @@ def _all_events(record: EffectRecord) -> tuple[Event, ...]:
     return ()
 
 
+def event_type_coverage(records: Iterable[EffectRecord]) -> Finding:
+    """Which of the declared event types a corpus actually contains.
+
+    Watched, not judged: a short window legitimately misses rare types — the
+    remembered-result and choice families depend on which decks were drawn,
+    so their absence in one run is not a verdict on the collector — and a
+    floor nobody has calibrated would fail every smoke run. What this must
+    not do is stay silent: 29 of the vocabulary's types were unreachable for
+    the life of the project and no report ever said so before this check
+    existed.
+
+    This measures *fires*, a narrower and strictly harder question than the
+    static guard in ``test_event_schema_completeness.py`` answers. That guard
+    scans the connector's Java source for a reference to each type's
+    constant, so it catches a type nothing points at; it cannot catch a type
+    referenced from dead code that never actually runs, which is exactly what
+    ``damage_prevented`` and ``spell_copied`` were — both referenced in
+    ``PatchedCollectors.java`` while firing zero times across a 10.1M-record
+    corpus. A declared type this check never saw is one of those two gaps or a
+    type genuinely too rare for the window; the guard closes the first gap,
+    this closes the second, and telling one absence from the other is for
+    whoever reads the report.
+
+    A standalone one-pass entry point over ``records`` so a caller wanting
+    only this number does not pay for every other invariant's bookkeeping.
+    :class:`_Tally` accumulates the identical set during its own pass and
+    reports it through :meth:`_Tally.findings`, and both routes end at
+    :func:`_event_type_coverage_finding` so "declared" and "seen" are never
+    computed two different ways.
+    """
+    seen: set[str] = set()
+    for record in records:
+        for event in _all_events(record):
+            seen.add(event.type.value)
+    return _event_type_coverage_finding(seen)
+
+
+def _event_type_coverage_finding(seen: set[str]) -> Finding:
+    declared = {member.value for member in EventType}
+    unseen = tuple(sorted(declared - seen))
+    return Finding(
+        name="declared event types are observed in the window",
+        ok=True,
+        watched=True,
+        measured=(
+            f"{len(seen)}/{len(declared)} declared event types appeared at "
+            "least once"
+        ),
+        detail=unseen,
+    )
+
+
 def _provenance_keys(record: EffectRecord) -> Iterator[ProvenanceKey]:
     """Every printed-line key a record names, except emblems.
 
@@ -437,6 +489,9 @@ class _Tally:
         self.mana_flush_exempt = 0
         #: Every distinct printed-line key the window named, joined once.
         self.keys: set[ProvenanceKey] = set()
+        #: Every distinct event type the window named, anywhere in a record —
+        #: what event_type_coverage measures against the full vocabulary.
+        self.event_types_seen: set[str] = set()
         self.events_seen = 0
         self.duplicate_events = 0
         self.duplicate_events_by_type: Counter[str] = Counter()
@@ -567,6 +622,7 @@ class _Tally:
             else:
                 seen.add(digest)
         for event in _all_events(record):
+            self.event_types_seen.add(event.type.value)
             if event.type is EventType.ZONE_CHANGE:
                 self.zone_changes += 1
                 self.zone_changes_with_from += bool(event.params.get("from_zone"))
@@ -654,6 +710,7 @@ class _Tally:
             self._cause_bearing_events_name_a_cause(limits),
             self._forks_share_their_mirrors_turn(limits),
             self._probe_forks_were_taken(),
+            self._event_type_coverage(),
         ]
 
     def _unique_record_ids(self) -> Finding:
@@ -1401,3 +1458,13 @@ class _Tally:
                 "--probes-per-game, is what turns the path on",
             ),
         )
+
+    def _event_type_coverage(self) -> Finding:
+        """The check-list registration of :func:`event_type_coverage`.
+
+        Reads the set :meth:`add` already built while it walked every event
+        for the zone-change, cause-bearing and fork-attribution checks, so
+        registering this costs one more tuple in :meth:`findings` and no
+        second pass over the window.
+        """
+        return _event_type_coverage_finding(self.event_types_seen)

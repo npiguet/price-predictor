@@ -19,6 +19,7 @@ import pytest
 from effects.application.validate_corpus import (
     Finding,
     Thresholds,
+    event_type_coverage,
     read_window,
     validate_corpus,
 )
@@ -194,6 +195,28 @@ def _combat(record_id: str, **overrides):
         "moment": None,
         "ability": None,
         "payload": CombatPayload(attackers=("E0",)),
+    }
+    fields.update(overrides)
+    return _resolution(record_id, **fields)
+
+
+def _record_with_event(event_type: EventType, record_id: str = "r0", **overrides):
+    """A minimal record whose only event is one of ``event_type``.
+
+    For :func:`event_type_coverage`, which cares only which types appear
+    anywhere in a record, not what kind of record carries them. No ``params``
+    are set, so this is valid for any ``event_type`` regardless of what its
+    schema row declares.
+    """
+    fields: dict = {
+        "payload": ResolutionPayload(
+            events=(
+                Event(
+                    type=event_type, subjects=("E1",),
+                    attributed_to=ATTRIBUTION_ROOT,
+                ),
+            ),
+        ),
     }
     fields.update(overrides)
     return _resolution(record_id, **fields)
@@ -1662,6 +1685,69 @@ class TestNonKeywordKeysAreWatchedNotJudged:
             assert "none checked" in finding.measured
 
 
+class TestEventTypeCoverage:
+    """Which of the declared event types a corpus actually contains.
+
+    Watched, not judged: a short window legitimately misses rare types, and a
+    floor nobody has calibrated would fail every smoke run. What it must not
+    do is stay silent — 29 of the vocabulary's types were unreachable for the
+    life of the project and no report ever said so.
+
+    This measures *fires*, which the static guard in
+    ``test_event_schema_completeness.py`` cannot: that guard scans the
+    connector's Java source for a reference to each type's constant, and
+    ``damage_prevented``/``spell_copied`` were referenced from dead code
+    while firing zero times across a 10.1M-record corpus. A type this check
+    never saw is one of those two gaps or a type too rare for the window —
+    this check cannot tell them apart, and does not pretend to.
+    """
+
+    def test_it_reports_the_types_a_corpus_never_showed(self):
+        records = [
+            _record_with_event(EventType.ZONE_CHANGE, "r0"),
+            _record_with_event(EventType.DAMAGE_DEALT, "r1"),
+        ]
+
+        finding = event_type_coverage(records)
+
+        assert finding.watched is True
+        assert "2/" in finding.measured
+        assert "energy_change" in finding.detail
+
+    def test_a_type_seen_twice_is_not_listed_as_unseen(self):
+        records = [
+            _record_with_event(EventType.ZONE_CHANGE, "r0"),
+            _record_with_event(EventType.ZONE_CHANGE, "r1"),
+        ]
+
+        finding = event_type_coverage(records)
+
+        assert "1/" in finding.measured
+        assert "zone_change" not in finding.detail
+
+    def test_it_never_fails_the_run(self):
+        """Watched means never a verdict, however sparse the window is."""
+        finding = event_type_coverage([_record_with_event(EventType.ZONE_CHANGE)])
+        assert finding.ok is True
+
+    def test_the_full_vocabulary_reports_nothing_unseen(self):
+        records = [
+            _record_with_event(event_type, f"r{index}")
+            for index, event_type in enumerate(EventType)
+        ]
+
+        finding = event_type_coverage(records)
+
+        assert finding.detail == ()
+        total = len(list(EventType))
+        assert f"{total}/{total}" in finding.measured
+
+    def test_registered_in_the_full_check_list(self):
+        """The full pass reports it too, not just the standalone entry point."""
+        finding = _named(validate_corpus(_healthy()), "event types")
+        assert finding.watched is True
+
+
 @pytest.mark.parametrize(
     "fragment",
     [
@@ -1686,6 +1772,7 @@ class TestNonKeywordKeysAreWatchedNotJudged:
         "agrees with the record it mirrors",
         "non-keyword provenance keys",
         "probe forks",
+        "event types",
     ],
 )
 def test_every_named_invariant_is_reported(fragment):

@@ -125,6 +125,55 @@ The type vocabulary is the union of Forge trigger types, bus events, and bracket
 member list and per-type field normalization live in `src/effects/domain/event_schema.py`. A checked-in
 completeness test maps every Forge effect API class to a covered type or an explicit exclusion.
 
+### The vocabulary's reachability promise
+
+Three declared types are retired rather than wired, because each names a fact a payload field already
+carries under another name: `cost_adjusted` (`playability/decision` payload,
+`candidates[].cost_after_adjustment`), `damage_assignment_ordered` (`combat` payload,
+`assignment_choices`), and `name_change` (`continuous` payload, `contributions[].name`).
+`SUPERSEDED_EVENT_TYPES` in `event_schema.py` names all three and where the information lives; wiring
+them as events too would give one fact two spellings, and a corpus without them would read as incomplete
+rather than correct. Removing a declared type is safe in exactly one direction — no corpus has ever
+contained one, because nothing could emit it.
+
+Every other declared type is reachable by one of two mechanisms. A **bus subscription** covers the four
+types Forge already broadcasts on its own game-event bus with nothing more than a listener:
+`energy_change`, `radiation_change`, `speed_changed`, `day_night_changed`; `energy_change` is the
+channel's canary, since Aether Hub is the cheapest sealed-legal card that exercises it. A **clause hook
+plus an API-emitter table** covers the rest: `ApiEvents` in `forge-connector` wraps every `SpellAbility`
+resolution, and a table keyed by the effect's `ApiType` name — not its effect class, so a Forge rename
+costs a missing event rather than a compile error — says which event, if any, that API produces and how
+to build it from the clause's own parameters and whatever a memo captured before the clause ran. Where
+the fact an event carries exists only inside the effect's own resolution logic and not in its before/
+after parameters — a coin's actual result, a vote's ballot, which cards a restriction landed on, a
+reveal, a prevented amount — the effect reports it with an explicit call into the same per-clause
+channel instead of through the table (`EffectRecordOutcomes.note`, called from `FlipCoinEffect`,
+`ClashEffect`, `VoteEffect`, `DetainEffect`, `GoadEffect`, `MustBlockEffect`, `MakeCardEffect`,
+`(Multiple)Piles/TwoPilesEffect`, `VentureEffect`, `Clone`/`CopyPermanentEffect`,
+`CopySpellAbilityEffect`, and the two engine choke points `GameAction.reveal` and
+`ReplacementHandler.runSingleReplaceDamageEffect`). Both branches of this mechanism together account for
+22 of the 29 types that were unreachable for the life of the project before this plan; the bus
+subscription accounts for the other 4, and the three retirements above for the last 3 — the full 29 are
+what "previously unreachable" means throughout this contract.
+
+**A declared type nothing emits is indistinguishable, in a corpus, from one that is merely rare — which
+is exactly the state those 29 types were in, silently, before it was noticed.** Two checks now stand
+where that silence was, and neither is sufficient alone:
+
+- `test_no_declared_type_is_unreachable_by_surprise` (`test_event_schema_completeness.py`) statically
+  scans the connector's Java source for a reference to each type's constant and fails if a declared type
+  gains or loses one unexpectedly; `KNOWN_UNEMITTED` names the types with no reference at all (empty as
+  of this contract). It catches a type nothing in the source points at. It **cannot** catch a type
+  referenced from code that never runs: `damage_prevented` and `spell_copied` were both referenced in
+  `PatchedCollectors.java` for the whole of a 10.1M-record corpus while firing zero times, and a scan
+  that never executes the code it reads has no way to see that.
+- `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
+  declared types the corpus's records contain at all. It is watched, not judged: a short window
+  legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has
+  calibrated would fail every smoke run. What it must not do, and does not do, is stay silent — every
+  run's report names exactly which declared types it did and did not observe, which is where the gap the
+  static guard cannot see has somewhere to show up.
+
 ### `attributed_to` is tri-state
 
 | Value | Means |
@@ -173,6 +222,89 @@ damage to the same player produce events that differ in nothing else, so the dup
 counts them as a repeat while the collector is right not to dedupe them. `damage_dealt` names the
 same fact as `source`; the two spellings are deliberate and not interchangeable, and a collector
 fills the one its type's row declares.
+
+### `coin_flipped` speaks two dialects, and `FlipUntilYouLose` reports exactly one loss
+
+`results` speaks one of two vocabularies, and `called` — a boolean in `coin_flipped`'s own `EVENT_PARAMS`
+row — says which: `heads`/`tails` for a flip nobody called (`NoCall$ True`: there is no caller, so
+nothing to win or lose against), `win`/`loss` for every other flip. The two are different facts about the
+same event type, not a formatting inconsistency, so both are kept rather than one being normalized away.
+A reader computing a win rate from `results == "win"` without filtering on `called` silently drops every
+uncalled flip and has no signal that it did.
+
+Under `FlipUntilYouLose`, `coin_flipped` reports **exactly one loss**, however many wins preceded it.
+Forge computes `countLosses = |countWins - amount|` (`FlipCoinEffect.java`) as the gate that decides
+whether `LoseSubAbility` runs at all, not as a count of how many flips went against the caller; the event
+reports `1` in this branch specifically because reading `countLosses` as a tally would invent losses the
+flip sequence never produced.
+
+### `damage_prevented` is a second view of its `rewrite` sibling, not independent evidence
+
+`damage_prevented.source` is an entity ref (e.g. `"E17"`), converted from the raw `Card`/`Player` the
+effect reported, exactly like `damage_dealt.source` and every other producer of a `source` key. A card
+name cannot be joined against `state.entities` and cannot distinguish two permanents that share a name;
+the connector's outcome handler normalizes it the same way it normalizes `restriction_change.subjects`,
+below, and for the same reason.
+
+Prevention in this engine is implemented entirely as a replacement effect, so a `damage_prevented` event
+and the `rewrite` record for the same replacement are two views of **one** engine event, one call frame
+apart: the `rewrite` record is written from inside `executeReplacement`, before the engine computes the
+prevented amount the `damage_prevented` row carries. They are not independent confirmation of the same
+prevention — a reader that treats the pair as two confirming signals will double-count it.
+
+### `restriction_change` names who was restricted, not who restricted them
+
+`restriction_change`'s subjects (`Event.subjects`, not a `params` key) name only the cards or players the
+restriction landed on — never the card or ability that applied it. `subjects` means *who the event is
+about*; the actor rides in the acting ability's own provenance (the record's `ability` field), and naming
+it again as a subject would double it into a list a reader counts against. It can also carry
+`value: false`: the `Goad` API and its un-goad form (`NoLonger$ True`) both write a `restriction_change`
+record, and only `value` distinguishes granting the restriction from lifting it. `Detain` always writes
+`true`, since nothing un-detains through that API.
+
+### `vote_taken.options` is the ballot, not the tally's keys
+
+`options` is the script's own `VoteType` ballot, read before any vote is cast — not derived from the
+tally's keys after the fact. In 1v1 play the tally is almost always size 1, since the second player tends
+to vote however the outcome is already decided, so computing `options` from the tally would read the
+number of choices on the ballot as 1 on nearly every real game: a different and far less useful fact than
+what the card actually offered.
+
+### Two `choice_made`-family keys are not spelled like their effect classes
+
+`EFFECT_API_EVENTS` is keyed by `ApiType` name, and two of the `choice_made` family's keys are not
+spelled like the effect class that implements them: `NameCard` (not `ChooseCardName`) and
+`GenericChoice` (not `ChooseGenericEffect`). A rule keyed by the class stem instead of the `ApiType` name
+matches nothing and fails silently, which is exactly the mistake this note exists to head off.
+
+`ChooseSector` is deliberately **not** covered. It is excluded (`EXCLUDED_EFFECT_APIS`,
+`event_schema.py:651`) as an Unfinity attraction not reachable in sealed or draft, the only formats this
+corpus collects from — not an oversight, however much an uncovered API in this family looks like one.
+
+### Clash's `card_revealed` is Clash's own reveal
+
+`ClashEffect` calls `GameAction.revealTo`, not the six-argument `reveal(...)` overload this plan's engine
+hook wraps, so nothing about Clash's reveal reaches the generic `card_revealed` path on its own —
+`ClashEffect` reports it itself, with an explicit outcome call at the point where it already knows
+exactly which cards were revealed and that they came from the library. This is a deliberate, narrow gap
+and not an oversight: `revealTo` has other real callers (`ChooseCardEffect`'s `Secretly` path,
+`Player.java:1166` and `:3891`) that are look-at-shaped rather than reveal-shaped, and recording one of
+those as a `card_revealed` would misreport it worse than omitting it does. Clash's own use is the one
+`revealTo` call this corpus can say, without qualification, is a genuine reveal — always from the
+library, always to everyone.
+
+### Collection never runs against a simulated game
+
+Every effect-record listener this plan installs (the outcome channel, the clause hook, the rewrite
+listener) is a plain JVM-wide static with no `Game` reference of its own. Forge's AI full- and
+hybrid-simulation modes deep-copy the `Game` and run the real resolution pipeline against the clone
+purely to evaluate a candidate move; if that mode ran during a collected game, the same static listeners
+would fire for a hypothetical resolution exactly as for a real one, and the corpus would hold
+hypothetical events indistinguishable from real ones. `AiController` only enters that mode when an
+`AIOption` is set, and the connector's player setup builds both seats with a null `Set<AIOption>` — a
+test now reads that off the actual player instances the connector builds, not off a re-declaration of the
+constant, so a future edit that starts passing an `AIOption` fails a test rather than silently poisoning
+every collection channel at once.
 
 ## Payloads
 
