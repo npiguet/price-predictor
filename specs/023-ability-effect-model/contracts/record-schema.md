@@ -304,7 +304,7 @@ events would settle this empirically rather than by further argument.
 
 ### `spell_countered` cannot see a counter that removed the stack instance but then failed to exile
 
-`Counter | Destination$ Exile` (17 real cards: `dissipate`, `void_shatter`, `syncopate`,
+`Counter | Destination$ Exile` (21 real cards: `dissipate`, `void_shatter`, `syncopate`,
 `force_of_negation`, …) is a known limit of the channel, found in fix round 1 and not fixed: `removeFromStack`
 removes the target's `SpellAbilityStackInstance` from the stack first, then attempts the `Exile` destination,
 and can still return `false` if `canExiledBy` refuses (e.g. an exile-protected target) — after the stack
@@ -312,7 +312,7 @@ instance is already gone. `CounterEffect.resolve()`'s note is gated on that bool
 skips `spell_countered` even though the counter genuinely happened: the spell is gone from the stack, just
 not exiled where the script asked. Fixing it would mean deciding what "countered" means when the requested
 destination fails, which is a real question and not this task's to answer alone; documented here so a reader
-of a corpus with these 17 cards in it knows the undercount exists, rather than assuming `spell_countered` is
+of a corpus with these 21 cards in it knows the undercount exists, rather than assuming `spell_countered` is
 exhaustive.
 
 ### `card_made`, `permanent_copied` and `token_created` describe only the first object a clause makes
@@ -322,7 +322,7 @@ All three follow the same convention when one clause creates several objects at 
 `token_created.token_script_id`/`characteristics` (`TokenEffectBase.java`) are all read off the *first*
 created object, while `count` totals every one the engine actually made. A clause that creates more than one
 *distinct* kind in a single resolution — `MakeCard` naming several `Name$` values, `CopyPermanent` copying
-several different permanents, or `Token` with a multi-valued `TokenScript$` (19 real cards, e.g.
+several different permanents, or `Token` with a multi-valued `TokenScript$` (26 real cards, e.g.
 `bestial_menace`: Snake + Wolf + Elephant) — reports the true total count alongside characteristics that
 describe only the one sampled, not all of them.
 
