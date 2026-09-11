@@ -192,6 +192,21 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     EventType.SPELL_COPIED: ("count", "new_targets"),
     EventType.TARGETS_CHANGED: ("targets",),
     EventType.X_CHANGED: ("value",),
+    # The six Replace* APIs are exactly the getOverridingAbility() of a
+    # replacement effect, so this and the `rewrite` record for the same
+    # replacement are two views of ONE engine event, one call frame apart: the
+    # `rewrite` record is written from inside observeReplacement, wrapping the
+    # same executeReplacement call this row's ability runs from. They are not
+    # independent evidence of the same replacement -- a reader that treats a
+    # `replacement_applied` row and its sibling `rewrite` row as two
+    # confirming signals will double-count it. It is also a NARROWER view than
+    # `rewrite`: `rewrite` also covers replacements whose overriding ability is
+    # not a Replace* API at all (`Prevent$ True`, an arbitrary `ReplaceWith$`),
+    # so this row is a strict subset, not an alternate route to the same
+    # coverage. The empty tuple is deliberate, not a placeholder: the event
+    # carries subjects and provenance and nothing else, so unlike
+    # DAMAGE_PREVENTED's row this one exists only to hold the comment above.
+    EventType.REPLACEMENT_APPLIED: (),
     EventType.CONTINUOUS_EFFECT_CREATED: ("layers",),
     EventType.PHASE_ADDED: ("phase", "count"),
     EventType.PHASE_SKIPPED: ("phase",),

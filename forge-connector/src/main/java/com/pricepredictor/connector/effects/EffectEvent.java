@@ -105,6 +105,20 @@ public final class EffectEvent {
      */
     public static final String CONTINUOUS_EFFECT_CREATED = "continuous_effect_created";
     public static final String TARGETS_CHANGED = "targets_changed";
+    public static final String DELAYED_TRIGGER_CREATED = "delayed_trigger_created";
+    /**
+     * A strict subset of the {@code rewrite} record for the same replacement --
+     * see the comment above {@code EventType.REPLACEMENT_APPLIED} in
+     * {@code event_schema.py} for why the two must not be read as independent
+     * evidence of the same replacement.
+     */
+    public static final String REPLACEMENT_APPLIED = "replacement_applied";
+    public static final String MONARCH_CHANGED = "monarch_changed";
+    public static final String RING_TEMPTS = "ring_tempts";
+    public static final String REMOVED_FROM_COMBAT = "removed_from_combat";
+    public static final String INITIATIVE_TAKEN = "initiative_taken";
+    public static final String TEXT_CHANGE = "text_change";
+    public static final String TURN_ENDED = "turn_ended";
 
     private final String type;
     private final List<String> subjects = new ArrayList<>();

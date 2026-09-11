@@ -1779,14 +1779,20 @@ public final class PatchedCollectors implements AutoCloseable {
      * RollDiceEffect}) are Task 11's three -- the other one of Task 11's four,
      * {@code PLAYER_WON}, is a bus subscription (see {@code
      * BusBracketCollector#onGameOutcome}), not an outcome-hook type, and does
-     * not belong here.
+     * not belong here. {@code TURN_ENDED} ({@code EndTurnEffect}) and {@code
+     * TEXT_CHANGE} ({@code TextBoxExchangeEffect} -- {@code ChangeText}'s own
+     * contribution to {@code TEXT_CHANGE} is an {@code ApiEvents.RULES} entry,
+     * not this hook) are Task 12's two note-based additions; the other six of
+     * Task 12's eight types are {@code ApiEvents.RULES} entries and never reach
+     * this set at all.
      */
     private static final Set<String> KNOWN_OUTCOME_TYPES = Set.of(
             EffectEvent.COIN_FLIPPED, EffectEvent.CLASH_RESOLVED, EffectEvent.VOTE_TAKEN,
             EffectEvent.PILES_MADE, EffectEvent.DUNGEON_VENTURED, EffectEvent.SPELL_COPIED,
             EffectEvent.PERMANENT_COPIED, EffectEvent.CARD_MADE, EffectEvent.RESTRICTION_CHANGE,
             EffectEvent.CARD_REVEALED, EffectEvent.DAMAGE_PREVENTED, EffectEvent.SPELL_COUNTERED,
-            EffectEvent.TOKEN_CREATED, EffectEvent.DICE_ROLLED);
+            EffectEvent.TOKEN_CREATED, EffectEvent.DICE_ROLLED, EffectEvent.TURN_ENDED,
+            EffectEvent.TEXT_CHANGE);
 
     /** Set the first time {@link #outcomeHandler()} sees a type outside {@link #KNOWN_OUTCOME_TYPES}. */
     private static final AtomicBoolean UNKNOWN_OUTCOME_TYPE_REPORTED = new AtomicBoolean();

@@ -564,15 +564,20 @@ _CONNECTOR_EFFECTS = (
 #: params row -- so the 21 types that carry no params beyond their subjects were
 #: invisible to it: referenced or not, checked or not, they could never appear
 #: in ``unreachable`` because they were never in the set being subtracted from.
-#: Widening the guard to ``set(EventType)`` is what surfaced the 15 below; they
+#: Widening the guard to ``set(EventType)`` is what surfaced 15 types; they
 #: were unreachable and unchecked for the entire life of this plan, not broken by
 #: widening it. Going from ``frozenset()`` to a populated mapping is the set
 #: finally being honest about a gap that predates this plan and was invisible the
 #: whole time it ran.
 #:
+#: Task 12 wired the eight highest-reach of those 15 -- ``delayed_trigger_created``,
+#: ``replacement_applied``, ``monarch_changed``, ``ring_tempts``,
+#: ``removed_from_combat``, ``initiative_taken``, ``text_change``, ``turn_ended``,
+#: together ~84% of the 15's combined card count -- leaving the 7 below.
+#:
 #: Values are the reason: the producing Forge effect API(s), whether an emission
 #: path exists (``ApiEvents.RULES`` in the connector, or an explicit
-#: ``EffectRecordOutcomes.note`` call -- none of these 15 have either), and how
+#: ``EffectRecordOutcomes.note`` call -- none of these 7 have either), and how
 #: many cards in the sealed/draft pool script that API, read directly from
 #: ``forge-gui/res/cardsfolder`` rather than estimated.
 KNOWN_UNEMITTED: dict[str, str] = {
@@ -582,46 +587,20 @@ KNOWN_UNEMITTED: dict[str, str] = {
     "combat_ended":
         "EndCombatPhase: no ApiEvents.RULES entry, no outcome-note call; "
         "1 card scripts it",
-    "delayed_trigger_created":
-        "DelayedTrigger/ImmediateTrigger: no ApiEvents.RULES entry, no "
-        "outcome-note call; 445 + 312 = 757 cards, the largest count of any "
-        "type in this dict",
     "game_drawn":
         "GameDrawn: no ApiEvents.RULES entry, no outcome-note call; "
         "2 cards script it",
     "game_restarted":
         "RestartGame: no ApiEvents.RULES entry, no outcome-note call; "
         "1 card scripts it",
-    "initiative_taken":
-        "TakeInitiative: no ApiEvents.RULES entry, no outcome-note call; "
-        "23 cards script it",
-    "monarch_changed":
-        "BecomeMonarch: no ApiEvents.RULES entry, no outcome-note call; "
-        "60 cards script it -- a whole named mechanic (Monarch), not a corner case",
     "player_removed":
         "RemoveFromMatch: no ApiEvents.RULES entry, no outcome-note call; "
         "2 cards script it",
-    "removed_from_combat":
-        "ChangeCombatants/RemoveFromCombat: no ApiEvents.RULES entry, no "
-        "outcome-note call; 9 + 28 = 37 cards",
-    "replacement_applied":
-        "The six Replace* APIs (ReplaceEffect, ReplaceCounter, ReplaceDamage, "
-        "ReplaceMana, ReplaceSplitDamage, ReplaceToken): no ApiEvents.RULES "
-        "entry, no outcome-note call; ~304 cards combined",
-    "ring_tempts":
-        "RingTemptsYou: no ApiEvents.RULES entry, no outcome-note call; "
-        "49 cards script it (set-gated: Lord of the Rings only)",
-    "text_change":
-        "ChangeText/ExchangeTextBox: no ApiEvents.RULES entry, no outcome-note "
-        "call; 12 + 2 = 14 cards",
     "trigger_fired":
         "No Forge effect API maps to it at all -- absent from EFFECT_API_EVENTS "
         "entirely. Its only plausible source is the trigger-fire hook itself, "
         "which already reports through the trigger record kind's own `fired` "
         "flag rather than this type",
-    "turn_ended":
-        "EndTurn: no ApiEvents.RULES entry, no outcome-note call; "
-        "9 cards script it",
     "turn_order_reversed":
         "ReverseTurnOrder: no ApiEvents.RULES entry, no outcome-note call; "
         "3 cards script it",

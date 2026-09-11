@@ -174,12 +174,28 @@ blind spot, discovered by running the second against a real collection.
   check that never looks at a fifth of the vocabulary gives false assurance about exactly the thing it
   exists to assure. Widening it surfaced 15 types that were unreachable and unchecked for the entire life
   of this plan, not broken by widening it — `KNOWN_UNEMITTED` (in the test file, not empty as an earlier
-  draft of this contract said) names all 15 with the producing Forge effect API and a card count for
+  draft of this contract said) named all 15 with the producing Forge effect API and a card count for
   each, from `ability_activated` (2 cards) and `combat_ended` (1 card) up to `delayed_trigger_created`
   (757 cards, `DelayedTrigger`/`ImmediateTrigger` combined — the largest count of any type in
   `KNOWN_UNEMITTED`) and `monarch_changed` (60 cards, a whole named mechanic). Even at its full width, this scan
   **cannot** catch a type referenced from code that never runs on the path a reader would expect, in either
   of two distinct sub-shapes: see "Four declared types found not firing, now wired" below.
+
+  Task 12 wired the eight highest-reach of those 15 — `delayed_trigger_created` and `replacement_applied`
+  (an `ApiEvents.RULES` entry per API: `DelayedTrigger`/`ImmediateTrigger`, and the six `Replace*` APIs
+  respectively), `monarch_changed`, `ring_tempts`, `removed_from_combat` (`ChangeCombatants`/
+  `RemoveFromCombat`), `initiative_taken`, `text_change` (an `ApiEvents.RULES` entry for `ChangeText`, an
+  `EffectRecordOutcomes.note` call for `ExchangeTextBox`), and `turn_ended` (`EffectRecordOutcomes.note`
+  from `EndTurnEffect`, not the tempting but wrong `GameEventTurnEnded` bus event, which fires at the
+  natural end of every turn and would have drowned the nine-card `EndTurn` signal in noise). Together
+  these eight account for ~84% of the 15's combined card count. `replacement_applied` is a strict subset of
+  the `rewrite` record this connector already writes for every replacement — see the comment on
+  `EventType.REPLACEMENT_APPLIED` in `event_schema.py`, which states the relationship in the same words
+  ruling R12 used for `damage_prevented`/`rewrite`.
+
+  Seven remain in `KNOWN_UNEMITTED`: `ability_activated` (2 cards), `combat_ended` (1 card), `game_drawn`
+  (2 cards), `game_restarted` (1 card), `player_removed` (2 cards), `trigger_fired` (no producing Forge
+  effect API at all — see its own entry), and `turn_order_reversed` (3 cards, now the largest remaining).
 - `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has

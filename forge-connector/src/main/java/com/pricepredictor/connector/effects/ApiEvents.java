@@ -3,10 +3,12 @@ package com.pricepredictor.connector.effects;
 import forge.game.GameEntity;
 import forge.game.ability.AbilityUtils;
 import forge.game.card.Card;
+import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,6 +89,23 @@ final class ApiEvents {
         }
         return total;
     };
+
+    /**
+     * The six {@code Replace*} APIs are exactly {@code
+     * ReplacementEffect.getOverridingAbility()} -- the ability the replacement
+     * substitutes in -- and all six report the same thing: the card whose
+     * replacement applied, nothing more. Declared ahead of {@link #RULES} for
+     * the same forward-reference reason as {@link #DAMAGE_BEFORE} (a field
+     * initializer cannot read a sibling field declared later by simple name).
+     *
+     * <p>This is a strict subset of the {@code rewrite} record this connector
+     * already writes for every replacement, from {@code
+     * ReplacementHandler.observeReplacement} -- see the comment on {@code
+     * EventType.REPLACEMENT_APPLIED} in {@code event_schema.py} for why the two
+     * must not be read as independent evidence of the same replacement.
+     */
+    private static final Emitter REPLACEMENT_APPLIED_EMITTER = (sa, host, memo) ->
+            new EffectEvent(EffectEvent.REPLACEMENT_APPLIED).subject(SnapshotBuilder.entityId(host));
 
     private static final Map<String, Rule> RULES = Map.ofEntries(
             Map.entry("AddTurn", new Rule(EffectEvent.TURN_ADDED,
@@ -197,7 +216,147 @@ final class ApiEvents {
                     new EffectEvent(EffectEvent.CONTINUOUS_EFFECT_CREATED)
                             .param("layers", sa.getParamOrDefault("StaticAbilities", "")))),
             Map.entry("ChangeTargets", new Rule(EffectEvent.TARGETS_CHANGED, null,
-                    (sa, host, memo) -> retargeted(sa)))
+                    (sa, host, memo) -> retargeted(sa))),
+
+            // ── Task 12: the eight highest-reach unemitted types ─────────
+
+            // delayed_trigger_created: the card that scheduled it. Always the
+            // host -- neither effect reads Defined$/ValidTgts$ for the trigger
+            // itself, only for what the delayed trigger later acts on.
+            Map.entry("DelayedTrigger", new Rule(EffectEvent.DELAYED_TRIGGER_CREATED, null,
+                    (sa, host, memo) -> new EffectEvent(EffectEvent.DELAYED_TRIGGER_CREATED)
+                            .subject(SnapshotBuilder.entityId(host)))),
+            // ImmediateTriggerEffect.resolve() returns before registering
+            // anything when TriggerAmount$ (default 1) calculates to <= 0 --
+            // CR 603.12a's "once for each of those times" can be zero times.
+            // Captured as a memo (read the same way ApiEvents' own #amount
+            // helper reads it elsewhere) rather than re-read in the emitter,
+            // matching this file's own convention: nothing in the effect
+            // mutates whatever TriggerAmount$'s expression depends on before
+            // this is the first thing resolve() computes.
+            Map.entry("ImmediateTrigger", new Rule(EffectEvent.DELAYED_TRIGGER_CREATED,
+                    (sa, host) -> amount(sa, host, "TriggerAmount", "1"),
+                    (sa, host, memo) -> memo instanceof Integer n && n <= 0 ? null
+                            : new EffectEvent(EffectEvent.DELAYED_TRIGGER_CREATED)
+                                    .subject(SnapshotBuilder.entityId(host)))),
+
+            // replacement_applied: the card whose replacement applied. See
+            // REPLACEMENT_APPLIED_EMITTER's own javadoc above for why all six
+            // share one emitter and why this is a strict subset of `rewrite`.
+            Map.entry("ReplaceEffect", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+            Map.entry("ReplaceCounter", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+            Map.entry("ReplaceDamage", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+            Map.entry("ReplaceMana", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+            Map.entry("ReplaceSplitDamage", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+            Map.entry("ReplaceToken", new Rule(EffectEvent.REPLACEMENT_APPLIED, null,
+                    REPLACEMENT_APPLIED_EMITTER)),
+
+            // monarch_changed: the new monarch, and only when the monarch
+            // genuinely changed. GameAction.becomeMonarch is a no-op (no
+            // state change, no trigger) when the named player already is the
+            // monarch or canBecomeMonarch() says no (a static ability, e.g.
+            // Crown of Vigor's granted "monarch can't lose the crown" combined
+            // with a would-be usurper who cannot become monarch some other
+            // way) -- replicating that condition here would be exactly the
+            // duplicated-classification shortcut ruling R12 rejected for
+            // damage_prevented. Reading the actual before/after monarch
+            // instead needs no such duplication and is correct regardless of
+            // how many players BecomeMonarchEffect's loop iterates.
+            Map.entry("BecomeMonarch", new Rule(EffectEvent.MONARCH_CHANGED,
+                    (sa, host) -> host.getGame().getMonarch(),
+                    (sa, host, memo) -> {
+                        Player after = host.getGame().getMonarch();
+                        if (after == null || after.equals(memo)) {
+                            return null;
+                        }
+                        return new EffectEvent(EffectEvent.MONARCH_CHANGED)
+                                .subject(SnapshotBuilder.playerId(after));
+                    })),
+
+            // ring_tempts: the tempted player, always the activator --
+            // RingTemptsYouEffect.resolve() reads sa.getActivatingPlayer()
+            // unconditionally, never Defined$/targeting. The Ring-bearer is a
+            // separable second fact from the same clause (Card.setRingBearer,
+            // read back post-resolution since it is only known once the
+            // player's controller has chosen one) and is named as a second
+            // subject when one was actually chosen -- null when the player
+            // controls no creatures, per chooseSingleEntityForEffect's own
+            // contract on an empty candidate list.
+            Map.entry("RingTemptsYou", new Rule(EffectEvent.RING_TEMPTS, null,
+                    (sa, host, memo) -> {
+                        Player p = sa.getActivatingPlayer();
+                        if (p == null) {
+                            return null;
+                        }
+                        EffectEvent event = new EffectEvent(EffectEvent.RING_TEMPTS)
+                                .subject(SnapshotBuilder.playerId(p));
+                        Card ringBearer = p.getRingBearer();
+                        if (ringBearer != null) {
+                            event.subject(SnapshotBuilder.entityId(ringBearer));
+                        }
+                        return event;
+                    })),
+
+            // removed_from_combat: every creature actually removed, not just
+            // the first (Task 6's shipped defect, repeated here as a named
+            // risk). RemoveFromCombatEffect gates each target on several
+            // conditions (combat null, not in play, a stale LKI reference)
+            // this file cannot see from outside; reading whether each
+            // memoized combatant is still attacking or blocking afterward
+            // sidesteps replicating them, the same before/after-diff shape as
+            // BecomeMonarch above.
+            Map.entry("RemoveFromCombat", new Rule(EffectEvent.REMOVED_FROM_COMBAT,
+                    (sa, host) -> combatantsBefore(sa, host),
+                    (sa, host, memo) -> noLongerInCombat(host, memo))),
+            // ChangeCombatants reselects an attacker's defender by calling
+            // addToCombat, whose only removeFromCombat call sits immediately
+            // before re-adding the same creature against the new defender
+            // (SpellAbilityEffect.java:762) -- so "removed from combat" here
+            // means a targeted attacker's defender assignment actually
+            // changed, read the same way ChangeCombatantsEffect itself reads
+            // its own originalDefender/defender pair for retargeting
+            // triggers, not replicated from the Optional-decline or
+            // already-attacking-that-defender guards.
+            Map.entry("ChangeCombatants", new Rule(EffectEvent.REMOVED_FROM_COMBAT,
+                    (sa, host) -> attackerDefendersBefore(sa, host),
+                    (sa, host, memo) -> reselectedAttackers(host, memo))),
+
+            // initiative_taken: the player taking the initiative.
+            // GameAction.takeInitiative fires its trigger unconditionally --
+            // "You can take the initiative even if you already have it" is in
+            // the engine's own comment -- unlike becomeMonarch, which is a
+            // no-op when the target already holds the title. So this is NOT
+            // a before/after diff (that would wrongly suppress the
+            // already-has-it re-affirmation): it reads the post-resolution
+            // holder and confirms they are one of this clause's own targets,
+            // which is true whether the holder changed or was reconfirmed.
+            Map.entry("TakeInitiative", new Rule(EffectEvent.INITIATIVE_TAKEN, null,
+                    (sa, host, memo) -> {
+                        Player holder = host.getGame().getHasInitiative();
+                        if (holder == null || !affectedPlayers(sa).contains(holder)) {
+                            return null;
+                        }
+                        return new EffectEvent(EffectEvent.INITIATIVE_TAKEN)
+                                .subject(SnapshotBuilder.playerId(holder));
+                    })),
+
+            // text_change: the card(s) whose text changed. Only when the
+            // clause actually names a word to replace -- sa.hasParam reads
+            // its own params directly, no post-resolution state needed --
+            // since ChangeTextEffect's target loop still fires
+            // GameEventCardStatsChanged even when neither ChangeColorWord$
+            // nor ChangeTypeWord$ is set. ExchangeTextBox's own contribution
+            // to text_change is a note() call from TextBoxExchangeEffect
+            // itself (see that class), not a rule here: its two early returns
+            // (checkValidDuration, tgtCards.size() < 2) are not cheaply
+            // replicable from outside without duplicating engine logic.
+            Map.entry("ChangeText", new Rule(EffectEvent.TEXT_CHANGE, null,
+                    (sa, host, memo) -> changeTextEvent(sa)))
     );
 
     /**
@@ -673,5 +832,135 @@ final class ApiEvents {
             }
         }
         return new EffectEvent(EffectEvent.TARGETS_CHANGED).param("targets", targets);
+    }
+
+    // ── Task 12 helpers ───────────────────────────────────────────────────
+
+    /**
+     * {@code getCardsfromTargets(sa)} (SpellAbilityEffect.java:370), mirrored
+     * the way {@link #affectedCards} already mirrors {@code getTargetCards}:
+     * every real {@code ChangeText} script in the cardsfolder targets {@code
+     * ValidTgts$ Card | TgtZone$ Stack,Battlefield} or {@code Permanent} --
+     * read through {@link #affectedCards}'s own targeting-first logic -- so
+     * the extra {@code getTargetSpells()} union below is dead for today's
+     * cardsfolder and kept only because {@code ChangeTextEffect} itself reads
+     * it; a future card using the {@code ValidTgts$ Spell} shape would
+     * otherwise silently lose its subject.
+     */
+    private static List<Card> cardsFromTargets(SpellAbility sa) {
+        List<Card> cards = new ArrayList<>(affectedCards(sa));
+        if (sa.getTargets() != null) {
+            for (SpellAbility spellTarget : sa.getTargets().getTargetSpells()) {
+                cards.add(spellTarget.getHostCard());
+            }
+        }
+        return cards;
+    }
+
+    /**
+     * {@code ChangeText}'s subject list, or {@code null} when the clause
+     * names no word to replace at all -- {@code ChangeTextEffect.resolve()}'s
+     * target loop still fires {@code GameEventCardStatsChanged} for every
+     * target even then, so the params themselves are the only signal that
+     * anything textual actually changed.
+     */
+    private static EffectEvent changeTextEvent(SpellAbility sa) {
+        if (!sa.hasParam("ChangeColorWord") && !sa.hasParam("ChangeTypeWord")) {
+            return null;
+        }
+        EffectEvent event = new EffectEvent(EffectEvent.TEXT_CHANGE);
+        boolean any = false;
+        for (Card c : cardsFromTargets(sa)) {
+            event.subject(SnapshotBuilder.entityId(c));
+            any = true;
+        }
+        return any ? event : null;
+    }
+
+    /**
+     * {@code RemoveFromCombat}'s memo: which of the clause's own targets are
+     * genuinely attacking or blocking right now, before the clause runs.
+     * Mirrors {@link #DAMAGE_BEFORE}'s before/after shape rather than
+     * replicating {@code RemoveFromCombatEffect}'s own combat-null/in-play/
+     * stale-LKI guards.
+     */
+    private static List<Card> combatantsBefore(SpellAbility sa, Card host) {
+        Combat combat = host.getGame().getCombat();
+        List<Card> inCombat = new ArrayList<>();
+        if (combat != null) {
+            for (Card c : affectedCards(sa)) {
+                if (combat.isAttacking(c) || combat.isBlocking(c)) {
+                    inCombat.add(c);
+                }
+            }
+        }
+        return inCombat;
+    }
+
+    /** Every memoized combatant no longer attacking or blocking, or {@code null} if none. */
+    private static EffectEvent noLongerInCombat(Card host, Object memo) {
+        if (!(memo instanceof List<?> before) || before.isEmpty()) {
+            return null;
+        }
+        Combat combat = host.getGame().getCombat();
+        EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
+        boolean any = false;
+        for (Object o : before) {
+            if (o instanceof Card c
+                    && (combat == null || !(combat.isAttacking(c) || combat.isBlocking(c)))) {
+                event.subject(SnapshotBuilder.entityId(c));
+                any = true;
+            }
+        }
+        return any ? event : null;
+    }
+
+    /**
+     * {@code ChangeCombatants}'s memo: each targeted card's current attacker
+     * assignment, the same pair ({@code originalDefender}/{@code defender})
+     * {@code ChangeCombatantsEffect.resolve()} itself reads around its own
+     * {@code addToCombat} call, for the same reselection-retargeting reason.
+     * A card absent from combat entirely (not currently attacking) maps to
+     * {@code null} rather than being omitted, so {@link #reselectedAttackers}
+     * can tell "wasn't attacking" from "was attacking, still is" without a
+     * second lookup.
+     */
+    private static Map<Card, GameEntity> attackerDefendersBefore(SpellAbility sa, Card host) {
+        Combat combat = host.getGame().getCombat();
+        Map<Card, GameEntity> map = new LinkedHashMap<>();
+        if (combat != null) {
+            for (Card c : affectedCards(sa)) {
+                map.put(c, combat.getDefenderByAttacker(c));
+            }
+        }
+        return map;
+    }
+
+    /**
+     * Every memoized attacker whose defender assignment actually changed --
+     * exactly the creatures {@code SpellAbilityEffect.addToCombat}'s
+     * {@code combat.removeFromCombat(c)} call (SpellAbilityEffect.java:762)
+     * ran for, since that call fires only immediately before re-adding the
+     * same creature against a new defender. A card that was never attacking
+     * ({@code null} before) is skipped: nothing could have removed it.
+     */
+    private static EffectEvent reselectedAttackers(Card host, Object memo) {
+        if (!(memo instanceof Map<?, ?> before) || before.isEmpty()) {
+            return null;
+        }
+        Combat combat = host.getGame().getCombat();
+        EffectEvent event = new EffectEvent(EffectEvent.REMOVED_FROM_COMBAT);
+        boolean any = false;
+        for (Map.Entry<?, ?> entry : before.entrySet()) {
+            if (!(entry.getKey() instanceof Card c) || entry.getValue() == null) {
+                continue;
+            }
+            GameEntity now = combat == null ? null : combat.getDefenderByAttacker(c);
+            if (!entry.getValue().equals(now)) {
+                event.subject(SnapshotBuilder.entityId(c));
+                any = true;
+            }
+        }
+        return any ? event : null;
     }
 }

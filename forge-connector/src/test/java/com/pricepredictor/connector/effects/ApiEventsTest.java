@@ -1,10 +1,17 @@
 package com.pricepredictor.connector.effects;
 
 import com.pricepredictor.connector.ForgeExtension;
+import forge.StaticData;
 import forge.game.Direction;
 import forge.game.EvenOdd;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.ability.AbilityFactory;
 import forge.game.card.Card;
+import forge.game.card.CardFactory;
+import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.AbilitySub;
 import forge.game.spellability.SpellAbility;
@@ -786,5 +793,444 @@ class ApiEventsTest {
         assertEquals(2, lineCount, "one report from each latch, independently: " + output);
         assertTrue(output.contains("memo boom"), output);
         assertTrue(output.contains("emitter boom"), output);
+    }
+
+    // ── Task 12: the eight highest-reach unemitted types ─────────────────
+
+    /**
+     * A fresh {@code Game}, not {@link TestCards#game()} -- combat state
+     * ({@code PhaseHandler.setCombat}) is per-{@code Game} and this suite's
+     * shared game is used by every other test in this class; mutating combat
+     * on it would leak across tests that never asked for it.
+     */
+    private static Game freshGame() {
+        GameRules rules = new GameRules(GameType.Constructed);
+        return new Game(List.of(), rules, new Match(rules, List.of(), "ApiEventsCombatTest"));
+    }
+
+    private static Card cardIn(Game game, String name) {
+        return CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard(name), null,
+                TestCards.nextCardId(), game);
+    }
+
+    // ── delayed_trigger_created ───────────────────────────────────────────
+
+    @Test
+    void aDelayedTriggerNamesTheSchedulingCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ DelayedTrigger | Mode$ Phase | Phase$ EndCombat | ValidPlayer$ Player | "
+                        + "TriggerDescription$ test",
+                TestCards.build("Grizzly Bears"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.DELAYED_TRIGGER_CREATED, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+    }
+
+    @Test
+    void anImmediateTriggerNamesTheSchedulingCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ImmediateTrigger | TriggerDescription$ test",
+                TestCards.build("Grizzly Bears"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.DELAYED_TRIGGER_CREATED, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+    }
+
+    /**
+     * CR 603.12a: "once for each of those times" can be zero times.
+     * {@code ImmediateTriggerEffect.resolve()} returns before registering
+     * anything when {@code TriggerAmount$} calculates to <= 0. The plausible
+     * wrong implementation this falsifies is a rule that always fires
+     * regardless of the amount.
+     */
+    @Test
+    void anImmediateTriggerWithZeroAmountRegistersNothing() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ImmediateTrigger | TriggerAmount$ 0 | TriggerDescription$ test",
+                TestCards.build("Grizzly Bears"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertNull(event, "TriggerAmount$ 0 registers no delayed trigger at all");
+    }
+
+    // ── replacement_applied ───────────────────────────────────────────────
+
+    /**
+     * The card whose replacement applied -- the host, not the activator (no
+     * activator is even set here, which is the point: this rule reads
+     * nothing but the host).
+     */
+    @Test
+    void aReplaceCounterNamesTheHostCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ReplaceCounter | ValidCounterType$ ENERGY | ChooseCounter$ True | Amount$ 1",
+                TestCards.build("Grizzly Bears"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+    }
+
+    @Test
+    void aReplaceDamageNamesTheHostCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ReplaceDamage | Amount$ 0", TestCards.build("Grizzly Bears"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects());
+    }
+
+    /**
+     * All six {@code Replace*} APIs share one emitter; this pins that every
+     * one of them is actually keyed in {@code ApiEvents.RULES} rather than
+     * trusting the six hand-written entries agree with each other. A missing
+     * or misspelled key here would make {@code ruleFor} return null and this
+     * would fail with a {@code NullPointerException} on {@code event.type()}.
+     */
+    @Test
+    void allSixReplaceApisMapToReplacementApplied() {
+        Map<String, String> minimalParams = new TreeMap<>();
+        minimalParams.put("ReplaceEffect", "VarName$ DamageAmount | VarValue$ X");
+        minimalParams.put("ReplaceCounter", "ValidCounterType$ ENERGY | ChooseCounter$ True | Amount$ 1");
+        minimalParams.put("ReplaceDamage", "Amount$ 0");
+        minimalParams.put("ReplaceMana", "ReplaceType$ C");
+        minimalParams.put("ReplaceSplitDamage", "DamageTarget$ Remembered | VarName$ Y");
+        minimalParams.put("ReplaceToken", "Type$ ReplaceToken | TokenScript$ c_a_clue_draw");
+
+        for (Map.Entry<String, String> entry : minimalParams.entrySet()) {
+            SpellAbility sa = AbilityFactory.getAbility(
+                    "DB$ " + entry.getKey() + " | " + entry.getValue(),
+                    TestCards.build("Grizzly Bears"));
+
+            EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+            assertEquals(EffectEvent.REPLACEMENT_APPLIED, event.type(), entry.getKey());
+            assertEquals(List.of(SnapshotBuilder.entityId(sa.getHostCard())), event.subjects(),
+                    entry.getKey());
+        }
+    }
+
+    // ── monarch_changed ────────────────────────────────────────────────────
+
+    /**
+     * {@code GameAction.becomeMonarch} directly, not a hand-rolled {@code
+     * game.setMonarch(...)} -- the same public method {@code
+     * BecomeMonarchEffect.resolve()} itself calls, guards included, so this
+     * exercises the real production code path around the rule under test
+     * rather than a state the engine never produces.
+     */
+    @Test
+    void becomingMonarchNamesTheNewMonarch() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ BecomeMonarch | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
+        Player target = new Player("target", TestCards.game(), 93001);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+
+        Object memo = ApiEvents.before(sa);
+        target.getGame().getAction().becomeMonarch(target, "M12");
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.MONARCH_CHANGED, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+    }
+
+    /**
+     * {@code becomeMonarch} is a real no-op (no state change, no trigger)
+     * when the named player already is the monarch. The plausible wrong
+     * implementation this falsifies is a rule that always names the clause's
+     * own target instead of checking whether the monarchy actually changed.
+     */
+    @Test
+    void reaffirmingTheSameMonarchNamesNoOne() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ BecomeMonarch | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
+        Player target = new Player("already-monarch", TestCards.game(), 93002);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+        target.getGame().getAction().becomeMonarch(target, "M12");
+
+        Object memo = ApiEvents.before(sa);
+        target.getGame().getAction().becomeMonarch(target, "M12");
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertNull(event, "the monarch did not change, so nothing should be reported");
+    }
+
+    // ── ring_tempts ────────────────────────────────────────────────────────
+
+    @Test
+    void ringTemptsNamesTheActivatorAndTheChosenRingBearer() {
+        SpellAbility sa = AbilityFactory.getAbility("DB$ RingTemptsYou", TestCards.build("Grizzly Bears"));
+        Player activator = new Player("tempted", TestCards.game(), 93101);
+        sa.setActivatingPlayer(activator);
+        Card bearer = TestCards.build("Runeclaw Bear");
+        activator.setRingBearer(bearer);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.RING_TEMPTS, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.playerId(activator), SnapshotBuilder.entityId(bearer)),
+                event.subjects());
+    }
+
+    /**
+     * {@code chooseSingleEntityForEffect} returns {@code null} on an empty
+     * candidate list (no creatures to become the Ring-bearer), and {@code
+     * RingTemptsYouEffect.resolve()} calls {@code setRingBearer(null)}
+     * unconditionally either way -- so the tempted player is still reported,
+     * alone.
+     */
+    @Test
+    void ringTemptsWithNoRingBearerNamesOnlyTheActivator() {
+        SpellAbility sa = AbilityFactory.getAbility("DB$ RingTemptsYou", TestCards.build("Grizzly Bears"));
+        Player activator = new Player("tempted-no-bearer", TestCards.game(), 93102);
+        sa.setActivatingPlayer(activator);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.RING_TEMPTS, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
+    }
+
+    // ── removed_from_combat: RemoveFromCombat ───────────────────────────────
+
+    /**
+     * Two real attacking creatures, both removed -- not a single-entry
+     * fixture where "first only" and "both" would agree (Task 6's shipped
+     * defect shape).
+     */
+    @Test
+    void removeFromCombatNamesEveryCreatureActuallyRemoved() {
+        Game game = freshGame();
+        Player attackerCtrl = new Player("attacker", game, 93201);
+        Player defender = new Player("defender", game, 93202);
+        Card c1 = cardIn(game, "Grizzly Bears");
+        Card c2 = cardIn(game, "Runeclaw Bear");
+        Combat combat = new Combat(attackerCtrl);
+        game.getPhaseHandler().setCombat(combat);
+        combat.addAttacker(c1, defender);
+        combat.addAttacker(c2, defender);
+
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ RemoveFromCombat | ValidTgts$ Creature", c1);
+        sa.resetTargets();
+        sa.getTargets().add(c1);
+        sa.getTargets().add(c2);
+
+        Object memo = ApiEvents.before(sa);
+        combat.removeFromCombat(c1);
+        combat.removeFromCombat(c2);
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                event.subjects());
+    }
+
+    /**
+     * Only one of the two targets is genuinely removed -- {@code
+     * RemoveFromCombatEffect}'s own per-target guards (stale LKI, not in
+     * play) leave the other untouched, and this must report exactly the one
+     * that actually left, not both and not neither.
+     */
+    @Test
+    void removeFromCombatNamesOnlyTheCreatureThatWasActuallyRemoved() {
+        Game game = freshGame();
+        Player attackerCtrl = new Player("attacker", game, 93203);
+        Player defender = new Player("defender", game, 93204);
+        Card c1 = cardIn(game, "Grizzly Bears");
+        Card c2 = cardIn(game, "Runeclaw Bear");
+        Combat combat = new Combat(attackerCtrl);
+        game.getPhaseHandler().setCombat(combat);
+        combat.addAttacker(c1, defender);
+        combat.addAttacker(c2, defender);
+
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ RemoveFromCombat | ValidTgts$ Creature", c1);
+        sa.resetTargets();
+        sa.getTargets().add(c1);
+        sa.getTargets().add(c2);
+
+        Object memo = ApiEvents.before(sa);
+        combat.removeFromCombat(c1);
+        // c2 stays attacking -- its own removal was skipped by a guard this
+        // rule does not replicate.
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(List.of(SnapshotBuilder.entityId(c1)), event.subjects());
+    }
+
+    // ── removed_from_combat: ChangeCombatants ───────────────────────────────
+
+    /**
+     * {@code addToCombat}'s reselection branch calls {@code
+     * combat.removeFromCombat(c)} immediately before re-adding the same
+     * creature against the new defender (SpellAbilityEffect.java:762) --
+     * simulated here with the same two public {@code Combat} calls, not a
+     * hand-rolled approximation.
+     */
+    @Test
+    void changeCombatantsNamesTheReselectedAttacker() {
+        Game game = freshGame();
+        Player attackerCtrl = new Player("attacker", game, 93301);
+        Player oldDefender = new Player("old-defender", game, 93302);
+        Player newDefender = new Player("new-defender", game, 93303);
+        Card c = cardIn(game, "Grizzly Bears");
+        Combat combat = new Combat(attackerCtrl);
+        game.getPhaseHandler().setCombat(combat);
+        combat.addAttacker(c, oldDefender);
+
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ChangeCombatants | Attacking$ True", c);
+        sa.resetTargets();
+        sa.getTargets().add(c);
+
+        Object memo = ApiEvents.before(sa);
+        combat.removeFromCombat(c);
+        combat.addAttacker(c, newDefender);
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
+        assertEquals(List.of(SnapshotBuilder.entityId(c)), event.subjects());
+    }
+
+    /**
+     * The player declines the optional reselection (or reselects the same
+     * defender): {@code addToCombat} never calls {@code removeFromCombat} at
+     * all in that case, so nothing should be reported. The plausible wrong
+     * implementation this falsifies is a rule that reports every clause
+     * targeting an attacker, whether or not a reselection actually happened.
+     */
+    @Test
+    void changeCombatantsNamesNoOneWhenTheDefenderDidNotChange() {
+        Game game = freshGame();
+        Player attackerCtrl = new Player("attacker", game, 93304);
+        Player defender = new Player("defender", game, 93305);
+        Card c = cardIn(game, "Grizzly Bears");
+        Combat combat = new Combat(attackerCtrl);
+        game.getPhaseHandler().setCombat(combat);
+        combat.addAttacker(c, defender);
+
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ChangeCombatants | Attacking$ True", c);
+        sa.resetTargets();
+        sa.getTargets().add(c);
+
+        Object memo = ApiEvents.before(sa);
+        // Nothing changes: declined, or reselected the same defender.
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertNull(event, "the defender never changed, so no removal happened");
+    }
+
+    // ── initiative_taken ─────────────────────────────────────────────────
+
+    /**
+     * {@code GameAction.takeInitiative} directly, the same public method
+     * {@code TakeInitiativeEffect.resolve()} calls.
+     */
+    @Test
+    void takingInitiativeNamesThePlayer() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
+        Player target = new Player("initiative-taker", TestCards.game(), 93401);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+
+        target.getGame().getAction().takeInitiative(target, "BRO");
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.INITIATIVE_TAKEN, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+    }
+
+    /**
+     * Unlike {@code becomeMonarch}, {@code takeInitiative} fires its trigger
+     * even when the named player already has the initiative -- "You can take
+     * the initiative even if you already have it" is in the engine's own
+     * comment. The plausible wrong implementation this falsifies is a
+     * before/after diff copied from {@code BecomeMonarch}, which would wrongly
+     * suppress this re-affirmation.
+     */
+    @Test
+    void takingInitiativeAgainStillNamesThePlayer() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
+        Player target = new Player("already-has-it", TestCards.game(), 93402);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+        target.getGame().getAction().takeInitiative(target, "BRO");
+
+        Object memo = ApiEvents.before(sa);
+        target.getGame().getAction().takeInitiative(target, "BRO");
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.INITIATIVE_TAKEN, event.type());
+        assertEquals(List.of(SnapshotBuilder.playerId(target)), event.subjects());
+    }
+
+    /** No one processed by this clause ever took the initiative here. */
+    @Test
+    void noInitiativeTakenNamesNoOne() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ TakeInitiative | ValidTgts$ Player", TestCards.build("Grizzly Bears"));
+        Player target = new Player("never-took-it", TestCards.game(), 93403);
+        sa.resetTargets();
+        sa.getTargets().add(target);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertNull(event, "nobody targeted by this clause holds the initiative");
+    }
+
+    // ── text_change: ChangeText ──────────────────────────────────────────
+
+    @Test
+    void changeTextNamesEveryTargetedCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ ChangeText | ValidTgts$ Card | ChangeColorWord$ Choose Choose",
+                TestCards.build("Grizzly Bears"));
+        Card c1 = TestCards.build("Runeclaw Bear");
+        Card c2 = TestCards.build("Grizzly Bears");
+        sa.resetTargets();
+        sa.getTargets().add(c1);
+        sa.getTargets().add(c2);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.TEXT_CHANGE, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                event.subjects());
+    }
+
+    /**
+     * {@code ChangeTextEffect.resolve()}'s target loop still fires {@code
+     * GameEventCardStatsChanged} even when the clause names no word to
+     * replace at all -- the plausible wrong implementation this falsifies is
+     * a rule that reports every target regardless.
+     */
+    @Test
+    void changeTextWithNoWordToReplaceNamesNoOne() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ ChangeText | ValidTgts$ Card", TestCards.build("Grizzly Bears"));
+        sa.resetTargets();
+        sa.getTargets().add(TestCards.build("Runeclaw Bear"));
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertNull(event, "no ChangeColorWord$/ChangeTypeWord$ means nothing textual changed");
     }
 }

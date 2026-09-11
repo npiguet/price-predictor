@@ -2118,6 +2118,84 @@ class PatchedCollectorTest {
         assertTrue(shard.contains(SnapshotBuilder.entityId(counteredCard)), shard);
     }
 
+    // ── task-12: turn_ended, text_change (ExchangeTextBox) reach the live ──
+    // ── shard -- the KNOWN_OUTCOME_TYPES risk these two share with task-11's ──
+    // ── three above, and the six ApiEvents.RULES types below do not (that ──
+    // ── whitelist gates only outcomeHandler(), never clauseHandler()) ──────
+
+    /**
+     * Same shape as {@link #spellCounteredReachesTheLiveShard}. The plausible
+     * wrong implementation this falsifies is adding the {@code
+     * EffectRecordOutcomes.note("turn_ended", ...)} call in Forge without also
+     * adding {@code EffectEvent.TURN_ENDED} to {@code
+     * PatchedCollectors.KNOWN_OUTCOME_TYPES} -- exactly the "renamed or
+     * deleted note() call" shape {@code reportUnknownOutcomeType}'s own
+     * javadoc describes, which drops the outcome silently rather than
+     * failing a build.
+     */
+    @Test
+    void turnEndedReachesTheLiveShard() throws Throwable {
+        Player activePlayer = new Player("active", TestCards.game(), 94001);
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{liveAbility, "turn_ended",
+                                Map.of("subjects", List.of(activePlayer))});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("\"type\":\"turn_ended\""), shard);
+        assertTrue(shard.contains(SnapshotBuilder.playerId(activePlayer)), shard);
+    }
+
+    /** Same shape again, for {@code text_change} (the {@code ExchangeTextBox} half). */
+    @Test
+    void textChangeFromExchangeTextBoxReachesTheLiveShard() throws Throwable {
+        Card c1 = TestCards.build("Grizzly Bears");
+        Card c2 = TestCards.build("Runeclaw Bear");
+        SpellAbility liveAbility = TestCards.scriptedAbility("Alchemist's Gambit", "AddTurn");
+        RecordShardWriter writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        Path path = writer.path();
+        try {
+            BusBracketCollector bracket = new BusBracketCollector(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults());
+            try (PatchedCollectors collectors = new PatchedCollectors(
+                    TestCards.game(), writer, "run.0-l1.0", CollectionCaps.defaults(), 1L)) {
+                collectors.withBracket(bracket);
+                bracket.beginBracket(liveAbility);
+
+                collectors.outcomeHandler().invoke(null,
+                        methodNamed(OutcomeListenerShape.class, "onOutcome"),
+                        new Object[]{liveAbility, "text_change",
+                                Map.of("subjects", List.of(c1, c2))});
+
+                bracket.endBracket(liveAbility.getId(), false);
+            }
+        } finally {
+            writer.close();
+        }
+
+        String shard = String.join("\n", readShard(path));
+        assertTrue(shard.contains("\"type\":\"text_change\""), shard);
+        assertTrue(shard.contains(SnapshotBuilder.entityId(c1)), shard);
+        assertTrue(shard.contains(SnapshotBuilder.entityId(c2)), shard);
+    }
+
     /** Same shape as {@link #spellCounteredReachesTheLiveShard}, for token_created. */
     @Test
     void tokenCreatedReachesTheLiveShard() throws Throwable {
