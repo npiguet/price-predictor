@@ -373,6 +373,27 @@ field, not a per-kind breakdown, so a clause making three distinct things cannot
 widening the schema. Kept as-is (fix round 1, M2) — a reader counting distinct token or card *kinds* from
 these fields, rather than the total `count`, will undercount whenever a clause makes more than one kind.
 
+### `initiative_taken` can miss a redirect through a target who has lost but is still `isInGame()`
+
+`TakeInitiativeEffect.resolve()` filters its loop on `p.isInGame()`, then calls `GameAction.takeInitiative(p,
+set)` for each survivor. That method has its own, stricter check — `p.hasLost()` — and when it is true,
+recurses onto `game.getNextPlayerAfter(p)` before falling through, unconditionally, to `game.setHasInitiative(p)`
+for the original (lost) `p` (`GameAction.java:2578-2589`). The redirected player's own
+`TriggerType.TakesInitiative` trigger genuinely fires during that recursive call, but by the time this rule's
+emitter reads `game.getHasInitiative()` after the clause resolves, the outer frame has already overwritten it
+back to `p`. The emitter's own guard — the holder must be among the clause's `affectedPlayers(sa)` — then
+still matches (`p` is the clause's own target), so the event still fires, but names `p`, not the player who
+was actually redirected onto.
+
+`isInGame()` true while `hasLost()` is also true is the narrow precondition (Task 12 fix round 1, item 4):
+a player recorded as having lost but not yet fully removed from the game object. Not fixed — replicating the
+redirect chain in the emitter to find the true final holder would mean re-deriving `GameAction`'s own
+fall-through as a second copy of it, the exact duplicated-classification shortcut ruling R12 already rejected
+for `damage_prevented`, and the engine's own fall-through looks like a bug in its own right rather than a
+contract worth mirroring exactly. Recorded rather than fixed: a reader who sees `initiative_taken` name a
+player who does not end up holding the initiative in the same shard's state snapshot should suspect this path,
+not a wiring defect.
+
 ### `attributed_to` is tri-state
 
 | Value | Means |

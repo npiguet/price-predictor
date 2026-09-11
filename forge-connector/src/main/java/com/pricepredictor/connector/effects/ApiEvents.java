@@ -335,6 +335,19 @@ final class ApiEvents {
             // already-has-it re-affirmation): it reads the post-resolution
             // holder and confirms they are one of this clause's own targets,
             // which is true whether the holder changed or was reconfirmed.
+            //
+            // Known limit (Task 12 fix round 1, item 4; record-schema.md
+            // "initiative_taken can miss a redirect"): a target who satisfies
+            // isInGame() but has also already hasLost() triggers
+            // GameAction.takeInitiative's own redirect to the next player,
+            // which that method's own unconditional fall-through then
+            // overwrites back to the original (lost) target before this rule
+            // ever reads game.getHasInitiative() -- so the event still fires,
+            // but can name the lost player instead of who the redirect
+            // actually landed on. Not replicated here: doing so would mean
+            // re-deriving GameAction's own fall-through as a second copy of
+            // it, the classification-duplication shortcut ruling R12 already
+            // rejected for damage_prevented.
             Map.entry("TakeInitiative", new Rule(EffectEvent.INITIATIVE_TAKEN, null,
                     (sa, host, memo) -> {
                         Player holder = host.getGame().getHasInitiative();
@@ -838,14 +851,21 @@ final class ApiEvents {
 
     /**
      * {@code getCardsfromTargets(sa)} (SpellAbilityEffect.java:370), mirrored
-     * the way {@link #affectedCards} already mirrors {@code getTargetCards}:
-     * every real {@code ChangeText} script in the cardsfolder targets {@code
-     * ValidTgts$ Card | TgtZone$ Stack,Battlefield} or {@code Permanent} --
-     * read through {@link #affectedCards}'s own targeting-first logic -- so
-     * the extra {@code getTargetSpells()} union below is dead for today's
-     * cardsfolder and kept only because {@code ChangeTextEffect} itself reads
-     * it; a future card using the {@code ValidTgts$ Spell} shape would
-     * otherwise silently lose its subject.
+     * the way {@link #affectedCards} already mirrors {@code getTargetCards}.
+     *
+     * <p>The {@code getTargetSpells()} union below is NOT dead for today's
+     * cardsfolder (corrected, fix round 1 item 4: an earlier version of this
+     * javadoc claimed it was). Seven of {@code ChangeText}'s seventeen
+     * occurrences are {@code ValidTgts$ Card | TgtZone$ Stack,Battlefield} --
+     * {@code artificial_evolution}, {@code sleight_of_mind} and {@code
+     * magical_hack} among them -- which can target a spell on the stack, and
+     * {@code TargetChoices} stores a spell target as the {@code SpellAbility}
+     * itself ({@code getTargetCards()} filters to {@code Card.class}
+     * instances only, per {@code TargetChoices.java}; a targeted spell is a
+     * {@code SpellAbility}, not one). For that shape this union is not an
+     * extra path -- it is the <em>only</em> one that produces a subject at
+     * all; {@link #affectedCards}'s targeting branch reads {@code
+     * getTargetCards()} alone and would see nothing.
      */
     private static List<Card> cardsFromTargets(SpellAbility sa) {
         List<Card> cards = new ArrayList<>(affectedCards(sa));

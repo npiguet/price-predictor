@@ -988,8 +988,16 @@ class ApiEventsTest {
      * {@code chooseSingleEntityForEffect} returns {@code null} on an empty
      * candidate list (no creatures to become the Ring-bearer), and {@code
      * RingTemptsYouEffect.resolve()} calls {@code setRingBearer(null)}
-     * unconditionally either way -- so the tempted player is still reported,
-     * alone.
+     * either way -- but {@code Player.setRingBearer} (fix round 1, item 4:
+     * corrected from an earlier, wrong version of this javadoc) is {@code if
+     * (bearer == null) return;}, a no-op, not an unconditional clear. This
+     * fresh {@code Player} never had a Ring-bearer to begin with, so it
+     * reports only the activator for a reason this test can actually
+     * demonstrate -- {@code getRingBearer()} was null before {@code resolve()}
+     * ran and stays null after a no-op call. It does NOT demonstrate "no
+     * creatures clears an existing Ring-bearer", which is false; see {@link
+     * #ringTemptsWithNoCreaturesKeepsTheExistingRingBearer} for the shape a
+     * fresh player cannot reach.
      */
     @Test
     void ringTemptsWithNoRingBearerNamesOnlyTheActivator() {
@@ -1001,6 +1009,38 @@ class ApiEventsTest {
 
         assertEquals(EffectEvent.RING_TEMPTS, event.type());
         assertEquals(List.of(SnapshotBuilder.playerId(activator)), event.subjects());
+    }
+
+    /**
+     * The shape the previous test's fresh {@code Player} cannot reach (fix
+     * round 1, item 4): a player who already has a Ring-bearer, tempted again
+     * with no creatures to choose from. {@code RingTemptsYouEffect.resolve()}
+     * still calls {@code setRingBearer(null)}, and {@code
+     * Player.setRingBearer}'s null check makes that call a no-op -- the old
+     * Ring-bearer survives, and this rule's post-resolution read of {@code
+     * getRingBearer()} reports it again as the second subject. The plausible
+     * wrong implementation this falsifies is one written from the ORIGINAL,
+     * incorrect javadoc above (an unconditional clear): it would report only
+     * the activator here, the same as the true empty-candidate-list case,
+     * and this is the one test in the suite that can tell the two apart.
+     */
+    @Test
+    void ringTemptsWithNoCreaturesKeepsTheExistingRingBearer() {
+        SpellAbility sa = AbilityFactory.getAbility("DB$ RingTemptsYou", TestCards.build("Grizzly Bears"));
+        Player activator = new Player("tempted-keeps-bearer", TestCards.game(), 93103);
+        sa.setActivatingPlayer(activator);
+        Card existingBearer = TestCards.build("Runeclaw Bear");
+        activator.setRingBearer(existingBearer);
+
+        // What RingTemptsYouEffect.resolve() calls regardless of whether a
+        // new Ring-bearer was available -- a no-op here, per Player.java.
+        activator.setRingBearer(null);
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.RING_TEMPTS, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.playerId(activator), SnapshotBuilder.entityId(existingBearer)),
+                event.subjects());
     }
 
     // ── removed_from_combat: RemoveFromCombat ───────────────────────────────
@@ -1280,6 +1320,44 @@ class ApiEventsTest {
         assertEquals(EffectEvent.TEXT_CHANGE, event.type());
         assertEquals(
                 List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                event.subjects());
+    }
+
+    /**
+     * {@code artificial_evolution}/{@code sleight_of_mind}/{@code
+     * magical_hack}-shaped: {@code ValidTgts$ Card | TgtZone$
+     * Stack,Battlefield}, targeting a spell on the stack rather than a
+     * permanent. {@code TargetChoices} stores that as the targeted {@code
+     * SpellAbility} itself, not as a {@code Card} -- {@code getTargetCards()}
+     * filters to {@code Card.class} instances and would see nothing -- so
+     * {@code cardsFromTargets}'s {@code getTargetSpells()} union is the only
+     * path that can name a subject here (fix round 1, item 4, correcting an
+     * earlier javadoc that called this union dead). Built the way {@code
+     * changeTargetsNamesWhatTheRetargetedSpellPointsAtNow} already builds a
+     * "spell on the stack" target: a real, distinct {@code SpellAbility}
+     * added to {@code sa}'s own targets via {@code TargetChoices.add(GameObject)}'s
+     * {@code SpellAbility} overload, the same way real targeting leaves it.
+     * The plausible wrong implementation this falsifies is {@link
+     * #affectedCards} alone (no {@code getTargetSpells()} union at all),
+     * which would report zero subjects here instead of one.
+     */
+    @Test
+    void changeTextTargetingASpellOnTheStackNamesItsHostCard() {
+        SpellAbility sa = AbilityFactory.getAbility(
+                "SP$ ChangeText | ValidTgts$ Card | TgtZone$ Stack,Battlefield | "
+                        + "ChangeColorWord$ Choose Choose",
+                TestCards.build("Grizzly Bears"));
+        SpellAbility spellOnStack = AbilityFactory.getAbility(
+                "SP$ Pump | ValidTgts$ Creature | NumAtt$ +0 | NumDef$ +0",
+                TestCards.build("Runeclaw Bear"));
+        sa.resetTargets();
+        sa.getTargets().add(spellOnStack);
+
+        EffectEvent event = ApiEvents.after(sa, ApiEvents.before(sa));
+
+        assertEquals(EffectEvent.TEXT_CHANGE, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.entityId(spellOnStack.getHostCard())),
                 event.subjects());
     }
 
