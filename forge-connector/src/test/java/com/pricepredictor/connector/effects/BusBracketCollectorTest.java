@@ -592,6 +592,46 @@ class BusBracketCollectorTest {
     }
 
     /**
+     * Task 11 fix round 2, item 1. The sibling
+     * {@link #aCastStillOnTheStackAtTheEndIsCountedRatherThanGivenAnOutcome}
+     * pins the counting half of this already, but never files anything into
+     * {@link BusBracketCollector#bracketEvents} while the bracket is open, so
+     * it cannot catch {@code flushOrphanedEvents()} writing a record anyway.
+     *
+     * <p>Reproduces the real shape: {@code openBracket(bolt)} runs at cast
+     * time, so {@code resolving} stays {@code bolt} for as long as it sits on
+     * the stack -- here, until the game ends without it ever resolving (its
+     * own cost payment reaching 0 life, in the shape this stands in for). An
+     * event fires while that bracket is still open, then the game ends with
+     * {@code bolt} still on the stack. The only honest record of {@code bolt}
+     * is "abandoned, never resolved" -- exactly what {@code writeOffRemoved}
+     * already writes via {@code abandoned} -- not a second, contradictory
+     * {@code kind:resolution} record naming {@code bolt} as having resolved.
+     */
+    @Test
+    void aStillOpenBracketAtTheEndIsNotGivenAResolutionItNeverHad()
+            throws IOException {
+        BusBracketCollector collector = collector();
+        SpellAbility bolt = damageAbility();
+        Card victim = TestCards.build("Runeclaw Bear");
+
+        collector.beginBracket(bolt);
+        // Filed while bolt's own bracket is still open -- resolving == bolt --
+        // the same as any event its cost payment or its own resolution might
+        // produce before the game is discovered to be over.
+        collector.onCardDamaged(new GameEventCardDamaged(
+                victim.getView(), bolt.getHostCard().getView(), 3,
+                GameEventCardDamaged.DamageType.Normal));
+        long abandoned = collector.finishGame(Set.of(bolt.getId()));
+
+        assertEquals(1, abandoned, "bolt never resolved and must still be counted so");
+        assertEquals(
+                List.of(), written(),
+                "no record may claim bolt resolved -- it never did, and "
+                        + "writeOffRemoved's abandoned count already says so correctly");
+    }
+
+    /**
      * A cast that had already left the stack is written off as it always was.
      *
      * <p>The two halves of what is held at the end are different facts: this

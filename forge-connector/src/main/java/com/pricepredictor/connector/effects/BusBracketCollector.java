@@ -1177,9 +1177,31 @@ public final class BusBracketCollector {
      * #openBracketState} (also cleared by {@code closeBracket}), so it is
      * read fresh, the same null-ability snapshot {@link #openCombatBracket}
      * takes for its own record.
+     *
+     * <p><b>{@code resolving == null} is required, not incidental</b> (task-11
+     * fix round 2, item 1). {@link #bracketEvents} is non-empty at {@code
+     * finishGame()} in two reachable shapes, and only one of them means
+     * "nothing was resolving": {@code openBracket(X)} runs at <em>cast</em>
+     * time, not at resolution, so {@code resolving} stays {@code X} for as
+     * long as {@code X} sits on the stack -- and {@code
+     * checkStateBasedEffects} runs at the top of every main-loop iteration,
+     * the same CR 704.3 mechanism this method's own rescue depends on, so a
+     * cast whose own cost payment ends the game (life paid to 0) can leave
+     * {@code X} still {@code resolving}, still on the stack, and never
+     * resolved. Writing this method's record in that shape would name
+     * {@code X} as the resolving ability in the <em>same</em> {@code
+     * finishGame()} call that {@link #writeOffRemoved} separately and
+     * correctly counts {@code X} as abandoned and never resolved -- two
+     * contradictory claims about one ability, and worse than attributing to
+     * nothing, because it names a real ability that demonstrably did not
+     * resolve. Chosen over keeping the events under some other attribution:
+     * whatever {@code X} was doing when the game cut it off is exactly as
+     * unfinished as {@code X} itself, so counted-and-dropped (the treatment
+     * {@code pendingActivations} already gets) is the honest answer, not a
+     * partial one salvaged under a different name.
      */
     private void flushOrphanedEvents() {
-        if (bracketEvents.isEmpty()) {
+        if (resolving != null || bracketEvents.isEmpty()) {
             return;
         }
         emit(new EffectRecord(
