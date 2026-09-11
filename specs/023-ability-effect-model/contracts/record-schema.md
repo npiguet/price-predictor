@@ -181,7 +181,7 @@ blind spot, discovered by running the second against a real collection.
   **cannot** catch a type referenced from code that never runs on the path a reader would expect, in either
   of two distinct sub-shapes: see "Four declared types found not firing, now wired" below.
 
-  Task 12 wired the eight highest-reach of those 15 — `delayed_trigger_created` and `replacement_applied`
+  Task 12 wired all eight highest-reach of those 15 — `delayed_trigger_created` and `replacement_applied`
   (an `ApiEvents.RULES` entry per API: `DelayedTrigger`/`ImmediateTrigger`, and the six `Replace*` APIs
   respectively), `monarch_changed`, `ring_tempts`, `removed_from_combat` (`ChangeCombatants`/
   `RemoveFromCombat`), `initiative_taken`, `text_change` (an `ApiEvents.RULES` entry for `ChangeText`, an
@@ -193,9 +193,29 @@ blind spot, discovered by running the second against a real collection.
   `EventType.REPLACEMENT_APPLIED` in `event_schema.py`, which states the relationship in the same words
   ruling R12 used for `damage_prevented`/`rewrite`.
 
-  Seven remain in `KNOWN_UNEMITTED`: `ability_activated` (2 cards), `combat_ended` (1 card), `game_drawn`
-  (2 cards), `game_restarted` (1 card), `player_removed` (2 cards), `trigger_fired` (no producing Forge
-  effect API at all — see its own entry), and `turn_order_reversed` (3 cards, now the largest remaining).
+  A Task 12 fix round found that two of the eight, `turn_ended` and `text_change`, needed to go back into
+  `KNOWN_UNEMITTED` under a reason the dict had never carried before: the emitter for each is wired and
+  correct — referenced right there in the connector source, unlike every other entry in the dict — but no
+  AI-only corpus can ever reach it, because the AI refuses every card that carries these APIs before it
+  resolves one. `forge-ai`'s `EndTurnAi.canPlay`/`.chkDrawback` both return `CantPlayAi` unconditionally
+  (and for the three scripts that bury `EndTurn` in a `SubAbility$` chain, `chkDrawbackWithSubs` propagates
+  that refusal to the whole enclosing spell), so none of the nine `turn_ended` cards is ever played.
+  `ChangeText`/`ExchangeTextBox` have no `SpellApiToAi` entry at all and fall back to `CannotPlayAi`, which
+  refuses the same way, so none of the fourteen `text_change` cards is ever played either. `KNOWN_UNEMITTED`'s
+  `AI_CAPABILITY_GAP` constant names exactly these two, and the guard test that reads the dict is carved
+  around it in both directions — once to stop a live reference from permanently reading as "newly wired,"
+  and once to catch the reference silently disappearing, which would mean the wiring itself had been
+  removed. Both go live the moment the AI gains these APIs or a human-play corpus is collected; the wiring
+  is not provisional, only what plays it is.
+
+  So six of Task 12's eight are fully live: `delayed_trigger_created`, `replacement_applied`,
+  `monarch_changed`, `ring_tempts`, `removed_from_combat`, `initiative_taken`.
+
+  Nine remain in `KNOWN_UNEMITTED`, split by two kinds. Seven have no reference at all:
+  `ability_activated` (2 cards), `combat_ended` (1 card), `game_drawn` (2 cards), `game_restarted`
+  (1 card), `player_removed` (2 cards), `trigger_fired` (no producing Forge effect API at all — see its
+  own entry), and `turn_order_reversed` (3 cards, the largest of the seven). Two are wired and referenced
+  but AI-unreachable, per `AI_CAPABILITY_GAP` above: `turn_ended` (9 cards) and `text_change` (14 cards).
 - `event_type_coverage` (`validate_corpus.py`) measures, over an actually collected window, which
   declared types the corpus's records contain at all. It is watched, not judged: a short window
   legitimately misses types that are rare or depend on which decks were drawn, and a floor nobody has

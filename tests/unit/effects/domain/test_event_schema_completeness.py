@@ -570,16 +570,32 @@ _CONNECTOR_EFFECTS = (
 #: finally being honest about a gap that predates this plan and was invisible the
 #: whole time it ran.
 #:
-#: Task 12 wired the eight highest-reach of those 15 -- ``delayed_trigger_created``,
+#: Task 12 wired all eight highest-reach of those 15 -- ``delayed_trigger_created``,
 #: ``replacement_applied``, ``monarch_changed``, ``ring_tempts``,
-#: ``removed_from_combat``, ``initiative_taken``, ``text_change``, ``turn_ended``,
-#: together ~84% of the 15's combined card count -- leaving the 7 below.
+#: ``removed_from_combat``, ``initiative_taken``, ``text_change``, ``turn_ended``.
+#: Six are fully live. Two, ``turn_ended`` and ``text_change``, went back into this
+#: dict in Task 12's fix round 1 under a reason this dict had never needed before:
+#: **the emitter is wired and correct, and is referenced right here in the
+#: connector source -- unlike every other entry below -- but no AI-only corpus can
+#: ever reach it**, because the AI refuses to play any of the cards that would
+#: fire it. ``AI_CAPABILITY_GAP`` (below) names exactly these two. Conflating this
+#: with "no emitter exists" -- this dict's original and only meaning -- would have
+#: reproduced the exact ``token_created``/``spell_countered`` shape this whole
+#: effort exists to end: a corpus gap with the code that explains it removed from
+#: the ledger, at the moment the code was verified correct rather than at the
+#: moment it was written. Together all eight account for ~84% of the 15's
+#: combined card count -- leaving the 9 below: 7 genuinely unreferenced, 2 wired
+#: but AI-unreachable today, live the moment the AI gains these APIs or a
+#: human-play corpus is collected.
 #:
-#: Values are the reason: the producing Forge effect API(s), whether an emission
-#: path exists (``ApiEvents.RULES`` in the connector, or an explicit
-#: ``EffectRecordOutcomes.note`` call -- none of these 7 have either), and how
-#: many cards in the sealed/draft pool script that API, read directly from
-#: ``forge-gui/res/cardsfolder`` rather than estimated.
+#: Values are the reason: for the 7 unreferenced entries, the producing Forge
+#: effect API(s), that no emission path exists (``ApiEvents.RULES`` in the
+#: connector, or an explicit ``EffectRecordOutcomes.note`` call), and how many
+#: cards in the sealed/draft pool script that API, read directly from
+#: ``forge-gui/res/cardsfolder`` rather than estimated. For the 2
+#: ``AI_CAPABILITY_GAP`` entries, the reason instead names the emission path (which
+#: exists) and the AI class whose refusal keeps every card that carries it off the
+#: stack, so the claim is checkable rather than an assertion.
 KNOWN_UNEMITTED: dict[str, str] = {
     "ability_activated":
         "ActivateAbility: no ApiEvents.RULES entry, no outcome-note call; "
@@ -604,7 +620,36 @@ KNOWN_UNEMITTED: dict[str, str] = {
     "turn_order_reversed":
         "ReverseTurnOrder: no ApiEvents.RULES entry, no outcome-note call; "
         "3 cards script it",
+    "turn_ended":
+        "EndTurn: EffectRecordOutcomes.note is wired (EndTurnEffect) and correct "
+        "-- but forge-ai's EndTurnAi.canPlay and .chkDrawback both return "
+        "CantPlayAi unconditionally, and for the three scripts that bury EndTurn "
+        "in a SubAbility$ chain (days_undoing, ultima, hurkyls_final_meditation), "
+        "SpellAbilityAi.chkDrawbackWithSubs propagates that refusal to the whole "
+        "enclosing spell -- so none of the 9 cards is ever played by an AI-only "
+        "corpus. Live the moment the AI gains EndTurn or a human-play corpus is "
+        "collected",
+    "text_change":
+        "ChangeText/ExchangeTextBox: an ApiEvents.RULES entry (ChangeText) and an "
+        "EffectRecordOutcomes.note call (ExchangeTextBox) are both wired and "
+        "correct -- but neither API has a SpellApiToAi entry, so both fall back "
+        "to CannotPlayAi, whose canPlay and chkDrawback also refuse "
+        "unconditionally -- so none of the 12 + 2 = 14 cards is ever played by an "
+        "AI-only corpus. Live the moment the AI gains these APIs or a human-play "
+        "corpus is collected",
 }
+
+#: The subset of ``KNOWN_UNEMITTED`` that means something different from the rest
+#: of it: **wired, correct, and referenced right here in the connector source**,
+#: not absent from it. ``test_no_declared_type_is_unreachable_by_surprise`` has to
+#: carve these two out of the textual scan's comparison for exactly that reason --
+#: a live reference is what the scan looks for, so ``turn_ended``/``text_change``
+#: read as "emitted" to it and would otherwise make the guard's two sets disagree
+#: forever. ``test_the_ai_capability_gap_types_stay_wired`` is the guard in the
+#: other direction: if either of these two ever stops being referenced, the
+#: wiring described in its ``KNOWN_UNEMITTED`` reason has been silently removed,
+#: which is a real regression this set exists to catch.
+AI_CAPABILITY_GAP: frozenset[str] = frozenset({"turn_ended", "text_change"})
 
 
 def _emitted_event_types() -> set[str]:
@@ -716,14 +761,55 @@ class TestEveryDeclaredTypeIsReachable:
        measurement can, which is what makes ``event_type_coverage`` in
        ``validate_corpus.py`` this test's permanent counterpart rather than a
        one-off check that stops mattering once the guard is fixed.
+
+    A Task 12 fix round found a **third** category, distinct from both parts
+    above and easy to collapse into either: ``turn_ended`` and ``text_change``
+    are referenced by a real emitter, for the ability's own resolution, that
+    is wired correctly and would fire given the right game state -- but no
+    AI-only corpus can ever reach that state, because the AI refuses every
+    card that carries these APIs before it resolves one (``EndTurnAi``;
+    ``CannotPlayAi`` via the missing ``SpellApiToAi`` entries for
+    ``ChangeText``/``ExchangeTextBox``). Unlike part 2's four, the reference
+    *is* the real emitter -- nothing here is serving a different purpose --
+    so this is not "referenced but unfired" in part 2's sense either. Named
+    ``AI_CAPABILITY_GAP`` and kept inside ``KNOWN_UNEMITTED`` (with its own
+    carve-out in the guard test below) rather than treated as fully live,
+    because a declared type an AI-only corpus can structurally never produce
+    needs to say so, the same way an unreferenced one does — leaving it out
+    would have reported it covered when no collection at any length could
+    ever cover it.
     """
 
     def test_no_declared_type_is_unreachable_by_surprise(self):
+        """``AI_CAPABILITY_GAP`` entries are carved out of both sides on purpose:
+        they ARE referenced (the textual scan finds them, correctly), so they
+        would never appear in ``unreachable`` no matter how long they stayed in
+        ``KNOWN_UNEMITTED`` -- comparing the raw sets would report them "newly
+        wired" forever and mask a real drift hiding behind them. Subtracting the
+        same known set from both sides keeps this test measuring exactly what it
+        always measured (the never-checked types), and
+        ``test_the_ai_capability_gap_types_stay_wired`` below covers the two this
+        one now deliberately ignores.
+        """
         unreachable = set(EventType) - _emitted_event_types()
-        assert unreachable == set(KNOWN_UNEMITTED), (
+        never_checked = set(KNOWN_UNEMITTED) - AI_CAPABILITY_GAP
+        assert unreachable == never_checked, (
             "declared-but-unemitted types changed; wired: "
-            f"{sorted(set(KNOWN_UNEMITTED) - unreachable)}, newly unreachable: "
-            f"{sorted(unreachable - set(KNOWN_UNEMITTED))}"
+            f"{sorted(never_checked - unreachable)}, newly unreachable: "
+            f"{sorted(unreachable - never_checked)}"
+        )
+
+    def test_the_ai_capability_gap_types_stay_wired(self):
+        """The other half of the carve-out above: ``turn_ended``/``text_change``
+        must actually be referenced, or their ``KNOWN_UNEMITTED`` reason -- "the
+        emitter is wired and correct" -- would be describing code that no longer
+        exists, with nothing left to say so. This is the regression
+        ``test_no_declared_type_is_unreachable_by_surprise`` was widened to no
+        longer be able to see for these two.
+        """
+        assert AI_CAPABILITY_GAP <= _emitted_event_types(), (
+            "an AI_CAPABILITY_GAP type is no longer referenced in the connector "
+            "source -- its wiring may have been silently removed"
         )
 
     def test_the_known_list_names_only_declared_types(self):
@@ -736,6 +822,9 @@ class TestEveryDeclaredTypeIsReachable:
         real mistake.
         """
         assert set(KNOWN_UNEMITTED) <= set(EventType)
+
+    def test_the_ai_capability_gap_is_part_of_known_unemitted(self):
+        assert AI_CAPABILITY_GAP <= set(KNOWN_UNEMITTED)
 
 
 class TestSupersededTypes:
