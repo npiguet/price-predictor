@@ -644,6 +644,63 @@ class BusBracketCollectorTest {
     }
 
     /**
+     * Task 11 fix round 1, C1. The real sequencing for an ordinary non-combat
+     * kill: the killing ability's own bracket opens, resolves and closes --
+     * writing and clearing its own effect half -- and only afterwards, with no
+     * bracket open, does the state-based check discover the game is over
+     * (CR 704.3; {@code MagicStack} fires {@code GameEventSpellResolved}, and
+     * this collector's {@code endBracket} runs, before {@code
+     * checkStateBasedEffects} ever runs on the next main-loop iteration).
+     * {@code GameEventGameOutcome} therefore always arrives with {@link
+     * BusBracketCollector#bracketEvents} freshly emptied by the kill's own
+     * {@code endBracket}, and no further ability ever resolves to flush it --
+     * exactly what {@code theGameOutcomeNamesTheWinningPlayerAsARef} does not
+     * reproduce, since that test holds a bracket open around the event's whole
+     * life, a sequencing the real engine never produces here.
+     */
+    @Test
+    void aGameOutcomeAfterTheKillingBracketAlreadyClosedIsStillWritten()
+            throws IOException {
+        List<RegisteredPlayer> players = List.of(
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p1", null)),
+                new RegisteredPlayer(new Deck()).setPlayer(new LobbyPlayerAi("p2", null)));
+        GameRules rules = new GameRules(GameType.Constructed);
+        Match match = new Match(rules, players, "outcome-orphan-test");
+        Game outcomeGame = new Game(players, rules, match);
+        Player p1 = outcomeGame.getPlayers().stream()
+                .filter(p -> "p1".equals(p.getLobbyPlayer().getName()))
+                .findFirst().orElseThrow();
+        Card boltHost = CardFactory.getCard(
+                StaticData.instance().getCommonCards().getCard("Lightning Bolt"),
+                null, outcomeGame);
+        SpellAbility bolt = AbilityFactory.getAbility(
+                "SP$ DealDamage | Cost$ R | ValidTgts$ Any | TgtPrompt$ Choose"
+                        + " | NumDmg$ 3", boltHost);
+        writer = new RecordShardWriter(tempDir, "run", 0, "l1");
+        BusBracketCollector outcomeCollector = new BusBracketCollector(
+                outcomeGame, writer, "run.0-l1.0", CollectionCaps.defaults());
+
+        // Bolt resolves and its own bracket closes -- writing and clearing its
+        // own effect half -- before anyone asks whether the game is over.
+        outcomeCollector.beginBracket(bolt);
+        outcomeCollector.endBracket(bolt.getId(), false);
+        // Only now, with no bracket open, does the game turn out to be over.
+        outcomeCollector.onGameOutcome(new GameEventGameOutcome(
+                4, List.of("p1 has won"), "p1", "p1: 1 p2: 0 "));
+        outcomeCollector.finishGame(Set.of());
+
+        List<String> records = written();
+        assertTrue(
+                records.stream().anyMatch(r -> r.contains("\"type\":\"player_won\"")),
+                "the outcome must not be lost just because no bracket was open "
+                        + "when it fired: " + records);
+        String outcomeRecord = records.stream()
+                .filter(r -> r.contains("\"type\":\"player_won\""))
+                .findFirst().orElseThrow();
+        assertTrue(outcomeRecord.contains(SnapshotBuilder.playerId(p1)), outcomeRecord);
+    }
+
+    /**
      * A game in a damage step, the only state a combat bracket opens in.
      *
      * <p>Its own game rather than the shared one every other test here uses:

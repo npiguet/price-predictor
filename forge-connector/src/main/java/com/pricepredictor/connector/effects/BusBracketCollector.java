@@ -895,7 +895,7 @@ public final class BusBracketCollector {
     /**
      * The last thing that happens to a game, and the last chance to write.
      *
-     * <p>Nothing subscribed this event, and two channels were being lost at it.
+     * <p>Nothing subscribed this event, and three channels were being lost at it.
      *
      * <p>The <b>combat bracket</b> is closed at a phase boundary, and a game
      * that ends in combat damage never reaches one:
@@ -904,6 +904,15 @@ public final class BusBracketCollector {
      * {@code GameEventTurnPhase} nor {@code GameEventCombatEnded} follows the
      * lethal damage step. The record for the combat that decided the game was
      * therefore the one combat record no game had.
+     *
+     * <p>The <b>resolution bracket's own leftovers</b> (task-11 fix round 1,
+     * C1) are closed and cleared by the killing ability's own {@link
+     * #endBracket} the moment it resolves -- before the state-based check that
+     * discovers the game is over ever runs (CR 704.3, next main-loop
+     * iteration). A bus event filed after that point, with no bracket open
+     * (the ordinary case for {@code player_won}: burn, drain, decking out,
+     * anything that is not a combat-damage kill), had nowhere left to be
+     * flushed to. See {@link #flushOrphanedEvents}.
      *
      * <p>The <b>held casts</b> split in two, and only one half is writable.
      * A spell that left the stack since the last reconcile point — countered,
@@ -926,6 +935,7 @@ public final class BusBracketCollector {
      */
     long finishGame(Set<Integer> onStack) {
         flushCombat();
+        flushOrphanedEvents();
         writeOffRemoved(onStack);
         long abandoned = pendingActivations.size();
         if (abandoned > 0) {
@@ -1132,6 +1142,56 @@ public final class BusBracketCollector {
         combatShape = CombatShape.empty();
         combatState = null;
         combatSubstep = null;
+    }
+
+    /**
+     * Write a leftover resolution-bracket buffer as its own record, the same
+     * rescue {@link #flushCombat} already gives the combat bracket -- and
+     * needed for exactly the same reason: something can end the game between
+     * the last bracket close and the next one that never comes.
+     *
+     * <p>Reachable by the most ordinary kind of win. {@code MagicStack} fires
+     * {@code GameEventSpellResolved} immediately after a resolving ability's
+     * own effect returns, with no game-over check between, so {@link
+     * #endBracket} runs -- writing and clearing that ability's own effect half
+     * -- before {@code checkStateBasedEffects} ever asks whether anyone lost
+     * (CR 704.3, checked at the start of the next main-loop iteration). A
+     * burn spell that leaves its target at 0 life closes its own bracket first
+     * and only then is the game discovered to be over: {@code
+     * GameEventGameOutcome} fires with no bracket open, {@link #record} has
+     * nowhere to put it but the now-empty {@link #bracketEvents}, and no
+     * further ability ever resolves to trigger the {@link #endBracket} that
+     * would otherwise have flushed it. Without this, {@code player_won} (and
+     * anything else the bus files outside combat with no bracket open) was
+     * silently dropped for every non-combat kill -- a burn spell, a drain, a
+     * mill-out, a scripted "you lose the game" -- which is most of them.
+     *
+     * <p>{@code ability} is absent, the same as {@link #flushCombat}'s own
+     * combat record and for the same reason, not a narrower one: {@link
+     * #resolvingKeys} is already this collector's own "nothing resolving"
+     * default here ({@code closeBracket} set it, and nothing since has
+     * touched it), so this writes the same honest answer {@code endBracket}
+     * would write for a bracket that closed with nothing resolving -- a game
+     * outcome genuinely has no acting line, which is a fact about the record,
+     * not a lookup that failed. {@code state} cannot reuse {@link
+     * #openBracketState} (also cleared by {@code closeBracket}), so it is
+     * read fresh, the same null-ability snapshot {@link #openCombatBracket}
+     * takes for its own record.
+     */
+    private void flushOrphanedEvents() {
+        if (bracketEvents.isEmpty()) {
+            return;
+        }
+        emit(new EffectRecord(
+                writer.nextRecordId(), writer.runId(), RecordShardWriter.timestamp(),
+                gameId, EffectRecord.KIND_RESOLUTION, mode)
+                .moment(EffectRecord.MOMENT_RESOLUTION)
+                .actor(resolvingActor)
+                .ability(resolvingKeys)
+                .state(snapshots.toJson(null, List.of()))
+                .payload(EffectRecord.eventsPayload(bracketEvents)));
+        bracketEvents.clear();
+        bracketEventKeys.clear();
     }
 
     private String combatPayload() {
