@@ -1080,6 +1080,19 @@ class ApiEventsTest {
      * creature against the new defender (SpellAbilityEffect.java:762) --
      * simulated here with the same two public {@code Combat} calls, not a
      * hand-rolled approximation.
+     *
+     * <p>{@code ValidTgts$ Creature.attacking} on the ability text, and a
+     * host distinct from the attacker, are load-bearing, not decoration
+     * (fix round 1, item 3): {@code SpellAbility.usesTargeting()} is exactly
+     * {@code targetRestrictions != null}, which {@code AbilityFactory} only
+     * sets when the script declares {@code ValidTgts$}. Without it, {@code
+     * affectedCards} falls through to its {@code Defined$} branch (default
+     * {@code "Self"} -- the host), and the very first version of this test
+     * built the ability against the attacker itself, so the manually-added
+     * target and the host-fallback named the same card and the test passed
+     * for a reason that had nothing to do with targeting. Caught by the
+     * multi-attacker fixture below, which a same-card host cannot satisfy
+     * even by accident.
      */
     @Test
     void changeCombatantsNamesTheReselectedAttacker() {
@@ -1087,13 +1100,14 @@ class ApiEventsTest {
         Player attackerCtrl = new Player("attacker", game, 93301);
         Player oldDefender = new Player("old-defender", game, 93302);
         Player newDefender = new Player("new-defender", game, 93303);
+        Card host = cardIn(game, "Mountain");
         Card c = cardIn(game, "Grizzly Bears");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c, oldDefender);
 
         SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ChangeCombatants | Attacking$ True", c);
+                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
         sa.resetTargets();
         sa.getTargets().add(c);
 
@@ -1104,6 +1118,58 @@ class ApiEventsTest {
 
         assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
         assertEquals(List.of(SnapshotBuilder.entityId(c)), event.subjects());
+    }
+
+    /**
+     * {@code portal_manipulator.txt} is {@code DB$ ChangeCombatants |
+     * ValidTgts$ Creature.attacking | TargetMin$ 0 | TargetMax$ MaxTargets} --
+     * any number of attackers, not just one. Both existing {@code
+     * ChangeCombatants} tests above used a single attacker (fix round 1,
+     * item 3); this is the multi-member fixture {@code
+     * removeFromCombatNamesEveryCreatureActuallyRemoved} already has and this
+     * API's own sibling rule lacked. The plausible wrong implementation this
+     * falsifies is a {@code reselectedAttackers} that returns on the first
+     * matching entry instead of continuing the loop -- exactly Task 6's
+     * shipped defect shape, one API over. It is also what actually caught the
+     * host/target coincidence documented on the single-attacker test above:
+     * this test failed with {@code expected: <[E1, E2]> but was: <[E1]>}
+     * against the ORIGINAL fixture (ability built against the first attacker,
+     * no {@code ValidTgts$}) before that fixture was corrected, because
+     * {@code affectedCards} was silently reading {@code Defined$ Self} --
+     * the ability's own host, {@code c1} -- instead of the two manually-added
+     * targets.
+     */
+    @Test
+    void changeCombatantsNamesEveryReselectedAttackerNotJustTheFirst() {
+        Game game = freshGame();
+        Player attackerCtrl = new Player("attacker", game, 93306);
+        Player oldDefender = new Player("old-defender", game, 93307);
+        Player newDefender = new Player("new-defender", game, 93308);
+        Card host = cardIn(game, "Mountain");
+        Card c1 = cardIn(game, "Grizzly Bears");
+        Card c2 = cardIn(game, "Runeclaw Bear");
+        Combat combat = new Combat(attackerCtrl);
+        game.getPhaseHandler().setCombat(combat);
+        combat.addAttacker(c1, oldDefender);
+        combat.addAttacker(c2, oldDefender);
+
+        SpellAbility sa = AbilityFactory.getAbility(
+                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
+        sa.resetTargets();
+        sa.getTargets().add(c1);
+        sa.getTargets().add(c2);
+
+        Object memo = ApiEvents.before(sa);
+        combat.removeFromCombat(c1);
+        combat.addAttacker(c1, newDefender);
+        combat.removeFromCombat(c2);
+        combat.addAttacker(c2, newDefender);
+        EffectEvent event = ApiEvents.after(sa, memo);
+
+        assertEquals(EffectEvent.REMOVED_FROM_COMBAT, event.type());
+        assertEquals(
+                List.of(SnapshotBuilder.entityId(c1), SnapshotBuilder.entityId(c2)),
+                event.subjects());
     }
 
     /**
@@ -1118,13 +1184,14 @@ class ApiEventsTest {
         Game game = freshGame();
         Player attackerCtrl = new Player("attacker", game, 93304);
         Player defender = new Player("defender", game, 93305);
+        Card host = cardIn(game, "Mountain");
         Card c = cardIn(game, "Grizzly Bears");
         Combat combat = new Combat(attackerCtrl);
         game.getPhaseHandler().setCombat(combat);
         combat.addAttacker(c, defender);
 
         SpellAbility sa = AbilityFactory.getAbility(
-                "DB$ ChangeCombatants | Attacking$ True", c);
+                "DB$ ChangeCombatants | ValidTgts$ Creature.attacking | Attacking$ True", host);
         sa.resetTargets();
         sa.getTargets().add(c);
 
