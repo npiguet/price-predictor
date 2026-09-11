@@ -191,7 +191,13 @@ blind spot, discovered by running the second against a real collection.
   these eight account for ~84% of the 15's combined card count. `replacement_applied` is a strict subset of
   the `rewrite` record this connector already writes for every replacement — see the comment on
   `EventType.REPLACEMENT_APPLIED` in `event_schema.py`, which states the relationship in the same words
-  ruling R12 used for `damage_prevented`/`rewrite`.
+  ruling R12 used for `damage_prevented`/`rewrite`, **and the ratio**: measured across all 2,459
+  replacement definitions in the pool, only 14.4% (353) have one of the six `Replace*` APIs as the
+  overriding ability — 55.7% (1,369) use some other API (802 of them `DB$ Tap`, the enters-tapped
+  class Guardian Idol belongs to and the single largest replacement shape in the game), and 30.0% (737)
+  have no `ReplaceWith$` at all. By card, 289 files can produce `replacement_applied` against 1,235 that
+  cannot — the channel covers roughly *one in seven* scripted replacement sites, so a `rewrite` with no
+  sibling `replacement_applied` is the ordinary case, not a corner one.
 
   A Task 12 fix round found that two of the eight, `turn_ended` and `text_change`, needed to go back into
   `KNOWN_UNEMITTED` under a reason the dict had never carried before: the emitter for each is wired and

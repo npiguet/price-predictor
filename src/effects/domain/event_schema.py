@@ -199,11 +199,32 @@ EVENT_PARAMS: dict[EventType, tuple[str, ...]] = {
     # same executeReplacement call this row's ability runs from. They are not
     # independent evidence of the same replacement -- a reader that treats a
     # `replacement_applied` row and its sibling `rewrite` row as two
-    # confirming signals will double-count it. It is also a NARROWER view than
-    # `rewrite`: `rewrite` also covers replacements whose overriding ability is
-    # not a Replace* API at all (`Prevent$ True`, an arbitrary `ReplaceWith$`),
-    # so this row is a strict subset, not an alternate route to the same
-    # coverage. The empty tuple is deliberate, not a placeholder: the event
+    # confirming signals will double-count it. (`rewrite` is not written
+    # unconditionally either, for what it is worth: PatchedCollectors drops a
+    # fork's own replacements and deduplicates by digest, so a
+    # `replacement_applied` can legitimately have no visible `rewrite` sibling
+    # in a given shard -- the "two views of one event" claim is about what the
+    # engine fires, not a promise that a collector always keeps both halves.)
+    #
+    # It is also a NARROWER view than `rewrite`, and not by a little: measured
+    # across all 2,459 replacement definitions in the sealed/draft pool, only
+    # 14.4% (353) name one of these six APIs as the overriding ability -- 55.7%
+    # (1,369) name some other API (802 of them `DB$ Tap`, the enters-tapped
+    # class Guardian Idol belongs to and the single largest replacement shape
+    # in the game), and 30.0% (737) have no `ReplaceWith$` at all (Prevent /
+    # Skip / CantHappen). By card, 289 files can produce `replacement_applied`
+    # against 1,235 that cannot. So a `rewrite` with no `replacement_applied`
+    # sibling is the MODAL case -- roughly six shots in seven -- not a rare
+    # corner this row happens to miss; "strict subset" is true but undersells
+    # how narrow the six APIs are against everything `ReplaceWith$` can name.
+    # No Replace* API is scripted anywhere in the pool outside a
+    # `ReplaceWith$`/`ReplacementEffects$` chain -- the 103 cardsfolder
+    # occurrences that do not look like one on a first grep all resolve to a
+    # `ReplacementEffects$` SVar on an `Effect` -- so the subset holds in the
+    # direction that actually matters: nothing this row's RULES entries claim
+    # ever resolves outside a real replacement.
+    #
+    # The empty tuple is deliberate, not a placeholder: the event
     # carries subjects and provenance and nothing else, so unlike
     # DAMAGE_PREVENTED's row this one exists only to hold the comment above.
     EventType.REPLACEMENT_APPLIED: (),
