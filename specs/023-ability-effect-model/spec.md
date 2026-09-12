@@ -175,8 +175,8 @@ loss.
 3. **Given** a perturbed script, **When** its records are collected, **Then** they carry
    `synthetic = true` and `variant_of`, the variant is never converted to prose, and it contributes no
    paired-encoding loss term.
-4. **Given** a variant derived from a held-out card, **When** the split is applied, **Then** the
-   variant is held out with it.
+4. **Given** a card carrying a held-out text, **When** `collect-variants` runs, **Then** no variant
+   is generated from it.
 5. **Given** a completed `collect-variants` run, **When** the sealed corpora are inspected, **Then**
    `match-outcomes.txt` and `cards-played.txt` are unchanged by it.
 6. **Given** a checkpoint trained at stage two, **When** any inference command loads it after the
@@ -370,12 +370,35 @@ loss.
   perturbation; a mismatch MUST log a warning and discard the fork, which still counts against its
   budget.
 
+#### Depleted collection
+
+- **FR-130**: Training games and validation games MUST come from two collection runs writing into the
+  same `--effect-records` directory. A depleted run draws its pools from a card list with every
+  held-out card removed; a full-strength run draws normally and supplies the card-disjoint stratum.
+  No record field marks which run a shard came from — the split is derived from the records, as
+  everywhere else (FR-088, FR-125).
+- **FR-131**: `python -m effects holdout-cards --out PATH` MUST write the depletion list: one Forge
+  canonical card name per line, every card under `--cards-folder` carrying a held-out text. It MUST
+  select texts by the same rule and the same flags as FR-088, and MUST report the card count and the
+  share of the corpus it represents.
+- **FR-132**: `python -m sealed generate-pools --exclude-cards PATH` MUST omit the listed cards from
+  every booster it composes, redrawing within the same rarity slot so pool size and rarity structure
+  are unchanged. The flag MUST take a plain newline-delimited name list, so that `sealed` gains no
+  import of `effects`.
+- **FR-133**: The full-strength run MUST be sized for the card-disjoint stratum alone and is far
+  smaller than the depleted run. `collect-coverage` and `collect-variants` MUST keep taking
+  `--split-from` rather than a depletion list, since each builds its own decks and excludes held-out
+  cards there (FR-045, FR-057).
+- **FR-134**: A checkpoint MUST record the holdout flags it trained under alongside its split, and
+  `--split-from` MUST carry them. Changing the holdout invalidates a depleted corpus, whose games were
+  composed against the old list, so the flags are pinned for the life of a corpus.
+
 #### Coverage collector
 
 - **FR-044**: `python -m effects collect-coverage` MUST work in rounds, each rebuilding weighted decks,
   playing `--decks-per-round` (default 500) of those decks as matches, and recounting coverage.
-- **FR-045**: It MUST read the held-out card list from `--split-from PATH` when given and exclude
-  those cards from every deck.
+- **FR-045**: It MUST read the held-out card list from `--split-from PATH` when given — every card
+  carrying a held-out text — and exclude those cards from every deck.
 - **FR-046**: Decks MUST be built over the whole converted card corpus rather than sealed-legal sets,
   drawing candidates from the `output/cardsfolder/` entry of `--cards-folder` alone, weighted toward
   cards with the fewest effect records, as 40-card decks of 23 nonlands plus basics from
@@ -408,8 +431,10 @@ loss.
   there as custom cards, never entering `output/cardsfolder/` or Forge's own tree.
 - **FR-056**: Variants MUST exist on the script surface only: never converted to prose, excluded from
   the paired-encoding loss, with a sidecar written per variant script.
-- **FR-057**: Variant records MUST carry `synthetic = true` and `variant_of`, and a variant of a
-  held-out card MUST be held out with it.
+- **FR-057**: Variant records MUST carry `synthetic = true` and `variant_of`. No variant MUST be
+  generated from a card carrying a held-out text: a perturbation yields a text that is not itself
+  held out, so the variant would reach training and teach the held-out card's mechanics under an edit
+  the split cannot detect.
 - **FR-058**: `--variant-volume` (default 0.2) MUST cap variant records as a fraction of the real
   records already in `--effect-records`.
 - **FR-059**: Variant matches MUST write effect records only, never `match-outcomes.txt` or
@@ -518,14 +543,28 @@ loss.
 - **FR-087**: Records with no acting ability text MUST bypass rarity weighting: `combat` and
   `playability-legality` sample uniformly within their class, and a `decision` record's per-candidate
   examples key on the candidate's text.
-- **FR-088**: The card-disjoint validation split MUST take cards first printed in the newest sets,
-  newest-first, until they cover at least 8% of the cards under `output/cardsfolder/`, and MUST
-  exclude from training every game with a record naming a held-out card, in every shard the run reads
-  and not only the reserved ones. Game-disjoint validation MUST be the games of the reserved shards
-  (FR-125) that name no held-out card.
+- **FR-088**: The card-disjoint validation split MUST hold out ability texts, not cards. A text is
+  eligible when at most `--holdout-max-carriers` (default 8) cards under `output/cardsfolder/` carry
+  it; an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below
+  `--holdout-permille` (default 20). Membership MUST depend on the text's own bytes alone, so adding
+  cards never reassigns an existing text. A card is held-out when any of its lines carries a held-out
+  text. Training MUST exclude every game with a record naming a held-out card, in every shard the run
+  reads and not only the reserved ones. Game-disjoint validation MUST be the games of the reserved
+  shards (FR-125) that name no held-out card.
+- **FR-088a**: The hash MUST be stable across processes, machines and interpreter versions. The
+  salted built-in `hash()` over `str` MUST NOT be used.
+- **FR-088b**: `train-effect-model` MUST report, before its first epoch, the held-out text count, the
+  share of `output/cardsfolder/` cards those texts remove, and each stratum's record count. It MUST
+  fail rather than train when the card-disjoint stratum is empty, and MUST warn when that stratum
+  holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text
+  appears on no training card. The failure message MUST name the depleted and full-strength
+  collection runs (FR-130) as the remedy.
+- **FR-088c**: Gate-1 margins MUST additionally be reported split by whether a held-out text's first
+  printing falls in the newest sets, so recency is a breakdown of the card-disjoint stratum rather
+  than a second holdout.
 - **FR-089**: The best checkpoint MUST be selected by card-disjoint validation loss.
-- **FR-090**: A checkpoint MUST record the split it trained against — the held-out card list and the
-  `game_id` set across both strata — plus the vocabulary and keyword-definition paths, their content
+- **FR-090**: A checkpoint MUST record the split it trained against — the holdout flags (FR-134), the
+  held-out card list they produced, and the `game_id` set across both strata — plus the vocabulary and keyword-definition paths, their content
   hashes, and the keyword withheld from training (or null). The evaluator reads the withheld keyword
   from the checkpoint rather than from a flag, for the same reason it reads the split from there: the
   zero-shot check must measure the model that was trained, not a keyword an operator remembers
@@ -666,8 +705,11 @@ loss.
 #### Reading the corpus
 
 - **FR-125**: The trainer MUST read the record corpus one shard at a time and MUST NOT hold more than
-  one shard of parsed records at once. `--reserved-shards` (default 4) shards, spread evenly across the
-  shard list, are held back for validation and never trained on; the rest are training shards.
+  one shard of parsed records at once. Every shard holding a record that names a held-out card MUST be
+  reserved, which puts a full-strength collection run's shards (FR-130) in the card-disjoint stratum
+  without a flag naming them. `--reserved-shards` (default 4) further shards, spread evenly across the
+  remaining shard list, are held back for the game-disjoint stratum and never trained on; the rest are
+  training shards.
 - **FR-126**: An epoch MUST read `--shards-per-epoch` (default 18) training shards, dividing
   `--steps-per-epoch` evenly among them, and the walk MUST advance each epoch and wrap at the end of
   the list, so a long run covers the corpus rather than re-reading its opening shards.

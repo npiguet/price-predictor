@@ -13,7 +13,8 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 | 0 | apply the engine patch series, rebuild Forge and the JAR | minutes | no |
 | 1 | `price_predictor convert` | minutes | no |
 | 2 | `effects extract-keyword-definitions`, `effects build-vocab` | minutes | no |
-| 3 | `sealed match-outcomes --effect-records` | hours | you decide when to stop |
+| 3 | `effects holdout-cards`, `sealed generate-pools --exclude-cards`, `sealed match-outcomes --effect-records` | hours | you decide when to stop |
+| 3b | the same, full strength, into the same shard directory | hours | no |
 | 4 | `effects collect-coverage` | hours | no |
 | 5 | `effects collect-variants` | hours | no |
 | 6 | `effects train-effect-model`, then four baselines | 5 × hours | no |
@@ -23,6 +24,11 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 Steps 3–5 are three different ways to reach cards, and a full corpus wants all three: self-play plays
 what sealed pools deal, coverage plays what they never deal, and variants play text that never
 existed. Each writes into the same shard directory and none invalidates the others.
+
+Step 3 collects the training corpus from pools the held-out cards were removed from, and step 3b
+the validation corpus from pools at full strength. Splitting the corpus at collection time rather
+than discarding held-out games afterwards is what keeps every collected game usable;
+[spec.md](spec.md) FR-130 has the rules.
 
 ## Prerequisites
 
@@ -117,7 +123,14 @@ printed, and the engine-coded family generates nothing at all; both keep their t
 ## 3. Collect, riding ordinary self-play
 
 ```bash
+python -m effects holdout-cards --out output/effects/holdout-cards.txt
+
+python -m sealed generate-pools --set NEO --size 20000 \
+    --exclude-cards output/effects/holdout-cards.txt \
+    --pools-path output/sealed/pools-depleted/{set}
+
 python -m sealed match-outcomes \
+    --pools-path output/sealed/pools-depleted/{set} \
     --effect-records output/effects/records/ --workers 6 \
     --snapshot-tiers 1,2,3,4 \
     --playability-rate 0.1 \
@@ -262,6 +275,26 @@ observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted
 | `--legality-rate` | 0.1 | Share of legality points kept, sampled *after* the coalescing above. Its own knob because the two playability subkinds arrive at very different volumes from one priority pass. |
 | `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. Stage three collects at `1,2,3,4`. |
 
+## 3b. Collect the validation corpus at full strength
+
+```bash
+python -m sealed generate-pools --set NEO --size 2000 \
+    --pools-path output/sealed/pools-full/{set}
+
+python -m sealed match-outcomes \
+    --pools-path output/sealed/pools-full/{set} \
+    --effect-records output/effects/records/ --workers 6 \
+    --snapshot-tiers 1,2,3,4
+```
+
+The same command as step 3 without `--exclude-cards`, so these pools contain the held-out cards and
+these games become the card-disjoint stratum. Nothing marks the shards as validation: the trainer
+reserves every shard holding a held-out card, so the two runs separate themselves.
+
+This run is much smaller than step 3. It only has to satisfy `--min-holdout-records` unique-text
+resolution records, which is the number `train-effect-model` warns about. Collect it after step 3 so
+you can size it against what the holdout actually covers.
+
 ## 4. Collect the cards self-play never deals
 
 ```bash
@@ -314,7 +347,7 @@ python -m effects collect-variants \
 `collect-variants` reads Forge's **source** scripts, perturbs one whitelisted parameter per variant,
 writes a sidecar for each through `VariantSidecarMain`, and plays them. `--variant-volume` caps
 variant records as a fraction of the real records already present, so the cap scales with the corpus.
-A variant of a held-out card is held out with it. Variant scripts land in
+No variant is generated from a card carrying a held-out text. Variant scripts land in
 `output/effects/variant-scripts/` and are never converted to prose — the perturbation is on the script
 surface only.
 
@@ -352,11 +385,15 @@ Trains both transformers jointly from random init. The mixture renormalizes over
 actually present, and an absent kind's fields contribute no loss — so the same command works on a
 three-class stage-one corpus and an eight-class one.
 
-**Read the first line it prints.** It reports the split: total records, then how many are training,
-card-disjoint and game-disjoint. The split holds out cards by newest first printing until they cover
-≥ 8% of the corpus, then excludes every game holding a record that names one of them — so a thin
-corpus can leave most of its records untrainable. Collect more rather than training on a small
-training share.
+**Read the first line it prints.** It reports the holdout — how many ability texts it holds out and
+what share of `output/cardsfolder/` cards carry one — then the three strata's record counts. The
+holdout is keyed on the text, not the card: a text is eligible when at most `--holdout-max-carriers`
+cards carry it, and an eligible text is held out on a hash of its own bytes, so functional reprints
+are held out together and a Forge upgrade never reassigns an existing text.
+
+The run fails rather than trains when the card-disjoint stratum is empty, and warns when it holds
+fewer than `--min-holdout-records` unique-text resolution records. Both mean the same thing: step 3b
+was skipped or was too short, so there are no full-strength games to validate on.
 
 On an 8 GB card, `--context-cache` is the documented fallback: it swaps live context re-encoding for a
 stop-gradient momentum cache refreshed every `--cache-refresh` batches.
@@ -444,6 +481,8 @@ Every step above can be dropped, and the ones after it still run:
 | Step 0, the engine patch | Three of eight sampling classes, `degraded` mode, no forks. Evasion keywords will not separate — their signal is playability records. |
 | `--probe-keywords` in steps 3–4 | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
 | `--interventions-per-game` | Cards the AI can never afford to play keep no resolution record. |
+| Step 3b, the full-strength run | No card-disjoint stratum, so `train-effect-model` fails before its first epoch. Gate 1 has nothing to measure. |
+| `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. |
 | Step 4, `collect-coverage` | Cards in no sealed-legal set appear in no record at all. |
 | Step 5, `collect-variants` | No script-surface corpus; the prose surface trains as before. |
 

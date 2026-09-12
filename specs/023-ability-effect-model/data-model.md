@@ -144,7 +144,8 @@ generated script exists only for the script-generated majority and only from sta
 
 A perturbed copy of one Forge card script — one parameter changed. Lives in
 `output/effects/variant-scripts/` with a sidecar of its own, exists on the script surface only, and is
-never converted to prose. A variant of a held-out card is held out with it.
+never converted to prose. No variant is generated from a card carrying a held-out text: the
+perturbed text is not itself held out, so the variant would reach training.
 
 ## Model entities
 

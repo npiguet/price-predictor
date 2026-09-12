@@ -332,6 +332,29 @@ never existed on a real card.
 - [X] T154 Performance review per Principle VIII across all stories — I/O batching and caching, GPU placement, GPU batching with no per-item host↔device transfers in hot loops, vectorized hot loops (the snapshot-to-tensor derivation especially), streaming for the shard corpus, load-once reuse — verified against the 8 GB budget
 - [ ] T155 Fill the Outcome section of [`../../experiments/2026-09-04-ability-effect-model-design.md`](../../experiments/2026-09-04-ability-effect-model-design.md) with the first run's gate results — that file is the only home for run numbers
 
+## Phase 8: Text-keyed holdout and depleted collection
+
+Supersedes the newest-first card holdout built in T040 and the variant-holdout rule tested in T138.
+The split unit changes from the card to the ability text, and the card-disjoint stratum is built by
+depleting the training pools rather than discarding games. Rationale: the design record's *The
+held-out set is built by depleting the pools* and *The holdout unit is ability text*.
+
+- [ ] T156 [P] Test in `tests/unit/effects/domain/test_text_holdout.py` that a text is eligible only when at most `--holdout-max-carriers` cards carry it, that an eligible text is held out iff `crc32` of its normalized script text modulo 1000 is below `--holdout-permille`, that membership is unchanged by adding unrelated cards, and that the hash is stable across processes (FR-088, FR-088a)
+- [ ] T157 Replace `newest_first_holdout` in `src/effects/application/train_effect_model.py` with the text-keyed selection, keeping `HeldOutCards` as the type the rest of the split consumes (FR-088)
+- [ ] T158 [P] Test in `tests/unit/effects/application/test_split.py` that functional reprints — two cards whose script lines are byte-identical — are held out together or not at all, replacing T040's newest-first assertions
+- [ ] T159 `train-effect-model` reports held-out text count, the share of `output/cardsfolder/` cards removed, and per-stratum record counts before the first epoch; fails on an empty card-disjoint stratum; warns below `--min-holdout-records` (FR-088b)
+- [ ] T160 [P] Test that an empty card-disjoint stratum fails the run rather than yielding `nan` validation loss, a never-updating `EarlyStopper`, and a checkpoint that is never saved
+- [ ] T161 Gate-1 margins reported split by whether a held-out text's first printing falls in the newest sets, reading `--printings-path`, which is no longer a selection input (FR-088c)
+- [ ] T162 `python -m effects holdout-cards --out PATH` in `src/effects/application/holdout_cards.py` and its CLI wiring, writing every card carrying a held-out text and reporting the counts (FR-131)
+- [ ] T163 [P] Test that `holdout-cards` and `train-effect-model` select the same cards from the same flags, since a disagreement silently corrupts the split
+- [ ] T164 `--exclude-cards PATH` on `python -m sealed generate-pools`, omitting listed cards from every booster and redrawing within the same rarity slot; `sealed` gains no import of `effects` (FR-132)
+- [ ] T165 [P] Test that an excluded pool has the same card count and rarity distribution as an unexcluded one and contains no listed card
+- [ ] T166 Shard reservation reserves every shard holding a record that names a held-out card, ahead of the `--reserved-shards` even spread (FR-125)
+- [ ] T167 [P] Test that a full-strength shard lands in the card-disjoint stratum and a depleted shard in training, with no flag naming either
+- [ ] T168 `collect-variants` skips cards carrying a held-out text and states the reason, replacing T138's held-out-with-it assertion (FR-057)
+- [ ] T169 Checkpoints record the holdout flags alongside the split, and `--split-from` carries them (FR-134)
+- [ ] T170 Import-direction test extended: `sealed` must not import `effects` despite `--exclude-cards`
+
 ---
 
 ## Dependencies & Execution Order
@@ -345,6 +368,7 @@ never existed on a real card.
 - **US3 (Phase 5)**: depends on US2's collectors for the interventional path, and on **US1's gate-2 output** for whether the probe half is built at all
 - **US4 (Phase 6)**: depends on Foundational for the sidecar's `script_text`, and on US2's coverage collector for variant scheduling. Otherwise independent of US2 and US3
 - **Polish (Phase 7)**: after the stories being delivered
+- **Phase 8**: supersedes parts of US1 (the split) and US4 (the variant holdout rule); runs after both, and before any collection run whose corpus is meant to train on
 
 ### Critical ordering
 

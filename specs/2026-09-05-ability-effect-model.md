@@ -173,16 +173,42 @@ From stage four, `python -m effects collect-variants` emits perturbed card scrip
 - `--variant-volume` (default 0.2): the cap on variant records as a fraction of the real records already in `--effect-records`.
 - Perturbed scripts are written to `output/effects/variant-scripts/` and loaded from there as custom cards; they never enter `output/cardsfolder/` or Forge's own tree.
 - A variant exists on the script surface only. Converted prose is a script's hand-written description, so a perturbed script's description still describes the original — editing `NumDmg$ 3` leaves the prose saying three. Variants are therefore never converted, carry no prose surface, and are excluded from the paired-encoding loss; their records train the script side alone. The provenance key of a variant line is the perturbed script's own, so `collect-variants` writes a sidecar per variant script and needs no converted tree.
-- Variant records carry `synthetic = true` and `variant_of` — corpus metadata, never model inputs. A variant of a held-out card is held out with it, so the card-disjoint split cannot leak through a one-parameter edit.
+- Variant records carry `synthetic = true` and `variant_of` — corpus metadata, never model inputs. No variant is generated from a card carrying a held-out text: perturbing a parameter produces a text that is not itself held out, so the variant would train the model on the held-out card's mechanics under an edit the split cannot see.
 - Variant cards are decked and scheduled exactly as coverage decks are (§ Coverage collector), over the variant set rather than the converted corpus, with the same rounds and `--decks-per-round`.
 - Variant matches write effect records only — never `match-outcomes.txt` or `cards-played.txt`. Games played with perturbed cards are not sealed self-play and must not feed the scorer or encoder corpora.
+
+# Depleted collection
+
+Training games and validation games come from two collection runs over the same shard directory. A
+depleted run draws its pools from a card list with every held-out card removed; a full-strength run
+draws normally and supplies the card-disjoint stratum.
+
+- `python -m effects holdout-cards --out PATH` writes the depletion list: one Forge canonical card
+  name per line, every card carrying a held-out text (§ Training, Splits). `--cards-folder` and the
+  two holdout flags select the same texts the trainer selects.
+- `python -m sealed generate-pools --exclude-cards PATH` omits those cards from every booster it
+  composes, redrawing within the same rarity slot so pool size and rarity structure are unchanged.
+  The flag takes a plain name list and is the only coupling between the two packages.
+- A depleted pools directory and a full-strength one are separate `--pools-path` trees. Both feed
+  `sealed match-outcomes --effect-records`, which writes shards into the same directory: a depleted
+  game names no held-out card and trains, a full-strength game names several and validates. The
+  trainer reserves every shard holding a held-out card, so a full-strength run's shards reach the
+  card-disjoint stratum without a flag naming them.
+- `collect-coverage` and `collect-variants` take `--split-from` rather than a depletion list, since
+  each builds its own decks and excludes held-out cards there.
+- The full-strength run is sized for the card-disjoint stratum alone and is far smaller than the
+  depleted run. Nothing in the record schema marks which run a shard came from; the split is derived
+  from the records, as everywhere else.
+- Changing the holdout invalidates a depleted corpus, because its games were composed against the old
+  list. The holdout flags are therefore pinned for the life of a corpus and recorded in every
+  checkpoint trained on it.
 
 # Coverage collector
 
 `python -m effects collect-coverage` reaches the converted cards sealed pools never contain, by putting them in decks that get played.
 
 - Works in rounds. A round rebuilds the weighted decks, plays `--decks-per-round` (default 500) of them as matches, and recounts coverage; `--no-progress-rounds` below counts these.
-- Reads the held-out card list from `--split-from PATH` (a checkpoint) when one is given, so coverage decks exclude the same cards the trainer holds out; without it the run builds over every card and its games are usable only by a checkpoint whose split holds nothing they contain.
+- Reads the held-out card list from `--split-from PATH` (a checkpoint) when one is given, so coverage decks exclude every card carrying a held-out text; without it the run builds over every card and its games are usable only by a checkpoint whose split holds nothing they contain.
 - Builds 40-card decks over the whole converted card corpus, not sealed-legal sets. Deck candidates and the coverage unit come from the `output/cardsfolder/` entry of `--cards-folder` alone, since a token script is not a deckable card. Decks are weighted toward cards with the fewest effect records: 23 nonlands plus basics from `compute_basic_lands`. Excluding the held-out cards matters here: a deck of 23 cards drawn corpus-wide would otherwise contain one almost every game, and the whole coverage corpus would fall to the training exclusion.
 - Consults Forge castability to weight slots toward cards Forge actually plays. The consult only ranks; it never drops a card from deck building, because being in a game is the precondition a stage-three intervention forks from, so every uncovered card still gets slots.
 - Two residues are reported at the end of a run and fall to interventional resolutions (stage three): cards the consult judges uncastable, and cards it judges castable that never reach `--target-records`. A retired card goes to the residue matching its consult verdict.
@@ -290,8 +316,10 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 
 - **Rarity weighting.** Within a class, records weight ∝ effective_games^(−0.5), capped at 20× the weight of the most-observed ability text. Effective games is the count of distinct games contributing a record of that unique ability text — games, not raw records.
 - **Records with no acting text.** `combat` and `playability-legality` sample uniformly within their class; a `decision` record's per-candidate examples key on the candidate's text.
-- **Splits.** Card-disjoint validation: cards first printed in the newest sets (printing order read from `--printings-path`), taken newest-first until they cover at least 8% of the cards under `output/cardsfolder/` — token scripts and variant scripts are not in the printing order and stay out of the denominator; every game with a record naming a held-out card is excluded from training entirely. Game-disjoint validation: 10% of the remaining games. Best checkpoint by card-disjoint validation loss.
-- **Split provenance.** The checkpoint records the split it trained against — the held-out card list, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. For the same reason `--split-from PATH` makes a run inherit another checkpoint's split, vocabulary, and keyword-definition paths: every variant run inherits from the `full` run it is a baseline for, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
+- **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text; token scripts and variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. Best checkpoint by card-disjoint validation loss.
+- **Holdout reporting.** `train-effect-model` reports, before its first epoch, the held-out text count, the share of cards under `output/cardsfolder/` those texts remove, and the three strata's record counts. It also reports gate-1 margins split by whether a held-out text's first printing falls in the newest sets, so recency is a breakdown of one stratum rather than a second holdout.
+- **Split guard.** `train-effect-model` fails before its first epoch when the card-disjoint stratum is empty, and warns when the stratum holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text appears on no training card. The message names the depleted and full-strength collection runs as the fix.
+- **Split provenance.** The checkpoint records the split it trained against — the holdout flags, the held-out card list they produced, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. For the same reason `--split-from PATH` makes a run inherit another checkpoint's split, vocabulary, and keyword-definition paths: every variant run inherits from the `full` run it is a baseline for, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
 - **Records outside the recorded split.** Every reported check scores only the recorded `game_id`s, so games appended after a training run are ignored rather than re-derived into a stratum.
 - **Vocabulary drift.** The checkpoint also records a hash of the vocabulary and keyword-definition files it trained with. The inference commands hash the files they actually use — the recorded paths, or an explicit override — and fail fast on a mismatch, and `evaluate-effect-model` compares those hashes across `--checkpoint` and every `--variant-checkpoint` alongside the split. `build-vocab` overwrites its target in place, so a rebuild between training and encoding would otherwise silently re-index the embedding table.
 - **Checkpoints.** Saved under `--model-output`, which defaults to `models/effects/effect-model/` for `--variant full` and `models/effects/effect-model/{variant}/` otherwise, as `{timestamp}.pt` plus `latest.pt`, so variant runs never overwrite the shipping checkpoint. Each checkpoint records the `--vocab-path` and `--keyword-definitions` it trained with, plus its split, and the inference commands default to those. The saved artifact keeps the encoder, the effect-head trunk, and the per-entity, created-objects, and verdict heads; the MLM, script-API, and pairing heads are filtered at save time.

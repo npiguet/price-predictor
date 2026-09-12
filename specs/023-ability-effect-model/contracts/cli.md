@@ -27,6 +27,16 @@ Seeded specials: `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`.
 Writes keyword → reminder-text template for every keyword; from stage four also the generated
 implementation script, captured as text at the keyword factory, for the script-generated majority.
 
+## `python -m sealed generate-pools` (existing command, one added flag)
+
+| Flag | Default |
+|---|---|
+| `--exclude-cards` | none — a newline-delimited Forge canonical name list, from `effects holdout-cards`. Listed cards are omitted from every booster, redrawing within the same rarity slot so pool size and rarity structure are unchanged |
+
+The flag takes a plain file so that `sealed` gains no import of `effects`. A depleted pools tree
+and a full-strength one are two `--pools-path` directories; both feed `match-outcomes`, and the
+trainer tells their games apart by whether a record names a held-out card.
+
 ## `python -m sealed match-outcomes` (existing command, one added flag)
 
 | Flag | Default | Meaning |
@@ -191,6 +201,20 @@ Damage-step probes: up to 2 per game on trample, deathtouch
 `validate-corpus` reports the probe count as a watched number for the same reason, so a run that
 *meant* to probe is caught in its first minutes rather than at evaluation.
 
+## `python -m effects holdout-cards`
+
+Writes the depletion list that `sealed generate-pools --exclude-cards` reads: one Forge canonical
+card name per line, every card carrying a held-out ability text.
+
+| Flag | Default |
+|---|---|
+| `--out` | required — destination file |
+| `--cards-folder` | `output/cardsfolder/` |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` |
+
+Reports the held-out text count, the card count, and the share of the corpus those cards are. The
+same flags must be used here and at training, or the depleted corpus and the split disagree.
+
 ## `python -m effects train-effect-model`
 
 The full flag table is the root spec's § Training. Contract highlights:
@@ -202,7 +226,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--variant-scripts` | none (stage four: `output/effects/variant-scripts/`) |
 | `--split-from` | none (compute the split); **required for variant runs**. Inherits the source checkpoint's split *and* its vocabulary and keyword-definition paths |
 | `--vocab-path` | `models/effects/vocab.txt` |
-| `--printings-path` | `resources/AllPrintings.json` |
+| `--printings-path` | `resources/AllPrintings.json` — first-printing dates, used only to break gate-1 margins down by recency |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
 | `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |
 | `--variant` | `full` (\| `identity` \| `state-only` \| `no-state` \| `taxonomy`) |
@@ -215,11 +239,13 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--context-cache` / `--cache-refresh` | off / 500 |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
 | `--shards-per-epoch` | 18 — record shards an epoch reads, one resident at a time; the walk advances each epoch and wraps |
-| `--reserved-shards` | 4 — shards held back for validation and never trained on; their games supply both validation strata |
+| `--reserved-shards` | 4 — shards held back for the game-disjoint stratum. Every shard holding a held-out card is reserved on top of these, which is how a full-strength collection run's shards become the card-disjoint stratum |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8 — an ability text is held out when at most `--holdout-max-carriers` cards carry it and `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` |
+| `--min-holdout-records` | 2000 — warn below this many unique-text resolution records in the card-disjoint stratum; empty is a hard failure |
 | `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
 
-Best checkpoint is selected by card-disjoint validation loss. The split holds out cards by newest first
-printing until they cover ≥ 8% of `output/cardsfolder/`, then **excludes from training every game
+Best checkpoint is selected by card-disjoint validation loss. The split holds out ability texts by a
+stable hash of the text, and a card is held out when any of its lines carries one; it then **excludes from training every game
 holding a record that names a held-out card**, in every shard the run reads; game-disjoint validation
 is the reserved shards' remaining games.
 
