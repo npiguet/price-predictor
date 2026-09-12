@@ -115,12 +115,18 @@ def generate_variants(
 ) -> list[GeneratedVariant]:
     """Write perturbed scripts into the variant tree.
 
-    No variant is generated from a held-out card. Perturbing a parameter
-    changes the text, so the variant's text is not itself held out and the
+    No variant is generated from a held-out card. A source script's ``Name:``
+    is printed case while the holdout carries the converted tree's lowercase,
+    so both are folded before the comparison; unfolded it never fires.
+
+    Perturbing a parameter changes the text, so the variant's text is not itself held out and the
     split would route it to training — teaching that card's mechanics under an
     edit nothing downstream can detect. Generation is the only point where the
     rule can be enforced.
     """
+    from effects.application.train_effect_model import fold_card_name
+
+    held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)
     output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -137,7 +143,7 @@ def generate_variants(
         except OSError:
             continue
         card_name = _card_name(lines)
-        if card_name is None or card_name in held_out:
+        if card_name is None or fold_card_name(card_name) in held_out:
             continue
         result = perturb_script(lines, rng)
         if result is None:

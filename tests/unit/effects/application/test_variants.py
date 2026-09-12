@@ -434,3 +434,32 @@ class TestRunClosesTheSupervisor:
             collect_variants.run(self._config(tmp_path))
 
         supervisor.stop.assert_called_once()
+
+
+class TestTheHoldoutNameBoundary:
+    """Forge source scripts carry printed case; the holdout carries converted.
+
+    `generate_variants` reads `Name:` straight out of Forge's own script, so it
+    sees `Soul Echo`, while the held-out list built from the converted tree says
+    `soul echo`. Unfolded, the skip never fires and every held-out card gets a
+    variant — putting its mechanics into training under a text the split cannot
+    recognise, which is exactly what the skip exists to prevent.
+    """
+
+    def test_a_printed_case_script_is_skipped_by_a_converted_case_holdout(
+        self, tmp_path,
+    ) -> None:
+        source = tmp_path / "cards"
+        source.mkdir()
+        (source / "bolt.txt").write_text(
+            "Name:Lightning Bolt\nManaCost:R\nTypes:Instant\n"
+            "A:SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any\n",
+            encoding="utf-8",
+        )
+
+        variants = generate_variants(
+            source, tmp_path / "variants",
+            held_out=frozenset({"lightning bolt"}), limit=5,
+        )
+
+        assert variants == []

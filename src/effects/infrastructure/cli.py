@@ -388,6 +388,14 @@ def _holdout_cards_parser(subparsers) -> None:
         help="Converted card tree (default: output/cardsfolder/)",
     )
     parser.add_argument(
+        "--printings-path", type=str, default="resources/AllPrintings.json",
+        help=(
+            "MTGJSON dump, used only to write the list in Forge's printed "
+            "spelling rather than the converted tree's lowercase "
+            "(default: resources/AllPrintings.json)"
+        ),
+    )
+    parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
             "An eligible text is held out when crc32(text) %% 1000 is below "
@@ -416,6 +424,7 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
         load_card_files,
         load_card_texts,
+        load_first_printings,
     )
     from effects.infrastructure.sidecar_io import SidecarCache
 
@@ -431,10 +440,19 @@ def run_holdout_cards(args: argparse.Namespace) -> int:
 
     sidecars = SidecarCache({"cardsfolder": cards_folder})
     texts_by_card = load_card_texts(card_files, sidecars)
+    printings = Path(args.printings_path)
+    canonical = load_first_printings(printings) if printings.exists() else {}
+    if not canonical:
+        print(
+            f"No printings at {printings}: the list keeps the converted tree's "
+            "lowercase spelling. Every comparison folds case, so depletion "
+            "still works."
+        )
     names = depletion_list(
         card_files, texts_by_card,
         permille=args.holdout_permille,
         max_carriers=args.holdout_max_carriers,
+        canonical_names=canonical,
     )
     written = write_depletion_list(names, Path(args.out))
     share = 100.0 * written / len(card_files)

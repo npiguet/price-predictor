@@ -53,7 +53,10 @@ def test_the_list_is_sorted_so_two_runs_produce_the_same_file() -> None:
     )
 
     assert listed == sorted(listed)
-    assert listed == ["Alice", "Mallory", "Zed"]
+    assert listed == ["alice", "mallory", "zed"], (
+        "with no printings file to resolve against, the list keeps the "
+        "converted tree's spelling"
+    )
 
 
 def test_the_cli_defaults_match_the_trainer_constants() -> None:
@@ -137,3 +140,39 @@ def test_the_min_holdout_default_matches_the_trainer_constant() -> None:
     from effects.infrastructure import cli
 
     assert cli.MIN_HOLDOUT_RECORDS == MIN_HOLDOUT_RECORDS
+
+
+class TestTheFileSpeaksForgesSpelling:
+    """`holdout-cards.txt` crosses into Forge, so it should carry Forge's names.
+
+    Folding at every comparison makes the case irrelevant to correctness. The
+    file is still written in printed case, because it is an interface file: an
+    operator reads it, Forge's own `getName()` is what it will be matched
+    against, and a future consumer that forgets to fold should not be the one
+    that discovers the convention.
+    """
+
+    def test_names_are_resolved_to_their_printed_spelling(self) -> None:
+        from effects.application.holdout_cards import depletion_list
+
+        listed = depletion_list(
+            {"soul echo": "cardsfolder/s/soul_echo.txt"},
+            {"soul echo": ["SP$ Bespoke | Weird$ True"]},
+            permille=1000, max_carriers=8,
+            canonical_names={"Soul Echo": "2004-10-01"},
+        )
+
+        assert listed == ["Soul Echo"]
+
+    def test_an_unresolvable_name_keeps_the_converted_spelling(self) -> None:
+        """A token or a card MTGJSON has never heard of still gets depleted."""
+        from effects.application.holdout_cards import depletion_list
+
+        listed = depletion_list(
+            {"nonesuch": "cardsfolder/n/nonesuch.txt"},
+            {"nonesuch": ["SP$ Bespoke | Weird$ True"]},
+            permille=1000, max_carriers=8,
+            canonical_names={"Soul Echo": "2004-10-01"},
+        )
+
+        assert listed == ["nonesuch"]

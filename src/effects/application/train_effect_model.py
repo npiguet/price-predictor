@@ -230,12 +230,33 @@ def sample_weights(
 # ── the split ───────────────────────────────────────────────────────────
 
 
+def fold_card_name(name: str) -> str:
+    """A card name in the one spelling both sides of the boundary agree on.
+
+    Converted card text is lowercased, so every name read out of
+    ``output/cardsfolder/`` arrives as ``soul echo``. Forge's own
+    ``getName()`` — and so every record's ``EntityState.name`` and every
+    booster's cards — carries printed case, ``Soul Echo``. Comparing the two
+    directly never matches, and nothing says so: a collection run told to
+    deplete its pools depletes nothing and writes an ordinary corpus.
+
+    ``lower()`` rather than ``casefold()`` to agree with the Java side's
+    ``toLowerCase(Locale.ROOT)``; the two differ on characters no card name
+    has, and a holdout the two languages disagree about is the same bug again.
+    """
+    return name.lower()
+
+
 @dataclass(frozen=True, slots=True)
 class HeldOutCards:
     """The card-disjoint holdout, addressable both ways a record names a card.
 
     A record names a card by the entity names in its snapshot and by the script
     files its provenance keys point at; matching on either catches both.
+
+    ``names`` is folded on construction (:func:`fold_card_name`), because the
+    two sides of this comparison spell a card differently and a caller that
+    passed printed case would produce a holdout matching nothing.
     """
 
     names: frozenset[str]
@@ -244,6 +265,11 @@ class HeldOutCards:
     #: carries one, so this is also gate 1's unique-text slice — sizing the
     #: stratum needs no scan of the training corpus.
     texts: frozenset[str] = frozenset()
+
+    def __post_init__(self) -> None:
+        folded = frozenset(fold_card_name(name) for name in self.names)
+        if folded != self.names:
+            object.__setattr__(self, "names", folded)
 
     def __len__(self) -> int:
         return len(self.script_files or self.names)
@@ -366,7 +392,7 @@ def record_names_held_out_card(
 ) -> bool:
     """Whether this record names a held-out card, acting or in context."""
     for entity in record.state.entities:
-        if entity.name in held_out.names:
+        if fold_card_name(entity.name) in held_out.names:
             return True
     for key in record.ability or ():
         if key.script_file in held_out.script_files:

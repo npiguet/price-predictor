@@ -82,7 +82,9 @@ class TestNewestFirstHoldout:
         files, printings = self._corpus(100)
         held = newest_first_holdout(files, printings)
         newest = sorted(printings, key=lambda n: printings[n], reverse=True)
-        assert held.names == set(newest[: len(held.names)])
+        assert held.names == {
+            name.lower() for name in newest[: len(held.names)]
+        }, "HeldOutCards folds its names; the holdout is the same cards"
 
     def test_the_holdout_is_deterministic(self):
         files, printings = self._corpus(100)
@@ -253,3 +255,42 @@ def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     )
 
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
+
+
+class TestTheConvertedToRuntimeNameBoundary:
+    """Card names change case crossing from the converted tree to Forge.
+
+    `load_card_files` reads names out of converted card text, which is
+    lowercased (`name: soul echo`). Forge's own `getName()` and every record's
+    `EntityState.name` are printed case (`Soul Echo`). Matching one against the
+    other silently never fires, which is how a depleted collection run came back
+    holding 22% of its games tainted while reporting nothing wrong.
+
+    Every test in this file that builds both sides from the same literal misses
+    this, which is why it needs its own.
+    """
+
+    def test_a_printed_case_record_matches_a_converted_case_holdout(self) -> None:
+        held = HeldOutCards(
+            names=frozenset({"soul echo"}), script_files=frozenset(),
+        )
+        record = _record("g1", entities=(_entity("Soul Echo"),))
+
+        assert record_names_held_out_card(record, held) is True
+
+    def test_a_card_outside_the_holdout_still_does_not_match(self) -> None:
+        held = HeldOutCards(
+            names=frozenset({"soul echo"}), script_files=frozenset(),
+        )
+        record = _record("g1", entities=(_entity("Grizzly Bears"),))
+
+        assert record_names_held_out_card(record, held) is False
+
+    def test_accented_names_fold_the_same_way_java_does(self) -> None:
+        """`toLowerCase(Locale.ROOT)` on the Java side; these must agree."""
+        held = HeldOutCards(
+            names=frozenset({"lim-dûl's vault"}), script_files=frozenset(),
+        )
+        record = _record("g1", entities=(_entity("Lim-Dûl's Vault"),))
+
+        assert record_names_held_out_card(record, held) is True

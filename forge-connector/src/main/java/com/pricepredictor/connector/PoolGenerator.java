@@ -11,7 +11,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -122,7 +124,8 @@ public class PoolGenerator {
         return openSinglePool(boosterTemplate, excluded);
     }
 
-    private List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, Set<String> excluded) {
+    private List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, Set<String> raw) {
+        Set<String> excluded = fold(raw);
         List<PaperCard> pool = new ArrayList<>();
         Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);
         int replacementBoosters = 0;
@@ -132,7 +135,7 @@ public class PoolGenerator {
                 if (card.getRules().getMainPart().getType().isBasicLand()) {
                     continue;
                 }
-                if (!excluded.contains(card.getName())) {
+                if (!excluded.contains(fold(card.getName()))) {
                     pool.add(card);
                     continue;
                 }
@@ -152,6 +155,31 @@ public class PoolGenerator {
         return pool;
     }
 
+    /**
+     * A card name in the one spelling both sides of the boundary agree on.
+     *
+     * <p>The exclusion list is written by {@code effects holdout-cards}, which
+     * reads names out of the converted card tree, and converted text is
+     * lowercased: it says {@code soul echo} where Forge says {@code Soul Echo}.
+     * Comparing the two directly matches nothing, and a run told to deplete its
+     * pools depletes none of them without saying so.
+     *
+     * <p>{@code Locale.ROOT} to agree with the Python side's {@code lower()}. A
+     * Turkish default locale folds {@code I} to a dotless {@code i}, and the two
+     * languages would then disagree about the holdout.
+     */
+    private static String fold(String name) {
+        return name.toLowerCase(Locale.ROOT);
+    }
+
+    private static Set<String> fold(Set<String> names) {
+        Set<String> folded = new HashSet<>(names.size());
+        for (String name : names) {
+            folded.add(fold(name));
+        }
+        return folded;
+    }
+
     private PaperCard takeSpare(Map<CardRarity, Deque<PaperCard>> spares, CardRarity rarity) {
         Deque<PaperCard> queue = spares.get(rarity);
         return queue == null || queue.isEmpty() ? null : queue.poll();
@@ -164,7 +192,7 @@ public class PoolGenerator {
             Set<String> excluded) {
         for (PaperCard card : new UnOpenedProduct(boosterTemplate).get()) {
             if (card.getRules().getMainPart().getType().isBasicLand()
-                    || excluded.contains(card.getName())) {
+                    || excluded.contains(fold(card.getName()))) {
                 continue;
             }
             spares.computeIfAbsent(card.getRarity(), r -> new ArrayDeque<>()).add(card);

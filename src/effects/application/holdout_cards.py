@@ -26,19 +26,35 @@ def depletion_list(
     *,
     permille: int,
     max_carriers: int,
+    canonical_names: Mapping[str, object] | None = None,
 ) -> list[str]:
-    """Every card carrying a held-out ability text, sorted.
+    """Every card carrying a held-out ability text, in printed case, sorted.
 
-    Sorted because the file is compared between runs: one that reordered would
-    read as a changed holdout when nothing had changed.
+    Args:
+        canonical_names: any mapping keyed by printed card name — the
+            first-printing table serves — used to resolve the converted tree's
+            lowercase spelling back to the one Forge prints. A name it does not
+            know keeps the converted spelling; every comparison folds case, so
+            an unresolved name still depletes.
+
+    Printed case because this file crosses into another package and into Forge:
+    an operator reads it, and ``getName()`` is what it is matched against.
+    Sorted because the file is compared between runs, and one that reordered
+    would read as a changed holdout when nothing had changed.
     """
-    from effects.application.train_effect_model import text_keyed_holdout
+    from effects.application.train_effect_model import (
+        fold_card_name,
+        text_keyed_holdout,
+    )
 
     held = text_keyed_holdout(
         dict(card_files), texts_by_card,
         permille=permille, max_carriers=max_carriers,
     )
-    return sorted(held.names)
+    printed = {
+        fold_card_name(name): name for name in (canonical_names or {})
+    }
+    return sorted(printed.get(name, name) for name in held.names)
 
 
 def write_depletion_list(names: Iterable[str], out: Path) -> int:

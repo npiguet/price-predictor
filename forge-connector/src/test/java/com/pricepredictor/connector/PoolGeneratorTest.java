@@ -88,6 +88,27 @@ class PoolGeneratorTest {
     }
 
     @Test
+    void exclusionIsCaseInsensitive() {
+        // The list comes from `effects holdout-cards`, which reads names out of
+        // the converted card tree — and converted text is lowercased, so it says
+        // "soul echo" where Forge says "Soul Echo". Comparing the two directly
+        // matched nothing, and a run told to deplete its pools silently
+        // depleted none of them.
+        PoolGenerator generator = new PoolGenerator();
+        List<String> reference = generator.generate("RVR", 1).get(0);
+        Set<String> lowercased = reference.subList(0, 10).stream()
+                .map(name -> name.toLowerCase(java.util.Locale.ROOT))
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<String> pool = generator.generate("RVR", 1, lowercased).get(0);
+
+        for (String cardName : pool) {
+            assertFalse(lowercased.contains(cardName.toLowerCase(java.util.Locale.ROOT)),
+                    "Excluded card survived a lowercased exclusion list: " + cardName);
+        }
+    }
+
+    @Test
     void generatePoolWithNoExclusionsIsTheOrdinaryPool() {
         PoolGenerator generator = new PoolGenerator();
         List<String> pool = generator.generate("RVR", 1, Set.of()).get(0);
