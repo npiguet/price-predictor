@@ -18,11 +18,9 @@ from __future__ import annotations
 import json
 
 from effects.application.train_effect_model import (
-    CARD_HOLDOUT_FRACTION,
     HeldOutCards,
     load_card_files,
     load_first_printings,
-    newest_first_holdout,
     record_names_held_out_card,
 )
 from effects.domain.provenance import ProvenanceKey
@@ -61,62 +59,6 @@ def _record(game_id: str, entities=(), ability=None, **overrides) -> EffectRecor
     }
     defaults.update(overrides)
     return EffectRecord(**defaults)
-
-
-class TestNewestFirstHoldout:
-    def _corpus(self, n: int) -> tuple[dict[str, str], dict[str, str]]:
-        files = {f"Card {i:03d}": f"cardsfolder/c/card_{i:03d}.txt" for i in range(n)}
-        # Card 000 is the newest; dates descend with the index.
-        printings = {
-            f"Card {i:03d}": f"{2026 - i // 12:04d}-{12 - i % 12:02d}-01"
-            for i in range(n)
-        }
-        return files, printings
-
-    def test_the_holdout_covers_at_least_eight_percent(self):
-        files, printings = self._corpus(100)
-        held = newest_first_holdout(files, printings)
-        assert len(held.names) / len(files) >= CARD_HOLDOUT_FRACTION
-
-    def test_it_takes_the_newest_cards_not_random_ones(self):
-        files, printings = self._corpus(100)
-        held = newest_first_holdout(files, printings)
-        newest = sorted(printings, key=lambda n: printings[n], reverse=True)
-        assert held.names == {
-            name.lower() for name in newest[: len(held.names)]
-        }, "HeldOutCards folds its names; the holdout is the same cards"
-
-    def test_the_holdout_is_deterministic(self):
-        files, printings = self._corpus(100)
-        assert newest_first_holdout(files, printings) == newest_first_holdout(
-            files, printings
-        )
-
-    def test_a_card_with_no_printing_date_sorts_as_oldest(self):
-        """An unrecognized name must not become "newest" by accident."""
-        files, printings = self._corpus(50)
-        files["Mystery Card"] = "cardsfolder/m/mystery_card.txt"
-        held = newest_first_holdout(files, printings)
-        assert "Mystery Card" not in held.names
-
-    def test_the_holdout_records_both_names_and_script_files(self):
-        files, printings = self._corpus(50)
-        held = newest_first_holdout(files, printings)
-        assert len(held.names) == len(held.script_files)
-        assert all(f.startswith("cardsfolder/") for f in held.script_files)
-
-    def test_token_scripts_are_not_in_the_denominator(self):
-        """They are not in the printing order, so they cannot be held out."""
-        files, printings = self._corpus(100)
-        held = newest_first_holdout(files, printings)
-        assert all("tokenscripts" not in f for f in held.script_files)
-
-    def test_an_empty_corpus_holds_nothing_out(self):
-        assert newest_first_holdout({}, {}) == HeldOutCards(frozenset(), frozenset())
-
-    def test_the_fraction_is_configurable(self):
-        files, printings = self._corpus(100)
-        assert len(newest_first_holdout(files, printings, fraction=0.20).names) == 20
 
 
 class TestRecordNamesHeldOutCard:

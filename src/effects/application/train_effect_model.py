@@ -21,7 +21,6 @@ look well-observed when it has been seen in one board state.
 from __future__ import annotations
 
 import logging
-import math
 import random
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -66,8 +65,6 @@ UNIFORM_CLASSES: frozenset[str] = frozenset({
     CLASS_COMBAT, CLASS_PLAYABILITY_LEGALITY,
 })
 
-#: Fraction of the card corpus held out card-disjointly (FR-088).
-CARD_HOLDOUT_FRACTION = 0.08
 #: An eligible ability text is held out when crc32(text) % 1000 falls below
 #: this. Keyed on the text rather than the card because the model never reads a
 #: card's name, and stable per text so a depleted corpus stays valid (FR-088).
@@ -348,43 +345,6 @@ def load_card_texts(
             line.script_text for line in sidecar.lines if line.script_text
         ]
     return out
-
-
-def newest_first_holdout(
-    card_files: dict[str, str],
-    first_printing: dict[str, str],
-    *,
-    fraction: float = CARD_HOLDOUT_FRACTION,
-) -> HeldOutCards:
-    """Hold out the newest-printed cards until they cover ``fraction``.
-
-    Args:
-        card_files: ``card name -> script file``, one entry per converted card
-            under ``output/cardsfolder/``. Token scripts and variant scripts are
-            not in the printing order and are **not** in this denominator.
-        first_printing: ``card name -> first-printing release date`` (ISO), from
-            ``--printings-path``.
-
-    Newest-first is the point: the holdout stands in for deployment to a set the
-    model has never seen, and taking a random 8% would hold out cards whose
-    mechanics are all over the training corpus already.
-
-    A card with no printing date sorts as oldest, so an unrecognized name never
-    ends up in the holdout by accident.
-    """
-    if not card_files:
-        return HeldOutCards(frozenset(), frozenset())
-    target = math.ceil(len(card_files) * fraction)
-    ordered = sorted(
-        card_files,
-        key=lambda name: (first_printing.get(name) or "", name),
-        reverse=True,
-    )
-    chosen = ordered[:target]
-    return HeldOutCards(
-        names=frozenset(chosen),
-        script_files=frozenset(card_files[name] for name in chosen),
-    )
 
 
 def record_names_held_out_card(
