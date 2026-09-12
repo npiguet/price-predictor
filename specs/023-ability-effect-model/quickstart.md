@@ -166,11 +166,14 @@ Instrumentation is an opt-in on a command that already exists. The flag costs no
 it rides matches that were going to be played anyway — and the sealed corpora keep their exact format,
 so this doubles as a sealed self-play run. Ctrl-C to stop.
 
-The three fork flags are off by default and are what makes this a collect-everything run. Naming all
-eight damage-step keywords collects a probe branch for each, which is what gate 2 checks its model-side
-perturbation against; naming none takes no probe at all. Forks are the only expensive mechanism here —
-each costs a game copy that re-parses every card from its script — so the per-game budgets are the
-throttle, not the keyword list.
+Only one of the three fork flags is off by default, and it is not the one that reads like a switch.
+`--interventions-per-game` and `--probes-per-game` both default to 2, so a patched run already forks
+for interventions whether or not you name them; naming them here makes the budget explicit rather
+than turning it on. `--probe-keywords` defaults to empty and is what actually gates probes. Naming
+all eight damage-step keywords collects a probe branch for each, which is what gate 2 checks its
+model-side perturbation against; naming none takes no probe at all. Forks are the only expensive
+mechanism here — each costs a game copy that re-parses every card from its script — so the per-game
+budgets are the throttle, not the keyword list.
 
 **`--probes-per-game` is a budget, not a switch.** Without `--probe-keywords` it buys nothing, and a
 run that omits the keyword list collects a corpus with zero probe forks in it — which is what the
@@ -474,7 +477,7 @@ Every step above can be dropped, and the ones after it still run:
 |---|---|
 | Step 0, the engine patch | Three of eight sampling classes, `degraded` mode, no forks. Evasion keywords will not separate — their signal is playability records. |
 | `--probe-keywords` in steps 3–4 | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
-| `--interventions-per-game` | Cards the AI can never afford to play keep no resolution record. |
+| `--interventions-per-game 0` | Cards the AI can never afford to play keep no resolution record. Omitting the flag does not do this: it defaults to 2, so interventions run anyway. |
 | Step 3b, the full-strength run | No card-disjoint stratum, so `train-effect-model` fails before its first epoch. Gate 1 has nothing to measure. |
 | `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. The run looks identical while it happens. |
 | Step 4, `collect-coverage` | Cards in no sealed-legal set appear in no record at all. |
