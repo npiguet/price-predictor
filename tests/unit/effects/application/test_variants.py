@@ -1,13 +1,15 @@
 """Synthetic script variants (T138).
 
-Four properties: a variant record carries ``synthetic`` and ``variant_of``, a
-variant of a held-out card is held out **with it**, variants contribute no
-pairing loss, and no variant is ever converted to prose.
+Four properties: a variant record carries ``synthetic`` and ``variant_of``, no
+variant is generated from a held-out card, variants contribute no pairing loss,
+and no variant is ever converted to prose.
 
-The held-out rule is the one that would be silently wrong: a variant of a
-held-out card puts that card's mechanics in front of the model under a different
-name, and the card-disjoint split would stop meaning "deployment to an unseen
-set" without anything looking broken.
+The held-out rule is the one that would be silently wrong. Perturbing a
+parameter changes the text, so a variant of a held-out card carries a text that
+is *not* held out and would reach training — teaching that card's mechanics
+under an edit the split cannot see. Skipping generation is the only point where
+the rule can be enforced, because by collection time the text no longer matches
+anything in the holdout.
 """
 
 from __future__ import annotations
@@ -185,9 +187,9 @@ class TestVariantGeneration:
             encoding="utf-8"
         )
 
-    def test_a_variant_of_a_held_out_card_is_held_out_with_it(self, tmp_path):
-        """Otherwise a held-out card's mechanics reach the model under another
-        name, and the card-disjoint split stops meaning what it says."""
+    def test_no_variant_is_generated_from_a_held_out_card(self, tmp_path):
+        """A perturbed text is not itself held out, so the variant would
+        reach training and teach the held-out card's mechanics anyway."""
         source = tmp_path / "cards"
         source.mkdir()
         self._write_source(source, "bolt", "Lightning Bolt", _BOLT_SCRIPT)

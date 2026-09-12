@@ -38,6 +38,10 @@ DEFAULT_VOCAB_PATH = "models/effects/vocab.txt"
 DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"
 DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
 DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
+#: Restated rather than imported, so `--help` stays free of torch. The
+#: trainer's own constants are the source; `test_holdout_cli.py` pins them.
+HOLDOUT_PERMILLE = 20
+HOLDOUT_MAX_CARRIERS = 8
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
 DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
@@ -360,6 +364,90 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
         caps=CollectionCaps.from_args(args),
     )
     return collect(config)
+
+
+# ── holdout-cards ───────────────────────────────────────────────────────
+
+
+def _holdout_cards_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "holdout-cards",
+        help=(
+            "Write the depletion list: every card carrying a held-out ability "
+            "text, for 'sealed generate-pools --exclude-cards'"
+        ),
+    )
+    parser.set_defaults(func=run_holdout_cards)
+    parser.add_argument(
+        "--out", type=str, required=True,
+        help="Destination file, one Forge canonical card name per line",
+    )
+    parser.add_argument(
+        "--cards-folder", type=str, default="output/cardsfolder/",
+        help="Converted card tree (default: output/cardsfolder/)",
+    )
+    parser.add_argument(
+        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        help=(
+            "An eligible text is held out when crc32(text) %% 1000 is below "
+            f"this (default: {HOLDOUT_PERMILLE})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        help=(
+            "A text more cards than this carry is never eligible "
+            f"(default: {HOLDOUT_MAX_CARRIERS})"
+        ),
+    )
+
+
+def run_holdout_cards(args: argparse.Namespace) -> int:
+    """Write the list, and report what share of the corpus it removes.
+
+    The share is the number an operator needs: it is what a depleted pool loses,
+    and it is the knob the two holdout flags actually turn.
+    """
+    from effects.application.holdout_cards import (
+        depletion_list,
+        write_depletion_list,
+    )
+    from effects.application.train_effect_model import (
+        load_card_files,
+        load_card_texts,
+    )
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    cards_folder = Path(args.cards_folder)
+    if not cards_folder.is_dir():
+        print(f"no converted cards under {cards_folder}")
+        return 1
+
+    card_files = load_card_files(cards_folder)
+    if not card_files:
+        print(f"no converted cards under {cards_folder}")
+        return 1
+
+    sidecars = SidecarCache({"cardsfolder": cards_folder})
+    texts_by_card = load_card_texts(card_files, sidecars)
+    names = depletion_list(
+        card_files, texts_by_card,
+        permille=args.holdout_permille,
+        max_carriers=args.holdout_max_carriers,
+    )
+    written = write_depletion_list(names, Path(args.out))
+    share = 100.0 * written / len(card_files)
+    print(
+        f"{written} of {len(card_files)} cards ({share:.1f}%) carry a held-out "
+        f"text -> {args.out}"
+    )
+    if not written:
+        print(
+            "Nothing to deplete. Raise --holdout-permille, or check that the "
+            "converted tree has sidecars with script text."
+        )
+        return 1
+    return 0
 
 
 # ── field-coverage ──────────────────────────────────────────────────────
@@ -1025,6 +1113,7 @@ _SUBCOMMAND_BUILDERS = (
     _extract_keyword_definitions_parser,
     _collect_coverage_parser,
     _field_coverage_parser,
+    _holdout_cards_parser,
     _validate_corpus_parser,
     _collect_variants_parser,
     _train_effect_model_parser,

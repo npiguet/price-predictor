@@ -296,6 +296,17 @@ def _build_generate_pools_parser(subparsers) -> None:
         ),
     )
     generate_parser.add_argument(
+        "--exclude-cards",
+        default=None,
+        help=(
+            "File of card names, one per line, that no booster may contain. "
+            "Written by 'python -m effects holdout-cards'; a plain file rather "
+            "than a computed rule, so sealed needs no import of effects. Pools "
+            "built with it are the depleted training corpus for the effect "
+            "model; without it, the full-strength validation corpus."
+        ),
+    )
+    generate_parser.add_argument(
         "--size",
         type=int,
         default=10000,
@@ -1297,7 +1308,12 @@ def run_generate_pools(args: argparse.Namespace) -> int:
     use_case = GeneratePoolsUseCase()
 
     try:
-        use_case.execute(set_code, pool_count, pools_path, connector)
+        use_case.execute(
+            set_code, pool_count, pools_path, connector,
+            exclude_cards=(
+                Path(args.exclude_cards) if args.exclude_cards else None
+            ),
+        )
     except FileNotFoundError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2

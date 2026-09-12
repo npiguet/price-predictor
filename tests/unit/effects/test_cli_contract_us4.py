@@ -129,6 +129,7 @@ class TestSubcommandTable:
             "build-vocab", "extract-keyword-definitions", "collect-coverage",
             "field-coverage", "validate-corpus", "collect-variants",
             "train-effect-model", "encode-abilities", "evaluate-effect-model",
+            "holdout-cards",
         }
 
     def test_an_unknown_flag_is_rejected(self):

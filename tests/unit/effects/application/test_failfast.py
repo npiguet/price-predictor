@@ -299,3 +299,41 @@ class TestConfigDefaults:
     def test_an_explicit_model_output_wins(self, tmp_path):
         config = TrainEffectModelConfig(variant="identity", model_output=tmp_path)
         assert config.resolved_model_output() == tmp_path
+
+
+class TestHoldoutGuard:
+    """An empty card-disjoint stratum must stop the run (T160, FR-088b).
+
+    Left alone it produces a training run that writes nothing: `_validate` over
+    no records returns `nan`, `nan < inf` is False, so `EarlyStopper` never
+    records a best, the checkpoint is never saved, and the run early-stops after
+    its patience and exits 0. Hours of GPU time and no artifact.
+    """
+
+    def test_an_empty_card_disjoint_stratum_raises(self) -> None:
+        from effects.application.train_effect_model import (
+            EmptyHoldoutError,
+            check_holdout,
+        )
+
+        with pytest.raises(EmptyHoldoutError) as raised:
+            check_holdout(card_disjoint_records=0, unique_text_records=0, minimum=2000)
+
+        assert "full-strength" in str(raised.value)
+
+    def test_a_thin_stratum_warns_and_names_the_shortfall(self) -> None:
+        from effects.application.train_effect_model import check_holdout
+
+        warning = check_holdout(
+            card_disjoint_records=5_000, unique_text_records=120, minimum=2000,
+        )
+
+        assert warning is not None
+        assert "120" in warning and "2000" in warning
+
+    def test_a_healthy_stratum_warns_about_nothing(self) -> None:
+        from effects.application.train_effect_model import check_holdout
+
+        assert check_holdout(
+            card_disjoint_records=50_000, unique_text_records=9_000, minimum=2000,
+        ) is None

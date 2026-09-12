@@ -149,3 +149,73 @@ class TestMetrics:
         assert metrics.affected_gate_f1 == 0.5
         assert metrics.zone_outcome_accuracy == 0.4
         assert metrics.mean_poisson_deviance == 1.2
+
+
+class TestRecencyBreakdown:
+    """Recency is a column of the stratum, not a second holdout (T161, FR-088c).
+
+    A text hash does not prefer novel mechanics, and novel mechanics are the
+    harder generalization. Splitting the stratum by whether a held-out text's
+    first printing is recent recovers that without maintaining a second holdout
+    and a second depleted corpus.
+    """
+
+    def test_it_splits_the_stratum_by_first_printing(self) -> None:
+        from effects.application.gate_one import partition_by_recency
+
+        first_printing = {
+            "Old Card": "2011-09-30",
+            "New Card": "2026-04-17",
+            "Also New": "2026-08-01",
+        }
+        cards_of = {"r1": "Old Card", "r2": "New Card", "r3": "Also New"}
+
+        recent, older = partition_by_recency(
+            ["r1", "r2", "r3"], first_printing,
+            card_of=cards_of.get, since="2026-01-01",
+        )
+
+        assert recent == ["r2", "r3"]
+        assert older == ["r1"]
+
+    def test_an_unknown_printing_counts_as_older(self) -> None:
+        """A card with no printing date must not inflate the recent slice."""
+        from effects.application.gate_one import partition_by_recency
+
+        recent, older = partition_by_recency(
+            ["r1"], {}, card_of=lambda _: "Mystery", since="2026-01-01",
+        )
+
+        assert recent == []
+        assert older == ["r1"]
+
+
+class TestRecencyCutoff:
+    """What counts as "newest sets" for the breakdown (T161).
+
+    A date rather than a set list, derived the way the retired recency holdout
+    chose cards: newest-first until they cover a fraction of the corpus. That
+    keeps the breakdown reporting the same population the old holdout tested.
+    """
+
+    def test_it_is_the_date_of_the_last_card_inside_the_fraction(self) -> None:
+        from effects.application.gate_one import recency_cutoff
+
+        first_printing = {
+            "A": "2020-01-01", "B": "2021-01-01", "C": "2022-01-01",
+            "D": "2023-01-01", "E": "2024-01-01",
+        }
+
+        assert recency_cutoff(first_printing, fraction=0.4) == "2023-01-01"
+
+    def test_an_empty_corpus_has_no_cutoff(self) -> None:
+        from effects.application.gate_one import recency_cutoff
+
+        assert recency_cutoff({}, fraction=0.08) is None
+
+    def test_a_card_with_no_date_never_sets_the_cutoff(self) -> None:
+        from effects.application.gate_one import recency_cutoff
+
+        first_printing = {"A": "2020-01-01", "B": "", "C": "2024-01-01"}
+
+        assert recency_cutoff(first_printing, fraction=0.7) == "2020-01-01"

@@ -115,9 +115,11 @@ def generate_variants(
 ) -> list[GeneratedVariant]:
     """Write perturbed scripts into the variant tree.
 
-    A variant of a held-out card is skipped outright: putting a held-out card's
-    mechanics in front of the model under another name would make the
-    card-disjoint split stop meaning "deployment to an unseen set".
+    No variant is generated from a held-out card. Perturbing a parameter
+    changes the text, so the variant's text is not itself held out and the
+    split would route it to training — teaching that card's mechanics under an
+    edit nothing downstream can detect. Generation is the only point where the
+    rule can be enforced.
     """
     rng = random.Random(seed)
     output_path = Path(output_path)

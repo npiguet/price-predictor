@@ -92,9 +92,10 @@ class TestGeneratePoolsRandomSet:
         captured: dict = {}
 
         class FakeConnector:
-            def generate(self, set_code, pool_count, pools_path):
+            def generate(self, set_code, pool_count, pools_path, exclude_cards=None):
                 captured["set_code"] = set_code
                 captured["pools_path"] = pools_path
+                captured["exclude_cards"] = exclude_cards
                 return 0
 
         monkeypatch.setattr(
@@ -117,9 +118,10 @@ class TestGeneratePoolsRandomSet:
         captured: dict = {}
 
         class FakeConnector:
-            def generate(self, set_code, pool_count, pools_path):
+            def generate(self, set_code, pool_count, pools_path, exclude_cards=None):
                 captured["set_code"] = set_code
                 captured["pools_path"] = pools_path
+                captured["exclude_cards"] = exclude_cards
                 return 0
 
         monkeypatch.setattr(

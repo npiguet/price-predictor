@@ -97,6 +97,12 @@ class SplitProvenance:
     keyword_definitions_hash: str = ""
     #: The implemented keyword held out of training, or None.
     withheld_keyword: str | None = None
+    #: The holdout flags the split was computed under (FR-134). Recorded because
+    #: a depleted corpus was composed against these values: a run that inherits
+    #: the split but reads a corpus depleted against different ones would train
+    #: on cards it believes are held out, with nothing to say so.
+    holdout_permille: int = 0
+    holdout_max_carriers: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -112,6 +118,8 @@ class SplitProvenance:
             vocab_hash=data.get("vocab_hash", ""),
             keyword_definitions_hash=data.get("keyword_definitions_hash", ""),
             withheld_keyword=data.get("withheld_keyword"),
+            holdout_permille=int(data.get("holdout_permille", 0)),
+            holdout_max_carriers=int(data.get("holdout_max_carriers", 0)),
         )
 
     @property

@@ -14,6 +14,7 @@ class GeneratePoolsUseCase:
         pool_count: int,
         pools_path: Path,
         connector,
+        exclude_cards: Path | None = None,
     ) -> None:
         """Generate sealed pools and write them to pools_path/pools.txt.
 
@@ -23,10 +24,11 @@ class GeneratePoolsUseCase:
             pool_count: Number of sealed pools to generate.
             pools_path: Directory where pools.txt will be written.
             connector: PoolConnector (or compatible) instance.
+            exclude_cards: Optional file of card names no booster may hold.
 
         Raises:
             FileNotFoundError: If the JAR or Java is not found.
             RuntimeError: If the connector subprocess fails.
         """
         pools_path.mkdir(parents=True, exist_ok=True)
-        connector.generate(set_code, pool_count, pools_path)
+        connector.generate(set_code, pool_count, pools_path, exclude_cards)

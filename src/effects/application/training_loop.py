@@ -53,6 +53,7 @@ from effects.application.train_effect_model import (
     HeldOutCards,
     SplitAccumulator,
     TrainEffectModelConfig,
+    check_holdout,
     class_counts,
     epoch_shards,
     learning_rate_at,
@@ -63,6 +64,7 @@ from effects.application.train_effect_model import (
     sample_weights,
     sampling_class,
     steps_per_shard,
+    unique_text_resolution_records,
     variant_masks,
     warmup_steps,
 )
@@ -331,6 +333,21 @@ class TrainingLoop:
         sidecars = self._build_sidecars()
         widths = self._feature_widths(self.probe)
 
+        # Sized after the sidecars exist, because an acting line's text is what
+        # says whether a record is in gate 1's slice. An empty stratum stops the
+        # run: left alone it trains for its full patience, validates `nan` every
+        # epoch, and saves no checkpoint at all.
+        text_of = self._batcher(tokenizer, sidecars, widths).text_of
+        warning = check_holdout(
+            card_disjoint_records=len(self.card_disjoint),
+            unique_text_records=unique_text_resolution_records(
+                self.card_disjoint, self.held_out.texts, text_of=text_of,
+            ),
+            minimum=self.config.min_holdout_records,
+        )
+        if warning:
+            logger.warning("%s", warning)
+
         encoder_config = AbilityEncoderConfig(
             vocab_size=tokenizer.vocab_size,
             e_dim=self.config.e_dim,
@@ -562,6 +579,8 @@ class TrainingLoop:
                 Path(self.config.keyword_definitions)
             ),
             withheld_keyword=self.config.withhold_keyword,
+            holdout_permille=self.config.holdout_permille,
+            holdout_max_carriers=self.config.holdout_max_carriers,
         )
 
 

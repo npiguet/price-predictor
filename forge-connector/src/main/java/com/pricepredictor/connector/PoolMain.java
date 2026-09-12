@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.StringJoiner;
 
 /**
@@ -34,6 +35,7 @@ public class PoolMain {
         String setCode = null;
         int poolCount = 10000;
         String poolsPath = "./output/sealed/pools/";
+        String excludePath = null;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
@@ -53,11 +55,26 @@ public class PoolMain {
                 case "--pools-path" -> {
                     if (i + 1 < args.length) poolsPath = args[++i];
                 }
+                case "--exclude-cards" -> {
+                    if (i + 1 < args.length) excludePath = args[++i];
+                }
             }
         }
 
         try {
             ForgeEnvironmentInitializer.initialize();
+
+            // A depleted run: the named cards never enter a booster, so no
+            // training game holds one and none has to be discarded later.
+            Set<String> excluded = Set.of();
+            if (excludePath != null) {
+                excluded = Set.copyOf(Files.readAllLines(Path.of(excludePath)).stream()
+                        .map(String::trim)
+                        .filter(line -> !line.isEmpty())
+                        .toList());
+                System.out.println("Depleting pools of " + excluded.size() + " cards from "
+                        + excludePath);
+            }
 
             PoolGenerator generator = new PoolGenerator();
             Path outputDir = Path.of(poolsPath);
@@ -94,7 +111,7 @@ public class PoolMain {
                         poolSetCode = eligibleSets.get(random.nextInt(eligibleSets.size()));
                     }
 
-                    List<List<String>> pools = generator.generate(poolSetCode, batch);
+                    List<List<String>> pools = generator.generate(poolSetCode, batch, excluded);
                     for (List<String> pool : pools) {
                         StringJoiner joiner = new StringJoiner("|");
                         for (String name : pool) {

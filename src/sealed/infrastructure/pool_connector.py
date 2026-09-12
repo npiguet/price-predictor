@@ -15,6 +15,7 @@ class PoolConnector:
         set_code: str | None,
         pool_count: int,
         pools_path: Path,
+        exclude_cards: Path | None = None,
     ) -> int:
         """Generate sealed pools by invoking PoolMain via the connector JAR.
 
@@ -24,6 +25,10 @@ class PoolConnector:
                 ``--set`` argument is omitted from the subprocess command).
             pool_count: Number of sealed pools to generate.
             pools_path: Directory where pools.txt will be written.
+            exclude_cards: Optional newline-delimited file of card names no
+                booster may contain. A plain file rather than a computed rule,
+                so ``sealed`` needs no import of ``effects``, which owns the
+                holdout it comes from.
 
         Returns:
             Process exit code (0 = success).
@@ -39,6 +44,8 @@ class PoolConnector:
             "--size", str(pool_count),
             "--pools-path", str(pools_path),
         ])
+        if exclude_cards is not None:
+            main_args.extend(["--exclude-cards", str(exclude_cards)])
 
         result = run_forge_worker(
             "com.pricepredictor.connector.PoolMain",

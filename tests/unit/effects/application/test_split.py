@@ -180,3 +180,76 @@ class TestCorpusLoaders:
         printings = load_first_printings(path)
         assert printings["Front // Back"] == "2020-01-01"
         assert printings["Front"] == "2020-01-01"
+
+
+def test_functional_reprints_are_held_out_together(_ignored=None) -> None:
+    """Searing Spear and Lightning Strike compile to the same script (T158).
+
+    A name-keyed holdout puts one in training and the other in the holdout, and
+    gate 1 then drops those records for having text a training card carries. The
+    two must agree at every threshold, not merely at the extremes.
+    """
+    from effects.application.train_effect_model import text_keyed_holdout
+
+    shared = "SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any"
+    card_files = {
+        "Searing Spear": "cardsfolder/s/searing_spear.txt",
+        "Lightning Strike": "cardsfolder/l/lightning_strike.txt",
+        "Other Thing": "cardsfolder/o/other_thing.txt",
+    }
+    texts_by_card = {
+        "Searing Spear": [shared],
+        "Lightning Strike": [shared],
+        "Other Thing": ["SP$ Draw | NumCards$ 1"],
+    }
+
+    for permille in range(0, 1001, 50):
+        held = text_keyed_holdout(
+            card_files, texts_by_card, permille=permille, max_carriers=8,
+        )
+        assert ("Searing Spear" in held.names) == ("Lightning Strike" in held.names), (
+            f"reprints disagreed at permille={permille}"
+        )
+
+
+def test_unique_text_records_counts_only_held_out_acting_text() -> None:
+    """Gate 1's slice, countable from the holdout alone (T159).
+
+    Under depletion every card carrying a held-out text is absent from the
+    training pools, so "acting text on no training card" and "acting text is
+    held out" are the same set — no corpus scan needed to size the stratum.
+    """
+    from effects.application.train_effect_model import (
+        unique_text_resolution_records,
+    )
+
+    bespoke = ProvenanceKey("cardsfolder/b/bespoke.txt", 0, "spell", 0)
+    common = ProvenanceKey("cardsfolder/c/common.txt", 0, "static", 0)
+    texts = {bespoke: "SP$ Bespoke | Weird$ True", common: "Flying"}
+    held = frozenset({"SP$ Bespoke | Weird$ True"})
+
+    count = unique_text_resolution_records(
+        [
+            _record("g1", ability=(bespoke,)),
+            _record("g1", ability=(common,)),
+            _record("g2", ability=(bespoke,)),
+            _record("g3", ability=None),
+        ],
+        held,
+        text_of=texts.get,
+    )
+
+    assert count == 2
+
+
+def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
+    """The guard needs the texts, not just the cards (T159)."""
+    from effects.application.train_effect_model import text_keyed_holdout
+
+    held = text_keyed_holdout(
+        {"Alpha": "cardsfolder/a/alpha.txt"},
+        {"Alpha": ["SP$ DealDamage | NumDmg$ 3"]},
+        permille=1000, max_carriers=8,
+    )
+
+    assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})

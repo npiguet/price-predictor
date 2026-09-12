@@ -24,9 +24,10 @@ import logging
 import math
 import random
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.domain.effect_model import (
     CLASS_COMBAT,
@@ -40,6 +41,9 @@ from effects.domain.effect_model import (
     SAMPLING_CLASSES,
 )
 from effects.domain.records import EffectRecord, Moment, PlayabilitySubkind, RecordKind
+
+if TYPE_CHECKING:
+    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,17 @@ UNIFORM_CLASSES: frozenset[str] = frozenset({
 
 #: Fraction of the card corpus held out card-disjointly (FR-088).
 CARD_HOLDOUT_FRACTION = 0.08
+#: An eligible ability text is held out when crc32(text) % 1000 falls below
+#: this. Keyed on the text rather than the card because the model never reads a
+#: card's name, and stable per text so a depleted corpus stays valid (FR-088).
+HOLDOUT_PERMILLE = 20
+#: A text more cards than this carry is never eligible. `Flying` is on thousands
+#: of cards and depleting all of them would empty the training corpus.
+HOLDOUT_MAX_CARRIERS = 8
+#: Unique-text resolution records the card-disjoint stratum should hold
+#: before gate 1's margins mean anything. A floor, not a rule: below it
+#: the run warns, at zero it stops.
+MIN_HOLDOUT_RECORDS = 2000
 #: Rarity weight ceiling, as a multiple of the most-observed text's weight.
 RARITY_CAP = 20.0
 RANDOM_SEED = 42
@@ -225,6 +240,10 @@ class HeldOutCards:
 
     names: frozenset[str]
     script_files: frozenset[str]
+    #: The held-out ability texts themselves. Under depletion no training card
+    #: carries one, so this is also gate 1's unique-text slice — sizing the
+    #: stratum needs no scan of the training corpus.
+    texts: frozenset[str] = frozenset()
 
     def __len__(self) -> int:
         return len(self.script_files or self.names)
@@ -250,6 +269,59 @@ class CorpusSplit:
 
     def is_training_game(self, game_id: str) -> bool:
         return game_id not in self.validation_games
+
+
+def text_keyed_holdout(
+    card_files: dict[str, str],
+    texts_by_card: Mapping[str, Iterable[str]],
+    *,
+    permille: int = HOLDOUT_PERMILLE,
+    max_carriers: int = HOLDOUT_MAX_CARRIERS,
+) -> HeldOutCards:
+    """Hold out ability texts, and with them every card carrying one (FR-088).
+
+    Args:
+        card_files: ``card name -> script file``, one entry per converted card
+            under ``output/cardsfolder/``. Token scripts and variant scripts are
+            not in this denominator.
+        texts_by_card: ``card name -> its sidecar's script texts``, from
+            ``load_card_texts``.
+
+    The text rather than the card, because the model never reads a card's name
+    and functional reprints compile to the same script: a name-keyed holdout
+    trains on Lightning Strike while holding out Searing Spear, and gate 1 then
+    drops those records for having text a training card carries.
+    """
+    from effects.domain.text_holdout import select_holdout
+
+    chosen = select_holdout(
+        texts_by_card, permille=permille, max_carriers=max_carriers,
+    )
+    names = frozenset(chosen.cards & card_files.keys())
+    return HeldOutCards(
+        names=names,
+        script_files=frozenset(card_files[name] for name in names),
+        texts=chosen.texts,
+    )
+
+
+def load_card_texts(
+    card_files: Mapping[str, str], sidecars: SidecarCache,
+) -> dict[str, list[str]]:
+    """``card name -> the script texts of its sidecar's lines``.
+
+    The I/O half of the holdout, kept apart from the selection so the rule can
+    be exercised without a converted tree on disk.
+    """
+    out: dict[str, list[str]] = {}
+    for name, script_file in card_files.items():
+        sidecar = sidecars.get(script_file)
+        if sidecar is None:
+            continue
+        out[name] = [
+            line.script_text for line in sidecar.lines if line.script_text
+        ]
+    return out
 
 
 def newest_first_holdout(
@@ -324,6 +396,66 @@ def reserved_shard_indices(count: int, *, reserved: int) -> frozenset[int]:
     return frozenset(
         min(count - 1, int(index * step + step / 2)) for index in range(reserved)
     )
+
+
+#: Records the full-strength probe reads before calling a shard depleted. One
+#: gzip member is 256 records and several games, and a full-strength pool holds
+#: held-out cards throughout, so a shard that shows none in its opening records
+#: almost certainly has none.
+FULL_STRENGTH_PROBE_RECORDS = 512
+
+
+def records_name_held_out(
+    records: Iterable[EffectRecord],
+    held_out: HeldOutCards,
+    *,
+    limit: int = FULL_STRENGTH_PROBE_RECORDS,
+) -> bool:
+    """Whether a shard's opening records name a held-out card.
+
+    A probe rather than a proof, and deliberately so: parsing all 701 shards to
+    decide reservation would read the corpus twice over before the first epoch.
+    It stops at the first held-out card, and gives up after ``limit`` records.
+
+    A shard it misses stays a training shard and loses nothing that matters:
+    ``shard_games`` still routes every one of its games to the card-disjoint
+    stratum when an epoch reads it, so training purity does not depend on this.
+    What a miss costs is that shard's validation records.
+    """
+    from itertools import islice
+
+    return any(
+        record_names_held_out_card(record, held_out)
+        for record in islice(records, limit)
+    )
+
+
+def reserve_shards(
+    shards: Sequence[Path],
+    *,
+    reserved: int,
+    holds_held_out_card,
+) -> frozenset[int]:
+    """Which shard positions are held back from training (FR-125).
+
+    Every shard holding a held-out card is reserved, whatever else is chosen:
+    those are a full-strength collection run's shards, and they are the
+    card-disjoint stratum. Nothing names them — a depleted run's pools could not
+    have produced one — so the corpus says which it is and no flag has to.
+
+    ``reserved`` further shards are then spread evenly over the depleted ones,
+    for the game-disjoint stratum. Taking them from the full-strength shards
+    instead would leave the two strata sharing games.
+    """
+    full_strength = frozenset(
+        index for index, shard in enumerate(shards)
+        if holds_held_out_card(shard)
+    )
+    depleted = [
+        index for index in range(len(shards)) if index not in full_strength
+    ]
+    spread = reserved_shard_indices(len(depleted), reserved=reserved)
+    return full_strength | frozenset(depleted[position] for position in spread)
 
 
 def shard_games(
@@ -617,6 +749,81 @@ class MissingSplitError(RuntimeError):
     """A variant run was started without ``--split-from``."""
 
 
+def unique_text_resolution_records(
+    records: Iterable[EffectRecord],
+    held_out_texts: frozenset[str],
+    *,
+    text_of,
+) -> int:
+    """Resolution records in the stratum whose acting text is held out.
+
+    Args:
+        text_of: a provenance key to the text it is encoded from — the
+            batcher's own, so this counts what gate 1 will actually read.
+
+    This is gate 1's slice. Under depletion no training game holds a card
+    carrying a held-out text, so "acting text appears on no training card" and
+    "acting text is held out" name the same records, and the stratum can be
+    sized from the holdout without scanning the training corpus.
+    """
+    count = 0
+    for record in records:
+        if record.kind is not RecordKind.RESOLUTION:
+            continue
+        for key in record.ability or ():
+            text = text_of(key)
+            if text is not None and text in held_out_texts:
+                count += 1
+                break
+    return count
+
+
+class EmptyHoldoutError(RuntimeError):
+    """The card-disjoint stratum holds no records."""
+
+
+def check_holdout(
+    *,
+    card_disjoint_records: int,
+    unique_text_records: int,
+    minimum: int = MIN_HOLDOUT_RECORDS,
+) -> str | None:
+    """Stop on an empty card-disjoint stratum; warn on a thin one (FR-088b).
+
+    Empty is a failure rather than a warning because the run would otherwise
+    write nothing at all: validation over no records is ``nan``, ``nan`` never
+    compares below the running best, so no epoch is ever recorded as best and
+    the checkpoint is never saved.
+
+    Thin is the more expensive case and can only be a warning, since the floor
+    is a judgement rather than a rule. A few hundred records produce a real
+    number, and best-checkpoint selection, early stopping and gate 1's three
+    margins all read it.
+
+    Returns:
+        A warning to log, or None when the stratum is big enough.
+
+    Raises:
+        EmptyHoldoutError: When the stratum holds no records.
+    """
+    if card_disjoint_records <= 0:
+        raise EmptyHoldoutError(
+            "The card-disjoint stratum holds no records, so there is nothing "
+            "to select a checkpoint on and gate 1 has nothing to measure. "
+            "Collect a full-strength run — pools generated without "
+            "--exclude-cards — into the same shard directory; its games hold "
+            "the held-out cards and become this stratum."
+        )
+    if unique_text_records < minimum:
+        return (
+            f"The card-disjoint stratum holds {unique_text_records} resolution "
+            f"records whose acting text is on no training card, below the "
+            f"{minimum} gate 1 wants. Its margins will be noisy, and so will "
+            "best-checkpoint selection. Collect more full-strength games."
+        )
+    return None
+
+
 def require_split_from(variant: str, split_from: Path | None) -> None:
     """A variant run must inherit the split it is a baseline for (FR-091).
 
@@ -650,6 +857,14 @@ class TrainEffectModelConfig:
     printings_path: Path = field(
         default_factory=lambda: Path("resources/AllPrintings.json"),
     )
+    #: An eligible ability text is held out when crc32(text) % 1000 falls below
+    #: this; a text more than ``holdout_max_carriers`` cards carry is never
+    #: eligible. Pinned for the life of a corpus: a depleted collection run
+    #: composed its pools against these values (FR-134).
+    holdout_permille: int = HOLDOUT_PERMILLE
+    holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
+    #: Unique-text resolution records the card-disjoint stratum warns below.
+    min_holdout_records: int = MIN_HOLDOUT_RECORDS
     keyword_definitions: Path = field(
         default_factory=lambda: Path("output/effects/keyword-definitions.json"),
     )
@@ -883,13 +1098,23 @@ def resolve_holdout(
         (Path(f) for f in config.cards_folders if Path(f).name == "cardsfolder"),
         Path(config.cards_folders[0]),
     )
+    from effects.infrastructure.sidecar_io import SidecarCache
+
     card_files = load_card_files(cards_folder)
-    printings = (
-        load_first_printings(config.printings_path)
-        if Path(config.printings_path).exists()
-        else {}
+    sidecars = SidecarCache({"cardsfolder": cards_folder})
+    held_out = text_keyed_holdout(
+        card_files,
+        load_card_texts(card_files, sidecars),
+        permille=config.holdout_permille,
+        max_carriers=config.holdout_max_carriers,
     )
-    return newest_first_holdout(card_files, printings), None
+    logger.info(
+        "Holdout: %d ability texts, carried by %d of %d cards (%.1f%% of the "
+        "corpus). Every one of them is absent from a depleted training pool.",
+        len(held_out.texts), len(held_out.names), len(card_files),
+        100.0 * len(held_out.names) / max(len(card_files), 1),
+    )
+    return held_out, None
 
 
 def run(config: TrainEffectModelConfig) -> int:
@@ -911,7 +1136,20 @@ def run(config: TrainEffectModelConfig) -> int:
         )
         return 1
 
-    reserved = reserved_shard_indices(len(shards), reserved=config.reserved_shards)
+    held_out, inherited = resolve_holdout(config)
+
+    # Before the even spread, because a shard holding a held-out card came from
+    # a full-strength collection run and *is* the card-disjoint stratum. The
+    # probe reads each shard's opening records rather than all of it.
+    def _full_strength(shard: Path) -> bool:
+        from effects.infrastructure.record_io import read_shard
+
+        return records_name_held_out(read_shard(shard), held_out)
+
+    reserved = reserve_shards(
+        shards, reserved=config.reserved_shards,
+        holds_held_out_card=_full_strength,
+    )
     validation_shards = [shards[index] for index in sorted(reserved)]
     training_shards = [
         shard for index, shard in enumerate(shards) if index not in reserved
@@ -938,7 +1176,6 @@ def run(config: TrainEffectModelConfig) -> int:
 
     from effects.application.training_loop import TrainingLoop
 
-    held_out, inherited = resolve_holdout(config)
     return TrainingLoop(
         config,
         held_out=held_out,

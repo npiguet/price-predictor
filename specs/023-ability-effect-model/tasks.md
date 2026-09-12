@@ -339,21 +339,21 @@ The split unit changes from the card to the ability text, and the card-disjoint 
 depleting the training pools rather than discarding games. Rationale: the design record's *The
 held-out set is built by depleting the pools* and *The holdout unit is ability text*.
 
-- [ ] T156 [P] Test in `tests/unit/effects/domain/test_text_holdout.py` that a text is eligible only when at most `--holdout-max-carriers` cards carry it, that an eligible text is held out iff `crc32` of its normalized script text modulo 1000 is below `--holdout-permille`, that membership is unchanged by adding unrelated cards, and that the hash is stable across processes (FR-088, FR-088a)
-- [ ] T157 Replace `newest_first_holdout` in `src/effects/application/train_effect_model.py` with the text-keyed selection, keeping `HeldOutCards` as the type the rest of the split consumes (FR-088)
-- [ ] T158 [P] Test in `tests/unit/effects/application/test_split.py` that functional reprints — two cards whose script lines are byte-identical — are held out together or not at all, replacing T040's newest-first assertions
-- [ ] T159 `train-effect-model` reports held-out text count, the share of `output/cardsfolder/` cards removed, and per-stratum record counts before the first epoch; fails on an empty card-disjoint stratum; warns below `--min-holdout-records` (FR-088b)
-- [ ] T160 [P] Test that an empty card-disjoint stratum fails the run rather than yielding `nan` validation loss, a never-updating `EarlyStopper`, and a checkpoint that is never saved
-- [ ] T161 Gate-1 margins reported split by whether a held-out text's first printing falls in the newest sets, reading `--printings-path`, which is no longer a selection input (FR-088c)
-- [ ] T162 `python -m effects holdout-cards --out PATH` in `src/effects/application/holdout_cards.py` and its CLI wiring, writing every card carrying a held-out text and reporting the counts (FR-131)
-- [ ] T163 [P] Test that `holdout-cards` and `train-effect-model` select the same cards from the same flags, since a disagreement silently corrupts the split
-- [ ] T164 `--exclude-cards PATH` on `python -m sealed generate-pools`, omitting listed cards from every booster and redrawing within the same rarity slot; `sealed` gains no import of `effects` (FR-132)
-- [ ] T165 [P] Test that an excluded pool has the same card count and rarity distribution as an unexcluded one and contains no listed card
-- [ ] T166 Shard reservation reserves every shard holding a record that names a held-out card, ahead of the `--reserved-shards` even spread (FR-125)
-- [ ] T167 [P] Test that a full-strength shard lands in the card-disjoint stratum and a depleted shard in training, with no flag naming either
-- [ ] T168 `collect-variants` skips cards carrying a held-out text and states the reason, replacing T138's held-out-with-it assertion (FR-057)
-- [ ] T169 Checkpoints record the holdout flags alongside the split, and `--split-from` carries them (FR-134)
-- [ ] T170 Import-direction test extended: `sealed` must not import `effects` despite `--exclude-cards`
+- [X] T156 [P] Test in `tests/unit/effects/domain/test_text_holdout.py` that a text is eligible only when at most `--holdout-max-carriers` cards carry it, that an eligible text is held out iff `crc32` of its normalized script text modulo 1000 is below `--holdout-permille`, that membership is unchanged by adding unrelated cards, and that the hash is stable across processes (FR-088, FR-088a)
+- [X] T157 Replace `newest_first_holdout` in `src/effects/application/train_effect_model.py` with the text-keyed selection, keeping `HeldOutCards` as the type the rest of the split consumes (FR-088)
+- [X] T158 [P] Test in `tests/unit/effects/application/test_split.py` that functional reprints — two cards whose script lines are byte-identical — are held out together or not at all, replacing T040's newest-first assertions
+- [X] T159 `train-effect-model` reports held-out text count, the share of `output/cardsfolder/` cards removed, and per-stratum record counts before the first epoch; fails on an empty card-disjoint stratum; warns below `--min-holdout-records` (FR-088b)
+- [X] T160 [P] Test that an empty card-disjoint stratum fails the run rather than yielding `nan` validation loss, a never-updating `EarlyStopper`, and a checkpoint that is never saved
+- [X] T161 Gate-1 margins reported split by whether a held-out text's first printing falls in the newest sets, reading `--printings-path`, which is no longer a selection input (FR-088c)
+- [X] T162 `python -m effects holdout-cards --out PATH` in `src/effects/application/holdout_cards.py` and its CLI wiring, writing every card carrying a held-out text and reporting the counts (FR-131)
+- [X] T163 [P] Test that `holdout-cards` and `train-effect-model` select the same cards from the same flags, since a disagreement silently corrupts the split
+- [X] T164 `--exclude-cards PATH` on `python -m sealed generate-pools`, omitting listed cards from every booster and redrawing within the same rarity slot; `sealed` gains no import of `effects` (FR-132)
+- [X] T165 [P] Test that an excluded pool has the same card count and rarity distribution as an unexcluded one and contains no listed card
+- [X] T166 Shard reservation reserves every shard holding a record that names a held-out card, ahead of the `--reserved-shards` even spread (FR-125)
+- [X] T167 [P] Test that a full-strength shard lands in the card-disjoint stratum and a depleted shard in training, with no flag naming either
+- [X] T168 `collect-variants` skips cards carrying a held-out text and states the reason, replacing T138's held-out-with-it assertion (FR-057)
+- [X] T169 Checkpoints record the holdout flags alongside the split, and `--split-from` carries them (FR-134)
+- [X] T170 Import-direction test extended: `sealed` must not import `effects` despite `--exclude-cards`
 
 ---
 

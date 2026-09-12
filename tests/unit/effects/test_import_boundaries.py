@@ -1,7 +1,13 @@
 """The one-way dependency rule between the three Python packages (FR-002).
 
 ``effects`` imports downward from ``sealed`` and ``price_predictor`` and never
-the reverse, and it imports only the surface FR-002 declares. Both halves are
+the reverse, and it imports only the surface FR-002 declares.
+
+Depleted collection is the case that tempts an inversion (T170): `sealed
+generate-pools --exclude-cards` needs the holdout, which only `effects` can
+compute. It takes a plain file of card names written by `effects holdout-cards`
+rather than importing the rule, and the first test below is what keeps it that
+way. Both halves are
 asserted by parsing the source tree rather than by importing it, so the test
 costs nothing and does not depend on torch.
 """
