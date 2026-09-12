@@ -185,6 +185,16 @@ def prose_for(line, lines: list[str]) -> str | None:
     return rendered if separator < 0 else rendered[separator + 2:]
 
 
+class UnconvertedScript(KeyError):
+    """A provenance key names a script the converted corpus does not hold.
+
+    Raised rather than ``FileNotFoundError`` because callers already treat an
+    unresolvable key as an ability that contributes no text, and catching a
+    distinct exception type is what made them miss this case. A ``KeyError``
+    subclass so those handlers keep working unchanged.
+    """
+
+
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
@@ -203,6 +213,11 @@ class SidecarCache:
         self._roots = {name: Path(root) for name, root in roots.items()}
         self._cache: dict[str, ProvenanceSidecar] = {}
         self._prose: dict[str, list[str]] = {}
+        #: ``script_file -> times asked`` for keys naming an unconverted script.
+        #: Counted rather than only swallowed: today this is 0.07% of records,
+        #: all of them tokens, but a conversion that broke would raise that
+        #: share without otherwise changing the shape of a run.
+        self.unresolved: dict[str, int] = {}
 
     def path_for(self, script_file: str) -> Path:
         tree, _, relative = script_file.partition("/")
@@ -216,13 +231,30 @@ class SidecarCache:
     def get(self, script_file: str) -> ProvenanceSidecar:
         cached = self._cache.get(script_file)
         if cached is None:
-            cached = read_sidecar(self.path_for(script_file))
+            path = self.path_for(script_file)
+            if not path.exists():
+                self.unresolved[script_file] = (
+                    self.unresolved.get(script_file, 0) + 1
+                )
+                raise UnconvertedScript(
+                    f"{script_file} was never converted: no sidecar at {path}"
+                )
+            cached = read_sidecar(path)
             self._cache[script_file] = cached
         return cached
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
-        """The rendered line a record's key names, or None where it was dropped."""
-        return self.get(key.script_file).line_for(key)
+        """The rendered line a record's key names, or None where there is none.
+
+        None covers two cases that read the same way downstream: the converter
+        deduplicated the line away, and the key names a script the converted
+        corpus never held. An unconfigured *tree* still raises, because that is
+        a misconfigured run rather than a gap in the corpus.
+        """
+        try:
+            return self.get(key.script_file).line_for(key)
+        except UnconvertedScript:
+            return None
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
         """The converted prose of the line a key names.

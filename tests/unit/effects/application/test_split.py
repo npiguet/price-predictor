@@ -1,12 +1,16 @@
-"""The card-disjoint split (T040).
+"""The card holdout and what counts as naming a held-out card (T040).
 
-Three properties, and the middle one is the whole point: the holdout is newest
-cards rather than random ones, **every game holding a record that names a
-held-out card is excluded**, and game-disjoint validation takes 10% of what
-remains. Excluding the row and keeping the game would let a held-out card sit in
-the context of a training record, which is exactly the loop that trains each
-embedding from both directions — and gate 1, the shipping gate, would then score
-partly on cards the encoder had already seen.
+The holdout is the newest-printed cards rather than a random sample, because it
+stands in for deployment to a set the model has never seen. A record names a
+held-out card through its board entities or through the script files its
+provenance keys point at, and either is enough to taint the game it belongs to.
+
+Tainting the whole game rather than the naming record is the point. A held-out
+card sitting in the *context* of a training record leaks through its context
+role, which is exactly the loop that trains each embedding from both directions,
+and gate 1 — the shipping gate — would then score partly on cards the encoder had
+already seen. Which games that rule excludes, and which shards supply the
+validation records, is covered in ``test_shard_streaming.py``.
 """
 
 from __future__ import annotations
@@ -15,10 +19,7 @@ import json
 
 from effects.application.train_effect_model import (
     CARD_HOLDOUT_FRACTION,
-    GAME_HOLDOUT_FRACTION,
-    CorpusSplit,
     HeldOutCards,
-    derive_split,
     load_card_files,
     load_first_printings,
     newest_first_holdout,
@@ -26,7 +27,6 @@ from effects.application.train_effect_model import (
 )
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
-    CombatPayload,
     EffectRecord,
     Moment,
     RecordKind,
@@ -146,86 +146,6 @@ class TestRecordNamesHeldOutCard:
     def test_an_unrelated_record_does_not(self):
         record = _record("g1", entities=(_entity("Grizzly Bears"),))
         assert not record_names_held_out_card(record, self._held())
-
-
-class TestDeriveSplit:
-    def _records(self, games: int = 100):
-        records = []
-        for index in range(games):
-            entities = (_entity("Serra Angel"),) if index < 10 else (
-                _entity("Grizzly Bears"),
-            )
-            records.append(_record(f"g{index}", entities=entities))
-            records.append(_record(
-                f"g{index}", entities=(_entity("Grizzly Bears"),),
-                record_id=f"g{index}.2", kind=RecordKind.COMBAT, moment=None,
-                payload=CombatPayload(),
-            ))
-        return records
-
-    def _held(self) -> HeldOutCards:
-        return HeldOutCards(
-            names=frozenset({"Serra Angel"}),
-            script_files=frozenset({"cardsfolder/s/serra_angel.txt"}),
-        )
-
-    def test_a_whole_game_is_excluded_not_just_the_naming_record(self):
-        split = derive_split(self._records(), self._held())
-        # Game g0's second record names no held-out card, and is still out.
-        assert "g0" in split.card_disjoint_games
-        assert not split.is_training_game("g0")
-
-    def test_every_game_holding_a_naming_record_is_excluded(self):
-        split = derive_split(self._records(), self._held())
-        assert split.card_disjoint_games == frozenset(f"g{i}" for i in range(10))
-
-    def test_game_disjoint_validation_takes_a_tenth_of_the_rest(self):
-        split = derive_split(self._records(), self._held())
-        assert len(split.game_disjoint_games) == int(90 * GAME_HOLDOUT_FRACTION)
-
-    def test_the_two_strata_do_not_overlap(self):
-        split = derive_split(self._records(), self._held())
-        assert not (split.card_disjoint_games & split.game_disjoint_games)
-
-    def test_training_games_are_what_neither_stratum_took(self):
-        split = derive_split(self._records(), self._held())
-        training = {
-            f"g{i}" for i in range(100) if split.is_training_game(f"g{i}")
-        }
-        assert len(training) == 100 - 10 - 9
-
-    def test_the_split_is_reproducible_from_the_same_corpus(self):
-        records = self._records()
-        assert derive_split(records, self._held()) == derive_split(
-            records, self._held()
-        )
-
-    def test_a_different_seed_moves_the_game_disjoint_stratum(self):
-        records = self._records()
-        first = derive_split(records, self._held(), seed=1)
-        second = derive_split(records, self._held(), seed=2)
-        assert first.card_disjoint_games == second.card_disjoint_games
-        assert first.game_disjoint_games != second.game_disjoint_games
-
-    def test_the_held_out_card_list_is_recorded_sorted(self):
-        split = derive_split(self._records(), self._held())
-        assert split.held_out_cards == ("Serra Angel",)
-
-    def test_validation_games_are_both_strata(self):
-        split = derive_split(self._records(), self._held())
-        assert split.validation_games == (
-            split.card_disjoint_games | split.game_disjoint_games
-        )
-
-    def test_an_empty_corpus_yields_an_empty_split(self):
-        split = derive_split([], self._held())
-        assert split.card_disjoint_games == frozenset()
-        assert split.game_disjoint_games == frozenset()
-
-    def test_a_split_is_immutable(self):
-        split = CorpusSplit(("A",), frozenset({"g1"}), frozenset({"g2"}))
-        assert split.is_training_game("g3")
-        assert not split.is_training_game("g1")
 
 
 class TestCorpusLoaders:

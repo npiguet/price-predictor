@@ -239,6 +239,40 @@ class TestSidecarCache:
         with pytest.raises(KeyError, match="no converted root configured"):
             cache.get("variant-scripts/whatever.txt")
 
+    def test_a_script_that_was_never_converted_raises_key_error(self, tmp_path):
+        """A token entity's key names a card the converted corpus does not hold.
+
+        The collector files a token's provenance under ``cardsfolder/`` from its
+        sanitized name, while tokens convert into ``output/tokenscripts/`` under
+        Forge's own script filenames, so the path resolves to nothing. It is a
+        KeyError rather than a FileNotFoundError because callers already treat an
+        unresolvable key as a context ability that contributes no text, and a
+        distinct exception type made that handling miss this case.
+        """
+        cache = self._write_trees(tmp_path)
+        with pytest.raises(KeyError, match="never converted"):
+            cache.get("cardsfolder/b/bird_token.txt")
+
+    def test_an_unresolvable_key_is_counted_rather_than_swallowed(self, tmp_path):
+        # 0.07% of the corpus is unresolvable today. A conversion that broke
+        # would raise that share without changing the shape of a run, so the
+        # count is what an operator has to be able to see.
+        cache = self._write_trees(tmp_path)
+        for _ in range(3):
+            with pytest.raises(KeyError):
+                cache.get("cardsfolder/b/bird_token.txt")
+        with pytest.raises(KeyError):
+            cache.get("cardsfolder/c/clue_token.txt")
+        assert cache.unresolved == {
+            "cardsfolder/b/bird_token.txt": 3,
+            "cardsfolder/c/clue_token.txt": 1,
+        }
+
+    def test_line_for_returns_none_for_a_never_converted_script(self, tmp_path):
+        cache = self._write_trees(tmp_path)
+        key = ProvenanceKey("cardsfolder/b/bird_token.txt", 0, "static", 0)
+        assert cache.line_for(key) is None
+
     def test_the_cache_joins_a_record_key_to_its_row(self, tmp_path):
         cache = self._write_trees(tmp_path)
         assert cache.row_for(_TRIGGER) == 1

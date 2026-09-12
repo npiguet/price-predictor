@@ -214,11 +214,19 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--kind-mix` | the eight-class mixture |
 | `--context-cache` / `--cache-refresh` | off / 500 |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
+| `--shards-per-epoch` | 18 — record shards an epoch reads, one resident at a time; the walk advances each epoch and wraps |
+| `--reserved-shards` | 4 — shards held back for validation and never trained on; their games supply both validation strata |
 | `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
 
 Best checkpoint is selected by card-disjoint validation loss. The split holds out cards by newest first
 printing until they cover ≥ 8% of `output/cardsfolder/`, then **excludes from training every game
-holding a record that names a held-out card**; game-disjoint validation takes 10% of what remains.
+holding a record that names a held-out card**, in every shard the run reads; game-disjoint validation
+is the reserved shards' remaining games.
+
+The corpus is read one shard at a time and never held whole. Validation records are captured once from
+the reserved shards and reused every epoch, so `--patience` compares like with like. Both strata are
+enumerated from the games the run actually read, so a run that stops early records fewer games than a
+full one.
 
 Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 256 / 6 layers / 4 heads;
 `ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup; linear warmup over the first 5% of

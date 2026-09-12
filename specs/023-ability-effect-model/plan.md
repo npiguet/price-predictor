@@ -143,8 +143,11 @@ This feature both moves data and runs model compute, so the checklist applies in
   the lever is the streaming pass above, not vectorization. Neither does element-wise arithmetic in a
   Python loop.
 - **Streaming & load-once** — *Addressed.* The record corpus is append-only JSONL read as a stream and
-  never fully materialized; the tokenizer, vocabulary, keyword definitions, and model are constructed
-  once per run and reused.
+  never fully materialized. The trainer is the one consumer that needs records indexed by game and by
+  sampling class, and it builds those indexes one shard at a time: a shard is parsed, trained on for
+  its share of the epoch's steps, and released before the next is read, so resident memory is one
+  shard whatever the corpus size. The tokenizer, vocabulary, keyword definitions, and model are
+  constructed once per run and reused.
 
 No optimization beyond this checklist is planned. Anything further must be backed by a profile
 identifying the hot path (Principle II).

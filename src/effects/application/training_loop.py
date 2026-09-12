@@ -5,13 +5,21 @@ functions of their inputs, all unit-testable with no torch. This module owns the
 part that needs a GPU: assembling batches into tensors, stepping the optimizer,
 and validating between epochs.
 
-The loop's shape follows three constraints from the spec:
+The loop's shape follows four constraints from the spec:
 
 - **An epoch is a step count, not a pass over the corpus.** The corpus reaches
   10^8 records; a pass would be a week and would make ``--patience`` meaningless.
+- **The corpus is read one shard at a time.** Parsed records cost about 45 KB
+  each, so holding the whole corpus would need hundreds of gigabytes. A shard
+  costs about one, and it is released before the next is read. An epoch walks
+  ``--shards-per-epoch`` of them and the walk advances, so a long run covers the
+  corpus rather than re-reading its opening slice.
 - **Validation runs on both strata every epoch, and the best checkpoint is
   chosen by the card-disjoint one** — the number that stands in for deployment
-  to an unseen set, rather than in-distribution fit.
+  to an unseen set, rather than in-distribution fit. Its records come from
+  reserved shards the run never trains on, and they are captured once: a
+  validation set redrawn each epoch would make ``--patience`` measure which
+  records got drawn rather than whether the model improved.
 - **The batch groups each game's records together**, so one encode of an ability
   text serves every record in that game that mentions it.
 """
@@ -20,7 +28,9 @@ from __future__ import annotations
 
 import logging
 import random
+import time
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import asdict
 from pathlib import Path
 
@@ -34,16 +44,25 @@ from effects.application.train_effect_model import (
     LEARNING_RATE,
     MAX_GRAD_NORM,
     RANDOM_SEED,
+    VALIDATION_RECORDS_PER_STRATUM,
     WEIGHT_DECAY,
     ContextCache,
     CorpusSplit,
     EarlyStopper,
     EpochResult,
+    HeldOutCards,
+    SplitAccumulator,
     TrainEffectModelConfig,
+    class_counts,
+    epoch_shards,
     learning_rate_at,
+    load_shard,
+    parse_kind_mix,
     plan_batch,
+    renormalize_mix,
     sample_weights,
     sampling_class,
+    steps_per_shard,
     variant_masks,
     warmup_steps,
 )
@@ -81,21 +100,35 @@ from price_predictor.infrastructure.torch_training import clip_per_group
 
 logger = logging.getLogger(__name__)
 
+#: Records kept aside to measure feature widths from, before any shard loads.
+PROBE_RECORDS = 64
+
 
 class TrainingLoop:
-    """Owns one training run end to end."""
+    """Owns one training run end to end.
+
+    Holds one shard of the corpus at a time. The corpus is 14M records and would
+    need hundreds of gigabytes resident; a shard needs about one, and an epoch is
+    a walk over ``--shards-per-epoch`` of them rather than a pass over the whole.
+    """
 
     def __init__(
         self,
         config: TrainEffectModelConfig,
-        records: list,
-        split: CorpusSplit,
-        mix: dict[str, float],
+        *,
+        held_out: HeldOutCards,
+        inherited: CorpusSplit | None,
+        validation_shards: Sequence[Path],
+        training_shards: Sequence[Path],
     ) -> None:
         self.config = config
-        self.records = records
-        self.split = split
-        self.mix = mix
+        self.held_out = held_out
+        self.validation_shards = list(validation_shards)
+        self.training_shards = list(training_shards)
+        self.accumulator = (
+            SplitAccumulator.inheriting(inherited) if inherited is not None
+            else SplitAccumulator(held_out_cards=tuple(sorted(held_out.names)))
+        )
         self.masks = variant_masks(config.variant)
         # The surface follows the vocabulary the run loads, so the text an
         # ability is encoded from and the vocabulary it is tokenized against can
@@ -110,6 +143,10 @@ class TrainingLoop:
         self.context_cache = (
             ContextCache(config.cache_refresh) if config.context_cache else None
         )
+        self.card_disjoint: list = []
+        self.game_disjoint: list = []
+        self.probe: list = []
+        self.present: set[str] = set()
 
     # ── setup ───────────────────────────────────────────────────────────
 
@@ -131,21 +168,56 @@ class TrainingLoop:
             roots["variant-scripts"] = Path(self.config.variant_scripts)
         return SidecarCache(roots)
 
-    def _feature_widths(self) -> dict[SlotKind, int]:
+    def _capture_validation(self) -> None:
+        """Read the reserved shards once and keep a capped sample of each stratum.
+
+        Captured once rather than redrawn per epoch because ``--patience``
+        compares this epoch's loss against the best so far. A validation set that
+        changed every epoch would make that comparison measure which records got
+        drawn rather than whether the model improved.
+        """
+        cap = VALIDATION_RECORDS_PER_STRATUM
+        for position, shard in enumerate(self.validation_shards, start=1):
+            started = time.perf_counter()
+            records = load_shard(shard)
+            self.accumulator.note_shard(records, self.held_out, reserved=True)
+            split = self.accumulator.split()
+            self.present.update(class_counts(records))
+            for record in records:
+                if len(self.probe) < PROBE_RECORDS:
+                    self.probe.append(record)
+                if record.game_id in split.card_disjoint_games:
+                    target = self.card_disjoint
+                elif record.game_id in split.game_disjoint_games:
+                    target = self.game_disjoint
+                else:
+                    continue
+                if len(target) < cap:
+                    target.append(record)
+            logger.info(
+                "validation shard %d/%d %s | %d records over %d games | "
+                "load %.1fs | held card-disjoint %d/%d, game-disjoint %d/%d",
+                position, len(self.validation_shards), shard.name, len(records),
+                len({r.game_id for r in records}), time.perf_counter() - started,
+                len(self.card_disjoint), cap, len(self.game_disjoint), cap,
+            )
+            del records
+
+    def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
         """Measure each slot kind's width from a real record.
 
         Measured rather than declared: the vocabularies the features are built
         from live in one module, and a constant here would be a second place to
         keep them in step.
         """
-        probe = self.records[0]
+        probe = records[0]
         widths = {
             SlotKind.GLOBAL: len(global_features(probe)),
             SlotKind.ACT: len(act_features(probe)),
             SlotKind.PLAYER: 0,
             SlotKind.CARD: 0,
         }
-        for record in self.records:
+        for record in records:
             if record.state.players:
                 widths[SlotKind.PLAYER] = len(
                     player_features(record.state.players[0], record)
@@ -210,6 +282,14 @@ class TrainingLoop:
         return loss
 
     def _pools(self, records: list) -> tuple[dict, dict]:
+        """Sampling pools and rarity weights for one shard's training records.
+
+        Rarity weighting counts the games of the shard in hand rather than the
+        games of the whole corpus, which is the one thing reading shard by shard
+        costs. An ability that is rare corpus-wide but appears in several of this
+        shard's games is under-weighted while this shard is resident. Abilities
+        that are common are common in every shard, so they are unaffected.
+        """
         pools: dict[str, list] = defaultdict(list)
         for record in records:
             pools[sampling_class(record)].append(record)
@@ -222,9 +302,34 @@ class TrainingLoop:
     # ── the run ─────────────────────────────────────────────────────────
 
     def execute(self) -> int:
+        logger.info(
+            "Reading %d reserved shards for validation before training starts.",
+            len(self.validation_shards),
+        )
+        self._capture_validation()
+        if not self.probe:
+            logger.error(
+                "The %d reserved shards hold no records, so there is nothing to "
+                "measure feature widths from.", len(self.validation_shards),
+            )
+            return 1
+        if not self.card_disjoint and not self.game_disjoint:
+            logger.warning(
+                "No validation records in the reserved shards: every game there "
+                "is a training game. Early stopping has nothing to read, so the "
+                "run will train for all %d epochs.", self.config.epochs,
+            )
+
+        mix = renormalize_mix(parse_kind_mix(self.config.kind_mix), self.present)
+        logger.info("Classes present: %s", ", ".join(sorted(self.present)))
+        logger.info(
+            "Sampling mixture over the classes present: %s",
+            ", ".join(f"{name} {share:.0%}" for name, share in sorted(mix.items())),
+        )
+
         tokenizer = self._build_tokenizer()
         sidecars = self._build_sidecars()
-        widths = self._feature_widths()
+        widths = self._feature_widths(self.probe)
 
         encoder_config = AbilityEncoderConfig(
             vocab_size=tokenizer.vocab_size,
@@ -263,18 +368,8 @@ class TrainingLoop:
             epochs=self.config.epochs, steps_per_epoch=self.config.steps_per_epoch,
         )
 
-        training = [r for r in self.records if self.split.is_training_game(r.game_id)]
-        pools, weights = self._pools(training)
-        card_disjoint = [
-            r for r in self.records if r.game_id in self.split.card_disjoint_games
-        ]
-        game_disjoint = [
-            r for r in self.records if r.game_id in self.split.game_disjoint_games
-        ]
-
         stopper = EarlyStopper(self.config.patience)
         store = EffectModelStore(self.config.resolved_model_output())
-        provenance = self._provenance()
         step = 0
 
         for epoch in range(1, self.config.epochs + 1):
@@ -284,38 +379,35 @@ class TrainingLoop:
             # Reading it per step would synchronize once per batch for a number
             # nothing looks at until the epoch closes.
             running = torch.zeros((), device=self.device)
-            for _ in range(self.config.steps_per_epoch):
-                for group in optimizer.param_groups:
-                    group["lr"] = learning_rate_at(step, warmup=warmup)
-                plan = plan_batch(
-                    pools, weights, self.mix,
-                    batch_size=self.config.batch_size, rng=self.rng,
-                )
-                loss = self._loss_for(
-                    plan, encoder, model, tokenizer, sidecars, widths, step,
-                )
-                if loss is None:
+            taken = 0
+            shards = epoch_shards(
+                self.training_shards, epoch=epoch,
+                per_epoch=self.config.shards_per_epoch,
+            )
+            allocation = steps_per_shard(self.config.steps_per_epoch, len(shards))
+            for position, (shard, budget) in enumerate(
+                zip(shards, allocation), start=1,
+            ):
+                if budget <= 0:
                     continue
-                (loss / self.config.grad_accum).backward()
-                if (step + 1) % self.config.grad_accum == 0:
-                    clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
-                    optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
-                running += loss.detach()
-                step += 1
-                if self.context_cache is not None:
-                    self.context_cache.note_batch()
+                step, taken = self._train_on_shard(
+                    shard, budget, mix=mix, encoder=encoder, model=model,
+                    tokenizer=tokenizer, sidecars=sidecars, widths=widths,
+                    optimizer=optimizer, warmup=warmup, running=running,
+                    step=step, taken=taken, epoch=epoch, position=position,
+                    of=len(shards),
+                )
 
             result = EpochResult(
                 epoch=epoch,
-                train_loss=float(running) / max(self.config.steps_per_epoch, 1),
+                train_loss=float(running) / max(taken, 1),
                 card_disjoint_loss=self._validate(
-                    card_disjoint, encoder, model, tokenizer, sidecars, widths,
-                    step,
+                    self.card_disjoint, encoder, model, tokenizer, sidecars,
+                    widths, step,
                 ),
                 game_disjoint_loss=self._validate(
-                    game_disjoint, encoder, model, tokenizer, sidecars, widths,
-                    step,
+                    self.game_disjoint, encoder, model, tokenizer, sidecars,
+                    widths, step,
                 ),
             )
             logger.info(
@@ -323,13 +415,25 @@ class TrainingLoop:
                 result.epoch, result.train_loss, result.card_disjoint_loss,
                 result.game_disjoint_loss,
             )
+            if sidecars.unresolved:
+                worst = sorted(
+                    sidecars.unresolved.items(), key=lambda kv: -kv[1],
+                )[:3]
+                logger.info(
+                    "%d ability scripts the converted corpus does not hold, "
+                    "%d lookups so far; those abilities reach the model as no "
+                    "text. Most asked: %s",
+                    len(sidecars.unresolved),
+                    sum(sidecars.unresolved.values()),
+                    ", ".join(f"{name} ({hits})" for name, hits in worst),
+                )
             if stopper.update(result.card_disjoint_loss):
                 store.save(EffectCheckpoint(
                     encoder_config=encoder_config,
                     model_config=model_config,
                     encoder_state=encoder.state_dict(),
                     model_state=model.state_dict(),
-                    provenance=provenance,
+                    provenance=self._provenance(),
                     variant=self.config.variant,
                     best_val_loss=stopper.best,
                     epoch=epoch,
@@ -349,6 +453,67 @@ class TrainingLoop:
                 break
         return 0
 
+    def _train_on_shard(
+        self, shard, budget, *, mix, encoder, model, tokenizer, sidecars,
+        widths, optimizer, warmup, running, step, taken, epoch, position, of,
+    ) -> tuple[int, int]:
+        """Load one shard, take ``budget`` steps on it, and let it go.
+
+        The shard is released before the next one is read, so resident memory
+        stays at one shard however long the run and however large the corpus.
+
+        Returns the advanced ``(step, taken)`` counters.
+        """
+        started = time.perf_counter()
+        records = load_shard(shard)
+        self.accumulator.note_shard(records, self.held_out, reserved=False)
+        split = self.accumulator.split()
+        training = [r for r in records if split.is_training_game(r.game_id)]
+        held_back = len(records) - len(training)
+        del records
+        loaded = time.perf_counter() - started
+
+        if not training:
+            logger.info(
+                "epoch %d | shard %d/%d %s | nothing trainable, all %d records "
+                "held back | skipped",
+                epoch, position, of, shard.name, held_back,
+            )
+            return step, taken
+
+        pools, weights = self._pools(training)
+        for _ in range(budget):
+            for group in optimizer.param_groups:
+                group["lr"] = learning_rate_at(step, warmup=warmup)
+            plan = plan_batch(
+                pools, weights, mix,
+                batch_size=self.config.batch_size, rng=self.rng,
+            )
+            loss = self._loss_for(
+                plan, encoder, model, tokenizer, sidecars, widths, step,
+            )
+            if loss is None:
+                continue
+            (loss / self.config.grad_accum).backward()
+            if (step + 1) % self.config.grad_accum == 0:
+                clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+            running += loss.detach()
+            step += 1
+            taken += 1
+            if self.context_cache is not None:
+                self.context_cache.note_batch()
+
+        logger.info(
+            "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
+            "%d steps | load %.1fs, train %.1fs",
+            epoch, position, of, shard.name, len(training), held_back, budget,
+            loaded, time.perf_counter() - started - loaded,
+        )
+        del training, pools, weights
+        return step, taken
+
     def _validate(
         self, records, encoder, model, tokenizer, sidecars, widths, step,
     ) -> float:
@@ -357,7 +522,7 @@ class TrainingLoop:
         encoder.eval()
         model.eval()
         by_game: dict[str, list] = defaultdict(list)
-        for record in records[: self.config.batch_size * 8]:
+        for record in records:
             by_game[record.game_id].append(record)
         from effects.application.train_effect_model import BatchPlan
 
@@ -378,10 +543,18 @@ class TrainingLoop:
         return float(total) / batches if batches else float("nan")
 
     def _provenance(self) -> SplitProvenance:
+        """What the checkpoint records about the data it saw.
+
+        Both strata are enumerated from the games this run actually read, so a
+        run that stops early names fewer games than a full one. That is what the
+        evaluator needs: it scores only games the checkpoint recorded, and a
+        game the model never saw is neither training nor validation.
+        """
+        split = self.accumulator.split()
         return SplitProvenance(
-            held_out_cards=self.split.held_out_cards,
-            card_disjoint_games=tuple(sorted(self.split.card_disjoint_games)),
-            game_disjoint_games=tuple(sorted(self.split.game_disjoint_games)),
+            held_out_cards=split.held_out_cards,
+            card_disjoint_games=tuple(sorted(split.card_disjoint_games)),
+            game_disjoint_games=tuple(sorted(split.game_disjoint_games)),
             vocab_path=str(self.config.vocab_path),
             keyword_definitions_path=str(self.config.keyword_definitions),
             vocab_hash=content_hash(Path(self.config.vocab_path)),

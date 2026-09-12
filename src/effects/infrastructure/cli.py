@@ -732,6 +732,11 @@ def run_collect_variants(args: argparse.Namespace) -> int:
 
 
 def _train_effect_model_parser(subparsers) -> None:
+    from effects.application.train_effect_model import (
+        DEFAULT_SHARDS_PER_EPOCH,
+        RESERVED_VALIDATION_SHARDS,
+    )
+
     parser = subparsers.add_parser(
         "train-effect-model",
         help="Train the ability encoder and effect head jointly from random init",
@@ -790,6 +795,22 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     parser.add_argument("--cache-refresh", type=int, default=500)
     parser.add_argument("--steps-per-epoch", type=int, default=5000)
+    parser.add_argument(
+        "--shards-per-epoch", type=int, default=DEFAULT_SHARDS_PER_EPOCH,
+        help=(
+            "Record shards an epoch reads, one resident at a time. The walk "
+            "advances each epoch and wraps, so a long run covers the corpus "
+            f"rather than its opening slice (default: {DEFAULT_SHARDS_PER_EPOCH})"
+        ),
+    )
+    parser.add_argument(
+        "--reserved-shards", type=int, default=RESERVED_VALIDATION_SHARDS,
+        help=(
+            "Shards held back for validation and never trained on; their games "
+            "supply both validation strata "
+            f"(default: {RESERVED_VALIDATION_SHARDS})"
+        ),
+    )
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--patience", type=int, default=5)
     parser.add_argument(
@@ -842,6 +863,8 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         context_cache=args.context_cache,
         cache_refresh=args.cache_refresh,
         steps_per_epoch=args.steps_per_epoch,
+        shards_per_epoch=args.shards_per_epoch,
+        reserved_shards=args.reserved_shards,
         epochs=args.epochs,
         patience=args.patience,
         withhold_keyword=args.withhold_keyword,

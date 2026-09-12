@@ -513,14 +513,16 @@ loss.
   corpus MUST contribute no loss, so a stage-one corpus trains the same heads without them.
 - **FR-086**: Within a class, records MUST weight ∝ effective_games^(−0.5), capped at 20× the weight of
   the most-observed ability text, where effective games counts distinct games contributing a record of
-  that unique text.
+  that unique text. Effective games are counted over the resident shard rather than the whole corpus,
+  since FR-125 leaves no point at which the whole corpus is in hand.
 - **FR-087**: Records with no acting ability text MUST bypass rarity weighting: `combat` and
   `playability-legality` sample uniformly within their class, and a `decision` record's per-candidate
   examples key on the candidate's text.
 - **FR-088**: The card-disjoint validation split MUST take cards first printed in the newest sets,
   newest-first, until they cover at least 8% of the cards under `output/cardsfolder/`, and MUST
-  exclude from training every game with a record naming a held-out card. Game-disjoint validation
-  takes 10% of the remaining games.
+  exclude from training every game with a record naming a held-out card, in every shard the run reads
+  and not only the reserved ones. Game-disjoint validation MUST be the games of the reserved shards
+  (FR-125) that name no held-out card.
 - **FR-089**: The best checkpoint MUST be selected by card-disjoint validation loss.
 - **FR-090**: A checkpoint MUST record the split it trained against — the held-out card list and the
   `game_id` set across both strata — plus the vocabulary and keyword-definition paths, their content
@@ -660,6 +662,25 @@ loss.
   unique ability text. It MUST block shipping the model or cache.
 - **FR-124**: Run results MUST be recorded in the design record's Outcome section, never in the root
   spec.
+
+#### Reading the corpus
+
+- **FR-125**: The trainer MUST read the record corpus one shard at a time and MUST NOT hold more than
+  one shard of parsed records at once. `--reserved-shards` (default 4) shards, spread evenly across the
+  shard list, are held back for validation and never trained on; the rest are training shards.
+- **FR-126**: An epoch MUST read `--shards-per-epoch` (default 18) training shards, dividing
+  `--steps-per-epoch` evenly among them, and the walk MUST advance each epoch and wrap at the end of
+  the list, so a long run covers the corpus rather than re-reading its opening shards.
+- **FR-127**: Per-epoch validation MUST run on records captured once from the reserved shards, capped
+  per stratum, and MUST reuse those same records every epoch — an early-stopping rule reading a
+  freshly drawn sample each epoch would measure which records got drawn rather than whether the model
+  improved.
+- **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
+  shard as it goes, naming the shard, its record counts, and its timings.
+- **FR-129**: A provenance key naming a script file with no sidecar under its tree MUST NOT stop a run.
+  The ability contributes no text, and the reader MUST count the occurrence per script file so the
+  share is visible — an unconfigured *tree* still raises, being a misconfigured run rather than a gap
+  in the corpus.
 
 ### Key Entities
 

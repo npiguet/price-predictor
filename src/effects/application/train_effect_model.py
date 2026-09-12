@@ -64,11 +64,22 @@ UNIFORM_CLASSES: frozenset[str] = frozenset({
 
 #: Fraction of the card corpus held out card-disjointly (FR-088).
 CARD_HOLDOUT_FRACTION = 0.08
-#: Fraction of the remaining games held out game-disjointly.
-GAME_HOLDOUT_FRACTION = 0.10
 #: Rarity weight ceiling, as a multiple of the most-observed text's weight.
 RARITY_CAP = 20.0
 RANDOM_SEED = 42
+
+#: Shards an epoch reads. The corpus is 701 shards and a full run is 40 epochs,
+#: so this covers it once rather than re-reading its opening slice.
+DEFAULT_SHARDS_PER_EPOCH = 18
+#: Shards held back for validation and never trained on. Reserving whole shards
+#: rather than freezing a record count is what makes the validation sample
+#: representative: a shard carries ~90 games, drawn from one stretch of
+#: collection rather than from whichever shards the first epoch happened to read.
+RESERVED_VALIDATION_SHARDS = 4
+#: Validation records cached per stratum from the reserved shards. A full shard
+#: is ~20k records, and pushing all of them through the model every epoch would
+#: cost ~625 batches against the 8 that per-epoch validation costs today.
+VALIDATION_RECORDS_PER_STRATUM = 2_048
 
 
 # ── sampling classes ────────────────────────────────────────────────────
@@ -296,39 +307,126 @@ def record_names_held_out_card(
     return False
 
 
-def derive_split(
-    records: Iterable[EffectRecord],
-    held_out: HeldOutCards,
-    *,
-    game_fraction: float = GAME_HOLDOUT_FRACTION,
-    seed: int = RANDOM_SEED,
-) -> CorpusSplit:
-    """Assign every game to training, the card-disjoint stratum, or the other.
+# ── reading the corpus one shard at a time ──────────────────────────────
 
-    A game goes to the card-disjoint stratum as soon as **any** of its records
-    names a held-out card — the whole game, not the record. Game-disjoint
-    validation then takes ``game_fraction`` of what remains, seeded so the
-    split is reproducible from the same corpus.
+
+def reserved_shard_indices(count: int, *, reserved: int) -> frozenset[int]:
+    """``reserved`` shard positions spread evenly across ``count`` shards.
+
+    Evenly rather than the first few: consecutive shards come from one worker
+    over one stretch of collection, so the opening shards would sample one
+    worker's first games rather than the corpus.
+    """
+    if reserved <= 0 or count <= 0:
+        return frozenset()
+    reserved = min(reserved, count)
+    step = count / reserved
+    return frozenset(
+        min(count - 1, int(index * step + step / 2)) for index in range(reserved)
+    )
+
+
+def shard_games(
+    records: Iterable[EffectRecord], held_out: HeldOutCards,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """One shard's games, split by whether any record names a held-out card.
+
+    Decidable from the shard alone because a game never spans two shards: the
+    collector gives every shard its own game-id namespace. Returns
+    ``(tainted, clean)``, and a game appears in exactly one of them.
     """
     tainted: set[str] = set()
-    all_games: set[str] = set()
+    seen: set[str] = set()
     for record in records:
-        all_games.add(record.game_id)
+        seen.add(record.game_id)
         if record.game_id not in tainted and record_names_held_out_card(
             record, held_out
         ):
             tainted.add(record.game_id)
+    return frozenset(tainted), frozenset(seen - tainted)
 
-    remaining = sorted(all_games - tainted)
-    count = int(len(remaining) * game_fraction)
-    rng = random.Random(seed)
-    game_disjoint = set(rng.sample(remaining, count)) if count else set()
 
-    return CorpusSplit(
-        held_out_cards=tuple(sorted(held_out.names)),
-        card_disjoint_games=frozenset(tainted),
-        game_disjoint_games=frozenset(game_disjoint),
-    )
+class SplitAccumulator:
+    """The split, built up shard by shard instead of derived in one pass.
+
+    A game naming a held-out card joins the card-disjoint stratum wherever it is
+    found, because training on it would let the shipping gate score on cards the
+    encoder had already seen. A clean game joins the game-disjoint stratum only
+    when it comes from a reserved shard, which is what makes the validation
+    records the same ones every epoch.
+
+    A ``--split-from`` run inherits a fixed split instead: the corpus grows
+    between runs, and re-deriving the boundary would move it.
+    """
+
+    def __init__(
+        self,
+        *,
+        held_out_cards: Sequence[str] = (),
+        inherited: CorpusSplit | None = None,
+    ) -> None:
+        self._held_out_cards = tuple(held_out_cards)
+        self._inherited = inherited
+        self._card_disjoint: set[str] = set()
+        self._game_disjoint: set[str] = set()
+
+    @classmethod
+    def inheriting(cls, split: CorpusSplit) -> SplitAccumulator:
+        return cls(held_out_cards=split.held_out_cards, inherited=split)
+
+    @property
+    def inherited(self) -> bool:
+        return self._inherited is not None
+
+    def note_shard(
+        self,
+        records: Iterable[EffectRecord],
+        held_out: HeldOutCards,
+        *,
+        reserved: bool,
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Record one shard's games and return its ``(tainted, clean)`` sets."""
+        tainted, clean = shard_games(records, held_out)
+        if self._inherited is None:
+            self._card_disjoint |= tainted
+            if reserved:
+                self._game_disjoint |= clean
+        return tainted, clean
+
+    def split(self) -> CorpusSplit:
+        if self._inherited is not None:
+            return self._inherited
+        return CorpusSplit(
+            held_out_cards=self._held_out_cards,
+            card_disjoint_games=frozenset(self._card_disjoint),
+            game_disjoint_games=frozenset(self._game_disjoint),
+        )
+
+
+def epoch_shards(
+    shards: Sequence[Path], *, epoch: int, per_epoch: int,
+) -> list[Path]:
+    """The shards epoch ``epoch`` (1-based) reads, wrapping at the end.
+
+    Epochs advance through the list rather than re-reading the same shards, so a
+    long run covers the corpus instead of overfitting its opening slice.
+    """
+    if not shards or per_epoch <= 0:
+        return []
+    start = ((epoch - 1) * per_epoch) % len(shards)
+    return [shards[(start + offset) % len(shards)] for offset in range(per_epoch)]
+
+
+def steps_per_shard(total: int, count: int) -> list[int]:
+    """``total`` optimizer steps divided as evenly as possible over ``count``.
+
+    Spread rather than piled onto the last shard: every shard in the epoch
+    should contribute comparably, whatever the remainder.
+    """
+    if count <= 0:
+        return []
+    base, remainder = divmod(max(total, 0), count)
+    return [base + (1 if index < remainder else 0) for index in range(count)]
 
 
 def load_card_files(cards_folder: Path) -> dict[str, str]:
@@ -571,6 +669,8 @@ class TrainEffectModelConfig:
     context_cache: bool = False
     cache_refresh: int = 500
     steps_per_epoch: int = 5_000
+    shards_per_epoch: int = DEFAULT_SHARDS_PER_EPOCH
+    reserved_shards: int = RESERVED_VALIDATION_SHARDS
     epochs: int = 40
     patience: int = 5
     withhold_keyword: str | None = None
@@ -738,16 +838,33 @@ def ability_text_of(
     return None
 
 
-def load_corpus(records_dir: Path) -> list[EffectRecord]:
-    from effects.infrastructure.record_io import read_records
+def load_shard(path: Path) -> list[EffectRecord]:
+    """One shard's records, the largest unit the trainer ever holds.
 
-    return list(read_records(Path(records_dir)))
+    A median shard costs about a gigabyte of resident memory once parsed, and
+    the corpus as a whole would cost hundreds — which is why nothing here ever
+    holds more than one shard at a time.
+    """
+    from effects.infrastructure.record_io import read_shard
+
+    return list(read_shard(Path(path)))
 
 
-def build_split(
-    config: TrainEffectModelConfig, records: list[EffectRecord],
-) -> tuple[CorpusSplit, HeldOutCards]:
-    """Derive the split, or inherit one through ``--split-from`` (FR-091)."""
+def corpus_shards(records_dir: Path) -> list[Path]:
+    from effects.infrastructure.record_io import iter_shards
+
+    return iter_shards(Path(records_dir))
+
+
+def resolve_holdout(
+    config: TrainEffectModelConfig,
+) -> tuple[HeldOutCards, CorpusSplit | None]:
+    """The held-out cards, and an inherited split where one applies (FR-091).
+
+    A ``--split-from`` run returns the checkpoint's own split alongside its
+    cards: the corpus grows between runs, and re-deriving the boundary against a
+    grown corpus would not be the one the source model trained against.
+    """
     if config.split_from is not None:
         from effects.infrastructure.effect_model_store import EffectModelStore
 
@@ -756,13 +873,10 @@ def build_split(
         held_out = HeldOutCards(
             names=frozenset(provenance.held_out_cards), script_files=frozenset(),
         )
-        return (
-            CorpusSplit(
-                held_out_cards=provenance.held_out_cards,
-                card_disjoint_games=frozenset(provenance.card_disjoint_games),
-                game_disjoint_games=frozenset(provenance.game_disjoint_games),
-            ),
-            held_out,
+        return held_out, CorpusSplit(
+            held_out_cards=provenance.held_out_cards,
+            card_disjoint_games=frozenset(provenance.card_disjoint_games),
+            game_disjoint_games=frozenset(provenance.game_disjoint_games),
         )
 
     cards_folder = next(
@@ -775,20 +889,21 @@ def build_split(
         if Path(config.printings_path).exists()
         else {}
     )
-    held_out = newest_first_holdout(card_files, printings)
-    return derive_split(records, held_out), held_out
+    return newest_first_holdout(card_files, printings), None
 
 
 def run(config: TrainEffectModelConfig) -> int:
     """Train the encoder and effect head jointly. Returns an exit code.
 
-    Torch and the corpus are loaded here rather than at import, so
-    ``python -m effects --help`` and the unit suite stay fast.
+    Torch is imported here rather than at module scope, so
+    ``python -m effects --help`` and the unit suite stay fast. The corpus is
+    never loaded whole: the shard list is read here and the records behind it
+    one shard at a time, inside the loop.
     """
     require_split_from(config.variant, config.split_from)
 
-    records = load_corpus(config.records_dir)
-    if not records:
+    shards = corpus_shards(config.records_dir)
+    if not shards:
         logger.error(
             "No effect records under %s. Collect some first with "
             "'python -m sealed match-outcomes --effect-records %s'.",
@@ -796,23 +911,38 @@ def run(config: TrainEffectModelConfig) -> int:
         )
         return 1
 
-    split, _held_out = build_split(config, records)
-    present = set(class_counts(records))
-    mix = renormalize_mix(parse_kind_mix(config.kind_mix), present)
+    reserved = reserved_shard_indices(len(shards), reserved=config.reserved_shards)
+    validation_shards = [shards[index] for index in sorted(reserved)]
+    training_shards = [
+        shard for index, shard in enumerate(shards) if index not in reserved
+    ]
+    if not training_shards:
+        logger.error(
+            "All %d shards under %s are reserved for validation; lower "
+            "--reserved-shards.", len(shards), config.records_dir,
+        )
+        return 1
 
-    training = [r for r in records if split.is_training_game(r.game_id)]
+    on_disk = sum(shard.stat().st_size for shard in shards)
     logger.info(
-        "Corpus: %d records over %d games — %d training, %d card-disjoint, "
-        "%d game-disjoint. Classes present: %s",
-        len(records), len({r.game_id for r in records}), len(training),
-        len(split.card_disjoint_games), len(split.game_disjoint_games),
-        ", ".join(sorted(present)),
+        "Corpus: %d shards, %.1f GB on disk, under %s.",
+        len(shards), on_disk / 1e9, config.records_dir,
     )
     logger.info(
-        "Sampling mixture over the classes present: %s",
-        ", ".join(f"{name} {share:.0%}" for name, share in sorted(mix.items())),
+        "%d shards reserved for validation, %d for training; an epoch reads "
+        "%d of them, so %d epochs cover the corpus %.1f times.",
+        len(validation_shards), len(training_shards), config.shards_per_epoch,
+        config.epochs,
+        config.epochs * config.shards_per_epoch / max(len(training_shards), 1),
     )
 
     from effects.application.training_loop import TrainingLoop
 
-    return TrainingLoop(config, records, split, mix).execute()
+    held_out, inherited = resolve_holdout(config)
+    return TrainingLoop(
+        config,
+        held_out=held_out,
+        inherited=inherited,
+        validation_shards=validation_shards,
+        training_shards=training_shards,
+    ).execute()
