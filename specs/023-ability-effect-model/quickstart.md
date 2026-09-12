@@ -13,7 +13,7 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 | 0 | apply the engine patch series, rebuild Forge and the JAR | minutes | no |
 | 1 | `price_predictor convert` | minutes | no |
 | 2 | `effects extract-keyword-definitions`, `effects build-vocab` | minutes | no |
-| 3 | `effects holdout-cards`, `sealed generate-pools --exclude-cards`, `sealed match-outcomes --effect-records` | hours | you decide when to stop |
+| 3 | `effects holdout-cards`, `sealed match-outcomes --exclude-cards --effect-records` | hours | you decide when to stop |
 | 3b | the same, full strength, into the same shard directory | hours | no |
 | 4 | `effects collect-coverage` | hours | no |
 | 5 | `effects collect-variants` | hours | no |
@@ -125,12 +125,8 @@ printed, and the engine-coded family generates nothing at all; both keep their t
 ```bash
 python -m effects holdout-cards --out output/effects/holdout-cards.txt
 
-python -m sealed generate-pools --set NEO --size 20000 \
-    --exclude-cards output/effects/holdout-cards.txt \
-    --pools-path output/sealed/pools-depleted/{set}
-
 python -m sealed match-outcomes \
-    --pools-path output/sealed/pools-depleted/{set} \
+    --exclude-cards output/effects/holdout-cards.txt \
     --effect-records output/effects/records/ --workers 6 \
     --snapshot-tiers 1,2,3,4 \
     --playability-rate 0.1 \
@@ -278,11 +274,7 @@ observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted
 ## 3b. Collect the validation corpus at full strength
 
 ```bash
-python -m sealed generate-pools --set NEO --size 2000 \
-    --pools-path output/sealed/pools-full/{set}
-
 python -m sealed match-outcomes \
-    --pools-path output/sealed/pools-full/{set} \
     --effect-records output/effects/records/ --workers 6 \
     --snapshot-tiers 1,2,3,4
 ```
@@ -412,6 +404,8 @@ for V in identity state-only no-state taxonomy; do
 done
 ```
 
+Pass the **same** `--holdout-permille` and `--holdout-max-carriers` here as in step 3. The corpus was depleted against those values; a run that computes a different holdout would train on cards it believes are held out, and nothing would say so. The checkpoint records them.
+
 These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint.
 `--split-from` is required for a variant run — without it the run fails fast, rather than silently
 computing its own split and making the comparison meaningless.
@@ -482,7 +476,7 @@ Every step above can be dropped, and the ones after it still run:
 | `--probe-keywords` in steps 3–4 | Gate 2 still reports a per-keyword verdict; a routed keyword has no engine-side branch to check against. |
 | `--interventions-per-game` | Cards the AI can never afford to play keep no resolution record. |
 | Step 3b, the full-strength run | No card-disjoint stratum, so `train-effect-model` fails before its first epoch. Gate 1 has nothing to measure. |
-| `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. |
+| `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. The run looks identical while it happens. |
 | Step 4, `collect-coverage` | Cards in no sealed-legal set appear in no record at all. |
 | Step 5, `collect-variants` | No script-surface corpus; the prose surface trains as before. |
 

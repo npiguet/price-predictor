@@ -35,6 +35,7 @@ def _args(**overrides) -> Namespace:
         "side_a_decks": None,
         "side_b_decks": None,
         "best_of": 7,
+        "exclude_cards": None,
     }
     defaults.update(overrides)
     return Namespace(**defaults)

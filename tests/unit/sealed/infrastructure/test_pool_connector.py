@@ -96,3 +96,52 @@ class TestDepletedPools:
             connector.generate("RVR", 10, tmp_path / "pools")
 
         assert "--exclude-cards" not in run.call_args.kwargs["main_args"]
+
+
+class TestDepletedCollection:
+    """`match-outcomes --exclude-cards` reaches the worker (T164).
+
+    `generate-pools --exclude-cards` does not cover the collection path:
+    `MatchGenerator` opens its own pool per match rather than reading a pools
+    file, so without this flag a "depleted" collection run quietly plays
+    full-strength pools and every game it writes holds held-out cards.
+    """
+
+    def test_the_exclusion_reaches_the_match_worker(self, tmp_path):
+        from sealed.infrastructure.match_worker_connector import (
+            MatchWorkerConnector,
+        )
+
+        listed = tmp_path / "holdout-cards.txt"
+        with patch(
+            "sealed.infrastructure.match_worker_connector.build_jvm_command",
+            return_value=["java"],
+        ) as build, patch(
+            "sealed.infrastructure.match_worker_connector.build_forge_classpath",
+            return_value="cp",
+        ), patch("subprocess.Popen"):
+            MatchWorkerConnector().start(
+                run_id="r", best_of=7, output_file=tmp_path / "out.txt",
+                exclude_cards_path=listed,
+            )
+
+        props = build.call_args.kwargs["system_properties"]
+        assert props["sealed.exclude.cards"] == str(listed)
+
+    def test_an_ordinary_run_sets_no_exclusion_property(self, tmp_path):
+        from sealed.infrastructure.match_worker_connector import (
+            MatchWorkerConnector,
+        )
+
+        with patch(
+            "sealed.infrastructure.match_worker_connector.build_jvm_command",
+            return_value=["java"],
+        ) as build, patch(
+            "sealed.infrastructure.match_worker_connector.build_forge_classpath",
+            return_value="cp",
+        ), patch("subprocess.Popen"):
+            MatchWorkerConnector().start(
+                run_id="r", best_of=7, output_file=tmp_path / "out.txt",
+            )
+
+        assert "sealed.exclude.cards" not in build.call_args.kwargs["system_properties"]

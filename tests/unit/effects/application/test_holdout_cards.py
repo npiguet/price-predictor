@@ -89,3 +89,51 @@ def test_a_checkpoint_records_the_holdout_flags_it_trained_under() -> None:
 
     assert restored.holdout_permille == 20
     assert restored.holdout_max_carriers == 8
+
+
+class TestTheTrainerTakesTheHoldoutFlags:
+    """The quickstart tells an operator to pass these at training (FR-088).
+
+    They have to be flags, not just config fields: a depleted corpus was
+    composed against particular values, and a run that cannot be told about
+    them would silently train against a different holdout than the one its
+    pools were depleted for.
+    """
+
+    def _config(self, *argv):
+        from effects.infrastructure.cli import build_parser, train_config_from
+
+        return train_config_from(build_parser().parse_args(
+            ["train-effect-model", *argv]
+        ))
+
+    def test_the_defaults_are_the_trainer_constants(self):
+        from effects.application.train_effect_model import (
+            HOLDOUT_MAX_CARRIERS,
+            HOLDOUT_PERMILLE,
+            MIN_HOLDOUT_RECORDS,
+        )
+
+        config = self._config()
+
+        assert config.holdout_permille == HOLDOUT_PERMILLE
+        assert config.holdout_max_carriers == HOLDOUT_MAX_CARRIERS
+        assert config.min_holdout_records == MIN_HOLDOUT_RECORDS
+
+    def test_each_one_is_overridable(self):
+        config = self._config(
+            "--holdout-permille", "50",
+            "--holdout-max-carriers", "3",
+            "--min-holdout-records", "500",
+        )
+
+        assert config.holdout_permille == 50
+        assert config.holdout_max_carriers == 3
+        assert config.min_holdout_records == 500
+
+
+def test_the_min_holdout_default_matches_the_trainer_constant() -> None:
+    from effects.application.train_effect_model import MIN_HOLDOUT_RECORDS
+    from effects.infrastructure import cli
+
+    assert cli.MIN_HOLDOUT_RECORDS == MIN_HOLDOUT_RECORDS

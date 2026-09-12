@@ -906,6 +906,18 @@ def _build_match_outcomes_parser(subparsers) -> None:
     )
     match_parser.set_defaults(func=run_match_outcomes)
     match_parser.add_argument(
+        "--exclude-cards",
+        default=None,
+        help=(
+            "File of card names, one per line, that no pool may contain. "
+            "Written by 'python -m effects holdout-cards'. The worker opens "
+            "its own pool per match, so a depleted collection run needs this "
+            "here rather than on generate-pools; without it the run plays "
+            "full-strength pools and every game it collects holds held-out "
+            "cards."
+        ),
+    )
+    match_parser.add_argument(
         "--workers",
         type=int,
         default=12,
@@ -1876,6 +1888,9 @@ def run_match_outcomes(args: argparse.Namespace) -> int:
         side_b_decks_weight=side_b_decks_weight,
         effect_records_dir=effect_records_dir,
         collection_caps=_effect_collection_caps(args),
+        exclude_cards_path=(
+            Path(args.exclude_cards) if args.exclude_cards else None
+        ),
     )
 
     try:

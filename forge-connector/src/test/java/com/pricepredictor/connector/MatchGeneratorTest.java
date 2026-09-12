@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.Set;
+import java.util.Random;
+import forge.item.PaperCard;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -132,5 +135,37 @@ class MatchGeneratorTest {
             assertFalse(eligibleSets.contains(set),
                     "Small-booster set " + set + " must not be in eligible sets");
         }
+    }
+
+    @Test
+    void generatePoolOmitsExcludedCardsInTheCollectionPath() {
+        // The pool every collected effect record is played from. `generate-pools
+        // --exclude-cards` never reaches here: MatchGenerator makes its own pool
+        // per match, so a depleted collection run needs the exclusion on the
+        // worker, not on the pool file.
+        List<String> reference = new PoolGenerator().generate("RVR", 1).get(0);
+        Set<String> excluded = Set.copyOf(reference.subList(0, 10));
+
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
+                new Random(42), excluded);
+
+        List<PaperCard> pool = generator.generatePool("RVR");
+
+        assertFalse(pool.isEmpty(), "Depleted pool came back empty");
+        for (PaperCard card : pool) {
+            assertFalse(excluded.contains(card.getName()),
+                    "Excluded card reached a collected game: " + card.getName());
+        }
+    }
+
+    @Test
+    void generatePoolWithoutExclusionsIsFullStrength() {
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, TEST_RUN_ID, null, null, 0,
+                new Random(42), Set.of());
+
+        assertTrue(generator.generatePool("RVR").size() >= 70,
+                "Full-strength pool too small");
     }
 }

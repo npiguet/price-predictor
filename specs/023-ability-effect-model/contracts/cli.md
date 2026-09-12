@@ -27,15 +27,19 @@ Seeded specials: `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`.
 Writes keyword → reminder-text template for every keyword; from stage four also the generated
 implementation script, captured as text at the keyword factory, for the script-generated majority.
 
-## `python -m sealed generate-pools` (existing command, one added flag)
+## `python -m sealed generate-pools` / `match-outcomes` (existing commands, one added flag each)
 
 | Flag | Default |
 |---|---|
 | `--exclude-cards` | none — a newline-delimited Forge canonical name list, from `effects holdout-cards`. Listed cards are omitted from every booster, redrawing within the same rarity slot so pool size and rarity structure are unchanged |
 
-The flag takes a plain file so that `sealed` gains no import of `effects`. A depleted pools tree
-and a full-strength one are two `--pools-path` directories; both feed `match-outcomes`, and the
-trainer tells their games apart by whether a record names a held-out card.
+**The collection path is `match-outcomes`.** A match worker opens its own pool per match and reads
+no pools file, so `generate-pools --exclude-cards` does not deplete a collection run — it depletes a
+pools file, for the consumers that read one. Both share one redraw implementation.
+
+The flag takes a plain file so that `sealed` gains no import of `effects`. A depleted run and a
+full-strength one are two `match-outcomes` invocations writing into the same shard directory, and
+the trainer tells their games apart by whether a record names a held-out card.
 
 ## `python -m sealed match-outcomes` (existing command, one added flag)
 

@@ -110,6 +110,18 @@ public class PoolGenerator {
         return boosterTemplate;
     }
 
+    /**
+     * Open one pool from an already-resolved template, depleted of {@code excluded}.
+     *
+     * <p>Package-visible because {@link MatchGenerator} resolves its own
+     * template — it falls back to a draft booster for sets with no sealed one —
+     * and must share this redraw rule rather than keeping a second copy. Its
+     * pools are what every collected effect record is played from.
+     */
+    List<PaperCard> openPool(SealedTemplate boosterTemplate, Set<String> excluded) {
+        return openSinglePool(boosterTemplate, excluded);
+    }
+
     private List<PaperCard> openSinglePool(SealedTemplate boosterTemplate, Set<String> excluded) {
         List<PaperCard> pool = new ArrayList<>();
         Map<CardRarity, Deque<PaperCard>> spares = new EnumMap<>(CardRarity.class);

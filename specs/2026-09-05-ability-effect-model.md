@@ -179,20 +179,23 @@ From stage four, `python -m effects collect-variants` emits perturbed card scrip
 
 # Depleted collection
 
-Training games and validation games come from two collection runs over the same shard directory. A
-depleted run draws its pools from a card list with every held-out card removed; a full-strength run
-draws normally and supplies the card-disjoint stratum.
+Training games and validation games come from two `match-outcomes` runs over the same shard
+directory, differing only in `--exclude-cards`. A depleted run opens pools with every held-out card
+removed; a full-strength run opens them normally and supplies the card-disjoint stratum.
 
 - `python -m effects holdout-cards --out PATH` writes the depletion list: one Forge canonical card
   name per line, every card carrying a held-out text (§ Training, Splits). `--cards-folder` and the
   two holdout flags select the same texts the trainer selects.
-- `python -m sealed generate-pools --exclude-cards PATH` omits those cards from every booster it
-  composes, redrawing within the same rarity slot so pool size and rarity structure are unchanged.
-  The flag takes a plain name list and is the only coupling between the two packages.
-- A depleted pools directory and a full-strength one are separate `--pools-path` trees. Both feed
-  `sealed match-outcomes --effect-records`, which writes shards into the same directory: a depleted
-  game names no held-out card and trains, a full-strength game names several and validates. The
-  trainer reserves every shard holding a held-out card, so a full-strength run's shards reach the
+- `python -m sealed match-outcomes --exclude-cards PATH` omits those cards from every pool its
+  workers open, redrawing within the same rarity slot so pool size and rarity structure are
+  unchanged. The flag takes a plain name list and is the only coupling between the two packages.
+  It goes on `match-outcomes` rather than on a pools file because a match worker opens its own pool
+  per match and reads no pools directory.
+- `python -m sealed generate-pools --exclude-cards PATH` deplete a generated pools file the same
+  way, for the consumers that read one. Both paths share one redraw implementation.
+- The depleted run and the full-strength run write shards into the same directory: a depleted game
+  names no held-out card and trains, a full-strength game names several and validates. The trainer
+  reserves every shard holding a held-out card, so a full-strength run's shards reach the
   card-disjoint stratum without a flag naming them.
 - `collect-coverage` and `collect-variants` take `--split-from` rather than a depletion list, since
   each builds its own decks and excludes held-out cards there.

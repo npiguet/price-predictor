@@ -37,6 +37,7 @@ class MatchWorkerConnector:
         effect_records_dir: Path | None = None,
         worker_index: int = 0,
         collection_caps: Mapping[str, object] | None = None,
+        exclude_cards_path: Path | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -74,6 +75,11 @@ class MatchWorkerConnector:
                 ``effects.domain.collection_caps.as_system_properties``. Only
                 meaningful alongside ``effect_records_dir``; the worker falls
                 back to its own defaults for anything absent.
+            exclude_cards_path: Optional file of card names no pool may hold,
+                passed as ``-Dsealed.exclude.cards=<path>``. The worker opens
+                its own pool per match rather than reading a pools file, so a
+                depleted collection run needs the exclusion here; without it it
+                would quietly play full-strength pools.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -104,6 +110,8 @@ class MatchWorkerConnector:
             system_properties["effect.worker.index"] = str(worker_index)
             for key, value in (collection_caps or {}).items():
                 system_properties[key] = str(value)
+        if exclude_cards_path is not None:
+            system_properties["sealed.exclude.cards"] = str(exclude_cards_path)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:

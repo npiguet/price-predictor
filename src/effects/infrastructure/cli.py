@@ -42,6 +42,7 @@ DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 #: trainer's own constants are the source; `test_holdout_cli.py` pins them.
 HOLDOUT_PERMILLE = 20
 HOLDOUT_MAX_CARRIERS = 8
+MIN_HOLDOUT_RECORDS = 2000
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
 DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
@@ -892,6 +893,30 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        help=(
+            "An eligible ability text is held out when crc32(text) %% 1000 is "
+            "below this. Must match the value the corpus was depleted against "
+            f"(default: {HOLDOUT_PERMILLE})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        help=(
+            "A text more cards than this carry is never eligible for the "
+            "holdout, so depleting it cannot empty the corpus "
+            f"(default: {HOLDOUT_MAX_CARRIERS})"
+        ),
+    )
+    parser.add_argument(
+        "--min-holdout-records", type=int, default=MIN_HOLDOUT_RECORDS,
+        help=(
+            "Warn when the card-disjoint stratum holds fewer unique-text "
+            "resolution records than this; empty is a hard failure "
+            f"(default: {MIN_HOLDOUT_RECORDS})"
+        ),
+    )
+    parser.add_argument(
         "--reserved-shards", type=int, default=RESERVED_VALIDATION_SHARDS,
         help=(
             "Shards held back for validation and never trained on; their games "
@@ -914,7 +939,6 @@ def _train_effect_model_parser(subparsers) -> None:
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
         MissingSplitError,
-        TrainEffectModelConfig,
         require_split_from,
     )
 
@@ -925,13 +949,26 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         logger.error("%s", exc)
         return 2
 
-    config = TrainEffectModelConfig(
+    config = train_config_from(args)
+    from effects.application.train_effect_model import run as train
+
+    return train(config)
+
+
+def train_config_from(args: argparse.Namespace):
+    """The trainer's config, assembled from parsed arguments.
+
+    Imported here rather than at module scope so ``--help`` stays free of torch.
+    """
+    from effects.application.train_effect_model import TrainEffectModelConfig
+
+    return TrainEffectModelConfig(
         records_dir=Path(args.records_dir),
         cards_folders=resolve_cards_folders(args.cards_folders),
         variant_scripts=(
             Path(args.variant_scripts) if args.variant_scripts else None
         ),
-        split_from=split_from,
+        split_from=Path(args.split_from) if args.split_from else None,
         vocab_path=Path(args.vocab_path),
         printings_path=Path(args.printings_path),
         keyword_definitions=Path(args.keyword_definitions),
@@ -956,10 +993,10 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         epochs=args.epochs,
         patience=args.patience,
         withhold_keyword=args.withhold_keyword,
+        holdout_permille=args.holdout_permille,
+        holdout_max_carriers=args.holdout_max_carriers,
+        min_holdout_records=args.min_holdout_records,
     )
-    from effects.application.train_effect_model import run as train
-
-    return train(config)
 
 
 # ── encode-abilities ────────────────────────────────────────────────────

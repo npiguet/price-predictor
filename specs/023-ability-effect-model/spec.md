@@ -372,19 +372,25 @@ loss.
 
 #### Depleted collection
 
-- **FR-130**: Training games and validation games MUST come from two collection runs writing into the
-  same `--effect-records` directory. A depleted run draws its pools from a card list with every
-  held-out card removed; a full-strength run draws normally and supplies the card-disjoint stratum.
+- **FR-130**: Training games and validation games MUST come from two `match-outcomes` runs writing
+  into the same `--effect-records` directory, differing only in `--exclude-cards`. A depleted run
+  opens pools with every held-out card removed; a full-strength run opens them normally and supplies
+  the card-disjoint stratum.
   No record field marks which run a shard came from — the split is derived from the records, as
   everywhere else (FR-088, FR-125).
 - **FR-131**: `python -m effects holdout-cards --out PATH` MUST write the depletion list: one Forge
   canonical card name per line, every card under `--cards-folder` carrying a held-out text. It MUST
   select texts by the same rule and the same flags as FR-088, and MUST report the card count and the
   share of the corpus it represents.
-- **FR-132**: `python -m sealed generate-pools --exclude-cards PATH` MUST omit the listed cards from
-  every booster it composes, redrawing within the same rarity slot so pool size and rarity structure
-  are unchanged. The flag MUST take a plain newline-delimited name list, so that `sealed` gains no
+- **FR-132**: `python -m sealed match-outcomes --exclude-cards PATH` MUST omit the listed cards from
+  every pool its workers open, redrawing within the same rarity slot so pool size and rarity
+  structure are unchanged. It is the collection path: a match worker opens its own pool per match
+  rather than reading a pools file, so the exclusion MUST reach the worker and not a pools
+  directory. The flag MUST take a plain newline-delimited name list, so that `sealed` gains no
   import of `effects`.
+- **FR-132a**: `python -m sealed generate-pools --exclude-cards PATH` MUST deplete a generated pools
+  file the same way, for the consumers that read one (`build-decks`, `pick-decks`). The two paths
+  MUST share one redraw implementation; a second copy is the copy that stops matching.
 - **FR-133**: The full-strength run MUST be sized for the card-disjoint stratum alone and is far
   smaller than the depleted run. `collect-coverage` and `collect-variants` MUST keep taking
   `--split-from` rather than a depletion list, since each builds its own decks and excludes held-out

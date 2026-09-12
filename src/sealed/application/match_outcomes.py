@@ -39,6 +39,7 @@ class MatchOutcomeSupervisor:
         side_b_decks_weight: int = DEFAULT_SIDE_B_DECKS_WEIGHT,
         effect_records_dir: Path | None = None,
         collection_caps: Mapping[str, object] | None = None,
+        exclude_cards_path: Path | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._output_path = output_path
@@ -52,6 +53,7 @@ class MatchOutcomeSupervisor:
         # Only meaningful alongside the shard directory; the worker falls back
         # to its own defaults for anything absent.
         self._collection_caps = collection_caps
+        self._exclude_cards_path = exclude_cards_path
         self._run_id = str(uuid.uuid4())
         self._connector = MatchWorkerConnector()
         # Only constructed when a shard directory is: a plain match-outcomes
@@ -123,6 +125,7 @@ class MatchOutcomeSupervisor:
             # this cannot be what makes a restarted worker's ids distinct.
             worker_index=worker_id,
             collection_caps=self._collection_caps,
+            exclude_cards_path=self._exclude_cards_path,
         )
         print(f"Worker {worker_id} started (PID {proc.pid})")
         return proc

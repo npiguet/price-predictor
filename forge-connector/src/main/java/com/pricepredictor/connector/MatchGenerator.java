@@ -11,11 +11,15 @@ import forge.item.SealedTemplate;
 import forge.item.generation.UnOpenedProduct;
 import forge.model.FModel;
 import forge.util.MyRandom;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 /**
  * Generates one complete sealed match outcome per call.
@@ -64,6 +68,7 @@ public class MatchGenerator {
     private final GeneratedDecksIndex sideBIndex;
     private final int sideBWeight;
     private final Random random;
+    private final Set<String> excludedCards;
 
     public MatchGenerator(
             List<String> eligibleSetCodes,
@@ -86,6 +91,20 @@ public class MatchGenerator {
             GeneratedDecksIndex sideBIndex,
             int sideBWeight,
             Random random) {
+        this(eligibleSetCodes, deckBuilder, gamePlayer, runId, sideAIndex,
+                sideBIndex, sideBWeight, random, excludedCardsFromProperties());
+    }
+
+    MatchGenerator(
+            List<String> eligibleSetCodes,
+            DeckBuilder deckBuilder,
+            GamePlayer gamePlayer,
+            String runId,
+            GeneratedDecksIndex sideAIndex,
+            GeneratedDecksIndex sideBIndex,
+            int sideBWeight,
+            Random random,
+            Set<String> excludedCards) {
         if (eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
         }
@@ -104,6 +123,7 @@ public class MatchGenerator {
         this.sideBIndex = sideBIndex;
         this.sideBWeight = sideBWeight;
         this.random = random;
+        this.excludedCards = Set.copyOf(excludedCards);
     }
 
     /**
@@ -326,17 +346,36 @@ public class MatchGenerator {
             CardEdition edition = StaticData.instance().getEditions().get(setCode);
             template = edition.getBoosterTemplate("Draft");
         }
+        // Delegated so that depletion has one implementation: this is the pool
+        // every collected effect record is played from, and a second copy of
+        // the redraw rule here would be the copy that silently stopped matching.
+        return new PoolGenerator().openPool(template, excludedCards);
+    }
 
-        List<PaperCard> pool = new ArrayList<>();
-        for (int i = 0; i < BOOSTERS_PER_POOL; i++) {
-            List<PaperCard> booster = new UnOpenedProduct(template).get();
-            for (PaperCard card : booster) {
-                if (!card.getRules().getMainPart().getType().isBasicLand()) {
-                    pool.add(card);
-                }
-            }
+    /**
+     * Card names no booster may contain, from {@code -Dsealed.exclude.cards}.
+     *
+     * <p>A depleted run: with these absent from every pool, no collected game
+     * holds a held-out card and none has to be discarded from the effect
+     * model's training corpus. Absent property means an ordinary full-strength
+     * run, which is what supplies the card-disjoint validation stratum.
+     */
+    static Set<String> excludedCardsFromProperties() {
+        String path = System.getProperty("sealed.exclude.cards");
+        if (path == null || path.isBlank()) {
+            return Set.of();
         }
-        return pool;
+        try {
+            return Set.copyOf(Files.readAllLines(Path.of(path.trim())).stream()
+                    .map(String::trim)
+                    .filter(line -> !line.isEmpty())
+                    .toList());
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Cannot read -Dsealed.exclude.cards=" + path
+                            + ". A depleted run that silently fell back to full-strength "
+                            + "pools would put held-out cards in training games.", e);
+        }
     }
 
     /** Materialize a list of card names into a Forge {@link Deck}. */
