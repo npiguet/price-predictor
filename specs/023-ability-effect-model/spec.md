@@ -714,7 +714,9 @@ loss.
 #### Reading the corpus
 
 - **FR-125**: The trainer MUST read the record corpus one shard at a time and MUST NOT hold more than
-  one shard of parsed records at once. Every shard holding a record that names a held-out card MUST be
+  one shard of parsed records at once. Shard discovery MUST recurse: a depleted run and a
+  full-strength one kept in subdirectories of `--effect-records` are one corpus, and a flat glob
+  would read neither while reporting nothing. Every shard holding a record that names a held-out card MUST be
   reserved, which puts a full-strength collection run's shards (FR-130) in the card-disjoint stratum
   without a flag naming them. `--reserved-shards` (default 4) further shards, spread evenly across the
   remaining shard list, are held back for the game-disjoint stratum and never trained on; the rest are

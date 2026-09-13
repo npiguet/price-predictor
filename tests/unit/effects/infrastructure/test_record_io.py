@@ -9,6 +9,7 @@ collection precisely so those can be checked now.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -659,3 +660,53 @@ class TestCompressedShards:
         line = format_record_line(_record())
         path.write_text(f"{line}\n\n{line}\n", encoding="utf-8")
         assert len(list(read_shard(path))) == 2
+
+
+class TestShardsInSubdirectories:
+    """Shards nested under the corpus directory are part of the corpus (T173).
+
+    A flat directory is what the quickstart writes, but separating a depleted
+    collection run from a full-strength one into two subdirectories is the
+    obvious way to keep them straight — and a non-recursive glob reads none of
+    them while reporting nothing. Every consumer goes through this function:
+    the trainer would see an empty corpus, and `collect-coverage` would recount
+    every card as having zero records and chase a target already met.
+    """
+
+    def _shard(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("", encoding="utf-8")
+        return path
+
+    def test_it_finds_shards_nested_one_level_down(self, tmp_path) -> None:
+        self._shard(tmp_path / "depleted" / "run.0-a.jsonl.gz")
+        self._shard(tmp_path / "full-strength" / "run.0-b.jsonl.gz")
+        self._shard(tmp_path / "top.0-c.jsonl.gz")
+
+        found = iter_shards(tmp_path)
+
+        assert {p.name for p in found} == {
+            "run.0-a.jsonl.gz", "run.0-b.jsonl.gz", "top.0-c.jsonl.gz",
+        }
+
+    def test_it_finds_both_spellings_when_nested(self, tmp_path) -> None:
+        self._shard(tmp_path / "old" / "run.0-a.jsonl")
+        self._shard(tmp_path / "new" / "run.0-b.jsonl.gz")
+
+        assert len(iter_shards(tmp_path)) == 2
+
+    def test_a_nested_gz_is_not_claimed_twice(self, tmp_path) -> None:
+        """`*.jsonl` matches `x.jsonl.gz` on some platforms."""
+        self._shard(tmp_path / "sub" / "run.0-a.jsonl.gz")
+
+        found = iter_shards(tmp_path)
+
+        assert len(found) == 1
+
+    def test_the_order_is_stable_across_calls(self, tmp_path) -> None:
+        """Shard order fixes the epoch walk and the split's accumulation."""
+        for name in ("b", "a", "c"):
+            self._shard(tmp_path / f"dir{name}" / f"run.0-{name}.jsonl.gz")
+
+        assert iter_shards(tmp_path) == iter_shards(tmp_path)
+        assert iter_shards(tmp_path) == sorted(iter_shards(tmp_path))

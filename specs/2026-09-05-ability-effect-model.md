@@ -14,7 +14,7 @@ The ability effect model is a pretrained model of what each card ability does in
 
 # Corpus
 
-Location: `output/effects/records/`, shard files named `{run_id}.{worker}-{lifetime}.jsonl`, one per worker JVM lifetime, one JSON record per line, append-only. Readers load every `*.jsonl` in the directory and tolerate a trailing partial line.
+Location: `output/effects/records/` and any subdirectory of it — discovery recurses, so a depleted run and a full-strength one may be kept in separate subdirectories and still read as one corpus. Shard files named `{run_id}.{worker}-{lifetime}.jsonl`, one per worker JVM lifetime, one JSON record per line, append-only. Readers load every `*.jsonl` in the directory and tolerate a trailing partial line.
 
 The record schema is fixed before stage one (§ Stages); later stages widen the corpus without invalidating earlier records.
 

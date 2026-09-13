@@ -715,14 +715,27 @@ def read_shard(path: Path) -> Iterator[EffectRecord]:
 
 
 def iter_shards(directory: Path) -> list[Path]:
-    """Every shard under ``directory``, in name order, either spelling."""
+    """Every shard at or under ``directory``, in path order, either spelling.
+
+    Recursive, because separating a depleted collection run from a
+    full-strength one into two subdirectories is the obvious way to keep them
+    apart, and a flat glob reads neither while reporting nothing. Every
+    consumer arrives here: the trainer would see an empty corpus, and
+    ``collect-coverage`` would recount every card at zero records and chase a
+    target the corpus had already met.
+
+    Path order rather than name order, so two shards of the same name in
+    different subdirectories keep a stable relative position — the epoch walk
+    and the split's shard-by-shard accumulation both depend on the order not
+    moving between runs.
+    """
     directory = Path(directory)
     if not directory.is_dir():
         return []
     found: list[Path] = []
     for pattern in SHARD_GLOBS:
         found.extend(
-            path for path in directory.glob(pattern)
+            path for path in directory.rglob(pattern)
             # "*.jsonl" also matches "x.jsonl.gz" on some platforms; the
             # compressed pattern already claimed those.
             if path.suffix != ".gz" or pattern.endswith(".gz")
