@@ -260,15 +260,15 @@ tens of gigabytes.
 
 ### The cap flags
 
-Five flags cap what one worker collects, and every one is a per-worker quantity the supervisor cannot
-observe, so they travel to the JVM as `-Deffect.*` properties. They are accepted by both
-`match-outcomes` and `collect-coverage`.
+Seven flags govern what one worker collects, and every one is a per-worker quantity the supervisor
+cannot observe, so they travel to the JVM as `-Deffect.*` properties. All three collecting commands
+accept all seven: `match-outcomes`, `collect-coverage` and `collect-variants`.
 
 | Flag | Default | What it caps |
 |---|---|---|
 | `--mana-cap` | 1 | Records per unique mana ability **per game**, drawn uniformly from that game's activations rather than taken first — a land's first tap is turn one against an empty board, and taking it would make every mana record describe the same early game. Keyed on the mana produced, so a dual land's colours each record. |
 | `--playability-rate` | 0.1 | Share of decision points sampled. The legality subkinds are coalesced on their rendered payload instead, since the AI re-asks who may block while it evaluates. |
-| `--interventions-per-game` | 2 | Forced resolutions per game. Off unless the flag is given. |
+| `--interventions-per-game` | 2 | Forced resolutions per game. On at the default — pass `0` to stop them, since omitting the flag leaves them running. |
 | `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
 | `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
 | `--legality-rate` | 0.1 | Share of legality points kept, sampled *after* the coalescing above. Its own knob because the two playability subkinds arrive at very different volumes from one priority pass. |
