@@ -62,6 +62,7 @@ class CollectVariantsConfig:
     variant_volume: float = DEFAULT_VARIANT_VOLUME
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
     split_from: Path | None = None
+    exclude_cards: Path | None = None
     workers: int = 12
     caps: CollectionCaps = field(default_factory=CollectionCaps)
 
@@ -176,10 +177,12 @@ def _rename(lines: list[str], name: str) -> list[str]:
     ]
 
 
-def held_out_cards(split_from: Path | None) -> frozenset[str]:
-    from effects.application.collect_coverage import load_held_out
+def held_out_cards(
+    split_from: Path | None, exclude_cards: Path | None = None,
+) -> frozenset[str]:
+    from effects.application.collect_coverage import load_exclusions
 
-    return load_held_out(split_from)
+    return load_exclusions(split_from=split_from, exclude_cards=exclude_cards)
 
 
 def run(config: CollectVariantsConfig) -> int:
@@ -207,7 +210,7 @@ def run(config: CollectVariantsConfig) -> int:
         )
         return 1
 
-    held_out = held_out_cards(config.split_from)
+    held_out = held_out_cards(config.split_from, config.exclude_cards)
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
         held_out=held_out, limit=budget,

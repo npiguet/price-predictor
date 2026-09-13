@@ -392,9 +392,9 @@ loss.
   file the same way, for the consumers that read one (`build-decks`, `pick-decks`). The two paths
   MUST share one redraw implementation; a second copy is the copy that stops matching.
 - **FR-133**: The full-strength run MUST be sized for the card-disjoint stratum alone and is far
-  smaller than the depleted run. `collect-coverage` and `collect-variants` MUST keep taking
-  `--split-from` rather than a depletion list, since each builds its own decks and excludes held-out
-  cards there (FR-045, FR-057).
+  smaller than the depleted run. `collect-coverage` and `collect-variants` build their own decks
+  rather than opening pools, so each takes the depletion list directly (FR-045, FR-057) and neither
+  requires a trained checkpoint to know the holdout.
 - **FR-134**: A checkpoint MUST record the holdout flags it trained under alongside its split, and
   `--split-from` MUST carry them. Changing the holdout invalidates a depleted corpus, whose games were
   composed against the old list, so the flags are pinned for the life of a corpus.
@@ -403,8 +403,11 @@ loss.
 
 - **FR-044**: `python -m effects collect-coverage` MUST work in rounds, each rebuilding weighted decks,
   playing `--decks-per-round` (default 500) of those decks as matches, and recounting coverage.
-- **FR-045**: It MUST read the held-out card list from `--split-from PATH` when given — every card
-  carrying a held-out text — and exclude those cards from every deck.
+- **FR-045**: It MUST read the held-out card list from `--exclude-cards PATH` — the list
+  `holdout-cards` writes — and exclude those cards from every deck, folding case on both sides.
+  `--split-from PATH` MUST remain as the alternative, for adding coverage to a corpus an existing
+  checkpoint trained on. Passing both MUST be refused rather than merged: the holdout would then have
+  two spellings and a disagreement between them would be silent. Neither given means no exclusions.
 - **FR-046**: Decks MUST be built over the whole converted card corpus rather than sealed-legal sets,
   drawing candidates from the `output/cardsfolder/` entry of `--cards-folder` alone, weighted toward
   cards with the fewest effect records, as 40-card decks of 23 nonlands plus basics from

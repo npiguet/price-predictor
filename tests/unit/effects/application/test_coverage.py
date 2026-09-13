@@ -351,3 +351,42 @@ class TestRunClosesTheSupervisor:
 
         supervisor.play_round.assert_called_once()
         supervisor.stop.assert_called_once()
+
+
+class TestExclusionsWithoutACheckpoint:
+    """The holdout no longer needs a trained model to exist (T171).
+
+    `--split-from` was the only way to learn the holdout when it was derived at
+    training time. It is now derived from the converted tree and two flags, so
+    requiring a checkpoint makes coverage collection wait for a training run
+    that is itself supposed to come after it — which the quickstart papered over
+    by telling an operator to run step 6 once and come back.
+    """
+
+    def test_the_depletion_list_is_read_and_folded(self, tmp_path) -> None:
+        from effects.application.collect_coverage import load_exclusions
+
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("Soul Echo\nLim-Dûl's Vault\n", encoding="utf-8")
+
+        excluded = load_exclusions(split_from=None, exclude_cards=listed)
+
+        assert excluded == frozenset({"soul echo", "lim-dûl's vault"}), (
+            "the file carries Forge's printed case; coverage decks are built "
+            "from converted names, which are lowercase"
+        )
+
+    def test_neither_source_means_no_exclusions(self) -> None:
+        from effects.application.collect_coverage import load_exclusions
+
+        assert load_exclusions(split_from=None, exclude_cards=None) == frozenset()
+
+    def test_both_sources_at_once_is_refused(self, tmp_path) -> None:
+        """Two spellings of the same holdout is the bug this feature just had."""
+        from effects.application.collect_coverage import load_exclusions
+
+        listed = tmp_path / "holdout-cards.txt"
+        listed.write_text("Soul Echo\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="one source"):
+            load_exclusions(split_from=tmp_path / "latest.pt", exclude_cards=listed)

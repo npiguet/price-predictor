@@ -328,6 +328,17 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--exclude-cards", type=str, default=None,
+        help=(
+            "File of card names, one per line, to keep out of every deck — "
+            "from 'python -m effects holdout-cards'. The ordinary way to name "
+            "the holdout: it needs no trained model, so this command no longer "
+            "waits on a training run that follows it. Mutually exclusive with "
+            "--split-from, which inherits an existing checkpoint's split "
+            "instead."
+        ),
+    )
+    parser.add_argument(
         "--target-records", type=int, default=50,
         help="Per-card satisfaction goal (default: 50)",
     )
@@ -358,6 +369,7 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
         effect_records=Path(args.effect_records),
         cards_folders=resolve_cards_folders(args.cards_folders),
         split_from=Path(args.split_from) if args.split_from else None,
+        exclude_cards=Path(args.exclude_cards) if args.exclude_cards else None,
         target_records=args.target_records,
         decks_per_round=args.decks_per_round,
         no_progress_rounds=args.no_progress_rounds,
@@ -814,6 +826,17 @@ def _collect_variants_parser(subparsers) -> None:
             "excluded"
         ),
     )
+    parser.add_argument(
+        "--exclude-cards", type=str, default=None,
+        help=(
+            "File of card names, one per line, to keep out of every deck — "
+            "from 'python -m effects holdout-cards'. The ordinary way to name "
+            "the holdout: it needs no trained model, so this command no longer "
+            "waits on a training run that follows it. Mutually exclusive with "
+            "--split-from, which inherits an existing checkpoint's split "
+            "instead."
+        ),
+    )
     parser.add_argument("--workers", type=int, default=12)
     _add_cap_flags(parser)
 
@@ -830,6 +853,7 @@ def run_collect_variants(args: argparse.Namespace) -> int:
         variant_volume=args.variant_volume,
         decks_per_round=args.decks_per_round,
         split_from=Path(args.split_from) if args.split_from else None,
+        exclude_cards=Path(args.exclude_cards) if args.exclude_cards else None,
         workers=args.workers,
         caps=CollectionCaps.from_args(args),
     ))

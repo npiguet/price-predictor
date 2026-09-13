@@ -294,7 +294,7 @@ you can size it against what the holdout actually covers.
 
 ```bash
 python -m effects collect-coverage \
-    --split-from models/effects/effect-model/latest.pt \
+    --exclude-cards output/effects/holdout-cards.txt \
     --target-records 50 --workers 12 \
     --interventions-per-game 2 \
     --probes-per-game 2 \
@@ -306,10 +306,11 @@ appears in a record at all. Decks are built over the whole converted corpus, wei
 with the fewest records, and rounds play until every card is satisfied or retires after
 `--no-progress-rounds` without a new qualifying record — which is what makes the run terminate.
 
-`--split-from` keeps held-out cards out of every deck; without it a coverage run contaminates the
-split of the model it feeds. On a first pass there is no checkpoint yet, so either run step 6 once on
-the self-play corpus and come back, or omit the flag and accept that this corpus cannot be used to
-evaluate a model split afterwards.
+`--exclude-cards` keeps held-out cards out of every deck; without it a coverage run puts them into
+training games and contaminates the split of the model it feeds. It reads step 3's list, so it needs
+no trained model — pass `--split-from CHECKPOINT` instead only when adding coverage to a corpus an
+existing checkpoint was trained on, whose recorded split is then the authority. Passing both is
+refused: two spellings of one holdout is a disagreement nothing else would report.
 
 Every worker here collects effect records unconditionally (there is no plain mode to fall back to,
 unlike step 3), so it writes the same `{run_id}.{worker}.log` per-worker logs described in step 3's
@@ -335,7 +336,7 @@ The script surface is a second vocabulary and a second cache, side by side with 
 python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
 
 python -m effects collect-variants \
-    --split-from models/effects/effect-model/latest.pt \
+    --exclude-cards output/effects/holdout-cards.txt \
     --variant-volume 0.2
 ```
 

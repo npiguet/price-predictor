@@ -58,6 +58,7 @@ class CollectCoverageConfig:
     effect_records: Path = field(default_factory=lambda: DEFAULT_RECORDS_DIR)
     cards_folders: tuple[Path, ...] = DEFAULT_CARDS_FOLDERS
     split_from: Path | None = None
+    exclude_cards: Path | None = None
     target_records: int = DEFAULT_TARGET_RECORDS
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
     no_progress_rounds: int = DEFAULT_NO_PROGRESS_ROUNDS
@@ -235,6 +236,39 @@ def residues(
     return CoverageResidues(tuple(uncastable), tuple(short))
 
 
+def load_exclusions(
+    *, split_from: Path | None, exclude_cards: Path | None,
+) -> frozenset[str]:
+    """Cards to keep out of every deck, from whichever source names them.
+
+    ``--exclude-cards`` is the ordinary one: the holdout is derived from the
+    converted tree and two flags, so it needs no trained model and this command
+    no longer waits on a training run that is supposed to follow it.
+    ``--split-from`` remains for collecting more coverage against a checkpoint
+    that already exists, whose recorded split is then the authority.
+
+    Both at once is refused rather than merged. Two spellings of one holdout is
+    precisely the failure this feature has already had once, and a merge would
+    hide a disagreement instead of reporting it.
+    """
+    from effects.application.train_effect_model import fold_card_name
+
+    if split_from is not None and exclude_cards is not None:
+        raise ValueError(
+            "pass one source of held-out cards, not both: --exclude-cards "
+            "names the list this corpus is being depleted against, "
+            "--split-from inherits a checkpoint's recorded split, and a "
+            "disagreement between them is silent"
+        )
+    if exclude_cards is not None:
+        return frozenset(
+            fold_card_name(line.strip())
+            for line in Path(exclude_cards).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    return load_held_out(split_from)
+
+
 def load_held_out(split_from: Path | None) -> frozenset[str]:
     """Cards to keep out of every deck (FR-045).
 
@@ -294,7 +328,9 @@ def run(config: CollectCoverageConfig) -> int:
         )
         return 1
 
-    held_out = load_held_out(config.split_from)
+    held_out = load_exclusions(
+        split_from=config.split_from, exclude_cards=config.exclude_cards,
+    )
     coverage = build_coverage_units(cards_folder, held_out)
     if not coverage:
         logger.error("No deckable cards under %s", cards_folder)

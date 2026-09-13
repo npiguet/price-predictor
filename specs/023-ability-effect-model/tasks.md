@@ -354,6 +354,8 @@ held-out set is built by depleting the pools* and *The holdout unit is ability t
 - [X] T168 `collect-variants` skips cards carrying a held-out text and states the reason, replacing T138's held-out-with-it assertion (FR-057)
 - [X] T169 Checkpoints record the holdout flags alongside the split, and `--split-from` carries them (FR-134)
 - [X] T170 Import-direction test extended: `sealed` must not import `effects` despite `--exclude-cards`
+- [X] T171 [P] Test in `tests/unit/effects/application/test_coverage.py` that `load_exclusions` reads and folds the depletion list, returns empty with neither source, and refuses both at once
+- [X] T172 `--exclude-cards` on `collect-coverage` and `collect-variants`, so neither waits on a training run that follows it; `--split-from` stays for adding coverage to an existing checkpoint's corpus (FR-045, FR-133)
 
 ---
 
