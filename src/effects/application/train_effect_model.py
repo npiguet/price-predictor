@@ -1011,6 +1011,29 @@ class ContextCache:
 # ── the run ─────────────────────────────────────────────────────────────
 
 
+def text_for_key(key, sidecars, surface: str) -> str | None:
+    """One provenance key's text on ``surface``, or None where it has none.
+
+    The single key-level definition. ``build-corpus`` surveys by provenance key
+    and folds to text afterwards, and a second spelling of this would key the
+    rarity table differently from every lookup the trainer makes against it.
+
+    Falls back to the key itself where the sidecar carries neither surface, so
+    a line that cannot be read is still a distinct unit for rarity weighting
+    rather than collapsing into every other unreadable line.
+    """
+    from effects.domain.ability_encoder import encoding_text
+
+    try:
+        line = sidecars.line_for(key)
+    except KeyError:
+        return None
+    if line is None:
+        return None
+    text = encoding_text(line, sidecars.prose_for(key), surface)
+    return text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
+
+
 def ability_text_of(
     record: EffectRecord, sidecars, surface: str = "prose",
 ) -> str | None:
@@ -1018,24 +1041,13 @@ def ability_text_of(
 
     ``combat`` and the ``attackers``/``blockers`` subkinds have none, which is
     what makes them sample uniformly rather than by rarity.
-
-    Falls back to the key itself where the sidecar carries neither surface, so a
-    line that cannot be read is still a distinct unit for rarity weighting
-    rather than collapsing into every other unreadable line.
     """
-    from effects.domain.ability_encoder import encoding_text
-
     if not record.ability:
         return None
     for key in record.ability:
-        try:
-            line = sidecars.line_for(key)
-        except KeyError:
-            continue
-        if line is None:
-            continue
-        text = encoding_text(line, sidecars.prose_for(key), surface)
-        return text or f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
+        text = text_for_key(key, sidecars, surface)
+        if text is not None:
+            return text
     return None
 
 
