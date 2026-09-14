@@ -15,6 +15,7 @@ def manifest(**overrides) -> CorpusManifest:
         game_disjoint_target=1000,
         training_records=0,
         class_mix={"rewrite": 1.0},
+        delivered_mix={"rewrite": 1.0},
         held_out_cards=("soul echo",),
         held_out_texts=("deals 3 damage",),
         card_disjoint_games=("run.0-a.1",),
@@ -72,3 +73,11 @@ def test_drift_reports_a_shard_that_grew():
     added, removed, resized = manifest().drift(current)
     assert (added, removed) == ((), ())
     assert resized == ("depleted/run.0-a.jsonl.gz",)
+
+
+def test_digest_changes_when_the_delivered_mixture_changes():
+    """Two datasets holding different class proportions are different
+    datasets, so a checkpoint pinned to one must refuse the other."""
+    assert manifest().digest() != manifest(
+        delivered_mix={"rewrite": 0.5, "combat": 0.5},
+    ).digest()

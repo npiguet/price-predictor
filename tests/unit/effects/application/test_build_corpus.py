@@ -26,6 +26,7 @@ default ``--holdout-permille 20``, per the task brief.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,12 +34,14 @@ import pytest
 
 from effects.application.build_corpus import BuildCorpusConfig, _output_name, build
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
+from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
     Moment,
     RecordKind,
     ResolutionPayload,
+    RewritePayload,
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
@@ -137,6 +140,17 @@ def _combat(
             attackers=("E0",), probed_keyword=probed_keyword,
             probed_entity=probed_entity,
         ),
+    )
+
+
+def _rewrite(
+    record_id: str, game_id: str, *, ability: tuple[ProvenanceKey, ...],
+) -> EffectRecord:
+    return EffectRecord(
+        record_id=record_id, run_id="run", timestamp="2026-09-14T00:00:00.000000Z",
+        game_id=game_id, kind=RecordKind.REWRITE, actor_player="P0",
+        ability=ability, state=_snapshot(),
+        payload=RewritePayload(incoming=Event(type=EventType.ZONE_CHANGE)),
     )
 
 
@@ -462,3 +476,111 @@ def test_the_manifest_records_per_stratum_counts_and_unique_texts(tmp_path, a_co
     assert "game-disjoint" in manifest.per_stratum
     assert manifest.unique_texts["card-disjoint"] > 0
     assert manifest.unique_texts["game-disjoint"] > 0
+
+
+# ── the delivered mixture is the mixture the manifest records ─────────
+
+#: Shards, records per class per shard, and the cap — chosen so the per-shard
+#: estimate of what ``rewrite`` can supply is four times the truth. Each shard
+#: holds ``_MIX_PER_SHARD`` records of ONE rewrite text, so a shard-local heap
+#: of ``_MIX_TEXT_CAP`` admits that many *per shard* while the corpus-wide cap
+#: admits that many in total.
+_MIX_SHARDS = 4
+_MIX_PER_SHARD = 800
+_MIX_TEXT_CAP = 400
+
+
+@pytest.fixture
+def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
+    """Four shards, one text repeated far past the cap, and an uncapped class.
+
+    ``rewrite`` carries one ability text and is what the cap bites; ``combat``
+    has no acting line at all (FR-087), so nothing caps it and its
+    availability is exact either way. Asked for half and half, the two come
+    out half and half only if availability is estimated corpus-wide.
+
+    One further game holds the held-out ability resolving, which is what the
+    card-disjoint stratum is made of; its records are ``resolution-effect``,
+    a class outside this corpus's ``--class-mix``, so nothing it holds reaches
+    the training mixture under test.
+    """
+    root = tmp_path / "mixture-source"
+    _write_card(root, _HELD_OUT_FILE, _HELD_OUT_CARD, _HELD_OUT_TEXT)
+    _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
+
+    records_dir = root / "records"
+    for shard in range(_MIX_SHARDS):
+        rows: list[EffectRecord] = [
+            _rewrite(f"rw.{shard}.{n}", f"g-rw-{shard}", ability=(_BOLT_KEY,))
+            for n in range(_MIX_PER_SHARD)
+        ]
+        rows += [
+            _combat(f"cb.{shard}.{n}", f"g-cb-{shard}")
+            for n in range(_MIX_PER_SHARD)
+        ]
+        if shard == 0:
+            rows.append(
+                _resolution("g-tainted.1", "g-tainted", ability=(_HELD_OUT_KEY,)),
+            )
+        write_shard(records_dir / f"run.0-{shard}.jsonl.gz", rows)
+
+    return CorpusFixture(records=records_dir, cards=(str(root / "cardsfolder"),))
+
+
+def _mixture_config(output: Path, records: Path, cards: tuple[str, ...]):
+    return BuildCorpusConfig(
+        records_dir=records, cards_folders=cards, output=output, workers=1,
+        text_cap=_MIX_TEXT_CAP, class_mix={"rewrite": 0.5, "combat": 0.5},
+        game_disjoint_target=0,
+    )
+
+
+def _delivered_shares(training_dir: Path) -> dict[str, float]:
+    from effects.application.train_effect_model import sampling_class
+
+    counts: Counter[str] = Counter()
+    for record in read_records(training_dir):
+        counts[sampling_class(record)] += 1
+    total = sum(counts.values())
+    return {name: count / total for name, count in counts.items()}
+
+
+def test_the_delivered_class_mixture_is_the_one_the_manifest_records(
+    tmp_path, a_mixture_corpus,
+):
+    """FR-139: a class is written at its share or its shortfall is recorded.
+
+    ``class_capped_records`` was summed from each shard's own ``CapHeap``
+    thresholds while the real cap is corpus-wide, so availability was
+    over-estimated by a factor of the shard count for exactly the classes the
+    cap touches. ``build()`` divides each class's target by that availability
+    to get its admission rate, so every capped class under-delivered against
+    the mixture the manifest went on to record.
+    """
+    out = tmp_path / "curated"
+    assert build(_mixture_config(
+        out, a_mixture_corpus.records, a_mixture_corpus.cards,
+    )) == 0
+
+    delivered = _delivered_shares(CorpusStore(out).training_dir)
+    requested = CorpusStore(out).load().class_mix
+    for name, share in requested.items():
+        assert abs(delivered.get(name, 0.0) - share) < 0.05, (
+            f"{name}: delivered {delivered.get(name, 0.0):.3f} against a "
+            f"recorded share of {share:.3f}"
+        )
+
+
+def test_the_manifest_records_what_was_delivered_beside_what_was_asked_for(
+    tmp_path, a_mixture_corpus,
+):
+    """The requested mixture is a claim; the delivered one is a fact, and the
+    dataset's whole value is that its manifest is true."""
+    out = tmp_path / "curated"
+    build(_mixture_config(out, a_mixture_corpus.records, a_mixture_corpus.cards))
+
+    manifest = CorpusStore(out).load()
+    delivered = _delivered_shares(CorpusStore(out).training_dir)
+    assert set(manifest.delivered_mix) == set(delivered)
+    for name, share in delivered.items():
+        assert manifest.delivered_mix[name] == pytest.approx(share, abs=1e-6)

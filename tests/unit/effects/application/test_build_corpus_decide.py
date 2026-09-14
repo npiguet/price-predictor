@@ -102,11 +102,11 @@ def a_survey(*, heap_cap: int = 200, **overrides) -> Survey:
     to fold by walking ``key_records`` alone.
 
     ``class_records`` defaults to one token record of one class rather than to
-    nothing: ``decide`` always computes class targets from
-    ``class_capped_records``, and an empty availability map makes
-    ``class_targets`` raise — a scenario no test here is about.
-    ``class_capped_records`` defaults to a copy of whatever ``class_records``
-    ends up being, absent its own override.
+    nothing: ``decide`` always computes class targets from what the cap leaves
+    available, and an empty availability map makes ``class_targets`` raise — a
+    scenario no test here is about. ``class_key_records`` (sampling class ->
+    rendered key -> records) defaults to empty, which means every record of
+    every class has no acting line and so is never capped.
     """
     key_records = Counter(overrides.pop("key_records", {}))
     key_hashes: dict[str, object] = overrides.pop("key_hashes", {})
@@ -127,9 +127,10 @@ def a_survey(*, heap_cap: int = 200, **overrides) -> Survey:
     class_records = Counter(
         {CLASS_REWRITE: 1} if given_class_records is _UNSET else given_class_records
     )
-    class_capped_records = Counter(
-        overrides.pop("class_capped_records", dict(class_records))
-    )
+    class_key_records = {
+        name: Counter(per_key)
+        for name, per_key in overrides.pop("class_key_records", {}).items()
+    }
 
     base = dict(
         shards=(),
@@ -138,7 +139,7 @@ def a_survey(*, heap_cap: int = 200, **overrides) -> Survey:
         key_records=key_records,
         key_heaps=key_heaps,
         class_records=class_records,
-        class_capped_records=class_capped_records,
+        class_key_records=class_key_records,
         held_out_text_games={},
         held_out_games=frozenset(),
         games=frozenset(),
@@ -319,8 +320,10 @@ def test_the_card_disjoint_draw_is_seeded(fake_sidecars):
 
 def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
     survey = a_survey(
+        key_records={REPRINT_A: 100},
         class_records={"rewrite": 100, "combat": 50},
-        class_capped_records={"rewrite": 40, "combat": 20},
+        class_key_records={"rewrite": {REPRINT_A: 100}},
+        heap_cap=10,
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        held_out_texts=HELD_OUT_TEXTS,
@@ -331,16 +334,68 @@ def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
 
 
 def test_class_targets_are_computed_from_the_capped_counts_not_the_raw_ones(fake_sidecars):
-    # class_records is what the corpus holds before the per-text cap;
-    # class_capped_records is what survives it. class_targets has to be sized
-    # off the capped count (10): fed the raw one (100) instead, it would
-    # target more training records than the cap is about to leave available,
-    # and the manifest would advertise a mixture the corpus cannot supply.
+    # class_records is what the corpus holds before the per-text cap; a cap of
+    # 10 over one text carrying all 100 of them leaves 10. class_targets has to
+    # be sized off that: fed the raw count instead, it would target more
+    # training records than the cap is about to leave available, and the
+    # manifest would advertise a mixture the corpus cannot supply.
     survey = a_survey(
-        class_records={"rewrite": 100}, class_capped_records={"rewrite": 10},
+        key_records={REPRINT_A: 100},
+        class_records={"rewrite": 100},
+        class_key_records={"rewrite": {REPRINT_A: 100}},
+        heap_cap=10,
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        held_out_texts=HELD_OUT_TEXTS,
-                       config=a_config(class_mix={"rewrite": 1.0}))
+                       config=a_config(text_cap=10, class_mix={"rewrite": 1.0}))
 
     assert decisions.class_targets["rewrite"] == 10
+
+
+def test_the_capped_estimate_counts_a_text_once_over_the_whole_corpus(fake_sidecars):
+    # Two keys folding to one text, 300 records each, at a cap of 100. The cap
+    # is per text and corpus-wide, so 100 records of that text survive in
+    # total. Estimating it per key — or, as the survey used to, per shard —
+    # gives 200 here and `shard count x cap` on a real corpus, and every class
+    # the cap touches is then admitted at a rate sized against records that do
+    # not exist.
+    survey = a_survey(
+        key_records={REPRINT_A: 300, REPRINT_B: 300},
+        class_records={"rewrite": 600},
+        class_key_records={"rewrite": {REPRINT_A: 300, REPRINT_B: 300}},
+        heap_cap=100,
+    )
+    decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
+                       config=a_config(text_cap=100))
+
+    assert decisions.capped_class_records["rewrite"] == 100
+
+
+def test_a_capped_texts_survivors_are_split_over_the_classes_carrying_it(fake_sidecars):
+    # One text, 400 records: 300 rewrite and 100 trigger. The cap admits the
+    # 100 smallest hashes of the text, and a record's hash is computed from its
+    # id alone, so the survivors fall in the classes' own proportions: 75 and
+    # 25, not 100 each.
+    survey = a_survey(
+        key_records={REPRINT_A: 400},
+        class_records={"rewrite": 300, "trigger": 100},
+        class_key_records={"rewrite": {REPRINT_A: 300}, "trigger": {REPRINT_A: 100}},
+        heap_cap=100,
+    )
+    decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
+                       config=a_config(text_cap=100))
+
+    assert decisions.capped_class_records == {"rewrite": 75, "trigger": 25}
+
+
+def test_a_class_with_no_acting_ability_is_never_capped(fake_sidecars):
+    # `combat` and `playability-legality` carry no acting line (FR-087), so no
+    # text caps them and their availability is exact however small the cap is.
+    survey = a_survey(class_records={"combat": 500})
+    decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
+                       config=a_config(text_cap=1))
+
+    assert decisions.capped_class_records["combat"] == 500

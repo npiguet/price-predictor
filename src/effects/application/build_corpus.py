@@ -112,12 +112,13 @@ class ShardSurvey:
     key_records: Counter[str] = field(default_factory=Counter)
     key_hashes: dict[str, tuple[int, ...]] = field(default_factory=dict)
     class_records: Counter[str] = field(default_factory=Counter)
-    #: Records this shard's own per-key heap admitted, per class. An upper
-    #: bound on what the text-level cap will keep — several keys can fold to
-    #: one text, and only the main process knows which — and what
-    #: ``class_targets`` divides the mixture over. The manifest's ``kept`` is
-    #: the exact figure and comes from the write pass.
-    class_capped_records: Counter[str] = field(default_factory=Counter)
+    #: sampling class -> rendered provenance key -> records. What splits the
+    #: per-text cap's survivors across classes: the cap is corpus-wide, so
+    #: only the main process can say how many records of one text survive it,
+    #: and only this says which classes those records belong to. A record with
+    #: no acting key is absent from here and accounted for as
+    #: ``class_records - sum(class_key_records[class])``, which is exact.
+    class_key_records: dict[str, Counter[str]] = field(default_factory=dict)
     #: Each key's game ids as strings, for keys carried by a held-out game.
     #: The card-disjoint cap admits whole games (FR-142) and so needs the ids
     #: themselves, not the hashed cardinality rarity counts with.
@@ -136,7 +137,7 @@ class Survey:
     key_records: Counter[str]
     key_heaps: dict[str, CapHeap]
     class_records: Counter[str]
-    class_capped_records: Counter[str]
+    class_key_records: dict[str, Counter[str]]
     held_out_text_games: dict[str, set[str]]
     held_out_games: frozenset[str]
     games: frozenset[str]
@@ -156,7 +157,6 @@ def survey_shard(relative: str) -> ShardSurvey:
     from effects.application.train_effect_model import (
         HeldOutCards, record_names_held_out_card, sampling_class,
     )
-    from effects.domain.corpus_curation import keeps
     from effects.infrastructure.record_io import read_shard
 
     config = _CONFIG
@@ -168,10 +168,6 @@ def survey_shard(relative: str) -> ShardSurvey:
     out = ShardSurvey(name=relative, size=path.stat().st_size, records=0)
     heaps: dict[str, CapHeap] = {}
 
-    # Held for the second walk: a record's own heap admission is only known
-    # once the shard's heaps are final, so the class tally cannot be inline.
-    seen: list[tuple[str, str | None, int]] = []
-
     for record in read_shard(path):
         out.records += 1
         out.games.add(record.game_id)
@@ -181,26 +177,19 @@ def survey_shard(relative: str) -> ShardSurvey:
         if held:
             out.held_out_games.add(record.game_id)
         key = ability_key(record)
-        value = record_hash(record.record_id, seed=config.seed)
-        seen.append((name, key, value))
         if key is None:
             continue
         out.key_records[key] += 1
+        out.class_key_records.setdefault(name, Counter())[key] += 1
         out.key_games.setdefault(key, set()).add(game_hash(record.game_id))
         if held:
             out.held_out_text_games.setdefault(key, set()).add(record.game_id)
         heap = heaps.get(key)
         if heap is None:
             heap = heaps[key] = CapHeap(config.text_cap)
-        heap.offer(value)
+        heap.offer(record_hash(record.record_id, seed=config.seed))
 
     out.key_hashes = {key: heap.values() for key, heap in heaps.items()}
-    thresholds = {key: heap.threshold() for key, heap in heaps.items()}
-    for name, key, value in seen:
-        # A record with no acting line has no text and so no cap; it counts
-        # toward its class in full (FR-087).
-        if key is None or keeps(value, thresholds[key]):
-            out.class_capped_records[name] += 1
     return out
 
 
@@ -218,7 +207,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     held_out_games: set[str] = set()
     games: set[str] = set()
 
-    class_capped: Counter[str] = Counter()
+    class_key_records: dict[str, Counter[str]] = defaultdict(Counter)
     held_out_text_games: dict[str, set[str]] = defaultdict(set)
 
     for part in parts:
@@ -226,7 +215,8 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         records += part.records
         key_records.update(part.key_records)
         class_records.update(part.class_records)
-        class_capped.update(part.class_capped_records)
+        for name, per_key in part.class_key_records.items():
+            class_key_records[name].update(per_key)
         held_out_games |= part.held_out_games
         games |= part.games
         for key, ids in part.held_out_text_games.items():
@@ -247,7 +237,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         key_records=key_records,
         key_heaps=key_heaps,
         class_records=class_records,
-        class_capped_records=class_capped,
+        class_key_records=dict(class_key_records),
         held_out_text_games=dict(held_out_text_games),
         held_out_games=frozenset(held_out_games),
         games=frozenset(games),
@@ -377,6 +367,54 @@ def _held_out_text_of_key(
     return out
 
 
+def _capped_class_records(
+    survey: Survey, key_text: dict[str, str], *, cap: int,
+) -> dict[str, int]:
+    """What each sampling class can supply once the per-text cap has bitten.
+
+    The number ``class_targets`` divides the mixture over, and the number
+    ``build()`` divides a class's target by to get its admission rate — so an
+    over-estimate here delivers a class short of the share the manifest goes
+    on to record, and an under-estimate over-delivers it.
+
+    Exact per text, because the cap's survivor count is not a guess: the
+    threshold admits the ``cap`` smallest hashes of a text, or all of them
+    where the text has fewer, so ``min(cap, text_records)`` survive. Splitting
+    that across classes is a proportion — ``class_key_records[c][key] *
+    min(cap, text_total) / text_total`` — and it is unbiased because the hash
+    the cap selects on is computed from the record id alone and says nothing
+    about the record's class.
+
+    Two populations are never capped and count in full: a record with no
+    acting key (``combat``, ``playability-legality``), and a key no sidecar
+    can read, which ``decide`` leaves out of ``key_text`` and out of the cap
+    with it. ``cap <= 0`` means no cap at all, matching ``CapHeap``.
+    """
+    text_records: Counter[str] = Counter()
+    for key, total in survey.key_records.items():
+        text = key_text.get(key)
+        if text is not None:
+            text_records[text] += total
+
+    capped: dict[str, float] = {}
+    for name, per_key in survey.class_key_records.items():
+        survivors = 0.0
+        for key, count in per_key.items():
+            text = key_text.get(key)
+            if text is None or cap <= 0:
+                survivors += count
+                continue
+            total = text_records[text]
+            survivors += count * min(cap, total) / total
+        capped[name] = survivors
+
+    out: dict[str, int] = {}
+    for name, total in survey.class_records.items():
+        keyed = sum(survey.class_key_records.get(name, {}).values())
+        out[name] = round(capped.get(name, 0.0) + (total - keyed))
+    return out
+
+
 def _card_disjoint_games(
     survey: Survey, held_out_text_of_key: dict[str, str], *, cap: int, seed: int,
 ) -> frozenset[str]:
@@ -499,7 +537,7 @@ def decide(
     take = min(config.game_disjoint_target, len(remaining))
     game_disjoint = frozenset(random.Random(config.seed).sample(remaining, take))
 
-    capped = dict(survey.class_capped_records)
+    capped = _capped_class_records(survey, key_text, cap=config.text_cap)
     try:
         targets, shortfall = class_targets(
             capped, config.mix(), ceiling=config.training_records,
@@ -835,6 +873,10 @@ def build(config: BuildCorpusConfig) -> int:
     # three that are actual outputs -- dropped-held-out writes nothing, so it
     # has no ability texts of its own to count.
     per_stratum = {name: written.stratum.get(name, 0) for name in STRATA}
+    trained = sum(written.kept.values())
+    delivered_mix = {
+        name: count / trained for name, count in sorted(written.kept.items())
+    } if trained else {}
     unique_texts = {
         name: len({
             decisions.key_text.get(key, key)
@@ -853,6 +895,7 @@ def build(config: BuildCorpusConfig) -> int:
         game_disjoint_target=config.game_disjoint_target,
         training_records=config.training_records,
         class_mix=config.mix(),
+        delivered_mix=delivered_mix,
         held_out_cards=tuple(sorted(held_out.names)),
         held_out_texts=tuple(sorted(held_out.texts)),
         card_disjoint_games=tuple(sorted(decisions.card_disjoint)),
@@ -877,6 +920,15 @@ def build(config: BuildCorpusConfig) -> int:
             name, per_stratum[name], unique_texts[name],
         )
     logger.info("%-22s %9d record(s)", "dropped-held-out", per_stratum["dropped-held-out"])
+    # Requested against delivered, side by side: the mixture in `class_mix` is
+    # what the build was asked for, and only this says whether it got it.
+    requested = config.mix()
+    for name in sorted(set(requested) | set(delivered_mix)):
+        asked, got = requested.get(name, 0.0), delivered_mix.get(name, 0.0)
+        logger.info(
+            "%-22s requested %6.2f%%  delivered %6.2f%%  (%.2fx)",
+            name, 100.0 * asked, 100.0 * got, (got / asked) if asked else 0.0,
+        )
     for name, missing in sorted(decisions.shortfall.items()):
         logger.warning(
             "%s is short %d record(s) of its share: --training-records asks for "

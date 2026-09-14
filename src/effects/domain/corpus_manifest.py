@@ -60,6 +60,14 @@ class CorpusManifest:
     game_disjoint_target: int
     training_records: int
     class_mix: dict[str, float]
+    #: The class proportions the training output actually holds, counted from
+    #: what the write pass kept. ``class_mix`` is what the build was asked
+    #: for; this is what it delivered, and the two part company whenever a
+    #: class runs out or an availability estimate misses. Recorded rather than
+    #: left to be recomputed, because a reader comparing a mixture against the
+    #: corpus would have to re-read the whole dataset to do it (FR-139,
+    #: FR-143).
+    delivered_mix: dict[str, float]
     held_out_cards: tuple[str, ...]
     #: The held-out ability texts themselves — what a ``--corpus`` training
     #: run's ``HeldOutCards.texts`` is built from. Distinct from
@@ -108,6 +116,7 @@ class CorpusManifest:
             game_disjoint_target=int(data["game_disjoint_target"]),
             training_records=int(data["training_records"]),
             class_mix={k: float(v) for k, v in data["class_mix"].items()},
+            delivered_mix={k: float(v) for k, v in data["delivered_mix"].items()},
             held_out_cards=tuple(data["held_out_cards"]),
             held_out_texts=tuple(data["held_out_texts"]),
             card_disjoint_games=tuple(data["card_disjoint_games"]),
