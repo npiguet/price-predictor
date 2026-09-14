@@ -33,8 +33,8 @@ from pathlib import Path
 import pytest
 
 from effects.application.build_corpus import BuildCorpusConfig, _output_name, build
-from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
@@ -238,7 +238,8 @@ def test_no_training_record_belongs_to_a_withheld_game(tmp_path, a_corpus):
 def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
     """FR-088: the exclusion is by game, and every held-out game is dropped."""
     from effects.application.train_effect_model import (
-        HeldOutCards, record_names_held_out_card,
+        HeldOutCards,
+        record_names_held_out_card,
     )
 
     out = tmp_path / "curated"

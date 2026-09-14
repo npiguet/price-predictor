@@ -27,7 +27,10 @@ from types import SimpleNamespace
 import pytest
 
 from effects.application.build_corpus import (
-    BuildCorpusConfig, Survey, ability_key, decide,
+    BuildCorpusConfig,
+    Survey,
+    ability_key,
+    decide,
 )
 from effects.domain.corpus_curation import CapHeap
 from effects.domain.effect_model import CLASS_REWRITE

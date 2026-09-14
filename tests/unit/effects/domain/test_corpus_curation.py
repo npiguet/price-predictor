@@ -3,7 +3,10 @@ from __future__ import annotations
 import pytest
 
 from effects.domain.corpus_curation import (
-    CapHeap, class_targets, keeps, record_hash,
+    CapHeap,
+    class_targets,
+    keeps,
+    record_hash,
 )
 
 

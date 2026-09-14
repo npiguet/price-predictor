@@ -16,11 +16,15 @@ import pytest
 
 from effects.application import build_corpus
 from effects.application.build_corpus import (
-    ShardSurvey, Survey, SurveyConfig, ability_key, game_hash,
-    init_survey_worker, merge_surveys, parse_ability_key, run_survey,
-    survey_shard,
+    ShardSurvey,
+    SurveyConfig,
+    ability_key,
+    game_hash,
+    init_survey_worker,
+    merge_surveys,
+    parse_ability_key,
+    run_survey,
 )
-from effects.application.train_effect_model import HeldOutCards
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (

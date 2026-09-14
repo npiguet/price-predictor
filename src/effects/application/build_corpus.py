@@ -155,7 +155,9 @@ def init_survey_worker(config: SurveyConfig) -> None:
 def survey_shard(relative: str) -> ShardSurvey:
     """Survey one shard. Module-level so a process pool can pickle it."""
     from effects.application.train_effect_model import (
-        HeldOutCards, record_names_held_out_card, sampling_class,
+        HeldOutCards,
+        record_names_held_out_card,
+        sampling_class,
     )
     from effects.infrastructure.record_io import read_shard
 
@@ -783,7 +785,9 @@ def run_write_pass(
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code."""
     from effects.application.train_effect_model import (
-        load_card_files, load_card_texts, text_keyed_holdout,
+        load_card_files,
+        load_card_texts,
+        text_keyed_holdout,
     )
     from effects.domain.ability_encoder import surface_of
     from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
