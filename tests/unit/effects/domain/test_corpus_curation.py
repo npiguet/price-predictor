@@ -41,6 +41,26 @@ def test_merging_two_heaps_keeps_the_cap_smallest_of_the_union():
     assert sorted(left.values()) == [5, 10, 35]
 
 
+def test_merging_heaps_with_mismatched_caps_raises_error():
+    left, right = CapHeap(5), CapHeap(2)
+    for value in (100, 101, 102, 103, 104):
+        left.offer(value)
+    for value in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
+        right.offer(value)
+    with pytest.raises(ValueError, match="cap"):
+        left.merge(right)
+
+
+def test_merging_equal_cap_heaps_with_overlapping_ranges():
+    left, right = CapHeap(3), CapHeap(3)
+    for value in (5, 10, 15):
+        left.offer(value)
+    for value in (2, 8, 12):
+        right.offer(value)
+    left.merge(right)
+    assert sorted(left.values()) == [2, 5, 8]
+
+
 def test_keeps_admits_exactly_the_values_at_or_below_the_threshold():
     assert keeps(30, 30) is True
     assert keeps(31, 30) is False

@@ -64,10 +64,16 @@ class CapHeap:
     def merge(self, other: CapHeap) -> None:
         """Absorb another heap's values, keeping the cap smallest of the union.
 
-        Valid because the k smallest of a union are drawn from each side's own
-        k smallest, which is what lets the survey run one heap per worker and
-        combine them afterwards.
+        Valid only when both heaps share the same cap, because the k smallest of
+        a union are drawn from each side's own k smallest. This precondition is
+        enforced to prevent silent data loss: if the other heap discarded values
+        due to a smaller cap, they are irrecoverably lost here.
         """
+        if self.cap != other.cap:
+            raise ValueError(
+                f"cannot merge heaps with mismatched caps: "
+                f"self.cap={self.cap}, other.cap={other.cap}"
+            )
         for negated in other._heap:
             self.offer(-negated)
 
