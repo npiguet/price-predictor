@@ -745,6 +745,20 @@ def build(config: BuildCorpusConfig) -> int:
         "Holdout: %d ability text(s) on %d card(s); encoding surface %r.",
         len(held_out.texts), len(held_out.names), surface,
     )
+    if not held_out.names:
+        tried = ", ".join(
+            f"{folder} ({'found' if Path(folder).is_dir() else 'missing'})"
+            for folder in config.cards_folders
+        )
+        raise BuildCorpusError(
+            "Nothing is held out, so the card-disjoint stratum would be empty "
+            "and gate 1 would have nothing to measure at all. Cards folders "
+            f"tried: {tried}; {len(card_files)} converted card(s) read, "
+            f"{len(held_out.texts)} held-out ability text(s), no held-out card. "
+            "Run from the repository root so the relative --cards-folder paths "
+            "resolve, raise --holdout-permille, or check that the converted "
+            "tree has sidecars with script text."
+        )
 
     survey = run_survey(
         records_dir,
@@ -766,6 +780,21 @@ def build(config: BuildCorpusConfig) -> int:
         survey, sidecars=sidecars, surface=surface,
         held_out_texts=held_out.texts, config=config,
     )
+    if not decisions.card_disjoint:
+        raise BuildCorpusError(
+            "No game is admitted to the card-disjoint stratum, so the dataset "
+            "cannot score gate 1 and the trainer would refuse it in its first "
+            f"minute. {records_dir} holds {len(survey.games)} game(s), "
+            f"{len(survey.held_out_games)} of which name one of the "
+            f"{len(held_out.names)} held-out card(s). Depleted and "
+            "full-strength shards live in sibling subdirectories of the raw "
+            "corpus root: point --records-dir at the parent of both, and check "
+            "that a full-strength run — pools generated without "
+            "--exclude-cards — has actually been collected. A held-out game is "
+            "admitted only while every held-out ability text it carries is "
+            "under --card-disjoint-text-cap, and one that carries none is "
+            "never admitted."
+        )
     admit = {
         name: min(1.0, target / decisions.capped_class_records[name])
         for name, target in decisions.class_targets.items()

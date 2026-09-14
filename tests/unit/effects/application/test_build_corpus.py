@@ -336,6 +336,83 @@ def test_verify_is_quiet_when_nothing_moved(tmp_path, a_corpus):
     )) == 0
 
 
+# ── a dataset that cannot score gate 1 is refused, not written ────────
+
+
+def test_build_refuses_a_cards_folder_that_resolved_to_nothing(
+    tmp_path, a_corpus, monkeypatch,
+):
+    """Launched from the wrong directory, the relative --cards-folder paths
+    miss, the holdout selects nothing, and the whole card-disjoint stratum —
+    the entire basis of gate 1's margins — comes out empty. The builder used
+    to log that as an INFO line, pay for two full parallel passes, write the
+    dataset and exit 0; the trainer then refuses it in its first minute.
+
+    ``run_survey`` is replaced with a bomb, so this also pins that the refusal
+    comes *before* the survey rather than after it.
+    """
+    from effects.application import build_corpus as module
+
+    def no_survey(*args, **kwargs):
+        raise AssertionError("the survey must not run on an empty holdout")
+
+    monkeypatch.setattr(module, "run_survey", no_survey)
+
+    with pytest.raises(ValueError, match="no held-out card") as raised:
+        build(BuildCorpusConfig(
+            records_dir=a_corpus.records,
+            cards_folders=(str(tmp_path / "not-here"), str(tmp_path / "nor-here")),
+            output=tmp_path / "curated", workers=1,
+        ))
+
+    message = str(raised.value)
+    assert "not-here" in message and "nor-here" in message
+    assert "missing" in message
+    assert "0 converted card" in message
+
+
+def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
+    """The same unusable dataset by the other route: the cards folder is real
+    and full, and ``--holdout-permille 0`` holds nothing out of it. Refusing
+    only on an empty folder would let this one through.
+    """
+    with pytest.raises(ValueError, match="no held-out card") as raised:
+        build(BuildCorpusConfig(
+            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+            output=tmp_path / "curated", workers=1, holdout_permille=0,
+        ))
+
+    assert "3 converted card" in str(raised.value)
+
+
+def test_build_refuses_a_corpus_no_game_of_which_names_a_held_out_card(
+    tmp_path, a_corpus,
+):
+    """A perfectly good holdout against shards that hold none of it.
+
+    This repo keeps depleted and full-strength shards in sibling
+    subdirectories, so a ``--records-dir`` pointed one level too deep surveys
+    only the depleted half: every game is clean, the card-disjoint stratum is
+    empty, and the dataset cannot score gate 1 at all. Nothing is written.
+    """
+    import shutil
+
+    depleted = tmp_path / "depleted-only"
+    depleted.mkdir()
+    shutil.copy(
+        a_corpus.records / "run.0-b.jsonl.gz", depleted / "run.0-b.jsonl.gz",
+    )
+    out = tmp_path / "curated"
+
+    with pytest.raises(ValueError, match="card-disjoint"):
+        build(BuildCorpusConfig(
+            records_dir=depleted, cards_folders=a_corpus.cards, output=out,
+            workers=1, game_disjoint_target=1,
+        ))
+
+    assert not (out / "manifest.json").exists()
+
+
 def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
     empty = tmp_path / "empty"
     empty.mkdir()
