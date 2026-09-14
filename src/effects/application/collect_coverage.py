@@ -31,9 +31,11 @@ are constructed.
 from __future__ import annotations
 
 import logging
+import os
 import random
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -150,6 +152,24 @@ def count_coverage(records: Iterable) -> Counter[str]:
     return counts
 
 
+def count_shard(shard: Path) -> Counter[str]:
+    """One shard's qualifying records, keyed by folded card name.
+
+    Top-level rather than a method so a process pool can pickle it. Returns
+    folded names because that is what a coverage unit is keyed by: the unit
+    comes from converted card text (lowercase) while a record's entity name is
+    Forge's own (printed case), and an unfolded key matches nothing.
+    """
+    from effects.application.train_effect_model import fold_card_name
+    from effects.infrastructure.record_io import read_shard
+
+    counts: Counter[str] = Counter()
+    for record in read_shard(shard):
+        for name in qualifying_cards(record):
+            counts[fold_card_name(name)] += 1
+    return counts
+
+
 class CoverageCounter:
     """Counts each shard once across a whole run, not once per round.
 
@@ -174,36 +194,62 @@ class CoverageCounter:
         self._progress_every = progress_every
 
     def update(
-        self, coverage: dict[str, CardCoverage], records_dir: Path,
+        self,
+        coverage: dict[str, CardCoverage],
+        records_dir: Path,
+        *,
+        workers: int | None = None,
     ) -> int:
-        """Add the counts of shards not yet read. Returns how many it read."""
-        from effects.infrastructure.record_io import iter_shards, read_shard
+        """Add the counts of shards not yet read. Returns how many it read.
+
+        Shards are independent and each contributes only a per-card count, so
+        the work maps: count shards in parallel, sum the counters, apply once.
+        Summation is associative, so the answer cannot depend on how the shards
+        were divided or in what order they finished.
+
+        ``workers`` defaults to the machine's usable cores. One means in-process
+        — what the tests use for the serial reference, and what a handful of
+        shards wants, since a process pool costs more to start than it saves.
+        """
+        from effects.infrastructure.record_io import iter_shards
 
         fresh = [
             shard for shard in iter_shards(Path(records_dir))
             if shard not in self._counted
         ]
-        from effects.application.train_effect_model import fold_card_name
+        if not fresh:
+            return 0
 
-        for done, shard in enumerate(fresh, start=1):
-            if self._progress_every and len(fresh) > self._progress_every:
-                if done % self._progress_every == 0 or done == len(fresh):
-                    logger.info(
-                        "Counted %d of %d shard(s) (%.0f%%)",
-                        done, len(fresh), 100.0 * done / len(fresh),
-                    )
-            for record in read_shard(shard):
-                for name in qualifying_cards(record):
-                    # A coverage unit is keyed off `load_card_files`, whose
-                    # names come from converted card text and are lowercase.
-                    # A record's entity name is Forge's own, printed case.
-                    # Unfolded, the lookup misses every time and every card
-                    # counts zero for the life of the run.
-                    card = coverage.get(fold_card_name(name))
-                    if card is not None:
-                        card.records += 1
-            self._counted.add(shard)
+        workers = workers or (os.process_cpu_count() or 1)
+        workers = max(1, min(workers, len(fresh)))
+        totals: Counter[str] = Counter()
+        if workers == 1:
+            for done, shard in enumerate(fresh, start=1):
+                totals += count_shard(shard)
+                self._note_progress(done, len(fresh))
+        else:
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                done = 0
+                for counted in pool.map(count_shard, fresh, chunksize=1):
+                    totals += counted
+                    done += 1
+                    self._note_progress(done, len(fresh))
+
+        for name, count in totals.items():
+            card = coverage.get(name)
+            if card is not None:
+                card.records += count
+        self._counted.update(fresh)
         return len(fresh)
+
+    def _note_progress(self, done: int, total: int) -> None:
+        if not self._progress_every or total <= self._progress_every:
+            return
+        if done % self._progress_every == 0 or done == total:
+            logger.info(
+                "Counted %d of %d shard(s) (%.0f%%)",
+                done, total, 100.0 * done / total,
+            )
 
 
 def deck_weights(

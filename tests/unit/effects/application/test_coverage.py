@@ -907,3 +907,71 @@ class TestCountingReportsProgress:
             CoverageCounter(progress_every=50).update(coverage, tmp_path)
 
         assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]
+
+
+class TestParallelCounting:
+    """Counting is CPU-bound per shard and the shards are independent.
+
+    Each shard contributes a count per card and nothing else, so the work maps
+    cleanly: read shards in parallel, sum the per-shard counters, apply once.
+    Summation is associative and commutative, so the result cannot depend on
+    how the shards were divided or in what order they finished — which is the
+    property worth pinning, since a parallel count that merely *usually* agrees
+    with the serial one is worse than no parallelism at all.
+    """
+
+    def _shards(self, directory: Path, spec: dict[str, int]) -> None:
+        from effects.infrastructure.record_io import format_record_line
+
+        directory.mkdir(parents=True, exist_ok=True)
+        for n, (card, count) in enumerate(spec.items()):
+            line = format_record_line(
+                _record([_entity("E1", card)], source="E1")
+            )
+            (directory / f"run.0-{n:03d}.jsonl").write_text(
+                "\n".join([line] * count) + "\n", encoding="utf-8",
+            )
+
+    def test_parallel_and_serial_agree(self, tmp_path) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+
+        spec = {f"Card {i}": i + 1 for i in range(12)}
+        self._shards(tmp_path, spec)
+        expected = {f"card {i}": i + 1 for i in range(12)}
+
+        serial = {n: CardCoverage(n) for n in expected}
+        CoverageCounter().update(serial, tmp_path, workers=1)
+        parallel = {n: CardCoverage(n) for n in expected}
+        CoverageCounter().update(parallel, tmp_path, workers=4)
+
+        assert {n: c.records for n, c in serial.items()} == expected
+        assert {n: c.records for n, c in parallel.items()} == expected
+
+    def test_a_card_split_across_shards_sums(self, tmp_path) -> None:
+        """The reduce step, which is where a parallel count goes wrong."""
+        from effects.application.collect_coverage import CoverageCounter
+        from effects.infrastructure.record_io import format_record_line
+
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        line = format_record_line(_record([_entity("E1", "Soul Echo")], source="E1"))
+        for n in range(6):
+            (tmp_path / f"run.0-{n}.jsonl").write_text(
+                "\n".join([line] * 5) + "\n", encoding="utf-8",
+            )
+
+        coverage = {"soul echo": CardCoverage("soul echo")}
+        CoverageCounter().update(coverage, tmp_path, workers=3)
+
+        assert coverage["soul echo"].records == 30
+
+    def test_already_counted_shards_stay_counted_once(self, tmp_path) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shards(tmp_path, {"Alpha": 4})
+        coverage = {"alpha": CardCoverage("alpha")}
+        counter = CoverageCounter()
+
+        counter.update(coverage, tmp_path, workers=2)
+        counter.update(coverage, tmp_path, workers=2)
+
+        assert coverage["alpha"].records == 4
