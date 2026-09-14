@@ -91,6 +91,7 @@ from effects.domain.effect_model import (
     per_entity_loss,
 )
 from effects.domain.effect_targets import derive_targets
+from effects.domain.records import EffectRecord
 from effects.infrastructure.effect_model_store import (
     EffectCheckpoint,
     EffectModelStore,
@@ -321,7 +322,7 @@ class TrainingLoop:
         Abilities that are common are common in every shard, so they are
         unaffected either way.
         """
-        def text_of(record):
+        def text_of(record: EffectRecord) -> str | None:
             return ability_text_of(record, sidecars, self.surface)
 
         if self.rarity is not None and not self._rarity_reported:

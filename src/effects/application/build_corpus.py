@@ -363,7 +363,9 @@ class Decisions:
     key_text: dict[str, str]
 
 
-def _text_of_rendered_key(rendered: str, sidecars, surface: str) -> str | None:
+def _text_of_rendered_key(
+    rendered: str, sidecars: SidecarCache, surface: str,
+) -> str | None:
     """The text a survey key folds to, through the trainer's own definition."""
     from effects.application.train_effect_model import text_for_key
 
