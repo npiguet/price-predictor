@@ -438,6 +438,141 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
     return collect(coverage_config_from(args))
 
 
+# ── build-corpus ────────────────────────────────────────────────────────
+
+#: Kept apart from DEFAULT_RECORDS_DIR: this is the *curated dataset*
+#: directory build-corpus writes to, not the raw shard root it reads from
+#: (specs/2026-09-05-ability-effect-model.md § Curated corpus).
+DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
+
+
+def _class_mix(text: str) -> dict[str, float]:
+    """``--class-mix`` as argparse wants it: parsed through the trainer's own
+    ``parse_kind_mix``, so the two commands cannot disagree about the syntax
+    or the class vocabulary. Raising ``ArgumentTypeError`` puts a bad value in
+    the usage message rather than in a traceback (the same trade
+    ``_snapshot_tiers`` above makes).
+    """
+    from effects.application.train_effect_model import parse_kind_mix
+
+    try:
+        return parse_kind_mix(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _build_corpus_parser(subparsers) -> None:
+    parser = subparsers.add_parser(
+        "build-corpus",
+        help=(
+            "Read the raw shard corpus once and write a fixed training "
+            "corpus, two validation strata, and a manifest"
+        ),
+    )
+    parser.set_defaults(func=run_build_corpus)
+    parser.add_argument(
+        "--records-dir", type=str, default=DEFAULT_RECORDS_DIR,
+        help=f"Raw corpus root; discovery recurses (default: {DEFAULT_RECORDS_DIR})",
+    )
+    parser.add_argument(
+        "--output", type=str, default=DEFAULT_CORPUS_OUTPUT,
+        help=f"Curated dataset directory (default: {DEFAULT_CORPUS_OUTPUT})",
+    )
+    _add_cards_folder(parser)
+    parser.add_argument(
+        "--vocab-path", type=str, default=DEFAULT_VOCAB_PATH,
+        help=(
+            "Decides the encoding surface the rarity table's text keys are "
+            f"built on (default: {DEFAULT_VOCAB_PATH})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
+        help=(
+            "Holdout share of eligible ability texts "
+            f"(default: {HOLDOUT_PERMILLE})"
+        ),
+    )
+    parser.add_argument(
+        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
+        help=(
+            "A text more cards than this carry stays out of the holdout "
+            f"(default: {HOLDOUT_MAX_CARRIERS})"
+        ),
+    )
+    parser.add_argument(
+        "--text-cap", type=int, default=200,
+        help="Max training records kept per unique ability text (default: 200)",
+    )
+    parser.add_argument(
+        "--class-mix", type=_class_mix, default=None,
+        help=(
+            "class=share,… on-disk class proportions (default: the training "
+            "mixture)"
+        ),
+    )
+    parser.add_argument(
+        "--training-records", type=int, default=0,
+        help=(
+            "Total training records after capping, subsampled per class; 0 "
+            "means no ceiling (default: 0)"
+        ),
+    )
+    parser.add_argument(
+        "--game-disjoint-games", type=int, default=1000,
+        help="Games withheld for the game-disjoint stratum (default: 1000)",
+    )
+    parser.add_argument(
+        "--card-disjoint-text-cap", type=int, default=50,
+        help=(
+            "Max card-disjoint records kept per held-out ability text "
+            "(default: 50)"
+        ),
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Selection seed (default: 42)",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=None,
+        help="Parallel shard readers (default: CPU count)",
+    )
+    parser.add_argument(
+        "--verify", action="store_true",
+        help="Report drift against an existing manifest and write nothing",
+    )
+
+
+def run_build_corpus(args: argparse.Namespace) -> int:
+    from effects.application.build_corpus import BuildCorpusConfig
+    from effects.application.build_corpus import build as build_corpus
+
+    config = BuildCorpusConfig(
+        records_dir=Path(args.records_dir),
+        output=Path(args.output),
+        cards_folders=tuple(
+            str(path) for path in resolve_cards_folders(args.cards_folders)
+        ),
+        vocab_path=args.vocab_path,
+        holdout_permille=args.holdout_permille,
+        holdout_max_carriers=args.holdout_max_carriers,
+        text_cap=args.text_cap,
+        class_mix=args.class_mix,
+        training_records=args.training_records,
+        game_disjoint_target=args.game_disjoint_games,
+        card_disjoint_text_cap=args.card_disjoint_text_cap,
+        seed=args.seed,
+        workers=args.workers,
+        verify=args.verify,
+    )
+    try:
+        return build_corpus(config)
+    except ValueError as exc:
+        # e.g. an empty --records-dir (run_survey's "no shards to build a
+        # corpus from"): an expected, reportable condition, not a crash.
+        logger.error("%s", exc)
+        return 1
+
+
 # ── holdout-cards ───────────────────────────────────────────────────────
 
 
@@ -1261,6 +1396,7 @@ _SUBCOMMAND_BUILDERS = (
     _build_vocab_parser,
     _extract_keyword_definitions_parser,
     _collect_coverage_parser,
+    _build_corpus_parser,
     _field_coverage_parser,
     _holdout_cards_parser,
     _validate_corpus_parser,

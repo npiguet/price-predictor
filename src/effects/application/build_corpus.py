@@ -428,3 +428,279 @@ def decide(survey: Survey, *, sidecars, surface: str, config) -> Decisions:
         capped_class_records=capped,
         key_text=key_text,
     )
+
+
+#: Training admission is two independent thresholds on the record id: the
+#: per-text cap, and the class's share of the mixture. Both are hashes rather
+#: than counters so a worker needs no coordination with any other worker, and
+#: the second is keyed differently from the first so a record is not judged
+#: twice by the same number.
+_CLASS_SEED_OFFSET = 0x9E3779B9
+
+
+@dataclass(frozen=True, slots=True)
+class WriteConfig:
+    records_dir: str
+    training_dir: str
+    card_disjoint_dir: str
+    game_disjoint_dir: str
+    thresholds: dict[str, int | None]
+    class_admit: dict[str, float]
+    card_disjoint: frozenset[str]
+    game_disjoint: frozenset[str]
+    held_out_games: frozenset[str]
+    seed: int
+
+
+@dataclass(slots=True)
+class WriteResult:
+    kept: Counter[str] = field(default_factory=Counter)
+    dropped_by_cap: Counter[str] = field(default_factory=Counter)
+    read: Counter[str] = field(default_factory=Counter)
+    kept_keys: dict[str, set[str]] = field(default_factory=dict)
+    #: Records written to each output, keyed "training" / "card-disjoint" /
+    #: "game-disjoint", plus "dropped-held-out" for held-out games the
+    #: card-disjoint cap declined. FR-145 wants the report per stratum as well
+    #: as per class, and a stratum nobody counted is a stratum nobody notices
+    #: is empty.
+    stratum: Counter[str] = field(default_factory=Counter)
+
+
+_WRITE: WriteConfig | None = None
+
+
+def init_write_worker(config: WriteConfig) -> None:
+    global _WRITE
+    _WRITE = config
+
+
+def _output_name(relative: str) -> str:
+    """A flat shard name for a source that may sit in a subdirectory.
+
+    ``depleted/run.0-a.jsonl.gz`` and ``full-strength/run.0-a.jsonl.gz`` are
+    different shards and must not write to one file.
+    """
+    return relative.replace("/", "__")
+
+
+def write_shard_pass(relative: str) -> WriteResult:
+    """Filter one shard into the three outputs. Module-level so it pickles."""
+    from effects.application.train_effect_model import sampling_class
+    from effects.domain.corpus_curation import keeps, record_hash
+    from effects.infrastructure.record_io import read_shard, write_shard
+
+    config = _WRITE
+    assert config is not None, "init_write_worker was not run"
+    out = WriteResult()
+    training: list = []
+    card_disjoint: list = []
+    game_disjoint: list = []
+
+    for record in read_shard(Path(config.records_dir) / relative):
+        name = sampling_class(record)
+        out.read[name] += 1
+        if record.game_id in config.card_disjoint:
+            card_disjoint.append(record)
+            out.stratum["card-disjoint"] += 1
+            continue
+        if record.game_id in config.game_disjoint:
+            game_disjoint.append(record)
+            out.stratum["game-disjoint"] += 1
+            continue
+        if record.game_id in config.held_out_games:
+            # Held out but not admitted to the stratum: dropped, never trained
+            # on (FR-088).
+            out.stratum["dropped-held-out"] += 1
+            continue
+        key = ability_key(record)
+        value = record_hash(record.record_id, seed=config.seed)
+        if key is not None and not keeps(value, config.thresholds.get(key)):
+            out.dropped_by_cap[name] += 1
+            continue
+        share = config.class_admit.get(name, 0.0)
+        if share < 1.0:
+            draw = record_hash(record.record_id, seed=config.seed + _CLASS_SEED_OFFSET)
+            if draw >= int(share * 2**64):
+                continue
+        training.append(record)
+        out.kept[name] += 1
+        out.stratum["training"] += 1
+        if key is not None:
+            out.kept_keys.setdefault(name, set()).add(key)
+
+    shard_name = _output_name(relative)
+    write_shard(Path(config.training_dir) / shard_name, training)
+    write_shard(Path(config.card_disjoint_dir) / shard_name, card_disjoint)
+    write_shard(Path(config.game_disjoint_dir) / shard_name, game_disjoint)
+    return out
+
+
+def run_write_pass(
+    names: list[str], *, config: WriteConfig, workers: int | None,
+    progress_every: int = 50,
+) -> WriteResult:
+    """Write every shard's three outputs, in parallel, reporting progress."""
+    total = WriteResult()
+
+    def absorb(part: WriteResult) -> None:
+        total.kept.update(part.kept)
+        total.dropped_by_cap.update(part.dropped_by_cap)
+        total.read.update(part.read)
+        total.stratum.update(part.stratum)
+        for name, keys in part.kept_keys.items():
+            total.kept_keys.setdefault(name, set()).update(keys)
+
+    if workers is not None and workers <= 1:
+        init_write_worker(config)
+        for index, name in enumerate(names, start=1):
+            absorb(write_shard_pass(name))
+            if index % progress_every == 0:
+                logger.info("Wrote %d of %d shard(s)", index, len(names))
+        return total
+
+    with ProcessPoolExecutor(
+        max_workers=workers, initializer=init_write_worker, initargs=(config,),
+    ) as pool:
+        for index, part in enumerate(
+            pool.map(write_shard_pass, names, chunksize=1), start=1,
+        ):
+            absorb(part)
+            if index % progress_every == 0:
+                logger.info("Wrote %d of %d shard(s)", index, len(names))
+    return total
+
+
+def build(config: BuildCorpusConfig) -> int:
+    """Build a curated dataset, or verify an existing one. Returns an exit code."""
+    from effects.application.train_effect_model import (
+        load_card_files, load_card_texts, text_keyed_holdout,
+    )
+    from effects.domain.ability_encoder import surface_of
+    from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
+    from effects.infrastructure.corpus_store import CorpusStore, current_sources
+    from effects.infrastructure.sidecar_io import SidecarCache
+
+    store = CorpusStore(config.output)
+    records_dir = Path(config.records_dir)
+
+    if config.verify:
+        manifest = store.load()
+        added, removed, resized = manifest.drift(current_sources(records_dir))
+        for label, names in (("added", added), ("removed", removed), ("resized", resized)):
+            if names:
+                logger.warning(
+                    "%d shard(s) %s since this dataset was built: %s%s",
+                    len(names), label, ", ".join(names[:5]),
+                    ", …" if len(names) > 5 else "",
+                )
+        if added or removed or resized:
+            logger.warning("Rebuild with `python -m effects build-corpus`.")
+            return 1
+        logger.info("Dataset is current against %s.", records_dir)
+        return 0
+
+    folders = {Path(f).name: Path(f) for f in config.cards_folders}
+    cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
+    sidecars = SidecarCache(folders)
+    card_files = load_card_files(cards_folder)
+    held_out = text_keyed_holdout(
+        card_files,
+        load_card_texts(card_files, sidecars),
+        permille=config.holdout_permille,
+        max_carriers=config.holdout_max_carriers,
+    )
+    surface = surface_of(config.vocab_path)
+    logger.info(
+        "Holdout: %d ability text(s) on %d card(s); encoding surface %r.",
+        len(held_out.texts), len(held_out.names), surface,
+    )
+
+    survey = run_survey(
+        records_dir,
+        config=SurveyConfig(
+            records_dir=str(records_dir),
+            held_out_names=held_out.names,
+            held_out_script_files=held_out.script_files,
+            text_cap=config.text_cap,
+            seed=config.seed,
+        ),
+        workers=config.workers,
+    )
+    logger.info(
+        "Surveyed %d record(s) in %d game(s); %d game(s) name a held-out card.",
+        survey.records, len(survey.games), len(survey.held_out_games),
+    )
+
+    decisions = decide(survey, sidecars=sidecars, surface=surface, config=config)
+    admit = {
+        name: min(1.0, target / decisions.capped_class_records[name])
+        for name, target in decisions.class_targets.items()
+        if decisions.capped_class_records.get(name)
+    }
+    written = run_write_pass(
+        [shard.name for shard in survey.shards],
+        config=WriteConfig(
+            records_dir=str(records_dir),
+            training_dir=str(store.training_dir),
+            card_disjoint_dir=str(store.card_disjoint_dir),
+            game_disjoint_dir=str(store.game_disjoint_dir),
+            thresholds=decisions.thresholds,
+            class_admit=admit,
+            card_disjoint=decisions.card_disjoint,
+            game_disjoint=decisions.game_disjoint,
+            held_out_games=survey.held_out_games,
+            seed=config.seed,
+        ),
+        workers=config.workers,
+    )
+
+    per_class = {
+        name: ClassCounts(
+            read=written.read.get(name, 0),
+            kept=written.kept.get(name, 0),
+            dropped_by_cap=written.dropped_by_cap.get(name, 0),
+            unique_texts=len({
+                decisions.key_text.get(key, key)
+                for key in written.kept_keys.get(name, ())
+            }),
+        )
+        for name in sorted(written.read)
+    }
+    manifest = CorpusManifest(
+        seed=config.seed,
+        surface=surface,
+        vocab_path=config.vocab_path,
+        holdout_permille=config.holdout_permille,
+        holdout_max_carriers=config.holdout_max_carriers,
+        text_cap=config.text_cap,
+        card_disjoint_text_cap=config.card_disjoint_text_cap,
+        game_disjoint_target=config.game_disjoint_target,
+        training_records=config.training_records,
+        class_mix=config.mix(),
+        held_out_cards=tuple(sorted(held_out.names)),
+        card_disjoint_games=tuple(sorted(decisions.card_disjoint)),
+        game_disjoint_games=tuple(sorted(decisions.game_disjoint)),
+        rarity=decisions.rarity,
+        sources=survey.shards,
+        per_class=per_class,
+        shortfall=decisions.shortfall,
+    )
+    store.save(manifest)
+
+    for name, counts in per_class.items():
+        logger.info(
+            "%-22s read %9d  kept %9d  cap dropped %8d  unique texts %7d",
+            name, counts.read, counts.kept, counts.dropped_by_cap, counts.unique_texts,
+        )
+    for stratum in ("training", "card-disjoint", "game-disjoint", "dropped-held-out"):
+        logger.info("%-22s %9d record(s)", stratum, written.stratum.get(stratum, 0))
+    for name, missing in sorted(decisions.shortfall.items()):
+        logger.warning(
+            "%s is short %d record(s) of its share: --training-records asks for "
+            "more than the corpus can supply at this mixture.", name, missing,
+        )
+    logger.info(
+        "Wrote %d training record(s) to %s (digest %s).",
+        sum(written.kept.values()), store.directory, manifest.digest(),
+    )
+    return 0
