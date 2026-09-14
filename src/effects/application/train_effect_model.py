@@ -823,19 +823,27 @@ def check_holdout(
     return None
 
 
-def require_split_from(variant: str, split_from: Path | None) -> None:
+def require_split_from(
+    variant: str, split_from: Path | None, *, corpus: str | None = None,
+) -> None:
     """A variant run must inherit the split it is a baseline for (FR-091).
 
     Without it the run would silently compute its own split and the comparison
     would be between two models that saw different games — which looks like a
-    result and is not one.
+    result and is not one. A shared ``--corpus`` satisfies this at least as
+    firmly as ``--split-from``: the manifest enumerates the split directly, so
+    every run reading the same curated dataset trains against the same games
+    (FR-146). ``validate_corpus_flags`` already refuses the two together, so a
+    caller never has both to offer at once.
     """
-    if variant != VARIANT_FULL and split_from is None:
+    if variant != VARIANT_FULL and split_from is None and corpus is None:
         raise MissingSplitError(
-            f"--variant {variant} requires --split-from PATH: a baseline must "
-            "inherit the split, vocabulary and keyword-definition paths of the "
-            "full run it baselines, or the comparison is between two models "
-            "that saw different games."
+            f"--variant {variant} requires --split-from PATH or --corpus DIR: "
+            "a baseline must inherit the split, vocabulary and "
+            "keyword-definition paths of the full run it baselines (via "
+            "--split-from), or read the same curated dataset (via --corpus) — "
+            "otherwise the comparison is between two models that saw "
+            "different games."
         )
 
 
@@ -1163,7 +1171,7 @@ def run(config: TrainEffectModelConfig) -> int:
     one shard at a time, inside the loop.
     """
     validate_corpus_flags(config)
-    require_split_from(config.variant, config.split_from)
+    require_split_from(config.variant, config.split_from, corpus=config.corpus)
 
     rarity: dict[str, int] | None = None
     corpus_digest = ""
@@ -1189,6 +1197,7 @@ def run(config: TrainEffectModelConfig) -> int:
 
         held_out = HeldOutCards(
             names=frozenset(manifest.held_out_cards), script_files=frozenset(),
+            texts=frozenset(manifest.held_out_texts),
         )
         inherited = CorpusSplit(
             held_out_cards=manifest.held_out_cards,

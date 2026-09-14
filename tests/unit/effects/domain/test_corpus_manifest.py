@@ -16,6 +16,7 @@ def manifest(**overrides) -> CorpusManifest:
         training_records=0,
         class_mix={"rewrite": 1.0},
         held_out_cards=("soul echo",),
+        held_out_texts=("deals 3 damage",),
         card_disjoint_games=("run.0-a.1",),
         game_disjoint_games=("run.0-a.2",),
         rarity={"deals 3 damage": 7},

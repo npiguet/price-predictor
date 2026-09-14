@@ -70,6 +70,15 @@ class TestVariantRequiresASplit:
     def test_a_variant_run_with_split_from_is_accepted(self):
         require_split_from("identity", Path("models/effects/effect-model/latest.pt"))
 
+    def test_a_variant_run_with_corpus_instead_is_accepted(self):
+        """A shared curated dataset is as firm a baseline as a checkpoint's
+        split (FR-146): its manifest enumerates the games directly."""
+        require_split_from("identity", None, corpus="output/effects/corpus")
+
+    def test_a_variant_run_with_neither_route_still_fails_fast(self):
+        with pytest.raises(MissingSplitError, match="--corpus"):
+            require_split_from("identity", None)
+
 
 class TestVariantCheckpointDisagreement:
     def _provenance(self, **overrides) -> SplitProvenance:

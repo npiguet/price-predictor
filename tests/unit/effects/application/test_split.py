@@ -199,6 +199,41 @@ def test_the_holdout_carries_its_texts_for_sizing_the_stratum() -> None:
     assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
 
 
+def test_a_corpus_shaped_holdout_carries_its_texts_too() -> None:
+    """The ``--corpus`` path's holdout needs the same texts (task 7 fix round 1).
+
+    A curated dataset's manifest is ``--corpus``'s only source for
+    ``HeldOutCards`` — there is no sidecar scan to fall back on. Built without
+    ``texts=``, ``unique_text_resolution_records`` would count against an
+    empty set on every single ``--corpus`` run, so ``check_holdout`` would
+    always report a zero-record card-disjoint stratum and print its "collect
+    more full-strength games" warning even on a healthy dataset. Asserting the
+    populated value (not just that it round-trips non-empty) is what would
+    catch a manifest field that reached ``HeldOutCards`` empty.
+    """
+    from effects.application.train_effect_model import unique_text_resolution_records
+    from tests.unit.effects.domain.test_corpus_manifest import manifest
+
+    built = manifest(held_out_texts=("SP$ DealDamage | NumDmg$ 3",))
+    held = HeldOutCards(
+        names=frozenset(built.held_out_cards), script_files=frozenset(),
+        texts=frozenset(built.held_out_texts),
+    )
+
+    assert held.texts == frozenset({"SP$ DealDamage | NumDmg$ 3"})
+
+    # Closes the loop on the actual reported symptom: the stratum-sizing
+    # guard now sees a non-zero count for a record whose acting text is held
+    # out, rather than reading 0 on every run regardless of health.
+    key = ProvenanceKey("cardsfolder/a/alpha.txt", 0, "spell", 0)
+    count = unique_text_resolution_records(
+        [_record("g1", ability=(key,))],
+        held.texts,
+        text_of={key: "SP$ DealDamage | NumDmg$ 3"}.get,
+    )
+    assert count == 1
+
+
 class TestTheConvertedToRuntimeNameBoundary:
     """Card names change case crossing from the converted tree to Forge.
 

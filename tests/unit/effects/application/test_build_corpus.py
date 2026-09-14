@@ -235,6 +235,25 @@ def test_no_training_record_names_a_held_out_card(tmp_path, a_corpus):
         assert not record_names_held_out_card(record, held_out)
 
 
+def test_the_manifest_records_the_held_out_texts(tmp_path, a_corpus):
+    """Fix round 1, Finding 1: ``build()`` must populate ``held_out_texts``.
+
+    A ``--corpus`` training run's stratum-sizing guard (``check_holdout``)
+    reads ``HeldOutCards.texts`` alone, built from this field — not from
+    ``held_out_cards``. A manifest that recorded only the held-out cards would
+    make every ``--corpus`` run see an empty text set and report the
+    card-disjoint stratum as empty regardless of the dataset's actual health.
+    """
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    ))
+
+    manifest = CorpusStore(out).load()
+    assert manifest.held_out_texts == (_HELD_OUT_TEXT,)
+
+
 def test_a_validation_stratum_keeps_whole_games(tmp_path, a_corpus):
     """A probe and the combat record it mirrors land together (FR-136)."""
     out = tmp_path / "curated"

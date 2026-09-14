@@ -742,6 +742,7 @@ def build(config: BuildCorpusConfig) -> int:
         training_records=config.training_records,
         class_mix=config.mix(),
         held_out_cards=tuple(sorted(held_out.names)),
+        held_out_texts=tuple(sorted(held_out.texts)),
         card_disjoint_games=tuple(sorted(decisions.card_disjoint)),
         game_disjoint_games=tuple(sorted(decisions.game_disjoint)),
         rarity=decisions.rarity,

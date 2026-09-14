@@ -61,6 +61,12 @@ class CorpusManifest:
     training_records: int
     class_mix: dict[str, float]
     held_out_cards: tuple[str, ...]
+    #: The held-out ability texts themselves — what a ``--corpus`` training
+    #: run's ``HeldOutCards.texts`` is built from. Distinct from
+    #: ``held_out_cards``: the check-holdout guard sizes the card-disjoint
+    #: stratum from ``.texts`` alone (FR-088), so a manifest that omitted this
+    #: would make every ``--corpus`` run read that stratum as empty.
+    held_out_texts: tuple[str, ...]
     card_disjoint_games: tuple[str, ...]
     game_disjoint_games: tuple[str, ...]
     rarity: dict[str, int]
@@ -103,6 +109,7 @@ class CorpusManifest:
             training_records=int(data["training_records"]),
             class_mix={k: float(v) for k, v in data["class_mix"].items()},
             held_out_cards=tuple(data["held_out_cards"]),
+            held_out_texts=tuple(data["held_out_texts"]),
             card_disjoint_games=tuple(data["card_disjoint_games"]),
             game_disjoint_games=tuple(data["game_disjoint_games"]),
             rarity={k: int(v) for k, v in data["rarity"].items()},
