@@ -286,6 +286,69 @@ The corpus stores per-record state snapshots rather than a replayable per-game e
 
 Collection piggybacks on the existing match generation: instrumenting the match-outcomes workers makes every self-play match feed the effect corpus at no extra simulation cost, and the coverage collector supplies the cards match play can never reach. Sampling design is settled in the spec up front, not left as tuning: a million games yield on the order of a hundred million records dominated by mana taps and routine combat, and the 8 GB training budget sees a small fraction of them, so the mixture over record kinds and importance sampling by ability rarity decide what the model actually learns. Rarity is counted in effective games per unique text, not records: rare-text records are heavily within-game correlated (a coalesced anthem, a playability record repeated per decision point), so record-counting would replay the same boards and overstate tail coverage.
 
+## Training reads half a corpus whose shape collection chose, so the training and validation sets become built artifacts
+
+A training run reads a little over half the shards it is pointed at, draws from each one a class mixture that shard cannot supply, and weights records by a rarity table computed from whichever shard is resident. All three follow from FR-125, which never lets the whole corpus be in hand at once. A build step that reads the corpus once and writes a fixed training corpus and a fixed validation corpus removes all three. It also makes a sweep over architectures and hyperparameters interpretable, which is what motivates building it now: two runs that differ only in their hyperparameters have to read the same records, and today they do not.
+
+### The mixture a batch wants is not the mixture on disk
+
+Playability records are the only kind a batch wants less of than the disk holds, and every other kind is over-drawn to make room. Measured over the whole depleted corpus, 17.2M records in 1,398 shards:
+
+| Record kind | Share of records | Share of a batch | Draws per record on disk |
+|---|---|---|---|
+| `playability` | 65.7% | 15% | 0.23× |
+| `resolution` | 20.8% | 38% | 1.8× |
+| `trigger` | 5.6% | 8% | 1.4× |
+| `continuous` | 4.2% | 12% | 2.9× |
+| `combat` | 3.2% | 20% | 6.3× |
+| `rewrite` | 0.6% | 7% | 12.7× |
+
+`plan_batch` draws with replacement from the resident shard, so an under-supplied class never runs out; it repeats. Rewrite records are seen about thirteen times as often as a uniform draw would see them, and most of what the run decompressed and parsed reaches no batch at all. What the mixture lacks is a corpus already written in its own proportions.
+
+### Rewrite records set the size of any corpus written in those proportions
+
+The scarcest class decides how large a mixture-proportioned dataset can be, and that class is `rewrite` by a wide margin. The corpus holds 94,419 of them against a 7% batch share, which supports a dataset of about 1.35M records; the next-scarcest class relative to its share, `combat`, would support twice that. Growing a curated corpus past a million-odd records therefore means collecting more replacement effects, not more games — a stage-three collection target rather than a curation parameter.
+
+### A cap of 200 records per text trims the head and leaves the tail untouched
+
+The ninetieth percentile of records per ability line is 214, so a cap in that region is the point where trimming starts to bite the head and still reaches nothing else. The distribution over 56,700 distinct ability lines, counting only the 5.2M records that name an acting line:
+
+| Measure | Value |
+|---|---|
+| records per line, p50 / p90 / p99 | 28 / 214 / 863 |
+| games per line, p50 / p90 / p99 | 10 / 60 / 169 |
+| lines occurring exactly once | 3.1% |
+| records held by the top 10% of lines | 57.7% |
+| records surviving a cap of 100 / 200 / 500 | 46.8% / 63.9% / 81.8% |
+
+The five basic lands hold the top five places at around 43,000 records each, one per game, and the next-largest entries are triggers that fire repeatedly within a single game — Faceless Butcher's 14,651 records come from 249 games. Both are what the cap is for, and both are already the subject of a coalescing rule on the collection side.
+
+The tail is thinner than the head is fat. Lines appearing exactly once are a small minority, and the median line is observed across several distinct games. Curation does not have to protect a corpus of singletons; it has to stop a few thousand lines from crowding out fifty thousand.
+
+### Rarity weighting reads the resident shard, and the coverage corpus inverts it
+
+FR-086 counts effective games over the resident shard, because FR-125 leaves no point at which the whole corpus is in hand. The assumption that makes it sound is that every shard is an interchangeable sample of sealed self-play. Coverage shards are not interchangeable: they are built to be dense in the cards self-play never deals. Inside one of them a scarce card looks common, so `effective_games^(−0.5)` down-weights the records the coverage run was launched to collect. Variant shards have the same shape, every text in them being new to the corpus. A build step holds the whole corpus by construction, so it is the one place the statistic can be computed correctly, and it computes it once.
+
+### A run reads half the corpus, and the corpus's growth decides which half
+
+A run performs 720 shard reads against roughly 1,330 training shards, at the current defaults of 18 shards an epoch over 40 epochs. `epoch_shards` walks the sorted shard list rather than sampling it, so a run against an unchanged corpus is reproducible. A shard's filename begins with its collection run's UUID and shards sort by filename, so a new collection run inserts its shards at an arbitrary position and shifts the window every epoch takes.
+
+`--split-from` already pins the two validation strata against exactly this, and any sweep has to pass it. What it pins is the exam: it carries the held-out cards and both strata's `game_id` sets forward from a source checkpoint. It does not pin the training data, because every shard collected since is one the source run never read and the later run trains on. Two runs a week apart sit the same exam having read different textbooks.
+
+### The build step decides the split once, and the validation sets are sampled to measure rather than to teach
+
+The build step chooses the held-out texts, finds the games that name a held-out card, and assigns every remaining game to training or to the game-disjoint stratum. It does this once, against a corpus that is not moving, and writes the answer down. A checkpoint then records which curated corpus it read instead of enumerating the games it happened to reach, and `evaluate-effect-model` checks that hash the way it already checks the vocabulary's.
+
+Training and validation want different sampling, and building both in one pass is what makes that affordable. A training corpus is written in the mixture's proportions under a per-text cap, so every read feeds a batch and the long tail survives. A validation set built the same way would measure whatever the training distribution over-represents. The card-disjoint stratum wants one property the training corpus must not have: every held-out text present at comparable weight. Gate 1's margins are averages over that stratum, so a text carrying a tenth of its records decides a tenth of the verdict.
+
+One join constrains what may be dropped. Gate 2 pairs a probe record to the real combat record named by its `mirror_of`, and `evaluate-effect-model` looks that partner up by `record_id`. A curation pass that selects records independently separates some of those pairs. The evaluator then finds no partner, scores nothing, and reports the keyword as under-sampled rather than as broken. Probe pairs move together or not at all. The trainer itself joins nothing — `link_id` reaches no training code, and `pairing_loss` pairs the two surfaces of one record — so only the validation build carries the constraint.
+
+### Curation waits for the coverage run, because the tail is thin rather than absent
+
+The build step freezes whatever it is given, so it should be given the corpus after stage two rather than during it. What stage two is still fixing is how *thinly* the tail is observed, not whether it is observed at all. The coverage run reports 19,139 of 32,869 cards satisfied and 13,730 remaining, where satisfied means fifty qualifying records; a card in the remainder usually has records, just not fifty of them.
+
+That distinction decides how much is lost by curating early, and the answer is that the per-text cap loses nothing and the rarity table loses a little. A cap is a ceiling, so a text with four records keeps all four whichever day the dataset is built. What changes with the coverage run is how many records those texts have to offer, and a dataset built today would under-represent exactly the texts stage two exists to reach.
+
 ## Rejected and deferred alternatives
 
 - **Repairing the snapshot-delta draft in place** (keep the 20-dim delta for stack abilities, add probes for statics, feed state in). Rejected: it repairs coverage but keeps the lossy hand-designed target and the diff contamination, which were the primary dissatisfactions, and replacements still get nothing.
@@ -303,6 +366,8 @@ Collection piggybacks on the existing match generation: instrumenting the match-
 - **The AI's play verdict as the playability label.** Rejected: the decision enum mixes rules-level checks with policy judgments, and the policy half would train the head on Forge's opinions rather than the rules.
 - **A recency-ordered card holdout.** Rejected: every Forge upgrade makes a different set the newest one, which rewrites the holdout and invalidates a depleted corpus that cannot be regenerated cheaply. Recency is kept as a reported breakdown of the gate-1 margins instead of as the selection rule.
 - **Building the card-disjoint stratum by discarding games.** Rejected in favor of depleting the pools: discarding couples the holdout size to the training yield, biases training toward the games where a held-out card happened not to appear, and leaves the stratum's size to the overlap between two unrelated set choices.
+- **A corpus-wide rarity table computed at trainer startup** (one pass over the corpus before training, replacing the per-shard count). Rejected as insufficient rather than wrong: it corrects the rarity statistic and nothing else, leaving the class mixture drawing with replacement from whatever the resident shard holds and leaving the training set to change under every run. It also pays for a full corpus pass at the start of every run, which is the cost the build step pays once.
+- **Relying on `--split-from` alone to make a sweep comparable.** Rejected: it pins the held-out cards and both validation strata, so the runs are scored on the same records, but the training corpus keeps growing underneath them and the later run reads shards the earlier one could not have.
 - **Hashing the card name rather than the ability text.** Rejected: functional reprints compile to the same script, so a name-keyed hash holds one out and trains on the other. Those records then fail the unique-text filter and the holdout slot buys no test.
 
 ## Evaluation adds behavioral checks to the draft's intrinsic ones
@@ -416,7 +481,8 @@ The subsystems stage so that the first `e` vectors exist and pass canaries as ea
 - Created-object slots: the K for the fixed-slot readout, the overflow rule, and the matching-vs-canonical-order loss.
 - Numeric handling: the monotone number-embedding parameterization and the binning of overlay scalars.
 - Gate thresholds: the identity-baseline margin on the unique-text stratum, the damage-step canary criterion, and the collapse-canary metrics.
-- Per-unique-text caps: the cap schedule for mana abilities, ubiquitous keywords, and other high-frequency texts.
+- Per-unique-text caps: the cap schedule the curated build applies to mana abilities, ubiquitous keywords, and other high-frequency texts, set from a count over the whole corpus rather than a sample — a sample understates the head, because a line's records grow with the shards read while the number of distinct lines grows far more slowly.
+- Curated corpus size and rebuild policy: how many records the training corpus should hold so a run sees each one a few times rather than hundreds, and what obliges a rebuild once collection appends to the raw corpus again.
 - Context-gradient strategy: live re-encoding with in-batch dedup vs the stop-gradient context cache, decided by what fits the 8 GB budget.
 - Subword fallback: whether the tokenizer gains a subword fallback for new-set nouns (subtypes, token names) that currently become `[UNK]`.
 

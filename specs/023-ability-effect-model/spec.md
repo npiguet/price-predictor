@@ -544,6 +544,60 @@ loss.
   `--curriculum-step` steps. Every other field trains from step zero, as do all three heads' remaining
   outputs.
 
+#### Curated corpus
+
+- **FR-135**: `python -m effects build-corpus` MUST read the raw shard corpus under `--records-dir`
+  once and write a curated dataset under `--output` (default `output/effects/corpus/`) holding
+  `training/`, `validation/card-disjoint/`, `validation/game-disjoint/` and `manifest.json`. Each
+  output directory MUST hold shards in the corpus shard format (FR-027), so every existing reader
+  loads them unchanged.
+- **FR-136**: Training records MUST be selected per record and both validation strata per **game**.
+  Whole-game selection is what keeps intra-game joins intact: `evaluate-effect-model` resolves a probe
+  record's `mirror_of` to a `record_id` in the same stratum, and a stratum holding one half of a pair
+  scores nothing and reports the keyword as under-sampled rather than as broken (FR-105).
+- **FR-137**: The split MUST be decided once, by the FR-088 rule under the same
+  `--holdout-permille` and `--holdout-max-carriers`, against the corpus as it stands at build time. A
+  game with a record naming a held-out card MUST go to the card-disjoint stratum;
+  `--game-disjoint-games` (default 1000) of the remaining games MUST go to the game-disjoint stratum;
+  the rest are training candidates.
+- **FR-138**: The training corpus MUST hold at most `--text-cap` (default 200) records per unique
+  ability text, dropping the excess at random under `--seed`. The cap MUST be a ceiling and never a
+  floor: a text below it keeps every record it has, so the tail `collect-coverage` exists to fill
+  survives curation whole.
+- **FR-139**: `--class-mix` MUST set the on-disk proportions over the eight sampling classes
+  (FR-085), defaulting to the training mixture. A class the raw corpus cannot supply at its share MUST
+  be written in full and its shortfall recorded in the manifest, never silently under-filled.
+- **FR-140**: `--training-records`, when non-zero, MUST subsample the capped result within each class
+  to that total. It defaults to zero, meaning no ceiling beyond `--text-cap`.
+- **FR-141**: The manifest MUST record effective games per unique ability text counted over the whole
+  raw corpus. This is the corpus-wide table FR-086 cannot compute; a `--corpus` training run MUST read
+  it rather than counting the resident shard. Coverage and variant shards are built dense in scarce
+  texts, so a per-shard count reads those texts as common and down-weights exactly the records those
+  collectors were run to obtain.
+- **FR-142**: The card-disjoint stratum MUST hold at most `--card-disjoint-text-cap` (default 50)
+  records per held-out ability text, so each held-out text weighs comparably in gate 1's per-stratum
+  averages (FR-103) and in best-checkpoint selection (FR-092). Games are the selection unit (FR-136),
+  so the cap governs which games are admitted rather than which records survive within one.
+- **FR-143**: The dataset MUST be a function of the raw corpus, the flags and `--seed` alone. The
+  manifest MUST record all three, plus the source shard names and byte sizes, the per-class and
+  per-stratum counts, and the unique-ability-text count of each output.
+- **FR-144**: A raw corpus that has grown MUST be rebuilt whole rather than extended in place, since
+  the split and the rarity table are corpus-wide quantities. `--verify` MUST report the difference
+  between an existing manifest's source list and the corpus on disk, and write nothing.
+- **FR-145**: The run MUST report, per class and per stratum, the records read, the records kept and
+  the records the cap dropped, and the unique ability texts each output holds. The text counts are
+  what say whether curation preserved the tail, which no record count can show.
+- **FR-146**: `train-effect-model --corpus DIR` MUST read a curated dataset instead of the raw
+  corpus, taking the split, the rarity table and both validation strata from its manifest. It MUST
+  refuse `--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and
+  `--holdout-max-carriers` alongside it — each names a decision the manifest already records, and two
+  spellings of one decision is a disagreement nothing would report. FR-125 still binds: a curated
+  corpus is read one shard at a time like any other.
+- **FR-147**: A checkpoint trained with `--corpus` MUST record the manifest's path and digest
+  alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
+  hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
+  score them partly on games the model trained on.
+
 #### Training
 
 - **FR-083**: `python -m effects train-effect-model` MUST train both transformers jointly, end to end,
@@ -557,7 +611,8 @@ loss.
 - **FR-086**: Within a class, records MUST weight ∝ effective_games^(−0.5), capped at 20× the weight of
   the most-observed ability text, where effective games counts distinct games contributing a record of
   that unique text. Effective games are counted over the resident shard rather than the whole corpus,
-  since FR-125 leaves no point at which the whole corpus is in hand.
+  since FR-125 leaves no point at which the whole corpus is in hand. A `--corpus` run reads the
+  corpus-wide table from the curated manifest instead (FR-141).
 - **FR-087**: Records with no acting ability text MUST bypass rarity weighting: `combat` and
   `playability-legality` sample uniformly within their class, and a `decision` record's per-candidate
   examples key on the candidate's text.

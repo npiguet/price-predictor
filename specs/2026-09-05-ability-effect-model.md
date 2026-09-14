@@ -211,7 +211,7 @@ removed; a full-strength run opens them normally and supplies the card-disjoint 
 `python -m effects collect-coverage` reaches the converted cards sealed pools never contain, by putting them in decks that get played.
 
 - Works in rounds. A round rebuilds the weighted decks, plays `--decks-per-round` (default 500) of them as matches, and recounts coverage; `--no-progress-rounds` below counts these.
-- Reads the held-out card list from `--exclude-cards PATH` — the file `holdout-cards` writes — so coverage decks exclude every card carrying a held-out text. It needs no trained model, so this command does not wait on a training run that follows it. `--split-from PATH` (a checkpoint) is the alternative, for adding coverage to a corpus an existing checkpoint trained on; passing both is refused. With neither, the run builds over every card and its games are usable only by a checkpoint whose split holds nothing they contain.
+- Reads the held-out card list from `--exclude-cards PATH` — the file `holdout-cards` writes — so coverage decks exclude every card carrying a held-out text. `--training-corpus DIR` is the one-flag spelling: it names the corpus this run extends and the `holdout-cards.txt` beside it, refuses a directory holding no such list rather than running undepleted, and refuses either flag it implies alongside it. It takes the depleted corpus, not a tree that also holds the full-strength one: discovery recurses, so a card whose only records are held out would otherwise read as satisfied. It needs no trained model, so this command does not wait on a training run that follows it. `--split-from PATH` (a checkpoint) is the alternative, for adding coverage to a corpus an existing checkpoint trained on; passing both is refused. With neither, the run builds over every card and its games are usable only by a checkpoint whose split holds nothing they contain.
 - Builds 40-card decks over the whole converted card corpus, not sealed-legal sets. Deck candidates and the coverage unit come from the `output/cardsfolder/` entry of `--cards-folder` alone, since a token script is not a deckable card. Decks are weighted toward cards with the fewest effect records: 23 nonlands plus basics from `compute_basic_lands`. Excluding the held-out cards matters here: a deck of 23 cards drawn corpus-wide would otherwise contain one almost every game, and the whole coverage corpus would fall to the training exclusion.
 - Consults Forge castability to weight slots toward cards Forge actually plays. The consult only ranks; it never drops a card from deck building, because being in a game is the precondition a stage-three intervention forks from, so every uncovered card still gets slots.
 - Two residues are reported at the end of a run and fall to interventional resolutions (stage three): cards the consult judges uncastable, and cards it judges castable that never reach `--target-records`. A retired card goes to the residue matching its consult verdict.
@@ -219,6 +219,48 @@ removed; a full-strength run opens them normally and supplies the card-disjoint 
 - `--target-records` (default 50): the per-card goal — a card is satisfied once that many records, counted over every shard in `--effect-records`, have it as the acting line's host, an event subject, or a referenced ref. Merely sitting on the battlefield in a snapshot does not count, and the unit is not resolution records specifically, since a vanilla or keyword-only creature has no acting line and could never produce one.
 - The run stops when every card is satisfied or retired: a card that gains no new qualifying record across `--no-progress-rounds` (default 3) consecutive rounds is retired, so the stop condition always terminates.
 - Coverage matches write effect records only — never `match-outcomes.txt` or `cards-played.txt`. They are not sealed self-play and must not feed the scorer or encoder corpora.
+
+# Curated corpus
+
+`python -m effects build-corpus` reads the raw shard corpus once and writes a fixed dataset: one training corpus, two validation strata, and a manifest. `train-effect-model --corpus` reads the dataset instead of the raw corpus, so two runs differing only in hyperparameters read the same records in the same order.
+
+Output layout under `--output` (default `output/effects/corpus/`):
+
+| Path | Contents |
+|---|---|
+| `training/*.jsonl.gz` | training records, capped per ability text and written in the class mixture's proportions |
+| `validation/card-disjoint/*.jsonl.gz` | whole games with a record naming a held-out card |
+| `validation/game-disjoint/*.jsonl.gz` | whole games naming no held-out card, withheld from training |
+| `manifest.json` | the split, the rarity table, the caps and flags, the seed, the source shard list, and per-class counts |
+
+- **Selection unit.** Training is selected per record; both validation strata are selected per game. Whole-game selection keeps every intra-game join intact, including the `mirror_of` pairing `evaluate-effect-model` reads for gate 2 — a stratum missing a probe's partner scores nothing and reports the keyword as under-sampled.
+- **Split.** The holdout rule is the trainer's (§ Training, Splits) under the same `--holdout-permille` and `--holdout-max-carriers`, which the manifest records. A game with a record naming a held-out card goes to the card-disjoint stratum; `--game-disjoint-games` of the remaining games go to the game-disjoint stratum; the rest are training candidates.
+- **Per-text cap.** The training corpus holds at most `--text-cap` records per unique ability text, records beyond the cap dropped at random under `--seed`. The cap is a ceiling and never a floor: a text below it keeps every record it has, so the tail the coverage collector exists to fill survives curation whole.
+- **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class.
+- **Size ceiling.** `--training-records`, when non-zero, subsamples the capped result within each class to that total.
+- **Rarity table.** The manifest records effective games per unique ability text, counted over the whole raw corpus. A `--corpus` training run reads that table instead of counting the resident shard. Coverage and variant shards are built dense in scarce texts, so a per-shard count reads those texts as common and down-weights them.
+- **Card-disjoint sampling.** At most `--card-disjoint-text-cap` records per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric.
+- **Determinism.** The dataset is a function of the raw corpus, the flags, and `--seed`, all three recorded in the manifest along with the source shard names and byte sizes.
+- **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place. The manifest's source list is what says whether it has grown; `--verify` reports the difference and writes nothing.
+- **Reporting.** The run reports, per class and per stratum, the records read, the records kept, and the records the cap dropped; and it reports the number of unique ability texts in each output, which is what says whether curation preserved the tail.
+
+Flags:
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--records-dir` | `output/effects/records/` | raw corpus root; discovery recurses |
+| `--output` | `output/effects/corpus/` | curated dataset directory |
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and sidecars, for the holdout rule; repeatable |
+| `--holdout-permille` | 20 | holdout share of eligible ability texts |
+| `--holdout-max-carriers` | 8 | cards a text may be on and stay eligible |
+| `--text-cap` | 200 | max training records per unique ability text |
+| `--class-mix` | the training mixture | on-disk class proportions, `class=share` pairs |
+| `--training-records` | 0 (no ceiling) | total training records after capping |
+| `--game-disjoint-games` | 1000 | games withheld for the game-disjoint stratum |
+| `--card-disjoint-text-cap` | 50 | max card-disjoint records per held-out ability text |
+| `--seed` | 42 | selection seed |
+| `--workers` | CPU count | shard readers |
+| `--verify` | _(off)_ | report drift against an existing manifest and write nothing |
 
 # Model
 
@@ -302,6 +344,7 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 
 `python -m effects train-effect-model` — joint, end to end, from random init.
 
+- **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest already records. Without it a run reads the raw corpus and decides those itself.
 - **Batches.** Each batch (`--batch-size` records, stretched by `--grad-accum`) mixes several games, groups each game's records together, and encodes each unique ability text once. Context gradient is live re-encoding by default; `--context-cache` switches to the stop-gradient momentum cache (refreshed every `--cache-refresh` batches) when the 8 GB GPU budget requires it.
 - **Schedule.** An epoch is `--steps-per-epoch` optimizer steps with validation between epochs; `--epochs` bounds the run; early stopping after `--patience` epochs without a new card-disjoint validation best.
 - **Sampling mixture.** Per batch, set by `--kind-mix` and renormalized over the classes present in the corpus:
@@ -317,12 +360,13 @@ change. Until it is taken, `result` is corpus content the validator judges and t
   | `rewrite` | 7% | `rewrite` |
   | `playability-legality` | 5% | `playability` / `attackers`, `blockers` |
 
-- **Rarity weighting.** Within a class, records weight ∝ effective_games^(−0.5), capped at 20× the weight of the most-observed ability text. Effective games is the count of distinct games contributing a record of that unique ability text — games, not raw records.
+- **Rarity weighting.** Within a class, records weight ∝ effective_games^(−0.5), capped at 20× the weight of the most-observed ability text. Effective games is the count of distinct games contributing a record of that unique ability text — games, not raw records. A `--corpus` run reads the count from the manifest, over the whole corpus; otherwise it counts the resident shard, which under-weights a text that is rare corpus-wide and common in one shard.
 - **Records with no acting text.** `combat` and `playability-legality` sample uniformly within their class; a `decision` record's per-candidate examples key on the candidate's text.
-- **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text; token scripts and variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. Best checkpoint by card-disjoint validation loss.
+- **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text; token scripts and variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. A `--corpus` run takes both strata from the manifest as built directories rather than reserving shards. Best checkpoint by card-disjoint validation loss.
 - **Holdout reporting.** `train-effect-model` reports, before its first epoch, the held-out text count, the share of cards under `output/cardsfolder/` those texts remove, and the three strata's record counts. It also reports gate-1 margins split by whether a held-out text's first printing falls in the newest sets, so recency is a breakdown of one stratum rather than a second holdout.
 - **Split guard.** `train-effect-model` fails before its first epoch when the card-disjoint stratum is empty, and warns when the stratum holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text appears on no training card. The message names the depleted and full-strength collection runs as the fix.
 - **Split provenance.** The checkpoint records the split it trained against — the holdout flags, the held-out card list they produced, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. For the same reason `--split-from PATH` makes a run inherit another checkpoint's split, vocabulary, and keyword-definition paths: every variant run inherits from the `full` run it is a baseline for, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
+- **Corpus provenance.** A `--corpus` checkpoint records the manifest's digest and path alongside its split, and `evaluate-effect-model` fails fast when the dataset it is given hashes differently — the same guard the vocabulary already has, for the same reason: a rebuilt dataset scores the gates on records the model may have trained on.
 - **Records outside the recorded split.** Every reported check scores only the recorded `game_id`s, so games appended after a training run are ignored rather than re-derived into a stratum.
 - **Vocabulary drift.** The checkpoint also records a hash of the vocabulary and keyword-definition files it trained with. The inference commands hash the files they actually use — the recorded paths, or an explicit override — and fail fast on a mismatch, and `evaluate-effect-model` compares those hashes across `--checkpoint` and every `--variant-checkpoint` alongside the split. `build-vocab` overwrites its target in place, so a rebuild between training and encoding would otherwise silently re-index the embedding table.
 - **Checkpoints.** Saved under `--model-output`, which defaults to `models/effects/effect-model/` for `--variant full` and `models/effects/effect-model/{variant}/` otherwise, as `{timestamp}.pt` plus `latest.pt`, so variant runs never overwrite the shipping checkpoint. Each checkpoint records the `--vocab-path` and `--keyword-definitions` it trained with, plus its split, and the inference commands default to those. The saved artifact keeps the encoder, the effect-head trunk, and the per-entity, created-objects, and verdict heads; the MLM, script-API, and pairing heads are filtered at save time.
@@ -332,7 +376,8 @@ Flags:
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--records-dir` | `output/effects/records/` | corpus shard directory |
+| `--corpus` | _(none; read `--records-dir`)_ | a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the holdout flags |
+| `--records-dir` | `output/effects/records/` | raw corpus shard directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and provenance sidecars; repeatable |
 | `--variant-scripts` | _(none; `output/effects/variant-scripts/` at stage four)_ | the perturbed-script tree and its sidecars |
 | `--split-from` | _(none; compute the split)_ | inherit another checkpoint's split, vocabulary, and keyword-definition paths |
@@ -471,9 +516,33 @@ python -m effects validate-corpus
     [--min-zone-change-from-zone-rate F]  unset; measured and watched, not judged
     [--min-attributed-rate F]             unset; measured and watched, not judged
 
+python -m effects build-corpus
+    [--records-dir DIR]          default output/effects/records/
+    [--output DIR]               default output/effects/corpus/
+    [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
+    [--holdout-permille N]       default 20
+    [--holdout-max-carriers N]   default 8
+    [--text-cap N]               default 200
+    [--class-mix SPEC]           default: the training mixture
+    [--training-records N]       default 0 (no ceiling)
+    [--game-disjoint-games N]    default 1000
+    [--card-disjoint-text-cap N] default 50
+    [--seed N]                   default 42
+    [--workers N]                default: CPU count
+    [--verify]                   report drift against an existing manifest; write nothing
+
+python -m effects holdout-cards
+    [--out PATH]                 the depletion list generate-pools --exclude-cards reads
+    [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
+    [--printings-path PATH]      default resources/AllPrintings.json; names in printed case
+    [--holdout-permille N]       default 20
+    [--holdout-max-carriers N]   default 8
+
 python -m effects collect-coverage
     [--effect-records DIR]       default output/effects/records/
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
+    [--training-corpus DIR]      the depleted corpus and its holdout-cards.txt, in one flag
+    [--exclude-cards PATH]       the held-out card list holdout-cards writes
     [--split-from PATH]          checkpoint whose held-out cards to exclude
     [--target-records N]         default 50
     [--decks-per-round N]        default 500
@@ -488,6 +557,7 @@ python -m effects collect-variants                    (stage four)
     [cap/budget flags]           § Collection caps and budgets
 
 python -m effects train-effect-model
+    [--corpus DIR]               a curated dataset; refuses --records-dir and the split flags
     [--printings-path PATH]      default resources/AllPrintings.json
     [--split-from PATH]          inherit a checkpoint's split; required for variant runs
     [other flags]                § Training
@@ -504,6 +574,7 @@ python -m effects encode-abilities
 python -m effects evaluate-effect-model
     [--checkpoint PATH]          default models/effects/effect-model/latest.pt
     [--variant-checkpoint NAME=PATH ...]   repeatable
+    [--corpus DIR]               default: the dataset the checkpoint records, if any
     [--records-dir DIR]          default output/effects/records/
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
     [--variant-scripts PATH]     stage four
