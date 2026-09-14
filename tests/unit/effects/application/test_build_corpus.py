@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import BuildCorpusConfig, build
+from effects.application.build_corpus import BuildCorpusConfig, _output_name, build
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
     CombatPayload,
@@ -319,3 +319,44 @@ def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
             records_dir=empty, cards_folders=a_corpus.cards,
             output=tmp_path / "out", workers=1,
         ))
+
+
+# ── fix round 1: _output_name must be injective (review Finding 1) ─────
+
+
+def test_output_name_is_injective_on_the_reviewers_counterexample():
+    """``"/" -> "__"`` collided: ``"a_/b"`` and ``"a/_b"`` both became
+    ``"a___b"``. Two source shards writing the same output filename is a
+    silent overwrite (``write_shard`` truncates), so this has to hold.
+    """
+    assert _output_name("a_/b") != _output_name("a/_b")
+
+
+def test_output_name_flattens_a_subdirectory_path():
+    assert _output_name("depleted/run.0-a.jsonl.gz") == "depleted_srun.0-a.jsonl.gz"
+
+
+# ── fix round 1: per-stratum counts and unique texts (review Finding 2) ─
+
+
+def test_the_manifest_records_per_stratum_counts_and_unique_texts(tmp_path, a_corpus):
+    """FR-143/FR-145: per-class counts alone leave both validation strata
+    with no unique-text figure anywhere in the manifest. A test that only
+    checked the two fields exist would not catch them being populated empty,
+    so this checks actual values against strata ``a_corpus`` is built to
+    populate: the tainted game (card-disjoint) and whichever clean game the
+    seeded game-disjoint draw takes both carry a resolvable ability.
+    """
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    ))
+
+    manifest = CorpusStore(out).load()
+    assert manifest.per_stratum["training"] > 0
+    assert manifest.unique_texts["training"] > 0
+    assert "card-disjoint" in manifest.per_stratum
+    assert "game-disjoint" in manifest.per_stratum
+    assert manifest.unique_texts["card-disjoint"] > 0
+    assert manifest.unique_texts["game-disjoint"] > 0

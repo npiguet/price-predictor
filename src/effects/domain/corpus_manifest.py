@@ -66,6 +66,19 @@ class CorpusManifest:
     rarity: dict[str, int]
     sources: tuple[SourceShard, ...]
     per_class: dict[str, ClassCounts]
+    #: Records written to each output: "training", "card-disjoint",
+    #: "game-disjoint", and "dropped-held-out" for held-out games the
+    #: card-disjoint cap declined. The per-stratum sibling of ``per_class``'s
+    #: per-class breakdown (FR-143, FR-145).
+    per_stratum: dict[str, int]
+    #: Distinct ability texts in each of the three real outputs (not
+    #: "dropped-held-out", which writes nothing). Read together with
+    #: ``per_stratum``, this is the pair FR-145 asks an operator to read: a
+    #: stratum can hold plenty of records and still have flattened its tail,
+    #: and only the text count says so. Not to be confused with
+    #: ``ClassCounts.unique_texts``, which is the same idea sliced by
+    #: sampling class within the training output alone.
+    unique_texts: dict[str, int]
     shortfall: dict[str, int]
 
     def as_dict(self) -> dict[str, Any]:
@@ -101,6 +114,8 @@ class CorpusManifest:
                 name: ClassCounts(**{k: int(v) for k, v in counts.items()})
                 for name, counts in data["per_class"].items()
             },
+            per_stratum={k: int(v) for k, v in data["per_stratum"].items()},
+            unique_texts={k: int(v) for k, v in data["unique_texts"].items()},
             shortfall={k: int(v) for k, v in data["shortfall"].items()},
         )
 

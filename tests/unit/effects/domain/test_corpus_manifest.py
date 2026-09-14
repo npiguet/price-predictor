@@ -21,6 +21,11 @@ def manifest(**overrides) -> CorpusManifest:
         rarity={"deals 3 damage": 7},
         sources=(SourceShard(name="depleted/run.0-a.jsonl.gz", size=1234),),
         per_class={"rewrite": ClassCounts(read=10, kept=4, dropped_by_cap=6, unique_texts=2)},
+        per_stratum={
+            "training": 4, "card-disjoint": 3, "game-disjoint": 2,
+            "dropped-held-out": 1,
+        },
+        unique_texts={"training": 2, "card-disjoint": 1, "game-disjoint": 1},
         shortfall={},
     )
     base.update(overrides)

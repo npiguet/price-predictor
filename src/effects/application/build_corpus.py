@@ -448,6 +448,15 @@ def decide(
 #: twice by the same number.
 _CLASS_SEED_OFFSET = 0x9E3779B9
 
+#: Every write-pass stratum, in report order. The first three are the real
+#: outputs -- shard directories a downstream reader loads, and what
+#: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is just that
+#: prefix; "dropped-held-out" is accounting only, since nothing is written
+#: for it, so it is counted in ``per_stratum`` but never carries a
+#: unique-text figure.
+STRATA: tuple[str, ...] = ("training", "card-disjoint", "game-disjoint", "dropped-held-out")
+OUTPUTS: tuple[str, ...] = STRATA[:-1]
+
 
 @dataclass(frozen=True, slots=True)
 class WriteConfig:
@@ -475,6 +484,12 @@ class WriteResult:
     #: as per class, and a stratum nobody counted is a stratum nobody notices
     #: is empty.
     stratum: Counter[str] = field(default_factory=Counter)
+    #: Ability keys admitted to each of the three real outputs -- "training"
+    #: / "card-disjoint" / "game-disjoint", never "dropped-held-out", which
+    #: writes nothing -- the same role ``kept_keys`` plays per class, but per
+    #: stratum instead: ``build()`` folds these through ``decisions.key_text``
+    #: to get each output's unique-ability-text count (FR-143, FR-145).
+    stratum_keys: dict[str, set[str]] = field(default_factory=dict)
 
 
 _WRITE: WriteConfig | None = None
@@ -486,12 +501,26 @@ def init_write_worker(config: WriteConfig) -> None:
 
 
 def _output_name(relative: str) -> str:
-    """A flat shard name for a source that may sit in a subdirectory.
+    """A flat, **injective** shard name for a source that may sit in a subdirectory.
 
     ``depleted/run.0-a.jsonl.gz`` and ``full-strength/run.0-a.jsonl.gz`` are
-    different shards and must not write to one file.
+    different shards and must not write to one file — and neither may any other
+    pair of distinct relative paths, because ``write_shard`` opens in truncate
+    mode, so a collision is a silent overwrite in all three outputs with no
+    stable answer, under ``workers > 1``, as to which source survives.
+
+    A plain ``"/" -> "__"`` substitution is not injective: ``"a_/b"`` and
+    ``"a/_b"`` both become ``"a___b"``, because an original ``_`` and a
+    doubled-up ``/`` separator are indistinguishable in the output. The fix is
+    the standard one for building an injective string encoding out of a small
+    alphabet of specials: escape the escape character *first*. Every ``_`` in
+    the result is then the first character of a two-character escape --
+    ``_u`` for an original ``_``, ``_s`` for an original ``/`` -- and never an
+    untouched original character (every real ``_`` was already rewritten to
+    ``_u`` before ``/`` is touched), so the two cases can never be confused
+    and the mapping is one-to-one.
     """
-    return relative.replace("/", "__")
+    return relative.replace("_", "_u").replace("/", "_s")
 
 
 def write_shard_pass(relative: str) -> WriteResult:
@@ -509,21 +538,29 @@ def write_shard_pass(relative: str) -> WriteResult:
 
     for record in read_shard(Path(config.records_dir) / relative):
         name = sampling_class(record)
+        # Computed once, up front: every branch below -- including the two
+        # validation strata, which never used to look at it at all -- needs
+        # it to track which ability texts that output actually holds.
+        key = ability_key(record)
         out.read[name] += 1
         if record.game_id in config.card_disjoint:
             card_disjoint.append(record)
             out.stratum["card-disjoint"] += 1
+            if key is not None:
+                out.stratum_keys.setdefault("card-disjoint", set()).add(key)
             continue
         if record.game_id in config.game_disjoint:
             game_disjoint.append(record)
             out.stratum["game-disjoint"] += 1
+            if key is not None:
+                out.stratum_keys.setdefault("game-disjoint", set()).add(key)
             continue
         if record.game_id in config.held_out_games:
             # Held out but not admitted to the stratum: dropped, never trained
-            # on (FR-088).
+            # on (FR-088). Nothing is written for it, so it earns no entry in
+            # stratum_keys -- only the three real outputs do.
             out.stratum["dropped-held-out"] += 1
             continue
-        key = ability_key(record)
         value = record_hash(record.record_id, seed=config.seed)
         if key is not None and not keeps(value, config.thresholds.get(key)):
             out.dropped_by_cap[name] += 1
@@ -538,6 +575,7 @@ def write_shard_pass(relative: str) -> WriteResult:
         out.stratum["training"] += 1
         if key is not None:
             out.kept_keys.setdefault(name, set()).add(key)
+            out.stratum_keys.setdefault("training", set()).add(key)
 
     shard_name = _output_name(relative)
     write_shard(Path(config.training_dir) / shard_name, training)
@@ -560,6 +598,8 @@ def run_write_pass(
         total.stratum.update(part.stratum)
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
+        for name, keys in part.stratum_keys.items():
+            total.stratum_keys.setdefault(name, set()).update(keys)
 
     if workers is not None and workers <= 1:
         init_write_worker(config)
@@ -677,6 +717,19 @@ def build(config: BuildCorpusConfig) -> int:
         )
         for name in sorted(written.read)
     }
+    # The same fold as per_class's unique_texts, one axis over: by output
+    # (stratum) rather than by sampling class (FR-143, FR-145). per_stratum
+    # covers all four strata written.stratum can hold; unique_texts only the
+    # three that are actual outputs -- dropped-held-out writes nothing, so it
+    # has no ability texts of its own to count.
+    per_stratum = {name: written.stratum.get(name, 0) for name in STRATA}
+    unique_texts = {
+        name: len({
+            decisions.key_text.get(key, key)
+            for key in written.stratum_keys.get(name, ())
+        })
+        for name in OUTPUTS
+    }
     manifest = CorpusManifest(
         seed=config.seed,
         surface=surface,
@@ -694,6 +747,8 @@ def build(config: BuildCorpusConfig) -> int:
         rarity=decisions.rarity,
         sources=survey.shards,
         per_class=per_class,
+        per_stratum=per_stratum,
+        unique_texts=unique_texts,
         shortfall=decisions.shortfall,
     )
     store.save(manifest)
@@ -703,8 +758,12 @@ def build(config: BuildCorpusConfig) -> int:
             "%-22s read %9d  kept %9d  cap dropped %8d  unique texts %7d",
             name, counts.read, counts.kept, counts.dropped_by_cap, counts.unique_texts,
         )
-    for stratum in ("training", "card-disjoint", "game-disjoint", "dropped-held-out"):
-        logger.info("%-22s %9d record(s)", stratum, written.stratum.get(stratum, 0))
+    for name in OUTPUTS:
+        logger.info(
+            "%-22s %9d record(s)  %7d unique text(s)",
+            name, per_stratum[name], unique_texts[name],
+        )
+    logger.info("%-22s %9d record(s)", "dropped-held-out", per_stratum["dropped-held-out"])
     for name, missing in sorted(decisions.shortfall.items()):
         logger.warning(
             "%s is short %d record(s) of its share: --training-records asks for "
