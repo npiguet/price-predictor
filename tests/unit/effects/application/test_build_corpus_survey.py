@@ -9,8 +9,12 @@ never against text.
 
 from __future__ import annotations
 
+import zlib
 from collections import Counter
 
+import pytest
+
+from effects.application import build_corpus
 from effects.application.build_corpus import (
     ShardSurvey, Survey, SurveyConfig, ability_key, game_hash,
     init_survey_worker, merge_surveys, parse_ability_key, run_survey,
@@ -130,6 +134,16 @@ def test_ability_key_is_none_for_a_record_with_no_acting_line():
 
 
 def test_game_hash_is_stable_across_calls():
+    """Pinned to the algorithm, not merely to idempotency (FR-088a).
+
+    ``game_hash("x") == game_hash("x")`` is also true of the built-in
+    ``hash()``, whose salt is per-process rather than per-call — so that
+    assertion alone cannot fail for the exact defect the function's docstring
+    warns against, and that defect would only corrupt ``key_games``
+    cardinality under the multi-worker pool path, where it is hardest to
+    notice.
+    """
+    assert game_hash("run.0-a.3") == zlib.crc32(b"run.0-a.3")
     assert game_hash("run.0-a.3") == game_hash("run.0-a.3")
 
 
@@ -235,3 +249,21 @@ def test_merging_shard_surveys_unions_games_and_sums_records():
     assert merged.key_records["k"] == 2
     assert len(merged.key_games["k"]) == 2
     assert sorted(merged.key_heaps["k"].values()) == [10, 20]
+
+
+def test_merge_surveys_fails_loudly_when_the_worker_was_never_initialized(
+    monkeypatch,
+):
+    """No silent cap-0 degradation (FR-088a).
+
+    ``config.text_cap if config is not None else 0`` used to be the fallback:
+    with no config, ``cap`` became 0, every ``CapHeap(0).offer`` became a
+    no-op and every ``threshold()`` read back None, meaning "admit every
+    record" — so a missing ``init_survey_worker`` call would report success
+    having applied no cap at all. ``survey_shard`` already fails loudly on
+    this precondition; ``merge_surveys`` must fail the same way.
+    """
+    monkeypatch.setattr(build_corpus, "_CONFIG", None)
+
+    with pytest.raises(AssertionError, match="init_survey_worker"):
+        merge_surveys([])

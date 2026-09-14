@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import zlib
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -184,10 +185,11 @@ def survey_shard(relative: str) -> ShardSurvey:
     return out
 
 
-def merge_surveys(parts) -> Survey:
+def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     """Combine shard surveys into one corpus-wide picture."""
     config = _CONFIG
-    cap = config.text_cap if config is not None else 0
+    assert config is not None, "init_survey_worker was not run"
+    cap = config.text_cap
     shards: list[SourceShard] = []
     records = 0
     key_games: dict[str, set[int]] = defaultdict(set)
@@ -242,7 +244,7 @@ def shard_names(records_dir: Path) -> list[str]:
 
 
 def run_survey(
-    records_dir,
+    records_dir: Path,
     *,
     config: SurveyConfig,
     workers: int | None = None,
