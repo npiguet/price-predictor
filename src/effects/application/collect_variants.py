@@ -186,6 +186,27 @@ def held_out_cards(
     return load_exclusions(split_from=split_from, exclude_cards=exclude_cards)
 
 
+def _brace_wrap_mana_cost(cost: str) -> str:
+    """Forge's raw ``ManaCost:`` shards, brace-delimited like the converted
+    corpus (e.g. ``"2 R R"`` -> ``"{2}{R}{R}"``).
+
+    ``compute_basic_lands`` reads its input through ``convert_mana_cost``,
+    which extracts mana symbols with a ``{...}`` regex and expects exactly
+    the converted corpus's shape -- a raw script's shards are
+    whitespace-separated with no braces at all, so unwrapped they match
+    nothing, ``convert_mana_cost`` silently returns ``""``, and
+    ``ManaCost.parse`` reads every variant as costless. Splitting first and
+    wrapping each shard on its own (rather than wrapping the whole string in
+    one pair of braces) reproduces the converted corpus's actual per-shard
+    shape, which is what a future reader iterating brace groups one at a
+    time would assume. Forge's own literal ``"no cost"`` (a land's
+    ``ManaCost:`` line) round-trips correctly too: split into two "shards",
+    rejoined by ``convert_mana_cost`` back into the exact literal
+    ``ManaCost.parse`` special-cases as costless.
+    """
+    return "".join(f"{{{shard}}}" for shard in cost.split())
+
+
 def _deck_text(variant: GeneratedVariant) -> str:
     """The converted-shaped text `compute_basic_lands` needs for a variant.
 
@@ -200,7 +221,11 @@ def _deck_text(variant: GeneratedVariant) -> str:
     types = next(
         (ln.split(":", 1)[1] for ln in lines if ln.startswith("Types:")), "",
     )
-    return f"name: {variant.name}\nmana cost: {cost}\ntypes: {types}\n"
+    return (
+        f"name: {variant.name}\n"
+        f"mana cost: {_brace_wrap_mana_cost(cost)}\n"
+        f"types: {types}\n"
+    )
 
 
 def run(config: CollectVariantsConfig) -> int:
