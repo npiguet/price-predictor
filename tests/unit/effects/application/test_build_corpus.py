@@ -636,3 +636,34 @@ def test_verify_leaves_the_written_dataset_alone(tmp_path, a_corpus):
     ))
 
     assert sorted(p.name for p in store.training_dir.glob("*")) == before
+
+
+def test_no_empty_output_shard_is_written(tmp_path, a_corpus):
+    """One output shard per source shard per stratum, written unconditionally,
+    turned 701 source shards into 2,103 files, most of them empty.
+
+    They are not free. `train-effect-model --corpus` lists both validation
+    directories and reads every shard in them before the first training step,
+    logging a line each; an empty *training* shard drawn into an epoch
+    forfeits its share of the step budget, because `_train_on_shard` returns
+    early on a shard with nothing in it.
+    """
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    ))
+
+    store = CorpusStore(out)
+    written = [
+        shard
+        for directory in (
+            store.training_dir, store.card_disjoint_dir, store.game_disjoint_dir,
+        )
+        for shard in directory.glob("*.jsonl.gz")
+    ]
+    from effects.infrastructure.record_io import read_shard
+
+    assert written, "the fixture must write something or this proves nothing"
+    empty = [shard for shard in written if not any(True for _ in read_shard(shard))]
+    assert not empty, f"empty shards written: {[str(s) for s in empty]}"

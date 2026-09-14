@@ -696,9 +696,19 @@ def write_shard_pass(relative: str) -> WriteResult:
             out.stratum_keys.setdefault("training", set()).add(key)
 
     shard_name = _output_name(relative)
-    write_shard(Path(config.training_dir) / shard_name, training)
-    write_shard(Path(config.card_disjoint_dir) / shard_name, card_disjoint)
-    write_shard(Path(config.game_disjoint_dir) / shard_name, game_disjoint)
+    # Only where there is something to write. A source shard contributes to one
+    # stratum far more often than to three, so writing all three unconditionally
+    # produced two empty files per source shard -- 2,103 files from 701 sources.
+    # An empty validation shard is read and logged before the first training
+    # step; an empty training shard drawn into an epoch forfeits its share of
+    # the step budget, because `_train_on_shard` returns early on one.
+    for directory, records in (
+        (config.training_dir, training),
+        (config.card_disjoint_dir, card_disjoint),
+        (config.game_disjoint_dir, game_disjoint),
+    ):
+        if records:
+            write_shard(Path(directory) / shard_name, records)
     return out
 
 
