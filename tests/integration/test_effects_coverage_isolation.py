@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
 from effects.infrastructure.record_io import read_records
 from price_predictor.infrastructure.forge_jvm import resolve_connector_jar
 from sealed.infrastructure.match_worker_connector import MatchWorkerConnector
@@ -107,3 +108,119 @@ def test_the_records_it_writes_are_still_well_formed(tmp_path: Path) -> None:
     assert records
     assert all(record.game_id for record in records)
     assert all(record.mode.value in ("degraded", "patched") for record in records)
+
+
+def _deck_of(
+    name: str, count: int = 23, lands: tuple[str, ...] = ("Forest",) * 17,
+) -> list[str]:
+    return [name] * count + list(lands)
+
+
+#: A mirror of mana-dork-only decks has nothing to press an advantage with,
+#: so any one Bo1 game between them can run long -- Forge's AI is in no hurry
+#: to trade 1/1s and the game only otherwise ends by decking out ~30 turns in.
+#: A lone worker would then make the progress-file assertion hostage to
+#: whichever single game it happened to draw. Running several workers against
+#: the one shared progress file -- exactly what ``CollectorSupervisor`` does
+#: in production, just at a smaller scale -- means only the *fastest* of
+#: several games has to finish inside the window. ``ProgressWriter`` is
+#: documented to support concurrent appends from exactly this kind of pool.
+_WORKER_COUNT = 4
+
+
+def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
+    """The whole point of the collector, against a real Forge.
+
+    A coverage deck names the cards it is built to reach. If the worker plays
+    that deck, those names appear in effect records; if it falls back to
+    sealed self-play -- which is what it did before this plan -- they do not,
+    and the run looks identical while collecting something else entirely.
+
+    Two decks, not one: ``pickDeckB`` excludes a deck that is an exact
+    content mirror of deck A, falling back to Forge's own set-based deck
+    building when no non-mirror file candidate exists -- and a coverage
+    deck's set code is the ``COVERAGE`` sentinel, which resolves against no
+    real Forge edition. A single deck repeated would make every match hit
+    that fallback and throw NullPointerException before a game is ever
+    played, forever (confirmed against a live worker while writing this
+    test). The second deck differs by one basic land so it is never a mirror
+    of the first, whichever side draws it, and the file-sample branch always
+    succeeds.
+
+    ``Llanowar Elves`` because it is in the converted tree, castable by the
+    AI, and does nothing that needs another card present.
+
+    Also closes a gap Task 4 left open: its progress counter
+    (``-Dsealed.progress.file``, written per completed match by
+    ``ProgressWriter``) was previously only exercised by a unit test calling
+    ``recordMatch`` directly. This is the first test to drive real workers'
+    ``runForever`` loops end to end and check that the progress file they
+    share actually grows.
+    """
+    _require_jar()
+    records_dir = tmp_path / "records"
+    records_dir.mkdir()
+    decks_file = tmp_path / "decks.txt"
+    write_deck_file(
+        [
+            _deck_of("Llanowar Elves"),
+            _deck_of("Llanowar Elves", lands=("Forest",) * 16 + ("Plains",)),
+        ],
+        decks_file,
+        label="coverage", set_code=COVERAGE_SET_CODE,
+    )
+    progress_file = tmp_path / "progress.txt"
+    run_id = str(uuid.uuid4())
+
+    processes = [
+        MatchWorkerConnector().start(
+            None,
+            run_id=run_id,
+            best_of=1,
+            effect_records_dir=records_dir,
+            worker_index=worker_index,
+            side_a_decks_path=decks_file,
+            side_b_decks_path=decks_file,
+            decks_only=True,
+            progress_file=progress_file,
+        )
+        for worker_index in range(_WORKER_COUNT)
+    ]
+    try:
+        deadline = time.monotonic() + _COLLECTION_SECONDS
+        names: set[str] = set()
+        progress_lines = 0
+        while time.monotonic() < deadline:
+            time.sleep(_POLL_SECONDS)
+            for process in processes:
+                if process.poll() is not None:
+                    pytest.fail(f"worker exited early with {process.returncode}")
+            names = {
+                entity.name
+                for record in read_records(records_dir)
+                for entity in record.state.entities
+            }
+            progress_lines = (
+                sum(1 for _ in progress_file.open(encoding="utf-8"))
+                if progress_file.exists() else 0
+            )
+            if "Llanowar Elves" in names and progress_lines >= 1:
+                break
+    finally:
+        for process in processes:
+            process.terminate()
+        for process in processes:
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+    assert "Llanowar Elves" in names, (
+        "the decked card never reached a record: the worker is not playing "
+        f"the decks file. Saw {len(names)} distinct names."
+    )
+    assert progress_lines >= 1, (
+        "the progress file gained no lines even though a match was awaited: "
+        "runForever's loop is not reaching ProgressWriter.write() for every "
+        "completed match."
+    )

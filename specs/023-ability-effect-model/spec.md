@@ -425,7 +425,8 @@ loss.
 - **FR-051**: The run MUST report two residues at the end — cards judged uncastable, and castable
   cards that never reached `--target-records` — each retired card counted under its consult verdict.
 - **FR-052**: Coverage matches MUST write effect records only, never `match-outcomes.txt` or
-  `cards-played.txt`.
+  `cards-played.txt`. A per-run progress file under `--effect-records` is not a sealed corpus and is
+  permitted: it is what bounds a round, and nothing downstream reads it.
 
 #### Synthetic script variants
 
@@ -447,7 +448,8 @@ loss.
 - **FR-058**: `--variant-volume` (default 0.2) MUST cap variant records as a fraction of the real
   records already in `--effect-records`.
 - **FR-059**: Variant matches MUST write effect records only, never `match-outcomes.txt` or
-  `cards-played.txt`.
+  `cards-played.txt`. A per-run progress file under `--effect-records` is not a sealed corpus and is
+  permitted: it is what bounds a round, and nothing downstream reads it.
 
 #### Keyword definitions
 
