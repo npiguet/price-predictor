@@ -7,6 +7,8 @@ no progress retires, which is the only thing that makes the run terminate.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from effects.application.collect_coverage import (
@@ -435,3 +437,40 @@ class TestExclusionsWithoutACheckpoint:
 
         with pytest.raises(ValueError, match="one source"):
             load_exclusions(split_from=tmp_path / "latest.pt", exclude_cards=listed)
+
+
+class TestTheRoundPlaysTheComputedDecks:
+    """The weights have to reach the table, which is what never happened.
+
+    `play_round` received correctly-computed weights and discarded them, so the
+    workers played ordinary sealed self-play: a slower duplicate of
+    `match-outcomes` that reaches none of the cards coverage exists for.
+    """
+
+    def test_the_decks_played_are_built_from_the_weights(self, tmp_path):
+        from effects.application import collect_coverage
+        from effects.infrastructure import collector_connector
+
+        cards = tmp_path / "cardsfolder"
+        (cards / "a").mkdir(parents=True)
+        (cards / "a" / "aa.txt").write_text(
+            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        supervisor = MagicMock()
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=supervisor), \
+             patch.object(collect_coverage, "consult_castability", return_value={}):
+            collect_coverage.run(
+                collect_coverage.CollectCoverageConfig(
+                    effect_records=tmp_path / "records",
+                    cards_folders=(cards,),
+                    target_records=1,
+                    decks_per_round=4,
+                )
+            )
+
+        decks_file = supervisor.play_round.call_args.args[0]
+        rows = decks_file.read_text(encoding="utf-8").splitlines()
+        assert rows, "no decks were written"
+        assert all(row.split(";")[2].count("|") == 39 for row in rows)
+        assert supervisor.play_round.call_args.kwargs["matches"] == 4

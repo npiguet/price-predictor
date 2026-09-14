@@ -53,6 +53,9 @@ DEFAULT_NO_PROGRESS_ROUNDS = 3
 NONLANDS_PER_DECK = 23
 DECK_SIZE = 40
 
+#: Seeds the per-round deck sampler so which cards fill a round is reproducible.
+RANDOM_SEED = 42
+
 
 @dataclass
 class CollectCoverageConfig:
@@ -405,6 +408,17 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
+    from effects.application.train_effect_model import load_card_files
+
+    card_files = load_card_files(cards_folder)
+    texts = {
+        name: (cards_folder.parent / script).read_text(encoding="utf-8")
+        for name, script in card_files.items()
+        if (cards_folder.parent / script).exists()
+    }
+    decks_file = Path(config.effect_records) / "coverage-decks.txt"
+    rng = random.Random(RANDOM_SEED)
+
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,
         caps=config.caps,
@@ -419,16 +433,17 @@ def run(config: CollectCoverageConfig) -> int:
             )
             if not weights:
                 break
-            # Task 5 replaces this with decks built from `weights` by
-            # build_coverage_decks. Until then this writes an empty file, and
-            # play_round refuses to play a decks-only round with no decks --
-            # so a real invocation of this command raises here rather than
-            # silently doing nothing, which is the intended interim state:
-            # a decks_file this call site never actually populates should
-            # fail loudly, not hand an empty file to the Forge worker.
-            decks_file = config.effect_records / "coverage-decks.txt"
+            decks = build_coverage_decks(
+                weights, texts, config.decks_per_round, rng=rng,
+            )
+            if not decks:
+                logger.error(
+                    "No card with a weight has converted text; nothing to deck."
+                )
+                break
             write_deck_file(
-                [], decks_file, label="coverage", set_code=COVERAGE_SET_CODE,
+                decks, decks_file,
+                label="coverage", set_code=COVERAGE_SET_CODE,
             )
             supervisor.play_round(decks_file, matches=config.decks_per_round)
             for name, count in count_coverage(
