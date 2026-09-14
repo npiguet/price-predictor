@@ -9,6 +9,8 @@ games and the card-disjoint stratum would hold games that are not disjoint.
 
 from __future__ import annotations
 
+import pytest
+
 from effects.application.holdout_cards import depletion_list
 
 
@@ -176,3 +178,60 @@ class TestTheFileSpeaksForgesSpelling:
         )
 
         assert listed == ["nonesuch"]
+
+
+class TestTheTrainingCorpusFlag:
+    """One flag for a corpus and the holdout list that depleted it.
+
+    They belong together: the list is what the corpus was built against, and
+    naming them separately invites the mismatch that silently produces an
+    undepleted corpus. `--training-corpus DIR` says both live in DIR.
+    """
+
+    def _config(self, *argv):
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+
+        return coverage_config_from(
+            build_parser().parse_args(["collect-coverage", *argv])
+        )
+
+    def test_it_sets_both_the_records_dir_and_the_holdout_list(self, tmp_path):
+        corpus = tmp_path / "depleted"
+        corpus.mkdir()
+        (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
+
+        config = self._config("--training-corpus", str(corpus))
+
+        assert config.effect_records == corpus
+        assert config.exclude_cards == corpus / "holdout-cards.txt"
+
+    def test_a_corpus_without_a_holdout_list_is_refused(self, tmp_path):
+        """Silently running undepleted is the failure this whole area had."""
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+
+        corpus = tmp_path / "depleted"
+        corpus.mkdir()
+
+        with pytest.raises(ValueError, match="holdout-cards.txt"):
+            coverage_config_from(build_parser().parse_args(
+                ["collect-coverage", "--training-corpus", str(corpus)]
+            ))
+
+    def test_it_refuses_to_share_the_stage_with_the_flags_it_implies(self, tmp_path):
+        from effects.infrastructure.cli import build_parser, coverage_config_from
+
+        corpus = tmp_path / "depleted"
+        corpus.mkdir()
+        (corpus / "holdout-cards.txt").write_text("Soul Echo\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="one source"):
+            coverage_config_from(build_parser().parse_args([
+                "collect-coverage", "--training-corpus", str(corpus),
+                "--effect-records", str(tmp_path / "elsewhere"),
+            ]))
+
+    def test_without_it_the_ordinary_flags_still_work(self, tmp_path):
+        config = self._config("--effect-records", str(tmp_path / "records"))
+
+        assert config.effect_records == tmp_path / "records"
+        assert config.exclude_cards is None

@@ -339,6 +339,16 @@ def _collect_coverage_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--training-corpus", type=str, default=None,
+        help=(
+            "Directory holding the training corpus AND the holdout-cards.txt "
+            "it was depleted against. Shorthand for --effect-records DIR plus "
+            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
+            "corpus depleted against one list and split against another is a "
+            "silent corruption. Refused alongside either flag it implies."
+        ),
+    )
+    parser.add_argument(
         "--target-records", type=int, default=50,
         help="Per-card satisfaction goal (default: 50)",
     )
@@ -360,23 +370,72 @@ def _collect_coverage_parser(subparsers) -> None:
     _add_cap_flags(parser)
 
 
-def run_collect_coverage(args: argparse.Namespace) -> int:
-    from effects.application.collect_coverage import CollectCoverageConfig
-    from effects.application.collect_coverage import run as collect
+#: The name a depletion list takes inside the corpus it depleted.
+HOLDOUT_LIST_NAME = "holdout-cards.txt"
 
-    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
-    config = CollectCoverageConfig(
-        effect_records=Path(args.effect_records),
+
+def resolve_training_corpus(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """``(records dir, depletion list)`` from ``--training-corpus`` or the pair.
+
+    A corpus and the list that depleted it belong together — the list is what
+    the corpus was built against, and naming them separately is how a run ends
+    up depleted against one holdout and split against another. ``DIR`` holding
+    both is the shape an operator naturally produces.
+
+    Raises:
+        ValueError: If ``--training-corpus`` is combined with either flag it
+            implies (two sources for one answer), or if the directory holds no
+            depletion list — running undepleted by accident is the failure this
+            whole area already had once.
+    """
+    corpus = getattr(args, "training_corpus", None)
+    if corpus is None:
+        return (
+            Path(args.effect_records),
+            Path(args.exclude_cards) if args.exclude_cards else None,
+        )
+    if args.effect_records != DEFAULT_RECORDS_DIR or args.exclude_cards:
+        raise ValueError(
+            "pass one source of the corpus location, not both: "
+            "--training-corpus DIR means --effect-records DIR with its own "
+            f"{HOLDOUT_LIST_NAME}"
+        )
+    corpus = Path(corpus)
+    listed = corpus / HOLDOUT_LIST_NAME
+    if not listed.is_file():
+        raise ValueError(
+            f"{corpus} holds no {HOLDOUT_LIST_NAME}. A training corpus is "
+            "depleted against a list, and without it this run would deck the "
+            "held-out cards and contaminate the split. Write one with "
+            "'python -m effects holdout-cards', or pass --effect-records and "
+            "--exclude-cards separately if they genuinely live apart."
+        )
+    return corpus, listed
+
+
+def coverage_config_from(args: argparse.Namespace):
+    """The coverage config, with the corpus location already resolved."""
+    from effects.application.collect_coverage import CollectCoverageConfig
+
+    records, listed = resolve_training_corpus(args)
+    return CollectCoverageConfig(
+        effect_records=records,
         cards_folders=resolve_cards_folders(args.cards_folders),
         split_from=Path(args.split_from) if args.split_from else None,
-        exclude_cards=Path(args.exclude_cards) if args.exclude_cards else None,
+        exclude_cards=listed,
         target_records=args.target_records,
         decks_per_round=args.decks_per_round,
         no_progress_rounds=args.no_progress_rounds,
         workers=args.workers,
         caps=CollectionCaps.from_args(args),
     )
-    return collect(config)
+
+
+def run_collect_coverage(args: argparse.Namespace) -> int:
+    from effects.application.collect_coverage import run as collect
+
+    print(announce_probe_state(args.probe_keywords, args.probes_per_game))
+    return collect(coverage_config_from(args))
 
 
 # ── holdout-cards ───────────────────────────────────────────────────────
@@ -837,6 +896,16 @@ def _collect_variants_parser(subparsers) -> None:
             "instead."
         ),
     )
+    parser.add_argument(
+        "--training-corpus", type=str, default=None,
+        help=(
+            "Directory holding the training corpus AND the holdout-cards.txt "
+            "it was depleted against. Shorthand for --effect-records DIR plus "
+            "--exclude-cards DIR/holdout-cards.txt, which belong together: a "
+            "corpus depleted against one list and split against another is a "
+            "silent corruption. Refused alongside either flag it implies."
+        ),
+    )
     parser.add_argument("--workers", type=int, default=12)
     _add_cap_flags(parser)
 
@@ -846,14 +915,15 @@ def run_collect_variants(args: argparse.Namespace) -> int:
     from effects.application.collect_variants import run as collect
 
     print(announce_probe_state(args.probe_keywords, args.probes_per_game))
+    records, listed = resolve_training_corpus(args)
     return collect(CollectVariantsConfig(
-        effect_records=Path(args.effect_records),
+        effect_records=records,
         forge_cards_path=Path(args.forge_cards_path),
         variant_scripts=Path(args.variant_scripts),
         variant_volume=args.variant_volume,
         decks_per_round=args.decks_per_round,
         split_from=Path(args.split_from) if args.split_from else None,
-        exclude_cards=Path(args.exclude_cards) if args.exclude_cards else None,
+        exclude_cards=listed,
         workers=args.workers,
         caps=CollectionCaps.from_args(args),
     ))

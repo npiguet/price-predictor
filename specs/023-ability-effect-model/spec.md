@@ -391,6 +391,13 @@ loss.
 - **FR-132a**: `python -m sealed generate-pools --exclude-cards PATH` MUST deplete a generated pools
   file the same way, for the consumers that read one (`build-decks`, `pick-decks`). The two paths
   MUST share one redraw implementation; a second copy is the copy that stops matching.
+- **FR-132b**: `collect-coverage` and `collect-variants` MUST accept `--training-corpus DIR`,
+  equivalent to `--effect-records DIR` with `--exclude-cards DIR/holdout-cards.txt`. A corpus and the
+  list that depleted it belong together, so the command MUST refuse a directory holding no
+  `holdout-cards.txt` rather than run undepleted, and MUST refuse the flag alongside either flag it
+  implies. Coverage counts records per card, and discovery recurses, so the directory MUST be the
+  depleted corpus rather than a tree also holding the full-strength one — counting validation records
+  toward coverage makes a card whose only records are held out read as satisfied.
 - **FR-133**: The full-strength run MUST be sized for the card-disjoint stratum alone and is far
   smaller than the depleted run. `collect-coverage` and `collect-variants` build their own decks
   rather than opening pools, so each takes the depletion list directly (FR-045, FR-057) and neither

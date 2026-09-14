@@ -123,11 +123,11 @@ printed, and the engine-coded family generates nothing at all; both keep their t
 ## 3. Collect, riding ordinary self-play
 
 ```bash
-python -m effects holdout-cards --out output/effects/holdout-cards.txt
+python -m effects holdout-cards --out output/effects/records/depleted/holdout-cards.txt
 
 python -m sealed match-outcomes \
-    --exclude-cards output/effects/holdout-cards.txt \
-    --effect-records output/effects/records/ --workers 6 \
+    --exclude-cards output/effects/records/depleted/holdout-cards.txt \
+    --effect-records output/effects/records/depleted/ --workers 6 \
     --snapshot-tiers 1,2,3,4 \
     --playability-rate 0.1 \
     --legality-rate 0.1 \
@@ -278,7 +278,7 @@ accept all seven: `match-outcomes`, `collect-coverage` and `collect-variants`.
 
 ```bash
 python -m sealed match-outcomes \
-    --effect-records output/effects/records/ --workers 6 \
+    --effect-records output/effects/records/full-strength/ --workers 6 \
     --snapshot-tiers 1,2,3,4
 ```
 
@@ -294,7 +294,7 @@ you can size it against what the holdout actually covers.
 
 ```bash
 python -m effects collect-coverage \
-    --exclude-cards output/effects/holdout-cards.txt \
+    --training-corpus output/effects/records/depleted/ \
     --target-records 50 --workers 12 \
     --interventions-per-game 2 \
     --probes-per-game 2 \
@@ -306,11 +306,20 @@ appears in a record at all. Decks are built over the whole converted corpus, wei
 with the fewest records, and rounds play until every card is satisfied or retires after
 `--no-progress-rounds` without a new qualifying record — which is what makes the run terminate.
 
-`--exclude-cards` keeps held-out cards out of every deck; without it a coverage run puts them into
-training games and contaminates the split of the model it feeds. It reads step 3's list, so it needs
-no trained model — pass `--split-from CHECKPOINT` instead only when adding coverage to a corpus an
-existing checkpoint was trained on, whose recorded split is then the authority. Passing both is
-refused: two spellings of one holdout is a disagreement nothing else would report.
+`--training-corpus` names one directory holding both the corpus this run extends and the
+`holdout-cards.txt` it was depleted against — shorthand for `--effect-records DIR` plus
+`--exclude-cards DIR/holdout-cards.txt`. The two belong together, so a directory without a list is
+refused rather than run undepleted, and passing either implied flag beside it is refused too.
+
+Point it at the **depleted** corpus rather than the tree above it. Coverage counts records per card
+to decide what still needs collecting, and shard discovery recurses, so a directory holding the
+full-strength corpus as well would count validation records toward coverage — a card whose only
+records are held out would read as satisfied while the model never learns from it.
+
+Reading that list is what keeps held-out cards out of every deck; without it a coverage run puts them
+into training games and contaminates the split of the model it feeds. Pass `--split-from CHECKPOINT`
+instead only when adding coverage to a corpus an existing checkpoint was trained on, whose recorded
+split is then the authority.
 
 Every worker here collects effect records unconditionally (there is no plain mode to fall back to,
 unlike step 3), so it writes the same `{run_id}.{worker}.log` per-worker logs described in step 3's
@@ -336,7 +345,7 @@ The script surface is a second vocabulary and a second cache, side by side with 
 python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
 
 python -m effects collect-variants \
-    --exclude-cards output/effects/holdout-cards.txt \
+    --training-corpus output/effects/records/depleted/ \
     --variant-volume 0.2
 ```
 
