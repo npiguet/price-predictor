@@ -142,4 +142,34 @@ class MatchGeneratorRoutingTest {
         }
         assertTrue(sawForgeMethod, "the ordinary roll never picked a Forge method");
     }
+
+    // ── pickDeckB under decksOnly (the mirror-fallback fix) ────────────────────
+    //
+    // pickDeckB's happy path (a mirror is accepted) materializes a Forge Deck
+    // via DeckSelection.fromFile, so it needs FModel initialized and lives in
+    // MatchGeneratorTest under -Pintegration instead. The one case that never
+    // reaches materialization -- decksOnly with literally no deck of deck A's
+    // set anywhere in the side-B index -- is pure routing logic and belongs
+    // here, called directly rather than via pickDeckA so no side needs Forge.
+
+    @Test
+    void decksOnlyThrowsRatherThanReachForgeWhenSideBHasNoDeckOfTheSet() {
+        // Not reachable from CollectorSupervisor, which always points both
+        // sides at the same file -- this is the defensive branch for a
+        // side-B index misconfigured to hold no deck of deck A's set at all.
+        // Before this fix existed at all, this configuration silently fell
+        // through to forgeBuilt("COVERAGE"), which NPEs on a sentinel set
+        // code; a clear exception here is strictly better than either that
+        // NPE or a second silent fall-through reintroducing it.
+        GeneratedDecksIndex sideB = new GeneratedDecksIndex(List.of(
+                new GeneratedDeck("coverage", "OTHERSET", List.of("Forest"))));
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, RUN_ID, null, sideB, 1,
+                new Random(7), Set.of(), true);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")));
+        assertTrue(ex.getMessage().contains("COVERAGE"),
+                "exception should name the set that had no candidate");
+    }
 }

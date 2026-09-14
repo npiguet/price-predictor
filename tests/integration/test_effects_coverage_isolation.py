@@ -137,15 +137,21 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     and the run looks identical while collecting something else entirely.
 
     Two decks, not one: ``pickDeckB`` excludes a deck that is an exact
-    content mirror of deck A, falling back to Forge's own set-based deck
-    building when no non-mirror file candidate exists -- and a coverage
-    deck's set code is the ``COVERAGE`` sentinel, which resolves against no
-    real Forge edition. A single deck repeated would make every match hit
-    that fallback and throw NullPointerException before a game is ever
-    played, forever (confirmed against a live worker while writing this
-    test). The second deck differs by one basic land so it is never a mirror
-    of the first, whichever side draws it, and the file-sample branch always
-    succeeds.
+    content mirror of deck A before accepting one at all. A single deck
+    repeated would make every match hit that exclusion and, at the time this
+    test was first written, fall through to Forge's own set-based deck
+    building -- and a coverage deck's set code is the ``COVERAGE`` sentinel,
+    which resolves against no real Forge edition, so every match threw
+    ``NullPointerException`` before a game was ever played, forever (a real
+    hang: nothing ever reached the progress file, so a bounded round never
+    saw its bound). Fixed in ``MatchGenerator.pickDeckB`` to accept a mirror
+    instead of reaching Forge under ``decksOnly`` -- see
+    ``GeneratedDecksIndex.randomAnyDeckFromSet`` and the Java tests covering
+    it (``MatchGeneratorRoutingTest``, ``MatchGeneratorTest``). This test's
+    second deck still differs by one basic land, so the fix's own mirror path
+    is never what makes this particular test pass -- it exercises the
+    ordinary non-mirror branch, the same one every real coverage/variant
+    round mostly uses.
 
     ``Llanowar Elves`` because it is in the converted tree, castable by the
     AI, and does nothing that needs another card present.
@@ -156,6 +162,22 @@ def test_a_named_deck_reaches_the_records(tmp_path: Path) -> None:
     ``recordMatch`` directly. This is the first test to drive real workers'
     ``runForever`` loops end to end and check that the progress file they
     share actually grows.
+
+    On the broken-evidence run this test's own history relies on (an empty
+    decks file, since Step 2 predates Tasks 1-6 and no longer fails): that
+    proves the harness fails loudly when the worker exits early on a bad
+    decks file. It does **not** by itself discriminate the narrower claim in
+    this docstring's first paragraph -- that a worker silently ignoring the
+    decks file and falling back to ordinary sealed self-play would leave this
+    card out. Checked directly rather than assumed: passing ``decksOnly=False``
+    against this exact fixture does **not** produce that failure either,
+    because ``pickDeckA`` samples from ``side_a_decks_path`` whenever it is
+    set, independent of ``decksOnly`` -- deck A still came from the file and
+    ``Llanowar Elves`` still reliably appeared within 21s. The regression the
+    first paragraph actually describes -- no decks file reaching the worker
+    at all -- is what ``_run_records_only`` above already exercises; it never
+    sees this card because it never sees any *named* card, only whatever an
+    unweighted sealed pool happens to contain.
     """
     _require_jar()
     records_dir = tmp_path / "records"

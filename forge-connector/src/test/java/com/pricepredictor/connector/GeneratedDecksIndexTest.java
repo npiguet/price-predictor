@@ -199,4 +199,59 @@ class GeneratedDecksIndexTest {
 
         assertNull(index.randomDeckFromSet("MH3", only.cardNames(), new Random(0)));
     }
+
+    // ── randomAnyDeckFromSet ─────────────────────────────────────────────────
+
+    @Test
+    void randomAnyDeckFromSetReturnsAMirrorWhenThatIsAllThereIs(
+            @TempDir Path tmp) throws IOException {
+        // Every deck of this set is content-identical, exactly the tail state
+        // of a coverage round with one live card left: randomDeckFromSet
+        // would return null here (see randomDeckFromSetExcludesContentEven
+        // AcrossDifferentDeckObjects above); randomAnyDeckFromSet must not.
+        String shared = deckLine("coverage", "MH3", "shared", 40);
+        Path file = writeDecks(tmp, List.of(shared, shared));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+        GeneratedDecksIndex.GeneratedDeck a = index.randomDeck(new Random(0));
+
+        assertNull(index.randomDeckFromSet("MH3", a.cardNames(), new Random(1)),
+                "sanity: this fixture really is the all-mirror case");
+        for (int i = 0; i < 20; i++) {
+            GeneratedDecksIndex.GeneratedDeck pick =
+                    index.randomAnyDeckFromSet("MH3", new Random(i));
+            assertNotNull(pick);
+            assertEquals(a.cardNames(), pick.cardNames());
+        }
+    }
+
+    @Test
+    void randomAnyDeckFromSetReturnsNullWhenSetAbsent(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of(deckLine("gen-2", "MH3", "mh3", 40)));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+
+        assertNull(index.randomAnyDeckFromSet("XYZ", new Random(0)));
+    }
+
+    @Test
+    void randomAnyDeckFromSetPicksFromMultipleCandidates(@TempDir Path tmp) throws IOException {
+        Path file = writeDecks(tmp, List.of(
+                deckLine("gen-2", "MH3", "mh3a", 40),
+                deckLine("gen-2", "MH3", "mh3b", 40),
+                deckLine("gen-2", "BLB", "blb", 40)
+        ));
+
+        GeneratedDecksIndex index = GeneratedDecksIndex.load(file);
+        Random rng = new Random(42);
+
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < 100; i++) {
+            GeneratedDecksIndex.GeneratedDeck pick = index.randomAnyDeckFromSet("MH3", rng);
+            assertNotNull(pick);
+            assertEquals("MH3", pick.setCode());
+            seen.add(pick.label() + pick.cardNames());
+        }
+        assertEquals(2, seen.size(), "should see both MH3 candidates over 100 draws");
+    }
 }

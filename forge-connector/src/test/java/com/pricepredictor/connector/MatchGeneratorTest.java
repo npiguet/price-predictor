@@ -168,4 +168,35 @@ class MatchGeneratorTest {
         assertTrue(generator.generatePool("RVR").size() >= 70,
                 "Full-strength pool too small");
     }
+
+    @Test
+    void decksOnlyAcceptsAMirrorInsteadOfReachingForge() {
+        // The bug this guards against: a coverage round's live-card pool
+        // shrinks monotonically as cards are satisfied (deck_weights in
+        // collect_coverage.py drops every satisfied card), so a round with
+        // exactly one card left samples 23 nonlands with replacement from a
+        // single candidate -- every deck that round builds is byte-identical,
+        // deterministically. Under decksOnly, pickDeckB's non-mirror search
+        // then always comes up empty. Before this fix, it fell through to
+        // forgeBuilt("COVERAGE") -- a sentinel set code that resolves against
+        // no real Forge edition -- throwing NullPointerException on every
+        // single match attempt, forever, since decksOnly forces every attempt
+        // down this branch: no match ever completed, the progress file never
+        // grew, and ForgeWorkerPool.run() blocked indefinitely.
+        GeneratedDecksIndex.GeneratedDeck deck = new GeneratedDecksIndex.GeneratedDeck(
+                "coverage", "COVERAGE", List.of("Llanowar Elves"));
+        GeneratedDecksIndex mirrorOnly = new GeneratedDecksIndex(List.of(deck, deck));
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, TEST_RUN_ID, null, mirrorOnly, 1,
+                new Random(7), Set.of(), true);
+
+        MatchGenerator.DeckSelection b = assertDoesNotThrow(
+                () -> generator.pickDeckB("COVERAGE", List.of("Llanowar Elves")),
+                "pickDeckB must accept a mirror rather than reach Forge's "
+                        + "set-based builder for a decksOnly round");
+
+        assertEquals("COVERAGE", b.setCode());
+        assertEquals(List.of("Llanowar Elves"), b.cardNames());
+        assertNotNull(b.deck(), "the mirror deck must still materialize");
+    }
 }

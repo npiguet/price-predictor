@@ -48,12 +48,17 @@ import java.util.Set;
  *       {@code sideBWeight}). On the file-sample branch, {@link
  *       GeneratedDecksIndex#randomDeckFromSet} filters to deck A's set code
  *       and excludes mirror matches by content equality. If no non-mirror
- *       candidate exists for that set, fall back to Forge methods.</li>
+ *       candidate exists for that set, fall back to Forge methods — unless
+ *       {@code decksOnly}, see below.</li>
  *   <li>{@code decksOnly}: forces the roll to always take the file-sample
  *       branch, regardless of {@code sideBWeight}. For decks that belong to
  *       no set (coverage, variant) and carry a sentinel set code the Forge
  *       method branch would fail to resolve against Forge's booster/edition
- *       tables.</li>
+ *       tables — so under {@code decksOnly}, a non-mirror miss falls back to
+ *       {@link GeneratedDecksIndex#randomAnyDeckFromSet} (accepting a mirror)
+ *       rather than to Forge methods; only an empty index for that set
+ *       reaches an exception. See {@link #pickDeckB} for why this case is
+ *       ordinary rather than rare.</li>
  * </ul>
  *
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called before use.
@@ -310,7 +315,20 @@ public class MatchGenerator {
      * {@link #FORGE_METHODS_TOTAL_WEIGHT}) and — if {@code sideBIndex} is
      * present — sampling from the index (weight {@code sideBWeight}). The
      * file-sample branch falls back to Forge methods when no non-mirror
-     * candidate exists for {@code setCode}.
+     * candidate exists for {@code setCode} — <b>except</b> under
+     * {@code decksOnly}, which has no Forge-legal fallback to reach (its set
+     * code can be a sentinel like {@code COVERAGE} that resolves against no
+     * real Forge edition, so {@link #forgeBuilt} would throw
+     * {@code NullPointerException} resolving it). A decks-only round's
+     * live-card pool shrinks monotonically as cards are satisfied, so a round
+     * with exactly one card left produces byte-identical decks,
+     * deterministically — an ordinary tail state, not a rare one — and every
+     * match attempt would hit that throw, forever: nothing is ever appended
+     * to the progress file, and {@code ForgeWorkerPool.run()} blocks
+     * indefinitely. So under {@code decksOnly} this instead accepts a mirror
+     * via {@link GeneratedDecksIndex#randomAnyDeckFromSet}: a mirror match
+     * still puts every card in the round's decks into a game, which is all a
+     * coverage or variant round requires.
      */
     DeckSelection pickDeckB(String setCode, List<String> deckACards) {
         if (sideBIndex != null && rollIsFileSample()) {
@@ -318,6 +336,22 @@ public class MatchGenerator {
                     setCode, deckACards, random);
             if (pick != null) {
                 return DeckSelection.fromFile(pick, setCode);
+            }
+            if (decksOnly) {
+                GeneratedDeck mirror = sideBIndex.randomAnyDeckFromSet(setCode, random);
+                if (mirror != null) {
+                    return DeckSelection.fromFile(mirror, setCode);
+                }
+                // Not reachable from CollectorSupervisor, which always points
+                // both sides at the same file: a decks-only side-B index with
+                // no deck of deck A's set at all is a configuration error, and
+                // silently falling through to Forge here would reintroduce
+                // this method's whole bug for a rarer trigger.
+                throw new IllegalStateException(
+                        "decksOnly is set but the side-B decks file has no "
+                                + "deck of set " + setCode + "; cannot build a "
+                                + "match without reaching the Forge-methods "
+                                + "path decksOnly exists to avoid");
             }
             // No non-mirror deck available for this set; fall through to Forge.
         }

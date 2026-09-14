@@ -127,4 +127,24 @@ public class GeneratedDecksIndex {
         }
         return nonMirror.get(random.nextInt(nonMirror.size()));
     }
+
+    /**
+     * Pick any random deck from the given set, without excluding mirrors of
+     * anything. Returns {@code null} if the set has no candidates at all.
+     *
+     * <p>Exists for {@link MatchGenerator#pickDeckB}'s {@code decksOnly}
+     * fallback: a decks-only round has no Forge-legal deck-building path (its
+     * set code can be a sentinel like {@code COVERAGE} that resolves against
+     * no real Forge edition), so when {@link #randomDeckFromSet} finds no
+     * non-mirror candidate, this is the only source left that does not reach
+     * Forge. A mirror match still puts every card in the round's decks into
+     * a game, which is all a coverage or variant round requires.
+     */
+    public GeneratedDeck randomAnyDeckFromSet(String setCode, Random random) {
+        List<GeneratedDeck> candidates = decksBySet.get(setCode);
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        return candidates.get(random.nextInt(candidates.size()));
+    }
 }
