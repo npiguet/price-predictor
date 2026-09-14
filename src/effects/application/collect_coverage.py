@@ -31,6 +31,7 @@ are constructed.
 from __future__ import annotations
 
 import logging
+import random
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -173,6 +174,64 @@ def rank_by_consult(
         multiplier = 0.25 if verdict == ConsultVerdict.UNCASTABLE else 1.0
         ranked[name] = weight * multiplier
     return ranked
+
+
+@dataclass(frozen=True)
+class _NonlandText:
+    """Adapts a raw converted-text string to what ``compute_basic_lands`` reads.
+
+    FR-002 declares only ``compute_basic_lands`` on the allowed surface of
+    ``sealed.domain.manabase``, not the ``ConvertedCardText`` wrapper its
+    signature is typed against — so rather than reaching past the declared
+    surface for that wrapper, this mirrors the single method the manabase
+    heuristic actually calls (``mana_cost_line``) over the plain string
+    ``build_coverage_decks`` already has on hand.
+    """
+
+    text: str
+
+    def mana_cost_line(self) -> str | None:
+        for line in self.text.splitlines():
+            if line.strip().lower().startswith("mana cost:"):
+                return line.split(":", 1)[1].strip() or None
+        return None
+
+
+def build_coverage_decks(
+    weights: dict[str, float],
+    texts: dict[str, str],
+    count: int,
+    *,
+    rng: random.Random,
+) -> list[list[str]]:
+    """``count`` 40-card decks drawn from ``weights`` (FR-046).
+
+    23 nonlands sampled with replacement in proportion to weight, then basics
+    from ``compute_basic_lands`` over the chosen cards' converted text. With
+    replacement because a weight of 500 against 1 should be able to fill a deck
+    with one card: the point is to get that card into games, not to build a
+    deck anyone would play.
+
+    A weighted card with no converted text is skipped — the manabase heuristic
+    reads the text, and a card without one cannot be placed.
+    """
+    from sealed.domain.manabase import compute_basic_lands
+
+    pool = [(name, w) for name, w in weights.items() if name in texts and w > 0]
+    if not pool:
+        return []
+    names = [name for name, _ in pool]
+    ws = [w for _, w in pool]
+
+    decks: list[list[str]] = []
+    for _ in range(count):
+        nonlands = rng.choices(names, weights=ws, k=NONLANDS_PER_DECK)
+        basics = compute_basic_lands([_NonlandText(texts[n]) for n in nonlands])
+        deck = list(nonlands)
+        for land, n in basics.items():
+            deck.extend([land] * n)
+        decks.append(deck)
+    return decks
 
 
 def retire_stalled(

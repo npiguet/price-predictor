@@ -10,11 +10,9 @@ from __future__ import annotations
 import pytest
 
 from effects.application.collect_coverage import (
-    DECK_SIZE,
     DEFAULT_DECKS_PER_ROUND,
     DEFAULT_NO_PROGRESS_ROUNDS,
     DEFAULT_TARGET_RECORDS,
-    NONLANDS_PER_DECK,
     CardCoverage,
     CollectCoverageConfig,
     ConsultVerdict,
@@ -249,9 +247,56 @@ class TestConfig:
         ))
         assert config.coverage_folder().name == "cardsfolder"
 
+
+class TestCoverageDeckBuilding:
+    """A coverage deck is 40 cards and favours the cards that need records."""
+
+    def _texts(self, names):
+        return {n: f"name: {n}\nmana cost: {{1}}{{G}}\ntypes: creature\n" for n in names}
+
     def test_a_deck_is_forty_cards_with_twenty_three_nonlands(self):
-        assert DECK_SIZE == 40
-        assert NONLANDS_PER_DECK == 23
+        import random
+
+        from effects.application.collect_coverage import build_coverage_decks
+
+        names = [f"card {i}" for i in range(40)]
+        decks = build_coverage_decks(
+            {n: 1.0 for n in names}, self._texts(names), count=3,
+            rng=random.Random(1),
+        )
+
+        assert len(decks) == 3
+        for deck in decks:
+            assert len(deck) == 40
+
+    def test_a_heavier_card_appears_more_often(self):
+        import random
+
+        from effects.application.collect_coverage import build_coverage_decks
+
+        names = [f"card {i}" for i in range(40)]
+        weights = {n: 1.0 for n in names}
+        weights["card 0"] = 500.0
+        decks = build_coverage_decks(
+            weights, self._texts(names), count=40, rng=random.Random(1),
+        )
+
+        flat = [n for deck in decks for n in deck]
+        assert flat.count("card 0") > flat.count("card 1")
+
+    def test_a_card_with_no_converted_text_is_skipped(self):
+        """A weight can name a card the tree has no text for; basics need text."""
+        import random
+
+        from effects.application.collect_coverage import build_coverage_decks
+
+        names = [f"card {i}" for i in range(40)]
+        decks = build_coverage_decks(
+            {**{n: 1.0 for n in names}, "ghost": 5.0},
+            self._texts(names), count=2, rng=random.Random(1),
+        )
+
+        assert all("ghost" not in deck for deck in decks)
 
 
 class TestHeldOutExclusion:
