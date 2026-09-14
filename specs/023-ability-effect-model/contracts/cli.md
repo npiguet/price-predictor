@@ -341,6 +341,7 @@ hashes differently than the digest `--checkpoint` recorded — a rebuilt dataset
 | Condition | Behaviour |
 |---|---|
 | Vocabulary or keyword-definition hash mismatch | fail fast with the recorded vs actual hash |
+| Curated corpus (`--corpus`) digest mismatch | fail fast with the recorded vs actual digest |
 | `--variant-checkpoint` split disagreement | fail fast naming both checkpoints |
 | Variant training run without `--split-from` | fail fast |
 | Missing connector JAR | the existing `forge_jvm` error naming the `mvn package` command |

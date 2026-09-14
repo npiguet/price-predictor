@@ -729,19 +729,28 @@ def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
 
 
 def resolve_corpus_path(
-    provenance: SplitProvenance, *, corpus: Path | None,
+    provenance: SplitProvenance, *, corpus: Path | None, checkpoint: Path,
 ) -> Path | None:
     """Where to read the curated corpus ``check_corpus`` verifies, if anywhere.
 
-    Meaningful only when the checkpoint actually recorded one: a checkpoint
-    trained against ``--records-dir`` has no dataset digest to compare, and
-    resolving a path for it anyway would let an unrelated ``--corpus``
-    override raise on a directory the checkpoint never claimed to have read.
-    Defaults to what the checkpoint recorded, the same override shape
-    ``resolve_inference_paths`` gives the vocabulary and keyword-definition
-    paths.
+    Defaults to what the checkpoint recorded; an explicit ``--corpus``
+    overrides it. That much matches ``resolve_inference_paths``, but the two
+    diverge on a checkpoint with no recorded corpus: ``resolve_inference_paths``
+    always resolves a path and hash-checks it afterwards, override or not,
+    while here there is no digest to check an override against, so the
+    override is discarded rather than resolved. Refusing outright would be too
+    strong — it would break a batch-eval script that passes ``--corpus``
+    uniformly across a mix of curated and legacy checkpoints — and honouring
+    it would be meaningless, so a warning names the checkpoint and says why,
+    rather than the flag silently doing nothing.
     """
     if not provenance.corpus_digest:
+        if corpus is not None:
+            logger.warning(
+                "%s records no curated corpus, so --corpus %s has nothing "
+                "to check its digest against and is ignored.",
+                checkpoint, corpus,
+            )
         return None
     if corpus is not None:
         return Path(corpus)
@@ -815,7 +824,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     main.provenance.verify_hashes(
         vocab_path=vocab_path, keyword_path=keyword_path,
     )
-    corpus_path = resolve_corpus_path(main.provenance, corpus=config.corpus)
+    corpus_path = resolve_corpus_path(
+        main.provenance, corpus=config.corpus, checkpoint=main_path,
+    )
     actual_corpus_digest = ""
     if corpus_path is not None:
         from effects.infrastructure.corpus_store import CorpusStore

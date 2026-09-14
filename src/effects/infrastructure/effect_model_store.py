@@ -14,6 +14,10 @@ numbers mean anything:
 - **the keyword withheld from training**, read by the evaluator rather than
   passed as a flag, so the zero-shot check measures the model that was trained
   rather than a keyword an operator remembers choosing.
+- **the curated dataset's path and digest, for a `--corpus` run** — the same
+  discipline as the vocabulary hashes above: a rebuilt dataset is a different
+  split, and `evaluate-effect-model` fails fast rather than scoring the gates
+  partly on games the model trained on.
 
 Training-only heads (MLM, script-API, pairing) are filtered out at save time
 (FR-076): they exist to shape the encoder and have no meaning at inference.
