@@ -333,3 +333,80 @@ class TestCorpusExclusiveFlagsAtThePreflightCheck:
         )
 
         assert run_train_effect_model(args) == 2
+
+
+class TestBuildCorpus:
+    """Every ``build-corpus`` default, pinned.
+
+    The defaults are contract here more sharply than anywhere else on this
+    surface: each one is written into the manifest and each one changes the
+    dataset's digest, so a default that drifts changes what a corpus — and
+    every checkpoint pinned to it — means, silently and after the fact.
+    """
+
+    def test_the_path_defaults_are_the_contracts(self):
+        args = parse("build-corpus")
+        assert args.records_dir == "output/effects/records/"
+        assert args.output == "output/effects/corpus/"
+        assert args.cards_folders is None  # resolved to both converted trees
+        assert args.vocab_path == "models/effects/vocab.txt"
+
+    def test_the_holdout_defaults_match_the_trainers(self):
+        """The same two values must be passed here, at `holdout-cards` and at
+        training, or the depleted corpus and the split disagree."""
+        args = parse("build-corpus")
+        assert args.holdout_permille == parse("train-effect-model").holdout_permille
+        assert (
+            args.holdout_max_carriers
+            == parse("train-effect-model").holdout_max_carriers
+        )
+        assert (args.holdout_permille, args.holdout_max_carriers) == (20, 8)
+
+    def test_the_selection_defaults_are_the_contracts(self):
+        args = parse("build-corpus")
+        assert args.text_cap == 200
+        assert args.card_disjoint_text_cap == 50
+        assert args.game_disjoint_games == 1000
+        assert args.training_records == 0  # no ceiling
+        assert args.class_mix is None  # the training mixture
+        assert args.seed == 42
+
+    def test_the_run_defaults_are_the_contracts(self):
+        args = parse("build-corpus")
+        assert args.workers is None  # CPU count
+        assert args.verify is False
+        assert parse("build-corpus", "--verify").verify is True
+
+    def test_the_parsed_defaults_and_the_configs_own_agree(self):
+        """Two default surfaces for one flag set, and only this compares them."""
+        from pathlib import Path
+
+        from effects.application.build_corpus import BuildCorpusConfig
+
+        args = parse("build-corpus")
+        config = BuildCorpusConfig(records_dir=Path("."))
+        assert config.output == Path(args.output)
+        assert config.vocab_path == args.vocab_path
+        assert config.holdout_permille == args.holdout_permille
+        assert config.holdout_max_carriers == args.holdout_max_carriers
+        assert config.text_cap == args.text_cap
+        assert config.card_disjoint_text_cap == args.card_disjoint_text_cap
+        assert config.game_disjoint_target == args.game_disjoint_games
+        assert config.training_records == args.training_records
+        assert config.class_mix == args.class_mix
+        assert config.seed == args.seed
+        assert config.workers == args.workers
+        assert config.verify == args.verify
+        assert config.cards_folders == ("output/cardsfolder", "output/tokenscripts")
+
+    def test_the_class_mix_is_parsed_through_the_trainers_own_syntax(self):
+        args = parse("build-corpus", "--class-mix", "rewrite=0.5,combat=0.5")
+        assert args.class_mix == {"rewrite": 0.5, "combat": 0.5}
+
+    def test_a_class_the_mixture_has_no_name_for_is_refused_at_the_parser(self):
+        with pytest.raises(SystemExit):
+            parse("build-corpus", "--class-mix", "oracle=1.0")
+
+    def test_cards_folder_is_repeatable(self):
+        args = parse("build-corpus", "--cards-folder", "a/", "--cards-folder", "b/")
+        assert args.cards_folders == ["a/", "b/"]

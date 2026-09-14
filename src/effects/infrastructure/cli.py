@@ -502,7 +502,10 @@ def _build_corpus_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--text-cap", type=int, default=200,
-        help="Max training records kept per unique ability text (default: 200)",
+        help=(
+            "Max training records kept per unique ability text; 0 means no cap "
+            "(default: 200)"
+        ),
     )
     parser.add_argument(
         "--class-mix", type=_class_mix, default=None,
@@ -520,13 +523,16 @@ def _build_corpus_parser(subparsers) -> None:
     )
     parser.add_argument(
         "--game-disjoint-games", type=int, default=1000,
-        help="Games withheld for the game-disjoint stratum (default: 1000)",
+        help=(
+            "Games withheld for the game-disjoint stratum; 0 leaves that stratum "
+            "empty (default: 1000)"
+        ),
     )
     parser.add_argument(
         "--card-disjoint-text-cap", type=int, default=50,
         help=(
-            "Max card-disjoint games admitted per held-out ability text "
-            "(default: 50)"
+            "Max card-disjoint games admitted per held-out ability text; 0 "
+            "means no cap (default: 50)"
         ),
     )
     parser.add_argument(
@@ -546,25 +552,26 @@ def run_build_corpus(args: argparse.Namespace) -> int:
     from effects.application import build_corpus as build_corpus_module
     from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
 
-    config = BuildCorpusConfig(
-        records_dir=Path(args.records_dir),
-        output=Path(args.output),
-        cards_folders=tuple(
-            str(path) for path in resolve_cards_folders(args.cards_folders)
-        ),
-        vocab_path=args.vocab_path,
-        holdout_permille=args.holdout_permille,
-        holdout_max_carriers=args.holdout_max_carriers,
-        text_cap=args.text_cap,
-        class_mix=args.class_mix,
-        training_records=args.training_records,
-        game_disjoint_target=args.game_disjoint_games,
-        card_disjoint_text_cap=args.card_disjoint_text_cap,
-        seed=args.seed,
-        workers=args.workers,
-        verify=args.verify,
-    )
     try:
+        # Inside the try: the config validates its own counts on construction.
+        config = BuildCorpusConfig(
+            records_dir=Path(args.records_dir),
+            output=Path(args.output),
+            cards_folders=tuple(
+                str(path) for path in resolve_cards_folders(args.cards_folders)
+            ),
+            vocab_path=args.vocab_path,
+            holdout_permille=args.holdout_permille,
+            holdout_max_carriers=args.holdout_max_carriers,
+            text_cap=args.text_cap,
+            class_mix=args.class_mix,
+            training_records=args.training_records,
+            game_disjoint_target=args.game_disjoint_games,
+            card_disjoint_text_cap=args.card_disjoint_text_cap,
+            seed=args.seed,
+            workers=args.workers,
+            verify=args.verify,
+        )
         return build_corpus_module.build(config)
     except BuildCorpusError as exc:
         # An empty --records-dir, a holdout that selected nothing, a --class-mix

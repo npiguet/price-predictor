@@ -697,3 +697,47 @@ def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
         train(TrainEffectModelConfig(
             corpus=str(out), vocab_path=Path("models/effects/vocab-script.txt"),
         ))
+
+
+# ── what a count may be, and what zero means for each ─────────────────
+
+
+@pytest.mark.parametrize("field,flag", [
+    ("text_cap", "--text-cap"),
+    ("card_disjoint_text_cap", "--card-disjoint-text-cap"),
+    ("game_disjoint_target", "--game-disjoint-games"),
+    ("training_records", "--training-records"),
+])
+def test_a_negative_count_is_refused(tmp_path, a_corpus, field, flag):
+    with pytest.raises(ValueError, match=flag):
+        BuildCorpusConfig(
+            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+            output=tmp_path / "curated", workers=1, **{field: -1},
+        )
+
+
+def test_a_text_cap_of_zero_means_no_cap_rather_than_keep_nothing(
+    tmp_path, a_corpus,
+):
+    """Zero admits everything, the way ``CapHeap`` reads it. Documented here
+    because the other reading — keep nothing — is the one the word "cap"
+    suggests, and it would silently empty the training corpus."""
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, text_cap=0, game_disjoint_target=1,
+    ))
+
+    manifest = CorpusStore(out).load()
+    assert sum(c.dropped_by_cap for c in manifest.per_class.values()) == 0
+    assert manifest.per_stratum["training"] > 0
+
+
+def test_a_card_disjoint_text_cap_of_zero_means_no_cap_either(tmp_path, a_corpus):
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, card_disjoint_text_cap=0, game_disjoint_target=1,
+    ))
+
+    assert CorpusStore(out).load().card_disjoint_games == ("g-tainted",)

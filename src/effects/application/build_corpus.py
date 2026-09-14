@@ -305,6 +305,37 @@ class BuildCorpusConfig:
     workers: int | None = None
     verify: bool = False
 
+    def __post_init__(self) -> None:
+        """Refuse a negative count, and say what zero means for each.
+
+        Zero is a real setting for all four and means something different in
+        each, which is why it is spelled out rather than rejected along with
+        the negatives:
+
+        - ``--text-cap 0`` — no per-text cap; every record of every text is a
+          training candidate (``CapHeap`` reads a non-positive cap this way).
+        - ``--card-disjoint-text-cap 0`` — no cap on the card-disjoint
+          stratum; every held-out game carrying a held-out text is admitted.
+        - ``--game-disjoint-games 0`` — no game-disjoint stratum at all.
+        - ``--training-records 0`` — no ceiling beyond ``--text-cap``.
+
+        A negative is none of those and has no reading at all: it would make
+        ``min(cap, total)`` negative and ``random.sample`` raise several
+        thousand records into the build.
+        """
+        for flag, value in (
+            ("--text-cap", self.text_cap),
+            ("--card-disjoint-text-cap", self.card_disjoint_text_cap),
+            ("--game-disjoint-games", self.game_disjoint_target),
+            ("--training-records", self.training_records),
+        ):
+            if value < 0:
+                raise BuildCorpusError(
+                    f"{flag} is {value}; it counts things and cannot be "
+                    "negative. Zero is allowed and means no cap, no ceiling, "
+                    "or an empty stratum depending on the flag — see --help."
+                )
+
     def mix(self) -> dict[str, float]:
         from effects.application.train_effect_model import DEFAULT_KIND_MIX
 
