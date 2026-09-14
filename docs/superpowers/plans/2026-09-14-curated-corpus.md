@@ -546,7 +546,7 @@ git commit -m "feat(effects): decide the cap and the mixture as per-worker thres
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/unit/effects/infrastructure/test_record_io.py`. Reuse whatever `EffectRecord` factory that file already has; read the file first and call the existing helper rather than inventing one. If there is none, build a record with `record_from_dict` on a dict copied from an existing test.
+Append to `tests/unit/effects/infrastructure/test_record_io.py`. That file already has the factory: `_record(**overrides)` at line 114. Use it, not a new one — the tests below are written against a name `a_record`, so either rename those calls to `_record(...)` or add `a_record = _record` next to them. Do not write a second factory.
 
 ```python
 def test_write_shard_round_trips_through_the_reader(tmp_path):
@@ -583,6 +583,16 @@ Expected: FAIL with `ImportError: cannot import name 'write_shard'`
 
 - [ ] **Step 3: Write the implementation**
 
+First widen the existing `collections.abc` import at the top of the module — it
+currently reads `from collections.abc import Iterator`, and `Iterable` is not in
+scope:
+
+```python
+from collections.abc import Iterable, Iterator
+```
+
+Then append the writer:
+
 ```python
 def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     """Write a whole shard at once, gzipped; return the record count.
@@ -600,6 +610,8 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
     with gzip.open(path, "wt", encoding="utf-8") as handle:
         for record in records:
             handle.write(format_record_line(record))
+            handle.write("
+")
             written += 1
     return written
 ```
@@ -624,7 +636,7 @@ git commit -m "feat(effects): write a whole shard in one gzip member"
 - Create: `src/effects/application/build_corpus.py`
 - Modify: `src/effects/application/train_effect_model.py` — extract `text_for_key` out of `ability_text_of` (around line 1013)
 - Test: `tests/unit/effects/application/test_build_corpus_survey.py`
-- Test: `tests/unit/effects/application/test_train_effect_model.py` — one added test for the extraction
+- Test: `tests/unit/effects/application/test_ability_text.py` (new) — the extraction's test. Note `ability_text_of` has **no** existing test anywhere; this is its first.
 
 **Interfaces:**
 - Consumes: `CapHeap`, `record_hash` (Task 2); `SourceShard` (Task 1); `record_names_held_out_card`, `HeldOutCards`, `sampling_class` (existing, `train_effect_model`); `iter_shards`, `read_shard` (existing, `record_io`).
@@ -641,7 +653,7 @@ git commit -m "feat(effects): write a whole shard in one gzip member"
 
 - [ ] **Step 1: Write the failing test for the `text_for_key` extraction**
 
-Add to `tests/unit/effects/application/test_train_effect_model.py`. Use whatever fake-sidecar helper that file already has for `ability_text_of`; read it first.
+Create `tests/unit/effects/application/test_ability_text.py`. No sidecar fake exists anywhere in the test tree, so write one: a small object with `line_for(key)` and `prose_for(key)`, which are the only two methods `text_for_key` calls. For the shape `line_for` returns, read `src/effects/infrastructure/sidecar_io.py` and the `_sidecar()` helper in `tests/unit/effects/infrastructure/test_sidecar_io.py` (around line 37). Build the `EffectRecord` with the `_record` factory in `tests/unit/effects/application/test_split.py` (around line 45), which already takes an `ability=` keyword.
 
 ```python
 def test_text_for_key_and_ability_text_of_agree_on_one_key():
@@ -658,7 +670,7 @@ def test_text_for_key_and_ability_text_of_agree_on_one_key():
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `python -m pytest tests/unit/effects/application/test_train_effect_model.py -k text_for_key -v`
+Run: `python -m pytest tests/unit/effects/application/test_ability_text.py -v`
 Expected: FAIL with `ImportError: cannot import name 'text_for_key'`
 
 - [ ] **Step 3: Extract `text_for_key`**
@@ -706,10 +718,10 @@ def ability_text_of(
     return None
 ```
 
-- [ ] **Step 4: Run the trainer's whole test module**
+- [ ] **Step 4: Run every test that touches the trainer**
 
-Run: `python -m pytest tests/unit/effects/application/test_train_effect_model.py -v`
-Expected: PASS, including the new test. `ability_text_of` must keep its existing behaviour exactly — if any existing test fails, the extraction changed semantics and must be fixed, not the test.
+Run: `python -m pytest tests/unit/effects/application/test_ability_text.py tests/unit/effects/application/test_sampling.py tests/unit/effects/application/test_split.py tests/unit/effects/application/test_failfast.py tests/unit/effects/application/test_shard_streaming.py -v`
+Expected: PASS, including the new test. `ability_text_of` must keep its existing behaviour exactly — if an existing test fails, the extraction changed semantics and the code must be fixed, not the test.
 
 - [ ] **Step 5: Write the failing tests for the survey**
 
@@ -847,7 +859,7 @@ def test_merging_shard_surveys_unions_games_and_sums_records():
     assert sorted(merged.key_heaps["k"].values()) == [10, 20]
 ```
 
-Write the `a_record` and `a_shard_survey` helpers at the top of the file. `a_record` must build a real `EffectRecord`; copy an existing factory from `tests/unit/effects/application/test_train_effect_model.py` or `tests/unit/effects/infrastructure/test_record_io.py` rather than inventing one, and give it `ability`, `game_id`, `record_id`, `kind` and `entity_names` keyword arguments.
+Write the `a_record` and `a_shard_survey` helpers at the top of the file. `a_record` must build a real `EffectRecord`; copy the `_record`/`_entity` factories from `tests/unit/effects/application/test_split.py` (lines 36-63) rather than inventing one, and give it `ability`, `game_id`, `record_id`, `kind` and `entity_names` keyword arguments.
 
 - [ ] **Step 6: Run them to verify they fail**
 
@@ -1273,7 +1285,7 @@ def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
         assert decisions.capped_class_records[name] <= held
 ```
 
-Write `a_survey(**overrides)` returning a real `Survey` with sensible empty defaults, and `a_config(**overrides)` returning a `BuildCorpusConfig(records_dir=Path("."), **overrides)`. Write `fake_sidecars` as a fixture whose `line_for`/`prose_for` resolve `reprint-a` and `reprint-b` to the text `"deals 3 damage"`, raise `KeyError` for `unknown-key`, and resolve `held-out-text` to `"held-out-text"`. Read `tests/unit/effects/application/test_train_effect_model.py` first and reuse its sidecar fake rather than writing a second one.
+Write `a_survey(**overrides)` returning a real `Survey` with sensible empty defaults, and `a_config(**overrides)` returning a `BuildCorpusConfig(records_dir=Path("."), **overrides)`. Write `fake_sidecars` as a fixture whose `line_for`/`prose_for` resolve `reprint-a` and `reprint-b` to the text `"deals 3 damage"`, raise `KeyError` for `unknown-key`, and resolve `held-out-text` to `"held-out-text"`. Import the sidecar fake Task 4 wrote in `tests/unit/effects/application/test_ability_text.py` rather than writing a second one.
 
 - [ ] **Step 2: Run them to verify they fail**
 
@@ -1577,7 +1589,7 @@ git commit -m "feat(effects): decide a curated corpus's split, caps and targets"
 - Test: `tests/unit/effects/application/test_build_corpus.py`
 
 **Interfaces:**
-- Consumes: `Decisions`, `BuildCorpusConfig` (Task 5); `CorpusStore`, `current_sources` (Task 5); `write_shard` (Task 3); `record_hash`, `keeps` (Task 2); `text_keyed_holdout`, `load_card_files`, `load_card_texts` (existing, `train_effect_model`); `SidecarCache` (existing); `surface_of` (existing, `surface_batching`).
+- Consumes: `Decisions`, `BuildCorpusConfig` (Task 5); `CorpusStore`, `current_sources` (Task 5); `write_shard` (Task 3); `record_hash`, `keeps` (Task 2); `text_keyed_holdout`, `load_card_files`, `load_card_texts` (existing, `train_effect_model`); `SidecarCache` (existing, `sidecar_io`); `surface_of` (existing, **`effects.domain.ability_encoder`** — not `surface_batching`, which only re-imports it).
 - Produces: `WriteConfig`, `init_write_worker`, `write_shard_pass`, `WriteResult`, `build(config: BuildCorpusConfig) -> int`, and `run_build_corpus(args)` in the CLI.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1729,8 +1741,8 @@ def test_build_refuses_an_empty_corpus(tmp_path, a_corpus):
 
 **The `a_corpus` fixture is the whole test's load-bearing part.** Build it as a small but *real* corpus, returning an object with `.records` (the raw shard root) and `.cards` (the converted-tree folders):
 
-- A converted card tree with sidecars, so `text_keyed_holdout` finds texts and `SidecarCache` resolves keys. Look for an existing fixture under `tests/` that builds one (search for `provenance.json` in the test tree) and reuse it; write one only if none exists.
-- At least one card whose text the holdout rule selects, so `held_out_cards` is non-empty. Pick the card by computing `crc32` of its normalized text and choosing text that lands under the permille, rather than by trial and error.
+- A converted card tree with sidecars. Follow `_write_bears_sidecar` in `tests/unit/effects/application/test_validate_corpus.py` (line 865) — it builds a `ProvenanceSidecar` with `SidecarLine`s and writes it under `<root>/cardsfolder/<letter>/<stem>.provenance.json`. Two things it does not do that you also need: write the matching `.txt` beside each sidecar (`load_card_files` globs `*.txt` and keys on each file's `name:` line — a sidecar with no `.txt` is invisible to the holdout), and give each `SidecarLine` a non-empty `script_text` (`load_card_texts` skips lines without one, so a card whose lines are all empty carries no text to hold out).
+- At least one card whose text the holdout rule selects, so `held_out_cards` is non-empty. Compute the selection rather than guessing at it: `effects.domain.text_holdout` holds `normalize_script_text` and `text_is_held_out`; loop over candidate script strings until one satisfies `text_is_held_out(text, permille=20)` and use that as the held-out card's line.
 - Two raw shards, several games each: one game naming the held-out card, one game holding a `combat` record and a probe record whose `mirror_of` names it, and one ability text repeated enough times to exceed a `text_cap` of 2.
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -1771,6 +1783,12 @@ class WriteResult:
     dropped_by_cap: Counter[str] = field(default_factory=Counter)
     read: Counter[str] = field(default_factory=Counter)
     kept_keys: dict[str, set[str]] = field(default_factory=dict)
+    #: Records written to each output, keyed "training" / "card-disjoint" /
+    #: "game-disjoint", plus "dropped-held-out" for held-out games the
+    #: card-disjoint cap declined. FR-145 wants the report per stratum as well
+    #: as per class, and a stratum nobody counted is a stratum nobody notices
+    #: is empty.
+    stratum: Counter[str] = field(default_factory=Counter)
 
 
 _WRITE: WriteConfig | None = None
@@ -1808,13 +1826,16 @@ def write_shard_pass(relative: str) -> WriteResult:
         out.read[name] += 1
         if record.game_id in config.card_disjoint:
             card_disjoint.append(record)
+            out.stratum["card-disjoint"] += 1
             continue
         if record.game_id in config.game_disjoint:
             game_disjoint.append(record)
+            out.stratum["game-disjoint"] += 1
             continue
         if record.game_id in config.held_out_games:
             # Held out but not admitted to the stratum: dropped, never trained
             # on (FR-088).
+            out.stratum["dropped-held-out"] += 1
             continue
         key = ability_key(record)
         value = record_hash(record.record_id, seed=config.seed)
@@ -1828,6 +1849,7 @@ def write_shard_pass(relative: str) -> WriteResult:
                 continue
         training.append(record)
         out.kept[name] += 1
+        out.stratum["training"] += 1
         if key is not None:
             out.kept_keys.setdefault(name, set()).add(key)
 
@@ -1848,6 +1870,7 @@ def run_write_pass(
         total.kept.update(part.kept)
         total.dropped_by_cap.update(part.dropped_by_cap)
         total.read.update(part.read)
+        total.stratum.update(part.stratum)
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
 
@@ -1873,10 +1896,10 @@ def run_write_pass(
 
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code."""
-    from effects.application.surface_batching import surface_of
     from effects.application.train_effect_model import (
         load_card_files, load_card_texts, text_keyed_holdout,
     )
+    from effects.domain.ability_encoder import surface_of
     from effects.domain.corpus_manifest import ClassCounts, CorpusManifest
     from effects.infrastructure.corpus_store import CorpusStore, current_sources
     from effects.infrastructure.sidecar_io import SidecarCache
@@ -1993,6 +2016,8 @@ def build(config: BuildCorpusConfig) -> int:
             "%-22s read %9d  kept %9d  cap dropped %8d  unique texts %7d",
             name, counts.read, counts.kept, counts.dropped_by_cap, counts.unique_texts,
         )
+    for stratum in ("training", "card-disjoint", "game-disjoint", "dropped-held-out"):
+        logger.info("%-22s %9d record(s)", stratum, written.stratum.get(stratum, 0))
     for name, missing in sorted(decisions.shortfall.items()):
         logger.warning(
             "%s is short %d record(s) of its share: --training-records asks for "
@@ -2032,7 +2057,7 @@ git commit -m "feat(effects): write the curated corpus and wire up build-corpus"
 - Modify: `src/effects/application/train_effect_model.py` — `TrainEffectModelConfig` (around line 841), `resolve_holdout` (around line 1060), and the corpus-resolution block (around line 1140)
 - Modify: `src/effects/application/training_loop.py` — the `sample_weights` call (around line 299)
 - Modify: `src/effects/infrastructure/cli.py` — the `train-effect-model` parser (around line 941)
-- Test: `tests/unit/effects/application/test_train_effect_model.py`
+- Test: `tests/unit/effects/application/test_failfast.py` — the `validate_corpus_flags` tests; that module is precisely "a case where continuing would produce a number that looks like a result and is not one". And `tests/unit/effects/application/test_sampling.py` — the `sample_weights` rarity tests, beside the existing weighting tests; its `_record` factory is at line 68.
 
 **Interfaces:**
 - Consumes: `CorpusStore`, `CorpusManifest` (Tasks 1 and 5).
@@ -2091,7 +2116,7 @@ def test_a_text_the_table_does_not_name_falls_back_to_the_shard():
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `python -m pytest tests/unit/effects/application/test_train_effect_model.py -k "corpus or rarity or table" -v`
+Run: `python -m pytest tests/unit/effects/application/test_failfast.py tests/unit/effects/application/test_sampling.py -k "corpus or rarity or table" -v`
 Expected: FAIL with `TypeError: unexpected keyword argument 'corpus'`
 
 - [ ] **Step 3: Implement**
@@ -2125,6 +2150,12 @@ Extend `sample_weights` with `rarity: Mapping[str, int] | None = None`. When giv
 
 In `run` (around line 1140): call `validate_corpus_flags` first; when `config.corpus` is set, load the manifest through `CorpusStore`, take `training_shards` from `iter_shards(store.training_dir)` and `validation_shards` from the two stratum directories, take `held_out`/`inherited` from the manifest instead of `resolve_holdout`, and pass `manifest.rarity` into `TrainingLoop`. Thread it to the `sample_weights` call in `training_loop.py`. Do not call `reserve_shards` on this path.
 
+**Fix the live no-op in that same call first.** `TrainingLoop._pools` (`src/effects/application/training_loop.py:299`) currently calls `sample_weights(group, lambda r: r.record_id)`. A `record_id` is unique per record, so `effective_games` returns 1 for every key and `rarity_weights` returns 1.0 for every record: rarity weighting is inert, and has been in every run to date, while the method's own docstring describes it working. Verified against the real functions — keyed by `record_id` the weights have exactly one distinct value; keyed by the ability, an ability seen in one game weighs 7.07× one seen in fifty.
+
+The key must be the acting ability's text. `ability_text_of(record, sidecars, surface)` in `train_effect_model.py` is exactly that function, `_pools` can reach `self.surface`, and a `SidecarCache` already exists in the calling scope — pass what it needs rather than rebuilding one per shard.
+
+Write the regression test first, in `tests/unit/effects/application/test_sampling.py`: one pool holding two abilities, one carried by many games and one by a single game, asserting the single-game ability's records weigh strictly more. That test fails against the current `record_id` key and passes once the key is the ability. Without it the fix is unguarded, which is how the defect survived this long.
+
 Add `--corpus` to the CLI parser with `default=None`.
 
 - [ ] **Step 4: Run the suite**
@@ -2149,7 +2180,7 @@ git commit -m "feat(effects): train against a curated corpus and its rarity tabl
 - Modify: `src/effects/application/evaluate_effect_model.py` — beside the vocabulary-hash guard
 - Modify: `src/effects/CLAUDE.md`
 - Test: `tests/unit/effects/infrastructure/test_effect_model_store.py`
-- Test: `tests/unit/effects/application/test_evaluate_effect_model.py`
+- Test: `tests/unit/effects/application/test_failfast.py` — `tests/unit/effects/application/test_evaluate_effect_model.py` does NOT exist; the evaluator's other fail-fast guards (`VocabularyMismatch`, `SplitMismatch`) are tested in `test_failfast.py`, which is where `check_corpus` belongs beside them
 
 **Interfaces:**
 - Consumes: `CorpusStore` (Task 5).
