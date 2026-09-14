@@ -39,7 +39,7 @@ records that cannot be recollected.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
@@ -660,6 +660,27 @@ class ShardWriter:
         if self._handle is not None:
             self._handle.close()
             self._handle = None
+
+
+def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
+    """Write a whole shard at once, gzipped; return the record count.
+
+    One gzip member rather than one per 256 records: that blocking exists so a
+    worker killed mid-run truncates only its last block, and a curated shard is
+    written in a single pass by a process that either finishes or leaves
+    nothing behind. ``read_shard`` reads both shapes.
+    """
+    import gzip
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    with gzip.open(path, "wt", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(format_record_line(record))
+            handle.write("\n")
+            written += 1
+    return written
 
 
 #: Both shard spellings. `.jsonl.gz` is what the writer produces; plain
