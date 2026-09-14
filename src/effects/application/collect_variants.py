@@ -188,6 +188,7 @@ def held_out_cards(
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
     from effects.infrastructure.record_io import count_records
     from effects.infrastructure.variant_sidecar_connector import (
         VariantSidecarConnector,
@@ -239,10 +240,14 @@ def run(config: CollectVariantsConfig) -> int:
         caps=config.caps,
     )
     try:
-        supervisor.play_round(
-            {v.name: 1.0 for v in variants}, Path(config.variant_scripts),
-            decks=config.decks_per_round,
+        # Task 6 replaces this with decks built from `variants` by
+        # build_coverage_decks; for now an empty file is the minimal
+        # decks_file that exercises the new play_round signature.
+        decks_file = config.effect_records / "variant-decks.txt"
+        write_deck_file(
+            [], decks_file, label="variant", set_code=COVERAGE_SET_CODE,
         )
+        supervisor.play_round(decks_file, matches=config.decks_per_round)
     finally:
         # Closes the worker log files and shuts the pool down (final-fix-3.md
         # item 5) -- see collect_coverage.run's identical finally for why.

@@ -47,6 +47,7 @@ class CollectorSupervisor:
         self._caps = caps or CollectionCaps()
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
+        self._decks_file: Path | None = None
         # Every worker here runs with effect-record collection on by
         # construction (records-only mode, see start_worker), so any of the
         # five latched effect-record failure reporters (ApiEvents.
@@ -74,27 +75,49 @@ class CollectorSupervisor:
             effect_records_dir=self._effect_records,
             worker_index=worker_id,
             collection_caps=self._caps.as_system_properties(),
+            side_a_decks_path=self._decks_file,
+            side_b_decks_path=self._decks_file,
+            decks_only=True,
         )
         logger.info("Coverage worker %d started (PID %d)", worker_id, process.pid)
         return process
 
-    def play_round(
-        self, weights: dict[str, float], cards_folder: Path, *, decks: int,
-    ) -> None:
-        """Play one round's worth of weighted decks.
+    @property
+    def progress_path(self) -> Path:
+        """The file a round's completed matches are counted from.
 
-        The weights name which cards this round is trying to reach; the worker
-        builds the decks itself from the converted corpus, because deck building
-        needs a live Forge to know what is castable together.
+        Under ``output/effects/``, never the sealed corpus: FR-052 and FR-059
+        forbid a coverage or variant run reaching ``match-outcomes.txt``, and
+        this is a per-run scratch file that nothing downstream reads.
         """
+        return self._effect_records / f"{self._run_id}.progress.txt"
+
+    def play_round(self, decks_file: Path, *, matches: int) -> None:
+        """Play ``matches`` matches from ``decks_file``, then stop.
+
+        The budget is what makes a round a round: without it the pool runs until
+        it is signalled, the caller never recounts coverage, nothing retires,
+        and the run cannot finish.
+        """
+        self._decks_file = Path(decks_file)
+        self.progress_path.parent.mkdir(parents=True, exist_ok=True)
+        self.progress_path.write_text("", encoding="utf-8")
         self._pool = ForgeWorkerPool(
             worker_count=self._worker_count,
             spawn_worker=self.start_worker,
-            output_path=self._effect_records,
+            output_path=self.progress_path,
+            should_stop=lambda completed: completed >= matches,
         )
-        logger.info(
-            "Playing %d decks over %d weighted cards", decks, len(weights),
+        # Guarded rather than opened unconditionally (unlike the brief's literal
+        # text): the caller always writes decks_file before calling play_round
+        # in production, but a deck count is a log line, not a precondition --
+        # it must not turn a missing file into a crash here, mirroring
+        # play_draft_games._line_count's identical "absent means 0" guard.
+        deck_count = (
+            sum(1 for _ in self._decks_file.open(encoding="utf-8"))
+            if self._decks_file.exists() else 0
         )
+        logger.info("Playing %d matches from %d decks", matches, deck_count)
         self._pool.run()
 
     def stop(self) -> None:

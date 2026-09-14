@@ -38,6 +38,7 @@ class MatchWorkerConnector:
         worker_index: int = 0,
         collection_caps: Mapping[str, object] | None = None,
         exclude_cards_path: Path | None = None,
+        decks_only: bool = False,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -80,6 +81,12 @@ class MatchWorkerConnector:
                 its own pool per match rather than reading a pools file, so a
                 depleted collection run needs the exclusion here; without it it
                 would quietly play full-strength pools.
+            decks_only: When True, forces both sides to sample from the decks
+                file instead of rolling the 4 Forge methods, passed as
+                ``-Dsealed.decks.only=true``. Both sides sample from the decks
+                file and no pool is opened. For decks that belong to no set —
+                a coverage or variant deck drawn from the whole corpus — where
+                resolving the set code would fail.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -112,6 +119,8 @@ class MatchWorkerConnector:
                 system_properties[key] = str(value)
         if exclude_cards_path is not None:
             system_properties["sealed.exclude.cards"] = str(exclude_cards_path)
+        if decks_only:
+            system_properties["sealed.decks.only"] = "true"
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:

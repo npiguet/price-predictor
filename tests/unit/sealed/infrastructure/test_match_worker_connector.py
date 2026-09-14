@@ -171,6 +171,35 @@ class TestMatchWorkerConnectorSideDecks:
         assert not any(arg.startswith("-Dself.play.label=") for arg in cmd)
 
 
+class TestMatchWorkerConnectorDecksOnly:
+    """``decks_only`` forces both sides onto the decks file, as
+    ``-Dsealed.decks.only``. A coverage or variant deck belongs to no set, so
+    the Forge-method branch would resolve its sentinel set code against
+    Forge's booster/edition tables and throw; this flag exists to prevent the
+    roll from ever reaching that branch."""
+
+    def test_decks_only_true_passed_as_system_property(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt",
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                decks_only=True,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert "-Dsealed.decks.only=true" in cmd
+
+    def test_decks_only_omitted_by_default(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dsealed.decks.only=") for arg in cmd)
+
+
 class TestMatchWorkerConnectorRunId:
     """run_id is required and propagates to the worker as a system property."""
 

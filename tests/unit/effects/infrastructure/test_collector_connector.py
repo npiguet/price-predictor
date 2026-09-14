@@ -9,7 +9,8 @@ unconditional.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from effects.infrastructure.collector_connector import CollectorSupervisor
 from tests.unit.sealed.conftest import FakeProcess
@@ -95,3 +96,50 @@ class TestCollectorSupervisorWorkerLogs:
 
         assert fake_connector.start.call_args.args[0] is None
         supervisor.stop()
+
+
+class TestPlayRound:
+    """The round supervisor: what it hands the workers and when it stops.
+
+    ``play_round`` used to take the weights and the deck budget and log both
+    without using either, so a round never ended and the decks were never the
+    coverage decks the caller had computed.
+    """
+
+    def _supervisor(self, tmp_path):
+        return CollectorSupervisor(worker_count=2, effect_records=tmp_path)
+
+    def test_the_round_stops_at_its_match_budget(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+        with patch(
+            "effects.infrastructure.collector_connector.ForgeWorkerPool"
+        ) as pool:
+            supervisor.play_round(tmp_path / "decks.txt", matches=500)
+
+        stop = pool.call_args.kwargs["should_stop"]
+        assert stop(499) is False
+        assert stop(500) is True
+        assert stop(501) is True
+
+    def test_progress_is_counted_from_a_file_not_a_directory(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+        with patch(
+            "effects.infrastructure.collector_connector.ForgeWorkerPool"
+        ) as pool:
+            supervisor.play_round(tmp_path / "decks.txt", matches=10)
+
+        output_path = pool.call_args.kwargs["output_path"]
+        assert output_path.is_file() or not output_path.exists()
+        assert output_path != Path(tmp_path)
+
+    def test_the_decks_file_reaches_the_worker_on_both_sides(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+        decks = tmp_path / "decks.txt"
+        with patch.object(supervisor, "_connector") as connector:
+            supervisor._decks_file = decks
+            supervisor.start_worker(0)
+
+        kwargs = connector.start.call_args.kwargs
+        assert kwargs["side_a_decks_path"] == decks
+        assert kwargs["side_b_decks_path"] == decks
+        assert kwargs["decks_only"] is True

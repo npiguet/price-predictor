@@ -377,6 +377,7 @@ def is_complete(coverage: dict[str, CardCoverage], target: int) -> bool:
 def run(config: CollectCoverageConfig) -> int:
     """Play rounds until every card is satisfied or retired."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
+    from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
     from effects.infrastructure.record_io import read_records
 
     cards_folder = config.coverage_folder()
@@ -418,9 +419,14 @@ def run(config: CollectCoverageConfig) -> int:
             )
             if not weights:
                 break
-            supervisor.play_round(
-                weights, cards_folder, decks=config.decks_per_round,
+            # Task 5 replaces this with decks built from `weights` by
+            # build_coverage_decks; for now an empty file is the minimal
+            # decks_file that exercises the new play_round signature.
+            decks_file = config.effect_records / "coverage-decks.txt"
+            write_deck_file(
+                [], decks_file, label="coverage", set_code=COVERAGE_SET_CODE,
             )
+            supervisor.play_round(decks_file, matches=config.decks_per_round)
             for name, count in count_coverage(
                 read_records(config.effect_records)
             ).items():
