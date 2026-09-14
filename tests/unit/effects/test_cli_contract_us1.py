@@ -162,6 +162,52 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
         assert run_train_effect_model(args) == 2
 
 
+class TestBuildCorpusDispatch:
+    """What ``run_build_corpus`` turns into an exit code, and what it does not.
+
+    ``except ValueError`` was catching three unrelated things at once: the
+    operator conditions it was written for, and two internal-invariant
+    violations (``decide``'s cap mismatch, ``CapHeap.merge``'s) where a
+    traceback is the useful output. A distinct ``BuildCorpusError`` separates
+    them, so a bug in the builder can no longer arrive as a one-line log entry
+    that reads like a misconfigured run.
+    """
+
+    def test_a_verify_against_a_directory_with_no_manifest_reports_cleanly(
+        self, tmp_path,
+    ):
+        from effects.infrastructure.cli import run_build_corpus
+
+        args = parse(
+            "build-corpus", "--output", str(tmp_path / "nothing-here"), "--verify",
+        )
+
+        assert run_build_corpus(args) == 1
+
+    def test_an_operator_condition_becomes_an_exit_code(self, tmp_path, monkeypatch):
+        from effects.application.build_corpus import BuildCorpusError
+        from effects.infrastructure.cli import run_build_corpus
+
+        def explode(config):
+            raise BuildCorpusError("nothing to build from")
+
+        monkeypatch.setattr("effects.application.build_corpus.build", explode)
+
+        assert run_build_corpus(parse("build-corpus")) == 1
+
+    def test_an_internal_invariant_violation_keeps_its_traceback(self, monkeypatch):
+        """A plain ``ValueError`` out of the builder is a bug, not a bad flag."""
+        from effects.infrastructure.cli import run_build_corpus
+
+        def explode(config):
+            raise ValueError("cannot merge heaps with mismatched caps")
+
+        monkeypatch.setattr("effects.application.build_corpus.build", explode)
+
+        with pytest.raises(ValueError, match="mismatched caps"):
+            run_build_corpus(parse("build-corpus"))
+
+
 class TestEncodeAbilities:
     def test_the_defaults_are_the_contracts(self):
         args = parse("encode-abilities")

@@ -37,6 +37,21 @@ _KEY_FIELD_SEPARATOR = "|"
 _KEY_SEPARATOR = ";"
 
 
+class BuildCorpusError(ValueError):
+    """A build this corpus, these flags or this working directory cannot do.
+
+    Separated from a bare ``ValueError`` so the CLI can report an operator
+    condition as one logged line and a non-zero exit while letting an
+    internal-invariant violation — ``decide``'s cap mismatch, ``CapHeap.merge``'s
+    — keep its traceback. The two arrive at the same ``except`` clause
+    otherwise, and a bug in the builder then reads exactly like a misconfigured
+    run.
+
+    A ``ValueError`` subclass rather than a fresh exception type, so a caller
+    that already handles the broader class keeps working.
+    """
+
+
 def ability_key(record: EffectRecord) -> str | None:
     """A record's whole acting-ability key tuple, as one hashable string.
 
@@ -258,7 +273,7 @@ def run_survey(
     root = Path(records_dir)
     names = shard_names(root)
     if not names:
-        raise ValueError(f"{root}: no shards to build a corpus from")
+        raise BuildCorpusError(f"{root}: no shards to build a corpus from")
     logger.info("Surveying %d shard(s) under %s", len(names), root)
 
     init_survey_worker(config)          # so a workers=1 run needs no pool
@@ -485,9 +500,15 @@ def decide(
     game_disjoint = frozenset(random.Random(config.seed).sample(remaining, take))
 
     capped = dict(survey.class_capped_records)
-    targets, shortfall = class_targets(
-        capped, config.mix(), ceiling=config.training_records,
-    )
+    try:
+        targets, shortfall = class_targets(
+            capped, config.mix(), ceiling=config.training_records,
+        )
+    except ValueError as exc:
+        # `--class-mix` names classes this corpus has no records of, which is
+        # the operator's flag against the operator's corpus, not a broken
+        # invariant.
+        raise BuildCorpusError(str(exc)) from exc
     return Decisions(
         thresholds=thresholds,
         class_targets=targets,

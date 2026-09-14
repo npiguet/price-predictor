@@ -543,8 +543,8 @@ def _build_corpus_parser(subparsers) -> None:
 
 
 def run_build_corpus(args: argparse.Namespace) -> int:
-    from effects.application.build_corpus import BuildCorpusConfig
-    from effects.application.build_corpus import build as build_corpus
+    from effects.application import build_corpus as build_corpus_module
+    from effects.application.build_corpus import BuildCorpusConfig, BuildCorpusError
 
     config = BuildCorpusConfig(
         records_dir=Path(args.records_dir),
@@ -565,10 +565,18 @@ def run_build_corpus(args: argparse.Namespace) -> int:
         verify=args.verify,
     )
     try:
-        return build_corpus(config)
-    except ValueError as exc:
-        # e.g. an empty --records-dir (run_survey's "no shards to build a
-        # corpus from"): an expected, reportable condition, not a crash.
+        return build_corpus_module.build(config)
+    except BuildCorpusError as exc:
+        # An empty --records-dir, a holdout that selected nothing, a --class-mix
+        # naming classes the corpus lacks: expected, reportable conditions, not
+        # crashes. A bare ValueError is NOT caught -- `decide`'s cap-mismatch
+        # guard and `CapHeap.merge`'s are internal invariants, and a traceback
+        # is what those are worth.
+        logger.error("%s", exc)
+        return 1
+    except FileNotFoundError as exc:
+        # `--verify` against a directory with no manifest. Every sibling
+        # condition gets a clean message; this one used to get a traceback.
         logger.error("%s", exc)
         return 1
 
