@@ -124,6 +124,7 @@ class TrainingLoop:
         validation_shards: Sequence[Path],
         training_shards: Sequence[Path],
         rarity: Mapping[str, int] | None = None,
+        corpus_digest: str = "",
     ) -> None:
         self.config = config
         self.held_out = held_out
@@ -134,6 +135,10 @@ class TrainingLoop:
         #: for an ordinary ``--records-dir`` run, which weights by the resident
         #: shard's own counts instead.
         self.rarity = rarity
+        #: The curated dataset's manifest digest at read time (FR-147), read
+        #: into the checkpoint's provenance by ``_provenance`` below. ``""``
+        #: for an ordinary ``--records-dir`` run, which has no dataset to pin.
+        self.corpus_digest = corpus_digest
         self.accumulator = (
             SplitAccumulator.inheriting(inherited) if inherited is not None
             else SplitAccumulator(held_out_cards=tuple(sorted(held_out.names)))
@@ -601,6 +606,8 @@ class TrainingLoop:
             withheld_keyword=self.config.withhold_keyword,
             holdout_permille=self.config.holdout_permille,
             holdout_max_carriers=self.config.holdout_max_carriers,
+            corpus_path=self.config.corpus or "",
+            corpus_digest=self.corpus_digest,
         )
 
 

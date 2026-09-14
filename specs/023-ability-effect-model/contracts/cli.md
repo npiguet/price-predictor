@@ -325,13 +325,16 @@ otherwise, beside rather than replacing the shipping cache.
 | `--variant-checkpoint NAME=PATH` | repeatable |
 | `--records-dir`, `--cards-folder`, `--variant-scripts` | the trainer's defaults |
 | `--vocab-path`, `--keyword-definitions` | the paths `--checkpoint` recorded |
+| `--corpus` | the dataset `--checkpoint` recorded, if any |
 
 The zero-shot keyword check needs no flag: the withheld keyword is read from `--checkpoint`, which
 records it alongside the split.
 
 **Splits are never a flag.** The held-out card list and `game_id` set come from `--checkpoint`. The
 command fails fast when a `--variant-checkpoint` records a different split, or different vocabulary or
-keyword-definition hashes, than `--checkpoint`.
+keyword-definition hashes, than `--checkpoint`. It also fails fast when the dataset `--corpus` names
+hashes differently than the digest `--checkpoint` recorded — a rebuilt dataset is a different split
+(FR-147).
 
 ## Exit-code and failure contract
 

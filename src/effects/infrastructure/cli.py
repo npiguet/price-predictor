@@ -1349,6 +1349,14 @@ def _evaluate_effect_model_parser(subparsers) -> None:
         "--keyword-definitions", type=str, default=None,
         help="Defaults to the path --checkpoint recorded",
     )
+    parser.add_argument(
+        "--corpus", type=str, default=None,
+        help=(
+            "A curated dataset directory (build-corpus); defaults to the one "
+            "--checkpoint recorded, if any. Fails fast when it has been "
+            "rebuilt since training."
+        ),
+    )
     parser.add_argument("--abilities-root", type=str, default=DEFAULT_ABILITIES_ROOT)
     parser.add_argument(
         "--sealed-encoder-checkpoint", type=str,
@@ -1359,6 +1367,7 @@ def _evaluate_effect_model_parser(subparsers) -> None:
 
 def run_evaluate_effect_model(args: argparse.Namespace) -> int:
     from effects.application.evaluate_effect_model import (
+        CorpusMismatchError,
         EvaluateEffectModelConfig,
         parse_variant_checkpoint,
     )
@@ -1389,12 +1398,16 @@ def run_evaluate_effect_model(args: argparse.Namespace) -> int:
         keyword_definitions=(
             Path(args.keyword_definitions) if args.keyword_definitions else None
         ),
+        corpus=Path(args.corpus) if args.corpus else None,
         abilities_root=Path(args.abilities_root),
         sealed_encoder_checkpoint=Path(args.sealed_encoder_checkpoint),
     )
     try:
         report = evaluate(config)
-    except (HashMismatchError, SplitMismatchError, FileNotFoundError) as exc:
+    except (
+        HashMismatchError, SplitMismatchError, CorpusMismatchError,
+        FileNotFoundError,
+    ) as exc:
         logger.error("%s", exc)
         return 2
     print(report.render())

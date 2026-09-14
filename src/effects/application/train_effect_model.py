@@ -1166,6 +1166,7 @@ def run(config: TrainEffectModelConfig) -> int:
     require_split_from(config.variant, config.split_from)
 
     rarity: dict[str, int] | None = None
+    corpus_digest = ""
     if config.corpus is not None:
         # A curated dataset (FR-146): every decision below was already made by
         # `build-corpus` and recorded in its manifest, so it is read rather
@@ -1195,6 +1196,10 @@ def run(config: TrainEffectModelConfig) -> int:
             game_disjoint_games=frozenset(manifest.game_disjoint_games),
         )
         rarity = manifest.rarity
+        # Recorded onto the checkpoint's provenance below (FR-147), so
+        # `evaluate-effect-model` can refuse a dataset rebuilt since this run
+        # read it — computed once here rather than re-hashed at every save.
+        corpus_digest = manifest.digest()
         logger.info(
             "Curated corpus at %s: %d training shards, %d validation shards "
             "(%d card-disjoint texts held out).",
@@ -1259,4 +1264,5 @@ def run(config: TrainEffectModelConfig) -> int:
         validation_shards=validation_shards,
         training_shards=training_shards,
         rarity=rarity,
+        corpus_digest=corpus_digest,
     ).execute()

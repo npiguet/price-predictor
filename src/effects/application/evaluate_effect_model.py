@@ -27,6 +27,7 @@ import random
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -37,6 +38,9 @@ from effects.domain.damage_step_keywords import (
     MIN_QUALIFYING_RECORDS,
     DamageStepKeyword,
 )
+
+if TYPE_CHECKING:
+    from effects.infrastructure.effect_model_store import SplitProvenance
 
 logger = logging.getLogger(__name__)
 
@@ -678,6 +682,9 @@ class EvaluateEffectModelConfig:
     variant_scripts: Path | None = None
     vocab_path: Path | None = None
     keyword_definitions: Path | None = None
+    #: A curated dataset directory (`build-corpus`); defaults to the one
+    #: `--checkpoint` recorded, if any (FR-147).
+    corpus: Path | None = None
     abilities_root: Path = field(
         default_factory=lambda: Path("output/effects/abilities"),
     )
@@ -694,6 +701,51 @@ def parse_variant_checkpoint(value: str) -> tuple[str, Path]:
             f"--variant-checkpoint takes NAME=PATH, got {value!r}"
         )
     return name.strip(), Path(path.strip())
+
+
+# ── corpus provenance (FR-147) ──────────────────────────────────────────
+
+
+class CorpusMismatchError(RuntimeError):
+    """The curated corpus was rebuilt since the checkpoint trained on it."""
+
+
+def check_corpus(provenance: SplitProvenance, *, actual_digest: str) -> None:
+    """Refuse a dataset that is not the one the checkpoint read (FR-147).
+
+    A rebuild is a different split, so scoring the gates against it would score
+    them partly on games the model trained on — the failure the recorded
+    ``game_id`` sets exist to prevent, arriving through the corpus instead.
+    """
+    if not provenance.corpus_digest:
+        return
+    if provenance.corpus_digest != actual_digest:
+        raise CorpusMismatchError(
+            f"{provenance.corpus_path} has been rebuilt since this checkpoint "
+            f"trained on it (recorded {provenance.corpus_digest}, found "
+            f"{actual_digest}). Evaluate against the dataset it read, or "
+            "retrain against this one."
+        )
+
+
+def resolve_corpus_path(
+    provenance: SplitProvenance, *, corpus: Path | None,
+) -> Path | None:
+    """Where to read the curated corpus ``check_corpus`` verifies, if anywhere.
+
+    Meaningful only when the checkpoint actually recorded one: a checkpoint
+    trained against ``--records-dir`` has no dataset digest to compare, and
+    resolving a path for it anyway would let an unrelated ``--corpus``
+    override raise on a directory the checkpoint never claimed to have read.
+    Defaults to what the checkpoint recorded, the same override shape
+    ``resolve_inference_paths`` gives the vocabulary and keyword-definition
+    paths.
+    """
+    if not provenance.corpus_digest:
+        return None
+    if corpus is not None:
+        return Path(corpus)
+    return Path(provenance.corpus_path)
 
 
 def scored_records(records, provenance) -> list:
@@ -763,6 +815,13 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     main.provenance.verify_hashes(
         vocab_path=vocab_path, keyword_path=keyword_path,
     )
+    corpus_path = resolve_corpus_path(main.provenance, corpus=config.corpus)
+    actual_corpus_digest = ""
+    if corpus_path is not None:
+        from effects.infrastructure.corpus_store import CorpusStore
+
+        actual_corpus_digest = CorpusStore(corpus_path).load().digest()
+    check_corpus(main.provenance, actual_digest=actual_corpus_digest)
 
     variants = {}
     for name, path in config.variant_checkpoints.items():

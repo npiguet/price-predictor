@@ -115,6 +115,36 @@ class TestSplitRoundTrip:
         ))
         assert store.load().provenance.withheld_keyword is None
 
+    def test_the_corpus_provenance_comes_back(self, tmp_path, files):
+        """FR-147: a `--corpus` run's manifest path and digest are checkpoint
+        state, the same as the split and the vocabulary hashes above."""
+        store = EffectModelStore(tmp_path / "effect-model")
+        store.save(_checkpoint(files, provenance=_provenance(
+            files, corpus_path="output/effects/corpus", corpus_digest="abc123",
+        )))
+        provenance = store.load().provenance
+        assert provenance.corpus_path == "output/effects/corpus"
+        assert provenance.corpus_digest == "abc123"
+
+
+class TestCorpusProvenance:
+    """FR-147: a checkpoint pins the curated corpus it read.
+
+    A rebuild is a different split, so scoring the gates against the rebuilt
+    one would score them partly on games the model trained on — the same
+    failure the held-out ``game_id`` sets exist to prevent, arriving through
+    the corpus instead of the split.
+    """
+
+    def test_split_provenance_round_trips_the_corpus_it_read(self):
+        original = SplitProvenance(
+            corpus_path="output/effects/corpus", corpus_digest="abc123",
+        )
+        assert SplitProvenance.from_dict(original.as_dict()) == original
+
+    def test_a_checkpoint_saved_before_curated_corpora_still_loads(self):
+        assert SplitProvenance.from_dict({}).corpus_digest == ""
+
 
 class TestHashChecking:
     def test_matching_hashes_pass(self, files):

@@ -316,6 +316,49 @@ class TestPoolsKeyByAbilityText:
         assert class_weights[-1] > class_weights[0]
 
 
+class TestProvenanceRecordsTheCorpus:
+    """FR-147: a checkpoint records the curated corpus it read, alongside its
+    split, so ``evaluate-effect-model`` can refuse one rebuilt since."""
+
+    def test_a_corpus_runs_provenance_records_the_manifest_digest(self):
+        from effects.application.train_effect_model import (
+            HeldOutCards,
+            TrainEffectModelConfig,
+        )
+        from effects.application.training_loop import TrainingLoop
+
+        loop = TrainingLoop(
+            TrainEffectModelConfig(corpus="output/effects/corpus"),
+            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
+            inherited=None, validation_shards=[], training_shards=[],
+            corpus_digest="abc123",
+        )
+
+        provenance = loop._provenance()
+
+        assert provenance.corpus_path == "output/effects/corpus"
+        assert provenance.corpus_digest == "abc123"
+
+    def test_an_ordinary_run_records_no_corpus(self):
+        """A ``--records-dir`` run has no curated dataset to pin."""
+        from effects.application.train_effect_model import (
+            HeldOutCards,
+            TrainEffectModelConfig,
+        )
+        from effects.application.training_loop import TrainingLoop
+
+        loop = TrainingLoop(
+            TrainEffectModelConfig(),
+            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
+            inherited=None, validation_shards=[], training_shards=[],
+        )
+
+        provenance = loop._provenance()
+
+        assert provenance.corpus_path == ""
+        assert provenance.corpus_digest == ""
+
+
 class TestBatchPlanning:
     def _pools(self):
         return {

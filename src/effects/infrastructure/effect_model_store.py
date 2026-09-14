@@ -103,6 +103,15 @@ class SplitProvenance:
     #: on cards it believes are held out, with nothing to say so.
     holdout_permille: int = 0
     holdout_max_carriers: int = 0
+    #: The curated dataset a `--corpus` run read, and its manifest digest at
+    #: read time (FR-147). Both default to `""`: an ordinary `--records-dir`
+    #: run has no dataset to pin, and a checkpoint saved before curated corpora
+    #: existed must still load. A rebuild is a different split, so scoring the
+    #: gates against the rebuilt one would score them partly on games the model
+    #: trained on — the same failure the held-out `game_id` sets exist to
+    #: prevent, arriving through the corpus instead of the split.
+    corpus_path: str = ""
+    corpus_digest: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -120,6 +129,8 @@ class SplitProvenance:
             withheld_keyword=data.get("withheld_keyword"),
             holdout_permille=int(data.get("holdout_permille", 0)),
             holdout_max_carriers=int(data.get("holdout_max_carriers", 0)),
+            corpus_path=data.get("corpus_path", ""),
+            corpus_digest=data.get("corpus_digest", ""),
         )
 
     @property

@@ -339,6 +339,85 @@ class TestHoldoutGuard:
         ) is None
 
 
+class TestCorpusMismatch:
+    """``evaluate-effect-model`` refuses a corpus rebuilt since training
+    (FR-147) — the same discipline as the vocabulary-hash guard above, for the
+    dataset rather than the vocabulary file."""
+
+    def test_evaluate_refuses_a_corpus_rebuilt_since_training(self, tmp_path):
+        from effects.application.evaluate_effect_model import (
+            CorpusMismatchError,
+            check_corpus,
+        )
+
+        provenance = SplitProvenance(
+            corpus_path=str(tmp_path), corpus_digest="trained-against-this",
+        )
+        with pytest.raises(CorpusMismatchError, match="rebuilt"):
+            check_corpus(provenance, actual_digest="something-else")
+
+    def test_evaluate_accepts_a_checkpoint_that_read_no_curated_corpus(self):
+        from effects.application.evaluate_effect_model import check_corpus
+
+        check_corpus(SplitProvenance(), actual_digest="anything")  # no raise
+
+    def test_matching_digests_pass(self, tmp_path):
+        from effects.application.evaluate_effect_model import check_corpus
+
+        provenance = SplitProvenance(
+            corpus_path=str(tmp_path), corpus_digest="same",
+        )
+        check_corpus(provenance, actual_digest="same")  # no raise
+
+    def test_the_error_names_the_corpus_path_and_both_digests(self, tmp_path):
+        from effects.application.evaluate_effect_model import (
+            CorpusMismatchError,
+            check_corpus,
+        )
+
+        provenance = SplitProvenance(
+            corpus_path=str(tmp_path), corpus_digest="trained-against-this",
+        )
+        with pytest.raises(CorpusMismatchError) as excinfo:
+            check_corpus(provenance, actual_digest="something-else")
+        message = str(excinfo.value)
+        assert str(tmp_path) in message
+        assert "trained-against-this" in message
+        assert "something-else" in message
+
+
+class TestCorpusPathResolution:
+    """``--corpus`` on ``evaluate-effect-model`` defaults to what the
+    checkpoint recorded, the same override shape
+    ``resolve_inference_paths`` gives the vocabulary and keyword-definition
+    paths (FR-147)."""
+
+    def test_defaults_to_the_checkpoints_recorded_path(self):
+        from effects.application.evaluate_effect_model import resolve_corpus_path
+
+        provenance = SplitProvenance(
+            corpus_path="output/effects/corpus", corpus_digest="abc123",
+        )
+        assert resolve_corpus_path(provenance, corpus=None) == Path(
+            "output/effects/corpus"
+        )
+
+    def test_an_explicit_corpus_overrides(self, tmp_path):
+        from effects.application.evaluate_effect_model import resolve_corpus_path
+
+        provenance = SplitProvenance(
+            corpus_path="output/effects/corpus", corpus_digest="abc123",
+        )
+        assert resolve_corpus_path(provenance, corpus=tmp_path) == tmp_path
+
+    def test_returns_none_when_the_checkpoint_read_no_curated_corpus(self, tmp_path):
+        """No digest recorded means nothing to check, whatever --corpus says."""
+        from effects.application.evaluate_effect_model import resolve_corpus_path
+
+        assert resolve_corpus_path(SplitProvenance(), corpus=None) is None
+        assert resolve_corpus_path(SplitProvenance(), corpus=tmp_path) is None
+
+
 class TestCorpusFlags:
     """``--corpus`` refuses a flag its manifest already decides (FR-146).
 

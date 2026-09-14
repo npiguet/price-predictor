@@ -170,6 +170,12 @@ class TestEvaluateEffectModel:
         assert args.vocab_path is None
         assert args.keyword_definitions is None
 
+    def test_the_corpus_defaults_to_the_checkpoints_recorded_one(self):
+        """FR-147: an explicit --corpus overrides; absent, the checkpoint's
+        own recorded path is what gets verified."""
+        args = parse("evaluate-effect-model")
+        assert args.corpus is None
+
 
 class TestSubcommandTable:
     def test_every_us1_subcommand_is_registered(self):
