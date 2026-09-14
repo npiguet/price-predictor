@@ -297,3 +297,39 @@ class TestTrainEffectModelSurfaceMismatch:
         args = parse("train-effect-model", "--corpus", "output/effects/corpus")
 
         assert run_train_effect_model(args) == 2
+
+
+class TestCorpusExclusiveFlagsAtThePreflightCheck:
+    """``validate_corpus_flags`` ran only inside ``run()`` and raised a bare
+    ``ValueError`` nothing caught, so ``train-effect-model --corpus DIR
+    --records-dir X`` printed a stack trace where its sibling guard one line
+    over printed a message and exited 2.
+
+    Tested through the dispatcher rather than through the library function,
+    because that is exactly how the last gap of this shape survived its own
+    fix round: the library was right and the entry point never called it.
+    """
+
+    def test_a_flag_the_manifest_records_is_refused_with_an_exit_code(self):
+        from effects.infrastructure.cli import run_train_effect_model
+
+        args = parse(
+            "train-effect-model", "--corpus", "output/effects/corpus",
+            "--records-dir", "output/effects/other-records",
+        )
+
+        assert run_train_effect_model(args) == 2
+
+    def test_the_refusal_happens_before_the_trainer_is_entered(self, monkeypatch):
+        from effects.infrastructure.cli import run_train_effect_model
+
+        def explode(config):
+            raise AssertionError("run() must not be reached")
+
+        monkeypatch.setattr("effects.application.train_effect_model.run", explode)
+        args = parse(
+            "train-effect-model", "--corpus", "output/effects/corpus",
+            "--holdout-permille", "30",
+        )
+
+        assert run_train_effect_model(args) == 2

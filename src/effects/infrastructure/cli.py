@@ -1206,6 +1206,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         MissingSplitError,
         SurfaceMismatchError,
         require_split_from,
+        validate_corpus_flags,
     )
 
     split_from = Path(args.split_from) if args.split_from else None
@@ -1216,6 +1217,15 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         return 2
 
     config = train_config_from(args)
+    try:
+        # Pre-flighted here as well as inside `run`, for the same reason its
+        # sibling one line above is: a bare ValueError out of `run` reaches the
+        # operator as a stack trace.
+        validate_corpus_flags(config)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 2
+
     from effects.application.train_effect_model import run as train
 
     try:
