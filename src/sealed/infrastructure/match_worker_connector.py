@@ -39,6 +39,7 @@ class MatchWorkerConnector:
         collection_caps: Mapping[str, object] | None = None,
         exclude_cards_path: Path | None = None,
         decks_only: bool = False,
+        progress_file: Path | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -87,6 +88,16 @@ class MatchWorkerConnector:
                 file and no pool is opened. For decks that belong to no set —
                 a coverage or variant deck drawn from the whole corpus — where
                 resolving the set code would fail.
+            progress_file: When provided, the worker appends one line per
+                completed match to this file, passed as
+                ``-Dsealed.progress.file=<path>``. Written unconditionally —
+                independent of ``output_file``/records-only mode and of both
+                sealed writers — because a progress tally is not a corpus and
+                must not ride the gate that keeps records-only mode out of
+                one. This is what lets a records-only round (``output_file``
+                is None) be bounded: without a real destination for
+                ``output_file``, nothing else this worker writes grows with
+                each completed match.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -121,6 +132,8 @@ class MatchWorkerConnector:
             system_properties["sealed.exclude.cards"] = str(exclude_cards_path)
         if decks_only:
             system_properties["sealed.decks.only"] = "true"
+        if progress_file is not None:
+            system_properties["sealed.progress.file"] = str(progress_file)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:

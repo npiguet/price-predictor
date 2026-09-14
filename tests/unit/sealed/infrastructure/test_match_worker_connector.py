@@ -200,6 +200,60 @@ class TestMatchWorkerConnectorDecksOnly:
         assert not any(arg.startswith("-Dsealed.decks.only=") for arg in cmd)
 
 
+class TestMatchWorkerConnectorProgressFile:
+    """``progress_file`` reaches the worker as ``-Dsealed.progress.file``,
+    independent of ``output_file``.
+
+    Round-1 review, CRITICAL finding: a records-only round's progress file
+    never grew because nothing appended to it. The fix is this parameter --
+    a channel of its own, so a caller can request a progress tally without
+    also passing a real ``output_file`` (which would flip records-only mode
+    off and construct a real ``CardsPlayedWriter``, see
+    ``MatchWorkerMain.java``'s ``recordsOnly()``)."""
+
+    def test_progress_file_passed_as_system_property(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        progress = tmp_path / "run-id.progress.txt"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                tmp_path / "outcomes.txt",
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                progress_file=progress,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert f"-Dsealed.progress.file={progress}" in cmd
+
+    def test_progress_file_omitted_by_default(self, tmp_path, stub_classpath):
+        connector = MatchWorkerConnector()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(tmp_path / "outcomes.txt", run_id=RUN_ID, best_of=BEST_OF)
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.startswith("-Dsealed.progress.file=") for arg in cmd)
+
+    def test_progress_file_works_with_output_file_absent(self, stub_classpath, tmp_path):
+        # The exact records-only shape CollectorSupervisor.start_worker uses:
+        # output_file=None (positional), effect_records_dir set, progress_file
+        # set. Must not raise the "needs an output file, effect records, or
+        # both" ValueError, and must still emit the progress property.
+        connector = MatchWorkerConnector()
+        progress = tmp_path / "run-id.progress.txt"
+        with patch("subprocess.Popen") as mock_popen:
+            mock_popen.return_value = MagicMock()
+            connector.start(
+                None,
+                run_id=RUN_ID,
+                best_of=BEST_OF,
+                effect_records_dir=tmp_path / "records",
+                progress_file=progress,
+            )
+        cmd = mock_popen.call_args[0][0]
+        assert f"-Dsealed.progress.file={progress}" in cmd
+        assert not any(arg.startswith("-Doutput.file=") for arg in cmd)
+
+
 class TestMatchWorkerConnectorRunId:
     """run_id is required and propagates to the worker as a system property."""
 

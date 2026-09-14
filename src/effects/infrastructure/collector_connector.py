@@ -78,6 +78,7 @@ class CollectorSupervisor:
             side_a_decks_path=self._decks_file,
             side_b_decks_path=self._decks_file,
             decks_only=True,
+            progress_file=self.progress_path,
         )
         logger.info("Coverage worker %d started (PID %d)", worker_id, process.pid)
         return process
@@ -98,8 +99,28 @@ class CollectorSupervisor:
         The budget is what makes a round a round: without it the pool runs until
         it is signalled, the caller never recounts coverage, nothing retires,
         and the run cannot finish.
+
+        ``decks_file`` is validated up front rather than merely logged: every
+        worker this round spawns runs ``decks_only=True``, which forces both
+        sides of every match to sample from this file (see ``start_worker``),
+        so a missing or empty file is not a degraded round but one no worker
+        can play at all. Raising here, before any worker is spawned, turns
+        that into one clear Python-level error instead of an unexplained
+        subprocess exit -- ``GeneratedDecksIndex.load`` on an empty file is
+        untested territory this deliberately never reaches.
         """
         self._decks_file = Path(decks_file)
+        if not self._decks_file.exists():
+            raise ValueError(
+                f"{self._decks_file}: a decks-only round cannot run without "
+                "decks (file does not exist)"
+            )
+        deck_count = sum(1 for _ in self._decks_file.open(encoding="utf-8"))
+        if deck_count == 0:
+            raise ValueError(
+                f"{self._decks_file}: a decks-only round cannot run without "
+                "decks (file is empty)"
+            )
         self.progress_path.parent.mkdir(parents=True, exist_ok=True)
         self.progress_path.write_text("", encoding="utf-8")
         self._pool = ForgeWorkerPool(
@@ -107,15 +128,6 @@ class CollectorSupervisor:
             spawn_worker=self.start_worker,
             output_path=self.progress_path,
             should_stop=lambda completed: completed >= matches,
-        )
-        # Guarded rather than opened unconditionally (unlike the brief's literal
-        # text): the caller always writes decks_file before calling play_round
-        # in production, but a deck count is a log line, not a precondition --
-        # it must not turn a missing file into a crash here, mirroring
-        # play_draft_games._line_count's identical "absent means 0" guard.
-        deck_count = (
-            sum(1 for _ in self._decks_file.open(encoding="utf-8"))
-            if self._decks_file.exists() else 0
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
         self._pool.run()

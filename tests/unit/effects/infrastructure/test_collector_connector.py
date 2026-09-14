@@ -12,6 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from effects.infrastructure.collector_connector import CollectorSupervisor
 from tests.unit.sealed.conftest import FakeProcess
 
@@ -109,12 +111,19 @@ class TestPlayRound:
     def _supervisor(self, tmp_path):
         return CollectorSupervisor(worker_count=2, effect_records=tmp_path)
 
+    def _decks_file(self, tmp_path) -> Path:
+        """A decks file with one (trivial) entry -- valid input for
+        ``play_round``, which now refuses an empty or missing one."""
+        path = tmp_path / "decks.txt"
+        path.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
+        return path
+
     def test_the_round_stops_at_its_match_budget(self, tmp_path):
         supervisor = self._supervisor(tmp_path)
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(tmp_path / "decks.txt", matches=500)
+            supervisor.play_round(self._decks_file(tmp_path), matches=500)
 
         stop = pool.call_args.kwargs["should_stop"]
         assert stop(499) is False
@@ -126,7 +135,7 @@ class TestPlayRound:
         with patch(
             "effects.infrastructure.collector_connector.ForgeWorkerPool"
         ) as pool:
-            supervisor.play_round(tmp_path / "decks.txt", matches=10)
+            supervisor.play_round(self._decks_file(tmp_path), matches=10)
 
         output_path = pool.call_args.kwargs["output_path"]
         assert output_path.is_file() or not output_path.exists()
@@ -143,3 +152,45 @@ class TestPlayRound:
         assert kwargs["side_a_decks_path"] == decks
         assert kwargs["side_b_decks_path"] == decks
         assert kwargs["decks_only"] is True
+
+    def test_the_progress_file_reaches_the_worker_without_becoming_output_file(
+        self, tmp_path,
+    ):
+        """Round-1 review, CRITICAL finding's prescribed fix: ``start_worker``
+        must pass the progress file through as its own channel
+        (``progress_file``), never by smuggling it in as ``output_file``.
+
+        Passing it as ``output_file`` would flip ``recordsOnly()`` to false
+        and construct a real ``CardsPlayedWriter`` at
+        ``<effect_records>/cards-played.txt`` every match
+        (``MatchWorkerMain.java`` ~237-238) -- not a breach of FR-052/FR-059's
+        letter (it is not ``output/sealed/cards-played.txt``), but it
+        contradicts the records-only invariant the surrounding Java comment
+        states, and it is not what fixes the round-never-ends bug. Both
+        halves are asserted together because the fix is exactly "add a
+        second, independent channel" -- either half regressing independently
+        (progress never reaching the worker, or output_file stopping being
+        None) reintroduces a defect this round's review found.
+        """
+        supervisor = self._supervisor(tmp_path)
+        with patch.object(supervisor, "_connector") as connector:
+            supervisor._decks_file = tmp_path / "decks.txt"
+            supervisor.start_worker(0)
+
+        call = connector.start.call_args
+        assert call.args[0] is None
+        assert call.kwargs["progress_file"] == supervisor.progress_path
+
+    def test_play_round_refuses_a_missing_decks_file(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+
+        with pytest.raises(ValueError, match="does not exist"):
+            supervisor.play_round(tmp_path / "missing.txt", matches=10)
+
+    def test_play_round_refuses_an_empty_decks_file(self, tmp_path):
+        supervisor = self._supervisor(tmp_path)
+        empty = tmp_path / "decks.txt"
+        empty.write_text("", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="is empty"):
+            supervisor.play_round(empty, matches=10)

@@ -55,6 +55,13 @@ import java.util.function.IntPredicate;
  *       read it. Parsed by {@code PatchedCollectors.CollectionCaps} along with the
  *       rest of the {@code effect.*} caps, which that record documents; echoed at
  *       startup because it is also the largest single lever on shard size.</li>
+ *   <li>{@code -Dsealed.progress.file=<path>} — when set, one line is appended
+ *       to this file per completed match via {@link ProgressWriter}, so a
+ *       caller that never touches {@code output.file} (records-only mode) can
+ *       still bound a run by counting matches played. Written unconditionally
+ *       — independent of {@link WorkerConfig#recordsOnly()} and of both sealed
+ *       writers — because a progress tally is not a corpus and must not ride
+ *       the gate that keeps records-only mode out of one.</li>
  * </ul>
  *
  * <p>The worker is terminated externally by the Python supervisor (process.terminate()).
@@ -79,7 +86,8 @@ public class MatchWorkerMain {
             Path effectRecordsDir,
             int workerIndex,
             String workerLifetime,
-            boolean decksOnly) {
+            boolean decksOnly,
+            Path progressFile) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -173,11 +181,19 @@ public class MatchWorkerMain {
             System.exit(2);
         }
 
+        // A counter, not a corpus: read independent of every other property
+        // here, and never validated against output.file / effect.records.dir,
+        // because a progress tally must be obtainable even in records-only
+        // mode -- that independence is the whole point (see the class-level
+        // Javadoc entry for this property).
+        String progressFileProp = System.getProperty("sealed.progress.file");
+
         return new WorkerConfig(
                 outputFileProp == null ? null : Path.of(outputFileProp),
                 runId, bestOf, sideAProp, sideBProp, sideBWeight,
                 effectRecordsProp == null ? null : Path.of(effectRecordsProp),
-                workerIndex, workerLifetime, decksOnly);
+                workerIndex, workerLifetime, decksOnly,
+                progressFileProp == null ? null : Path.of(progressFileProp));
     }
 
     /**
@@ -236,6 +252,12 @@ public class MatchWorkerMain {
                 ? null : new MatchResultWriter(config.outputFile());
         CardsPlayedWriter cardsPlayedWriter = config.recordsOnly()
                 ? null : new CardsPlayedWriter(cardsPlayedPath(config.outputFile()));
+        // Never gated by recordsOnly(): a progress tally is not a corpus, and
+        // gating it on the same guard that keeps records-only mode out of the
+        // sealed corpus is exactly the bug this property exists to fix (a
+        // records-only round's progress file would otherwise never grow).
+        ProgressWriter progressWriter = config.progressFile() == null
+                ? null : new ProgressWriter(config.progressFile());
 
         RecordShardWriter effectRecords = null;
         if (config.collectsEffectRecords()) {
@@ -277,14 +299,7 @@ public class MatchWorkerMain {
         while (true) {
             try {
                 MatchGenerationResult result = generator.generateMatch();
-                if (writer != null) {
-                    writer.write(result.matchResult());
-                }
-                if (cardsPlayedWriter != null) {
-                    for (CardsPlayedRow row : result.cardsPlayedRows()) {
-                        cardsPlayedWriter.write(row);
-                    }
-                }
+                recordMatch(result, writer, cardsPlayedWriter, progressWriter);
                 count++;
                 if (count % 10 == 0) {
                     System.out.println("Worker: " + count + " matches generated");
@@ -295,6 +310,35 @@ public class MatchWorkerMain {
                 e.printStackTrace(System.err);
                 // Continue on non-fatal errors; fatal errors (OOM, etc.) will propagate
             }
+        }
+    }
+
+    /**
+     * Record one completed match to whichever of the three writers are wired
+     * up. Factored out of {@link #runForever}'s infinite loop so the
+     * independence this method's contract depends on — the progress line is
+     * written whether or not {@code writer}/{@code cardsPlayedWriter} are
+     * {@code null} — is exercisable by a plain unit test that constructs a
+     * {@link MatchGenerationResult} fixture and never touches Forge.
+     */
+    static void recordMatch(
+            MatchGenerationResult result,
+            MatchResultWriter writer,
+            CardsPlayedWriter cardsPlayedWriter,
+            ProgressWriter progressWriter) {
+        if (writer != null) {
+            writer.write(result.matchResult());
+        }
+        if (cardsPlayedWriter != null) {
+            for (CardsPlayedRow row : result.cardsPlayedRows()) {
+                cardsPlayedWriter.write(row);
+            }
+        }
+        // Unconditional on writer/cardsPlayedWriter: a records-only round
+        // (both null) must still advance its progress file, or a bounded
+        // round built on this worker can never observe that it is done.
+        if (progressWriter != null) {
+            progressWriter.write();
         }
     }
 

@@ -420,8 +420,12 @@ def run(config: CollectCoverageConfig) -> int:
             if not weights:
                 break
             # Task 5 replaces this with decks built from `weights` by
-            # build_coverage_decks; for now an empty file is the minimal
-            # decks_file that exercises the new play_round signature.
+            # build_coverage_decks. Until then this writes an empty file, and
+            # play_round refuses to play a decks-only round with no decks --
+            # so a real invocation of this command raises here rather than
+            # silently doing nothing, which is the intended interim state:
+            # a decks_file this call site never actually populates should
+            # fail loudly, not hand an empty file to the Forge worker.
             decks_file = config.effect_records / "coverage-decks.txt"
             write_deck_file(
                 [], decks_file, label="coverage", set_code=COVERAGE_SET_CODE,
