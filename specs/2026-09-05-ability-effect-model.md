@@ -236,13 +236,14 @@ Output layout under `--output` (default `output/effects/corpus/`):
 - **Selection unit.** Training is selected per record; both validation strata are selected per game. Whole-game selection keeps every intra-game join intact, including the `mirror_of` pairing `evaluate-effect-model` reads for gate 2 — a stratum missing a probe's partner scores nothing and reports the keyword as under-sampled.
 - **Split.** The holdout rule is the trainer's (§ Training, Splits) under the same `--holdout-permille` and `--holdout-max-carriers`, which the manifest records. A game with a record naming a held-out card goes to the card-disjoint stratum; `--game-disjoint-games` of the remaining games go to the game-disjoint stratum; the rest are training candidates.
 - **Per-text cap.** The training corpus holds at most `--text-cap` records per unique ability text, records beyond the cap dropped at random under `--seed`. The cap is a ceiling and never a floor: a text below it keeps every record it has, so the tail the coverage collector exists to fill survives curation whole.
-- **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class.
+- **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class. The manifest also records the proportions actually delivered beside the requested ones, counted from what was written.
 - **Size ceiling.** `--training-records`, when non-zero, subsamples the capped result within each class to that total.
-- **Rarity table.** The manifest records effective games per unique ability text, counted over the whole raw corpus. A `--corpus` training run reads that table instead of counting the resident shard. Coverage and variant shards are built dense in scarce texts, so a per-shard count reads those texts as common and down-weights them.
+- **Rarity table.** The manifest records effective games per unique ability text, counted over the whole raw corpus, keyed on the encoding surface `--vocab-path` selects. A `--corpus` training run reads that table instead of counting the resident shard, and refuses a `--vocab-path` on the other surface: a table built on one surface keys every text differently while looking exactly as valid. Coverage and variant shards are built dense in scarce texts, so a per-shard count reads those texts as common and down-weights them.
 - **Card-disjoint sampling.** At most `--card-disjoint-text-cap` games per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric. Games are the selection unit, so a held-out game is admitted only while every held-out text it carries is under the cap. A held-out game carrying no held-out text is dropped rather than trained on.
 - **Determinism.** The dataset is a function of the raw corpus, the flags, and `--seed`, all three recorded in the manifest along with the source shard names and byte sizes.
-- **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place. The manifest's source list is what says whether it has grown; `--verify` reports the difference and writes nothing.
-- **Reporting.** The run reports, per class and per stratum, the records read, the records kept, and the records the cap dropped; and it reports the number of unique ability texts in each output, which is what says whether curation preserved the tail.
+- **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place: a build clears the three output directories before writing them, so no shard of an earlier build survives into a dataset the manifest does not describe. The manifest's source list is what says whether the corpus has grown; `--verify` reports the difference and writes nothing.
+- **Reporting.** The run reports, per class and per stratum, the records read, the records kept, and the records the cap dropped; the number of unique ability texts in each output, which is what says whether curation preserved the tail; and the delivered class proportions against the requested ones.
+- **Refusals.** A build that would produce a dataset gate 1 cannot be scored on writes nothing and exits non-zero: an empty holdout, reported before the survey runs and naming each `--cards-folder` path tried; and an empty card-disjoint stratum, reported after it.
 
 Flags:
 
@@ -251,6 +252,7 @@ Flags:
 | `--records-dir` | `output/effects/records/` | raw corpus root; discovery recurses |
 | `--output` | `output/effects/corpus/` | curated dataset directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and sidecars, for the holdout rule; repeatable |
+| `--vocab-path` | `models/effects/vocab.txt` | decides the encoding surface the rarity table's text keys are built on |
 | `--holdout-permille` | 20 | holdout share of eligible ability texts |
 | `--holdout-max-carriers` | 8 | cards a text may be on and stay eligible |
 | `--text-cap` | 200 | max training records per unique ability text |
@@ -344,7 +346,7 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 
 `python -m effects train-effect-model` — joint, end to end, from random init.
 
-- **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest already records. Without it a run reads the raw corpus and decides those itself.
+- **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest already records, and a `--vocab-path` whose encoding surface is not the one the dataset's rarity table was keyed on. Without it a run reads the raw corpus and decides those itself.
 - **Batches.** Each batch (`--batch-size` records, stretched by `--grad-accum`) mixes several games, groups each game's records together, and encodes each unique ability text once. Context gradient is live re-encoding by default; `--context-cache` switches to the stop-gradient momentum cache (refreshed every `--cache-refresh` batches) when the 8 GB GPU budget requires it.
 - **Schedule.** An epoch is `--steps-per-epoch` optimizer steps with validation between epochs; `--epochs` bounds the run; early stopping after `--patience` epochs without a new card-disjoint validation best.
 - **Sampling mixture.** Per batch, set by `--kind-mix` and renormalized over the classes present in the corpus:
@@ -520,6 +522,7 @@ python -m effects build-corpus
     [--records-dir DIR]          default output/effects/records/
     [--output DIR]               default output/effects/corpus/
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
+    [--vocab-path PATH]          default models/effects/vocab.txt; sets the encoding surface
     [--holdout-permille N]       default 20
     [--holdout-max-carriers N]   default 8
     [--text-cap N]               default 200

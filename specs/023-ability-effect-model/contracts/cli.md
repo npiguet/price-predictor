@@ -256,8 +256,15 @@ Output layout under `--output`:
   game is dropped rather than trained on.
 - Reports, per class and per stratum: records read, records kept, records the cap dropped, and the
   unique ability texts each output holds.
-- A grown raw corpus is rebuilt whole, never extended in place. `--verify` exits non-zero when the
-  source list has drifted.
+- A grown raw corpus is rebuilt whole, never extended in place: the three output directories are
+  cleared before the write pass. `--verify` exits non-zero when the source list has drifted and writes
+  nothing.
+- Reports the delivered class proportions against the requested ones, and records both in the
+  manifest.
+- Exits non-zero without writing when the holdout is empty (checked before the survey) or when no game
+  is admitted to the card-disjoint stratum (checked after it): either dataset cannot score gate 1.
+- `--text-cap`, `--card-disjoint-text-cap`, `--game-disjoint-games` and `--training-records` refuse a
+  negative value. Zero means no cap, no cap, an empty stratum, and no ceiling respectively.
 
 ## `python -m effects train-effect-model`
 
@@ -265,7 +272,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 
 | Flag | Default |
 |---|---|
-| `--corpus` | none (read `--records-dir`) — a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest records |
+| `--corpus` | none (read `--records-dir`) — a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest records, and a `--vocab-path` whose encoding surface is not the manifest's |
 | `--records-dir` | `output/effects/records/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--variant-scripts` | none (stage four: `output/effects/variant-scripts/`) |

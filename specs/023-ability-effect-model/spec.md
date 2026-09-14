@@ -566,12 +566,16 @@ loss.
   survives curation whole.
 - **FR-139**: `--class-mix` MUST set the on-disk proportions over the eight sampling classes
   (FR-085), defaulting to the training mixture. A class the raw corpus cannot supply at its share MUST
-  be written in full and its shortfall recorded in the manifest, never silently under-filled.
+  be written in full and its shortfall recorded in the manifest, never silently under-filled. What a
+  class can supply MUST be measured against the corpus-wide per-text cap rather than per shard, and
+  the manifest MUST record the proportions actually delivered beside the requested ones.
 - **FR-140**: `--training-records`, when non-zero, MUST subsample the capped result within each class
   to that total. It defaults to zero, meaning no ceiling beyond `--text-cap`.
 - **FR-141**: The manifest MUST record effective games per unique ability text counted over the whole
-  raw corpus. This is the corpus-wide table FR-086 cannot compute; a `--corpus` training run MUST read
-  it rather than counting the resident shard. Coverage and variant shards are built dense in scarce
+  raw corpus, and the encoding surface those text keys were built on. This is the corpus-wide table
+  FR-086 cannot compute; a `--corpus` training run MUST read it rather than counting the resident
+  shard, and MUST refuse a `--vocab-path` whose surface is not the manifest's — every lookup would
+  miss and weighting would fall back to the resident shard with nothing reported. Coverage and variant shards are built dense in scarce
   texts, so a per-shard count reads those texts as common and down-weights exactly the records those
   collectors were run to obtain.
 - **FR-142**: The card-disjoint stratum MUST hold at most `--card-disjoint-text-cap` (default 50)
@@ -585,11 +589,18 @@ loss.
   manifest MUST record all three, plus the source shard names and byte sizes, the per-class and
   per-stratum counts, and the unique-ability-text count of each output.
 - **FR-144**: A raw corpus that has grown MUST be rebuilt whole rather than extended in place, since
-  the split and the rarity table are corpus-wide quantities. `--verify` MUST report the difference
-  between an existing manifest's source list and the corpus on disk, and write nothing.
+  the split and the rarity table are corpus-wide quantities. A build MUST clear the three output
+  directories before writing them, so no shard of an earlier build survives into a dataset the
+  manifest does not describe. `--verify` MUST report the difference between an existing manifest's
+  source list and the corpus on disk, and write nothing.
 - **FR-145**: The run MUST report, per class and per stratum, the records read, the records kept and
-  the records the cap dropped, and the unique ability texts each output holds. The text counts are
-  what say whether curation preserved the tail, which no record count can show.
+  the records the cap dropped, the unique ability texts each output holds, and the delivered class
+  proportions against the requested ones. The text counts are what say whether curation preserved the
+  tail, which no record count can show.
+- **FR-145a**: `build-corpus` MUST refuse to write a dataset gate 1 cannot be scored on, reporting the
+  condition and exiting non-zero. An empty holdout MUST be refused before the survey pass, naming each
+  `--cards-folder` path tried and whether it existed; an empty card-disjoint stratum MUST be refused
+  after it and before anything is written.
 - **FR-146**: `train-effect-model --corpus DIR` MUST read a curated dataset instead of the raw
   corpus, taking the split, the rarity table and both validation strata from its manifest. It MUST
   refuse `--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and
