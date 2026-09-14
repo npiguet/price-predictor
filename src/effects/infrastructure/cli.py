@@ -1201,7 +1201,7 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
 
     split_from = Path(args.split_from) if args.split_from else None
     try:
-        require_split_from(args.variant, split_from)
+        require_split_from(args.variant, split_from, corpus=args.corpus)
     except MissingSplitError as exc:
         logger.error("%s", exc)
         return 2

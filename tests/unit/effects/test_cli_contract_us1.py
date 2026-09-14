@@ -1,7 +1,10 @@
 """Every flag and default of the US1 CLI surface (T039).
 
-Parsed values only, no execution. The defaults are contract: a default that
-drifts changes what a corpus or a checkpoint means, silently and after the fact.
+Parsed values only, no execution, with one deliberate exception
+(``TestVariantAcceptsCorpusAtThePreflightCheck``): a defaulted flag can drift
+silently, but a dispatcher's own pre-flight guard rejecting an argument the
+library function underneath it now accepts is a defect a parse-only test
+cannot see at all, because it never runs the code that guards.
 
 The stage-four rows (``--variant-scripts`` on the trainer's own default,
 ``--surface script``'s vocabulary path) are US4's, and are covered by its own
@@ -117,6 +120,46 @@ class TestTrainEffectModel:
         assert parse(
             "train-effect-model", "--withhold-keyword", "cascade",
         ).withhold_keyword == "cascade"
+
+
+class TestVariantAcceptsCorpusAtThePreflightCheck:
+    """Task 7 fix round 1, Finding 2's CLI-layer gap.
+
+    ``require_split_from`` was fixed to accept ``--corpus`` as an alternative
+    to ``--split-from`` for a non-``full`` variant, but ``cli.py``'s own
+    ``run_train_effect_model`` calls it a second time, earlier, as a
+    pre-flight check that turns ``MissingSplitError`` into a clean exit code
+    before ``train_config_from``/``run`` ever run. That call was not updated
+    alongside the library fix, so ``python -m effects train-effect-model
+    --variant identity --corpus DIR`` was still rejected at the door — a gap
+    the existing ``require_split_from`` unit tests cannot see, because they
+    call the function directly and never touch this second call site.
+
+    The real trainer entry point (``train_effect_model.run``) is
+    monkeypatched out in the accepted case, so getting past the pre-flight
+    check is what these tests prove — not a full training run — and neither
+    case imports torch or reads a real corpus off disk.
+    """
+
+    def test_a_variant_with_corpus_gets_past_the_preflight_check(self, monkeypatch):
+        from effects.infrastructure.cli import run_train_effect_model
+
+        monkeypatch.setattr(
+            "effects.application.train_effect_model.run", lambda config: 0,
+        )
+        args = parse(
+            "train-effect-model", "--variant", "identity",
+            "--corpus", "output/effects/corpus",
+        )
+
+        assert run_train_effect_model(args) == 0
+
+    def test_a_variant_with_neither_route_is_still_refused(self):
+        from effects.infrastructure.cli import run_train_effect_model
+
+        args = parse("train-effect-model", "--variant", "identity")
+
+        assert run_train_effect_model(args) == 2
 
 
 class TestEncodeAbilities:
