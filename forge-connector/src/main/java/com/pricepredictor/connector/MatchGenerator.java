@@ -127,6 +127,22 @@ public class MatchGenerator {
             throw new IllegalArgumentException(
                     "sideBWeight must be >= 1 when sideBIndex is provided, got: " + sideBWeight);
         }
+        if (decksOnly && (sideAIndex == null || sideBIndex == null)) {
+            // Both holes are silent, which is why they are refused rather
+            // than tolerated. With sideBIndex null, rollIsFileSample()
+            // returns false for every match and the whole round plays
+            // ordinary sealed self-play while reporting success. With
+            // sideAIndex null there is no exception anywhere: pickDeckA
+            // builds deck A from a fresh Forge pool of a random eligible
+            // set, so half of every match is a deck the round never asked
+            // for.
+            throw new IllegalArgumentException(
+                    "decksOnly requires a decks index on both sides, got sideAIndex="
+                            + (sideAIndex == null ? "null" : "present")
+                            + ", sideBIndex=" + (sideBIndex == null ? "null" : "present")
+                            + ". A missing index does not fail a decks-only match, it "
+                            + "quietly turns it back into sealed self-play.");
+        }
         this.eligibleSetCodes = List.copyOf(eligibleSetCodes);
         this.deckBuilder = deckBuilder;
         this.gamePlayer = gamePlayer;
@@ -306,7 +322,7 @@ public class MatchGenerator {
             return forgeBuilt(setCode);
         }
         GeneratedDeck sampled = sideAIndex.randomDeck(random);
-        return DeckSelection.fromFile(sampled, sampled.setCode());
+        return DeckSelection.fromFile(sampled, sampled.setCode(), decksOnly);
     }
 
     /**
@@ -335,12 +351,12 @@ public class MatchGenerator {
             GeneratedDeck pick = sideBIndex.randomDeckFromSet(
                     setCode, deckACards, random);
             if (pick != null) {
-                return DeckSelection.fromFile(pick, setCode);
+                return DeckSelection.fromFile(pick, setCode, decksOnly);
             }
             if (decksOnly) {
                 GeneratedDeck mirror = sideBIndex.randomAnyDeckFromSet(setCode, random);
                 if (mirror != null) {
-                    return DeckSelection.fromFile(mirror, setCode);
+                    return DeckSelection.fromFile(mirror, setCode, decksOnly);
                 }
                 // Not reachable from CollectorSupervisor, which always points
                 // both sides at the same file: a decks-only side-B index with
@@ -426,17 +442,71 @@ public class MatchGenerator {
         }
     }
 
-    /** Materialize a list of card names into a Forge {@link Deck}. */
-    static Deck materializeDeck(List<String> cardNames) {
+    /**
+     * Materialize a list of card names into a Forge {@link Deck}.
+     *
+     * @param strict what to do about a name Forge's card database does not
+     *               know — see {@link #reportUnresolved}. True for a
+     *               decks-only round, whose names did not come from Forge.
+     */
+    static Deck materializeDeck(List<String> cardNames, boolean strict) {
         Deck deck = new Deck();
         CardPool main = deck.getOrCreate(DeckSection.Main);
+        List<String> unresolved = new ArrayList<>();
         for (String name : cardNames) {
             PaperCard card = FModel.getMagicDb().getCommonCards().getCard(name);
             if (card != null) {
                 main.add(card);
+            } else {
+                unresolved.add(name);
             }
         }
+        reportUnresolved(unresolved, cardNames.size(), strict);
         return deck;
+    }
+
+    /** At most this many names are listed before the rest are counted. */
+    private static final int UNRESOLVED_NAMES_LISTED = 8;
+
+    /**
+     * Say something about names {@code getCommonCards()} could not resolve.
+     *
+     * <p>Dropping them silently is safe for sealed self-play, whose card
+     * names came out of Forge in the first place — a miss there is a
+     * surprise, and killing a long run over one is worse than logging it.
+     *
+     * <p>It is not safe for a coverage or variant deck. Those names come from
+     * {@code output/cardsfolder/} and from {@code VariantRegistry}, so a name
+     * Forge misses is dropped, the deck materializes as 17 basic lands, a
+     * game plays, a progress line is appended, effect records are written —
+     * and the card the round exists to reach never enters a game, then
+     * retires as "castable but short". For {@code collect-variants} this can
+     * be the whole run: if the staged custom scripts do not land in
+     * {@code getCommonCards()} under exactly the names the decks file spells,
+     * every deck is basics and the command exits 0 having collected nothing.
+     * So under {@code strict} this throws, naming them.
+     */
+    static void reportUnresolved(List<String> unresolved, int requested, boolean strict) {
+        if (unresolved.isEmpty()) {
+            return;
+        }
+        List<String> distinct = new ArrayList<>(new java.util.LinkedHashSet<>(unresolved));
+        String listed = String.join(", ",
+                distinct.subList(0, Math.min(UNRESOLVED_NAMES_LISTED, distinct.size())));
+        if (distinct.size() > UNRESOLVED_NAMES_LISTED) {
+            listed += " (and " + (distinct.size() - UNRESOLVED_NAMES_LISTED) + " more)";
+        }
+        String detail = unresolved.size() + " of " + requested
+                + " card names did not resolve against Forge's card database: " + listed;
+        if (strict) {
+            throw new IllegalStateException(
+                    "decks-only deck cannot be materialized: " + detail
+                            + ". These names come from the converted tree or from "
+                            + "VariantRegistry rather than from Forge, so dropping them "
+                            + "would play a deck of basic lands and collect nothing "
+                            + "while reporting a completed match.");
+        }
+        System.err.println("WARNING: " + detail);
     }
 
     static List<String> toNames(Deck deck) {
@@ -461,11 +531,14 @@ public class MatchGenerator {
          * the deck's recorded {@code label} as the method tag. {@code setCode}
          * is taken explicitly so callers can either propagate the file's
          * own set code (side A) or substitute deck A's set code (side B,
-         * where same-set pairing is enforced upstream).
+         * where same-set pairing is enforced upstream). {@code strict} is the
+         * generator's {@code decksOnly}: a coverage or variant deck's names
+         * did not come from Forge, so one it cannot resolve is a broken round
+         * rather than a curiosity — see {@link #reportUnresolved}.
          */
-        static DeckSelection fromFile(GeneratedDeck deck, String setCode) {
+        static DeckSelection fromFile(GeneratedDeck deck, String setCode, boolean strict) {
             return new DeckSelection(
-                    materializeDeck(deck.cardNames()),
+                    materializeDeck(deck.cardNames(), strict),
                     deck.cardNames(),
                     deck.label(),
                     setCode);

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,5 +164,93 @@ class MatchWorkerMainTest {
         }
 
         assertEquals(5, Files.readAllLines(progressFile).size());
+    }
+
+    // ── generateMatches(): a repeated per-match throw must not hang ────────
+
+    /**
+     * A source that throws for its first {@code failures} calls, then
+     * succeeds, and repeats that cycle {@code cycles} times before throwing
+     * forever. Counts what it was asked for so a test can assert the loop
+     * did not stop early.
+     */
+    private static final class ScriptedSource implements MatchWorkerMain.MatchSource {
+        private final int[] script;
+        private int index = 0;
+        int calls = 0;
+
+        /** {@code script[i]} true means "this call succeeds". */
+        ScriptedSource(int... script) {
+            this.script = script;
+        }
+
+        @Override
+        public MatchGenerationResult next() throws Exception {
+            calls++;
+            boolean succeeds = index < script.length && script[index] == 1;
+            index++;
+            if (!succeeds) {
+                throw new IllegalStateException("scripted failure " + calls);
+            }
+            return twoGameResult();
+        }
+    }
+
+    @Test
+    void aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning() {
+        // The blanket `catch (Exception e)` this replaces swallowed every
+        // error and looped. An error thrown on every match therefore left the
+        // progress file flat: `should_stop` never fired and
+        // ForgeWorkerPool.run() blocked forever, which is the hang the
+        // sentinel-set-code NPE actually produced.
+        ScriptedSource source = new ScriptedSource();  // never succeeds
+        List<MatchGenerationResult> recorded = new ArrayList<>();
+
+        long succeeded = assertTimeoutPreemptively(Duration.ofSeconds(10),
+                () -> MatchWorkerMain.generateMatches(source, recorded::add, 10));
+
+        assertEquals(0, succeeded);
+        assertEquals(10, source.calls, "gave up at a different count than asked");
+        assertTrue(recorded.isEmpty());
+    }
+
+    @Test
+    void aSuccessResetsTheConsecutiveFailureCount() {
+        // The budget is *consecutive* failures with no success between them:
+        // a worker that mostly works must never reach it, however many
+        // one-off errors it has seen over a long run.
+        // Two failures, a success, two failures, a success, then failures
+        // forever -- against a budget of 3.
+        ScriptedSource source = new ScriptedSource(0, 0, 1, 0, 0, 1);
+        List<MatchGenerationResult> recorded = new ArrayList<>();
+
+        long succeeded = assertTimeoutPreemptively(Duration.ofSeconds(10),
+                () -> MatchWorkerMain.generateMatches(source, recorded::add, 3));
+
+        assertEquals(2, succeeded, "the successes in the middle were not counted");
+        assertEquals(2, recorded.size());
+        assertEquals(9, source.calls,
+                "six scripted calls plus the three consecutive failures that "
+                        + "finally exhausted the budget");
+    }
+
+    @Test
+    void aRecordingFailureCountsAgainstTheBudgetToo() {
+        // The writer is as capable of throwing on every match as the
+        // generator is, and the same hang follows.
+        ScriptedSource source = new ScriptedSource(1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
+
+        long succeeded = assertTimeoutPreemptively(Duration.ofSeconds(10),
+                () -> MatchWorkerMain.generateMatches(source, result -> {
+                    throw new IllegalStateException("writer is broken");
+                }, 4));
+
+        assertEquals(0, succeeded);
+        assertEquals(4, source.calls);
+    }
+
+    @Test
+    void theDefaultBudgetIsSmallEnoughToFailFast() {
+        assertEquals(10, MatchWorkerMain.MAX_CONSECUTIVE_MATCH_FAILURES);
     }
 }

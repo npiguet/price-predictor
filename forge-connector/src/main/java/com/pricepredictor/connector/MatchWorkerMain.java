@@ -295,20 +295,81 @@ public class MatchWorkerMain {
                 MyRandom.getRandom(), MatchGenerator.excludedCardsFromProperties(),
                 config.decksOnly());
 
+        long succeeded = generateMatches(
+                generator::generateMatch,
+                result -> recordMatch(result, writer, cardsPlayedWriter, progressWriter),
+                MAX_CONSECUTIVE_MATCH_FAILURES);
+
+        System.err.println("Worker giving up after " + MAX_CONSECUTIVE_MATCH_FAILURES
+                + " consecutive match failures with no success between them ("
+                + succeeded + " matches succeeded in this JVM). Exiting non-zero so "
+                + "the supervisor restarts the slot and the operator sees a failing "
+                + "worker rather than a run that never finishes.");
+        System.err.flush();
+        System.exit(1);
+    }
+
+    /**
+     * How many matches may fail in a row, with no success between them, before
+     * the worker gives up.
+     *
+     * <p>Ten. A worker whose every match throws fails in milliseconds, so ten
+     * attempts cost well under a second and the pool restarts the slot at
+     * once; a worker whose matches mostly succeed never reaches ten, because
+     * any success resets the count — a run of ten failures with not one
+     * success between them is not bad luck, it is a broken configuration.
+     *
+     * <p>The blanket {@code catch (Exception)} this bounds had no such limit:
+     * an error thrown on every match left the progress file flat, so
+     * {@code should_stop} never fired and {@code ForgeWorkerPool.run()}
+     * blocked forever with nothing to show for it. That is not hypothetical —
+     * it is exactly what the sentinel-set-code {@code NullPointerException}
+     * produced before {@code pickDeckB} learned to accept a mirror.
+     */
+    static final int MAX_CONSECUTIVE_MATCH_FAILURES = 10;
+
+    /** One match's worth of work, as {@link MatchGenerator#generateMatch}. */
+    @FunctionalInterface
+    interface MatchSource {
+        MatchGenerationResult next() throws Exception;
+    }
+
+    /**
+     * Generate and record matches until {@code maxConsecutiveFailures} of them
+     * fail in a row with no success between them.
+     *
+     * <p>Factored out of {@link #runForever} so the budget is exercisable
+     * without Forge: the loop's only inputs are a source of matches and a sink
+     * for them, and both halves can throw.
+     *
+     * @return how many matches succeeded before the budget ran out. On a
+     *         healthy worker this never returns — the supervisor kills it.
+     */
+    static long generateMatches(
+            MatchSource source,
+            java.util.function.Consumer<MatchGenerationResult> record,
+            int maxConsecutiveFailures) {
         long count = 0;
+        int consecutiveFailures = 0;
         while (true) {
             try {
-                MatchGenerationResult result = generator.generateMatch();
-                recordMatch(result, writer, cardsPlayedWriter, progressWriter);
+                MatchGenerationResult result = source.next();
+                record.accept(result);
                 count++;
+                consecutiveFailures = 0;
                 if (count % 10 == 0) {
                     System.out.println("Worker: " + count + " matches generated");
                     System.out.flush();
                 }
             } catch (Exception e) {
+                // Non-fatal errors are still tolerated one at a time; fatal
+                // ones (OOM and friends) are Errors and propagate untouched.
                 System.err.println("Error generating match: " + e.getMessage());
                 e.printStackTrace(System.err);
-                // Continue on non-fatal errors; fatal errors (OOM, etc.) will propagate
+                consecutiveFailures++;
+                if (consecutiveFailures >= maxConsecutiveFailures) {
+                    return count;
+                }
             }
         }
     }
