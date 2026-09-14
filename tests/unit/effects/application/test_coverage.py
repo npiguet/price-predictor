@@ -449,23 +449,47 @@ class TestTheRoundPlaysTheComputedDecks:
 
     def test_the_decks_played_are_built_from_the_weights(self, tmp_path):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector
+        from effects.infrastructure import collector_connector, record_io
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
         (cards / "a" / "aa.txt").write_text(
             "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
+        (cards / "a" / "bb.txt").write_text(
+            "name: bb\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
         supervisor = MagicMock()
+
+        # Two candidates, and a recount that plays out over three rounds, so
+        # the test can tell "decks track the weights `run` recomputes each
+        # round" apart from "decks track a fixture that happens to have one
+        # candidate" -- a single-card pool gives `rng.choices` no real choice
+        # to make, and a single round never exercises the recompute at all.
+        # Round 1 sees no qualifying records yet, so "aa" and "bb" still
+        # weigh the same -- uninteresting, and that round's decks are
+        # overwritten before the test ever reads them. Round 2's recount
+        # reports "aa" at 9 of a target of 10 (nearly satisfied) while "bb"
+        # stays at 0, so round 3 computes sharply different weights (aa
+        # shortfall 1, bb shortfall 10). Round 3 is also the *last* round:
+        # its own recount (still "aa": 10, "bb" untouched) satisfies "aa"
+        # and is "bb"'s third consecutive stalled round, so both are done
+        # and `run` returns without overwriting round 3's decks -- which are
+        # exactly the ones this test reads.
+        aa_record = _record([_entity("E1", "aa")], source="E1")
+        recounts = iter([[], [aa_record] * 9, [aa_record] * 10])
+
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}):
+             patch.object(collect_coverage, "consult_castability", return_value={}), \
+             patch.object(record_io, "read_records",
+                          side_effect=lambda directory: next(recounts)):
             collect_coverage.run(
                 collect_coverage.CollectCoverageConfig(
                     effect_records=tmp_path / "records",
                     cards_folders=(cards,),
-                    target_records=1,
-                    decks_per_round=4,
+                    target_records=10,
+                    decks_per_round=150,
                 )
             )
 
@@ -473,4 +497,13 @@ class TestTheRoundPlaysTheComputedDecks:
         rows = decks_file.read_text(encoding="utf-8").splitlines()
         assert rows, "no decks were written"
         assert all(row.split(";")[2].count("|") == 39 for row in rows)
-        assert supervisor.play_round.call_args.kwargs["matches"] == 4
+        assert supervisor.play_round.call_args.kwargs["matches"] == 150
+
+        flat = [name for row in rows for name in row.split(";")[2].split("|")]
+        assert flat.count("bb") > flat.count("aa") * 3, (
+            "bb is 10 records short of target and aa is only 1 short after "
+            "the round-2 recount, so the final round's decks must favour bb "
+            "heavily -- a 'deck whatever is in texts, ignore the weights "
+            "argument' implementation would split them roughly evenly "
+            "instead and fail this assertion"
+        )
