@@ -403,7 +403,12 @@ class TestRunClosesTheSupervisor:
         import effects.application.collect_variants as collect_variants
         import effects.infrastructure.record_io as record_io
 
-        monkeypatch.setattr(record_io, "count_records", lambda path: 1000)
+        # Growing, not constant: `run` now compares the corpus before and
+        # after the round and refuses to report success when it did not move.
+        readings = iter([1000, 1100])
+        monkeypatch.setattr(
+            record_io, "count_records", lambda path: next(readings),
+        )
         monkeypatch.setattr(
             collect_variants, "generate_variants",
             lambda *a, **k: [variant],
@@ -424,6 +429,7 @@ class TestRunClosesTheSupervisor:
         variant = self._variant(tmp_path)
         collect_variants = self._patch_prerequisites(monkeypatch, variant)
         supervisor = MagicMock()
+        supervisor.interrupted = False
         monkeypatch.setattr(
             collector_connector, "CollectorSupervisor",
             MagicMock(return_value=supervisor),
@@ -594,3 +600,116 @@ class TestDeckTextManaCostIsParseable:
         lands = compute_basic_lands([_NonlandText(_deck_text(variant))] * 23)
         assert sum(lands.values()) == 17
         assert set(lands) == {"Plains", "Island", "Swamp", "Mountain", "Forest"}
+
+
+class TestTheRunReportsWhatItCollected:
+    """Final review, IMPORTANT 5: ``run`` returned 0 with no evidence that a
+    single variant record had been written.
+
+    It counted the corpus once, before play, purely to size the budget, and
+    never counted it again -- so a round in which every deck materialized as
+    17 basics (the whole-run case if the staged custom cards do not land in
+    Forge's card database under the exact names the decks file spells) exited
+    0 having collected nothing, and nothing said so.
+    """
+
+    def _fixture(self, tmp_path, monkeypatch, counts):
+        """A run whose only unknown is what ``count_records`` reports.
+
+        ``counts`` is consumed one value per call: the first is the
+        pre-flight corpus size the budget is taken from, the second is the
+        size after the round.
+        """
+        from unittest.mock import MagicMock
+
+        import effects.application.collect_variants as collect_variants
+        import effects.infrastructure.collector_connector as collector_connector
+        import effects.infrastructure.record_io as record_io
+
+        path = tmp_path / "variant-scripts" / "bolt_variant_0.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "Name:Bolt Variant 0\nManaCost:R\nTypes:Instant\n", encoding="utf-8",
+        )
+        variant = GeneratedVariant(
+            name="Bolt Variant 0", source_card="Bolt", path=path,
+            perturbation="numeric",
+        )
+        readings = iter(counts)
+        monkeypatch.setattr(
+            record_io, "count_records", lambda directory: next(readings),
+        )
+        monkeypatch.setattr(
+            collect_variants, "generate_variants", lambda *a, **k: [variant],
+        )
+        sidecar = MagicMock()
+        sidecar.run.return_value = 0
+        monkeypatch.setattr(
+            collect_variants, "VariantSidecarConnector",
+            MagicMock(return_value=sidecar),
+        )
+        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
+        supervisor.interrupted = False
+        monkeypatch.setattr(
+            collector_connector, "CollectorSupervisor",
+            MagicMock(return_value=supervisor),
+        )
+        forge_cards = tmp_path / "forge-cards"
+        forge_cards.mkdir()
+        config = CollectVariantsConfig(
+            effect_records=tmp_path / "records",
+            forge_cards_path=forge_cards,
+            variant_scripts=tmp_path / "variant-scripts",
+        )
+        return collect_variants, config, supervisor
+
+    def test_a_round_that_collected_nothing_fails_loudly(
+        self, tmp_path, monkeypatch, caplog,
+    ):
+        import logging
+
+        collect_variants, config, supervisor = self._fixture(
+            tmp_path, monkeypatch, [1000, 1000],
+        )
+
+        with caplog.at_level(logging.ERROR):
+            code = collect_variants.run(config)
+
+        supervisor.play_round.assert_called_once()
+        assert code != 0, (
+            "a variant run that collected no record at all reported success"
+        )
+        assert any(
+            "no new effect records" in record.getMessage().lower()
+            for record in caplog.records
+        ), "nothing in the log said the round collected nothing"
+
+    def test_a_round_that_collected_records_says_how_many(
+        self, tmp_path, monkeypatch, caplog,
+    ):
+        import logging
+
+        collect_variants, config, _ = self._fixture(
+            tmp_path, monkeypatch, [1000, 1042],
+        )
+
+        with caplog.at_level(logging.INFO):
+            code = collect_variants.run(config)
+
+        assert code == 0
+        assert any(
+            "42" in record.getMessage() for record in caplog.records
+        ), "the run never reported how many records it added"
+
+    def test_an_interrupted_round_does_not_report_success(
+        self, tmp_path, monkeypatch,
+    ):
+        """Final review, IMPORTANT 3, on the variant side: ``ForgeWorkerPool``
+        swallows SIGINT, so a round the operator stopped returns exactly like
+        one that finished."""
+        collect_variants, config, supervisor = self._fixture(
+            tmp_path, monkeypatch, [1000, 1042],
+        )
+        supervisor.interrupted = True
+
+        assert collect_variants.run(config) == 130

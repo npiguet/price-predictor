@@ -194,3 +194,99 @@ class TestPlayRound:
 
         with pytest.raises(ValueError, match="is empty"):
             supervisor.play_round(empty, matches=10)
+
+
+class TestTheRoundShutsTheRealPoolDown:
+    """Final review, CRITICAL 1: ``stop()`` called ``self._pool.shutdown()``,
+    a method ``ForgeWorkerPool`` has never had -- it defines
+    ``request_shutdown()``. ``stop()`` sits in the ``finally`` of both
+    ``collect_coverage.run`` and ``collect_variants.run``, so every round
+    ended in ``AttributeError``: the residue report (FR-051) and the return
+    code were never reached and an overnight run finished in a traceback
+    having reported nothing.
+
+    Every test written before this one mocked either ``CollectorSupervisor``
+    or ``ForgeWorkerPool``, and a ``MagicMock`` answers to any method name at
+    all -- which is exactly how a wrong one survived to a real run. This one
+    constructs the real pool and stubs only ``run()``, the blocking loop that
+    would otherwise spawn JVMs.
+    """
+
+    def _played_round(self, tmp_path) -> CollectorSupervisor:
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        decks = tmp_path / "decks.txt"
+        decks.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
+        with patch.object(ForgeWorkerPool, "run", autospec=True):
+            supervisor.play_round(decks, matches=1)
+        return supervisor
+
+    def test_stop_asks_the_real_pool_to_stop(self, tmp_path):
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = self._played_round(tmp_path)
+
+        with patch.object(
+            ForgeWorkerPool, "request_shutdown", autospec=True,
+        ) as requested:
+            supervisor.stop()
+
+        assert requested.call_count == 1, (
+            "the pool was never asked to shut down; stop() is calling a "
+            "method ForgeWorkerPool does not define"
+        )
+
+    def test_a_second_round_can_follow_a_stopped_one(self, tmp_path):
+        """The coverage loop plays round after round through one supervisor."""
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = self._played_round(tmp_path)
+        supervisor.stop()
+
+        with patch.object(ForgeWorkerPool, "run", autospec=True):
+            supervisor.play_round(tmp_path / "decks.txt", matches=1)
+        supervisor.stop()
+
+
+class TestInterruptIsVisibleToTheCaller:
+    """Final review, IMPORTANT 3: ``ForgeWorkerPool.run()`` installs its own
+    SIGINT handler, sets its own event and never raises, so a round the
+    operator interrupted returns exactly like one that hit its budget. The
+    pool already records the difference in ``interrupted``; nothing in
+    ``effects`` read it, so Ctrl-C degraded to "skip this round, start
+    another".
+
+    Latched rather than delegated live, because ``stop()`` drops the pool and
+    ``collect_variants.run`` asks after its ``finally`` has run.
+    """
+
+    def _round(self, tmp_path, *, interrupted: bool) -> CollectorSupervisor:
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        decks = tmp_path / "decks.txt"
+        decks.write_text("coverage;COVERAGE;Plains\n", encoding="utf-8")
+
+        def _fake_run(pool):
+            pool._interrupted = interrupted
+
+        with patch.object(ForgeWorkerPool, "run", _fake_run):
+            supervisor.play_round(decks, matches=1)
+        return supervisor
+
+    def test_an_uninterrupted_round_reports_no_interrupt(self, tmp_path):
+        assert self._round(tmp_path, interrupted=False).interrupted is False
+
+    def test_an_interrupted_round_reports_it(self, tmp_path):
+        assert self._round(tmp_path, interrupted=True).interrupted is True
+
+    def test_the_interrupt_survives_stop(self, tmp_path):
+        """``collect_variants.run`` asks after its ``finally`` has run."""
+        supervisor = self._round(tmp_path, interrupted=True)
+        supervisor.stop()
+        assert supervisor.interrupted is True
+
+    def test_nothing_played_yet_is_not_an_interrupt(self, tmp_path):
+        supervisor = CollectorSupervisor(worker_count=1, effect_records=tmp_path)
+        assert supervisor.interrupted is False

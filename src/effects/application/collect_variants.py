@@ -297,4 +297,32 @@ def run(config: CollectVariantsConfig) -> int:
         # Closes the worker log files and shuts the pool down (final-fix-3.md
         # item 5) -- see collect_coverage.run's identical finally for why.
         supervisor.stop()
+
+    # Counted again rather than assumed. The pre-flight count above exists
+    # only to size the budget, so without this the command returns 0 with no
+    # evidence that a single variant record was ever written -- and the
+    # whole-run failure is a real one: if the staged scripts do not reach
+    # Forge's card database under the names the decks file spells, every deck
+    # materializes as 17 basics, every game plays, every progress line is
+    # appended, and the run exits 0 having collected nothing.
+    collected = count_records(config.effect_records) - existing
+    if supervisor.interrupted:
+        logger.warning(
+            "Interrupted after %d new effect records; the variant round did "
+            "not finish", collected,
+        )
+        return 130
+    if collected <= 0:
+        logger.error(
+            "The variant round played its matches and added no new effect "
+            "records at all (corpus still %d). The staged scripts most likely "
+            "never reached Forge's card database under the names %s spells, "
+            "so every deck materialized as basics only.",
+            existing, decks_file,
+        )
+        return 1
+    logger.info(
+        "Collected %d new effect records from %d variant scripts "
+        "(budget %d)", collected, len(variants), budget,
+    )
     return 0

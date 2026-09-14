@@ -49,6 +49,7 @@ class CollectorSupervisor:
         self._variant_scripts = variant_scripts
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
+        self._interrupted = False
         self._decks_file: Path | None = None
         # Every worker here runs with effect-record collection on by
         # construction (records-only mode, see start_worker), so any of the
@@ -61,6 +62,23 @@ class CollectorSupervisor:
     @property
     def run_id(self) -> str:
         return self._run_id
+
+    @property
+    def interrupted(self) -> bool:
+        """True when some round ended on Ctrl-C rather than at its budget.
+
+        ``ForgeWorkerPool.run`` installs its own SIGINT handler, sets its own
+        event and returns normally, so an interrupted round is
+        indistinguishable from one that hit its match budget -- and a caller
+        that cannot tell them apart builds a fresh pool for the next round,
+        which turns Ctrl-C into "skip this round, start another". The pool
+        already records the difference; this is what carries it out.
+
+        Latched rather than read from the live pool, because ``stop()`` drops
+        the pool and ``collect_variants.run`` asks after its ``finally`` has
+        already run.
+        """
+        return self._interrupted
 
     def start_worker(self, worker_id: int) -> subprocess.Popen:
         """Spawn one records-only worker.
@@ -134,9 +152,15 @@ class CollectorSupervisor:
         )
         logger.info("Playing %d matches from %d decks", matches, deck_count)
         self._pool.run()
+        self._interrupted = self._interrupted or self._pool.interrupted
 
     def stop(self) -> None:
         self._worker_logs.close_all()
         if self._pool is not None:
-            self._pool.shutdown()
+            # ``request_shutdown``, not ``shutdown``: this call sits in the
+            # ``finally`` of both collectors' ``run``, so a wrong method name
+            # here does not merely fail to stop the pool -- it swallows the
+            # residue report and the return code behind an AttributeError and
+            # ends an overnight run in a traceback having reported nothing.
+            self._pool.request_shutdown()
             self._pool = None

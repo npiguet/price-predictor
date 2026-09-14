@@ -33,7 +33,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -242,18 +242,36 @@ def retire_stalled(
     previous: dict[str, int],
     *,
     no_progress_rounds: int,
+    decked: Collection[str],
 ) -> list[str]:
     """Retire cards that gained no qualifying record this round (FR-050).
 
     Without this the run never ends: some cards Forge's AI cannot cast at all,
     and a round that makes no progress on them will make none on the next.
+
+    ``decked`` is the names this round's decks actually held, and only those
+    can stall: a card no deck contained was never attempted, so counting the
+    round against it retires a card the run has not yet tried once. That is
+    not a rare edge — at the defaults a round draws 500 x 23 slots against
+    33,680 candidates, so a given card sits out a whole round with probability
+    about 0.71 and roughly a third of the corpus would retire after three
+    rounds having never been in a game. The run still terminates, because a
+    live card keeps its weight and is drawn eventually; it just stops
+    terminating with almost nothing collected and a residue list the size of
+    the corpus.
+
+    Required rather than defaulted to "everything": a default would restore
+    the exact silent behaviour this parameter exists to remove.
     """
+    decked_names = frozenset(decked)
     retired: list[str] = []
     for name, card in coverage.items():
         if card.retired:
             continue
         if card.records > previous.get(name, 0):
             card.rounds_without_progress = 0
+            continue
+        if name not in decked_names:
             continue
         card.rounds_without_progress += 1
         if card.rounds_without_progress >= no_progress_rounds:
@@ -348,14 +366,17 @@ def load_held_out(split_from: Path | None) -> frozenset[str]:
 
 
 def build_coverage_units(
-    cards_folder: Path, held_out: frozenset[str],
+    card_files: dict[str, str], held_out: frozenset[str],
 ) -> dict[str, CardCoverage]:
-    """Every deckable card, minus the holdout."""
-    from effects.application.train_effect_model import load_card_files
+    """Every deckable card, minus the holdout.
 
+    Takes the already-loaded ``name -> script`` mapping rather than the folder,
+    because ``run`` needs the same mapping to read each card's converted text
+    and ``load_card_files`` is a full rglob plus a read of some 33,000 files.
+    """
     return {
         name: CardCoverage(name=name)
-        for name in load_card_files(cards_folder)
+        for name in card_files
         if name not in held_out
     }
 
@@ -394,7 +415,10 @@ def run(config: CollectCoverageConfig) -> int:
     held_out = load_exclusions(
         split_from=config.split_from, exclude_cards=config.exclude_cards,
     )
-    coverage = build_coverage_units(cards_folder, held_out)
+    from effects.application.train_effect_model import load_card_files
+
+    card_files = load_card_files(cards_folder)
+    coverage = build_coverage_units(card_files, held_out)
     if not coverage:
         logger.error("No deckable cards under %s", cards_folder)
         return 1
@@ -408,9 +432,6 @@ def run(config: CollectCoverageConfig) -> int:
         if name in coverage:
             coverage[name].verdict = verdict
 
-    from effects.application.train_effect_model import load_card_files
-
-    card_files = load_card_files(cards_folder)
     texts = {
         name: (cards_folder.parent / script).read_text(encoding="utf-8")
         for name, script in card_files.items()
@@ -423,6 +444,7 @@ def run(config: CollectCoverageConfig) -> int:
         worker_count=config.workers, effect_records=config.effect_records,
         caps=config.caps,
     )
+    interrupted = False
     try:
         round_number = 0
         while not is_complete(coverage, config.target_records):
@@ -445,6 +467,7 @@ def run(config: CollectCoverageConfig) -> int:
                 decks, decks_file,
                 label="coverage", set_code=COVERAGE_SET_CODE,
             )
+            decked = {name for deck in decks for name in deck}
             supervisor.play_round(decks_file, matches=config.decks_per_round)
             for name, count in count_coverage(
                 read_records(config.effect_records)
@@ -453,10 +476,21 @@ def run(config: CollectCoverageConfig) -> int:
                     coverage[name].records = count
             retired = retire_stalled(
                 coverage, previous, no_progress_rounds=config.no_progress_rounds,
+                decked=decked,
             )
             logger.info("%s", round_summary(
                 round_number, coverage, config.target_records, retired,
             ))
+            if supervisor.interrupted:
+                # ForgeWorkerPool swallows SIGINT -- it sets its own event and
+                # returns normally -- so without this the loop builds a fresh
+                # pool and Ctrl-C means "skip this round, start another".
+                interrupted = True
+                logger.warning(
+                    "Interrupted after round %d; stopping instead of starting "
+                    "another round", round_number,
+                )
+                break
     finally:
         # Closes the worker log files and shuts the pool down (final-fix-3.md
         # item 5). Without this, the only latched effect-record failure
@@ -468,7 +502,11 @@ def run(config: CollectCoverageConfig) -> int:
 
     report = residues(coverage, config.target_records)
     logger.info("%s", report.render(config.target_records))
-    return 0
+    # The residues are printed either way -- what was collected before the
+    # interrupt is still what an operator needs to see -- but an interrupted
+    # run did not finish, and reporting success would be the same lie the
+    # swallowed SIGINT already told.
+    return 130 if interrupted else 0
 
 
 def consult_castability(

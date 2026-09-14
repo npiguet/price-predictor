@@ -163,22 +163,30 @@ class TestDeckWeighting:
 class TestRetirement:
     def test_a_card_that_gained_a_record_resets_its_counter(self):
         coverage = {"a": CardCoverage("a", records=5, rounds_without_progress=2)}
-        retire_stalled(coverage, {"a": 3}, no_progress_rounds=3)
+        retire_stalled(
+            coverage, {"a": 3}, no_progress_rounds=3, decked={"a"},
+        )
         assert coverage["a"].rounds_without_progress == 0
         assert not coverage["a"].retired
 
     def test_a_stalled_card_retires_after_the_configured_rounds(self):
         coverage = {"a": CardCoverage("a", records=0)}
         for _ in range(DEFAULT_NO_PROGRESS_ROUNDS - 1):
-            retire_stalled(coverage, {"a": 0}, no_progress_rounds=3)
+            retire_stalled(
+                coverage, {"a": 0}, no_progress_rounds=3, decked={"a"},
+            )
             assert not coverage["a"].retired
-        retired = retire_stalled(coverage, {"a": 0}, no_progress_rounds=3)
+        retired = retire_stalled(
+            coverage, {"a": 0}, no_progress_rounds=3, decked={"a"},
+        )
         assert coverage["a"].retired
         assert retired == ["a"]
 
     def test_an_already_retired_card_is_not_retired_twice(self):
         coverage = {"a": CardCoverage("a", retired=True)}
-        assert retire_stalled(coverage, {"a": 0}, no_progress_rounds=1) == []
+        assert retire_stalled(
+            coverage, {"a": 0}, no_progress_rounds=1, decked={"a"},
+        ) == []
 
     def test_the_run_terminates_once_every_card_is_done(self):
         coverage = {
@@ -267,9 +275,16 @@ class TestCoverageDeckBuilding:
             rng=random.Random(1),
         )
 
+        basics = {
+            "Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
+        }
         assert len(decks) == 3
         for deck in decks:
             assert len(deck) == 40
+            assert sum(1 for card in deck if card not in basics) == 23, (
+                "a coverage deck is 23 nonlands plus basics; asserting only "
+                "the total lets a 40-basic deck through"
+            )
 
     def test_a_heavier_card_appears_more_often(self):
         import random
@@ -309,13 +324,16 @@ class TestHeldOutExclusion:
 
     def test_held_out_cards_are_absent_from_the_coverage_unit(self, tmp_path):
         from effects.application.collect_coverage import build_coverage_units
+        from effects.application.train_effect_model import load_card_files
 
         (tmp_path / "s").mkdir()
         for stem, name in (("serra_angel", "Serra Angel"), ("shock", "Shock")):
             (tmp_path / "s" / f"{stem}.txt").write_text(
                 f"name: {name}\ntypes: creature\n", encoding="utf-8",
             )
-        units = build_coverage_units(tmp_path, frozenset({"Shock"}))
+        units = build_coverage_units(
+            load_card_files(tmp_path), frozenset({"Shock"}),
+        )
         assert set(units) == {"Serra Angel"}
 
 
@@ -460,6 +478,7 @@ class TestTheRoundPlaysTheComputedDecks:
             "name: bb\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
         )
         supervisor = MagicMock()
+        supervisor.interrupted = False
 
         # Two candidates, and a recount that plays out over three rounds, so
         # the test can tell "decks track the weights `run` recomputes each
@@ -507,3 +526,190 @@ class TestTheRoundPlaysTheComputedDecks:
             "argument' implementation would split them roughly evenly "
             "instead and fail this assertion"
         )
+
+
+class TestARoundEndsInItsReport:
+    """Final review, CRITICAL 1, at the level the operator sees.
+
+    ``run``'s ``finally`` calls ``CollectorSupervisor.stop()``, which called a
+    pool method that does not exist, so every round ended in
+    ``AttributeError``: ``residues(...).render(...)`` (FR-051) never printed
+    and ``run`` never returned its code. Every other test in this file mocks
+    the supervisor, and a ``MagicMock`` answers to any method name at all --
+    so none of them could see it. This one mocks neither the supervisor nor
+    the pool, stubbing only ``ForgeWorkerPool.run``, the blocking loop that
+    would otherwise spawn real JVMs.
+    """
+
+    def _one_card_config(self, tmp_path, **overrides):
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "aa.txt").write_text(
+            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        (tmp_path / "records").mkdir()
+        return CollectCoverageConfig(
+            effect_records=tmp_path / "records",
+            cards_folders=(cards,),
+            target_records=1,
+            decks_per_round=2,
+            no_progress_rounds=1,
+            workers=1,
+            **overrides,
+        )
+
+    def test_the_run_finishes_reports_and_returns_zero(self, tmp_path, caplog):
+        import logging
+
+        from effects.application import collect_coverage
+        from price_predictor.infrastructure.forge_jvm import ForgeWorkerPool
+
+        config = self._one_card_config(tmp_path)
+
+        with patch.object(ForgeWorkerPool, "run", autospec=True) as pool_run, \
+             patch.object(collect_coverage, "consult_castability", return_value={}), \
+             caplog.at_level(logging.INFO):
+            code = collect_coverage.run(config)
+
+        assert pool_run.called, "no round was ever played"
+        assert code == 0
+        assert any("Residues:" in record.getMessage() for record in caplog.records), (
+            "the run ended without printing the two residues FR-051 requires"
+        )
+
+
+class TestCtrlCEndsTheRun:
+    """Final review, IMPORTANT 3: nothing in ``effects`` read
+    ``ForgeWorkerPool.interrupted``, so ``run`` built a fresh pool for the
+    next round and Ctrl-C degraded to "skip this round, start another".
+
+    ``spec=CollectorSupervisor`` rather than a bare ``MagicMock`` on purpose:
+    a bare one answers to ``interrupted`` whether or not the supervisor
+    exposes it, which is the same blindness that let CRITICAL 1 ship.
+    """
+
+    def _two_round_config(self, tmp_path):
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        (cards / "aa.txt").write_text(
+            "name: aa\nmana cost: {G}\ntypes: creature\n", encoding="utf-8",
+        )
+        return CollectCoverageConfig(
+            effect_records=tmp_path / "records",
+            cards_folders=(cards,),
+            target_records=50,
+            decks_per_round=2,
+            no_progress_rounds=5,
+        )
+
+    def _run_with(self, tmp_path, *, interrupted: bool):
+        from effects.application import collect_coverage
+        from effects.infrastructure import collector_connector
+
+        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
+        supervisor.interrupted = interrupted
+
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=supervisor), \
+             patch.object(collect_coverage, "consult_castability", return_value={}):
+            code = collect_coverage.run(self._two_round_config(tmp_path))
+        return code, supervisor
+
+    def test_an_interrupted_round_is_the_last_round(self, tmp_path):
+        code, supervisor = self._run_with(tmp_path, interrupted=True)
+
+        assert supervisor.play_round.call_count == 1, (
+            "a second round was started after the operator interrupted the "
+            "first one"
+        )
+        assert code == 130, "an interrupted run must not report success"
+
+    def test_an_uninterrupted_run_plays_every_round_it_needs(self, tmp_path):
+        """The control: five stalled rounds, then retirement ends the run."""
+        code, supervisor = self._run_with(tmp_path, interrupted=False)
+
+        assert supervisor.play_round.call_count == 5
+        assert code == 0
+
+
+class TestOnlyDeckedCardsCountAStalledRound:
+    """Final review, IMPORTANT 4: ``retire_stalled`` counted a stalled round
+    against every card that gained no qualifying record, including cards no
+    deck that round ever held.
+
+    At the defaults -- 33,680 cards against 500 decks of 23 nonland slots --
+    a given card is left out of a whole round with probability about 0.71, so
+    roughly 36% of the corpus retired after three rounds without a single
+    attempt. FR-050's letter was met (the run terminates) but it terminated
+    having collected almost nothing while reporting a huge "castable but
+    short" residue.
+    """
+
+    def test_a_card_no_deck_held_does_not_count_a_stalled_round(self):
+        coverage = {"undecked": CardCoverage("undecked", records=0)}
+
+        for _ in range(5):
+            retire_stalled(
+                coverage, {"undecked": 0}, no_progress_rounds=1,
+                decked=frozenset(),
+            )
+
+        assert coverage["undecked"].rounds_without_progress == 0
+        assert not coverage["undecked"].retired, (
+            "a card that was never put in a deck retired without one attempt"
+        )
+
+    def test_the_round_reports_exactly_the_names_it_decked(self, tmp_path):
+        """``run`` must hand ``retire_stalled`` the round's own decks, not the
+        whole coverage unit -- otherwise the guard above never fires."""
+        from effects.application import collect_coverage
+        from effects.infrastructure import collector_connector
+
+        # Sixty candidates against a single deck of 23 nonland slots: most of
+        # the unit cannot be in the round at all, which is the real shape of
+        # the finding (33,680 cards against 500 x 23 slots).
+        names = [f"c{index:02d}" for index in range(60)]
+        cards = tmp_path / "cardsfolder"
+        cards.mkdir()
+        for name in names:
+            (cards / f"{name}.txt").write_text(
+                f"name: {name}\nmana cost: {{G}}\ntypes: creature\n",
+                encoding="utf-8",
+            )
+        supervisor = MagicMock(spec=collector_connector.CollectorSupervisor)
+        supervisor.interrupted = False
+        seen = []
+        real = collect_coverage.retire_stalled
+
+        def _spy(coverage, previous, *, no_progress_rounds, decked):
+            seen.append(frozenset(decked))
+            return real(
+                coverage, previous, no_progress_rounds=no_progress_rounds,
+                decked=decked,
+            )
+
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=supervisor), \
+             patch.object(collect_coverage, "consult_castability", return_value={}), \
+             patch.object(collect_coverage, "retire_stalled", _spy):
+            collect_coverage.run(CollectCoverageConfig(
+                effect_records=tmp_path / "records",
+                cards_folders=(cards,),
+                target_records=1,
+                decks_per_round=1,
+                no_progress_rounds=1,
+            ))
+
+        decks_file = supervisor.play_round.call_args.args[0]
+        decked_names = {
+            name
+            for row in decks_file.read_text(encoding="utf-8").splitlines()
+            for name in row.split(";")[2].split("|")
+        }
+        assert seen, "retire_stalled was never called"
+        assert len(seen[0] & set(names)) < len(names), (
+            "the whole coverage unit was reported as decked; one deck of 23 "
+            "slots cannot have held all 60 candidates"
+        )
+        # The last round is the one whose decks file survived the loop.
+        assert seen[-1] == decked_names
