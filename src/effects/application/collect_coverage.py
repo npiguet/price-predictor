@@ -144,6 +144,48 @@ def count_coverage(records: Iterable) -> Counter[str]:
     return counts
 
 
+class CoverageCounter:
+    """Counts each shard once across a whole run, not once per round.
+
+    The recount used to re-read every shard under ``--effect-records`` after
+    every round. On a 1,502-shard corpus that is about 66 minutes against the
+    ~35 minutes a round spends playing, so most of a coverage run's wall clock
+    went to re-deriving numbers that had not changed.
+
+    Counting incrementally is sound because a shard is final once counted. A
+    round's workers are all terminated before ``play_round`` returns —
+    ``ForgeWorkerPool._supervisor_loop`` calls ``_terminate_all`` when the stop
+    condition fires — and a shard file is never reopened afterwards, because
+    its name carries the worker's JVM lifetime and each round's workers are new
+    JVMs. So a shard this has read cannot gain records later.
+
+    The consequence for callers: ``CardCoverage.records`` is now accumulated
+    rather than assigned, so nothing else may overwrite it.
+    """
+
+    def __init__(self) -> None:
+        self._counted: set[Path] = set()
+
+    def update(
+        self, coverage: dict[str, CardCoverage], records_dir: Path,
+    ) -> int:
+        """Add the counts of shards not yet read. Returns how many it read."""
+        from effects.infrastructure.record_io import iter_shards, read_shard
+
+        fresh = [
+            shard for shard in iter_shards(Path(records_dir))
+            if shard not in self._counted
+        ]
+        for shard in fresh:
+            for record in read_shard(shard):
+                for name in qualifying_cards(record):
+                    card = coverage.get(name)
+                    if card is not None:
+                        card.records += 1
+            self._counted.add(shard)
+        return len(fresh)
+
+
 def deck_weights(
     coverage: dict[str, CardCoverage], target: int,
 ) -> dict[str, float]:
@@ -402,7 +444,6 @@ def run(config: CollectCoverageConfig) -> int:
     """Play rounds until every card is satisfied or retired."""
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
-    from effects.infrastructure.record_io import read_records
 
     cards_folder = config.coverage_folder()
     if not cards_folder.is_dir():
@@ -425,6 +466,18 @@ def run(config: CollectCoverageConfig) -> int:
     logger.info(
         "Coverage unit: %d cards (%d held out), target %d records each",
         len(coverage), len(held_out), config.target_records,
+    )
+
+    # The existing corpus is counted once, here, rather than again after every
+    # round. On 1,502 shards that is the difference between paying ~66 minutes
+    # once and paying it per round.
+    counter = CoverageCounter()
+    seeded = counter.update(coverage, Path(config.effect_records))
+    logger.info(
+        "Counted %d existing shard(s); %d of %d cards already at target",
+        seeded,
+        sum(1 for c in coverage.values() if c.satisfied(config.target_records)),
+        len(coverage),
     )
 
     verdicts = consult_castability(sorted(coverage), cards_folder)
@@ -469,11 +522,8 @@ def run(config: CollectCoverageConfig) -> int:
             )
             decked = {name for deck in decks for name in deck}
             supervisor.play_round(decks_file, matches=config.decks_per_round)
-            for name, count in count_coverage(
-                read_records(config.effect_records)
-            ).items():
-                if name in coverage:
-                    coverage[name].records = count
+            read = counter.update(coverage, Path(config.effect_records))
+            logger.info("Counted %d new shard(s) from round %d", read, round_number)
             retired = retire_stalled(
                 coverage, previous, no_progress_rounds=config.no_progress_rounds,
                 decked=decked,

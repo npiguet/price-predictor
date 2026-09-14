@@ -7,6 +7,7 @@ no progress retires, which is the only thing that makes the run terminate.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -467,7 +468,7 @@ class TestTheRoundPlaysTheComputedDecks:
 
     def test_the_decks_played_are_built_from_the_weights(self, tmp_path):
         from effects.application import collect_coverage
-        from effects.infrastructure import collector_connector, record_io
+        from effects.infrastructure import collector_connector
 
         cards = tmp_path / "cardsfolder"
         (cards / "a").mkdir(parents=True)
@@ -495,14 +496,31 @@ class TestTheRoundPlaysTheComputedDecks:
         # and is "bb"'s third consecutive stalled round, so both are done
         # and `run` returns without overwriting round 3's decks -- which are
         # exactly the ones this test reads.
-        aa_record = _record([_entity("E1", "aa")], source="E1")
-        recounts = iter([[], [aa_record] * 9, [aa_record] * 10])
+        # Each round's play writes the shard that round produced, which is how
+        # the real counter learns anything: it reads shards it has not seen and
+        # adds to a running total. Round 1 produces nothing, round 2 nine "aa"
+        # records, round 3 the tenth.
+        from effects.infrastructure.record_io import format_record_line
+
+        records_dir = tmp_path / "records"
+        records_dir.mkdir()
+        produced = iter([0, 9, 1])
+
+        def _play(_decks_file, *, matches):
+            count = next(produced, 0)
+            if not count:
+                return
+            line = format_record_line(
+                _record([_entity("E1", "aa")], source="E1")
+            )
+            shard = records_dir / f"run.0-{matches}{count}.jsonl"
+            shard.write_text("\n".join([line] * count) + "\n", encoding="utf-8")
+
+        supervisor.play_round.side_effect = _play
 
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=supervisor), \
-             patch.object(collect_coverage, "consult_castability", return_value={}), \
-             patch.object(record_io, "read_records",
-                          side_effect=lambda directory: next(recounts)):
+             patch.object(collect_coverage, "consult_castability", return_value={}):
             collect_coverage.run(
                 collect_coverage.CollectCoverageConfig(
                     effect_records=tmp_path / "records",
@@ -713,3 +731,83 @@ class TestOnlyDeckedCardsCountAStalledRound:
         )
         # The last round is the one whose decks file survived the loop.
         assert seen[-1] == decked_names
+
+
+class TestIncrementalCounting:
+    """Counting each shard once instead of the whole corpus every round.
+
+    The recount re-read every shard under `--effect-records` after each round.
+    Against a corpus of 1,502 shards that measured ~66 minutes per round,
+    against ~35 minutes of actual play — so a coverage run spent most of its
+    wall clock re-deriving numbers that had not changed.
+
+    Safe because a round's workers are all terminated before `play_round`
+    returns (`ForgeWorkerPool._supervisor_loop` calls `_terminate_all` when the
+    stop condition fires), and because a shard file is never reopened: its name
+    carries the worker's JVM lifetime, so each round's workers write new files.
+    A counted shard is therefore final.
+    """
+
+    def _shard(self, directory: Path, name: str, cards: list[str]) -> Path:
+        """One shard whose every record qualifies for the named card."""
+        from effects.infrastructure.record_io import format_record_line
+
+        directory.mkdir(parents=True, exist_ok=True)
+        lines = [
+            format_record_line(
+                _record([_entity(f"E-{card}", card)], source=f"E-{card}")
+            )
+            for card in cards
+        ]
+        path = directory / f"{name}.jsonl"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return path
+
+    def test_the_first_pass_counts_every_shard(self, tmp_path) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shard(tmp_path, "a.0-x", ["alpha", "beta"])
+        self._shard(tmp_path, "a.0-y", ["alpha"])
+        coverage = {n: CardCoverage(n) for n in ("alpha", "beta")}
+
+        CoverageCounter().update(coverage, tmp_path)
+
+        assert coverage["alpha"].records == 2
+        assert coverage["beta"].records == 1
+
+    def test_a_second_pass_over_the_same_shards_adds_nothing(self, tmp_path) -> None:
+        """The bug this replaces: every round re-counted the whole corpus."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shard(tmp_path, "a.0-x", ["alpha"])
+        coverage = {"alpha": CardCoverage("alpha")}
+        counter = CoverageCounter()
+
+        counter.update(coverage, tmp_path)
+        counter.update(coverage, tmp_path)
+
+        assert coverage["alpha"].records == 1
+
+    def test_a_new_shard_adds_to_the_running_total(self, tmp_path) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shard(tmp_path, "a.0-x", ["alpha"])
+        coverage = {"alpha": CardCoverage("alpha")}
+        counter = CoverageCounter()
+        counter.update(coverage, tmp_path)
+
+        self._shard(tmp_path, "a.0-y", ["alpha", "alpha"])
+        counter.update(coverage, tmp_path)
+
+        assert coverage["alpha"].records == 3
+
+    def test_it_reports_how_many_shards_it_read(self, tmp_path) -> None:
+        """The operator needs to see the round cost fall, not infer it."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shard(tmp_path, "a.0-x", ["alpha"])
+        counter = CoverageCounter()
+        coverage = {"alpha": CardCoverage("alpha")}
+
+        assert counter.update(coverage, tmp_path) == 1
+        assert counter.update(coverage, tmp_path) == 0
