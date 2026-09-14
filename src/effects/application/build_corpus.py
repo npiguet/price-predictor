@@ -273,3 +273,156 @@ def run_survey(
             if index % progress_every == 0:
                 logger.info("Surveyed %d of %d shard(s)", index, len(names))
     return merge_surveys(parts)
+
+
+@dataclass(frozen=True, slots=True)
+class BuildCorpusConfig:
+    """The `build-corpus` flags (root spec § Curated corpus)."""
+
+    records_dir: Path
+    output: Path = Path("output/effects/corpus")
+    cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    vocab_path: str = "models/effects/vocab.txt"
+    holdout_permille: int = 20
+    holdout_max_carriers: int = 8
+    text_cap: int = 200
+    class_mix: dict[str, float] | None = None
+    training_records: int = 0
+    game_disjoint_target: int = 1000
+    card_disjoint_text_cap: int = 50
+    seed: int = 42
+    workers: int | None = None
+    verify: bool = False
+
+    def mix(self) -> dict[str, float]:
+        from effects.application.train_effect_model import DEFAULT_KIND_MIX
+
+        return dict(self.class_mix or DEFAULT_KIND_MIX)
+
+
+@dataclass(frozen=True, slots=True)
+class Decisions:
+    """Everything the write pass needs, and nothing it has to look up.
+
+    ``thresholds`` is keyed by rendered provenance key rather than by ability
+    text, so a worker applies it without building a ``SidecarCache``; the fold
+    from key to text happened here, once.
+    """
+
+    thresholds: dict[str, int | None]
+    class_targets: dict[str, int]
+    card_disjoint: frozenset[str]
+    game_disjoint: frozenset[str]
+    rarity: dict[str, int]
+    shortfall: dict[str, int]
+    capped_class_records: dict[str, int]
+    key_text: dict[str, str]
+
+
+def _text_of_rendered_key(rendered: str, sidecars, surface: str) -> str | None:
+    """The text a survey key folds to, through the trainer's own definition."""
+    from effects.application.train_effect_model import text_for_key
+
+    for key in parse_ability_key(rendered):
+        text = text_for_key(key, sidecars, surface)
+        if text is not None:
+            return text
+    return None
+
+
+def _card_disjoint_games(
+    survey: Survey, key_text: dict[str, str], *, cap: int, seed: int,
+) -> frozenset[str]:
+    """Held-out games admitted while some held-out text is under its cap.
+
+    Games rather than records (FR-142, FR-136): a stratum built by dropping
+    records inside a game would separate a probe from the combat record its
+    ``mirror_of`` names, and the evaluator would score that keyword on nothing
+    while reporting it as merely under-sampled.
+
+    Walked in a seeded order so two builds of one corpus admit the same games,
+    and greedy so a text carried by few games is never crowded out by one
+    carried by thousands.
+    """
+    import random
+
+    text_games: dict[str, set[str]] = defaultdict(set)
+    for key, games in survey.held_out_text_games.items():
+        text = key_text.get(key, key)
+        text_games[text] |= games
+
+    order = sorted(survey.held_out_games)
+    random.Random(seed).shuffle(order)
+    games_text: dict[str, set[str]] = defaultdict(set)
+    for text, games in text_games.items():
+        for game in games:
+            games_text[game].add(text)
+
+    taken: Counter[str] = Counter()
+    admitted: set[str] = set()
+    for game in order:
+        texts = games_text.get(game, set())
+        if not texts:
+            continue
+        if any(taken[text] < cap for text in texts):
+            admitted.add(game)
+            for text in texts:
+                taken[text] += 1
+    return frozenset(admitted)
+
+
+def decide(survey: Survey, *, sidecars, surface: str, config) -> Decisions:
+    """Fold keys to texts, cap, split the games, and set the class targets."""
+    import random
+
+    from effects.domain.corpus_curation import class_targets
+
+    key_text: dict[str, str] = {}
+    text_games: dict[str, set[int]] = defaultdict(set)
+    text_heaps: dict[str, CapHeap] = {}
+    for key in survey.key_records:
+        text = _text_of_rendered_key(key, sidecars, surface)
+        if text is None:
+            # No sidecar can read this key, so it is not a text and cannot be
+            # capped against one. Its records stay, uncapped: dropping them
+            # would remove a card the converted corpus never held rather than
+            # trimming a head.
+            continue
+        key_text[key] = text
+        text_games[text] |= survey.key_games.get(key, set())
+        heap = text_heaps.get(text)
+        if heap is None:
+            # The cap the *survey's* per-key heaps were built with, not
+            # config.text_cap: CapHeap.merge raises on a cap mismatch, and the
+            # two are only guaranteed equal when this decide() call is paired
+            # with the survey it was run against. Reading it off the data
+            # itself, rather than off a second config the caller must keep in
+            # sync, is what keeps that pairing from being an unchecked
+            # invariant.
+            heap = text_heaps[text] = CapHeap(survey.key_heaps[key].cap)
+        heap.merge(survey.key_heaps[key])
+
+    rarity = {text: len(games) for text, games in text_games.items()}
+    thresholds = {key: text_heaps[text].threshold() for key, text in key_text.items()}
+
+    card_disjoint = _card_disjoint_games(
+        survey, key_text, cap=config.card_disjoint_text_cap, seed=config.seed,
+    )
+    remaining = sorted(survey.games - survey.held_out_games)
+    take = min(config.game_disjoint_target, len(remaining))
+    game_disjoint = frozenset(random.Random(config.seed).sample(remaining, take))
+
+    capped = dict(survey.class_capped_records)
+    targets, shortfall = class_targets(
+        capped, config.mix(), ceiling=config.training_records,
+    )
+    return Decisions(
+        thresholds=thresholds,
+        class_targets=targets,
+        card_disjoint=card_disjoint,
+        game_disjoint=game_disjoint,
+        rarity=rarity,
+        shortfall=shortfall,
+        capped_class_records=capped,
+        key_text=key_text,
+    )
