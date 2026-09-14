@@ -30,7 +30,7 @@ import logging
 import random
 import time
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 
@@ -53,6 +53,7 @@ from effects.application.train_effect_model import (
     HeldOutCards,
     SplitAccumulator,
     TrainEffectModelConfig,
+    ability_text_of,
     check_holdout,
     class_counts,
     epoch_shards,
@@ -122,11 +123,17 @@ class TrainingLoop:
         inherited: CorpusSplit | None,
         validation_shards: Sequence[Path],
         training_shards: Sequence[Path],
+        rarity: Mapping[str, int] | None = None,
     ) -> None:
         self.config = config
         self.held_out = held_out
         self.validation_shards = list(validation_shards)
         self.training_shards = list(training_shards)
+        #: A curated dataset's corpus-wide ``text -> games`` table (FR-146),
+        #: threaded into every ``sample_weights`` call this run makes. ``None``
+        #: for an ordinary ``--records-dir`` run, which weights by the resident
+        #: shard's own counts instead.
+        self.rarity = rarity
         self.accumulator = (
             SplitAccumulator.inheriting(inherited) if inherited is not None
             else SplitAccumulator(held_out_cards=tuple(sorted(held_out.names)))
@@ -283,20 +290,33 @@ class TrainingLoop:
         )
         return loss
 
-    def _pools(self, records: list) -> tuple[dict, dict]:
+    def _pools(self, records: list, sidecars: SidecarCache) -> tuple[dict, dict]:
         """Sampling pools and rarity weights for one shard's training records.
 
-        Rarity weighting counts the games of the shard in hand rather than the
-        games of the whole corpus, which is the one thing reading shard by shard
-        costs. An ability that is rare corpus-wide but appears in several of this
-        shard's games is under-weighted while this shard is resident. Abilities
-        that are common are common in every shard, so they are unaffected.
+        Keyed by the acting ability's text (:func:`ability_text_of`), not by
+        ``record_id``: a record id is unique per record, so keying on it would
+        give ``effective_games`` a count of exactly 1 for every key and every
+        record the same weight, silently disabling rarity weighting outright.
+
+        With a curated dataset's rarity table (``self.rarity``), weighting
+        reads it text by text, falling back to this shard's own count for a
+        text the table does not name — a shard collected after the table was
+        built still weights sanely rather than at zero. Without one, weighting
+        counts the games of the shard in hand rather than the games of the
+        whole corpus, which is the one thing reading shard by shard costs: an
+        ability that is rare corpus-wide but appears in several of this
+        shard's games is under-weighted while this shard is resident.
+        Abilities that are common are common in every shard, so they are
+        unaffected either way.
         """
         pools: dict[str, list] = defaultdict(list)
         for record in records:
             pools[sampling_class(record)].append(record)
         weights = {
-            name: sample_weights(group, lambda r: r.record_id)
+            name: sample_weights(
+                group, lambda r: ability_text_of(r, sidecars, self.surface),
+                rarity=self.rarity,
+            )
             for name, group in pools.items()
         }
         return dict(pools), weights
@@ -498,7 +518,7 @@ class TrainingLoop:
             )
             return step, taken
 
-        pools, weights = self._pools(training)
+        pools, weights = self._pools(training, sidecars)
         for _ in range(budget):
             for group in optimizer.param_groups:
                 group["lr"] = learning_rate_at(step, warmup=warmup)

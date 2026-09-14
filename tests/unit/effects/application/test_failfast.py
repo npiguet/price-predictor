@@ -337,3 +337,41 @@ class TestHoldoutGuard:
         assert check_holdout(
             card_disjoint_records=50_000, unique_text_records=9_000, minimum=2000,
         ) is None
+
+
+class TestCorpusFlags:
+    """``--corpus`` refuses a flag its manifest already decides (FR-146).
+
+    Continuing on a disagreement would produce a run whose split, holdout or
+    rarity table silently does not match what the manifest says it is —
+    exactly the case this module exists for.
+    """
+
+    @pytest.mark.parametrize("field,value", [
+        ("records_dir", "output/effects/records"),
+        ("split_from", "models/effects/effect-model/latest.pt"),
+        ("reserved_shards", 9),
+        ("holdout_permille", 30),
+        ("holdout_max_carriers", 4),
+    ])
+    def test_corpus_refuses_the_flags_the_manifest_already_decides(
+        self, field, value,
+    ) -> None:
+        from effects.application.train_effect_model import (
+            TrainEffectModelConfig,
+            validate_corpus_flags,
+        )
+
+        config = TrainEffectModelConfig(
+            corpus="output/effects/corpus", **{field: value},
+        )
+        with pytest.raises(ValueError, match=field.replace("_", "-")):
+            validate_corpus_flags(config)
+
+    def test_corpus_alone_is_accepted(self) -> None:
+        from effects.application.train_effect_model import (
+            TrainEffectModelConfig,
+            validate_corpus_flags,
+        )
+
+        validate_corpus_flags(TrainEffectModelConfig(corpus="output/effects/corpus"))

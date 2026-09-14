@@ -242,6 +242,80 @@ class TestUniformClasses:
         assert CLASS_PLAYABILITY_DECISION not in UNIFORM_CLASSES
 
 
+class TestSampleWeightsRarityTable:
+    """A curated dataset's corpus-wide rarity table, preferred over the
+    resident shard's own count (FR-146)."""
+
+    def test_sample_weights_prefer_a_supplied_corpus_wide_rarity_table(self):
+        records = [_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
+        # The resident shard shows one game; corpus-wide the text was in a
+        # hundred.
+        corpus_wide = sample_weights(records, lambda r: "t", rarity={"t": 100})
+        shard_only = sample_weights(records, lambda r: "t")
+        assert corpus_wide[0] < shard_only[0]
+
+    def test_a_text_the_table_does_not_name_falls_back_to_the_shard(self):
+        """A shard collected after the dataset was built still weights sanely."""
+        records = [_record(RecordKind.COMBAT, game_id="g1", record_id="r1")]
+        assert sample_weights(records, lambda r: "new", rarity={"t": 100}) == (
+            sample_weights(records, lambda r: "new")
+        )
+
+
+class TestPoolsKeyByAbilityText:
+    """``TrainingLoop._pools`` must key rarity by ability text, not record id.
+
+    A ``record_id`` is unique per record, so keying on it gives
+    ``effective_games`` a count of exactly 1 for every key and every record in
+    a pool the same weight — rarity weighting silently does nothing. This is
+    the live defect task 7 fixes: it fails against the pre-fix ``record_id``
+    key and passes once the key is the acting ability's text.
+    """
+
+    def test_a_single_game_ability_outweighs_a_many_game_one(self):
+        from effects.application.train_effect_model import (
+            HeldOutCards,
+            TrainEffectModelConfig,
+        )
+        from effects.application.training_loop import TrainingLoop
+        from effects.domain.provenance import ProvenanceKey, SidecarLine
+        from tests.unit.effects.application.test_ability_text import (
+            FakeSidecarCache,
+        )
+
+        common_key = ProvenanceKey("cardsfolder/c/common.txt", 0, "keyword", 0)
+        rare_key = ProvenanceKey("cardsfolder/r/rare.txt", 0, "keyword", 0)
+        sidecars = FakeSidecarCache(lines={
+            common_key: SidecarLine(
+                line_index=0, line_kind="keyword", provenance=(common_key,),
+                script_text="Common Ability",
+            ),
+            rare_key: SidecarLine(
+                line_index=0, line_kind="keyword", provenance=(rare_key,),
+                script_text="Rare Ability",
+            ),
+        })
+        # Carried by fifty games...
+        common_records = [
+            _record(RecordKind.RESOLUTION, game_id=f"g{i}", ability=(common_key,))
+            for i in range(50)
+        ]
+        # ...against one carried by a single game.
+        rare_records = [
+            _record(RecordKind.RESOLUTION, game_id="g-rare", ability=(rare_key,)),
+        ]
+        loop = TrainingLoop(
+            TrainEffectModelConfig(),
+            held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
+            inherited=None, validation_shards=[], training_shards=[],
+        )
+
+        _, weights = loop._pools([*common_records, *rare_records], sidecars)
+
+        class_weights = weights[CLASS_RESOLUTION_EFFECT]
+        assert class_weights[-1] > class_weights[0]
+
+
 class TestBatchPlanning:
     def _pools(self):
         return {

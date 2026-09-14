@@ -1079,6 +1079,16 @@ def _train_effect_model_parser(subparsers) -> None:
     )
     parser.set_defaults(func=run_train_effect_model)
     parser.add_argument("--records-dir", type=str, default=DEFAULT_RECORDS_DIR)
+    parser.add_argument(
+        "--corpus", type=str, default=None,
+        help=(
+            "A curated dataset directory built by `build-corpus`. Its "
+            "manifest already records the split, holdout and rarity table, "
+            "so --records-dir, --reserved-shards, --split-from, "
+            "--holdout-permille and --holdout-max-carriers cannot be passed "
+            "alongside it."
+        ),
+    )
     _add_cards_folder(parser)
     parser.add_argument(
         "--variant-scripts", type=str, default=None,
@@ -1211,6 +1221,7 @@ def train_config_from(args: argparse.Namespace):
 
     return TrainEffectModelConfig(
         records_dir=Path(args.records_dir),
+        corpus=args.corpus,
         cards_folders=resolve_cards_folders(args.cards_folders),
         variant_scripts=(
             Path(args.variant_scripts) if args.variant_scripts else None
