@@ -21,11 +21,15 @@ from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from effects.domain.corpus_curation import CapHeap, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import EffectRecord
+
+if TYPE_CHECKING:
+    from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
 
@@ -373,11 +377,25 @@ def _card_disjoint_games(
     return frozenset(admitted)
 
 
-def decide(survey: Survey, *, sidecars, surface: str, config) -> Decisions:
+def decide(
+    survey: Survey, *, sidecars: SidecarCache, surface: str, config: BuildCorpusConfig,
+) -> Decisions:
     """Fold keys to texts, cap, split the games, and set the class targets."""
     import random
 
     from effects.domain.corpus_curation import class_targets
+
+    for key, heap in survey.key_heaps.items():
+        if heap.cap != config.text_cap:
+            raise ValueError(
+                f"survey key {key!r} was surveyed with a per-text cap of "
+                f"{heap.cap}, but config.text_cap is {config.text_cap}. "
+                "decide() must be run against the Survey that this same "
+                "--text-cap produced — this Survey looks like it came from a "
+                "SurveyConfig built with a different text_cap, and its "
+                "thresholds would silently disagree with what the manifest "
+                "is about to record."
+            )
 
     key_text: dict[str, str] = {}
     text_games: dict[str, set[int]] = defaultdict(set)
@@ -394,14 +412,7 @@ def decide(survey: Survey, *, sidecars, surface: str, config) -> Decisions:
         text_games[text] |= survey.key_games.get(key, set())
         heap = text_heaps.get(text)
         if heap is None:
-            # The cap the *survey's* per-key heaps were built with, not
-            # config.text_cap: CapHeap.merge raises on a cap mismatch, and the
-            # two are only guaranteed equal when this decide() call is paired
-            # with the survey it was run against. Reading it off the data
-            # itself, rather than off a second config the caller must keep in
-            # sync, is what keeps that pairing from being an unchecked
-            # invariant.
-            heap = text_heaps[text] = CapHeap(survey.key_heaps[key].cap)
+            heap = text_heaps[text] = CapHeap(config.text_cap)
         heap.merge(survey.key_heaps[key])
 
     rarity = {text: len(games) for text, games in text_games.items()}

@@ -19,7 +19,7 @@ MANIFEST_NAME = "manifest.json"
 class CorpusStore:
     """Reads and writes one curated dataset directory."""
 
-    def __init__(self, directory) -> None:
+    def __init__(self, directory: Path) -> None:
         self.directory = Path(directory)
 
     @property
@@ -57,7 +57,7 @@ class CorpusStore:
         )
 
 
-def current_sources(records_dir) -> tuple[SourceShard, ...]:
+def current_sources(records_dir: Path) -> tuple[SourceShard, ...]:
     """Every raw shard under ``records_dir``, by relative path and size."""
     from effects.infrastructure.record_io import iter_shards
 

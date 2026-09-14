@@ -84,6 +84,13 @@ def fake_sidecars() -> FakeSidecarCache:
 def a_survey(*, heap_cap: int = 200, **overrides) -> Survey:
     """A real ``Survey`` with sensible defaults.
 
+    ``decide`` now checks every ``key_heaps`` entry's cap against
+    ``config.text_cap`` before it merges anything (a survey built at one cap
+    cannot be decided against another). Any test whose survey carries a
+    ``key_records``/``key_hashes``/``key_games`` entry — so its ``key_heaps``
+    is non-empty — MUST pass ``heap_cap`` equal to whatever ``text_cap`` the
+    ``a_config`` it calls ``decide`` with uses, or ``decide`` raises.
+
     ``key_hashes`` (``{key: iterable of ints}``) is not a ``Survey`` field: it
     builds ``key_heaps`` by offering each hash into a fresh
     ``CapHeap(heap_cap)`` per key. Every key named by ``key_hashes`` or
@@ -143,12 +150,21 @@ def a_config(**overrides) -> BuildCorpusConfig:
 
 
 def test_two_keys_folding_to_one_text_share_a_threshold(fake_sidecars):
-    survey = a_survey(key_records={REPRINT_A: 300, REPRINT_B: 300},
-                      key_hashes={REPRINT_A: range(300), REPRINT_B: range(300)})
+    # Disjoint, non-overlapping hash ranges: a threshold computed PER KEY
+    # (rather than per text, the regression this test is named against) would
+    # give REPRINT_A 99 and REPRINT_B 1099 — different. Only a genuine merge
+    # into one per-text heap gives both keys the same threshold, and that
+    # threshold has to be the smallest 100 of the whole 600-value union, i.e.
+    # 99, not either key's own unmerged value.
+    survey = a_survey(
+        key_records={REPRINT_A: 300, REPRINT_B: 300},
+        key_hashes={REPRINT_A: range(0, 300), REPRINT_B: range(1000, 1300)},
+        heap_cap=100,
+    )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        config=a_config(text_cap=100))
 
-    assert decisions.thresholds[REPRINT_A] == decisions.thresholds[REPRINT_B]
+    assert decisions.thresholds[REPRINT_A] == decisions.thresholds[REPRINT_B] == 99
 
 
 def test_rarity_counts_games_over_the_whole_corpus(fake_sidecars):
@@ -161,7 +177,7 @@ def test_rarity_counts_games_over_the_whole_corpus(fake_sidecars):
 
 
 def test_a_text_under_the_cap_gets_no_threshold(fake_sidecars):
-    survey = a_survey(key_records={REPRINT_A: 5})
+    survey = a_survey(key_records={REPRINT_A: 5}, heap_cap=100)
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        config=a_config(text_cap=100))
 
@@ -169,11 +185,22 @@ def test_a_text_under_the_cap_gets_no_threshold(fake_sidecars):
 
 
 def test_a_key_no_sidecar_can_read_gets_no_threshold_and_no_rarity(fake_sidecars):
-    survey = a_survey(key_records={UNKNOWN_KEY: 500})
+    survey = a_survey(key_records={UNKNOWN_KEY: 500}, heap_cap=10)
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        config=a_config(text_cap=10))
 
     assert UNKNOWN_KEY not in decisions.thresholds
+
+
+def test_a_survey_built_at_a_different_text_cap_raises(fake_sidecars):
+    # a_survey's heaps are built at cap 50 (via heap_cap); a_config asks for
+    # 100. decide() must fail loudly rather than let the thresholds it
+    # computes silently disagree with the text_cap the manifest will record.
+    survey = a_survey(key_records={REPRINT_A: 5}, heap_cap=50)
+
+    with pytest.raises(ValueError, match="text_cap"):
+        decide(survey, sidecars=fake_sidecars, surface="script",
+               config=a_config(text_cap=100))
 
 
 def test_games_split_into_the_two_strata_and_training(fake_sidecars):
@@ -221,8 +248,47 @@ def test_the_card_disjoint_cap_stops_admitting_games_once_texts_are_covered(fake
     assert 0 < len(decisions.card_disjoint) < 20
 
 
+def test_the_card_disjoint_cap_is_per_text_not_global(fake_sidecars):
+    # A common text carried by ten games and a rare one by two, no game
+    # carrying both: a per-text cap admits both of the rare text's games
+    # regardless of the common text's size. A regression that replaced the
+    # per-text Counter with one global counter would let the common text's
+    # games (ten candidates against the rare text's two, in a twelve-game
+    # shuffle) exhaust the whole cap before a rare game is ever reached, most
+    # of the time starving it — which is exactly what a single held-out text
+    # (the test above) cannot tell apart from correct behaviour.
+    common_games = {f"common-{i}" for i in range(10)}
+    rare_games = {f"rare-{i}" for i in range(2)}
+    survey = a_survey(
+        games=frozenset(common_games | rare_games),
+        held_out_games=frozenset(common_games | rare_games),
+        held_out_text_games={"common-text": common_games, "rare-text": rare_games},
+    )
+    decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       config=a_config(card_disjoint_text_cap=2))
+
+    assert rare_games <= decisions.card_disjoint
+
+
+def test_the_card_disjoint_draw_is_seeded(fake_sidecars):
+    survey = a_survey(
+        games=frozenset({f"g{i}" for i in range(20)}),
+        held_out_games=frozenset({f"g{i}" for i in range(20)}),
+        held_out_text_games={"held-out-text": {f"g{i}" for i in range(20)}},
+    )
+    first = decide(survey, sidecars=fake_sidecars, surface="script",
+                   config=a_config(card_disjoint_text_cap=2, seed=7))
+    again = decide(survey, sidecars=fake_sidecars, surface="script",
+                   config=a_config(card_disjoint_text_cap=2, seed=7))
+
+    assert first.card_disjoint == again.card_disjoint
+
+
 def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
-    survey = a_survey(class_records={"rewrite": 100, "combat": 50})
+    survey = a_survey(
+        class_records={"rewrite": 100, "combat": 50},
+        class_capped_records={"rewrite": 40, "combat": 20},
+    )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
                        config=a_config(text_cap=10))
 
