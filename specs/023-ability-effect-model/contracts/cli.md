@@ -219,12 +219,53 @@ card name per line, every card carrying a held-out ability text.
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The
 same flags must be used here and at training, or the depleted corpus and the split disagree.
 
+## `python -m effects build-corpus`
+
+Reads the raw shard corpus once and writes a fixed dataset: a training corpus, two validation strata,
+and a manifest. `train-effect-model --corpus` reads the dataset instead of the raw corpus, so two runs
+differing only in hyperparameters read the same records.
+
+| Flag | Default |
+|---|---|
+| `--records-dir` | `output/effects/records/` — raw corpus root; discovery recurses |
+| `--output` | `output/effects/corpus/` |
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
+| `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` and `holdout-cards` |
+| `--text-cap` | 200 — max training records per unique ability text |
+| `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |
+| `--training-records` | 0 (no ceiling beyond `--text-cap`) |
+| `--game-disjoint-games` | 1000 |
+| `--card-disjoint-text-cap` | 50 |
+| `--seed` | 42 |
+| `--workers` | CPU count |
+| `--verify` | off — report drift against an existing manifest and write nothing |
+
+Output layout under `--output`:
+
+| Path | Contents |
+|---|---|
+| `training/*.jsonl.gz` | training records, capped per ability text, in the class mixture's proportions |
+| `validation/card-disjoint/*.jsonl.gz` | whole games with a record naming a held-out card |
+| `validation/game-disjoint/*.jsonl.gz` | whole games naming no held-out card, withheld from training |
+| `manifest.json` | the split, the rarity table, the caps and flags, the seed, the source shard list, and the per-class and per-stratum counts |
+
+- Training is selected per record; both validation strata are selected per game, so a probe record and
+  the combat record its `mirror_of` names cannot be separated.
+- Every held-out game is excluded from training, including one the card-disjoint cap declined — that
+  game is dropped rather than trained on.
+- Reports, per class and per stratum: records read, records kept, records the cap dropped, and the
+  unique ability texts each output holds.
+- A grown raw corpus is rebuilt whole, never extended in place. `--verify` exits non-zero when the
+  source list has drifted.
+
 ## `python -m effects train-effect-model`
 
 The full flag table is the root spec's § Training. Contract highlights:
 
 | Flag | Default |
 |---|---|
+| `--corpus` | none (read `--records-dir`) — a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest records |
 | `--records-dir` | `output/effects/records/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--variant-scripts` | none (stage four: `output/effects/variant-scripts/`) |
