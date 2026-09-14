@@ -40,6 +40,7 @@ class MatchWorkerConnector:
         exclude_cards_path: Path | None = None,
         decks_only: bool = False,
         progress_file: Path | None = None,
+        variant_scripts: Path | None = None,
     ) -> subprocess.Popen:
         """Spawn a MatchWorkerMain Java subprocess and return its Popen handle.
 
@@ -98,6 +99,16 @@ class MatchWorkerConnector:
                 is None) be bounded: without a real destination for
                 ``output_file``, nothing else this worker writes grows with
                 each completed match.
+            variant_scripts: When provided, a directory of perturbed Forge
+                scripts to stage into Forge's custom-cards directory before
+                the card database loads, passed as
+                ``-Deffect.variant.scripts=<path>``. Staging also registers
+                every name with ``VariantRegistry``, which is what makes a
+                variant's provenance key resolve to ``variant-scripts/``
+                rather than ``cardsfolder/``. Read by
+                ``ForgeEnvironmentInitializer.initialize`` at worker startup,
+                so a script that only appears afterward is invisible for the
+                life of the JVM.
 
         Returns:
             subprocess.Popen handle for the spawned worker process.
@@ -134,6 +145,8 @@ class MatchWorkerConnector:
             system_properties["sealed.decks.only"] = "true"
         if progress_file is not None:
             system_properties["sealed.progress.file"] = str(progress_file)
+        if variant_scripts is not None:
+            system_properties["effect.variant.scripts"] = str(variant_scripts)
         if side_a_decks_path is not None:
             system_properties["side.a.decks.file"] = str(side_a_decks_path)
         if side_b_decks_path is not None:

@@ -34,6 +34,7 @@ from pathlib import Path
 
 from effects.domain.collection_caps import CollectionCaps
 from effects.domain.script_variants import perturb, variant_name
+from effects.infrastructure.variant_sidecar_connector import VariantSidecarConnector
 from price_predictor.infrastructure.card_filenames import sanitize_card_name
 
 logger = logging.getLogger(__name__)
@@ -185,14 +186,29 @@ def held_out_cards(
     return load_exclusions(split_from=split_from, exclude_cards=exclude_cards)
 
 
+def _deck_text(variant: GeneratedVariant) -> str:
+    """The converted-shaped text `compute_basic_lands` needs for a variant.
+
+    A variant has no converted prose by design (FR-056), and the manabase
+    heuristic reads only the name, mana cost and type line, so those are
+    rendered from the perturbed script rather than the tree.
+    """
+    lines = variant.path.read_text(encoding="utf-8").splitlines()
+    cost = next(
+        (ln.split(":", 1)[1] for ln in lines if ln.startswith("ManaCost:")), "",
+    )
+    types = next(
+        (ln.split(":", 1)[1] for ln in lines if ln.startswith("Types:")), "",
+    )
+    return f"name: {variant.name}\nmana cost: {cost}\ntypes: {types}\n"
+
+
 def run(config: CollectVariantsConfig) -> int:
     """Generate variants, then play them through the records-only worker."""
+    from effects.application.collect_coverage import build_coverage_decks
     from effects.infrastructure.collector_connector import CollectorSupervisor
     from effects.infrastructure.deck_file import COVERAGE_SET_CODE, write_deck_file
     from effects.infrastructure.record_io import count_records
-    from effects.infrastructure.variant_sidecar_connector import (
-        VariantSidecarConnector,
-    )
 
     if not Path(config.forge_cards_path).is_dir():
         logger.error(
@@ -237,20 +253,20 @@ def run(config: CollectVariantsConfig) -> int:
 
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,
-        caps=config.caps,
+        caps=config.caps, variant_scripts=Path(config.variant_scripts),
     )
+    # Every variant is weighted equally: coverage's shortfall weighting has
+    # nothing to weight against here, since a variant round exists to get
+    # each freshly-generated script into a game at all, not to balance
+    # against records the corpus already has for it.
+    decks_file = Path(config.effect_records) / "variant-decks.txt"
+    texts = {variant.name: _deck_text(variant) for variant in variants}
+    decks = build_coverage_decks(
+        {variant.name: 1.0 for variant in variants}, texts, config.decks_per_round,
+        rng=random.Random(RANDOM_SEED),
+    )
+    write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)
     try:
-        # Task 6 replaces this with decks built from `variants` by
-        # build_coverage_decks. Until then this writes an empty file, and
-        # play_round refuses to play a decks-only round with no decks -- so a
-        # real invocation of this command raises here rather than silently
-        # doing nothing, which is the intended interim state: a decks_file
-        # this call site never actually populates should fail loudly, not
-        # hand an empty file to the Forge worker.
-        decks_file = config.effect_records / "variant-decks.txt"
-        write_deck_file(
-            [], decks_file, label="variant", set_code=COVERAGE_SET_CODE,
-        )
         supervisor.play_round(decks_file, matches=config.decks_per_round)
     finally:
         # Closes the worker log files and shuts the pool down (final-fix-3.md

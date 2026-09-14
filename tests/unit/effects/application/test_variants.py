@@ -15,6 +15,7 @@ anything in the holdout.
 from __future__ import annotations
 
 import random
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -365,16 +366,41 @@ class TestRunClosesTheSupervisor:
             **overrides,
         )
 
+    def _variant(self, tmp_path) -> GeneratedVariant:
+        """A ``GeneratedVariant`` whose ``.path`` is a real file on disk.
+
+        ``generate_variants`` is stubbed out below rather than exercised for
+        real, so nothing else would write this file -- and ``run()`` now
+        reads it (``_deck_text``) to build the round's decks.
+        """
+        path = tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "Name:Lightning Bolt Variant 0\nManaCost:R\nTypes:Instant\n",
+            encoding="utf-8",
+        )
+        return GeneratedVariant(
+            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
+            path=path, perturbation="numeric",
+        )
+
     def _patch_prerequisites(self, monkeypatch, variant):
         """Everything ``run()`` needs before it ever reaches the supervisor,
         stood in for rather than exercised for real: the corpus size, the
         variant generator (which otherwise reads real Forge card scripts) and
-        the sidecar writer (which otherwise needs a real JVM)."""
+        the sidecar writer (which otherwise needs a real JVM).
+
+        The sidecar writer is patched on ``collect_variants`` itself, not on
+        ``effects.infrastructure.variant_sidecar_connector`` where the class
+        lives -- ``run()`` now resolves the name at module scope (so
+        ``TestTheVariantRoundPlaysTheVariants`` can patch it there too), and
+        patching the source module no longer reaches a name ``run()`` never
+        looks up again.
+        """
         from unittest.mock import MagicMock
 
         import effects.application.collect_variants as collect_variants
         import effects.infrastructure.record_io as record_io
-        import effects.infrastructure.variant_sidecar_connector as sidecar_module
 
         monkeypatch.setattr(record_io, "count_records", lambda path: 1000)
         monkeypatch.setattr(
@@ -384,7 +410,7 @@ class TestRunClosesTheSupervisor:
         sidecar = MagicMock()
         sidecar.run.return_value = 0
         monkeypatch.setattr(
-            sidecar_module, "VariantSidecarConnector",
+            collect_variants, "VariantSidecarConnector",
             MagicMock(return_value=sidecar),
         )
         return collect_variants
@@ -394,11 +420,7 @@ class TestRunClosesTheSupervisor:
 
         import effects.infrastructure.collector_connector as collector_connector
 
-        variant = GeneratedVariant(
-            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
-            path=tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt",
-            perturbation="numeric",
-        )
+        variant = self._variant(tmp_path)
         collect_variants = self._patch_prerequisites(monkeypatch, variant)
         supervisor = MagicMock()
         monkeypatch.setattr(
@@ -417,11 +439,7 @@ class TestRunClosesTheSupervisor:
 
         import effects.infrastructure.collector_connector as collector_connector
 
-        variant = GeneratedVariant(
-            name="Lightning Bolt Variant 0", source_card="Lightning Bolt",
-            path=tmp_path / "variant-scripts" / "lightning_bolt_variant_0.txt",
-            perturbation="numeric",
-        )
+        variant = self._variant(tmp_path)
         collect_variants = self._patch_prerequisites(monkeypatch, variant)
         supervisor = MagicMock()
         supervisor.play_round.side_effect = RuntimeError("boom")
@@ -463,3 +481,39 @@ class TestTheHoldoutNameBoundary:
         )
 
         assert variants == []
+
+
+class TestTheVariantRoundPlaysTheVariants:
+    def test_the_scripts_are_staged_and_decked(self, tmp_path):
+        from effects.application import collect_variants
+        from effects.infrastructure import collector_connector
+
+        source = tmp_path / "cards"
+        source.mkdir()
+        (source / "bolt.txt").write_text(
+            "Name:Bolt\nManaCost:R\nTypes:Instant\n"
+            "A:SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any\n",
+            encoding="utf-8",
+        )
+        records = tmp_path / "records"
+        records.mkdir()
+        (records / "seed.jsonl").write_text("{}\n" * 100, encoding="utf-8")
+
+        supervisor = MagicMock()
+        with patch.object(collector_connector, "CollectorSupervisor",
+                          return_value=supervisor) as ctor, \
+             patch.object(collect_variants, "VariantSidecarConnector") as sidecar:
+            sidecar.return_value.run.return_value = 0
+            collect_variants.run(
+                collect_variants.CollectVariantsConfig(
+                    effect_records=records,
+                    forge_cards_path=source,
+                    variant_scripts=tmp_path / "variants",
+                    decks_per_round=3,
+                )
+            )
+
+        assert ctor.call_args.kwargs["variant_scripts"] == tmp_path / "variants"
+        decks_file = supervisor.play_round.call_args.args[0]
+        assert decks_file.read_text(encoding="utf-8").strip(), "no variant decks"
+        assert supervisor.play_round.call_args.kwargs["matches"] == 3

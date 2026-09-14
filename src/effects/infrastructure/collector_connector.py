@@ -40,11 +40,13 @@ class CollectorSupervisor:
         *,
         run_id: str | None = None,
         caps: CollectionCaps | None = None,
+        variant_scripts: Path | None = None,
     ) -> None:
         self._worker_count = worker_count
         self._effect_records = Path(effect_records)
         self._run_id = run_id or str(uuid.uuid4())
         self._caps = caps or CollectionCaps()
+        self._variant_scripts = variant_scripts
         self._connector = MatchWorkerConnector()
         self._pool: ForgeWorkerPool | None = None
         self._decks_file: Path | None = None
@@ -79,6 +81,7 @@ class CollectorSupervisor:
             side_b_decks_path=self._decks_file,
             decks_only=True,
             progress_file=self.progress_path,
+            variant_scripts=self._variant_scripts,
         )
         logger.info("Coverage worker %d started (PID %d)", worker_id, process.pid)
         return process
