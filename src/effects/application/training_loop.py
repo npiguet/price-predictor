@@ -61,6 +61,7 @@ from effects.application.train_effect_model import (
     load_shard,
     parse_kind_mix,
     plan_batch,
+    rarity_coverage,
     renormalize_mix,
     sample_weights,
     sampling_class,
@@ -135,6 +136,12 @@ class TrainingLoop:
         #: for an ordinary ``--records-dir`` run, which weights by the resident
         #: shard's own counts instead.
         self.rarity = rarity
+        #: Whether this run has already said how much of a shard the
+        #: rarity table names. Once per run rather than once per shard:
+        #: a table matching nothing is otherwise invisible, since every
+        #: weight falls back to the shard's own count and the run looks
+        #: exactly like a healthy one.
+        self._rarity_reported = False
         #: The curated dataset's manifest digest at read time (FR-147), read
         #: into the checkpoint's provenance by ``_provenance`` below. ``""``
         #: for an ordinary ``--records-dir`` run, which has no dataset to pin.
@@ -314,14 +321,29 @@ class TrainingLoop:
         Abilities that are common are common in every shard, so they are
         unaffected either way.
         """
+        def text_of(record):
+            return ability_text_of(record, sidecars, self.surface)
+
+        if self.rarity is not None and not self._rarity_reported:
+            self._rarity_reported = True
+            found, distinct = rarity_coverage(
+                (text_of(record) for record in records), self.rarity,
+            )
+            share = 100.0 * found / distinct if distinct else 0.0
+            report = logger.info if found else logger.warning
+            report(
+                "Rarity table names %d of this shard's %d distinct ability "
+                "text(s) (%.1f%%); the rest weigh by this shard's own game "
+                "count. A table naming none of them means the dataset and the "
+                "vocabulary disagree about the encoding surface.",
+                found, distinct, share,
+            )
+
         pools: dict[str, list] = defaultdict(list)
         for record in records:
             pools[sampling_class(record)].append(record)
         weights = {
-            name: sample_weights(
-                group, lambda r: ability_text_of(r, sidecars, self.surface),
-                rarity=self.rarity,
-            )
+            name: sample_weights(group, text_of, rarity=self.rarity)
             for name, group in pools.items()
         }
         return dict(pools), weights

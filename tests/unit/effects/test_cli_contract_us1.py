@@ -279,3 +279,21 @@ class TestSubcommandTable:
 
     def test_bare_invocation_prints_help_rather_than_failing(self):
         assert getattr(build_parser().parse_args([]), "func", None) is None
+
+
+class TestTrainEffectModelSurfaceMismatch:
+    """A surface disagreement is only knowable once the manifest is read, so
+    it surfaces out of ``run`` rather than at the parser. It still has to
+    arrive as an exit code, the way every sibling guard does."""
+
+    def test_it_becomes_an_exit_code_rather_than_a_traceback(self, monkeypatch):
+        from effects.application.train_effect_model import SurfaceMismatchError
+        from effects.infrastructure.cli import run_train_effect_model
+
+        def explode(config):
+            raise SurfaceMismatchError("built on 'script', --vocab-path is 'prose'")
+
+        monkeypatch.setattr("effects.application.train_effect_model.run", explode)
+        args = parse("train-effect-model", "--corpus", "output/effects/corpus")
+
+        assert run_train_effect_model(args) == 2

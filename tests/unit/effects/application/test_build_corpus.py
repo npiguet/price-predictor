@@ -667,3 +667,33 @@ def test_no_empty_output_shard_is_written(tmp_path, a_corpus):
     assert written, "the fixture must write something or this proves nothing"
     empty = [shard for shard in written if not any(True for _ in read_shard(shard))]
     assert not empty, f"empty shards written: {[str(s) for s in empty]}"
+
+
+def test_the_trainer_refuses_a_real_dataset_built_on_the_other_surface(
+    tmp_path, a_corpus,
+):
+    """The manifest's ``surface`` reaches the trainer (FR-141).
+
+    A real ``build-corpus`` output, read back by ``train_effect_model.run``
+    under a vocabulary on the other surface. The guard fires before the
+    training loop is imported, so this needs no torch and no GPU — and it is
+    the only thing in the suite that round-trips a written dataset into the
+    trainer at all.
+    """
+    from effects.application.train_effect_model import (
+        SurfaceMismatchError,
+        TrainEffectModelConfig,
+    )
+    from effects.application.train_effect_model import run as train
+
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    ))
+    assert CorpusStore(out).load().surface == "prose"
+
+    with pytest.raises(SurfaceMismatchError, match="prose"):
+        train(TrainEffectModelConfig(
+            corpus=str(out), vocab_path=Path("models/effects/vocab-script.txt"),
+        ))

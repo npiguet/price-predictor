@@ -507,3 +507,68 @@ class TestCorpusFlags:
         )
 
         validate_corpus_flags(TrainEffectModelConfig(corpus="output/effects/corpus"))
+
+
+class TestCorpusSurface:
+    """A curated dataset's rarity table is keyed on one encoding surface.
+
+    ``CorpusManifest.surface`` records which, and nothing read it: the
+    ``--corpus`` branch took its surface from ``--vocab-path`` alone. A
+    prose-built dataset read with ``--vocab-path
+    models/effects/vocab-script.txt`` misses on every rarity lookup, and
+    ``sample_weights`` reads a miss as "a shard collected after the dataset was
+    built" and falls back to the resident shard's own count — reverting
+    silently to exactly the per-shard weighting FR-141 exists to replace.
+    """
+
+    def test_a_vocabulary_on_the_other_surface_is_refused(self) -> None:
+        from effects.application.train_effect_model import (
+            SurfaceMismatchError,
+            require_matching_surface,
+        )
+
+        with pytest.raises(SurfaceMismatchError, match="script"):
+            require_matching_surface(
+                manifest_surface="script",
+                vocab_path=Path("models/effects/vocab.txt"),
+                corpus="output/effects/corpus",
+            )
+
+    def test_the_surface_the_dataset_was_built_on_is_accepted(self) -> None:
+        from effects.application.train_effect_model import require_matching_surface
+
+        require_matching_surface(
+            manifest_surface="script",
+            vocab_path=Path("models/effects/vocab-script.txt"),
+            corpus="output/effects/corpus",
+        )
+        require_matching_surface(
+            manifest_surface="prose",
+            vocab_path=Path("models/effects/vocab.txt"),
+            corpus="output/effects/corpus",
+        )
+
+
+class TestRarityCoverage:
+    """How much of a shard the rarity table actually names.
+
+    Reported once per run because a table that matches nothing is invisible
+    otherwise: every weight silently falls back to the resident shard's count,
+    and the run looks exactly like a healthy one.
+    """
+
+    def test_it_counts_distinct_texts_rather_than_records(self) -> None:
+        from effects.application.train_effect_model import rarity_coverage
+
+        texts = ["a", "a", "a", "b", None, None]
+        assert rarity_coverage(texts, {"a": 3}) == (1, 2)
+
+    def test_a_table_naming_nothing_reads_as_zero_of_the_texts_present(self) -> None:
+        from effects.application.train_effect_model import rarity_coverage
+
+        assert rarity_coverage(["a", "b"], {"other": 1}) == (0, 2)
+
+    def test_a_shard_with_no_acting_text_at_all_looks_up_nothing(self) -> None:
+        from effects.application.train_effect_model import rarity_coverage
+
+        assert rarity_coverage([None, None], {"a": 1}) == (0, 0)

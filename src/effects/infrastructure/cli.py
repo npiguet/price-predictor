@@ -1204,6 +1204,7 @@ def _train_effect_model_parser(subparsers) -> None:
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
         MissingSplitError,
+        SurfaceMismatchError,
         require_split_from,
     )
 
@@ -1217,7 +1218,13 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     config = train_config_from(args)
     from effects.application.train_effect_model import run as train
 
-    return train(config)
+    try:
+        return train(config)
+    except SurfaceMismatchError as exc:
+        # The dataset's rarity table and --vocab-path disagree about the
+        # encoding surface, which is only knowable once the manifest is read.
+        logger.error("%s", exc)
+        return 2
 
 
 def train_config_from(args: argparse.Namespace):

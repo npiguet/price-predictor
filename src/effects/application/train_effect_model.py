@@ -917,6 +917,52 @@ CORPUS_EXCLUSIVE_FLAGS: tuple[str, ...] = (
 )
 
 
+class SurfaceMismatchError(ValueError):
+    """A curated dataset's rarity table was keyed on the other surface."""
+
+
+def require_matching_surface(
+    *, manifest_surface: str, vocab_path: Path, corpus: str,
+) -> None:
+    """Refuse a vocabulary whose encoding surface is not the dataset's (FR-141).
+
+    The manifest's rarity table keys every ability text by the surface
+    ``build-corpus`` resolved texts on, which ``--vocab-path`` decided there
+    and decides again here. Read with a vocabulary on the other surface every
+    lookup misses, and ``sample_weights`` reads a miss as "a shard collected
+    after the dataset was built" and falls back to the resident shard's own
+    count — silently reverting to exactly the per-shard weighting FR-141
+    exists to replace, with nothing logged and every number still looking
+    valid.
+    """
+    from effects.domain.ability_encoder import surface_of
+
+    actual = surface_of(vocab_path)
+    if actual != manifest_surface:
+        raise SurfaceMismatchError(
+            f"the curated dataset at {corpus} was built on the "
+            f"{manifest_surface!r} surface, but --vocab-path {vocab_path} is "
+            f"the {actual!r} one. Its rarity table keys every ability text by "
+            "surface, so every lookup would miss and rarity weighting would "
+            "fall back to counting the resident shard — which is the thing a "
+            "curated dataset exists to stop. Pass the vocabulary the manifest "
+            "records, or rebuild the dataset against this one."
+        )
+
+
+def rarity_coverage(
+    texts: Iterable[str | None], rarity: Mapping[str, int],
+) -> tuple[int, int]:
+    """How many of the distinct ability texts present the table names.
+
+    Distinct texts rather than records, because that is the unit the table is
+    keyed by: a shard whose one uncovered text carries half its records is
+    still one miss.
+    """
+    distinct = {text for text in texts if text is not None}
+    return sum(1 for text in distinct if text in rarity), len(distinct)
+
+
 def validate_corpus_flags(config: TrainEffectModelConfig) -> None:
     """Refuse a flag the curated manifest decides (FR-146)."""
     if config.corpus is None:
@@ -1186,6 +1232,11 @@ def run(config: TrainEffectModelConfig) -> int:
 
         store = CorpusStore(Path(config.corpus))
         manifest = store.load()
+        require_matching_surface(
+            manifest_surface=manifest.surface,
+            vocab_path=Path(config.vocab_path),
+            corpus=config.corpus,
+        )
         training_shards = corpus_shards(store.training_dir)
         validation_shards = (
             corpus_shards(store.card_disjoint_dir)
