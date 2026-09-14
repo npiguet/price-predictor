@@ -186,8 +186,16 @@ class MatchGeneratorTest {
         GeneratedDecksIndex.GeneratedDeck deck = new GeneratedDecksIndex.GeneratedDeck(
                 "coverage", "COVERAGE", List.of("Llanowar Elves"));
         GeneratedDecksIndex mirrorOnly = new GeneratedDecksIndex(List.of(deck, deck));
+        // Both sides point at the same index, which is what
+        // CollectorSupervisor does (one decks file, both --side-*-decks
+        // paths) and what decksOnly now requires: a null index on either
+        // side does not fail a decks-only match, it quietly turns it back
+        // into sealed self-play. pickDeckB never reads sideAIndex -- only
+        // pickDeckA does -- so this changes nothing about the branch under
+        // test, which is called directly below with an explicit set code and
+        // deck-A card list.
         MatchGenerator generator = new MatchGenerator(
-                List.of("RVR"), null, null, TEST_RUN_ID, null, mirrorOnly, 1,
+                List.of("RVR"), null, null, TEST_RUN_ID, mirrorOnly, mirrorOnly, 1,
                 new Random(7), Set.of(), true);
 
         MatchGenerator.DeckSelection b = assertDoesNotThrow(
