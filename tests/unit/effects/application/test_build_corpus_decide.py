@@ -294,3 +294,18 @@ def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
 
     for name, held in survey.class_records.items():
         assert decisions.capped_class_records[name] <= held
+
+
+def test_class_targets_are_computed_from_the_capped_counts_not_the_raw_ones(fake_sidecars):
+    # class_records is what the corpus holds before the per-text cap;
+    # class_capped_records is what survives it. class_targets has to be sized
+    # off the capped count (10): fed the raw one (100) instead, it would
+    # target more training records than the cap is about to leave available,
+    # and the manifest would advertise a mixture the corpus cannot supply.
+    survey = a_survey(
+        class_records={"rewrite": 100}, class_capped_records={"rewrite": 10},
+    )
+    decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       config=a_config(class_mix={"rewrite": 1.0}))
+
+    assert decisions.class_targets["rewrite"] == 10
