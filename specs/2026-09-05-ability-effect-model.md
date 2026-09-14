@@ -239,7 +239,7 @@ Output layout under `--output` (default `output/effects/corpus/`):
 - **Class mixture.** `--class-mix` sets the on-disk proportions over the eight sampling classes, defaulting to the training mixture. A class the raw corpus cannot supply at its share is written in full, and the manifest records the shortfall per class.
 - **Size ceiling.** `--training-records`, when non-zero, subsamples the capped result within each class to that total.
 - **Rarity table.** The manifest records effective games per unique ability text, counted over the whole raw corpus. A `--corpus` training run reads that table instead of counting the resident shard. Coverage and variant shards are built dense in scarce texts, so a per-shard count reads those texts as common and down-weights them.
-- **Card-disjoint sampling.** At most `--card-disjoint-text-cap` records per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric.
+- **Card-disjoint sampling.** At most `--card-disjoint-text-cap` games per held-out ability text, so each held-out text weighs comparably in gate 1's averages and in the best-checkpoint metric. Games are the selection unit, so a held-out game is admitted only while every held-out text it carries is under the cap. A held-out game carrying no held-out text is dropped rather than trained on.
 - **Determinism.** The dataset is a function of the raw corpus, the flags, and `--seed`, all three recorded in the manifest along with the source shard names and byte sizes.
 - **Rebuilds.** A grown raw corpus is rebuilt whole, never extended in place. The manifest's source list is what says whether it has grown; `--verify` reports the difference and writes nothing.
 - **Reporting.** The run reports, per class and per stratum, the records read, the records kept, and the records the cap dropped; and it reports the number of unique ability texts in each output, which is what says whether curation preserved the tail.
@@ -257,7 +257,7 @@ Flags:
 | `--class-mix` | the training mixture | on-disk class proportions, `class=share` pairs |
 | `--training-records` | 0 (no ceiling) | total training records after capping |
 | `--game-disjoint-games` | 1000 | games withheld for the game-disjoint stratum |
-| `--card-disjoint-text-cap` | 50 | max card-disjoint records per held-out ability text |
+| `--card-disjoint-text-cap` | 50 | max card-disjoint games per held-out ability text |
 | `--seed` | 42 | selection seed |
 | `--workers` | CPU count | shard readers |
 | `--verify` | _(off)_ | report drift against an existing manifest and write nothing |

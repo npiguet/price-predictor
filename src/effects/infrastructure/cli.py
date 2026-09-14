@@ -525,7 +525,7 @@ def _build_corpus_parser(subparsers) -> None:
     parser.add_argument(
         "--card-disjoint-text-cap", type=int, default=50,
         help=(
-            "Max card-disjoint records kept per held-out ability text "
+            "Max card-disjoint games admitted per held-out ability text "
             "(default: 50)"
         ),
     )

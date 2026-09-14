@@ -336,26 +336,71 @@ def _text_of_rendered_key(rendered: str, sidecars, surface: str) -> str | None:
     return None
 
 
+def _held_out_text_of_key(
+    survey: Survey, sidecars: SidecarCache, held_out_texts: frozenset[str],
+) -> dict[str, str]:
+    """Each survey key that resolves to a held-out ability text, and the text.
+
+    Resolved on the **script** surface whatever ``--vocab-path`` says, because
+    that is the surface the holdout itself is keyed on: ``select_holdout``
+    hashes a sidecar line's ``script_text``, so a prose-surface fold would
+    compare a prose string against a set of script strings and match nothing —
+    silently, since an empty match looks exactly like a corpus with no
+    held-out ability in it. Normalized the same way for the same reason.
+    """
+    from effects.domain.ability_encoder import SURFACE_SCRIPT
+    from effects.domain.text_holdout import normalize_script_text
+
+    out: dict[str, str] = {}
+    for key in survey.held_out_text_games:
+        script = _text_of_rendered_key(key, sidecars, SURFACE_SCRIPT)
+        if script is None:
+            continue
+        normalized = normalize_script_text(script)
+        if normalized in held_out_texts:
+            out[key] = normalized
+    return out
+
+
 def _card_disjoint_games(
-    survey: Survey, key_text: dict[str, str], *, cap: int, seed: int,
+    survey: Survey, held_out_text_of_key: dict[str, str], *, cap: int, seed: int,
 ) -> frozenset[str]:
-    """Held-out games admitted while some held-out text is under its cap.
+    """Held-out games admitted while every held-out text they carry is under cap.
 
     Games rather than records (FR-142, FR-136): a stratum built by dropping
     records inside a game would separate a probe from the combat record its
     ``mirror_of`` names, and the evaluator would score that keyword on nothing
     while reporting it as merely under-sampled.
 
-    Walked in a seeded order so two builds of one corpus admit the same games,
-    and greedy so a text carried by few games is never crowded out by one
-    carried by thousands.
+    Two rules make the cap bind, and both are FR-142's "per **held-out**
+    ability text" read literally.
+
+    Only a held-out text is tallied. A real game carries tens of distinct
+    ability texts, nearly all of them ordinary, so a tally over every text a
+    game carries counted mostly things the cap is not about — and the
+    held-out texts are the only ones gate 1 averages over.
+
+    And a game is admitted only while **every** held-out text it carries is
+    still under the cap, not merely one of them. Admitting on one was the
+    defect: a game's own private texts sit at zero forever, so there was
+    always some text under cap and the cap never declined a game. The cost of
+    the strict rule is that a game pairing a saturated text with an unsaturated
+    one is declined, which can leave the second short; the cap is a ceiling on
+    how far any one held-out text may dominate the stratum, and a rule that
+    can be pushed past its ceiling is not one.
+
+    A game carrying no held-out text is not admitted at all. It holds nothing
+    gate 1 measures, and it is withheld from training either way — a held-out
+    game the cap declines is dropped, never trained on.
+
+    Walked in a seeded order so two builds of one corpus admit the same games.
+    ``cap <= 0`` means no cap, matching ``--text-cap``'s own zero.
     """
     import random
 
     text_games: dict[str, set[str]] = defaultdict(set)
-    for key, games in survey.held_out_text_games.items():
-        text = key_text.get(key, key)
-        text_games[text] |= games
+    for key, text in held_out_text_of_key.items():
+        text_games[text] |= survey.held_out_text_games[key]
 
     order = sorted(survey.held_out_games)
     random.Random(seed).shuffle(order)
@@ -370,17 +415,28 @@ def _card_disjoint_games(
         texts = games_text.get(game, set())
         if not texts:
             continue
-        if any(taken[text] < cap for text in texts):
-            admitted.add(game)
-            for text in texts:
-                taken[text] += 1
+        if cap > 0 and any(taken[text] >= cap for text in texts):
+            continue
+        admitted.add(game)
+        for text in texts:
+            taken[text] += 1
     return frozenset(admitted)
 
 
 def decide(
-    survey: Survey, *, sidecars: SidecarCache, surface: str, config: BuildCorpusConfig,
+    survey: Survey,
+    *,
+    sidecars: SidecarCache,
+    surface: str,
+    held_out_texts: frozenset[str],
+    config: BuildCorpusConfig,
 ) -> Decisions:
-    """Fold keys to texts, cap, split the games, and set the class targets."""
+    """Fold keys to texts, cap, split the games, and set the class targets.
+
+    Args:
+        held_out_texts: the normalized script texts the holdout names, which
+            is the unit ``--card-disjoint-text-cap`` counts (FR-142).
+    """
     import random
 
     from effects.domain.corpus_curation import class_targets
@@ -419,7 +475,10 @@ def decide(
     thresholds = {key: text_heaps[text].threshold() for key, text in key_text.items()}
 
     card_disjoint = _card_disjoint_games(
-        survey, key_text, cap=config.card_disjoint_text_cap, seed=config.seed,
+        survey,
+        _held_out_text_of_key(survey, sidecars, held_out_texts),
+        cap=config.card_disjoint_text_cap,
+        seed=config.seed,
     )
     remaining = sorted(survey.games - survey.held_out_games)
     take = min(config.game_disjoint_target, len(remaining))
@@ -682,7 +741,10 @@ def build(config: BuildCorpusConfig) -> int:
         survey.records, len(survey.games), len(survey.held_out_games),
     )
 
-    decisions = decide(survey, sidecars=sidecars, surface=surface, config=config)
+    decisions = decide(
+        survey, sidecars=sidecars, surface=surface,
+        held_out_texts=held_out.texts, config=config,
+    )
     admit = {
         name: min(1.0, target / decisions.capped_class_records[name])
         for name, target in decisions.class_targets.items()

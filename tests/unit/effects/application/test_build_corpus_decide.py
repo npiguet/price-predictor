@@ -12,11 +12,10 @@ against the sidecars. A bare mnemonic like ``"reprint-a"`` does not parse
 (there is no ``|`` in it), so every label these tests need resolved is put
 through ``_rendered_key`` first, which renders a real single-key string
 carrying the label as its script file; ``decisions.thresholds`` is then
-indexed by that same rendered string, never by the bare label. A label that
-is only ever used as a fallback text name (``held_out_text_games`` in the
-card-disjoint test) needs no such wrapping, because ``decide`` never parses
-those keys — it looks them up in the key->text table built from
-``key_records`` and falls back to the key itself unparsed.
+indexed by that same rendered string, never by the bare label.
+``held_out_text_games`` is keyed the same way: its keys are resolved to a
+script text and matched against the holdout, so a bare label there would not
+parse either.
 """
 
 from __future__ import annotations
@@ -57,6 +56,9 @@ def _rendered_key(label: str) -> str:
 REPRINT_A = _rendered_key("reprint-a")
 REPRINT_B = _rendered_key("reprint-b")
 UNKNOWN_KEY = _rendered_key("unknown-key")
+#: The one key ``fake_sidecars`` resolves to a text the holdout names.
+HELD_OUT_KEY = _rendered_key("held-out-text")
+HELD_OUT_TEXTS = frozenset({"held-out-text"})
 
 
 @pytest.fixture
@@ -162,6 +164,7 @@ def test_two_keys_folding_to_one_text_share_a_threshold(fake_sidecars):
         heap_cap=100,
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(text_cap=100))
 
     assert decisions.thresholds[REPRINT_A] == decisions.thresholds[REPRINT_B] == 99
@@ -170,6 +173,7 @@ def test_two_keys_folding_to_one_text_share_a_threshold(fake_sidecars):
 def test_rarity_counts_games_over_the_whole_corpus(fake_sidecars):
     survey = a_survey(key_games={REPRINT_A: {1, 2}, REPRINT_B: {2, 3}})
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config())
 
     # Both fold to one text, and game 2 is one game: three distinct games.
@@ -179,6 +183,7 @@ def test_rarity_counts_games_over_the_whole_corpus(fake_sidecars):
 def test_a_text_under_the_cap_gets_no_threshold(fake_sidecars):
     survey = a_survey(key_records={REPRINT_A: 5}, heap_cap=100)
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(text_cap=100))
 
     assert decisions.thresholds[REPRINT_A] is None
@@ -187,6 +192,7 @@ def test_a_text_under_the_cap_gets_no_threshold(fake_sidecars):
 def test_a_key_no_sidecar_can_read_gets_no_threshold_and_no_rarity(fake_sidecars):
     survey = a_survey(key_records={UNKNOWN_KEY: 500}, heap_cap=10)
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(text_cap=10))
 
     assert UNKNOWN_KEY not in decisions.thresholds
@@ -200,6 +206,7 @@ def test_a_survey_built_at_a_different_text_cap_raises(fake_sidecars):
 
     with pytest.raises(ValueError, match="text_cap"):
         decide(survey, sidecars=fake_sidecars, surface="script",
+               held_out_texts=HELD_OUT_TEXTS,
                config=a_config(text_cap=100))
 
 
@@ -209,6 +216,7 @@ def test_games_split_into_the_two_strata_and_training(fake_sidecars):
         held_out_games=frozenset({"g0", "g1"}),
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(game_disjoint_target=3))
 
     assert decisions.card_disjoint <= frozenset({"g0", "g1"})
@@ -220,8 +228,10 @@ def test_games_split_into_the_two_strata_and_training(fake_sidecars):
 def test_the_game_disjoint_draw_is_seeded(fake_sidecars):
     survey = a_survey(games=frozenset({f"g{i}" for i in range(50)}))
     first = decide(survey, sidecars=fake_sidecars, surface="script",
+                   held_out_texts=HELD_OUT_TEXTS,
                    config=a_config(game_disjoint_target=5, seed=7))
     again = decide(survey, sidecars=fake_sidecars, surface="script",
+                   held_out_texts=HELD_OUT_TEXTS,
                    config=a_config(game_disjoint_target=5, seed=7))
 
     assert first.game_disjoint == again.game_disjoint
@@ -230,55 +240,78 @@ def test_the_game_disjoint_draw_is_seeded(fake_sidecars):
 def test_a_game_disjoint_target_larger_than_the_corpus_takes_what_there_is(fake_sidecars):
     survey = a_survey(games=frozenset({"g0", "g1"}))
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(game_disjoint_target=100))
 
     assert decisions.game_disjoint == frozenset({"g0", "g1"})
 
 
-def test_the_card_disjoint_cap_stops_admitting_games_once_texts_are_covered(fake_sidecars):
-    # Twenty games all carrying the one held-out text; a cap of 2 admits few.
+def _many_text_games(count: int, *, carry_held_out: int | None = None) -> dict[str, set[str]]:
+    """``held_out_text_games`` for ``count`` games that each carry many texts.
+
+    Every game carries a text of its own that no sidecar can read — so
+    ``decide`` never folds it to a held-out text — plus, for the first
+    ``carry_held_out`` games (all of them by default), the one text
+    ``fake_sidecars`` resolves into the holdout.
+
+    The private per-game texts are the whole point: a real game carries tens
+    of distinct ability texts, so a rule that admitted a game while *any*
+    text it carries was under cap never declined one, because a game's own
+    private texts sit at zero forever.
+    """
+    games = [f"g{i}" for i in range(count)]
+    carriers = games if carry_held_out is None else games[:carry_held_out]
+    out: dict[str, set[str]] = {HELD_OUT_KEY: set(carriers)}
+    for index, game in enumerate(games):
+        out[_rendered_key(f"filler-{index}")] = {game}
+    return out
+
+
+def test_the_card_disjoint_cap_admits_exactly_its_cap_of_games(fake_sidecars):
+    # Twenty games, each carrying the held-out text plus a private text of its
+    # own. Under `any(under cap)` every one of the twenty was admitted, because
+    # each game's private text is always at zero; under `all(under cap)` only
+    # the cap's worth of games gets in, which is what FR-142 says.
     survey = a_survey(
         games=frozenset({f"g{i}" for i in range(20)}),
         held_out_games=frozenset({f"g{i}" for i in range(20)}),
-        held_out_text_games={"held-out-text": {f"g{i}" for i in range(20)}},
+        held_out_text_games=_many_text_games(20),
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(card_disjoint_text_cap=2))
 
-    assert 0 < len(decisions.card_disjoint) < 20
+    assert len(decisions.card_disjoint) == 2
 
 
-def test_the_card_disjoint_cap_is_per_text_not_global(fake_sidecars):
-    # A common text carried by ten games and a rare one by two, no game
-    # carrying both: a per-text cap admits both of the rare text's games
-    # regardless of the common text's size. A regression that replaced the
-    # per-text Counter with one global counter would let the common text's
-    # games (ten candidates against the rare text's two, in a twelve-game
-    # shuffle) exhaust the whole cap before a rare game is ever reached, most
-    # of the time starving it — which is exactly what a single held-out text
-    # (the test above) cannot tell apart from correct behaviour.
-    common_games = {f"common-{i}" for i in range(10)}
-    rare_games = {f"rare-{i}" for i in range(2)}
+def test_a_text_the_holdout_does_not_name_is_not_tallied(fake_sidecars):
+    # Twenty games each carrying a private text; only the first five also carry
+    # the held-out one. With a cap of 5 the five carriers are admitted and the
+    # other fifteen are not: the cap counts held-out texts and nothing else, so
+    # a game holding nothing gate 1 measures earns no place in the stratum.
     survey = a_survey(
-        games=frozenset(common_games | rare_games),
-        held_out_games=frozenset(common_games | rare_games),
-        held_out_text_games={"common-text": common_games, "rare-text": rare_games},
+        games=frozenset({f"g{i}" for i in range(20)}),
+        held_out_games=frozenset({f"g{i}" for i in range(20)}),
+        held_out_text_games=_many_text_games(20, carry_held_out=5),
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
-                       config=a_config(card_disjoint_text_cap=2))
+                       held_out_texts=HELD_OUT_TEXTS,
+                       config=a_config(card_disjoint_text_cap=5))
 
-    assert rare_games <= decisions.card_disjoint
+    assert decisions.card_disjoint == frozenset({f"g{i}" for i in range(5)})
 
 
 def test_the_card_disjoint_draw_is_seeded(fake_sidecars):
     survey = a_survey(
         games=frozenset({f"g{i}" for i in range(20)}),
         held_out_games=frozenset({f"g{i}" for i in range(20)}),
-        held_out_text_games={"held-out-text": {f"g{i}" for i in range(20)}},
+        held_out_text_games=_many_text_games(20),
     )
     first = decide(survey, sidecars=fake_sidecars, surface="script",
+                   held_out_texts=HELD_OUT_TEXTS,
                    config=a_config(card_disjoint_text_cap=2, seed=7))
     again = decide(survey, sidecars=fake_sidecars, surface="script",
+                   held_out_texts=HELD_OUT_TEXTS,
                    config=a_config(card_disjoint_text_cap=2, seed=7))
 
     assert first.card_disjoint == again.card_disjoint
@@ -290,6 +323,7 @@ def test_capped_class_records_never_exceed_what_the_corpus_holds(fake_sidecars):
         class_capped_records={"rewrite": 40, "combat": 20},
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(text_cap=10))
 
     for name, held in survey.class_records.items():
@@ -306,6 +340,7 @@ def test_class_targets_are_computed_from_the_capped_counts_not_the_raw_ones(fake
         class_records={"rewrite": 100}, class_capped_records={"rewrite": 10},
     )
     decisions = decide(survey, sidecars=fake_sidecars, surface="script",
+                       held_out_texts=HELD_OUT_TEXTS,
                        config=a_config(class_mix={"rewrite": 1.0}))
 
     assert decisions.class_targets["rewrite"] == 10

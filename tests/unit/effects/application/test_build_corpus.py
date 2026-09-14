@@ -50,6 +50,7 @@ _HELD_OUT_CARD = "Held Out Bears"
 #: default), the way the brief asks: constructed, not guessed at.
 _HELD_OUT_TEXT = "deals 10 damage to any target held out effect"
 _HELD_OUT_FILE = "cardsfolder/h/held_out_bears.txt"
+_HELD_OUT_KEY = ProvenanceKey(_HELD_OUT_FILE, 0, "spell", 0)
 
 _BOLT_CARD = "Common Bolt"
 _BOLT_TEXT = "deals 3 damage to any target"
@@ -162,6 +163,11 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
             "g-tainted.1", "g-tainted", ability=(_BOLT_KEY,),
             entity_names=(_HELD_OUT_CARD,),
         ),
+        # The held-out ability actually resolving, which is what the cap
+        # counts: FR-142 balances the stratum per *held-out* text, so a game
+        # where the held-out card only sat on the battlefield carries nothing
+        # the cap is about and earns no place in the stratum.
+        _resolution("g-tainted.4", "g-tainted", ability=(_HELD_OUT_KEY,)),
         _combat("g-tainted.2", "g-tainted"),
         _combat(
             "g-tainted.3", "g-tainted", fork=True, mirror_of="g-tainted.2",

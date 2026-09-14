@@ -236,7 +236,7 @@ differing only in hyperparameters read the same records.
 | `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |
 | `--training-records` | 0 (no ceiling beyond `--text-cap`) |
 | `--game-disjoint-games` | 1000 |
-| `--card-disjoint-text-cap` | 50 |
+| `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text |
 | `--seed` | 42 |
 | `--workers` | CPU count |
 | `--verify` | off — report drift against an existing manifest and write nothing |

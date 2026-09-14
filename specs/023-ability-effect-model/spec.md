@@ -575,9 +575,12 @@ loss.
   texts, so a per-shard count reads those texts as common and down-weights exactly the records those
   collectors were run to obtain.
 - **FR-142**: The card-disjoint stratum MUST hold at most `--card-disjoint-text-cap` (default 50)
-  records per held-out ability text, so each held-out text weighs comparably in gate 1's per-stratum
+  games per held-out ability text, so each held-out text weighs comparably in gate 1's per-stratum
   averages (FR-103) and in best-checkpoint selection (FR-092). Games are the selection unit (FR-136),
-  so the cap governs which games are admitted rather than which records survive within one.
+  so the cap governs which games are admitted rather than which records survive within one: a
+  held-out game MUST be admitted only while every held-out text it carries is under the cap, and a
+  held-out game carrying no held-out text MUST be dropped rather than trained on. Texts the holdout
+  does not name MUST NOT be tallied against the cap.
 - **FR-143**: The dataset MUST be a function of the raw corpus, the flags and `--seed` alone. The
   manifest MUST record all three, plus the source shard names and byte sizes, the per-class and
   per-stratum counts, and the unique-ability-text count of each output.
