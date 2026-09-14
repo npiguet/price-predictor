@@ -329,6 +329,14 @@ The tail is thinner than the head is fat. Lines appearing exactly once are a sma
 
 FR-086 counts effective games over the resident shard, because FR-125 leaves no point at which the whole corpus is in hand. The assumption that makes it sound is that every shard is an interchangeable sample of sealed self-play. Coverage shards are not interchangeable: they are built to be dense in the cards self-play never deals. Inside one of them a scarce card looks common, so `effective_games^(−0.5)` down-weights the records the coverage run was launched to collect. Variant shards have the same shape, every text in them being new to the corpus. A build step holds the whole corpus by construction, so it is the one place the statistic can be computed correctly, and it computes it once.
 
+### Rarity weighting was keyed on the record id, so it never ran at all
+
+The sampler asked for each record's ability text and was handed its record id instead. A record id is unique per record, so every key appeared in exactly one game, `effective_games^(−0.5)` returned one for everything, and every weight the sampler drew with was equal. Within-class sampling has been uniform in every run to date, and the corpus's own skew reached the model undamped.
+
+Nothing downstream could notice. The weights exist, the sampler consumes them, the loss falls, and the method's own docstring describes the intended behaviour in detail. What the defect costs is one of the mechanisms the design leans on to decide what the model learns: the shard walk and the kind mixture were operating, and the third was not.
+
+Keyed by the record id, the returned weights take exactly one distinct value. Keyed by the ability, an ability seen in one game weighs √50 ≈ 7.1 times one seen in fifty, which is the exponent doing what the spec asks of it. The fix is the ability text, which is what the rarity table the curated build writes is keyed on.
+
 ### A run reads half the corpus, and the corpus's growth decides which half
 
 A run performs 720 shard reads against roughly 1,330 training shards, at the current defaults of 18 shards an epoch over 40 epochs. `epoch_shards` walks the sorted shard list rather than sampling it, so a run against an unchanged corpus is reproducible. A shard's filename begins with its collection run's UUID and shards sort by filename, so a new collection run inserts its shards at an arbitrary position and shifts the window every epoch takes.
