@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -108,5 +109,37 @@ class MatchGeneratorRoutingTest {
         double frac = hits / (double) trials;
         assertTrue(frac >= 0.42 && frac <= 0.47,
                 "Fraction should be ~8/18 (≈0.444), got " + frac);
+    }
+
+    // ── decksOnly ────────────────────────────────────────────────────────────
+
+    @Test
+    void decksOnlyAlwaysRollsTheFileForSideB() {
+        // A coverage deck belongs to no set, so the Forge-method branch would
+        // try to open a booster for a set code Forge has never heard of.
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, RUN_ID, null, emptyIndex(), 1,
+                new Random(7), Set.of(), true);
+
+        for (int i = 0; i < 100; i++) {
+            assertTrue(generator.rollIsFileSample(),
+                    "decks-only mode rolled a Forge method");
+        }
+    }
+
+    @Test
+    void withoutDecksOnlyTheRollStillMixes() {
+        MatchGenerator generator = new MatchGenerator(
+                List.of("RVR"), null, null, RUN_ID, null, emptyIndex(), 4,
+                new Random(7), Set.of(), false);
+
+        boolean sawForgeMethod = false;
+        for (int i = 0; i < 200; i++) {
+            if (!generator.rollIsFileSample()) {
+                sawForgeMethod = true;
+                break;
+            }
+        }
+        assertTrue(sawForgeMethod, "the ordinary roll never picked a Forge method");
     }
 }

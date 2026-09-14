@@ -4,6 +4,7 @@ import com.pricepredictor.connector.effects.AttributionMode;
 import com.pricepredictor.connector.effects.PatchHooks;
 import com.pricepredictor.connector.effects.PatchedCollectors;
 import com.pricepredictor.connector.effects.RecordShardWriter;
+import forge.util.MyRandom;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -35,6 +36,13 @@ import java.util.function.IntPredicate;
  *   <li>{@code -Dside.b.decks.weight=<int>} — weight of the file-sampled side-B
  *       method relative to the 4 Forge methods (which carry total weight 10).
  *       Default 4. Only meaningful when {@code -Dside.b.decks.file} is also set.</li>
+ *   <li>{@code -Dsealed.decks.only=true} — force side B to always sample the
+ *       decks file instead of rolling the 4 Forge methods; deck A already
+ *       comes from the file whenever {@code -Dside.a.decks.file} is set. For
+ *       decks (coverage, variant) that belong to no set and carry a sentinel
+ *       set code the Forge-method branch would fail to resolve against
+ *       Forge's booster/edition tables. Default {@code false}. See
+ *       {@link MatchGenerator#rollIsFileSample()}.</li>
  *   <li>{@code -Dmatch.best.of=<N>} — number of games per match (default 7). Must be a
  *       positive odd integer; any size is valid (Bo1, Bo3, Bo7, Bo17, …).</li>
  *   <li>{@code -Deffect.worker.lifetime=<token>} — pins the per-JVM token that makes
@@ -70,7 +78,8 @@ public class MatchWorkerMain {
             int sideBWeight,
             Path effectRecordsDir,
             int workerIndex,
-            String workerLifetime) {
+            String workerLifetime,
+            boolean decksOnly) {
 
         /**
          * Records-only: no sealed corpus is written at all.
@@ -136,6 +145,13 @@ public class MatchWorkerMain {
                 "side.b.decks.weight", DEFAULT_SIDE_B_WEIGHT,
                 v -> v >= 1, "must be >= 1");
 
+        // A coverage or variant deck belongs to no set, so the roll's
+        // Forge-method branch would resolve its sentinel set code against
+        // Forge's booster/edition tables and throw. This forces the roll to
+        // the decks file every time. See MatchGenerator.rollIsFileSample().
+        boolean decksOnly = Boolean.parseBoolean(
+                System.getProperty("sealed.decks.only", "false"));
+
         int workerIndex = parseIntProp(
                 "effect.worker.index", 0, v -> v >= 0, "must be >= 0");
 
@@ -161,7 +177,7 @@ public class MatchWorkerMain {
                 outputFileProp == null ? null : Path.of(outputFileProp),
                 runId, bestOf, sideAProp, sideBProp, sideBWeight,
                 effectRecordsProp == null ? null : Path.of(effectRecordsProp),
-                workerIndex, workerLifetime);
+                workerIndex, workerLifetime, decksOnly);
     }
 
     /**
@@ -246,10 +262,16 @@ public class MatchWorkerMain {
             Runtime.getRuntime().addShutdownHook(new Thread(toFlush::close));
         }
 
+        // The public 7-arg constructor has no decksOnly parameter (it must
+        // keep working unchanged for `sealed match-outcomes`), so a decks-only
+        // run goes through the full constructor directly, supplying the same
+        // random source and exclusion set the shorter constructors default to.
         MatchGenerator generator = new MatchGenerator(
                 eligibleSets, new DeckBuilder(),
                 new GamePlayer(config.bestOf(), effectRecords), config.runId(),
-                sideAIndex, sideBIndex, config.sideBWeight());
+                sideAIndex, sideBIndex, config.sideBWeight(),
+                MyRandom.getRandom(), MatchGenerator.excludedCardsFromProperties(),
+                config.decksOnly());
 
         long count = 0;
         while (true) {

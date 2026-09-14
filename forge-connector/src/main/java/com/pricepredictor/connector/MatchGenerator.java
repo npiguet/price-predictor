@@ -49,6 +49,11 @@ import java.util.Set;
  *       GeneratedDecksIndex#randomDeckFromSet} filters to deck A's set code
  *       and excludes mirror matches by content equality. If no non-mirror
  *       candidate exists for that set, fall back to Forge methods.</li>
+ *   <li>{@code decksOnly}: forces the roll to always take the file-sample
+ *       branch, regardless of {@code sideBWeight}. For decks that belong to
+ *       no set (coverage, variant) and carry a sentinel set code the Forge
+ *       method branch would fail to resolve against Forge's booster/edition
+ *       tables.</li>
  * </ul>
  *
  * <p>{@link ForgeEnvironmentInitializer#initialize()} must have been called before use.
@@ -69,6 +74,7 @@ public class MatchGenerator {
     private final int sideBWeight;
     private final Random random;
     private final Set<String> excludedCards;
+    private final boolean decksOnly;
 
     public MatchGenerator(
             List<String> eligibleSetCodes,
@@ -92,7 +98,7 @@ public class MatchGenerator {
             int sideBWeight,
             Random random) {
         this(eligibleSetCodes, deckBuilder, gamePlayer, runId, sideAIndex,
-                sideBIndex, sideBWeight, random, excludedCardsFromProperties());
+                sideBIndex, sideBWeight, random, excludedCardsFromProperties(), false);
     }
 
     MatchGenerator(
@@ -104,7 +110,8 @@ public class MatchGenerator {
             GeneratedDecksIndex sideBIndex,
             int sideBWeight,
             Random random,
-            Set<String> excludedCards) {
+            Set<String> excludedCards,
+            boolean decksOnly) {
         if (eligibleSetCodes.isEmpty()) {
             throw new IllegalArgumentException("Eligible set list must not be empty");
         }
@@ -124,6 +131,7 @@ public class MatchGenerator {
         this.sideBWeight = sideBWeight;
         this.random = random;
         this.excludedCards = Set.copyOf(excludedCards);
+        this.decksOnly = decksOnly;
     }
 
     /**
@@ -330,11 +338,17 @@ public class MatchGenerator {
     /**
      * Roll {@code true} with probability {@code sideBWeight / (10 + sideBWeight)}
      * — the "sample from sideBIndex" branch. Always returns {@code false}
-     * when {@code sideBIndex} is null.
+     * when {@code sideBIndex} is null, and always returns {@code true} (once
+     * an index is present) when {@code decksOnly} is set.
      */
     boolean rollIsFileSample() {
         if (sideBIndex == null) {
             return false;
+        }
+        // A decks-only round has no set to open a booster for: both sides come
+        // from the decks file or the match cannot be built at all.
+        if (decksOnly) {
+            return true;
         }
         double total = FORGE_METHODS_TOTAL_WEIGHT + sideBWeight;
         return random.nextDouble() < sideBWeight / total;
