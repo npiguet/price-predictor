@@ -838,6 +838,9 @@ def build(config: BuildCorpusConfig) -> int:
         for name, target in decisions.class_targets.items()
         if decisions.capped_class_records.get(name)
     }
+    # Before the first output shard, and only on a real build: a rebuild
+    # replaces the dataset rather than layering over it (FR-144).
+    store.clear_outputs()
     written = run_write_pass(
         [shard.name for shard in survey.shards],
         config=WriteConfig(

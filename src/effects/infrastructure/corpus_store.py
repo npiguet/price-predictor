@@ -38,6 +38,27 @@ class CorpusStore:
     def game_disjoint_dir(self) -> Path:
         return self.directory / "validation" / "game-disjoint"
 
+    def clear_outputs(self) -> None:
+        """Delete the three shard directories, leaving the manifest in place.
+
+        A dataset is rebuilt whole rather than extended (FR-144): the split and
+        the rarity table are corpus-wide, so a shard left over from an earlier
+        build belongs to a different split. Same-named shards are
+        truncate-overwritten anyway, but a source shard that has been renamed
+        or removed — or a rebuild pointed at another ``--records-dir`` — leaves
+        files behind that every reader loads as part of the dataset while the
+        manifest and its digest describe only the newer build.
+
+        The manifest itself is left alone so a build that fails before writing
+        one does not also destroy the record of what used to be here.
+        """
+        import shutil
+
+        for directory in (
+            self.training_dir, self.card_disjoint_dir, self.game_disjoint_dir,
+        ):
+            shutil.rmtree(directory, ignore_errors=True)
+
     def save(self, manifest: CorpusManifest) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.manifest_path.write_text(

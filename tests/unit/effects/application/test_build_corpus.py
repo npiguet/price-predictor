@@ -584,3 +584,55 @@ def test_the_manifest_records_what_was_delivered_beside_what_was_asked_for(
     assert set(manifest.delivered_mix) == set(delivered)
     for name, share in delivered.items():
         assert manifest.delivered_mix[name] == pytest.approx(share, abs=1e-6)
+
+
+# ── a rebuild replaces the dataset rather than layering over it ────────
+
+
+def test_a_rebuild_removes_a_shard_the_new_build_does_not_write(tmp_path, a_corpus):
+    """FR-144: a grown corpus is rebuilt whole, never extended in place.
+
+    Same-named source shards are truncate-overwritten, so the common case
+    survived; a source shard renamed, removed, or a rebuild pointed at a
+    different --records-dir left files behind that the trainer reads as part
+    of the dataset while the manifest and its digest describe only the second
+    build.
+    """
+    out = tmp_path / "curated"
+    config = BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    )
+    build(config)
+
+    store = CorpusStore(out)
+    orphans = [
+        store.training_dir / "orphan.jsonl.gz",
+        store.card_disjoint_dir / "orphan.jsonl.gz",
+        store.game_disjoint_dir / "orphan.jsonl.gz",
+    ]
+    for orphan in orphans:
+        write_shard(orphan, [_resolution("orphan.1", "g-orphan", ability=(_BOLT_KEY,))])
+
+    build(config)
+
+    assert not any(orphan.exists() for orphan in orphans)
+    assert store.manifest_path.exists()
+    assert "g-orphan" not in {r.game_id for r in read_records(store.training_dir)}
+
+
+def test_verify_leaves_the_written_dataset_alone(tmp_path, a_corpus):
+    out = tmp_path / "curated"
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, game_disjoint_target=1,
+    ))
+    store = CorpusStore(out)
+    before = sorted(p.name for p in store.training_dir.glob("*"))
+
+    build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards, output=out,
+        workers=1, verify=True,
+    ))
+
+    assert sorted(p.name for p in store.training_dir.glob("*")) == before
