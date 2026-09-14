@@ -3,16 +3,18 @@ package com.pricepredictor.connector;
 import com.pricepredictor.connector.effects.Json;
 import forge.card.CardRules;
 import forge.card.CardRarity;
+import forge.game.Game;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
 import forge.game.card.Card;
 import forge.game.card.CardFactory;
-import forge.game.spellability.SpellAbility;
 import forge.item.PaperCard;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +24,10 @@ import java.util.StringJoiner;
  * The coverage collector's castability consult.
  *
  * <p>Answers one question per card: could Forge ever put this on the stack at
- * all? A card with no castable spell ability — a land, a card whose only spell
- * is a variant Forge does not implement — will never appear in a resolution
- * record however many games it is dealt into, so the coverage collector ranks
- * it lower and stops waiting for it sooner.
+ * all? A card with no castable spell ability — a land, unless an Adventure
+ * half or a face-down keyword such as Morph gives it one — will never appear
+ * in a resolution record however many games it is dealt into, so the coverage
+ * collector ranks it lower and stops waiting for it sooner.
  *
  * <p>The verdict <b>only ranks</b>. It never drops a card from deck building,
  * because being in a game is the precondition a stage-three intervention forks
@@ -106,6 +108,19 @@ public class CastabilityMain {
      * "castable" costs a few wasted decks and a false "uncastable" costs a
      * slower run. Neither is a correctness failure, which is why this asks the
      * cheap question rather than simulating a cast.
+     *
+     * <p>The card is built with an explicit, non-negative id. {@code CardFactory}
+     * treats a negative id as "for display only" and then reads none of the
+     * script's traits — no keywords, no triggers, no statics and no {@code A:}
+     * lines, which is where an instant's or sorcery's spell lives — so all
+     * that is left are the spells {@code CardState} synthesises from the type
+     * line: a permanent's {@code SpellPermanent}, a land's {@code LandAbility}.
+     * The three-argument {@code getCard(paper, owner, game)} derives the id
+     * from the owner and passes -1 for a null one, so an ownerless card has to
+     * be given its id here. The game it is built against is the same
+     * player-less dummy {@code convert} builds every card against in
+     * {@link RulesParser}: with no game at all, three cards' ability setup
+     * throws and would be misread as uncastable.
      */
     private static String verdictFor(String name) {
         // allowAltNames: a double-faced card's back-face name still names the
@@ -117,17 +132,23 @@ public class CastabilityMain {
         }
         try {
             PaperCard paper = new PaperCard(rules, "UNK", CardRarity.Common);
-            Card card = CardFactory.getCard(paper, null, null);
-            List<SpellAbility> spells = new ArrayList<>();
-            for (SpellAbility sa : card.getSpellAbilities()) {
-                if (sa.isSpell()) {
-                    spells.add(sa);
-                }
-            }
-            return spells.isEmpty() ? UNCASTABLE : CASTABLE;
+            Game game = ConsultGame.INSTANCE;
+            Card card = CardFactory.getCard(paper, null, game.nextCardId(), game);
+            return card.getSpells().isEmpty() ? UNCASTABLE : CASTABLE;
         } catch (RuntimeException e) {
             // A card Forge cannot even instantiate certainly cannot be cast.
             return UNCASTABLE;
+        }
+    }
+
+    /** A player-less game to build cards against; created once, on first use. */
+    private static class ConsultGame {
+        static final Game INSTANCE = create();
+
+        private static Game create() {
+            GameRules rules = new GameRules(GameType.Constructed);
+            return new Game(List.of(), rules,
+                    new Match(rules, List.of(), "castability-consult"));
         }
     }
 
