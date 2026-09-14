@@ -811,3 +811,99 @@ class TestIncrementalCounting:
 
         assert counter.update(coverage, tmp_path) == 1
         assert counter.update(coverage, tmp_path) == 0
+
+
+class TestCountingCrossesTheNameBoundary:
+    """Coverage units are converted names; record entities are Forge's (T174).
+
+    `build_coverage_units` keys off `load_card_files`, which reads names out of
+    converted card text — lowercased, `soul echo`. A record's `EntityState.name`
+    is Forge's own, `Soul Echo`. Looking one up in the other matches nothing, so
+    every card counts zero records forever: nothing is ever satisfied, the
+    weights never fall, and cards leave the run only by retiring.
+
+    The same converted-tree/Forge boundary that broke depletion, the split, the
+    variant skip and the holdout file. Fifth instance.
+    """
+
+    def test_a_printed_case_record_counts_toward_a_converted_case_card(
+        self, tmp_path,
+    ) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+        from effects.infrastructure.record_io import format_record_line
+
+        shard = tmp_path / "run.0-x.jsonl"
+        shard.write_text(
+            format_record_line(
+                _record([_entity("E1", "Soul Echo")], source="E1")
+            ) + "\n",
+            encoding="utf-8",
+        )
+        coverage = {"soul echo": CardCoverage("soul echo")}
+
+        CoverageCounter().update(coverage, tmp_path)
+
+        assert coverage["soul echo"].records == 1
+
+    def test_a_card_outside_the_coverage_unit_is_still_ignored(
+        self, tmp_path,
+    ) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+        from effects.infrastructure.record_io import format_record_line
+
+        shard = tmp_path / "run.0-x.jsonl"
+        shard.write_text(
+            format_record_line(
+                _record([_entity("E1", "Some Token")], source="E1")
+            ) + "\n",
+            encoding="utf-8",
+        )
+        coverage = {"soul echo": CardCoverage("soul echo")}
+
+        CoverageCounter().update(coverage, tmp_path)
+
+        assert coverage["soul echo"].records == 0
+
+
+class TestCountingReportsProgress:
+    """A silent 35-minute startup is indistinguishable from a hang.
+
+    Moving the corpus scan from per-round to once made the round loop fast and
+    the startup long. Without output it looks exactly like the hang this whole
+    area kept producing, which is the one shape an operator must never have to
+    guess at.
+    """
+
+    def _shards(self, directory: Path, count: int) -> None:
+        from effects.infrastructure.record_io import format_record_line
+
+        directory.mkdir(parents=True, exist_ok=True)
+        line = format_record_line(_record([_entity("E1", "aa")], source="E1"))
+        for n in range(count):
+            (directory / f"run.0-{n:03d}.jsonl").write_text(
+                line + "\n", encoding="utf-8",
+            )
+
+    def test_it_reports_progress_while_reading(self, tmp_path, caplog) -> None:
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shards(tmp_path, 120)
+        coverage = {"aa": CardCoverage("aa")}
+
+        with caplog.at_level("INFO"):
+            CoverageCounter(progress_every=50).update(coverage, tmp_path)
+
+        progress = [r for r in caplog.messages if "of 120 shard" in r]
+        assert len(progress) >= 2, f"expected periodic progress, got {progress}"
+
+    def test_a_short_read_says_nothing(self, tmp_path, caplog) -> None:
+        """Counting three shards should not narrate itself."""
+        from effects.application.collect_coverage import CoverageCounter
+
+        self._shards(tmp_path, 3)
+        coverage = {"aa": CardCoverage("aa")}
+
+        with caplog.at_level("INFO"):
+            CoverageCounter(progress_every=50).update(coverage, tmp_path)
+
+        assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]

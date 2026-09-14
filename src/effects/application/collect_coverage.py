@@ -49,6 +49,12 @@ DEFAULT_TARGET_RECORDS = 50
 DEFAULT_DECKS_PER_ROUND = 500
 DEFAULT_NO_PROGRESS_ROUNDS = 3
 
+#: Shards between progress lines while counting. The first pass reads the whole
+#: existing corpus -- on 801 shards about 35 minutes -- and silence that long is
+#: indistinguishable from the hang this command kept producing. Ten keeps the
+#: line moving often enough to read as progress rather than as a stall.
+PROGRESS_EVERY_SHARDS = 10
+
 #: A 40-card limited deck: 23 nonlands plus basics.
 NONLANDS_PER_DECK = 23
 DECK_SIZE = 40
@@ -163,8 +169,9 @@ class CoverageCounter:
     rather than assigned, so nothing else may overwrite it.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, progress_every: int = PROGRESS_EVERY_SHARDS) -> None:
         self._counted: set[Path] = set()
+        self._progress_every = progress_every
 
     def update(
         self, coverage: dict[str, CardCoverage], records_dir: Path,
@@ -176,10 +183,23 @@ class CoverageCounter:
             shard for shard in iter_shards(Path(records_dir))
             if shard not in self._counted
         ]
-        for shard in fresh:
+        from effects.application.train_effect_model import fold_card_name
+
+        for done, shard in enumerate(fresh, start=1):
+            if self._progress_every and len(fresh) > self._progress_every:
+                if done % self._progress_every == 0 or done == len(fresh):
+                    logger.info(
+                        "Counted %d of %d shard(s) (%.0f%%)",
+                        done, len(fresh), 100.0 * done / len(fresh),
+                    )
             for record in read_shard(shard):
                 for name in qualifying_cards(record):
-                    card = coverage.get(name)
+                    # A coverage unit is keyed off `load_card_files`, whose
+                    # names come from converted card text and are lowercase.
+                    # A record's entity name is Forge's own, printed case.
+                    # Unfolded, the lookup misses every time and every card
+                    # counts zero for the life of the run.
+                    card = coverage.get(fold_card_name(name))
                     if card is not None:
                         card.records += 1
             self._counted.add(shard)
