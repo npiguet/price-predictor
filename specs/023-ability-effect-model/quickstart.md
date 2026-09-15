@@ -34,26 +34,6 @@ the validation corpus from pools at full strength. Splitting the corpus at colle
 than discarding held-out games afterwards is what keeps every collected game usable;
 [spec.md](spec.md) FR-130 has the rules.
 
-### Steps and stages are different axes
-
-A **step** is a command and its position in the order. A **stage** is how much of the record schema a
-run can reach at all, and the two do not line up: nothing below is a "stage 3 step", because a stage is
-unlocked by the engine patch and a handful of flags rather than by reaching a later command. The path
-in this document is **stage four throughout** — it applies the patch, collects at tier 4 with forks,
-and trains on the script surface. [The root spec](../2026-09-05-ability-effect-model.md) § Stages
-defines them; this is where each one is bought here.
-
-| Stage | What unlocks it | Where in this document | What you lose without it |
-|---|---|---|---|
-| one | nothing — stock Forge | steps 1–3, 6–8 | 3 of the 8 sampling classes; every record stamped `degraded` |
-| two | the engine patch | step 0, and step 4 becomes possible at all | mana, rewrite, trigger, continuous and playability records; the coverage collector |
-| three | `--interventions-per-game`, `--probes-per-game` with `--probe-keywords`, `--snapshot-tiers 1,2,3,4` | flags in steps 3, 3b and 4 | records for abilities the AI never plays, and gate 2's engine-side branch |
-| four | the script surface | step 5, then `--vocab-path models/effects/vocab-script.txt` in steps 5b and 6 | synthetic variants, captured keyword scripts, and the mechanism-level encoding that collapses paraphrases |
-
-Stage four is also where the primary encoding surface changes. Prose is the sole surface through stage
-three; from stage four the Forge script line is primary and converted prose is the paired secondary,
-which is why step 5 builds a second vocabulary at a path of its own and steps 5b and 6 name it.
-
 ## Prerequisites
 
 ```bash
@@ -161,8 +141,9 @@ python -m sealed match-outcomes \
 ```
 
 `--snapshot-tiers 1,2,3,4` because this command opts into interventions and probes, which are
-stage three, and stage three collects at that depth. Left at the `1,2,3` default it would write
-stage-three forks into stage-two snapshots, and tier 4 is the one tier no later pass can add:
+an interventional fork, so a run taking forks collects at that depth. Left at the `1,2,3` default it
+would write forks into snapshots shallower than the fork can see, and tier 4 is the one tier no later
+pass can add:
 an absent tier means uncollected, so a reader cannot tell an empty graveyard from an
 unrecorded one. It costs about 59% more entities per record — 11.8 cards sit in hands and
 graveyards against the 19.9 entities a snapshot already carries.
@@ -296,7 +277,7 @@ accept all seven: `match-outcomes`, `collect-coverage` and `collect-variants`.
 | `--probes-per-game` | 2 | Damage-step probes per game. A budget, not a switch. |
 | `--probe-keywords` | *(empty)* | Which keywords a probe may strip. Empty means **no probe is ever taken**, whatever the budget — the state each collecting command announces at startup. |
 | `--legality-rate` | 0.1 | Share of legality points kept, sampled *after* the coalescing above. Its own knob because the two playability subkinds arrive at very different volumes from one priority pass. |
-| `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. Stage three collects at `1,2,3,4`. |
+| `--snapshot-tiers` | `1,2,3` | How deep every snapshot reaches: a prefix of `1,2,3,4` — 1 referenced objects, 2 core, 3 the unreferenced stack, 4 unreferenced hands and graveyards. Run-level, never per collector — a depth that varies by kind turns `state.tiers` into a proxy for how a record was collected. A run taking forks wants `1,2,3,4`. |
 
 ## 3b. Collect the validation corpus at full strength
 
@@ -480,7 +461,7 @@ python -m effects build-corpus \
 
 Drop `--variant-scripts` only if step 5 was skipped, and `--vocab-path` only if you are training on the
 prose surface. Both are load-bearing and neither has a default that guesses right for you: without the
-variant tree every stage-four record resolves to no ability text, so it lands in neither the rarity
+variant tree every variant record resolves to no ability text, so it lands in neither the rarity
 table nor the per-text cap while every real ability is in both; and the rarity table's keys are texts
 *on one surface*, so a dataset built on prose and trained on script matches nothing. Training refuses
 the second mismatch rather than reporting it, but nothing catches the first.
@@ -533,7 +514,7 @@ python -m effects train-effect-model \
 **Every flag above matters, and the three paths must match the ones `build-corpus` was given.**
 `--vocab-path` decides the encoding surface; the manifest records the surface it was built on and the
 run refuses a mismatch, because the rarity table's keys are texts on one surface and a table read on
-the other matches nothing while looking entirely valid. `--variant-scripts` is what lets a stage-four
+the other matches nothing while looking entirely valid. `--variant-scripts` is what lets a variant
 record resolve to a text at all. Drop `--corpus` to train against the raw corpus instead, `--vocab-path`
 to stay on prose, and `--variant-scripts` if step 5 was skipped.
 
@@ -549,7 +530,7 @@ the eight would degrade that keyword's own gate-2 verdict in the same run.
 
 Trains both transformers jointly from random init. The mixture renormalizes over the sampling classes
 actually present, and an absent kind's fields contribute no loss — so the same command works on a
-three-class stage-one corpus and an eight-class one.
+three-class corpus and an eight-class one.
 
 **Read the first line it prints.** It reports the holdout — how many ability texts it holds out and
 what share of `output/cardsfolder/` cards carry one — then the three strata's record counts. The
@@ -685,4 +666,4 @@ Two fields in the record schema are deliberately empty, and `field-coverage` lis
 Run results belong in the design record's Outcome section
 ([`../../experiments/2026-09-04-ability-effect-model-design.md`](../../experiments/2026-09-04-ability-effect-model-design.md)),
 never in the root spec and never here. Record gate 1's three margins, gate 3's two geometry figures,
-and gate 2's per-keyword table — the routed list is the input to the stage-three decision.
+and gate 2's per-keyword table — the routed list is what decides whether the damage-step probe is worth building.
