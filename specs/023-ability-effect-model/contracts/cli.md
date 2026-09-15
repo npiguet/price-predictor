@@ -157,7 +157,8 @@ no shards.
 |---|---|
 | `--effect-records` | `output/effects/records/` |
 | `--forge-cards-path` | `../forge/forge-gui/res/cardsfolder/` |
-| `--variant-volume` | 0.2 (cap on variant records as a fraction of real records already present) |
+| `--variant-volume` | 0.2 — cap on how many variant **scripts** are generated, as a fraction of the real records in `--corpus-records` |
+| `--corpus-records` | `--effect-records` — the real records the volume cap is measured against. Variants written to a directory of their own need it pointed at the corpus, or the cap is measured against an empty destination and allows nothing |
 | `--decks-per-round` | 500 |
 | cap/budget flags | see below |
 

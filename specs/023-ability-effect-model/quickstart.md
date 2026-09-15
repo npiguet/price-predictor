@@ -358,6 +358,7 @@ python -m effects build-vocab --surface script          # models/effects/vocab-s
 
 python -m effects collect-variants \
     --effect-records output/effects/records/variants/ \
+    --corpus-records output/effects/records/ \
     --exclude-cards output/effects/records/depleted/holdout-cards.txt \
     --decks-per-round 2000
 ```
@@ -367,7 +368,9 @@ part of the corpus exactly like `depleted/` and `full-strength/` — but keeping
 lets `collect-coverage --training-corpus` keep pointing at `depleted/` alone, and what lets a curated
 build be made with or without them. `--training-corpus` is the wrong flag here: it sets the records
 directory and the holdout list together, and those two want different directories in this step, so
-pass `--effect-records` and `--exclude-cards` separately.
+pass `--effect-records` and `--exclude-cards` separately. `--corpus-records` is needed for the same
+reason: `--variant-volume` is measured against the records already collected, and a directory of their
+own is empty on the first run, so without it the cap allows nothing and the command refuses.
 
 **One invocation is one round**, unlike step 4 — there is no loop and no `--no-progress-rounds`. Run
 length is `--decks-per-round` matches at one game each. Re-running the command collects nothing new:
@@ -380,7 +383,7 @@ is worth buying is each variant reaching a game at all. The default 500 decks pu
 them into one; a few thousand gets most.
 
 `--variant-volume` (default 0.2) caps how many variant **scripts** are generated, as a fraction of the
-records already collected. On a corpus of any size that budget exceeds the number of perturbable
+records in `--corpus-records`. On a corpus of any size that budget exceeds the number of perturbable
 scripts, so it is inert and every perturbable card gets a variant.
 
 `collect-variants` reads Forge's **source** scripts, perturbs one whitelisted parameter per variant,

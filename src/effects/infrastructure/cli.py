@@ -1032,9 +1032,19 @@ def _collect_variants_parser(subparsers) -> None:
     parser.add_argument(
         "--variant-volume", type=float, default=0.2,
         help=(
-            "Cap on variant records as a fraction of the real records already "
-            "present (default: 0.2). Expressed against the corpus so it scales "
-            "with it."
+            "Cap on how many variant *scripts* are generated, as a fraction of "
+            "the real records already present (default: 0.2). Expressed "
+            "against the corpus so it scales with it; at any real corpus size "
+            "it exceeds the number of perturbable scripts and is inert."
+        ),
+    )
+    parser.add_argument(
+        "--corpus-records", type=str, default=None,
+        help=(
+            "The real records --variant-volume is measured against (default: "
+            "--effect-records). Point it at the corpus when variants are "
+            "written to their own directory, or the cap is measured against an "
+            "empty destination and allows nothing."
         ),
     )
     parser.add_argument("--decks-per-round", type=int, default=500)
@@ -1081,6 +1091,9 @@ def run_collect_variants(args: argparse.Namespace) -> int:
         forge_cards_path=Path(args.forge_cards_path),
         variant_scripts=Path(args.variant_scripts),
         variant_volume=args.variant_volume,
+        corpus_records=(
+            Path(args.corpus_records) if args.corpus_records else None
+        ),
         decks_per_round=args.decks_per_round,
         split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,

@@ -15,6 +15,7 @@ anything in the holdout.
 from __future__ import annotations
 
 import random
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -305,6 +306,28 @@ class TestVolumeCap:
 
     def test_a_larger_volume_allows_more(self):
         assert variant_budget(1000, 0.5) > variant_budget(1000, 0.2)
+
+    def test_the_volume_is_measured_against_the_corpus_not_the_destination(self):
+        """Writing variants to their own directory must not zero the budget.
+
+        `--variant-volume` scales the cap with the corpus that already exists.
+        When variants are written into that same tree the destination *is* the
+        corpus, but a run that keeps them in `records/variants/` starts with an
+        empty destination — and measuring there caps the run at zero records
+        against a corpus of millions.
+        """
+        config = CollectVariantsConfig(
+            effect_records=Path("output/effects/records/variants"),
+            corpus_records=Path("output/effects/records"),
+        )
+        assert config.volume_source() == Path("output/effects/records")
+
+    def test_the_volume_source_defaults_to_the_destination(self):
+        """Unset, the corpus and the destination are the same directory."""
+        config = CollectVariantsConfig(
+            effect_records=Path("output/effects/records"),
+        )
+        assert config.volume_source() == Path("output/effects/records")
 
 
 class TestPairingLoss:

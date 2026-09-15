@@ -61,11 +61,21 @@ class CollectVariantsConfig:
         default_factory=lambda: DEFAULT_VARIANT_SCRIPTS,
     )
     variant_volume: float = DEFAULT_VARIANT_VOLUME
+    #: The real records ``--variant-volume`` is measured against. Defaults to
+    #: the destination, which is right only when variants are written into the
+    #: corpus they are sized against. A run that keeps them in their own
+    #: directory starts with an empty destination, and measuring there caps the
+    #: run at zero against a corpus of millions.
+    corpus_records: Path | None = None
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
     split_from: Path | None = None
     exclude_cards: Path | None = None
     workers: int = 12
     caps: CollectionCaps = field(default_factory=CollectionCaps)
+
+    def volume_source(self) -> Path:
+        """The directory the volume cap counts records in."""
+        return self.corpus_records or self.effect_records
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,13 +252,15 @@ def run(config: CollectVariantsConfig) -> int:
         )
         return 1
 
-    existing = count_records(config.effect_records)
+    source = config.volume_source()
+    existing = count_records(source)
     budget = variant_budget(existing, config.variant_volume)
     if budget <= 0:
         logger.error(
-            "The corpus holds %d records, so --variant-volume %.2f allows %d "
-            "variant records. Collect real records first.",
-            existing, config.variant_volume, budget,
+            "%s holds %d records, so --variant-volume %.2f allows %d variant "
+            "scripts. Collect real records first, or point --corpus-records at "
+            "the corpus when variants are written to a directory of their own.",
+            source, existing, config.variant_volume, budget,
         )
         return 1
 
