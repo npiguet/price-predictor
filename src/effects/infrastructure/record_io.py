@@ -774,7 +774,7 @@ def read_records(directory: Path) -> Iterator[EffectRecord]:
         yield from read_shard(shard)
 
 
-def count_records(directory: Path) -> int:
+def count_records(directory: Path, *, ceiling: int = 0) -> int:
     """Complete records under ``directory``, for progress and resume.
 
     Counts complete lines rather than parsed records: the count is a number,
@@ -783,7 +783,10 @@ def count_records(directory: Path) -> int:
     just to size its budget.
 
     A compressed shard still has to be decompressed to be counted, so the saving
-    there is only the JSON parse.
+    there is only the JSON parse. Over a full corpus that is minutes of gzip
+    before a single game is played, which is why ``ceiling`` exists: a caller
+    that only needs to know whether some threshold is passed stops there and
+    gets the threshold back. Zero means count everything.
     """
     total = 0
     for shard in iter_shards(directory):
@@ -791,4 +794,6 @@ def count_records(directory: Path) -> int:
             total += sum(1 for line in iter_shard_lines(shard) if line.strip())
         else:
             total += count_complete_lines(shard)
+        if ceiling and total >= ceiling:
+            return ceiling
     return total

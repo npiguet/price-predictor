@@ -29,6 +29,8 @@ from effects.application.collect_variants import (
     generate_variants,
     perturb_script,
     variant_budget,
+    variant_growth,
+    volume_ceiling,
 )
 from effects.domain.records import (
     EffectRecord,
@@ -329,6 +331,40 @@ class TestVolumeCap:
             effect_records=Path("output/effects/records"),
         )
         assert config.volume_source() == Path("output/effects/records")
+
+    def test_growth_is_measured_in_the_destination_not_the_volume_source(self):
+        """The two counts must come from the same directory.
+
+        `--corpus-records` let the volume cap be sized against a corpus the
+        variants are not written into. The growth check subtracted that count
+        from a count of the destination, so a run against a 39M-record corpus
+        writing to an empty directory reported "-39332737 new effect records".
+        """
+        assert variant_growth(before=12, after=20) == 8
+        assert variant_growth(before=0, after=0) == 0
+
+    def test_the_record_count_stops_once_the_cap_cannot_bind(self):
+        """Counting the corpus exactly is minutes of gzip for an inert number.
+
+        The budget caps how many variant *scripts* are generated, and there are
+        only ever as many candidates as source scripts. Past
+        `source_scripts / volume` records the cap cannot bind, so the count
+        stops there rather than gunzipping the rest of the corpus.
+        """
+        assert volume_ceiling(33_700, 0.2) == 168_501
+        assert volume_ceiling(33_700, 0.0) == 0
+
+    def test_a_ceiling_stops_the_count_early(self, tmp_path):
+        from effects.infrastructure.record_io import count_records, write_shard
+
+        for index in range(4):
+            write_shard(
+                tmp_path / f"run.0-{index}.jsonl.gz",
+                [_record(record_id=f"r.{index}.{n}") for n in range(10)],
+            )
+        assert count_records(tmp_path) == 40
+        assert count_records(tmp_path, ceiling=15) == 15
+
     def test_the_seed_is_settable_so_a_second_run_draws_differently(self):
         """A repeat run is the only way to top up, and it needs a new draw.
 
@@ -465,9 +501,11 @@ class TestRunClosesTheSupervisor:
 
         # Growing, not constant: `run` now compares the corpus before and
         # after the round and refuses to report success when it did not move.
-        readings = iter([1000, 1100])
+        # Three calls: the volume source, then the destination before and
+        # after the round.
+        readings = iter([1000, 1000, 1100])
         monkeypatch.setattr(
-            record_io, "count_records", lambda path: next(readings),
+            record_io, "count_records", lambda path, **_: next(readings),
         )
         monkeypatch.setattr(
             collect_variants, "generate_variants",
@@ -676,9 +714,12 @@ class TestTheRunReportsWhatItCollected:
     def _fixture(self, tmp_path, monkeypatch, counts):
         """A run whose only unknown is what ``count_records`` reports.
 
-        ``counts`` is consumed one value per call: the first is the
-        pre-flight corpus size the budget is taken from, the second is the
-        size after the round.
+        ``counts`` is consumed one value per call, and there are three: the
+        pre-flight size of the *volume source* the budget is taken from, then
+        the destination before the round and after it. The first can name a
+        different directory from the other two -- that is what
+        ``--corpus-records`` is for -- so the growth check must never subtract
+        it from either.
         """
         from unittest.mock import MagicMock
 
@@ -697,7 +738,8 @@ class TestTheRunReportsWhatItCollected:
         )
         readings = iter(counts)
         monkeypatch.setattr(
-            record_io, "count_records", lambda directory: next(readings),
+            record_io, "count_records",
+            lambda directory, **_: next(readings),
         )
         monkeypatch.setattr(
             collect_variants, "generate_variants", lambda *a, **k: [variant],
@@ -729,7 +771,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1000],
+            tmp_path, monkeypatch, [1000, 1000, 1000],
         )
 
         with caplog.at_level(logging.ERROR):
@@ -750,7 +792,7 @@ class TestTheRunReportsWhatItCollected:
         import logging
 
         collect_variants, config, _ = self._fixture(
-            tmp_path, monkeypatch, [1000, 1042],
+            tmp_path, monkeypatch, [1000, 1000, 1042],
         )
 
         with caplog.at_level(logging.INFO):
@@ -761,6 +803,31 @@ class TestTheRunReportsWhatItCollected:
             "42" in record.getMessage() for record in caplog.records
         ), "the run never reported how many records it added"
 
+    def test_a_corpus_counted_elsewhere_never_enters_the_growth_figure(
+        self, tmp_path, monkeypatch, caplog,
+    ):
+        """The reported figure was "Interrupted after -39332737 new records".
+
+        ``--corpus-records`` sizes the budget against a corpus the variants are
+        not written into. Subtracting that count from a count of the
+        destination reports a run against a 39M-record corpus writing to an
+        empty directory as having collected minus thirty-nine million.
+        """
+        import logging
+
+        collect_variants, config, _ = self._fixture(
+            tmp_path, monkeypatch, [39_000_000, 0, 42],
+        )
+
+        with caplog.at_level(logging.INFO):
+            code = collect_variants.run(config)
+
+        assert code == 0
+        assert any("42" in r.getMessage() for r in caplog.records)
+        assert not any("-38" in r.getMessage() for r in caplog.records), (
+            "the growth figure was taken against the wrong directory"
+        )
+
     def test_an_interrupted_round_does_not_report_success(
         self, tmp_path, monkeypatch,
     ):
@@ -768,7 +835,7 @@ class TestTheRunReportsWhatItCollected:
         swallows SIGINT, so a round the operator stopped returns exactly like
         one that finished."""
         collect_variants, config, supervisor = self._fixture(
-            tmp_path, monkeypatch, [1000, 1042],
+            tmp_path, monkeypatch, [1000, 1000, 1042],
         )
         supervisor.interrupted = True
 

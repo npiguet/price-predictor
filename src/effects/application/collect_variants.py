@@ -105,6 +105,33 @@ def variant_budget(existing_records: int, volume: float) -> int:
     return int(existing_records * volume)
 
 
+def volume_ceiling(source_scripts: int, volume: float) -> int:
+    """Records past which ``--variant-volume`` cannot bind.
+
+    The budget caps how many variant scripts are generated, and there are only
+    ever as many candidates as there are source scripts. Once the corpus is
+    large enough that ``existing * volume`` clears that number, the exact count
+    changes nothing — and counting it exactly means gunzipping the whole corpus
+    before a single game is played, which on a full corpus is minutes of
+    startup for a number that cannot matter.
+    """
+    if volume <= 0:
+        return 0
+    return int(source_scripts / volume) + 1
+
+
+def variant_growth(*, before: int, after: int) -> int:
+    """How many records the round added to the destination.
+
+    Both counts must come from the destination. ``--corpus-records`` lets the
+    volume cap be sized against a corpus the variants are not written into, and
+    subtracting that count from a count of the destination reports a run
+    against a 39M-record corpus writing to an empty directory as having
+    collected minus thirty-nine million records.
+    """
+    return after - before
+
+
 def perturb_script(
     source_lines: list[str], rng: random.Random,
 ) -> tuple[list[str], str] | None:
@@ -259,8 +286,14 @@ def run(config: CollectVariantsConfig) -> int:
         )
         return 1
 
+    # A directory listing, not a corpus read: it bounds how many variants can
+    # exist, which is what says how far the record count has to go.
+    source_scripts = sum(1 for _ in Path(config.forge_cards_path).rglob("*.txt"))
     source = config.volume_source()
-    existing = count_records(source)
+    existing = count_records(
+        source,
+        ceiling=volume_ceiling(source_scripts, config.variant_volume),
+    )
     budget = variant_budget(existing, config.variant_volume)
     if budget <= 0:
         logger.error(
@@ -310,6 +343,10 @@ def run(config: CollectVariantsConfig) -> int:
         rng=random.Random(config.seed),
     )
     write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)
+    # The destination's own count, which is what the growth check compares
+    # against. `existing` sized the volume cap and may have come from another
+    # directory entirely.
+    before = count_records(config.effect_records)
     try:
         supervisor.play_round(decks_file, matches=config.decks_per_round)
     finally:
@@ -324,7 +361,9 @@ def run(config: CollectVariantsConfig) -> int:
     # Forge's card database under the names the decks file spells, every deck
     # materializes as 17 basics, every game plays, every progress line is
     # appended, and the run exits 0 having collected nothing.
-    collected = count_records(config.effect_records) - existing
+    collected = variant_growth(
+        before=before, after=count_records(config.effect_records),
+    )
     if supervisor.interrupted:
         logger.warning(
             "Interrupted after %d new effect records; the variant round did "
@@ -334,10 +373,10 @@ def run(config: CollectVariantsConfig) -> int:
     if collected <= 0:
         logger.error(
             "The variant round played its matches and added no new effect "
-            "records at all (corpus still %d). The staged scripts most likely "
-            "never reached Forge's card database under the names %s spells, "
-            "so every deck materialized as basics only.",
-            existing, decks_file,
+            "records at all (%s still holds %d). The staged scripts most "
+            "likely never reached Forge's card database under the names %s "
+            "spells, so every deck materialized as basics only.",
+            config.effect_records, before, decks_file,
         )
         return 1
     logger.info(

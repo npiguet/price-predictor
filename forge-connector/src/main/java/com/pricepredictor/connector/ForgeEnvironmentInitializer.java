@@ -55,13 +55,21 @@ public class ForgeEnvironmentInitializer {
         Path forgeDir = findForgeDir();
         Path forgeGuiDir = forgeDir.resolve(GUI_SUBPATH);
 
+        // The GUI base comes first, staging second, FModel.initialize last, and
+        // the window between the first two is exactly one class-init wide.
+        // stageCustomCards resolves ForgeConstants.USER_CUSTOM_CARDS_DIR, and
+        // ForgeConstants' static initializer calls
+        // GuiBase.getInterface().getAssetsDir() -- so staging before this line
+        // throws ExceptionInInitializerError on a null interface, and every
+        // worker of a variant run dies at startup before playing a game.
+        GuiBase.setInterface(new GuiHeadless(forgeGuiDir + File.separator));
+
         if (extraCardSource != null) {
             com.pricepredictor.connector.effects.VariantRegistry
                     .registerAll(extraCardSource);
             stageCustomCards(extraCardSource);
         }
 
-        GuiBase.setInterface(new GuiHeadless(forgeGuiDir + File.separator));
         FModel.initialize(null, null);
 
         initialized = true;
