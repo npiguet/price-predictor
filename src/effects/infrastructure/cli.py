@@ -37,6 +37,10 @@ DEFAULT_KEYWORD_DEFINITIONS = "output/effects/keyword-definitions.json"
 DEFAULT_VOCAB_PATH = "models/effects/vocab.txt"
 DEFAULT_SCRIPT_VOCAB_PATH = "models/effects/vocab-script.txt"
 DEFAULT_VARIANT_SCRIPTS = "output/effects/variant-scripts/"
+#: Mirrors collect_variants.RANDOM_SEED. Restated rather than imported
+#: because the parser is built before that module is, and pinned against
+#: it by tests/unit/effects/application/test_variants.py.
+VARIANT_RANDOM_SEED = 42
 DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 #: Restated rather than imported, so `--help` stays free of torch. The
 #: trainer's own constants are the source; `test_holdout_cli.py` pins them.
@@ -1049,6 +1053,16 @@ def _collect_variants_parser(subparsers) -> None:
     )
     parser.add_argument("--decks-per-round", type=int, default=500)
     parser.add_argument(
+        "--seed", type=int, default=VARIANT_RANDOM_SEED,
+        help=(
+            "Seeds both the perturbation and the deck build (default: "
+            f"{VARIANT_RANDOM_SEED}). A variant round weights every variant "
+            "equally and plays once, so a repeat run with the same seed "
+            "regenerates the same scripts and decks and collects nothing; "
+            "change it to top a corpus up."
+        ),
+    )
+    parser.add_argument(
         "--split-from", type=str, default=None,
         help=(
             "A checkpoint whose held-out cards, and their variants, are "
@@ -1095,6 +1109,7 @@ def run_collect_variants(args: argparse.Namespace) -> int:
             Path(args.corpus_records) if args.corpus_records else None
         ),
         decks_per_round=args.decks_per_round,
+        seed=args.seed,
         split_from=Path(args.split_from) if args.split_from else None,
         exclude_cards=listed,
         workers=args.workers,

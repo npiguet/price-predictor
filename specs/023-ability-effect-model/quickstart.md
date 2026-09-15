@@ -373,14 +373,30 @@ reason: `--variant-volume` is measured against the records already collected, an
 own is empty on the first run, so without it the cap allows nothing and the command refuses.
 
 **One invocation is one round**, unlike step 4 — there is no loop and no `--no-progress-rounds`. Run
-length is `--decks-per-round` matches at one game each. Re-running the command collects nothing new:
-both the perturbation and the deck build take a fixed seed, so a second invocation writes the same
-variants and plays the same decks. Widen with a larger `--decks-per-round` rather than by repeating.
+length is `--decks-per-round` matches at one game each. A repeat run needs `--seed` changed: step 4
+re-weights each round by how far a card is from its target, so its rounds converge whatever the seed,
+while a variant round weights every variant equally, so the same seed regenerates the same scripts and
+the same decks and collects nothing.
 
-Size it for breadth rather than depth. Forge has about 33,700 source scripts, a round's decks hold 23
-nonlands each, and the curated build caps every ability text at `--text-cap` records anyway — so what
-is worth buying is each variant reaching a game at all. The default 500 decks puts well under half of
-them into one; a few thousand gets most.
+Size it for breadth rather than depth. What is worth buying is each variant reaching a game at all:
+the curated build caps every ability text at `--text-cap` records, so depth past that is discarded.
+Forge has about 33,700 source scripts and a deck holds 23 nonlands, so `--decks-per-round` decks draw
+`23 ×` that many slots over the variant set, and the share of variants landing in at least one deck is
+`1 − e^(−slots/variants)`:
+
+| `--decks-per-round` | Variants in ≥ 1 deck |
+|---:|---:|
+| 500 (default) | ~29% |
+| 1000 | ~49% |
+| 2000 | ~75% |
+| 4000 | ~94% |
+| 6000 | ~98% |
+
+Reaching a deck is not the same as being cast — a game shows perhaps two thirds of a deck's nonlands,
+and a card that is drawn still has to resolve something to earn a record. Treat the table as the
+ceiling on what one round can reach, not as coverage achieved. There is no residue report here as
+there is in step 4, so the honest check is the unique-text count `build-corpus` prints for the
+dataset it writes.
 
 `--variant-volume` (default 0.2) caps how many variant **scripts** are generated, as a fraction of the
 records in `--corpus-records`. On a corpus of any size that budget exceeds the number of perturbable

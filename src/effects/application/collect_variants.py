@@ -68,6 +68,13 @@ class CollectVariantsConfig:
     #: run at zero against a corpus of millions.
     corpus_records: Path | None = None
     decks_per_round: int = DEFAULT_DECKS_PER_ROUND
+    #: Seeds both the perturbation and the deck build. Settable because a
+    #: variant round has no feedback to make progress on: `collect-coverage`
+    #: re-weights each round by how far a card is from its target, so its
+    #: rounds converge whatever the seed, while a variant round weights every
+    #: variant equally and plays once. Pinned, a second invocation regenerates
+    #: the same perturbations, builds the same decks and collects nothing.
+    seed: int = RANDOM_SEED
     split_from: Path | None = None
     exclude_cards: Path | None = None
     workers: int = 12
@@ -267,7 +274,7 @@ def run(config: CollectVariantsConfig) -> int:
     held_out = held_out_cards(config.split_from, config.exclude_cards)
     variants = generate_variants(
         config.forge_cards_path, config.variant_scripts,
-        held_out=held_out, limit=budget,
+        held_out=held_out, limit=budget, seed=config.seed,
     )
     logger.info(
         "Generated %d variant scripts into %s (%d cards held out with their "
@@ -300,7 +307,7 @@ def run(config: CollectVariantsConfig) -> int:
     texts = {variant.name: _deck_text(variant) for variant in variants}
     decks = build_coverage_decks(
         {variant.name: 1.0 for variant in variants}, texts, config.decks_per_round,
-        rng=random.Random(RANDOM_SEED),
+        rng=random.Random(config.seed),
     )
     write_deck_file(decks, decks_file, label="variant", set_code=COVERAGE_SET_CODE)
     try:

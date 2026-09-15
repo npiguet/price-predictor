@@ -158,6 +158,7 @@ no shards.
 | `--effect-records` | `output/effects/records/` |
 | `--forge-cards-path` | `../forge/forge-gui/res/cardsfolder/` |
 | `--variant-volume` | 0.2 — cap on how many variant **scripts** are generated, as a fraction of the real records in `--corpus-records` |
+| `--seed` | 42 — seeds the perturbation and the deck build. A variant round has no shortfall to converge on, so a repeat run with the same seed collects nothing |
 | `--corpus-records` | `--effect-records` — the real records the volume cap is measured against. Variants written to a directory of their own need it pointed at the corpus, or the cap is measured against an empty destination and allows nothing |
 | `--decks-per-round` | 500 |
 | cap/budget flags | see below |

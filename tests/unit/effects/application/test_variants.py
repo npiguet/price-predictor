@@ -22,6 +22,7 @@ import pytest
 
 from effects.application.collect_variants import (
     DEFAULT_VARIANT_VOLUME,
+    RANDOM_SEED,
     CollectVariantsConfig,
     GeneratedVariant,
     _deck_text,
@@ -328,6 +329,42 @@ class TestVolumeCap:
             effect_records=Path("output/effects/records"),
         )
         assert config.volume_source() == Path("output/effects/records")
+    def test_the_seed_is_settable_so_a_second_run_draws_differently(self):
+        """A repeat run is the only way to top up, and it needs a new draw.
+
+        `collect-coverage` re-weights each round by how far a card is from its
+        target, so its rounds make progress whatever the seed. A variant round
+        weights every variant equally and plays once, so with the seed pinned a
+        second invocation regenerates the same perturbations, builds the same
+        decks, and collects nothing.
+        """
+        from effects.infrastructure.cli import VARIANT_RANDOM_SEED
+
+        assert CollectVariantsConfig().seed == RANDOM_SEED
+        assert CollectVariantsConfig(seed=7).seed == 7
+        # The CLI restates the constant rather than importing it.
+        assert VARIANT_RANDOM_SEED == RANDOM_SEED
+
+    def test_two_seeds_perturb_the_same_script_differently(self, tmp_path):
+        source = tmp_path / "cards"
+        (source / "b").mkdir(parents=True)
+        (source / "b" / "bolt.txt").write_text(
+            "Name:Bolt\nManaCost:R\nTypes:Instant\n"
+            "A:SP$ DealDamage | Cost$ R | NumDmg$ 3 | ValidTgts$ Any\n"
+            "Oracle:Bolt deals 3 damage to any target.\n",
+            encoding="utf-8",
+        )
+        drawn = {
+            seed: [
+                v.perturbation for v in generate_variants(
+                    source, tmp_path / f"out{seed}",
+                    held_out=frozenset(), limit=50, seed=seed,
+                )
+            ]
+            for seed in range(1, 21)
+        }
+        assert len({tuple(v) for v in drawn.values()}) > 1
+
 
 
 class TestPairingLoss:
