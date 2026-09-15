@@ -16,8 +16,9 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 | 3 | `effects holdout-cards`, `sealed match-outcomes --exclude-cards --effect-records` | hours | you decide when to stop |
 | 3b | the same, full strength, into `records/full-strength/` | hours | no |
 | 4 | `effects collect-coverage` | hours | no |
-| 5 | `effects collect-variants`, into `records/variants/` | hours | no |
-| 6 | `effects train-effect-model`, then four baselines | 5 × hours | no |
+| 5 | `effects collect-variants` into `records/variants/`, then `build-vocab --surface script` over them | hours | no |
+| 5b | `effects build-corpus` | ~1 hour | no |
+| 6 | `effects train-effect-model --corpus`, then four baselines | 5 × hours | no |
 | 7 | `effects encode-abilities` ×3 | minutes | no |
 | 8 | `effects evaluate-effect-model` | minutes | read the output |
 
@@ -351,17 +352,30 @@ held-out card dealing 3 is still predicted correctly by a model that recognizes 
 changes one parameter and nothing else, so the only way to be right about it is to read the
 parameter. These records are training data, and they are collected **before** step 6, not after it.
 
-The script surface is a second vocabulary and a second cache, side by side with the prose ones:
+Collect the variants first, then build the script vocabulary over them. The script surface is a
+second vocabulary and a second cache, side by side with the prose ones:
 
 ```bash
-python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
-
 python -m effects collect-variants \
     --effect-records output/effects/records/variants/ \
     --corpus-records output/effects/records/ \
     --exclude-cards output/effects/records/depleted/holdout-cards.txt \
-    --decks-per-round 2000
+    --decks-per-round 4000
+
+# The script vocabulary comes *after*, and scans the variant tree: a
+# vocabulary built before the perturbed scripts existed cannot hold their
+# tokens, and build-vocab overwrites its target in place.
+python -m effects build-vocab --surface script \
+    --cards-folder output/cardsfolder/ \
+    --cards-folder output/tokenscripts/ \
+    --cards-folder output/effects/variant-scripts/
 ```
+
+Build the script vocabulary **after** this step, not before. It is what every stage-four command loads
+(`models/effects/vocab-script.txt`), the encoding surface follows the vocabulary rather than a flag of
+its own, and `build-vocab` overwrites its target in place — so building it once the variants exist is
+the only ordering that has them in it, and rebuilding it after training would silently re-index the
+embedding table a checkpoint was trained against.
 
 **Write them to their own directory.** Shard discovery recurses, so `records/variants/` is read as
 part of the corpus exactly like `depleted/` and `full-strength/` — but keeping them apart is what
@@ -439,8 +453,17 @@ that many runs can read:
 ```bash
 python -m effects build-corpus \
     --records-dir output/effects/records/ \
-    --output output/effects/corpus/
+    --output output/effects/corpus/ \
+    --variant-scripts output/effects/variant-scripts/ \
+    --vocab-path models/effects/vocab-script.txt
 ```
+
+Drop `--variant-scripts` only if step 5 was skipped, and `--vocab-path` only if you are training on the
+prose surface. Both are load-bearing and neither has a default that guesses right for you: without the
+variant tree every stage-four record resolves to no ability text, so it lands in neither the rarity
+table nor the per-text cap while every real ability is in both; and the rarity table's keys are texts
+*on one surface*, so a dataset built on prose and trained on script matches nothing. Training refuses
+the second mismatch rather than reporting it, but nothing catches the first.
 
 Two passes. A parallel survey reads every shard once, then one process folds provenance keys to
 ability texts, decides the split, computes the rarity table corpus-wide, and a second parallel pass
@@ -467,14 +490,12 @@ margin; the distribution is in the [design record](../../experiments/2026-09-04-
 the corpus on disk and writes nothing; a corpus that has grown is rebuilt whole, because the split and
 the rarity table are both corpus-wide quantities.
 
-**Pass `--variant-scripts` once step 5 has run.** A variant line's provenance names the variant tree,
-so without that root it resolves to no ability text at all: no rarity-table entry and no per-text cap,
-while every real ability gets both. The manifest records which tree was read, because which trees
-resolved decides which texts the rarity table names.
+The manifest records the variant tree and the vocabulary it read, because which trees resolved decides
+which texts the rarity table names, and which vocabulary decides what surface those texts are on.
 
-```bash
-python -m effects build-corpus     --records-dir output/effects/records/     --variant-scripts output/effects/variant-scripts/     --output output/effects/corpus/
-```
+`--card-disjoint-text-cap` (default 50) sizes the card-disjoint stratum, and 50 is deliberately
+generous: per-epoch validation reads only 2,048 records of it, but `evaluate-effect-model` scores
+gate 1 against the **whole** stratum, so its size is gate 1's precision rather than waste.
 
 Build the dataset **after** step 4 finishes, not during it. The dataset freezes whatever it is given,
 and what step 4 is still fixing is how thinly the tail is observed.
@@ -483,17 +504,23 @@ and what step 4 is still fixing is how thinly the tail is observed.
 
 ```bash
 python -m effects train-effect-model \
+    --corpus output/effects/corpus/ \
     --variant-scripts output/effects/variant-scripts/ \
+    --vocab-path models/effects/vocab-script.txt \
     --withhold-keyword cascade
 ```
 
-Add `--corpus output/effects/corpus/` to train against a curated dataset instead of the raw corpus.
-It takes the split, both validation strata and the rarity table from the manifest, so it refuses
-`--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and `--holdout-max-carriers`
-alongside it — each of those names a decision the manifest already records, and two spellings of one
-decision is a disagreement nothing would report. It also refuses a dataset built on the other encoding
-surface, because the rarity table's keys are the texts of that surface and a table read on the wrong
-one matches nothing while looking entirely valid.
+**Every flag above matters, and the three paths must match the ones `build-corpus` was given.**
+`--vocab-path` decides the encoding surface; the manifest records the surface it was built on and the
+run refuses a mismatch, because the rarity table's keys are texts on one surface and a table read on
+the other matches nothing while looking entirely valid. `--variant-scripts` is what lets a stage-four
+record resolve to a text at all. Drop `--corpus` to train against the raw corpus instead, `--vocab-path`
+to stay on prose, and `--variant-scripts` if step 5 was skipped.
+
+`--corpus` takes the split, both validation strata and the rarity table from the manifest, so it
+refuses `--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and
+`--holdout-max-carriers` alongside it — each of those names a decision the manifest already records,
+and two spellings of one decision is a disagreement nothing would report.
 
 `--withhold-keyword` holds one implemented keyword's token out of training so the zero-shot check in
 step 8 has something to measure; its occurrences are always expanded instead. Any implemented keyword
@@ -525,26 +552,28 @@ keyword, so the only difference from the shipping model is the input its variant
 ```bash
 for V in identity state-only no-state taxonomy; do
   python -m effects train-effect-model --variant $V \
-      --split-from models/effects/effect-model/latest.pt \
+      --corpus output/effects/corpus/ \
       --variant-scripts output/effects/variant-scripts/ \
+      --vocab-path models/effects/vocab-script.txt \
       --withhold-keyword cascade
 done
 ```
 
-Pass the **same** `--holdout-permille` and `--holdout-max-carriers` here as in step 3. The corpus was depleted against those values; a run that computes a different holdout would train on cards it believes are held out, and nothing would say so. The checkpoint records them.
+Same flags as the shipping run, and `--withhold-keyword` must name the same keyword: the only
+difference between a baseline and the model it is a baseline for is the input its variant masks.
 
-These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint. A
-variant run must inherit the split it is a baseline for, so it fails fast without either
-`--split-from` or `--corpus` rather than silently computing its own and making the comparison
-meaningless. Against a curated dataset, pass `--corpus` to every baseline and drop `--split-from`:
-the manifest enumerates the split directly, so every run reading that dataset trains on the same
-games by construction.
+A variant run must inherit the split it is a baseline for, so it fails fast without either `--corpus`
+or `--split-from` rather than silently computing its own. **Against a curated dataset pass `--corpus`
+and not `--split-from`** — the manifest enumerates the split directly, so every run reading that
+dataset trains on the same games by construction. `--split-from models/effects/effect-model/latest.pt`
+is the raw-corpus route, and there it also carries the vocabulary and keyword-definition paths forward.
 
-**For the script surface** add `--vocab-path models/effects/vocab-script.txt` to *every* command in
-steps 6, 7 and 8 — training, the four baselines, `encode-abilities` and `evaluate-effect-model` all
-take it. The surface follows the loaded vocabulary rather than a flag of its own, so the two cannot
-disagree; but a cache encoded under one vocabulary and evaluated under another is a mismatch nothing
-catches for you.
+Without `--corpus`, pass the **same** `--holdout-permille` and `--holdout-max-carriers` as in step 3:
+the corpus was depleted against those values, and a run computing a different holdout would train on
+cards it believes are held out with nothing to say so. With `--corpus` the manifest carries them and
+the flags are refused.
+
+These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint.
 
 **Checks**: the checkpoint under `models/effects/effect-model/` records its held-out card list, its
 `game_id` set across both strata, and the vocabulary and keyword-definition paths plus their hashes.
@@ -562,6 +591,11 @@ for V in no-state taxonomy; do
       --variant-scripts output/effects/variant-scripts/
 done
 ```
+
+**No `--vocab-path` here, and none in step 8.** Both commands default it to the path the checkpoint
+recorded at training, and re-hash the file they actually load against the hash the checkpoint carries —
+so passing the wrong one fails rather than encoding a cache that looks fine and means nothing. Naming
+it again only creates a second place for the two to disagree.
 
 **Checks**: `output/effects/abilities/cardsfolder/…` and `…/tokenscripts/…` mirror their source trees;
 each file is `(n_lines, e_dim)` and row-aligned with that source's sidecar. Each variant run wrote
