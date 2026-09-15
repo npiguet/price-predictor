@@ -34,6 +34,26 @@ the validation corpus from pools at full strength. Splitting the corpus at colle
 than discarding held-out games afterwards is what keeps every collected game usable;
 [spec.md](spec.md) FR-130 has the rules.
 
+### Steps and stages are different axes
+
+A **step** is a command and its position in the order. A **stage** is how much of the record schema a
+run can reach at all, and the two do not line up: nothing below is a "stage 3 step", because a stage is
+unlocked by the engine patch and a handful of flags rather than by reaching a later command. The path
+in this document is **stage four throughout** — it applies the patch, collects at tier 4 with forks,
+and trains on the script surface. [The root spec](../2026-09-05-ability-effect-model.md) § Stages
+defines them; this is where each one is bought here.
+
+| Stage | What unlocks it | Where in this document | What you lose without it |
+|---|---|---|---|
+| one | nothing — stock Forge | steps 1–3, 6–8 | 3 of the 8 sampling classes; every record stamped `degraded` |
+| two | the engine patch | step 0, and step 4 becomes possible at all | mana, rewrite, trigger, continuous and playability records; the coverage collector |
+| three | `--interventions-per-game`, `--probes-per-game` with `--probe-keywords`, `--snapshot-tiers 1,2,3,4` | flags in steps 3, 3b and 4 | records for abilities the AI never plays, and gate 2's engine-side branch |
+| four | the script surface | step 5, then `--vocab-path models/effects/vocab-script.txt` in steps 5b and 6 | synthetic variants, captured keyword scripts, and the mechanism-level encoding that collapses paraphrases |
+
+Stage four is also where the primary encoding surface changes. Prose is the sole surface through stage
+three; from stage four the Forge script line is primary and converted prose is the paired secondary,
+which is why step 5 builds a second vocabulary at a path of its own and steps 5b and 6 name it.
+
 ## Prerequisites
 
 ```bash
