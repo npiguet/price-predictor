@@ -296,6 +296,7 @@ class BuildCorpusConfig:
     output: Path = Path("output/effects/corpus")
     cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
     vocab_path: str = "models/effects/vocab.txt"
+    variant_scripts: str | None = None
     holdout_permille: int = 20
     holdout_max_carriers: int = 8
     text_cap: int = 200
@@ -817,7 +818,14 @@ def build(config: BuildCorpusConfig) -> int:
 
     folders = {Path(f).name: Path(f) for f in config.cards_folders}
     cards_folder = folders.get("cardsfolder", Path(config.cards_folders[0]))
-    sidecars = SidecarCache(folders)
+    roots = dict(folders)
+    if config.variant_scripts:
+        # Keyed "variant-scripts" because that is the tree a variant line's
+        # own provenance names, and the trainer registers it under the same
+        # name. Without it every variant key resolves to no text: no rarity
+        # entry and no per-text cap, while every real ability has both.
+        roots["variant-scripts"] = Path(config.variant_scripts)
+    sidecars = SidecarCache(roots)
     card_files = load_card_files(cards_folder)
     held_out = text_keyed_holdout(
         card_files,
@@ -938,6 +946,7 @@ def build(config: BuildCorpusConfig) -> int:
         seed=config.seed,
         surface=surface,
         vocab_path=config.vocab_path,
+        variant_scripts=config.variant_scripts or "",
         holdout_permille=config.holdout_permille,
         holdout_max_carriers=config.holdout_max_carriers,
         text_cap=config.text_cap,

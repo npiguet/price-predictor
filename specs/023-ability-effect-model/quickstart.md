@@ -448,13 +448,14 @@ margin; the distribution is in the [design record](../../experiments/2026-09-04-
 the corpus on disk and writes nothing; a corpus that has grown is rebuilt whole, because the split and
 the rarity table are both corpus-wide quantities.
 
-**Step 5's variant records are read but not capped.** `build-corpus` takes no `--variant-scripts`
-root, so a variant line resolves to no ability text: it gets no entry in the rarity table and no
-per-text cap, while every real ability has both. The records still reach training, and the trainer
-still resolves them because it does take that flag — but they sit outside the two mechanisms that
-decide how much of the corpus anything gets to be. Until that gap closes, build the dataset with
-`--records-dir output/effects/records/` and know that the variant fraction is whatever step 5
-collected, not a share the manifest chose.
+**Pass `--variant-scripts` once step 5 has run.** A variant line's provenance names the variant tree,
+so without that root it resolves to no ability text at all: no rarity-table entry and no per-text cap,
+while every real ability gets both. The manifest records which tree was read, because which trees
+resolved decides which texts the rarity table names.
+
+```bash
+python -m effects build-corpus     --records-dir output/effects/records/     --variant-scripts output/effects/variant-scripts/     --output output/effects/corpus/
+```
 
 Build the dataset **after** step 4 finishes, not during it. The dataset freezes whatever it is given,
 and what step 4 is still fixing is how thinly the tail is observed.

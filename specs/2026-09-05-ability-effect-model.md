@@ -253,6 +253,7 @@ Flags:
 | `--output` | `output/effects/corpus/` | curated dataset directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and sidecars, for the holdout rule; repeatable |
 | `--vocab-path` | `models/effects/vocab.txt` | decides the encoding surface the rarity table's text keys are built on |
+| `--variant-scripts` | _(none)_ | the stage-four variant tree; without it a variant line resolves to no ability text, so it gets neither a rarity-table entry nor a per-text cap |
 | `--holdout-permille` | 20 | holdout share of eligible ability texts |
 | `--holdout-max-carriers` | 8 | cards a text may be on and stay eligible |
 | `--text-cap` | 200 | max training records per unique ability text |

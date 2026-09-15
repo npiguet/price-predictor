@@ -487,6 +487,15 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--variant-scripts", type=str, default=None,
+        help=(
+            "The stage-four variant tree (collect-variants). Without it a "
+            "variant line resolves to no ability text, so it gets neither a "
+            "rarity-table entry nor a per-text cap while every real ability "
+            "gets both"
+        ),
+    )
+    parser.add_argument(
         "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
         help=(
             "Holdout share of eligible ability texts "
@@ -561,6 +570,7 @@ def run_build_corpus(args: argparse.Namespace) -> int:
                 str(path) for path in resolve_cards_folders(args.cards_folders)
             ),
             vocab_path=args.vocab_path,
+            variant_scripts=args.variant_scripts,
             holdout_permille=args.holdout_permille,
             holdout_max_carriers=args.holdout_max_carriers,
             text_cap=args.text_cap,

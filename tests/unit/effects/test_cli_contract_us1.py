@@ -350,6 +350,7 @@ class TestBuildCorpus:
         assert args.output == "output/effects/corpus/"
         assert args.cards_folders is None  # resolved to both converted trees
         assert args.vocab_path == "models/effects/vocab.txt"
+        assert args.variant_scripts is None
 
     def test_the_holdout_defaults_match_the_trainers(self):
         """The same two values must be passed here, at `holdout-cards` and at

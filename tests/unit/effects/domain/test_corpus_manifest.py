@@ -8,6 +8,7 @@ def manifest(**overrides) -> CorpusManifest:
         seed=42,
         surface="script",
         vocab_path="models/effects/vocab-script.txt",
+        variant_scripts="output/effects/variant-scripts",
         holdout_permille=20,
         holdout_max_carriers=8,
         text_cap=200,

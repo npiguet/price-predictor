@@ -53,6 +53,10 @@ class CorpusManifest:
     #: surface keys every text differently while looking exactly as valid.
     surface: str
     vocab_path: str
+    #: The stage-four variant tree the build resolved against, or "" when
+    #: none was given. Which trees resolved decides which keys became texts,
+    #: and so which texts the rarity table names and the cap reaches.
+    variant_scripts: str
     holdout_permille: int
     holdout_max_carriers: int
     text_cap: int
@@ -109,6 +113,7 @@ class CorpusManifest:
             seed=int(data["seed"]),
             surface=str(data["surface"]),
             vocab_path=str(data["vocab_path"]),
+            variant_scripts=str(data.get("variant_scripts", "")),
             holdout_permille=int(data["holdout_permille"]),
             holdout_max_carriers=int(data["holdout_max_carriers"]),
             text_cap=int(data["text_cap"]),

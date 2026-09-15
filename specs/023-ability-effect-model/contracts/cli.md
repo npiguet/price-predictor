@@ -231,6 +231,7 @@ differing only in hyperparameters read the same records.
 | `--output` | `output/effects/corpus/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
+| `--variant-scripts` | _(none)_ — the stage-four variant tree. A variant line resolves to no ability text without it, so it gets neither a rarity-table entry nor a per-text cap |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` and `holdout-cards` |
 | `--text-cap` | 200 — max training records per unique ability text |
 | `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |

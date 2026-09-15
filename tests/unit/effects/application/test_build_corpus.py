@@ -742,3 +742,104 @@ def test_a_card_disjoint_text_cap_of_zero_means_no_cap_either(tmp_path, a_corpus
     ))
 
     assert CorpusStore(out).load().card_disjoint_games == ("g-tainted",)
+
+
+# ── stage-four variants (FR-141: they are ability texts like any other) ──
+
+_VARIANT_FILE = "variant-scripts/bolt_numdmg_2.txt"
+_VARIANT_KEY = ProvenanceKey(_VARIANT_FILE, 0, "spell", 0)
+_VARIANT_TEXT = "SP$ DealDamage | NumDmg$ 2"
+
+
+def _write_variant(root: Path, script_file: str, text: str) -> None:
+    """A sidecar in the flat variant tree, which carries no prose surface.
+
+    `collect-variants` writes the perturbed *source* script and a sidecar
+    beside it; nothing converts it, so `script_text` is the only surface the
+    line has.
+    """
+    relative = script_file.split("/", 1)[1]
+    path = root / "variant-scripts" / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text + "\n", encoding="utf-8")
+    write_sidecar(
+        ProvenanceSidecar(
+            card="Bolt Variant",
+            script_file=script_file,
+            lines=(
+                SidecarLine(
+                    line_index=0, line_kind="spell",
+                    provenance=(_VARIANT_KEY,), script_text=text,
+                ),
+            ),
+        ),
+        sidecar_path_for(path),
+    )
+
+
+@pytest.fixture
+def a_corpus_with_variants(tmp_path: Path, a_corpus: CorpusFixture):
+    """The ordinary fixture plus a variant tree and a shard that uses it."""
+    fixture = a_corpus
+    root = tmp_path / "source"
+    _write_variant(root, _VARIANT_FILE, _VARIANT_TEXT)
+    write_shard(
+        fixture.records / "variants" / "run.0-v.jsonl.gz",
+        [
+            _resolution(f"g-var.{i}", "g-var", ability=(_VARIANT_KEY,))
+            for i in range(6)
+        ],
+    )
+    return fixture, str(root / "variant-scripts")
+
+
+def test_a_variant_text_is_capped_and_weighted_like_any_other(
+    tmp_path: Path, a_corpus_with_variants,
+):
+    """FR-138/FR-141 do not exempt the variant tree.
+
+    Without `--variant-scripts` a variant line resolves to no text at all, so
+    it lands in neither the rarity table nor the per-text cap while every real
+    ability is in both — uncapped records competing against capped ones.
+    """
+    fixture, variant_root = a_corpus_with_variants
+    out = tmp_path / "curated"
+
+    build(BuildCorpusConfig(
+        records_dir=fixture.records, cards_folders=fixture.cards,
+        variant_scripts=variant_root, output=out, workers=1,
+        game_disjoint_target=1,
+    ))
+
+    assert _VARIANT_TEXT in CorpusStore(out).load().rarity
+
+
+def test_without_the_variant_tree_a_variant_text_resolves_to_nothing(
+    tmp_path: Path, a_corpus_with_variants,
+):
+    """The state this flag exists to end; pinned so the fix cannot regress."""
+    fixture, _ = a_corpus_with_variants
+    out = tmp_path / "curated"
+
+    build(BuildCorpusConfig(
+        records_dir=fixture.records, cards_folders=fixture.cards,
+        output=out, workers=1, game_disjoint_target=1,
+    ))
+
+    assert _VARIANT_TEXT not in CorpusStore(out).load().rarity
+
+
+def test_the_manifest_records_the_variant_tree_it_read(
+    tmp_path: Path, a_corpus_with_variants,
+):
+    """Which trees resolved decides which texts the rarity table names."""
+    fixture, variant_root = a_corpus_with_variants
+    out = tmp_path / "curated"
+
+    build(BuildCorpusConfig(
+        records_dir=fixture.records, cards_folders=fixture.cards,
+        variant_scripts=variant_root, output=out, workers=1,
+        game_disjoint_target=1,
+    ))
+
+    assert CorpusStore(out).load().variant_scripts == variant_root
