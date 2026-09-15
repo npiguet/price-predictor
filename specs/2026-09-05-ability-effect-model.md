@@ -16,7 +16,7 @@ The ability effect model is a pretrained model of what each card ability does in
 
 Location: `output/effects/records/` and any subdirectory of it — discovery recurses, so a depleted run and a full-strength one may be kept in separate subdirectories and still read as one corpus. Shard files named `{run_id}.{worker}-{lifetime}.jsonl`, one per worker JVM lifetime, one JSON record per line, append-only. Readers load every `*.jsonl` in the directory and tolerate a trailing partial line.
 
-The record schema is fixed before stage one (§ Stages); later stages widen the corpus without invalidating earlier records.
+The record schema is fixed before the first record is collected: a later capability may make a new `kind` reachable or add a snapshot tier, but never redefines a field, so no corpus is invalidated by one.
 
 ## Record envelope (every record)
 
@@ -62,7 +62,7 @@ State is stored as data — names plus dynamic attributes. The tensor representa
   3. unreferenced stack contents;
   4. unreferenced hand and graveyard contents.
 
-  Tiers 1 and 2 are in every snapshot from stage one; tier 3 joins at stage two and tier 4 at stage three. A record carries the tiers current at its collection; readers treat an absent tier as uncollected, not empty.
+  Tiers 1 and 2 need nothing; tier 3 needs the engine patch and tier 4 is what an interventional fork reads. A record carries the tiers current at its collection; readers treat an absent tier as uncollected, not empty.
 - Perspective is not stored: controllers are absolute ids, and mine/opponent tags are derived at training time relative to `actor_player`.
 
 ## Events
@@ -97,7 +97,7 @@ The itemized rulings behind the less obvious corners of the vocabulary — `coin
 
 Verdicts are the rules-level checks only; the AI's policy judgments (e.g. "another time", "life in danger") are never recorded.
 
-**Why the `rewrite` payload is wider than `{incoming, outgoing}`.** That pair assumed a replacement edits the event's parameter map. Forge mostly does not: `ReplacementHandler` runs the `ReplaceWith$` ability and then records a `ReplacementResult`, and for `Prevented`, `Skipped` and `NotReplaced` it never touches the map. "Enters tapped", "if it would die, exile it instead" and "prevent that damage" are substitutions — a *different* ability runs — so the before/after maps the hook copied were byte-identical, and the collector was right to drop them. Measured on the corpus this feature is collecting: **34 rewrite records in 1.88M**, against a 7% `--kind-mix` share, with **87% of candidates dropped as identity**. The missing facts — which of the five results happened, and which ability ran instead — were available at the hook all along. The schema is fixed before collection and later stages may add `kind` values or snapshot tiers but never redefine a field; this obeys that. `incoming` keeps its meaning and type, `result` and `replaced_by` are new fields, and `outgoing` only *widens* to admit null, which is the honest spelling of the case the old shape expressed as a self-copy and then discarded. Full argument in `023-ability-effect-model/contracts/record-schema.md`.
+**Why the `rewrite` payload is wider than `{incoming, outgoing}`.** That pair assumed a replacement edits the event's parameter map. Forge mostly does not: `ReplacementHandler` runs the `ReplaceWith$` ability and then records a `ReplacementResult`, and for `Prevented`, `Skipped` and `NotReplaced` it never touches the map. "Enters tapped", "if it would die, exile it instead" and "prevent that damage" are substitutions — a *different* ability runs — so the before/after maps the hook copied were byte-identical, and the collector was right to drop them. Measured on the corpus this feature is collecting: **34 rewrite records in 1.88M**, against a 7% `--kind-mix` share, with **87% of candidates dropped as identity**. The missing facts — which of the five results happened, and which ability ran instead — were available at the hook all along. The schema is fixed before collection: a later change may add `kind` values or snapshot tiers but never redefine a field, and this obeys that. `incoming` keeps its meaning and type, `result` and `replaced_by` are new fields, and `outgoing` only *widens* to admit null, which is the honest spelling of the case the old shape expressed as a self-copy and then discarded. Full argument in `023-ability-effect-model/contracts/record-schema.md`.
 
 ## Collection caps and budgets
 
@@ -108,10 +108,10 @@ Flags live on every collecting supervisor (`match-outcomes`, `collect-coverage`,
 | `--mana-cap` | 1 | cap on resolution records per unique (mana ability, mana produced) pair, per game |
 | `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` records are sampled at `--legality-rate` instead |
 | `--legality-rate` | 0.1 | fraction of `legality`-subkind logging points kept, sampled **after** the dedup |
-| `--interventions-per-game` | 2 | interventional resolutions per game (stage three) |
+| `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game (only for keywords whose canary failed — § Evaluation, gate 2) |
 | `--probe-keywords` | _(none; probes disabled)_ | the canary-failing keywords to probe, comma-separated |
-| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth, a prefix of `1,2,3,4`; stage three collects at `1,2,3,4` |
+| `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth, a prefix of `1,2,3,4`; a run taking interventional forks collects at `1,2,3,4` |
 
 Continuous records need no cap: coalescing per stable board is the cap.
 
@@ -130,7 +130,7 @@ The provenance sidecar is the join between runtime trait objects and converted l
 - Per rendered line, the sidecar carries:
   - the provenance key list — a line merged from several traits carries several keys; a trait deduplicated away maps to no line;
   - the sub-ability links the line covers, as index paths below the trait — an event attributed to an unmapped link falls back to the root line;
-  - the trait's script API type, its parameter-key list, and its script line as text — the stage-four primary encoding surface, so every command that encodes reads it from the sidecar and needs no Forge-cardsfolder path of its own;
+  - the trait's script API type, its parameter-key list, and its script line as text — the primary encoding surface once the script surface is in use, so every command that encodes reads it from the sidecar and needs no Forge-cardsfolder path of its own;
   - role spans over the prose — character ranges tagged `cost` \| `effect` \| `trigger-condition` \| `target-spec`.
 - Runtime keys are computed from the trait accessors. Granted abilities resolve through the grantor accessors to the donor card's printed line; copied abilities through the original-ability back-reference; copy-spell effects (Fork, Reverberate) carry only a copied flag and resolve through the stack object's source card.
 - `python -m price_predictor convert` also converts Forge's token scripts, from `../forge/forge-gui/res/tokenscripts/` into `output/tokenscripts/`, with sidecars of their own. They stay out of `output/cardsfolder/` because converted token and card filenames collide (Ajani's Pridemate is both) and the sealed pipeline treats that tree as its card corpus. Commands that read converted text take it as another `--cards-folder`.
@@ -140,15 +140,15 @@ The provenance sidecar is the join between runtime trait objects and converted l
 
 All collectors write the one schema. Instrumentation is opt-in per run: `python -m sealed match-outcomes --effect-records output/effects/records/` forwards the flag to the Java workers; `python -m effects collect-coverage` runs the same instrumented workers over coverage decks. Adding `--effect-records` to `match-outcomes` leaves that command's own outputs unchanged.
 
-- **Channels.** Stage one, no Forge patch (`mode = degraded`): the public event bus plus a bracket around stack resolution; events attribute to the resolving ability by bracket. The patch (`mode = patched`) adds three attribution hooks: the trigger-handler cause channel, the shared replacement execution point (parameter map deep-copied before the call), and a threaded currently-resolving-sub-ability pointer.
+- **Channels.** Without the Forge patch (`mode = degraded`): the public event bus plus a bracket around stack resolution; events attribute to the resolving ability by bracket. The patch (`mode = patched`) adds three attribution hooks: the trigger-handler cause channel, the shared replacement execution point (parameter map deep-copied before the call), and a threaded currently-resolving-sub-ability pointer.
 - **Bracket rules.** State-based-action deaths attribute to the bracket they follow; combat damage attributes to its damage-step bracket.
 - **Continuous effects.** Read from the per-card layer tables ((timestamp, static id)-keyed) after a recompute; static id 0 entries (temporary pumps) stay attributed to the resolution bracket.
 - **Stat-change diffs.** Stat changes that fire no trigger (pumps, anthem recomputes) are captured by recomputing and diffing computed stats inside the bracket whenever the stats-changed bus event fires, coalesced per bracket; trigger-channel events take precedence where both report.
 - **Mana abilities.** Mana records ride the inline-path cast/resolution triggers, exist only under `mode = patched`, and honor `--mana-cap`.
 - **Trigger-fire logging.** The hook sits at the trigger handler's condition evaluation.
 - **Playability logging.** Hooks sit at the AI's candidate computation, combat-setup legality, and the legality/cost-adjustment checks. The logger snapshots defensively: a verdict may be abandoned mid-evaluation, and the legality check mutates the checked ability's targets, so the logger never reuses a checked ability object.
-- **Interventional resolutions.** From stage three, these run Forge's game simulator on a fork with chosen targets/modes: unaffordable candidates go through the play-without-paying-mana path, the ability is located on the copy and verified through the provenance key, and the record stores the fork's state. Force-resolving drains the fork's stack, so fork records attribute by bracket. An intervention writes the effect half only: the forced cast pays no real cost, so no activation record is written and the effect half carries no `link_id`. Every intervention counts against `--interventions-per-game`; within that budget, at most 2 forks (a fixed constant, independent of the flag) target the same real resolution.
-- **Probes.** Stage three, contingent per keyword on the damage-step canary: fork at declare-blockers after blocks lock, strip one keyword from one participant below the layer system (with the keyword-cache refresh), resolve the damage step. Both branches run under an installed seeded random source restored in a `finally`; one concurrent game per JVM while probes are on. The fork branch is recorded as an ordinary combat record with `fork = true`; the real-vs-fork diff is computed only at evaluation time.
+- **Interventional resolutions.** These run Forge's game simulator on a fork with chosen targets/modes: unaffordable candidates go through the play-without-paying-mana path, the ability is located on the copy and verified through the provenance key, and the record stores the fork's state. Force-resolving drains the fork's stack, so fork records attribute by bracket. An intervention writes the effect half only: the forced cast pays no real cost, so no activation record is written and the effect half carries no `link_id`. Every intervention counts against `--interventions-per-game`; within that budget, at most 2 forks (a fixed constant, independent of the flag) target the same real resolution.
+- **Probes.** Contingent per keyword on the damage-step canary: fork at declare-blockers after blocks lock, strip one keyword from one participant below the layer system (with the keyword-cache refresh), resolve the damage step. Both branches run under an installed seeded random source restored in a `finally`; one concurrent game per JVM while probes are on. The fork branch is recorded as an ordinary combat record with `fork = true`; the real-vs-fork diff is computed only at evaluation time.
 - **Budgets and guards.** Every fork counts against its per-game budget flag. Each fork's copy is score-checked against the live game at creation, before any perturbation (Forge's copy-score guard); a mismatch logs a warning and discards the fork — it still counts against the budget, and no record is written.
 
 ## The operating condition: workers are short-lived on purpose
@@ -167,7 +167,7 @@ The price is paid and accepted: a handful of GC crashes per overnight run, and a
 
 # Synthetic script variants
 
-From stage four, `python -m effects collect-variants` emits perturbed card scripts and collects engine-ground-truth records for texts that never existed, through the same instrumented workers and the same caps and budgets.
+`python -m effects collect-variants` emits perturbed card scripts and collects engine-ground-truth records for texts that never existed, through the same instrumented workers and the same caps and budgets.
 
 - Perturbations: each variant edits one parameter of one script read from `--forge-cards-path` (default `../forge/forge-gui/res/cardsfolder/`) — a numeric parameter shifted by up to ±3 or doubled, floored at zero, or a selector swapped for one drawn from the checked-in whitelist in `src/effects/domain/script_variants.py`.
 - `--variant-volume` (default 0.2): the cap on how many variant scripts are generated, as a fraction of the real records in `--corpus-records` (default `--effect-records`). Variants written to a directory of their own need `--corpus-records` pointed at the corpus, or the cap is measured against an empty destination and allows nothing.
@@ -213,8 +213,8 @@ removed; a full-strength run opens them normally and supplies the card-disjoint 
 - Works in rounds. A round rebuilds the weighted decks, plays `--decks-per-round` (default 500) of them as matches, and recounts coverage; `--no-progress-rounds` below counts these.
 - Reads the held-out card list from `--exclude-cards PATH` — the file `holdout-cards` writes — so coverage decks exclude every card carrying a held-out text. `--training-corpus DIR` is the one-flag spelling: it names the corpus this run extends and the `holdout-cards.txt` beside it, refuses a directory holding no such list rather than running undepleted, and refuses either flag it implies alongside it. It takes the depleted corpus, not a tree that also holds the full-strength one: discovery recurses, so a card whose only records are held out would otherwise read as satisfied. It needs no trained model, so this command does not wait on a training run that follows it. `--split-from PATH` (a checkpoint) is the alternative, for adding coverage to a corpus an existing checkpoint trained on; passing both is refused. With neither, the run builds over every card and its games are usable only by a checkpoint whose split holds nothing they contain.
 - Builds 40-card decks over the whole converted card corpus, not sealed-legal sets. Deck candidates and the coverage unit come from the `output/cardsfolder/` entry of `--cards-folder` alone, since a token script is not a deckable card. Decks are weighted toward cards with the fewest effect records: 23 nonlands plus basics from `compute_basic_lands`. Excluding the held-out cards matters here: a deck of 23 cards drawn corpus-wide would otherwise contain one almost every game, and the whole coverage corpus would fall to the training exclusion.
-- Consults Forge castability to weight slots toward cards Forge actually plays. The consult only ranks; it never drops a card from deck building, because being in a game is the precondition a stage-three intervention forks from, so every uncovered card still gets slots.
-- Two residues are reported at the end of a run and fall to interventional resolutions (stage three): cards the consult judges uncastable, and cards it judges castable that never reach `--target-records`. A retired card goes to the residue matching its consult verdict.
+- Consults Forge castability to weight slots toward cards Forge actually plays. The consult only ranks; it never drops a card from deck building, because being in a game is the precondition an interventional fork starts from, so every uncovered card still gets slots.
+- Two residues are reported at the end of a run and fall to interventional resolutions: cards the consult judges uncastable, and cards it judges castable that never reach `--target-records`. A retired card goes to the residue matching its consult verdict.
 - Runs instrumented matches over those decks with the same worker and flags; `--effect-records` (default `output/effects/records/`) names the destination shard directory — on `match-outcomes` the same flag is the opt-in and has no default.
 - `--target-records` (default 50): the per-card goal — a card is satisfied once that many records, counted over every shard in `--effect-records`, have it as the acting line's host, an event subject, or a referenced ref. Merely sitting on the battlefield in a snapshot does not count, and the unit is not resolution records specifically, since a vanilla or keyword-only creature has no acting line and could never produce one.
 - The run stops when every card is satisfied or retired: a card that gains no new qualifying record across `--no-progress-rounds` (default 3) consecutive rounds is retired, so the stop condition always terminates.
@@ -253,7 +253,7 @@ Flags:
 | `--output` | `output/effects/corpus/` | curated dataset directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and sidecars, for the holdout rule; repeatable |
 | `--vocab-path` | `models/effects/vocab.txt` | decides the encoding surface the rarity table's text keys are built on |
-| `--variant-scripts` | _(none)_ | the stage-four variant tree; without it a variant line resolves to no ability text, so it gets neither a rarity-table entry nor a per-text cap |
+| `--variant-scripts` | _(none)_ | the perturbed-script tree; without it a variant line resolves to no ability text, so it gets neither a rarity-table entry nor a per-text cap |
 | `--holdout-permille` | 20 | holdout share of eligible ability texts |
 | `--holdout-max-carriers` | 8 | cards a text may be on and stay eligible |
 | `--text-cap` | 200 | max training records per unique ability text |
@@ -271,19 +271,19 @@ Two transformers trained jointly; training-only auxiliaries are filtered out of 
 
 ## Ability encoder
 
-- **Surfaces.** Prose is the sole surface through stage three, with the script-API classification auxiliary standing in for script structure; from stage four the Forge script line is the primary surface and converted prose the paired secondary.
+- **Surfaces.** The Forge script line is the primary surface and converted prose the paired secondary. Before the script vocabulary exists prose is the only surface, with the script-API classification auxiliary standing in for script structure.
 - **Vocabulary.** Effects-side vocabulary at `models/effects/vocab.txt`, built by `python -m effects build-vocab`: wraps the shared vocabulary utility (`--cards-folder`, repeatable, defaulting to `output/cardsfolder/` and `output/tokenscripts/`; `--vocab-path`, default `models/effects/vocab.txt`; `--target-size`, default 5000); the scan covers converted cards, converted token scripts, and the keyword-definition file (`--keyword-definitions`, § Keyword definitions); seeded specials `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`. `--keyword-definitions` defaults to `output/effects/keyword-definitions.json`; `--surface` (`prose` by default) selects the scan and the default of `--vocab-path`.
 - **Tokenization.** Whole-token only: words outside the vocabulary map to `[UNK]`, with no subword fallback; unknown keywords are covered by forced expansion, unknown subtypes and token names by the next vocabulary rebuild.
-- **Script-surface tokenization.** At stage four `build-vocab --surface script` adds the sidecars' script lines to the scan and writes `models/effects/vocab-script.txt`, a path of its own so the rebuild never overwrites the prose vocabulary that stage-one-to-three checkpoints record. The script tokenizer splits compound selectors compositionally (`Creature.nonDragon+OppCtrl` → `Creature`, `nonDragon`, `OppCtrl`).
+- **Script-surface tokenization.** `build-vocab --surface script` adds the sidecars' script lines to the scan and writes `models/effects/vocab-script.txt`, a path of its own so the rebuild never overwrites the prose vocabulary a prose-surface checkpoint records. The script tokenizer splits compound selectors compositionally (`Creature.nonDragon+OppCtrl` → `Creature`, `nonDragon`, `OppCtrl`).
 - **Number tokens.** A monotone numeric embedding: a shared learned base vector plus log1p(n) times a learned direction.
 - **Prose tokens.** Each token adds a role embedding (`cost` \| `effect` \| `trigger-condition` \| `target-spec`) looked up from the sidecar's role spans.
 - **Keyword-expansion dropout.**
-  - With probability `--keyword-expand-p` a keyword token is replaced by its definition text; keywords unknown to the vocabulary are always expanded. From stage four the definition is the captured script on the script surface and the reminder template on the prose surface, falling back to the template where no script exists.
+  - With probability `--keyword-expand-p` a keyword token is replaced by its definition text; keywords unknown to the vocabulary are always expanded. On the script surface the definition is the captured script and the reminder template on the prose surface, falling back to the template where no script exists.
   - Parameterized keywords instantiate the template with the instance's own values; a keyword referenced without an instance (inside another definition) expands with the template's generic wording.
   - Keywords whose body lives on the host card (saga chapters, class levels) never expand.
   - Keywords inside an expansion stay tokens, themselves subject to dropout on other samples.
 - **Pooling.** A `[CLS]` aggregation token pools to the bottleneck `e` (`--e-dim`), with additive Gaussian noise during training (`--e-noise`).
-- **Training-only heads.** MLM over masked tokens (`--mlm-weight`, `--mlm-mask-prob`) and a script-API classification head from `e` (API type plus parameter-key set; `--api-weight`). Stage four adds the paired-encoding loss — asymmetric, stop-gradient on the script side — over the lines that have both surfaces; synthetic variants have only the script surface and contribute no pairing term.
+- **Training-only heads.** MLM over masked tokens (`--mlm-weight`, `--mlm-mask-prob`) and a script-API classification head from `e` (API type plus parameter-key set; `--api-weight`). The paired-encoding loss — asymmetric, stop-gradient on the script side — runs over the lines that have both surfaces; synthetic variants have only the script surface and contribute no pairing term.
 
 ## Effect head input
 
@@ -382,9 +382,9 @@ Flags:
 | `--corpus` | _(none; read `--records-dir`)_ | a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the holdout flags |
 | `--records-dir` | `output/effects/records/` | raw corpus shard directory |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | converted text and provenance sidecars; repeatable |
-| `--variant-scripts` | _(none; `output/effects/variant-scripts/` at stage four)_ | the perturbed-script tree and its sidecars |
+| `--variant-scripts` | _(none; `output/effects/variant-scripts/` once variants are collected)_ | the perturbed-script tree and its sidecars |
 | `--split-from` | _(none; compute the split)_ | inherit another checkpoint's split, vocabulary, and keyword-definition paths |
-| `--vocab-path` | `models/effects/vocab.txt` | tokenizer vocabulary; a stage-four run points it at `models/effects/vocab-script.txt` |
+| `--vocab-path` | `models/effects/vocab.txt` | tokenizer vocabulary; a script-surface run points it at `models/effects/vocab-script.txt` |
 | `--printings-path` | `resources/AllPrintings.json` | first-printing order for the card-disjoint split |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | keyword definitions for expansion dropout |
 | `--model-output` | per variant (above) | checkpoint directory |
@@ -424,11 +424,11 @@ Hardcoded (mirroring the sealed encoder's conventions):
 
 `python -m effects encode-abilities`:
 
-- Runs the trained encoder (`--checkpoint`; `--cards-folder`, repeatable, defaulting to `output/cardsfolder/` and `output/tokenscripts/`; `--variant-scripts`, stage four; `--vocab-path` and `--keyword-definitions`, defaulting to the paths the checkpoint records from its training run) over every converted card, token script, and — at stage four — variant script, writing one file per card under `output/effects/abilities/`, in a subtree named for its source tree (`abilities/cardsfolder/…`, `abilities/tokenscripts/…`, `abilities/variant-scripts/…`) mirroring that tree's layout: a float32 array of shape (n_lines, e_dim), row-aligned with the source's sidecar — rendered lines for a converted tree, script lines for the variant tree. Per-tree subtrees keep colliding filenames apart, and the cache lives outside `output/cardsfolder/` because the sealed pipeline's `encode-cards --clean` deletes every `.npz` under that tree. Idempotent; `--clean` removes only files this command wrote.
+- Runs the trained encoder (`--checkpoint`; `--cards-folder`, repeatable, defaulting to `output/cardsfolder/` and `output/tokenscripts/`; `--variant-scripts`; `--vocab-path` and `--keyword-definitions`, defaulting to the paths the checkpoint records from its training run) over every converted card, token script, and — at variant script, writing one file per card under `output/effects/abilities/`, in a subtree named for its source tree (`abilities/cardsfolder/…`, `abilities/tokenscripts/…`, `abilities/variant-scripts/…`) mirroring that tree's layout: a float32 array of shape (n_lines, e_dim), row-aligned with the source's sidecar — rendered lines for a converted tree, script lines for the variant tree. Per-tree subtrees keep colliding filenames apart, and the cache lives outside `output/cardsfolder/` because the sealed pipeline's `encode-cards --clean` deletes every `.npz` under that tree. Idempotent; `--clean` removes only files this command wrote.
 - `--variant` selects both ends together, so a variant is never encoded with another variant's weights: `full` (the default) reads `models/effects/effect-model/latest.pt` and writes `<name>.npz` — the shipping cache every consumer reads; any other variant reads `models/effects/effect-model/{variant}/latest.pt` and writes `<name>.{variant}.npz`, beside the shipping cache rather than replacing it. `--checkpoint` overrides the resolved default.
 - The `taxonomy` variant has no encoder: the command emits its `e` construction (the taxonomy lookup over the sidecar's API type and parameter keys) into the same row layout, so every `e`-geometry check reads one file shape.
 - Cache-time keyword handling matches inference: known keywords stay tokens, unknown keywords are always expanded.
-- The cached vector is the primary surface's `e`: prose through stage three, script from stage four (§ Stages).
+- The cached vector is the primary surface's `e`, which the checkpoint's recorded `--vocab-path` decides.
 
 Downstream card representation:
 
@@ -448,7 +448,7 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 - nearest-neighbor inspection and UMAP colored by effect category
 - ward canary: ward's `e` closer in cosine distance to each functional twin's `e` than the median of ward's distances to all bare single-keyword `e` vectors; the twins are a checked-in list of ability texts that spell out ward's behavior without the keyword (`src/effects/domain/ward_twins.py`)
 - zero-shot keyword: one implemented keyword withheld from training, its occurrences always expanded
-- role-polarity probe: predicted mana-pool sign for `{R}` in cost vs effect position (the effect-position half needs mana records, so the probe is informative from stage two)
+- role-polarity probe: predicted mana-pool sign for `{R}` in cost vs effect position (the effect-position half needs mana records, so the probe needs the engine patch)
 - scaling calibration: predicted sweeper deaths as a function of board size
 - matched real-vs-fork prediction agreement: pairs are the same ability resolved for real and forked in the same game, joined by `mirror_of`
 - the `identity` variant on the game-disjoint split: the in-distribution memorization ceiling
@@ -456,9 +456,11 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 - pooled-`e` scorer smoke test: the same pooled `e` concatenated with that sealed encoder's vector, written into a scratch copy of the cards folder — never `output/cardsfolder/`, which the sealed pipeline ships from — and `train-scorer` Phase A re-run against it; informational
 - `taxonomy` variant comparison: what the full encoding surfaces add over the script API taxonomy alone, on held-out effect prediction and the decodability battery
 - average-effect control: the `no-state` variant compared on the decodability battery, the scorer smoke test, the ward canary, and scaling calibration
-- probe-diff re-check (stage three, probed keywords only): gate 2's canary re-run over the real-and-fork combat pairs joined by `mirror_of`
+- probe-diff re-check (probed keywords only): gate 2's canary re-run over the real-and-fork combat pairs joined by `mirror_of`
 
-**Gates** (numeric). Gates 1 and 3 block shipping the model or the cache. Gate 2 blocks nothing: it is a per-keyword routing decision whose failure schedules that keyword's probe at stage three.
+The damage-step canary covers the damage-step family only; evasion keywords are not part of any canary gate, since their supervision arrives with playability records and so needs the engine patch.
+
+**Gates** (numeric). Gates 1 and 3 block shipping the model or the cache. Gate 2 blocks nothing: it is a per-keyword routing decision whose failure is what schedules that keyword's probe.
 
 1. **Identity-baseline gate** — card-disjoint split, unique-text stratum, resolution records: the `full` model beats the `identity` variant by ≥ 0.05 absolute affected-gate F1, ≥ 0.05 absolute zone-outcome accuracy on affected entities, and ≥ 5% relative reduction in mean Poisson deviance over the count-valued fields. All three must hold.
 2. **Damage-step keyword canary**, run per keyword over first strike, double strike, deathtouch, lifelink, trample, indestructible, wither, and infect; it decides whether that keyword gets a probe.
@@ -471,20 +473,9 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 
 Run results land in the design record's Outcome section, never in this spec.
 
-# Stages
-
-Each stage widens the corpus without invalidating earlier records.
-
-- **Stage one** — no Forge patch (`mode = degraded`): bus + bracket collection of resolution and combat records; the provenance sidecar; the keyword-definition extractor (reminder-template form); the trainer with the per-entity, created-objects, and verdict heads (fields whose record kinds are absent contribute no loss), the script-API auxiliary, and keyword-expansion dropout over reminder-text definitions. Evaluation at this stage runs `encode-abilities` and `evaluate-effect-model` with the shipping gates 1 and 3, the gate-2 routing canary, and every reported check whose records exist — matched real-vs-fork agreement and the probe-diff re-check wait for stage three, the role-polarity probe for stage two (§ Evaluation).
-- **Stage two** — the patch set (`mode = patched`): cause-attributed triggers, mana records, rewrite records, sub-ability attribution; playability, continuous, and trigger records; snapshot tier 3; the coverage collector.
-- **Stage three** — interventional resolutions; snapshot tier 4; the damage-step probe for keywords whose canary failed.
-- **Stage four** — the script surface: the script-surface vocabulary, the compositional script tokenizer, the asymmetric paired-encoding loss, keyword definitions upgraded from reminder templates to captured scripts, and `collect-variants`.
-
-The damage-step canary covers the damage-step family only, at every stage; evasion keywords are not part of any canary gate (their supervision arrives with playability records at stage two).
-
 # Keyword definitions
 
-`python -m effects extract-keyword-definitions` (Java `KeywordDefinitionMain`) writes the keyword-definition file (`--output`, default `output/effects/keyword-definitions.json`): keyword → reminder-text template for all keywords, plus — from stage four — the generated implementation script captured as text at the keyword factory for the script-generated majority.
+`python -m effects extract-keyword-definitions` (Java `KeywordDefinitionMain`) writes the keyword-definition file (`--output`, default `output/effects/keyword-definitions.json`): keyword → reminder-text template for all keywords, plus — once the script surface is in use — the generated implementation script captured as text at the keyword factory for the script-generated majority.
 
 # CLI summary
 
@@ -553,7 +544,7 @@ python -m effects collect-coverage
     [--no-progress-rounds N]     default 3
     [cap/budget flags]           § Collection caps and budgets
 
-python -m effects collect-variants                    (stage four)
+python -m effects collect-variants
     [--effect-records DIR]       default output/effects/records/
     [--forge-cards-path PATH]    default ../forge/forge-gui/res/cardsfolder/
     [--variant-volume F]         default 0.2
@@ -570,7 +561,7 @@ python -m effects encode-abilities
     [--variant NAME]             default full; resolves --checkpoint and the output suffix
     [--checkpoint PATH]          default: the variant's latest.pt
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
-    [--variant-scripts PATH]     stage four
+    [--variant-scripts PATH]     the perturbed-script tree
     [--vocab-path PATH]          default: the path the checkpoint trained with
     [--keyword-definitions PATH] default: the path the checkpoint trained with
     [--clean]
@@ -581,7 +572,7 @@ python -m effects evaluate-effect-model
     [--corpus DIR]               default: the dataset the checkpoint records, if any
     [--records-dir DIR]          default output/effects/records/
     [--cards-folder PATH ...]    default output/cardsfolder/ + output/tokenscripts/
-    [--variant-scripts PATH]     stage four
+    [--variant-scripts PATH]     the perturbed-script tree
     [--vocab-path PATH]          default: the path the checkpoint trained with
     [--keyword-definitions PATH] default: the path the checkpoint trained with
 ```
