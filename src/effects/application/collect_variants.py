@@ -120,6 +120,43 @@ def volume_ceiling(source_scripts: int, volume: float) -> int:
     return int(source_scripts / volume) + 1
 
 
+#: Written by VariantSidecarMain: every variant name Forge's card database
+#: accepted, by the same lookup MatchGenerator.materializeDeck uses.
+LOADABLE_FILE = "loadable.txt"
+
+
+def loadable_variants(
+    generated: list[GeneratedVariant], variant_scripts: Path,
+) -> list[GeneratedVariant]:
+    """The generated variants Forge's card database actually holds.
+
+    A perturbation can produce a script Forge declines to load: a sub-ability
+    that no longer resolves, a selector the parser rejects. The script is still
+    written and still gets a sidecar, so nothing on this side can tell it
+    apart. A decks-only round refuses a deck naming a card Forge does not know
+    rather than playing basics, so decking the generated list unfiltered is not
+    a rounding error -- at roughly one variant in nine unloadable, almost every
+    deck of 23 nonlands holds at least one.
+
+    A missing list raises rather than falling through to the generated names:
+    no list is no evidence, and building anyway is the defect this exists to
+    end.
+    """
+    listing = Path(variant_scripts) / LOADABLE_FILE
+    if not listing.is_file():
+        raise FileNotFoundError(
+            f"{listing}: VariantSidecarMain writes the loadable-name list "
+            "beside the variant scripts, and without it there is no way to "
+            "tell which perturbations Forge accepted. Rebuild the connector "
+            "JAR (cd forge-connector && mvn package -DskipTests)."
+        )
+    accepted = {
+        line.strip() for line in listing.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+    return [variant for variant in generated if variant.name in accepted]
+
+
 def variant_growth(*, before: int, after: int) -> int:
     """How many records the round added to the destination.
 
@@ -149,6 +186,24 @@ def perturb_script(
         lines[index] = perturbed
         return lines, perturbation.describe()
     return None
+
+
+def is_multi_face(source_lines: list[str]) -> bool:
+    """Whether a Forge script declares more than one card face.
+
+    A variant takes its own name, and renaming is a rewrite of the script's
+    first ``Name:`` line -- which on a two-faced card renames the front and
+    leaves the back answering to the original. Forge then builds card rules
+    whose faces disagree, and the failure is not a skipped card: ``StaticData``
+    throws while constructing the whole database, so every Forge startup that
+    sees the script dies, including runs with nothing to do with variants.
+
+    Perturbing one parameter of one face is not what these scripts are for
+    anyway, so they are left alone rather than renamed more cleverly.
+    """
+    return any(
+        line.strip().startswith("ALTERNATE") for line in source_lines
+    )
 
 
 def generate_variants(
@@ -190,6 +245,8 @@ def generate_variants(
             continue
         card_name = _card_name(lines)
         if card_name is None or fold_card_name(card_name) in held_out:
+            continue
+        if is_multi_face(lines):
             continue
         result = perturb_script(lines, rng)
         if result is None:
@@ -327,6 +384,28 @@ def run(config: CollectVariantsConfig) -> int:
             "sidecar to join against", code,
         )
         return code
+
+    # Forge decides which perturbations it will load, and it has just told us:
+    # the sidecar pass staged the variants and wrote the list. Decking a name
+    # Forge rejected kills the worker that draws it, because a decks-only round
+    # refuses the deck rather than playing basics.
+    deckable = loadable_variants(variants, Path(config.variant_scripts))
+    rejected = len(variants) - len(deckable)
+    if rejected:
+        logger.warning(
+            "Forge rejected %d of %d perturbed scripts (%.1f%%); they are "
+            "written and have sidecars but are not in its card database, so "
+            "they are left out of the decks. A deck naming one is refused "
+            "whole, not played as basics.",
+            rejected, len(variants), 100.0 * rejected / len(variants),
+        )
+    if not deckable:
+        logger.error(
+            "Forge loaded none of the %d perturbed scripts, so there is "
+            "nothing to deck.", len(variants),
+        )
+        return 1
+    variants = deckable
 
     supervisor = CollectorSupervisor(
         worker_count=config.workers, effect_records=config.effect_records,

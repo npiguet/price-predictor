@@ -27,6 +27,8 @@ from effects.application.collect_variants import (
     GeneratedVariant,
     _deck_text,
     generate_variants,
+    is_multi_face,
+    loadable_variants,
     perturb_script,
     variant_budget,
     variant_growth,
@@ -511,6 +513,13 @@ class TestRunClosesTheSupervisor:
             collect_variants, "generate_variants",
             lambda *a, **k: [variant],
         )
+        # Stubbed like the sidecar writer beside it: the real one reads the
+        # list VariantSidecarMain writes from a staged Forge database, which
+        # needs a JVM. Its own behaviour is covered by
+        # TestOnlyLoadableVariantsAreDecked.
+        monkeypatch.setattr(
+            collect_variants, "loadable_variants", lambda generated, _root: generated,
+        )
         sidecar = MagicMock()
         sidecar.run.return_value = 0
         monkeypatch.setattr(
@@ -607,7 +616,12 @@ class TestTheVariantRoundPlaysTheVariants:
         supervisor = MagicMock()
         with patch.object(collector_connector, "CollectorSupervisor",
                           return_value=supervisor) as ctor, \
-             patch.object(collect_variants, "VariantSidecarConnector") as sidecar:
+             patch.object(collect_variants, "VariantSidecarConnector") as sidecar, \
+             patch.object(collect_variants, "loadable_variants",
+                          side_effect=lambda generated, _root: generated):
+            # The loadable list is written by the sidecar connector, which is
+            # mocked here, so the file it would leave behind does not exist.
+            # TestOnlyLoadableVariantsAreDecked covers the filter itself.
             sidecar.return_value.run.return_value = 0
             collect_variants.run(
                 collect_variants.CollectVariantsConfig(
@@ -744,6 +758,11 @@ class TestTheRunReportsWhatItCollected:
         monkeypatch.setattr(
             collect_variants, "generate_variants", lambda *a, **k: [variant],
         )
+        # As above: the real filter needs a Forge database staged with the
+        # variants. TestOnlyLoadableVariantsAreDecked covers it directly.
+        monkeypatch.setattr(
+            collect_variants, "loadable_variants", lambda generated, _root: generated,
+        )
         sidecar = MagicMock()
         sidecar.run.return_value = 0
         monkeypatch.setattr(
@@ -840,3 +859,73 @@ class TestTheRunReportsWhatItCollected:
         supervisor.interrupted = True
 
         assert collect_variants.run(config) == 130
+
+
+class TestOnlyLoadableVariantsAreDecked:
+    """A perturbation can produce a script Forge declines to load.
+
+    The script is still written and still gets a sidecar, so nothing before
+    the card database can tell it apart. A decks-only round refuses a deck
+    naming a card Forge does not know rather than playing basics, so an
+    unfiltered deck build is not a rounding error: at roughly one variant in
+    nine unloadable, almost every deck of 23 nonlands holds at least one. A
+    real 4,000-deck round lost 350 of its 354 workers to exactly that.
+    """
+
+    def _generated(self, tmp_path, names):
+        return [
+            GeneratedVariant(name=name, source_card="x",
+                             path=tmp_path / "x.txt", perturbation="numeric")
+            for name in names
+        ]
+
+    def test_a_variant_forge_rejected_is_not_decked(self, tmp_path):
+        (tmp_path / "loadable.txt").write_text(
+            "Bolt Variant 0" + chr(10) + "Shock Variant 2" + chr(10),
+            encoding="utf-8",
+        )
+        kept = loadable_variants(
+            self._generated(
+                tmp_path,
+                ["Bolt Variant 0", "Broken Variant 1", "Shock Variant 2"],
+            ),
+            tmp_path,
+        )
+        assert [v.name for v in kept] == ["Bolt Variant 0", "Shock Variant 2"]
+
+    def test_a_missing_list_is_refused_rather_than_ignored(self, tmp_path):
+        """No list is no evidence, and decking anyway is the defect itself."""
+        with pytest.raises(FileNotFoundError, match="loadable"):
+            loadable_variants(self._generated(tmp_path, ["Bolt Variant 0"]),
+                              tmp_path)
+
+
+class TestMultiFaceCardsAreLeftAlone:
+    """Renaming one face of a two-faced card breaks the whole card database.
+
+    A variant takes its own name by rewriting the script's first `Name:`, which
+    on a two-faced card renames the front and leaves the back answering to the
+    original. Forge does not skip the resulting card: `StaticData` throws while
+    constructing the database, so every Forge startup that sees the script
+    dies. One run staged such a script and every subsequent JVM -- variant run
+    or not -- failed with `mainPart is null` until the directory was cleared.
+    """
+
+    def test_an_alternate_section_marks_a_multi_face_script(self):
+        assert is_multi_face(["Name:Front", "Types:Creature", "ALTERNATE"])
+        assert not is_multi_face(["Name:Bolt", "Types:Instant"])
+
+    def test_no_variant_is_generated_from_a_multi_face_card(self, tmp_path):
+        source = tmp_path / "cards"
+        source.mkdir()
+        (source / "dfc.txt").write_text(
+            "Name:Front Face" + chr(10) + "ManaCost:R" + chr(10)
+            + "Types:Instant" + chr(10)
+            + "A:SP$ DealDamage | NumDmg$ 3 | ValidTgts$ Any" + chr(10)
+            + "ALTERNATE" + chr(10) + "Name:Back Face" + chr(10)
+            + "Types:Instant" + chr(10),
+            encoding="utf-8",
+        )
+        assert generate_variants(
+            source, tmp_path / "variants", held_out=frozenset(), limit=5,
+        ) == []

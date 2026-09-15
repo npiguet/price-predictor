@@ -228,12 +228,16 @@ public class MatchWorkerMain {
 
     private static void initializeForge(WorkerConfig config) {
         System.out.println("Initializing Forge environment...");
-        // Stage four's variant scripts are staged into Forge's custom-cards
-        // directory before the card database is read; a script that appears
-        // afterwards is invisible for the life of the JVM.
+        // Stage four's variant scripts are already in Forge's custom-cards
+        // directory: VariantSidecarMain put them there, in one process, before
+        // the first worker started. This one registers their names and does
+        // not copy. A dozen workers each copying thousands of scripts into
+        // that one shared directory while the others walk it during
+        // FModel.initialize is a race, and a worker that reads it half-written
+        // has a card database missing the very variants its decks name.
         String variantScripts = System.getProperty("effect.variant.scripts");
         ForgeEnvironmentInitializer.initialize(
-                variantScripts == null ? null : Path.of(variantScripts));
+                variantScripts == null ? null : Path.of(variantScripts), false);
         System.out.println("Forge initialized. Starting match generation.");
         System.out.println("Match format: best-of-" + config.bestOf());
     }
