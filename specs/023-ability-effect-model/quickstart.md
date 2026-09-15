@@ -373,6 +373,49 @@ On a full run expect `[known ]` on exactly the two fields under
 look before spending hours training against it — a rare counter type absent from a short run is
 normal, a whole payload channel constant is not.
 
+## Build the curated dataset, if runs have to be comparable
+
+Two training runs a week apart do not read the same corpus. An epoch walks the sorted shard list, a
+shard's filename begins with its collection run's UUID, and every run since inserts shards at an
+arbitrary position — so which half of the corpus a run reads moves under it. Rarity is counted over
+whichever shard is resident, which inverts on step 4's shards: those are built dense in scarce cards,
+so inside one of them a scarce card looks common. `build-corpus` freezes all of it into a dataset
+that many runs can read:
+
+```bash
+python -m effects build-corpus \
+    --records-dir output/effects/records/ \
+    --output output/effects/corpus/
+```
+
+Two passes. A parallel survey reads every shard once, then one process folds provenance keys to
+ability texts, decides the split, computes the rarity table corpus-wide, and a second parallel pass
+writes `training/`, `validation/card-disjoint/`, `validation/game-disjoint/` and `manifest.json`.
+Training records are selected per record; both validation strata are selected per **game**, which is
+what keeps a probe and the combat record its `mirror_of` names in the same stratum.
+
+**Read the delivered-against-requested table it prints.** The manifest records the mixture the run
+asked for and the mixture the data actually holds, and they are not identical: availability is counted
+over every game while admission applies only to training candidates. The gap is a few percent, and it
+is in the manifest rather than left to be discovered.
+
+The run refuses rather than writing in two cases, both of which produce a dataset no training run will
+accept. Nothing held out means the card-disjoint stratum would be empty and gate 1 would have nothing
+to measure — usually the relative `--cards-folder` paths failing to resolve from somewhere other than
+the repository root. No game naming a held-out card means the same outcome by a different route, and
+on this corpus it usually means `--records-dir` was pointed at `records/depleted/` rather than
+`records/`, so the full-strength shards from step 3b were never read.
+
+`--text-cap` (default 200) is the ceiling on records per unique ability text, and it is a ceiling and
+never a floor: a text below it keeps everything it has, so step 4's tail survives curation whole. The
+scarcest sampling class sets the size of the whole dataset, and that class is `rewrite` by a wide
+margin; the distribution is in the [design record](../../experiments/2026-09-04-ability-effect-model-design.md). `--verify` reports the manifest's drift against
+the corpus on disk and writes nothing; a corpus that has grown is rebuilt whole, because the split and
+the rarity table are both corpus-wide quantities.
+
+Build the dataset **after** step 4 finishes, not during it. The dataset freezes whatever it is given,
+and what step 4 is still fixing is how thinly the tail is observed.
+
 ## 6. Train, and train the baselines
 
 ```bash
@@ -380,6 +423,14 @@ python -m effects train-effect-model \
     --variant-scripts output/effects/variant-scripts/ \
     --withhold-keyword cascade
 ```
+
+Add `--corpus output/effects/corpus/` to train against a curated dataset instead of the raw corpus.
+It takes the split, both validation strata and the rarity table from the manifest, so it refuses
+`--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and `--holdout-max-carriers`
+alongside it — each of those names a decision the manifest already records, and two spellings of one
+decision is a disagreement nothing would report. It also refuses a dataset built on the other encoding
+surface, because the rarity table's keys are the texts of that surface and a table read on the wrong
+one matches nothing while looking entirely valid.
 
 `--withhold-keyword` holds one implemented keyword's token out of training so the zero-shot check in
 step 8 has something to measure; its occurrences are always expanded instead. Any implemented keyword
@@ -419,9 +470,12 @@ done
 
 Pass the **same** `--holdout-permille` and `--holdout-max-carriers` here as in step 3. The corpus was depleted against those values; a run that computes a different holdout would train on cards it believes are held out, and nothing would say so. The checkpoint records them.
 
-These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint.
-`--split-from` is required for a variant run — without it the run fails fast, rather than silently
-computing its own split and making the comparison meaningless.
+These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint. A
+variant run must inherit the split it is a baseline for, so it fails fast without either
+`--split-from` or `--corpus` rather than silently computing its own and making the comparison
+meaningless. Against a curated dataset, pass `--corpus` to every baseline and drop `--split-from`:
+the manifest enumerates the split directly, so every run reading that dataset trains on the same
+games by construction.
 
 **For the script surface** add `--vocab-path models/effects/vocab-script.txt` to *every* command in
 steps 6, 7 and 8 — training, the four baselines, `encode-abilities` and `evaluate-effect-model` all
@@ -464,7 +518,10 @@ python -m effects evaluate-effect-model \
 ```
 
 Splits come from the checkpoint — never a flag, never recomputed. A baseline recording a different
-split, or different vocabulary hashes, fails the run rather than being compared. The command exits
+split, or different vocabulary hashes, fails the run rather than being compared. A checkpoint trained
+with `--corpus` also records that dataset's digest, and `--corpus` here defaults to the path it
+recorded; a dataset rebuilt since fails the run, because a rebuild is a different split and the gates
+would be scored partly on games the model trained on. The command exits
 non-zero when a blocking gate fails.
 
 **What you get, and what to do with it**:
@@ -492,6 +549,7 @@ Every step above can be dropped, and the ones after it still run:
 | `--exclude-cards` in step 3 | Held-out cards reach training games, and every game holding one is discarded instead — most of the corpus at a useful holdout size. The run looks identical while it happens. |
 | Step 4, `collect-coverage` | Cards in no sealed-legal set appear in no record at all. |
 | Step 5, `collect-variants` | No script-surface corpus; the prose surface trains as before. |
+| `build-corpus` | Training still runs against the raw corpus. Each run reads a different half of a corpus that keeps growing, counts rarity over the resident shard, and enumerates its own split — so two runs differ by more than the hyperparameters under test, and an architecture comparison cannot be read. |
 
 ## What is not collected
 
