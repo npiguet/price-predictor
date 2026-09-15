@@ -12,9 +12,9 @@ Forge-source feasibility evidence live in
 
 ## User Scenarios & Testing *(mandatory)*
 
-The four stories are the root spec's four stages. Each widens the corpus without invalidating earlier
+The four stories build on one another. Each widens the corpus without invalidating earlier
 records, because the record schema is fixed before any collection happens. Each ends in a re-runnable
-evaluation, so every stage is independently demonstrable.
+evaluation, so every story is independently demonstrable.
 
 ### User Story 1 - First embeddings without patching Forge (Priority: P1)
 
@@ -26,9 +26,9 @@ workers attach to Forge's public event bus and bracket stack resolution, attribu
 the ability being resolved. No Forge source is modified. They train the model on the resulting
 records, encode the ability cache, and run the evaluation battery.
 
-**Why this priority**: This is the deliverable in miniature and the only stage that needs nothing from
+**Why this priority**: This is the deliverable in miniature and the only story that needs nothing from
 the sibling Forge checkout beyond what stock Forge already exposes. It produces the first `e` vectors,
-the shipping gates, and the routing canary that decides whether stage three needs to build probes at
+the shipping gates, and the routing canary that decides whether the probe machinery is worth building at
 all. If the embeddings are poor, that is learned here, before any patch exists to maintain.
 
 **Independent Test**: Run `match-outcomes --effect-records` for a short session, train on the shard
@@ -74,11 +74,11 @@ from the trigger handler's own condition evaluation. Separately, the operator ru
 the coverage collector, which builds decks over the whole converted corpus rather than sealed-legal
 sets, so the cards sealed pools can never contain finally reach a game. Reaching a game is the
 precondition, not the whole fix: cards Forge still declines to cast fall to the residue that
-stage three's interventions pick up.
+interventional resolutions pick up.
 
-**Why this priority**: Stage one's bracket attribution is exact only up to replacement and static
+**Why this priority**: Bracket attribution is exact only up to replacement and static
 interactions inside one window, and it leaves the corpus's largest line kind (`static`, 29% of ability
-lines) with no records at all. This stage supplies the signal for statics, costs, timing, and the
+lines) with no records at all. This story supplies the signal for statics, costs, timing, and the
 evasion keywords, and it starts closing the coverage hole that sealed self-play cannot reach.
 
 **Independent Test**: Apply the patches, re-run collection, and confirm records appear with
@@ -120,7 +120,7 @@ which forks at declare-blockers, strips the keyword, and resolves the damage ste
 
 **Why this priority**: Forks are the only expensive collection mechanism — each costs a game copy that
 re-parses every card from its script — and they carry fidelity and process-global-state hazards.
-Everything cheaper comes first, and the probe half of this stage may never be built at all, because
+Everything cheaper comes first, and the probe half of this story may never be built at all, because
 gate 2 decides per keyword whether it is needed.
 
 **Independent Test**: Run collection with `--interventions-per-game` set and confirm interventional
@@ -156,13 +156,13 @@ to the implementations Forge generates, and runs `collect-variants` to collect e
 perturbed scripts — texts that never existed on a real card.
 
 **Why this priority**: The encoding-surface half changes what the model reads rather than what is
-collected, so it depends on no earlier stage. It is last because the vocabulary rebuild it forces must
-not disturb the prose vocabulary that stage-one-to-three checkpoints record, which is why the script
+collected, so it depends on no earlier story. It is last because the vocabulary rebuild it forces must
+not disturb the prose vocabulary a prose-surface checkpoint records, which is why the script
 vocabulary gets a path of its own. `collect-variants` is the exception to the independence: it decks
-and schedules variant cards exactly as the coverage collector does, so it reuses stage two.
+and schedules variant cards exactly as the coverage collector does, so it reuses the coverage collector's machinery.
 
 **Independent Test**: Run `build-vocab --surface script`, train with the script vocabulary, and confirm
-the stage-one-to-three checkpoints still load and encode against their own recorded vocabulary path.
+a prose-surface checkpoint still loads and encodes against its own recorded vocabulary path.
 Run `collect-variants` and confirm variant records are collected, marked, and excluded from the paired
 loss.
 
@@ -179,7 +179,7 @@ loss.
    is generated from it.
 5. **Given** a completed `collect-variants` run, **When** the sealed corpora are inspected, **Then**
    `match-outcomes.txt` and `cards-played.txt` are unchanged by it.
-6. **Given** a checkpoint trained at stage two, **When** any inference command loads it after the
+6. **Given** a checkpoint trained against the prose vocabulary, **When** any inference command loads it after the
    script vocabulary exists, **Then** it resolves the prose vocabulary the checkpoint recorded and the
    vocabulary hash check passes.
 
@@ -280,7 +280,7 @@ loss.
   `--effect-records` (`output/effects/records/` is the convention and the default everywhere the
   flag has one); readers MUST load every `*.jsonl` in the directory and tolerate a trailing partial
   line.
-- **FR-014**: The record schema MUST be fixed before stage one collection begins, so later stages
+- **FR-014**: The record schema MUST be fixed before collection begins, so later work
   widen the corpus without invalidating earlier records.
 - **FR-015**: Every record MUST carry the envelope fields defined in the root spec: `record_id`,
   `run_id`, `timestamp`, `game_id`, `kind`, `mode`, `interventional`, `fork`, `synthetic`,
@@ -304,8 +304,8 @@ loss.
   carried as an entity in whatever zone it sits with that zone recorded; (2) core: global, battlefield
   entities, and command-zone effect cards (player-scoped continuous effects with no permanent, carried
   as entities with the originating line's key); (3) unreferenced stack contents; (4) unreferenced hand
-  and graveyard contents — with tiers 1–2 present from stage one, tier 3 from stage two, and tier 4
-  from stage three. Readers MUST treat an absent tier as uncollected rather than empty.
+  and graveyard contents — with tiers 1–2 always present, tier 3 requiring the
+  engine patch, and tier 4 what an interventional fork reads. Readers MUST treat an absent tier as uncollected rather than empty.
 - **FR-023**: Perspective MUST NOT be stored: controllers are absolute ids and mine/opponent tags are
   derived at training time relative to `actor_player`.
 - **FR-024**: Effect payloads MUST carry typed event lists of
@@ -334,7 +334,7 @@ loss.
 - **FR-031**: `--effect-records` MUST have no default on `match-outcomes`, where it is the
   instrumentation opt-in, and MUST default to `output/effects/records/` on `collect-coverage` and
   `collect-variants`, where collection is the whole point of the command.
-- **FR-032**: Stage one collection MUST use only the public event bus plus a bracket around stack
+- **FR-032**: Collection without the engine patch MUST use only the public event bus plus a bracket around stack
   resolution, attributing events to the resolving ability by bracket, and MUST NOT require a patched
   Forge.
 - **FR-033**: The patch MUST add exactly three attribution hooks: the trigger-handler cause channel,
@@ -462,7 +462,7 @@ loss.
 
 - **FR-060**: `python -m effects extract-keyword-definitions` (Java `KeywordDefinitionMain`) MUST write
   keyword → reminder-text template for all keywords to `--output` (default
-  `output/effects/keyword-definitions.json`), adding, from stage four, the generated implementation
+  `output/effects/keyword-definitions.json`), adding the generated implementation
   script captured as text at the keyword factory for the script-generated majority of keywords. The
   engine-coded minority generates no script and keeps its reminder template.
 
@@ -470,13 +470,13 @@ loss.
 
 - **FR-061**: The ability encoder MUST pool through a `[CLS]` token to the bottleneck `e` (`--e-dim`),
   with additive Gaussian noise (`--e-noise`) during training.
-- **FR-062**: Prose MUST be the sole encoding surface through stage three, with the script-API
-  classification auxiliary standing in for script structure; from stage four the Forge script line is
+- **FR-062**: Prose MUST be the sole encoding surface until the script vocabulary exists, with the
+  script-API classification auxiliary standing in for script structure; thereafter the Forge script line is
   primary and prose the paired secondary under an asymmetric loss with stop-gradient on the script
   side.
 - **FR-063**: Training-only heads MUST be an MLM head over masked tokens (`--mlm-weight`,
   `--mlm-mask-prob`) and a script-API classification head from `e` predicting the trait's API type plus
-  its parameter-key set (`--api-weight`). Stage four adds the paired-encoding loss over lines that have
+  its parameter-key set (`--api-weight`). The paired-encoding loss MUST run over lines that have
   both surfaces; synthetic variants have only the script surface and contribute no pairing term.
 - **FR-064**: `python -m effects build-vocab` MUST write `models/effects/vocab.txt` by default, scan
   converted cards, converted token scripts, and the keyword-definition file, and seed `[PAD]`,
@@ -494,7 +494,7 @@ loss.
   probability `--keyword-expand-p`, always expand keywords unknown to the vocabulary, instantiate
   parameterized templates with the instance's own values (a keyword referenced without an instance,
   inside another definition, expands with the template's generic wording), never expand keywords whose body lives on
-  the host card, and leave keywords inside an expansion as tokens. From stage four the definition MUST
+  the host card, and leave keywords inside an expansion as tokens. On the script surface the definition MUST
   be the captured script on the script surface and the reminder template on the prose surface, falling
   back to the template where no script exists.
 - **FR-071**: Each record kind MUST enter the one shared input surface as the input variation defined
@@ -621,7 +621,7 @@ loss.
   cache refreshed every `--cache-refresh` batches.
 - **FR-085**: The per-batch sampling mixture MUST default to the root spec's eight-class shares and be
   renormalized over the classes present in the corpus. Fields whose record kinds are absent from the
-  corpus MUST contribute no loss, so a stage-one corpus trains the same heads without them.
+  corpus MUST contribute no loss, so a three-class corpus trains the same heads without them.
 - **FR-086**: Within a class, records MUST weight ∝ effective_games^(−0.5), capped at 20× the weight of
   the most-observed ability text, where effective games counts distinct games contributing a record of
   that unique text. Effective games are counted over the resident shard rather than the whole corpus,
@@ -680,7 +680,7 @@ loss.
   not only the trainer's flag table. In particular: `--cards-folder` is repeatable and defaults to
   `output/cardsfolder/` plus `output/tokenscripts/` on `build-vocab`, `collect-coverage`,
   `encode-abilities`, and `evaluate-effect-model`; `--surface` defaults to `prose`;
-  `--probe-keywords` is comma-separated; `--variant-scripts` appears from stage four; and
+  `--probe-keywords` is comma-separated; `--variant-scripts` names the perturbed-script tree; and
   `--records-dir` / `--effect-records` default to `output/effects/records/` everywhere except
   `match-outcomes`.
 - **FR-097**: `--vocab-path` and `--keyword-definitions` MUST default, on every inference command,
@@ -690,7 +690,7 @@ loss.
 #### Embedding cache
 
 - **FR-098**: `python -m effects encode-abilities` MUST write one file per converted card, token
-  script, and (stage four) variant script under `output/effects/abilities/`, in a subtree named for
+  script, and variant script under `output/effects/abilities/`, in a subtree named for
   its source tree and mirroring that tree's layout, holding a float32 array of shape
   `(n_lines, e_dim)` row-aligned with the source's sidecar — rendered lines for a converted tree, script lines for the
   variant tree.
@@ -705,8 +705,8 @@ loss.
   having no encoder, so every `e`-geometry check reads one file shape.
 - **FR-103**: Cache-time keyword handling MUST match inference: known keywords stay tokens, unknown
   keywords are always expanded.
-- **FR-104**: The cached vector MUST be the primary surface's `e` — prose through stage three, script
-  from stage four.
+- **FR-104**: The cached vector MUST be the primary surface's `e`, which the checkpoint's recorded
+  `--vocab-path` decides.
 - **FR-105**: The downstream card representation MUST be a `[CARD]` token carrying structured features
   followed by the card's ability `e` rows, with position ids resetting at each `[CARD]` and faces
   separated by an `[ALTERNATE]` token tagged with the converted `layout:` line's value (the authority
@@ -717,7 +717,7 @@ loss.
 - **FR-106**: `python -m effects evaluate-effect-model` MUST run the battery over the trained variants
   and report per record kind and per held-out stratum. The four strata are computed from the
   provenance sidecar's `script_api_type`, `script_param_keys`, and `script_text`, which every converted
-  tree carries from stage one:
+  tree carries from the first collected record:
   - **unique-text** — the line's text appears on no training card;
   - **shared-text** — the line's text also appears on a training card;
   - **novel combination** — every sub-ability API type in the line appears in training, but their
@@ -741,9 +741,9 @@ loss.
   pooled-`e` scorer smoke test; the `taxonomy` comparison; the average-effect control (the `no-state`
   variant); and the probe-diff re-check.
 - **FR-111**: Checks whose records do not yet exist MUST be skipped rather than failing: matched
-  real-vs-fork agreement and the probe-diff re-check are available from stage three, and the
-  role-polarity probe from stage two (its effect-position half needs mana records). Every other check
-  runs from stage one.
+  real-vs-fork agreement and the probe-diff re-check need forks, and the
+  role-polarity probe needs mana records and so the engine patch. Every other check runs against any
+  corpus.
 - **FR-112**: The ward canary MUST compare ward's `e` against a checked-in list of functional-twin
   ability texts in `src/effects/domain/ward_twins.py`, passing when ward is closer in cosine distance
   to each twin than the median of ward's cosine distances to all bare single-keyword `e` vectors.
@@ -774,7 +774,7 @@ loss.
 - **FR-119**: Gate 2 (damage-step keyword canary) MUST run per keyword over first strike, double
   strike, deathtouch, lifelink, trample, indestructible, wither, and infect; require at least 200
   qualifying records; pass when the affected fields move in the keyword's rules direction in ≥ 70% of
-  them; and route a failing or under-sampled keyword to the stage-three probe. It MUST block nothing.
+  them; and route a failing or under-sampled keyword to the damage-step probe. It MUST block nothing.
 - **FR-120**: A qualifying record for gate 2 MUST be a combat record from the game-disjoint validation
   split in which the keyword's presence changes the damage-step outcome.
 - **FR-121**: Gate 2's perturbation MUST be model-side, not a game fork: remove the keyword from the
@@ -828,7 +828,7 @@ loss.
   per unique text. The feature's primary shipped artifact.
 - **Effect head**: the state-conditional model consuming `e` plus a state snapshot and emitting
   per-entity, created-object, and verdict predictions. The feature's second shipped artifact.
-- **Keyword definition**: a keyword's reminder-text template and, from stage four, its captured
+- **Keyword definition**: a keyword's reminder-text template and, on the script surface, its captured
   generated implementation script — the expansion target for keyword-expansion dropout.
 - **Variant script**: a perturbed copy of a Forge card script, existing on the script surface only,
   used for engine-ground-truth records of texts that never existed.
@@ -847,7 +847,7 @@ loss.
 - **SC-004**: Ward's embedding sits closer to each of its checked-in functional twins than the median
   distance from ward to all bare single-keyword embeddings, showing that behavioral records pull
   together texts whose surfaces barely overlap.
-- **SC-005**: A stage-one operator obtains a populated cache and a full set of gate verdicts without
+- **SC-005**: An operator running against stock Forge obtains a populated cache and a full set of gate verdicts without
   modifying a single line of Forge source.
 - **SC-006**: Every card in the converted corpus is either satisfied at `--target-records` or reported
   in a named residue after a coverage run, so coverage is accounted for rather than estimated.
@@ -861,7 +861,7 @@ loss.
 
 ## Assumptions
 
-- The four stages are implemented in order. Stage one is the minimum shippable slice; each later stage
+- The four stories are implemented in order. The first is the minimum shippable slice; each later one
   widens the corpus and re-runs the same evaluation.
 - The Forge feasibility findings the design record verified against the sibling checkout hold for the
   version this branch builds against (2.0.15-SNAPSHOT). The three hooks are still required, and the

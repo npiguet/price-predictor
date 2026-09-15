@@ -12,7 +12,7 @@ below are contract, not suggestions.
 |---|---|---|
 | `--surface` | `prose` | `prose` \| `script`; `script` adds the sidecars' script lines to the scan and switches the `--vocab-path` default |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable |
-| `--vocab-path` | `models/effects/vocab.txt` (`vocab-script.txt` under `--surface script`) | separate paths so a stage-four rebuild never overwrites the vocabulary stage-one-to-three checkpoints recorded |
+| `--vocab-path` | `models/effects/vocab.txt` (`vocab-script.txt` under `--surface script`) | separate paths so a script-surface rebuild never overwrites the vocabulary a prose-surface checkpoint recorded |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | included in the scan |
 | `--target-size` | 5000 | post-truncates the corpus-frequency vocabulary, preserving seeded specials and domain tokens |
 
@@ -24,7 +24,7 @@ Seeded specials: `[PAD]`, `[UNK]`, `cardname`, `[MASK]`, `[CLS]`.
 |---|---|
 | `--output` | `output/effects/keyword-definitions.json` |
 
-Writes keyword → reminder-text template for every keyword; from stage four also the generated
+Writes keyword → reminder-text template for every keyword; on the script surface also the generated
 implementation script, captured as text at the keyword factory, for the script-generated majority.
 
 ## `python -m sealed generate-pools` / `match-outcomes` (existing commands, one added flag each)
@@ -50,7 +50,7 @@ the trainer tells their games apart by whether a record names a held-out card.
 
 Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in format or content.
 
-## `python -m effects collect-coverage` (stage two)
+## `python -m effects collect-coverage` 
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -65,13 +65,13 @@ Adding the flag must not change `match-outcomes.txt` or `cards-played.txt` in fo
 Behaviour the flags do not convey:
 
 - The castability consult **only ranks** slots. It never drops a card from deck building, because being
-  in a game is the precondition a stage-three intervention forks from.
+  in a game is the precondition an interventional fork starts from.
 - A card is satisfied once `--target-records` records across every shard have it as the acting line's
   host, an event subject, or a referenced ref. **Sitting on the battlefield in a snapshot does not
   count**, and the unit is not resolution records specifically — a vanilla creature has no acting line.
 - The run ends when every card is satisfied or retired, and reports **two residues**: cards the consult
   judged uncastable, and castable cards that never reached `--target-records`. Each retired card is
-  counted under its consult verdict. Both fall to stage-three interventions; SC-006 turns on this
+  counted under its consult verdict. Both fall to interventional resolutions; SC-006 turns on this
   report existing.
 
 ## `python -m effects validate-corpus`
@@ -151,7 +151,7 @@ mana was made, so the un-exempted check failed 168 of 177 games on a healthy cor
 Exit codes: 0 when every judged invariant holds, 1 when any is broken **or** when the directory holds
 no shards.
 
-## `python -m effects collect-variants` (stage four)
+## `python -m effects collect-variants` 
 
 | Flag | Default |
 |---|---|
@@ -170,7 +170,7 @@ no shards.
 | `--mana-cap` | 1 | resolution records per unique (mana ability, mana produced) pair, per game |
 | `--playability-rate` | 0.1 | fraction of `decision`-subkind logging points sampled; `attackers`/`blockers` are sampled at `--legality-rate` instead |
 | `--legality-rate` | 0.1 | fraction of `legality`-subkind logging points kept, sampled after the dedup |
-| `--interventions-per-game` | 2 | interventional resolutions per game (stage three) |
+| `--interventions-per-game` | 2 | interventional resolutions per game |
 | `--probes-per-game` | 2 | damage-step probe forks per game — a budget, not a switch |
 | `--probe-keywords` | none (**probes disabled**) | comma-separated canary-failing keywords; required for any probe at all |
 | `--snapshot-tiers` | `1,2,3` | snapshot inclusion depth; a prefix of `1,2,3,4` holding at least `1,2` — 4 adds unreferenced hands and graveyards |
@@ -182,7 +182,7 @@ no shards.
 reads exactly those names; a test reads both sides and fails when either grows a knob the other does
 not have. It grew two before that test existed: `effect.snapshot.tiers` and `effect.legality.rate`
 were read by the JVM, documented in `MatchWorkerMain`, and settable by no command, so the tier-4
-snapshot stage three needs took a code edit to request and the legality sampler ran at a rate a
+snapshot an interventional fork needs took a code edit to request and the legality sampler ran at a rate a
 javadoc called `--legality-rate` — a flag that did not exist.
 
 **`--snapshot-tiers` is validated before the JVM sees it.** A vector that is not a prefix of
@@ -233,7 +233,7 @@ differing only in hyperparameters read the same records.
 | `--output` | `output/effects/corpus/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
-| `--variant-scripts` | _(none)_ — the stage-four variant tree. A variant line resolves to no ability text without it, so it gets neither a rarity-table entry nor a per-text cap |
+| `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, so it gets neither a rarity-table entry nor a per-text cap |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` and `holdout-cards` |
 | `--text-cap` | 200 — max training records per unique ability text |
 | `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |
@@ -278,7 +278,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--corpus` | none (read `--records-dir`) — a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest records, and a `--vocab-path` whose encoding surface is not the manifest's |
 | `--records-dir` | `output/effects/records/` |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
-| `--variant-scripts` | none (stage four: `output/effects/variant-scripts/`) |
+| `--variant-scripts` | none (`output/effects/variant-scripts/`) |
 | `--split-from` | none (compute the split); **required for variant runs**. Inherits the source checkpoint's split *and* its vocabulary and keyword-definition paths |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--printings-path` | `resources/AllPrintings.json` — first-printing dates, used only to break gate-1 margins down by recency |
@@ -320,7 +320,7 @@ Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 25
 | `--variant` | `full` — resolves both `--checkpoint` and the output suffix, so a variant is never encoded with another variant's weights |
 | `--checkpoint` | the variant's `latest.pt`; an explicit value overrides |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
-| `--variant-scripts` | stage four |
+| `--variant-scripts` | the perturbed-script tree |
 | `--vocab-path`, `--keyword-definitions` | the paths the checkpoint recorded from training |
 | `--clean` | removes only files this command wrote |
 
