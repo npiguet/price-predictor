@@ -23,6 +23,7 @@ from effects.application.build_corpus import (
     init_survey_worker,
     merge_surveys,
     parse_ability_key,
+    progress_line,
     run_survey,
 )
 from effects.domain.event_schema import Event, EventType
@@ -271,3 +272,24 @@ def test_merge_surveys_fails_loudly_when_the_worker_was_never_initialized(
 
     with pytest.raises(AssertionError, match="init_survey_worker"):
         merge_surveys([])
+
+
+class TestProgressSaysWhetherToWait:
+    """A count alone does not answer the question an operator is asking.
+
+    "Surveyed 100 of 3205" says the run is alive. It does not say whether the
+    remaining 3,105 are ten minutes away or two hours, which is what decides
+    whether to sit and watch it.
+    """
+
+    def test_the_line_carries_the_rate_and_what_is_left(self):
+        line = progress_line(done=100, total=3205, elapsed=120.0)
+        assert "100 of 3205" in line
+        assert "50/min" in line          # 100 shards in 2 minutes
+        assert "62 min left" in line     # 3105 remaining at 50/min
+
+    def test_a_pass_that_has_just_started_reports_no_rate_rather_than_dividing_by_zero(self):
+        assert "0 of 10" in progress_line(done=0, total=10, elapsed=0.0)
+
+    def test_the_last_line_says_nothing_is_left(self):
+        assert "0 min left" in progress_line(done=10, total=10, elapsed=5.0)

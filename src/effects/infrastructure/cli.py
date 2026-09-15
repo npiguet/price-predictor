@@ -1513,7 +1513,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # Every line is stamped, because every command here is one an operator
+    # leaves running for hours: a progress line without a clock answers "is it
+    # alive" and not "when did it last move", which is the question actually
+    # being asked of a survey that is two hundred shards in.
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S",
+    )
     parser = build_parser()
     args = parser.parse_args()
     if not getattr(args, "func", None):

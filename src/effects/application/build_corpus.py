@@ -15,6 +15,7 @@ that already has a cache for the holdout.
 from __future__ import annotations
 
 import logging
+import time
 import zlib
 from collections import Counter, defaultdict
 from collections.abc import Iterable
@@ -246,6 +247,23 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     )
 
 
+def progress_line(*, done: int, total: int, elapsed: float) -> str:
+    """``done of total`` with the rate and the time left.
+
+    A bare count says the run is alive. It does not say whether the rest is ten
+    minutes away or two hours, and on a pass over thousands of shards that is
+    the question actually being asked.
+    """
+    rate = done / elapsed if elapsed > 0 else 0.0
+    left = (total - done) / rate if rate > 0 else 0.0
+    if rate <= 0:
+        return f"{done} of {total} shard(s)"
+    return (
+        f"{done} of {total} shard(s), {rate * 60:.0f}/min, "
+        f"~{left / 60:.0f} min left"
+    )
+
+
 def shard_names(records_dir: Path) -> list[str]:
     """Every shard under the corpus root, as posix paths relative to it."""
     from effects.infrastructure.record_io import iter_shards
@@ -268,13 +286,17 @@ def run_survey(
         raise BuildCorpusError(f"{root}: no shards to build a corpus from")
     logger.info("Surveying %d shard(s) under %s", len(names), root)
 
+    started = time.monotonic()
     init_survey_worker(config)          # so a workers=1 run needs no pool
     if workers is not None and workers <= 1:
         parts = []
         for index, name in enumerate(names, start=1):
             parts.append(survey_shard(name))
             if index % progress_every == 0:
-                logger.info("Surveyed %d of %d shard(s)", index, len(names))
+                logger.info("Surveyed %s", progress_line(
+                    done=index, total=len(names),
+                    elapsed=time.monotonic() - started,
+                ))
         return merge_surveys(parts)
 
     parts = []
@@ -284,7 +306,10 @@ def run_survey(
         for index, part in enumerate(pool.map(survey_shard, names, chunksize=1), 1):
             parts.append(part)
             if index % progress_every == 0:
-                logger.info("Surveyed %d of %d shard(s)", index, len(names))
+                logger.info("Surveyed %s", progress_line(
+                    done=index, total=len(names),
+                    elapsed=time.monotonic() - started,
+                ))
     return merge_surveys(parts)
 
 
@@ -753,6 +778,7 @@ def run_write_pass(
     progress_every: int = 50,
 ) -> WriteResult:
     """Write every shard's three outputs, in parallel, reporting progress."""
+    started = time.monotonic()
     total = WriteResult()
 
     def absorb(part: WriteResult) -> None:
@@ -770,7 +796,10 @@ def run_write_pass(
         for index, name in enumerate(names, start=1):
             absorb(write_shard_pass(name))
             if index % progress_every == 0:
-                logger.info("Wrote %d of %d shard(s)", index, len(names))
+                logger.info("Wrote %s", progress_line(
+                    done=index, total=len(names),
+                    elapsed=time.monotonic() - started,
+                ))
         return total
 
     with ProcessPoolExecutor(
@@ -781,7 +810,10 @@ def run_write_pass(
         ):
             absorb(part)
             if index % progress_every == 0:
-                logger.info("Wrote %d of %d shard(s)", index, len(names))
+                logger.info("Wrote %s", progress_line(
+                    done=index, total=len(names),
+                    elapsed=time.monotonic() - started,
+                ))
     return total
 
 
