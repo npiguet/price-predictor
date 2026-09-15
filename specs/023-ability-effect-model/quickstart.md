@@ -14,16 +14,19 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 | 1 | `price_predictor convert` | minutes | no |
 | 2 | `effects extract-keyword-definitions`, `effects build-vocab` | minutes | no |
 | 3 | `effects holdout-cards`, `sealed match-outcomes --exclude-cards --effect-records` | hours | you decide when to stop |
-| 3b | the same, full strength, into the same shard directory | hours | no |
+| 3b | the same, full strength, into `records/full-strength/` | hours | no |
 | 4 | `effects collect-coverage` | hours | no |
-| 5 | `effects collect-variants` | hours | no |
+| 5 | `effects collect-variants`, into `records/variants/` | hours | no |
 | 6 | `effects train-effect-model`, then four baselines | 5 × hours | no |
 | 7 | `effects encode-abilities` ×3 | minutes | no |
 | 8 | `effects evaluate-effect-model` | minutes | read the output |
 
 Steps 3–5 are three different ways to reach cards, and a full corpus wants all three: self-play plays
 what sealed pools deal, coverage plays what they never deal, and variants play text that never
-existed. Each writes into the same shard directory and none invalidates the others.
+existed. Each writes into its own subdirectory of `output/effects/records/` — `depleted/`,
+`full-strength/` and `variants/`, with step 4 extending `depleted/`. Shard discovery recurses, so
+every reader sees one corpus; the subdirectories exist so a command can be pointed at part of it.
+None of the three invalidates the others.
 
 Step 3 collects the training corpus from pools the held-out cards were removed from, and step 3b
 the validation corpus from pools at full strength. Splitting the corpus at collection time rather
@@ -339,22 +342,54 @@ counts against its budget, and at most two forks may target one real resolution.
 
 ## 5. Collect synthetic variants
 
+A variant is a card that does not exist, played for real. Take Lightning Bolt's script, change
+`NumDmg$ 3` to `NumDmg$ 2`, load it into Forge as a custom card, and play it — Forge deals 2, and the
+record says so. The point is what the model cannot do with it. Shown Lightning Bolt in a thousand
+games, the effect head can store "this card deals 3" against the ability's own vector, and never learn
+that the `3` in the script is where the number came from. Holding out cards does not catch that: a
+held-out card dealing 3 is still predicted correctly by a model that recognizes card shapes. A variant
+changes one parameter and nothing else, so the only way to be right about it is to read the
+parameter. These records are training data, and they are collected **before** step 6, not after it.
+
 The script surface is a second vocabulary and a second cache, side by side with the prose ones:
 
 ```bash
 python -m effects build-vocab --surface script          # models/effects/vocab-script.txt
 
 python -m effects collect-variants \
-    --training-corpus output/effects/records/depleted/ \
-    --variant-volume 0.2
+    --effect-records output/effects/records/variants/ \
+    --exclude-cards output/effects/records/depleted/holdout-cards.txt \
+    --decks-per-round 2000
 ```
 
+**Write them to their own directory.** Shard discovery recurses, so `records/variants/` is read as
+part of the corpus exactly like `depleted/` and `full-strength/` — but keeping them apart is what
+lets `collect-coverage --training-corpus` keep pointing at `depleted/` alone, and what lets a curated
+build be made with or without them. `--training-corpus` is the wrong flag here: it sets the records
+directory and the holdout list together, and those two want different directories in this step, so
+pass `--effect-records` and `--exclude-cards` separately.
+
+**One invocation is one round**, unlike step 4 — there is no loop and no `--no-progress-rounds`. Run
+length is `--decks-per-round` matches at one game each. Re-running the command collects nothing new:
+both the perturbation and the deck build take a fixed seed, so a second invocation writes the same
+variants and plays the same decks. Widen with a larger `--decks-per-round` rather than by repeating.
+
+Size it for breadth rather than depth. Forge has about 33,700 source scripts, a round's decks hold 23
+nonlands each, and the curated build caps every ability text at `--text-cap` records anyway — so what
+is worth buying is each variant reaching a game at all. The default 500 decks puts well under half of
+them into one; a few thousand gets most.
+
+`--variant-volume` (default 0.2) caps how many variant **scripts** are generated, as a fraction of the
+records already collected. On a corpus of any size that budget exceeds the number of perturbable
+scripts, so it is inert and every perturbable card gets a variant.
+
 `collect-variants` reads Forge's **source** scripts, perturbs one whitelisted parameter per variant,
-writes a sidecar for each through `VariantSidecarMain`, and plays them. `--variant-volume` caps
-variant records as a fraction of the real records already present, so the cap scales with the corpus.
-No variant is generated from a card carrying a held-out text. Variant scripts land in
-`output/effects/variant-scripts/` and are never converted to prose — the perturbation is on the script
-surface only.
+writes a sidecar for each through `VariantSidecarMain`, and plays them. No variant is generated from a
+card carrying a held-out text: perturbing a parameter produces a text that is not itself held out, so
+the split would route it to training and teach that card's mechanics under an edit nothing downstream
+can detect. Variant scripts land in `output/effects/variant-scripts/` and are never converted to prose
+— a perturbed script's hand-written description still describes the original, so editing `NumDmg$ 3`
+would leave the prose saying three.
 
 ## Verify the corpus before training
 
@@ -412,6 +447,14 @@ scarcest sampling class sets the size of the whole dataset, and that class is `r
 margin; the distribution is in the [design record](../../experiments/2026-09-04-ability-effect-model-design.md). `--verify` reports the manifest's drift against
 the corpus on disk and writes nothing; a corpus that has grown is rebuilt whole, because the split and
 the rarity table are both corpus-wide quantities.
+
+**Step 5's variant records are read but not capped.** `build-corpus` takes no `--variant-scripts`
+root, so a variant line resolves to no ability text: it gets no entry in the rarity table and no
+per-text cap, while every real ability has both. The records still reach training, and the trainer
+still resolves them because it does take that flag — but they sit outside the two mechanisms that
+decide how much of the corpus anything gets to be. Until that gap closes, build the dataset with
+`--records-dir output/effects/records/` and know that the variant fraction is whatever step 5
+collected, not a share the manifest chose.
 
 Build the dataset **after** step 4 finishes, not during it. The dataset freezes whatever it is given,
 and what step 4 is still fixing is how thinly the tail is observed.
