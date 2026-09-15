@@ -16,7 +16,7 @@ Steps 1–8 are the acceptance path for User Story 1 in [spec.md](spec.md).
 | 3 | `effects holdout-cards`, `sealed match-outcomes --exclude-cards --effect-records` | hours | you decide when to stop |
 | 3b | the same, full strength, into `records/full-strength/` | hours | no |
 | 4 | `effects collect-coverage` | hours | no |
-| 5 | `effects collect-variants` into `records/variants/`, then `build-vocab --surface script` over them | hours | no |
+| 5 | `effects collect-variants` into `records/variants/`, plus `build-vocab --surface script` | hours | no |
 | 5b | `effects build-corpus` | ~1 hour | no |
 | 6 | `effects train-effect-model --corpus`, then four baselines | 5 × hours | no |
 | 7 | `effects encode-abilities` ×3 | minutes | no |
@@ -352,8 +352,8 @@ held-out card dealing 3 is still predicted correctly by a model that recognizes 
 changes one parameter and nothing else, so the only way to be right about it is to read the
 parameter. These records are training data, and they are collected **before** step 6, not after it.
 
-Collect the variants first, then build the script vocabulary over them. The script surface is a
-second vocabulary and a second cache, side by side with the prose ones:
+The script surface is a second vocabulary and a second cache, side by side with the prose ones.
+Either order works here: the vocabulary is built from the converted trees, not from the variants.
 
 ```bash
 python -m effects collect-variants \
@@ -362,20 +362,20 @@ python -m effects collect-variants \
     --exclude-cards output/effects/records/depleted/holdout-cards.txt \
     --decks-per-round 4000
 
-# The script vocabulary comes *after*, and scans the variant tree: a
-# vocabulary built before the perturbed scripts existed cannot hold their
-# tokens, and build-vocab overwrites its target in place.
-python -m effects build-vocab --surface script \
-    --cards-folder output/cardsfolder/ \
-    --cards-folder output/tokenscripts/ \
-    --cards-folder output/effects/variant-scripts/
+python -m effects build-vocab --surface script    # models/effects/vocab-script.txt
 ```
 
-Build the script vocabulary **after** this step, not before. It is what every stage-four command loads
-(`models/effects/vocab-script.txt`), the encoding surface follows the vocabulary rather than a flag of
-its own, and `build-vocab` overwrites its target in place — so building it once the variants exist is
-the only ordering that has them in it, and rebuilding it after training would silently re-index the
-embedding table a checkpoint was trained against.
+**Do not add the variant tree to `build-vocab`.** `--cards-folder` means a *converted* tree — `name:`,
+`mana cost: {3}` — and `output/effects/variant-scripts/` holds raw Forge source scripts, `Name:`,
+`ManaCost:W U B R G`, `Oracle:`. Passed as a cards folder it is read as converted prose, so card names
+and oracle English enter a script-surface vocabulary and evict real tokens: measured against this
+corpus, 1,101 of 5,000 are displaced, among them the token-script names (`_a_golem`, `_ally`,
+`_bear`) that appear on almost every board.
+
+Variants need nothing from the vocabulary anyway. A perturbation changes a whitelisted numeric
+parameter or swaps a selector for another already in the whitelist, so its tokens are its source
+card's tokens; the values that change are numbers, and numbers reach the model through the monotone
+numeric embedding rather than through a vocabulary entry.
 
 **Write them to their own directory.** Shard discovery recurses, so `records/variants/` is read as
 part of the corpus exactly like `depleted/` and `full-strength/` — but keeping them apart is what
