@@ -40,12 +40,20 @@ def quality_defect(
 
     Ordered so the most specific reason wins: a record with no ability is
     reported as that, whatever its events look like.
+
+    A non-positive ``max_events`` means **no event-flood rule at all**, the
+    way ``CapHeap`` reads a non-positive cap and ``--text-cap 0`` reads zero.
+    Taken as a literal ceiling instead, zero refuses every record carrying a
+    single event -- which is nearly all of them -- so ``build-corpus``, which
+    lists ``--max-events-per-record 0`` among the settings zero is real for,
+    would write an almost empty corpus and still exit 0. The other two rules
+    are unconditional: neither has a number to turn off.
     """
     if record.kind is RecordKind.RESOLUTION and not record.ability:
         return NO_ABILITY
     events = events_of(record)
     if any(event.attributed_to == UNRESOLVED for event in events):
         return UNATTRIBUTED
-    if len(events) > max_events:
+    if max_events > 0 and len(events) > max_events:
         return EVENT_FLOOD
     return None

@@ -46,6 +46,18 @@ def test_too_many_events_is_a_defect(make_record):
     assert quality_defect(make_record(payload=payload), max_events=100) is None
 
 
+def test_a_max_events_of_zero_means_no_cap_rather_than_refuse_everything(make_record):
+    """Zero admits everything, the way ``CapHeap`` reads ``--text-cap 0``.
+
+    ``build-corpus`` lists ``--max-events-per-record 0`` among the flags zero
+    is a real setting for. Read as a literal ceiling it refused every record
+    carrying a single event, so a build launched with it wrote an almost empty
+    corpus and still exited 0.
+    """
+    payload = ResolutionPayload(events=tuple(_event("root") for _ in range(65)))
+    assert quality_defect(make_record(payload=payload), max_events=0) is None
+
+
 def test_no_ability_wins_over_the_other_reasons(make_record):
     payload = ResolutionPayload(events=tuple(_event("unresolved") for _ in range(65)))
     assert quality_defect(make_record(ability=(), payload=payload)) == NO_ABILITY

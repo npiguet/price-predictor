@@ -381,7 +381,7 @@ class BuildCorpusConfig:
     def __post_init__(self) -> None:
         """Refuse a negative count, and say what zero means for each.
 
-        Zero is a real setting for all four and means something different in
+        Zero is a real setting for all seven and means something different in
         each, which is why it is spelled out rather than rejected along with
         the negatives:
 
@@ -391,6 +391,15 @@ class BuildCorpusConfig:
           stratum; every held-out game carrying a held-out text is admitted.
         - ``--game-disjoint-games 0`` — no game-disjoint stratum at all.
         - ``--training-records 0`` — no ceiling beyond ``--text-cap``.
+        - ``--shard-records 0`` — no repacking; one output shard per source
+          shard, which is what the write pass did before repacking existed
+          (``repack_shards`` reads a non-positive size this way).
+        - ``--max-events-per-record 0`` — no event-flood rule; every record's
+          event count is accepted (``quality_defect`` reads a non-positive
+          maximum this way, the same reading ``--text-cap`` gives zero). The
+          other two quality rules have no number and stay on.
+        - ``--validation-sample 0`` — no fixed validation sample; nothing is
+          written under ``validation/samples/``.
 
         A negative is none of those and has no reading at all: it would make
         ``min(cap, total)`` negative and ``random.sample`` raise several
