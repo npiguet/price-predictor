@@ -549,6 +549,28 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--shard-records", type=int, default=2000,
+        help=(
+            "Records per output shard after repacking, cut at game boundaries; "
+            "0 keeps one output shard per source shard (default: 2000)"
+        ),
+    )
+    parser.add_argument(
+        "--max-events-per-record", type=int, default=64,
+        help=(
+            "A record carrying more events than this is refused as a game "
+            "dump rather than an ability (default: 64)"
+        ),
+    )
+    parser.add_argument(
+        "--validation-sample", type=int, default=2048,
+        help=(
+            "Records per stratum in validation/samples/, mixture-matched; the "
+            "card-disjoint resolution classes draw from the gate-one slice; "
+            "0 writes no sample (default: 2048)"
+        ),
+    )
+    parser.add_argument(
         "--seed", type=int, default=42, help="Selection seed (default: 42)",
     )
     parser.add_argument(
@@ -582,6 +604,9 @@ def run_build_corpus(args: argparse.Namespace) -> int:
             training_records=args.training_records,
             game_disjoint_target=args.game_disjoint_games,
             card_disjoint_text_cap=args.card_disjoint_text_cap,
+            shard_records=args.shard_records,
+            max_events=args.max_events_per_record,
+            validation_sample=args.validation_sample,
             seed=args.seed,
             workers=args.workers,
             verify=args.verify,

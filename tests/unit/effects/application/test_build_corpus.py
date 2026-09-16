@@ -998,3 +998,14 @@ def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, a_corpus):
         assert store.sample_path(stratum).exists()
         assert 0 < sum(1 for _ in read_shard(store.sample_path(stratum))) <= 4 * 8
     assert store.load().validation_sample == 4
+
+
+def test_the_cli_exposes_the_rework_flags():
+    from effects.infrastructure.cli import build_parser
+    args = build_parser().parse_args([
+        "build-corpus", "--shard-records", "500", "--max-events-per-record", "32",
+        "--validation-sample", "64",
+    ])
+    assert (args.shard_records, args.max_events_per_record, args.validation_sample) == (500, 32, 64)
+    defaults = build_parser().parse_args(["build-corpus"])
+    assert (defaults.shard_records, defaults.max_events_per_record, defaults.validation_sample) == (2000, 64, 2048)
