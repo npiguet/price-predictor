@@ -36,11 +36,10 @@ def test_every_record_survives_in_order(tmp_path, parts):
 def test_a_shard_closes_at_a_game_boundary_once_full(tmp_path, parts):
     written = repack_shards(parts, tmp_path / "out", shard_records=4)
     games = [[r.game_id for r in read_shard(p)] for p in written]
-    # 4 records fill the first shard mid-g3; it closes only when g3 ends.
-    assert games[0] == ["g1", "g1", "g2", "g2", "g3", "g3", "g3"]
-    for shard in games:
-        for a, b in zip(shard, shard[1:]):
-            assert a == b or shard.index(b) > shard.index(a)
+    # 4 records fill the first shard; it closes at the first game boundary once full.
+    assert games[0] == ["g1", "g1", "g2", "g2"]
+    assert games[1] == ["g3", "g3", "g3", "g4", "g4"]
+    assert games[2] == ["g5", "g6", "g7"]
     # No game spans two shards.
     seen = {}
     for index, shard in enumerate(games):

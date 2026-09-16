@@ -722,25 +722,17 @@ def repack_shards(
     handle = open_next()
     count = 0
     last_game: str | None = None
-    threshold_game: str | None = None
-    close_after_game: str | None = None
     try:
         for part in parts:
             for record in read_shard(part):
-                if close_after_game is not None and record.game_id != close_after_game:
+                if count >= shard_records and record.game_id != last_game:
                     handle.close()
                     handle = open_next()
                     count = 0
-                    threshold_game = None
-                    close_after_game = None
                 handle.write(format_record_line(record))
                 handle.write("\n")
                 count += 1
                 last_game = record.game_id
-                if threshold_game is None and count >= shard_records:
-                    threshold_game = record.game_id
-                elif threshold_game is not None and record.game_id != threshold_game and close_after_game is None:
-                    close_after_game = record.game_id
     finally:
         handle.close()
     if count == 0:
