@@ -408,9 +408,17 @@ def active_fields(
 
 
 def _poisson(prediction: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    """Poisson NLL on a log-rate prediction, summed."""
+    """Poisson NLL on a log-rate prediction, summed.
+
+    ``full=True`` adds the Stirling approximation of ``log(k!)``, which is
+    constant in the prediction and so changes no gradient — but it moves the
+    minimum of every term to about zero. Without it a term's floor is
+    ``k - k·ln k``, and a batch holding one 88-card draw reads as -306 at a
+    perfect prediction, which is what made the first run's training loss
+    track batch composition rather than the model.
+    """
     return functional.poisson_nll_loss(
-        prediction, target, log_input=True, full=False, reduction="sum",
+        prediction, target, log_input=True, full=True, reduction="sum",
     )
 
 

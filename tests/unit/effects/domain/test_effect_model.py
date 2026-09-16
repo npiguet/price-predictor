@@ -351,6 +351,15 @@ class TestLosses:
         assert right < too_low
         assert right < too_high
 
+    def test_the_count_loss_is_nonnegative_at_its_optimum(self):
+        """`full=True` adds the Stirling term, so a perfect prediction scores ~0
+        instead of k - k ln k, which is -306 for a target of 88 (FR-081)."""
+        from effects.domain.effect_model import _poisson
+        target = torch.tensor([88.0, 3.0, 1.0])
+        loss = _poisson(torch.log(target), target)
+        assert loss.item() >= 0.0
+        assert loss.item() < 6.0   # Stirling residual is ~0.5*log(2*pi*k) per element
+
     def test_a_signed_delta_separates_direction_from_magnitude(self):
         spec = FIELDS_BY_NAME["life_delta"]
         prediction = torch.zeros(4, 4)
