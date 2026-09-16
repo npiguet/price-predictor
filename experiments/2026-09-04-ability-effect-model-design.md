@@ -499,7 +499,63 @@ The subsystems stage so that the first `e` vectors exist and pass canaries as ea
 
 ## Outcome / Result
 
-Not yet run. The stage-one pipeline executes end to end against a stock, unpatched Forge: conversion with sidecars, the keyword table, the vocabulary, collection riding ordinary self-play, training, the four evaluation baselines, the ability cache, and the gate battery. No pretraining run at corpus scale has happened, so every gate verdict is still open.
+The first run at corpus scale trained on a twentieth of the corpus and on none of the data the corpus was built to supply, so it settles no gate. The cause is how an epoch chooses its shards, and it is independent of everything this document argues for. The run was made on 2026-09-15 against the curated dataset, on the script surface, withholding `cascade`.
+
+### An epoch's contiguous shard block never left the corpus's opening family
+
+`build-corpus` writes its three source families into one directory and the trainer reads that directory in path order, so each family occupies a contiguous stretch of the shard list.
+
+| Family | Shard indices | Shards |
+|---|---|---:|
+| `depleted` | 0 – 2,425 | 2,426 |
+| `full-strength` | 2,426 – 3,124 | 699 |
+| `variants` | 3,125 – 3,193 | 69 |
+
+An epoch read eighteen consecutive shards and the next epoch started where the last one stopped. Nine epochs reached index 161. Every shard read came from one collection run's first two workers, and the model saw no full-strength record and no synthetic variant at all — the corpus built to supply the anti-memorization lever was never asked for one.
+
+The epoch bound would not have rescued it. Forty epochs of eighteen shards reach index 720, which is still inside the depleted block, so no run with these defaults can reach a variant shard whatever its patience.
+
+The eighteen was sized correctly against the corpus it was written for: a 701-shard raw corpus, which forty epochs cover exactly once. Curation multiplied the shard count by four and a half, and a default expressed in shards rather than in fractions of a corpus silently stopped meaning what it said.
+
+### The thin-stratum warning described the sample rather than the stratum
+
+The run warned that the card-disjoint stratum held sixteen resolution records on texts absent from training, against a floor of two thousand, and advised collecting more full-strength games. The stratum holds roughly seventeen thousand.
+
+The check sizes itself on the validation records the trainer keeps, not on the stratum on disk. Those records are the first two thousand the reader meets, the reader takes the strata in path order, and the depleted shards sort first — so the sample came entirely from the games that slipped past depletion, which are the games least likely to carry a held-out card.
+
+| Slice | Resolution records | On a held-out text |
+|---|---|---:|
+| The seven depleted shards the trainer sampled | 905 | 26 |
+| Twelve full-strength shards | 7,294 | 312 |
+| All 655 full-strength shards, extrapolated | — | ~17,000 |
+
+Gate 1 reads the stratum from disk rather than the trainer's sample, so the gate itself was never at risk. What the warning measured was the sample.
+
+### Validation carried no trend because consecutive epochs trained on unrelated slices
+
+Training loss fell across the run, with one rise at epoch 8, while both validation strata moved without direction.
+
+| Epoch | Train | Card-disjoint | Game-disjoint |
+|---:|---:|---:|---:|
+| 1 | 10.4105 | 2.9826 | 3.1530 |
+| 2 | 1.5322 | 84.8214 | 84.8832 |
+| 3 | 1.2031 | 3.2118 | 3.2737 |
+| 4 | 0.8719 | 2.0089 | 2.4743 |
+| 5 | 0.5600 | 3.7575 | 3.9252 |
+| 6 | 0.5015 | 3.0404 | 3.2044 |
+| 7 | 0.4332 | 4.6186 | 4.2299 |
+| 8 | 0.5468 | 2.1045 | 2.3176 |
+| 9 | 0.3287 | 2.7160 | 2.7626 |
+
+The gap between the two columns is not memorization: a shard is read once and never revisited, so no record is seen twice and there is nothing to memorize. Each epoch fine-tuned on eighteen fresh shards from one worker's consecutive JVM lifetimes, which share pools and a deck-building pass and are about as correlated as two games in the corpus get. Validation then measured wherever that slice left the model. Early stopping selected epoch 4 on that signal.
+
+Epoch 2 is a separate failure. Both strata rose by a factor of twenty-eight together and returned the next epoch, which is a few records hitting an unbounded term rather than a state the model was in. Nothing in the run's output names the term, because the loss was reported only as a total.
+
+### What the run does establish
+
+The pipeline runs end to end at corpus scale. All eight sampling classes were present, so the batch mixture ran unrenormalized. An epoch of five thousand steps costs about forty-five minutes on the 8 GB budget with live context re-encoding, so the stop-gradient cache is not needed at this size.
+
+Three gates still decide whether the design works, and all three remain open. Gate 1 is the three margins against the identity baseline on the unique-text stratum. Gate 3 is the collapse canaries over the cache. Gate 2 is the per-keyword verdict on the eight damage-step keywords, which is what says whether probe machinery is worth building. Fill them in here after a run that reads the whole corpus.
 
 Three gates decide whether the design works, and each needs that run. Gate 1 is the three margins against the identity baseline on the unique-text stratum. Gate 3 is the collapse canaries over the cache. Gate 2 is the per-keyword verdict on the eight damage-step keywords, which is what says whether stage three has to build probe machinery at all. Fill them in here.
 

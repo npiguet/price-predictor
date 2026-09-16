@@ -293,7 +293,8 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--kind-mix` | the eight-class mixture |
 | `--context-cache` / `--cache-refresh` | off / 500 |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
-| `--shards-per-epoch` | 18 — record shards an epoch reads, one resident at a time; the walk advances each epoch and wraps |
+| `--shards-per-epoch` | 256 — record shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
+| `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded on the checkpoint, so a run repeats by passing back the seed it logged |
 | `--reserved-shards` | 4 — shards held back for the game-disjoint stratum. Every shard holding a held-out card is reserved on top of these, which is how a full-strength collection run's shards become the card-disjoint stratum |
 | `--holdout-permille` / `--holdout-max-carriers` | 20 / 8 — an ability text is held out when at most `--holdout-max-carriers` cards carry it and `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` |
 | `--min-holdout-records` | 2000 — warn below this many unique-text resolution records in the card-disjoint stratum; empty is a hard failure |

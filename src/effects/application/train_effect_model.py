@@ -80,9 +80,20 @@ MIN_HOLDOUT_RECORDS = 2000
 RARITY_CAP = 20.0
 RANDOM_SEED = 42
 
-#: Shards an epoch reads. The corpus is 701 shards and a full run is 40 epochs,
-#: so this covers it once rather than re-reading its opening slice.
-DEFAULT_SHARDS_PER_EPOCH = 18
+#: Shards an epoch reads.
+#:
+#: Sized so an epoch is a representative sample of the corpus rather than a
+#: pass over it: ``--steps-per-epoch`` fixes the wall clock, and this fixes how
+#: many different shards those steps are spread across. Raising it costs only
+#: the per-shard load — about a third of a second against a 45-minute epoch —
+#: so the ceiling is how thinly a shard can be sampled and still be worth
+#: opening, not time.
+#:
+#: The previous value of 18 was correct for the corpus it was written against
+#: (701 raw shards, covered once by 40 epochs) and silently wrong for the one
+#: ``build-corpus`` writes, which is 3,194. Eighteen an epoch reads 0.6% of
+#: that, and a run that early-stops at epoch 9 has seen 5% of it.
+DEFAULT_SHARDS_PER_EPOCH = 256
 #: Shards held back for validation and never trained on. Reserving whole shards
 #: rather than freezing a record count is what makes the validation sample
 #: representative: a shard carries ~90 games, drawn from one stretch of
@@ -535,17 +546,38 @@ class SplitAccumulator:
 
 
 def epoch_shards(
-    shards: Sequence[Path], *, epoch: int, per_epoch: int,
+    shards: Sequence[Path], *, epoch: int, per_epoch: int, seed: int,
 ) -> list[Path]:
-    """The shards epoch ``epoch`` (1-based) reads, wrapping at the end.
+    """The shards epoch ``epoch`` (1-based) reads, drawn across the corpus.
 
-    Epochs advance through the list rather than re-reading the same shards, so a
-    long run covers the corpus instead of overfitting its opening slice.
+    Drawn at random rather than taken as a contiguous run of the list, because
+    a contiguous block is the worst composition an epoch can have. The list is
+    in path order, so a block is one collection run's consecutive worker
+    lifetimes: the games in it share pools, share a deck-building pass, and are
+    about as correlated as two games in the corpus ever get. Worse, it never
+    leaves the family that sorts first. On a 3,194-shard curated corpus the
+    full-strength shards start at index 2,426 and the variants at 3,125, so
+    eighteen shards an epoch walked to index 161 in nine epochs and a full
+    forty-epoch run would have reached 720 — reading neither, and training a
+    model that never saw a synthetic variant on a corpus built to supply them.
+
+    ``epoch`` no longer selects the block, but it stays in the signature and
+    seeds the draw alongside ``seed``, so an epoch's composition is a function
+    of those two alone. Deliberately not the training RNG: drawn from that,
+    an epoch's shards would depend on how many batches the epochs before it
+    planned, and a run resumed or reconfigured anywhere upstream would read a
+    different corpus while reporting the same seed.
     """
     if not shards or per_epoch <= 0:
         return []
-    start = ((epoch - 1) * per_epoch) % len(shards)
-    return [shards[(start + offset) % len(shards)] for offset in range(per_epoch)]
+    # Seeded from a string rather than a tuple: 3.14 accepts only None, int,
+    # float, str, bytes and bytearray, and a tuple raises at the first draw.
+    draw = random.Random(f"{seed}:{epoch}")
+    if per_epoch >= len(shards):
+        picks = list(shards)
+        draw.shuffle(picks)
+        return picks
+    return draw.sample(list(shards), per_epoch)
 
 
 def steps_per_shard(total: int, count: int) -> list[int]:
@@ -876,6 +908,15 @@ class TrainEffectModelConfig:
     holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     #: Unique-text resolution records the card-disjoint stratum warns below.
     min_holdout_records: int = MIN_HOLDOUT_RECORDS
+    #: Seeds weight init, batch planning and each epoch's shard draw.
+    #:
+    #: ``None`` draws one from the OS and logs it, because these runs are not
+    #: meant to be repeatable and a pinned default quietly makes every run
+    #: sample the same shards in the same order — which looks like a stable
+    #: result and is one arrangement of the corpus measured many times. The
+    #: drawn value is reported at startup and recorded on the checkpoint, so a
+    #: run stays reproducible after the fact by passing it back.
+    seed: int | None = None
     keyword_definitions: Path = field(
         default_factory=lambda: Path("output/effects/keyword-definitions.json"),
     )

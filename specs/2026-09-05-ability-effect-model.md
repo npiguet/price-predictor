@@ -349,7 +349,9 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 
 - **Corpus.** `--corpus DIR` reads a curated dataset (§ Curated corpus) and is what a hyperparameter or architecture sweep passes: the split, the rarity table, the caps and the record selection all come from its manifest, so runs differ only in the flags under test. It refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest already records, and a `--vocab-path` whose encoding surface is not the one the dataset's rarity table was keyed on. Without it a run reads the raw corpus and decides those itself.
 - **Batches.** Each batch (`--batch-size` records, stretched by `--grad-accum`) mixes several games, groups each game's records together, and encodes each unique ability text once. Context gradient is live re-encoding by default; `--context-cache` switches to the stop-gradient momentum cache (refreshed every `--cache-refresh` batches) when the 8 GB GPU budget requires it.
-- **Schedule.** An epoch is `--steps-per-epoch` optimizer steps with validation between epochs; `--epochs` bounds the run; early stopping after `--patience` epochs without a new card-disjoint validation best.
+- **Schedule.** An epoch is `--steps-per-epoch` optimizer steps with validation between epochs; `--epochs` bounds the run; early stopping after `--patience` epochs without a new card-disjoint validation best. Those steps are spread over `--shards-per-epoch` training shards, one resident at a time, drawn at random across the whole shard list rather than taken as a contiguous run of it — the list is in path order, so a contiguous block holds one collection run's consecutive worker lifetimes and never leaves the family that sorts first. The draw is a function of `--seed` and the epoch number alone.
+- **Seed.** `--seed` seeds weight initialization, batch planning and the shard draw. Omitted, it is drawn from the OS, reported at startup and recorded on the checkpoint: runs differ by default, and any one of them repeats by passing its seed back.
+- **Progress.** Within a shard the trainer reports on a wall-clock interval, carrying the running training loss, the loss decomposed by field, each parameter group's pre-clip gradient norm, the learning rate and the step rate. The three-way training / card-disjoint / game-disjoint comparison stays at the close of each epoch.
 - **Sampling mixture.** Per batch, set by `--kind-mix` and renormalized over the classes present in the corpus:
 
   | Class | Share | Records |
@@ -403,6 +405,8 @@ Flags:
 | `--context-cache` | _(off)_ | stop-gradient momentum cache for context `e` |
 | `--cache-refresh` | 500 | batches between momentum-cache refreshes |
 | `--steps-per-epoch` | 5000 | optimizer steps per epoch |
+| `--shards-per-epoch` | 256 | training shards an epoch draws, one resident at a time |
+| `--seed` | _(drawn from the OS)_ | weight init, batch planning and the shard draw |
 | `--epochs` | 40 | epoch bound |
 | `--patience` | 5 | epochs without a card-disjoint validation best before stopping |
 

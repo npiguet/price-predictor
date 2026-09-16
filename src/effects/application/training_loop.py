@@ -109,6 +109,35 @@ logger = logging.getLogger(__name__)
 PROBE_RECORDS = 64
 
 
+#: Seconds between within-shard progress lines, matching the draft trainer's.
+#: A wall-clock interval rather than a step count because a step's cost varies
+#: with how many entities its records carry, and a count that reads well on one
+#: shard goes silent for minutes on another.
+STEP_LOG_INTERVAL = 15.0
+
+
+def _format_norms(norms: Mapping[str, float]) -> str:
+    """The pre-clip gradient norms, or nothing before the first clip."""
+    if not norms:
+        return ""
+    body = ", ".join(f"{name} {value:.2f}" for name, value in norms.items())
+    return f"\n  |g| {body} (clip {MAX_GRAD_NORM:g})"
+
+
+def _format_parts(parts: Mapping[str, float]) -> str:
+    """Each field's loss term, largest first.
+
+    Ordered by size rather than by name because the question this line answers
+    is which term the loss is made of: a single field carrying nearly all of it
+    is what a blow-up looks like, and alphabetical order buries that.
+    """
+    if not parts:
+        return ""
+    ranked = sorted(parts.items(), key=lambda kv: -kv[1])
+    body = ", ".join(f"{name} {value:.3f}" for name, value in ranked)
+    return f"\n  fields: {body}"
+
+
 class TrainingLoop:
     """Owns one training run end to end.
 
@@ -157,8 +186,15 @@ class TrainingLoop:
         # never disagree.
         self.surface = surface_of(config.vocab_path)
         self.identity_table = None
-        self.rng = random.Random(RANDOM_SEED)
-        torch.manual_seed(RANDOM_SEED)
+        #: Resolved once here rather than read from the config at each use, so
+        #: the value logged at startup and written to the checkpoint is the one
+        #: every draw actually used.
+        self.seed = (
+            config.seed if config.seed is not None
+            else random.SystemRandom().getrandbits(32)
+        )
+        self.rng = random.Random(self.seed)
+        torch.manual_seed(self.seed)
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
@@ -271,7 +307,17 @@ class TrainingLoop:
 
     # ── stepping ────────────────────────────────────────────────────────
 
-    def _loss_for(self, plan, encoder, model, tokenizer, sidecars, widths, step):
+    def _loss_for(
+        self, plan, encoder, model, tokenizer, sidecars, widths, step,
+        *, report_parts: bool = False,
+    ):
+        """``(loss, parts)`` for one planned batch, or ``None`` when empty.
+
+        ``report_parts`` reads each field's term back as a float, which is one
+        device synchronization per active field. Passed only on the batch a
+        progress line is about to report, so the cost lands a few times a
+        minute rather than on all five thousand steps of an epoch.
+        """
         records = plan.records
         if not records:
             return None
@@ -296,12 +342,13 @@ class TrainingLoop:
         gathered = outputs.gather(
             1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
         )
-        loss, _parts = per_entity_loss(
+        loss, parts = per_entity_loss(
             gathered, gate.to(self.device),
             {k: v.to(self.device) for k, v in field_targets.items()},
             mask.to(self.device), fields=fields,
+            report_parts=report_parts,
         )
-        return loss
+        return loss, parts
 
     def _pools(self, records: list, sidecars: SidecarCache) -> tuple[dict, dict]:
         """Sampling pools and rarity weights for one shard's training records.
@@ -370,6 +417,15 @@ class TrainingLoop:
                 "run will train for all %d epochs.", self.config.epochs,
             )
 
+        logger.info(
+            "Seed %d (%s), %d of %d training shards per epoch, drawn across "
+            "the corpus.",
+            self.seed,
+            "given" if self.config.seed is not None else "drawn; pass "
+            f"--seed {self.seed} to repeat this run",
+            min(self.config.shards_per_epoch, len(self.training_shards)),
+            len(self.training_shards),
+        )
         mix = renormalize_mix(parse_kind_mix(self.config.kind_mix), self.present)
         logger.info("Classes present: %s", ", ".join(sorted(self.present)))
         logger.info(
@@ -448,6 +504,7 @@ class TrainingLoop:
             shards = epoch_shards(
                 self.training_shards, epoch=epoch,
                 per_epoch=self.config.shards_per_epoch,
+                seed=self.seed,
             )
             allocation = steps_per_shard(self.config.steps_per_epoch, len(shards))
             for position, (shard, budget) in enumerate(
@@ -547,26 +604,65 @@ class TrainingLoop:
             return step, taken
 
         pools, weights = self._pools(training, sidecars)
-        for _ in range(budget):
+        # Accumulated on the device like the epoch's own running loss, and read
+        # back once per progress line rather than once per step.
+        window = torch.zeros((), device=self.device)
+        window_steps = 0
+        window_opened = time.monotonic()
+        parts: dict[str, float] = {}
+        norms: dict[str, float] = {}
+        learning_rate = 0.0
+        for index in range(budget):
             for group in optimizer.param_groups:
-                group["lr"] = learning_rate_at(step, warmup=warmup)
+                group["lr"] = learning_rate = learning_rate_at(
+                    step, warmup=warmup,
+                )
             plan = plan_batch(
                 pools, weights, mix,
                 batch_size=self.config.batch_size, rng=self.rng,
             )
-            loss = self._loss_for(
-                plan, encoder, model, tokenizer, sidecars, widths, step,
+            # Decided before the forward pass: the decomposition has to be
+            # asked for while the loss is being computed, not after.
+            due = (
+                time.monotonic() - window_opened >= STEP_LOG_INTERVAL
+                and index + 1 < budget
             )
-            if loss is None:
+            computed = self._loss_for(
+                plan, encoder, model, tokenizer, sidecars, widths, step,
+                report_parts=due,
+            )
+            if computed is None:
                 continue
+            loss, batch_parts = computed
             (loss / self.config.grad_accum).backward()
             if (step + 1) % self.config.grad_accum == 0:
-                clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                # Pre-clip L2 norms per parameter group, which this already
+                # computes and reads back; dropping them left the run's only
+                # view of whether the encoder is learning on the floor.
+                norms = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
             running += loss.detach()
+            window += loss.detach()
+            window_steps += 1
             step += 1
             taken += 1
+            if batch_parts:
+                parts = batch_parts
+            if due and window_steps:
+                elapsed = time.monotonic() - window_opened
+                logger.info(
+                    "epoch %d | shard %d/%d | step %d/%d (%.0f%%) | "
+                    "loss %.4f | lr %.2e | %.1f steps/s%s%s",
+                    epoch, position, of, index + 1, budget,
+                    100 * (index + 1) / budget,
+                    float(window) / window_steps, learning_rate,
+                    window_steps / elapsed,
+                    _format_norms(norms), _format_parts(parts),
+                )
+                window = torch.zeros((), device=self.device)
+                window_steps = 0
+                window_opened = time.monotonic()
             if self.context_cache is not None:
                 self.context_cache.note_batch()
 
@@ -595,13 +691,13 @@ class TrainingLoop:
         batches = 0
         with torch.no_grad():
             for game_id, group in by_game.items():
-                loss = self._loss_for(
+                computed = self._loss_for(
                     BatchPlan({game_id: group}), encoder, model, tokenizer,
                     sidecars, widths, step,
                 )
-                if loss is not None:
+                if computed is not None:
                     # Accumulated on the device; read once below.
-                    total += loss
+                    total += computed[0]
                     batches += 1
         encoder.train()
         model.train()

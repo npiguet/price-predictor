@@ -197,32 +197,61 @@ class TestEpochShards:
 
     def test_an_epoch_reads_its_share_of_the_corpus(self):
         shards = [Path(f"s{i}") for i in range(701)]
-        assert len(epoch_shards(shards, epoch=1, per_epoch=18)) == 18
+        assert len(epoch_shards(shards, epoch=1, per_epoch=18, seed=1)) == 18
+
+    def test_an_epoch_reads_each_shard_at_most_once(self):
+        shards = [Path(f"s{i}") for i in range(701)]
+        picks = epoch_shards(shards, epoch=1, per_epoch=64, seed=1)
+        assert len(set(picks)) == len(picks)
 
     def test_consecutive_epochs_read_different_shards(self):
         shards = [Path(f"s{i}") for i in range(701)]
-        first = epoch_shards(shards, epoch=1, per_epoch=18)
-        second = epoch_shards(shards, epoch=2, per_epoch=18)
-        assert not set(first) & set(second)
+        first = epoch_shards(shards, epoch=1, per_epoch=18, seed=1)
+        second = epoch_shards(shards, epoch=2, per_epoch=18, seed=1)
+        assert first != second
 
-    def test_forty_epochs_of_eighteen_cover_the_corpus_once(self):
-        shards = [Path(f"s{i}") for i in range(701)]
-        seen = {
-            shard
-            for epoch in range(1, 41)
-            for shard in epoch_shards(shards, epoch=epoch, per_epoch=18)
-        }
-        assert seen == set(shards)
+    def test_an_epoch_reaches_the_end_of_the_corpus(self):
+        """The regression: a contiguous walk never left the opening family.
 
-    def test_the_shard_list_wraps_rather_than_running_out(self):
-        shards = [Path(f"s{i}") for i in range(10)]
-        assert epoch_shards(shards, epoch=2, per_epoch=8) == [
-            Path("s8"), Path("s9"), Path("s0"), Path("s1"),
-            Path("s2"), Path("s3"), Path("s4"), Path("s5"),
+        A curated corpus is written in path order, so its depleted shards come
+        first and its synthetic variants last — 69 shards of 3,194, starting at
+        index 3,125. Read eighteen contiguous shards an epoch and a forty-epoch
+        run walks to index 720, training a model that never saw a variant on a
+        corpus built to supply them. An epoch's draw has to span the list.
+        """
+        shards = [Path(f"s{i}") for i in range(3194)]
+        tail = set(shards[3125:])
+        reached = [
+            epoch
+            for epoch in range(1, 11)
+            if tail & set(epoch_shards(shards, epoch=epoch, per_epoch=256, seed=7))
         ]
+        assert len(reached) >= 8, (
+            f"only {len(reached)} of ten epochs reached the last 2% of the "
+            "corpus; the draw is not spanning the list"
+        )
+
+    def test_one_seed_and_epoch_always_draw_the_same_shards(self):
+        shards = [Path(f"s{i}") for i in range(701)]
+        assert (
+            epoch_shards(shards, epoch=3, per_epoch=18, seed=99)
+            == epoch_shards(shards, epoch=3, per_epoch=18, seed=99)
+        )
+
+    def test_a_different_seed_draws_different_shards(self):
+        shards = [Path(f"s{i}") for i in range(701)]
+        assert (
+            epoch_shards(shards, epoch=1, per_epoch=18, seed=1)
+            != epoch_shards(shards, epoch=1, per_epoch=18, seed=2)
+        )
+
+    def test_a_corpus_smaller_than_the_draw_is_read_whole(self):
+        shards = [Path(f"s{i}") for i in range(10)]
+        picks = epoch_shards(shards, epoch=2, per_epoch=18, seed=1)
+        assert sorted(picks) == sorted(shards)
 
     def test_an_empty_corpus_yields_no_shards(self):
-        assert epoch_shards([], epoch=1, per_epoch=18) == []
+        assert epoch_shards([], epoch=1, per_epoch=18, seed=1) == []
 
     def test_the_steps_divide_evenly_across_the_epoch_s_shards(self):
         assert sum(steps_per_shard(5000, 18)) == 5000
@@ -337,3 +366,31 @@ class TestTheFullStrengthProbe:
 
         assert records_name_held_out(_records(), held, limit=8) is False
         assert read == 8
+
+
+class TestProgressFormatting:
+    """The within-shard progress line's two optional sections."""
+
+    def test_gradient_norms_render_per_group(self):
+        from effects.application.training_loop import _format_norms
+
+        line = _format_norms({"encoder": 0.8412, "head": 1.9733})
+        assert "encoder 0.84" in line
+        assert "head 1.97" in line
+
+    def test_no_gradient_section_before_the_first_clip(self):
+        from effects.application.training_loop import _format_norms
+
+        assert _format_norms({}) == ""
+
+    def test_field_terms_are_ordered_largest_first(self):
+        """A blow-up is one field carrying the loss; name order buries it."""
+        from effects.application.training_loop import _format_parts
+
+        line = _format_parts({"gate": 0.41, "zone": 0.63, "pt": 0.28})
+        assert line.index("zone") < line.index("gate") < line.index("pt")
+
+    def test_no_field_section_when_the_batch_reported_none(self):
+        from effects.application.training_loop import _format_parts
+
+        assert _format_parts({}) == ""

@@ -799,15 +799,27 @@ loss.
   without a flag naming them. `--reserved-shards` (default 4) further shards, spread evenly across the
   remaining shard list, are held back for the game-disjoint stratum and never trained on; the rest are
   training shards.
-- **FR-126**: An epoch MUST read `--shards-per-epoch` (default 18) training shards, dividing
-  `--steps-per-epoch` evenly among them, and the walk MUST advance each epoch and wrap at the end of
-  the list, so a long run covers the corpus rather than re-reading its opening shards.
+- **FR-126**: An epoch MUST read `--shards-per-epoch` (default 256) training shards, dividing
+  `--steps-per-epoch` evenly among them, and MUST draw them at random from the whole training shard
+  list rather than as a contiguous run of it. The shard list is in path order, so a contiguous block
+  holds one collection run's consecutive worker lifetimes and never leaves the family that sorts
+  first; an epoch's draw MUST be able to reach every part of the list. The draw MUST be a function of
+  `--seed` and the epoch number alone, so an epoch's composition does not depend on how many batches
+  the epochs before it planned.
+- **FR-126a**: `--seed` MUST seed weight initialization, batch planning and the shard draw. Omitted,
+  it MUST be drawn from the OS rather than defaulting to a fixed value, and the drawn value MUST be
+  logged at startup and recorded on the checkpoint, so runs differ by default and any one of them
+  repeats by passing its seed back.
 - **FR-127**: Per-epoch validation MUST run on records captured once from the reserved shards, capped
   per stratum, and MUST reuse those same records every epoch — an early-stopping rule reading a
   freshly drawn sample each epoch would measure which records got drawn rather than whether the model
   improved.
 - **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
-  shard as it goes, naming the shard, its record counts, and its timings.
+  shard as it goes, naming the shard, its record counts, and its timings. Within a shard it MUST also
+  log progress on a wall-clock interval, carrying the running training loss, the loss decomposed by
+  field, the pre-clip gradient norm of each parameter group, the learning rate and the step rate. An
+  epoch is long enough that its closing line is the only signal a run gives for many minutes, and a
+  single field carrying the whole loss is invisible in the total.
 - **FR-129**: A provenance key naming a script file with no sidecar under its tree MUST NOT stop a run.
   The ability contributes no text, and the reader MUST count the occurrence per script file so the
   share is visible — an unconfigured *tree* still raises, being a misconfigured run rather than a gap

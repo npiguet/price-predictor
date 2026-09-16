@@ -1,0 +1,432 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -----------------< com.pricepredictor:forge-connector >-----------------
+[INFO] Building Forge Price Predictor Connector 1.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.4.0:resources (default-resources) @ forge-connector ---
+[INFO] skip non existing resourceDirectory C:\Users\nicol\IdeaProjects\price-predictor\forge-connector\src\main\resources
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ forge-connector ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 84 source files with javac [debug target 17] to target\classes
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by lombok.permit.Permit
+WARNING: Please consider reporting this to the maintainers of class lombok.permit.Permit
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[WARNING] location of system modules is not set in conjunction with -source 17
+  not setting the location of system modules may lead to class files that cannot run on JDK 17
+    --release 17 is recommended instead of -source 17 -target 17 because it sets the location of system modules automatically
+[INFO] /C:/Users/nicol/IdeaProjects/price-predictor/forge-connector/src/main/java/com/pricepredictor/connector/DeckBuilder.java: C:\Users\nicol\IdeaProjects\price-predictor\forge-connector\src\main\java\com\pricepredictor\connector\DeckBuilder.java uses or overrides a deprecated API.
+[INFO] /C:/Users/nicol/IdeaProjects/price-predictor/forge-connector/src/main/java/com/pricepredictor/connector/DeckBuilder.java: Recompile with -Xlint:deprecation for details.
+[INFO] 
+[INFO] --- resources:3.4.0:testResources (default-testResources) @ forge-connector ---
+[INFO] Copying 3 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ forge-connector ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 54 source files with javac [debug target 17] to target\test-classes
+[WARNING] location of system modules is not set in conjunction with -source 17
+  not setting the location of system modules may lead to class files that cannot run on JDK 17
+    --release 17 is recommended instead of -source 17 -target 17 because it sets the location of system modules automatically
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ forge-connector ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running com.pricepredictor.connector.ability.CharmAbilityTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.068 s -- in com.pricepredictor.connector.ability.CharmAbilityTest
+[INFO] Running com.pricepredictor.connector.BatchConverterTest
+Language 'en-US' loaded successfully.
+(ThreadUtil first call): Running with priority 5
+Read cards: 33682 files in 0 ms (25 parts) using thread pool
+Upcoming set Star Trek (TRK) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+The card A-Alrund's Epiphany was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Baba Lysaga, Night Witch was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Divide by Zero was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Esika's Chariot was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Faceless Haven was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Fires of Invention was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Goldspan Dragon was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Hullbreaker Horror was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Kumano Faces Kakkazan was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Luminarch Aspirant was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Monster Manual was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Omnath, Locus of Creation was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-The Meathook Massacre was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card A-Unholy Heat was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Blinding Radiance was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Goblin Bruiser was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Ogre Painbringer was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Titanic Pelagosaur was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+The card Treetop Recluse was not assigned to any set. Adding it to UNKNOWN set... to fix see res/editions/ folder. 
+Upcoming set Star Trek (TRK) dated in the future. All `upcoming` cards will be added to this set with unknown rarity.
+Read cards: 839 files in 0 ms (8 parts) using thread pool
+00:00  WARN: [BatchConverter] [malformed_card] null
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper (file:/C:/Users/nicol/.m2/repository/com/google/guava/guava/33.3.1-android/guava-33.3.1-android.jar)
+WARNING: Please consider reporting this to the maintainers of class com.google.common.util.concurrent.AbstractFuture$UnsafeAtomicHelper
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+00:00  WARN: [BatchConverter] [malformed_card] null
+00:00  WARN: [BatchConverter] [malformed_card] null
+00:00  WARN: [BatchConverter] [malformed_card] null
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 65.95 s -- in com.pricepredictor.connector.BatchConverterTest
+[INFO] Running com.pricepredictor.connector.CardAttributesTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.pricepredictor.connector.CardAttributesTest
+[INFO] Running com.pricepredictor.connector.CardsPlayedRowTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.014 s -- in com.pricepredictor.connector.CardsPlayedRowTest
+[INFO] Running com.pricepredictor.connector.CardsPlayedWriterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.070 s -- in com.pricepredictor.connector.CardsPlayedWriterTest
+[INFO] Running com.pricepredictor.connector.CastabilityRenderTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.pricepredictor.connector.CastabilityRenderTest
+[INFO] Running com.pricepredictor.connector.CostTranslationTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.pricepredictor.connector.CostTranslationTest
+[INFO] Running com.pricepredictor.connector.DeckBuilderMainTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.005 s -- in com.pricepredictor.connector.DeckBuilderMainTest
+[INFO] Running com.pricepredictor.connector.DraftGamePlayerTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.pricepredictor.connector.DraftGamePlayerTest
+[INFO] Running com.pricepredictor.connector.DraftPickProtocolTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.pricepredictor.connector.DraftPickProtocolTest
+[INFO] Running com.pricepredictor.connector.DraftWorkerRequiredAgentTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.pricepredictor.connector.DraftWorkerRequiredAgentTest
+[INFO] Running com.pricepredictor.connector.effects.ApiEventsTest
+[INFO] Tests run: 51, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.160 s -- in com.pricepredictor.connector.effects.ApiEventsTest
+[INFO] Running com.pricepredictor.connector.effects.BusBracketCollectorTest
+effect records: run.0-l1.0 ended with 1 cast(s) still on the stack, dropped because outcome has no member for a game that stopped: run.0-l1.0.link.172
+effect records: run.0-l1.0 ended with 1 cast(s) still on the stack, dropped because outcome has no member for a game that stopped: run.0-l1.0.link.226
+[INFO] Tests run: 32, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.160 s -- in com.pricepredictor.connector.effects.BusBracketCollectorTest
+[INFO] Running com.pricepredictor.connector.effects.BusEventsTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.pricepredictor.connector.effects.BusEventsTest
+[INFO] Running com.pricepredictor.connector.effects.CardFilenamesTest
+[INFO] Tests run: 31, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.370 s -- in com.pricepredictor.connector.effects.CardFilenamesTest
+[INFO] Running com.pricepredictor.connector.effects.ClauseContractTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.037 s -- in com.pricepredictor.connector.effects.ClauseContractTest
+[INFO] Running com.pricepredictor.connector.effects.CollectorTest
+[INFO] Tests run: 34, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.045 s -- in com.pricepredictor.connector.effects.CollectorTest
+[INFO] Running com.pricepredictor.connector.effects.CostPayloadTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.020 s -- in com.pricepredictor.connector.effects.CostPayloadTest
+[INFO] Running com.pricepredictor.connector.effects.ForkCollectorTest
+hidden has neither ManaCost nor Color
+Effect records: dropping a probe branch taken on turn 7 that would mirror run.0-l1.9 from turn 0; its own damage step wrote no record
+[INFO] Tests run: 21, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in com.pricepredictor.connector.effects.ForkCollectorTest
+[INFO] Running com.pricepredictor.connector.effects.ForkEventSinkTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in com.pricepredictor.connector.effects.ForkEventSinkTest
+[INFO] Running com.pricepredictor.connector.effects.PatchedCollectorTest
+Effect rewrites [worker, 20 games]: 2 records, 2 rewrote a parameter in place (100.0%), 0 named the ability that ran instead
+  by result: updated=2
+  by mode and result: DrawCards.updated=1, Moved.updated=1
+  rewrote in place, by mode: DrawCards=1, Moved=1
+  0 carried no outgoing while a raw parameter moved: none
+  of those, by mode: none
+[INFO] Tests run: 120, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.527 s -- in com.pricepredictor.connector.effects.PatchedCollectorTest
+[INFO] Running com.pricepredictor.connector.effects.ProvenanceKeyTest
+[INFO] Tests run: 43, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.060 s -- in com.pricepredictor.connector.effects.ProvenanceKeyTest
+[INFO] Running com.pricepredictor.connector.effects.ProvenanceSidecarTest
+00:01  WARN: [BatchConverter] [malformed_card] null
+00:01  WARN: [BatchConverter] [malformed_card] null
+00:02  WARN: [BatchConverter] [malformed_card] null
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.084 s -- in com.pricepredictor.connector.effects.ProvenanceSidecarTest
+[INFO] Running com.pricepredictor.connector.effects.RecordShardIdentityTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.pricepredictor.connector.effects.RecordShardIdentityTest
+[INFO] Running com.pricepredictor.connector.effects.RewriteContractTest
+Effect rewrites [worker, 30 games]: 19 records, 6 rewrote a parameter in place (31.6%), 1 named the ability that ran instead
+  by result: replaced=6, updated=5, skipped=3, not_replaced=2, prevented=2, ?=1
+  by mode and result: Moved.replaced=6, Moved.updated=3, Moved.not_replaced=2, Untap.skipped=2, ?.?=1, DamageDone.updated=1, DrawCards.updated=1, Moved.prevented=1, and 2 more
+  rewrote in place, by mode: Moved=4, DamageDone=1, DrawCards=1
+  0 carried no outgoing while a raw parameter moved: none
+  of those, by mode: none
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.056 s -- in com.pricepredictor.connector.effects.RewriteContractTest
+[INFO] Running com.pricepredictor.connector.effects.RoleSpansTest
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.pricepredictor.connector.effects.RoleSpansTest
+[INFO] Running com.pricepredictor.connector.effects.SnapshotBuilderTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in com.pricepredictor.connector.effects.SnapshotBuilderTest
+[INFO] Running com.pricepredictor.connector.effects.VariantRegistryTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 s -- in com.pricepredictor.connector.effects.VariantRegistryTest
+[INFO] Running com.pricepredictor.connector.ForgeScriptSerializerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.pricepredictor.connector.ForgeScriptSerializerTest
+[INFO] Running com.pricepredictor.connector.GamePlayerTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.pricepredictor.connector.GamePlayerTest
+[INFO] Running com.pricepredictor.connector.GeneratedDecksIndexTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.046 s -- in com.pricepredictor.connector.GeneratedDecksIndexTest
+[INFO] Running com.pricepredictor.connector.GracefulDegradationTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 13.26 s -- in com.pricepredictor.connector.GracefulDegradationTest
+[INFO] Running com.pricepredictor.connector.KeywordDefinitionMainTest
+Did not parse a long enough value for Companion.
+Malformed Equip entry! - Card:  (Original)
+Malformed Prototype entry! - Card:  (Original)
+Malformed Reconfigure entry! - Card:  (Original)
+Did not parse a long enough value for Companion.
+Malformed Equip entry! - Card:  (Original)
+Malformed Prototype entry! - Card:  (Original)
+Malformed Reconfigure entry! - Card:  (Original)
+Did not parse a long enough value for Companion.
+Malformed Equip entry! - Card:  (Original)
+Malformed Prototype entry! - Card:  (Original)
+Malformed Reconfigure entry! - Card:  (Original)
+Did not parse a long enough value for Companion.
+Malformed Equip entry! - Card:  (Original)
+Malformed Prototype entry! - Card:  (Original)
+Malformed Reconfigure entry! - Card:  (Original)
+Did not parse a long enough value for Companion.
+Malformed Equip entry! - Card:  (Original)
+Malformed Prototype entry! - Card:  (Original)
+Malformed Reconfigure entry! - Card:  (Original)
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.130 s -- in com.pricepredictor.connector.KeywordDefinitionMainTest
+[INFO] Running com.pricepredictor.connector.MatchGeneratorRoutingTest
+WARNING: 1 of 40 card names did not resolve against Forge's card database: Whatever
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in com.pricepredictor.connector.MatchGeneratorRoutingTest
+[INFO] Running com.pricepredictor.connector.MatchResultWriterTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.033 s -- in com.pricepredictor.connector.MatchResultWriterTest
+[INFO] Running com.pricepredictor.connector.MatchWorkerMainTest
+Error generating match: writer is broken
+java.lang.IllegalStateException: writer is broken
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$1(MatchWorkerMainTest.java:245)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:357)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$0(MatchWorkerMainTest.java:244)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: writer is broken
+java.lang.IllegalStateException: writer is broken
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$1(MatchWorkerMainTest.java:245)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:357)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$0(MatchWorkerMainTest.java:244)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: writer is broken
+java.lang.IllegalStateException: writer is broken
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$1(MatchWorkerMainTest.java:245)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:357)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$0(MatchWorkerMainTest.java:244)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: writer is broken
+java.lang.IllegalStateException: writer is broken
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$1(MatchWorkerMainTest.java:245)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:357)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aRecordingFailureCountsAgainstTheBudgetToo$0(MatchWorkerMainTest.java:244)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 1
+java.lang.IllegalStateException: scripted failure 1
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 2
+java.lang.IllegalStateException: scripted failure 2
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 3
+java.lang.IllegalStateException: scripted failure 3
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 4
+java.lang.IllegalStateException: scripted failure 4
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 5
+java.lang.IllegalStateException: scripted failure 5
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 6
+java.lang.IllegalStateException: scripted failure 6
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 7
+java.lang.IllegalStateException: scripted failure 7
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 8
+java.lang.IllegalStateException: scripted failure 8
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 9
+java.lang.IllegalStateException: scripted failure 9
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 10
+java.lang.IllegalStateException: scripted failure 10
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aWorkerWhoseEveryMatchThrowsGivesUpInsteadOfSpinning$0(MatchWorkerMainTest.java:210)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 1
+java.lang.IllegalStateException: scripted failure 1
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 2
+java.lang.IllegalStateException: scripted failure 2
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 4
+java.lang.IllegalStateException: scripted failure 4
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 5
+java.lang.IllegalStateException: scripted failure 5
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 7
+java.lang.IllegalStateException: scripted failure 7
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 8
+java.lang.IllegalStateException: scripted failure 8
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+Error generating match: scripted failure 9
+java.lang.IllegalStateException: scripted failure 9
+	at com.pricepredictor.connector.MatchWorkerMainTest$ScriptedSource.next(MatchWorkerMainTest.java:193)
+	at com.pricepredictor.connector.MatchWorkerMain.generateMatches(MatchWorkerMain.java:356)
+	at com.pricepredictor.connector.MatchWorkerMainTest.lambda$aSuccessResetsTheConsecutiveFailureCount$0(MatchWorkerMainTest.java:228)
+	at org.junit.jupiter.api.AssertTimeoutPreemptively.lambda$submitTask$3(AssertTimeoutPreemptively.java:95)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:328)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1090)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:614)
+	at java.base/java.lang.Thread.run(Thread.java:1474)
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 s -- in com.pricepredictor.connector.MatchWorkerMainTest
+[INFO] Running com.pricepredictor.connector.OutputFormatterTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in com.pricepredictor.connector.OutputFormatterTest
+[INFO] Running com.pricepredictor.connector.PlayedCardCollectorTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in com.pricepredictor.connector.PlayedCardCollectorTest
+[INFO] Running com.pricepredictor.connector.PoolGeneratorTest
+Parsing from main code: fromsheet("RVR cards")
+Attempting to lookup: RVR cards
+Parsing from main code: fromSheet("RVR cards")
+Attempting to lookup: RVR cards
+Parsing from main code: fromSheet("RVR cards")
+Attempting to lookup: RVR cards
+Parsing from main code: fromSheet("RVR Mana Fixing")
+Attempting to lookup: RVR Mana Fixing
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.888 s -- in com.pricepredictor.connector.PoolGeneratorTest
+[INFO] Running com.pricepredictor.connector.PricePredictorClientTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.025 s -- in com.pricepredictor.connector.PricePredictorClientTest
+[INFO] Running com.pricepredictor.connector.ProgressWriterTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.058 s -- in com.pricepredictor.connector.ProgressWriterTest
+[INFO] Running com.pricepredictor.connector.ResponseParsingTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 s -- in com.pricepredictor.connector.ResponseParsingTest
+[INFO] Running com.pricepredictor.connector.RulesParserTest
+B has neither ManaCost nor Color
+[INFO] Tests run: 146, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.222 s -- in com.pricepredictor.connector.RulesParserTest
+[INFO] Running com.pricepredictor.connector.SeatTableIndexTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in com.pricepredictor.connector.SeatTableIndexTest
+[INFO] Running com.pricepredictor.connector.ValidationMatchPlayerTest
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in com.pricepredictor.connector.ValidationMatchPlayerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 781, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:39 min
+[INFO] Finished at: 2026-09-14T17:11:11+02:00
+[INFO] ------------------------------------------------------------------------

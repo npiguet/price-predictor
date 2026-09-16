@@ -1197,9 +1197,19 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument(
         "--shards-per-epoch", type=int, default=DEFAULT_SHARDS_PER_EPOCH,
         help=(
-            "Record shards an epoch reads, one resident at a time. The walk "
-            "advances each epoch and wraps, so a long run covers the corpus "
-            f"rather than its opening slice (default: {DEFAULT_SHARDS_PER_EPOCH})"
+            "Record shards an epoch reads, one resident at a time, drawn at "
+            "random across the whole corpus. --steps-per-epoch fixes how long "
+            "an epoch takes; this fixes how many different shards those steps "
+            f"are spread over (default: {DEFAULT_SHARDS_PER_EPOCH})"
+        ),
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help=(
+            "Seeds weight init, batch planning and each epoch's shard draw. "
+            "Drawn from the OS and reported at startup when omitted, so runs "
+            "differ by default and any one of them can be repeated by passing "
+            "back the seed it logged"
         ),
     )
     parser.add_argument(
@@ -1317,6 +1327,7 @@ def train_config_from(args: argparse.Namespace):
         cache_refresh=args.cache_refresh,
         steps_per_epoch=args.steps_per_epoch,
         shards_per_epoch=args.shards_per_epoch,
+        seed=args.seed,
         reserved_shards=args.reserved_shards,
         epochs=args.epochs,
         patience=args.patience,
