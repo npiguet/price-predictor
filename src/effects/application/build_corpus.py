@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 from effects.domain.corpus_curation import CapHeap, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.record_quality import quality_defect
+from effects.domain.record_quality import has_unattributed_events, quality_defect
 from effects.domain.records import EffectRecord, RecordKind
 
 if TYPE_CHECKING:
@@ -708,8 +708,8 @@ _CLASS_SEED_OFFSET = 0x9E3779B9
 #: not a dirty corpus: it is a rule that does not fit the kind, or a corpus
 #: collected against an unpatched Forge, and either way the dataset silently
 #: loses a whole class the trainer then reports as one the corpus happens not
-#: to hold. The unattributed rule refused 98.9% of combat records exactly this
-#: way and nothing said so.
+#: to hold. The withdrawn unattributed rule refused 98.9% of combat records
+#: exactly this way and nothing said so.
 MAX_REFUSED_SHARE = 0.5
 
 #: Every write-pass stratum, in report order. All but the last are the real
@@ -780,6 +780,12 @@ class WriteResult:
     #: junk overall and still have lost one whole class, and
     #: ``quality_dropped`` cannot tell the two apart.
     refused_by_class: Counter[str] = field(default_factory=Counter)
+    #: Records the pass **kept** whose events name no producing clause
+    #: (FR-148). Counted after the quality check, so it is a share of what the
+    #: dataset actually holds rather than of what the shards held. Watched
+    #: rather than refused: a clause the collector could not find on the
+    #: acting chain does not make the outcome another ability's.
+    unattributed: int = 0
 
 
 _WRITE: WriteConfig | None = None
@@ -841,6 +847,8 @@ def write_shard_pass(relative: str) -> WriteResult:
             out.refused_by_class[name] += 1
             continue
         out.read[name] += 1
+        if has_unattributed_events(record):
+            out.unattributed += 1
         if record.game_id in config.card_disjoint:
             card_disjoint.append(record)
             out.stratum["card-disjoint"] += 1
@@ -915,6 +923,7 @@ def run_write_pass(
         total.stratum.update(part.stratum)
         total.quality_dropped.update(part.quality_dropped)
         total.refused_by_class.update(part.refused_by_class)
+        total.unattributed += part.unattributed
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
         for name, keys in part.stratum_keys.items():
@@ -1158,6 +1167,14 @@ def build(config: BuildCorpusConfig) -> int:
         workers=config.workers,
     )
     _check_refusals(written)
+    kept_records = sum(written.read.values())
+    logger.info(
+        "%-22s %9d record(s) kept (%.1f%%) name no producing clause for at "
+        "least one event — watched, not refused; a rising share is the "
+        "collector's attribution, not the corpus",
+        "unattributed", written.unattributed,
+        100.0 * written.unattributed / kept_records if kept_records else 0.0,
+    )
     if survey.quality_dropped != written.quality_dropped:
         # Both passes run the same rule over the same shards, so they must
         # agree. A disagreement means the two passes read different records --
@@ -1247,6 +1264,7 @@ def build(config: BuildCorpusConfig) -> int:
         shard_records=config.shard_records,
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
+        unattributed_records=written.unattributed,
     )
     store.save(manifest)
 

@@ -934,16 +934,24 @@ def test_source_of_is_the_first_path_component():
 
 
 def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
-    """A junk resolution record in a training game and one in a held-out game both vanish."""
-    from effects.domain.record_quality import NO_ABILITY, UNATTRIBUTED
+    """A junk resolution record in a training game and one in a held-out game both vanish.
+
+    The second is an event flood -- a whole game that landed on one record --
+    rather than the unattributed record it used to be: an unattributed event
+    is a watch statistic now, not a refusal (FR-148).
+    """
+    from effects.domain.record_quality import EVENT_FLOOD, NO_ABILITY
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution("junk-train", game="g-clean-1", ability=()),
         a_corpus.resolution(
             "junk-held", game="g-tainted",
-            events=(Event(
-                type=EventType.DAMAGE_DEALT, subjects=("P0",),
-                attributed_to="unresolved",
-            ),),
+            events=tuple(
+                Event(
+                    type=EventType.DAMAGE_DEALT, subjects=("P0",),
+                    attributed_to="root",
+                )
+                for _ in range(65)
+            ),
         ),
     ])
     assert build(BuildCorpusConfig(records_dir=corpus.records, output=tmp_path / "out",
@@ -953,7 +961,7 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
                                   store.game_disjoint_dir, store.gate_one_dir)
            for r in read_records(d)}
     assert "junk-train" not in ids and "junk-held" not in ids
-    assert store.load().quality_dropped == {NO_ABILITY: 1, UNATTRIBUTED: 1}
+    assert store.load().quality_dropped == {NO_ABILITY: 1, EVENT_FLOOD: 1}
 
 
 def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tmp_path, a_corpus):
@@ -1047,8 +1055,8 @@ def _unresolved_event() -> Event:
 def test_a_combat_record_with_an_unresolved_event_reaches_training(tmp_path, a_corpus):
     """Nothing resolves in a damage step, so the collector stamps every combat
     event ``unresolved`` by design and the cause lives in ``cause``. Judged by
-    the unattributed rule the class was 98.9% refused on the real corpus —
-    a statement about the rule, not about the records.
+    the withdrawn unattributed rule the class was 98.9% refused on the real
+    corpus — a statement about the rule, not about the records.
     """
     corpus = a_corpus.with_extra_records([
         replace(
@@ -1131,3 +1139,36 @@ def test_a_stratum_whose_sample_comes_out_empty_stops_the_build(
             ),
             validation_sample=8,
         ))
+
+
+def test_a_kept_record_with_an_unresolved_event_is_counted_not_refused(
+    tmp_path, a_corpus,
+):
+    """FR-148: unattributed events are a watch statistic in the manifest.
+
+    The refusal that used to be here threw away an eighth of the resolution
+    outcomes on the real corpus, the "died" zone outcome among them. The
+    count is what replaces it: a rising share is a statement about the
+    collector's attribution, not about the corpus.
+    """
+    # In ``g-tainted`` (card-disjoint), which is admitted whole: the training
+    # output is subsampled to the eight-class mixture and this fixture holds
+    # two of the eight, so a training record is not a reliable place to look
+    # for one particular id.
+    corpus = a_corpus.with_extra_records([
+        a_corpus.resolution(
+            "unattributed-1", game="g-tainted",
+            events=(_unresolved_event(),),
+        ),
+    ])
+    assert build(BuildCorpusConfig(
+        records_dir=corpus.records, cards_folders=corpus.cards,
+        output=tmp_path / "out", workers=1, game_disjoint_target=1,
+    )) == 0
+
+    store = CorpusStore(tmp_path / "out")
+    manifest = store.load()
+    assert manifest.unattributed_records >= 1
+    assert "unattributed-events" not in manifest.quality_dropped
+    kept = {r.record_id for r in read_records(store.card_disjoint_dir)}
+    assert "unattributed-1" in kept

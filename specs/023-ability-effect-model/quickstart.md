@@ -480,7 +480,8 @@ validation/gate-one/               COPIES: resolution records that also remain i
 validation/samples/card-disjoint.jsonl.gz   COPIES: the trainer's per-epoch validation set; its
                                    resolution classes come from gate-one
 validation/samples/game-disjoint.jsonl.gz
-manifest.json                      + quality_dropped, games_by_source, held_out_games_by_source, shard_records, validation_sample
+manifest.json                      + quality_dropped, unattributed_records, games_by_source,
+                                   held_out_games_by_source, shard_records, validation_sample
 ```
 
 Training records are selected per record; both validation strata are selected per **game**, which is
@@ -493,13 +494,22 @@ would count those records two and three times over. Read one directory at a time
 `per_stratum` reflects this: `gate-one` overlaps `card-disjoint`, so its values do not sum to a
 record total.
 
-Three kinds of record are refused on sight and counted in `quality_dropped`: a resolution record with
-no acting ability, a **non-combat** record with an event attributed to `unresolved`, and a record with
-more than `--max-events-per-record` events. Combat records are exempt from the second rule because a
-damage step resolves nothing — the collector has no acting chain to attribute the damage to and
-stamps every combat event `unresolved` by design, putting the cause in the event's `cause` — so the
-rule applied there refuses ~98.9% of the class. A build whose rules refuse more than half of any one
-sampling class stops rather than writing a dataset missing that class. The per-source report warns when a directory routes a few games to
+Two kinds of record are refused on sight and counted in `quality_dropped`: a resolution record with
+no acting ability, and a record with more than `--max-events-per-record` events. A build whose rules
+refuse more than half of any one sampling class stops rather than writing a dataset missing that
+class.
+
+An event attributed to `unresolved` is **counted, not refused**. `attributed_to` names the clause
+that produced an event, and `unresolved` means the collector walked the acting chain and no clause
+claimed it — the outcome is still the ability's, because the bracket collector records what happened
+inside its own resolution. On the full-strength corpus 12.3% of resolution records with an acting
+ability have every event stamped that way and not one is a dump, another 1% carry a single
+unattributed side effect (a state-based-action death, a `choice_made`, a `tapped`), and a `combat`
+record has no acting chain at all, so 98.9% of that class carries it by design with the cause in
+`cause`. Refusing on it threw away an eighth of the legitimate resolution outcomes, the "died" zone
+outcome among them. The manifest's `unattributed_records` is the watch number, logged with its share
+of kept records: a rising share is a statement about the collector's attribution, not about the
+corpus. The per-source report warns when a directory routes a few games to
 the card-disjoint stratum; a depleted directory should route none, and a small count there is a leak
 in collection (in the first corpus, The Hobbit and Marvel Super Heroes boosters).
 

@@ -96,6 +96,7 @@ def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
     for key in (
         "quality_dropped", "games_by_source", "held_out_games_by_source",
         "shard_records", "validation_sample", "max_events_per_record",
+        "unattributed_records",
     ):
         manifest_dict.pop(key, None)
     loaded = CorpusManifest.from_dict(manifest_dict)
@@ -105,6 +106,7 @@ def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
     assert loaded.shard_records == 0
     assert loaded.validation_sample == 0
     assert loaded.max_events_per_record == 0
+    assert loaded.unattributed_records == 0
 
 
 def test_the_new_fields_round_trip(manifest_dict):
@@ -115,7 +117,9 @@ def test_the_new_fields_round_trip(manifest_dict):
         "shard_records": 2000,
         "validation_sample": 2048,
         "max_events_per_record": 64,
+        "unattributed_records": 512,
     })
     loaded = CorpusManifest.from_dict(manifest_dict)
     assert loaded.as_dict()["quality_dropped"] == {"no-ability": 3}
+    assert loaded.unattributed_records == 512
     assert CorpusManifest.from_dict(loaded.as_dict()) == loaded

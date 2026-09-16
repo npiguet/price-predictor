@@ -117,6 +117,13 @@ class CorpusManifest:
     validation_sample: int = 0
     #: ``--max-events-per-record`` the quality rule used.
     max_events_per_record: int = 0
+    #: A **watch** statistic, not a refusal: records the build kept whose
+    #: events the collector could not attribute to a producing clause (FR-148).
+    #: Attribution failing does not make the outcome someone else's -- the
+    #: bracket collector records what happened inside the ability's own
+    #: resolution -- so these records are trained on. A rising share is a
+    #: statement about the collector, not about the corpus.
+    unattributed_records: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -165,6 +172,7 @@ class CorpusManifest:
             shard_records=int(data.get("shard_records", 0)),
             validation_sample=int(data.get("validation_sample", 0)),
             max_events_per_record=int(data.get("max_events_per_record", 0)),
+            unattributed_records=int(data.get("unattributed_records", 0)),
         )
 
     def digest(self) -> str:

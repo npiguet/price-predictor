@@ -1,21 +1,29 @@
 """Which records a curated corpus refuses on sight (FR-148).
 
-Three shapes the first corpus held that no model should learn from. A
-resolution record with no acting ability is an outcome with no cause. An
-event attributed to ``unresolved`` was produced by a clause the collector
-could not find on the acting chain, which in practice marks whole-game event
-streams that landed on one record. And a record carrying more events than any
-single ability resolves is the same dump seen from the other side: one such
-record in the first corpus held 278 events, 88 card draws and the game's
-``player_won``.
+Two shapes the first corpus held that no model should learn from. A
+resolution record with no acting ability is an outcome with no cause. And a
+record carrying more events than any single ability resolves is a whole game
+that landed on one record: one such record in the first corpus held 278
+events, 88 card draws and the game's ``player_won``.
 
-**Combat records are exempt from the unattributed rule.** Nothing is
-resolving in a damage step, so there is no acting chain for an event to be
-attributed to and the collector stamps every combat-damage event
-``unresolved`` by design; what caused the damage lives in the event's
-``cause`` instead. Applied to combat the rule refused 98.9% of the combat
-records in the real corpus — the whole sampling class, for being exactly
-what it is supposed to be.
+**An unattributed event is watched, not refused.** ``attributed_to`` names
+the sub-ability clause that produced an event, and the collector writes
+``unresolved`` when it walked the acting chain and no clause claimed it. That
+is a failure to attribute, not a failure to belong: the bracket collector
+records the events that happened inside the ability's *own* resolution, so
+the outcome is that ability's whether or not a clause can be named for it. On
+the real corpus 12.3% of resolution records with an acting ability have every
+event stamped ``unresolved`` and not one of them exceeds ten events, and
+another 1% carry a single unattributed side effect — a state-based-action
+``zone_change`` death, a ``choice_made``, a ``tapped``. Refusing them threw
+away an eighth of the legitimate resolution outcomes, the "died" zone outcome
+among them. Combat is the same case at full strength: a damage step resolves
+nothing, so there is no chain at all and every combat-damage event is
+``unresolved`` by design with its cause in ``cause`` — 98.9% of the class.
+The whole-game dumps the rule was reaching for are caught by the no-ability
+and event-flood rules instead. ``has_unattributed_events`` keeps the number
+available, and ``build-corpus`` reports it as ``unattributed_records``: a
+rising share is a statement about the collector, not about the corpus.
 
 Pure over the record, so build-corpus applies it in a worker without a
 sidecar, and a test can state each rule in one line.
@@ -28,14 +36,13 @@ from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
 from effects.domain.records import EffectRecord, RecordKind
 
 NO_ABILITY = "no-ability"
-UNATTRIBUTED = "unattributed-events"
 EVENT_FLOOD = "event-flood"
-QUALITY_REASONS: tuple[str, ...] = (NO_ABILITY, UNATTRIBUTED, EVENT_FLOOD)
+QUALITY_REASONS: tuple[str, ...] = (NO_ABILITY, EVENT_FLOOD)
 
 #: The ``attributed_to`` sentinel the collector writes when the producing
 #: clause was sought and nothing on the chain claimed the event. Aliased from
-#: the schema rather than re-declared, so the rule and the writer cannot drift
-#: apart on the spelling of the one string the whole check turns on.
+#: the schema rather than re-declared, so the watch statistic and the writer
+#: cannot drift apart on the spelling of the one string it turns on.
 UNRESOLVED = ATTRIBUTION_UNRESOLVED
 
 #: More events than this on one record is a game, not an ability. The
@@ -52,26 +59,28 @@ def quality_defect(
     Ordered so the most specific reason wins: a record with no ability is
     reported as that, whatever its events look like.
 
-    The unattributed rule skips ``combat``: a damage step resolves nothing,
-    so the collector has no chain to attribute an event to and stamps every
-    one ``unresolved`` (the cause is in ``cause``). Judged by that rule the
-    class is 98.9% defective, which is a statement about the rule.
-
     A non-positive ``max_events`` means **no event-flood rule at all**, the
     way ``CapHeap`` reads a non-positive cap and ``--text-cap 0`` reads zero.
     Taken as a literal ceiling instead, zero refuses every record carrying a
     single event -- which is nearly all of them -- so ``build-corpus``, which
     lists ``--max-events-per-record 0`` among the settings zero is real for,
-    would write an almost empty corpus and still exit 0. The other two rules
-    are unconditional: neither has a number to turn off.
+    would write an almost empty corpus and still exit 0. The no-ability rule
+    is unconditional: it has no number to turn off.
     """
     if record.kind is RecordKind.RESOLUTION and not record.ability:
         return NO_ABILITY
     events = events_of(record)
-    if record.kind is not RecordKind.COMBAT and any(
-        event.attributed_to == UNRESOLVED for event in events
-    ):
-        return UNATTRIBUTED
     if max_events > 0 and len(events) > max_events:
         return EVENT_FLOOD
     return None
+
+
+def has_unattributed_events(record: EffectRecord) -> bool:
+    """Whether any of this record's events names no producing clause.
+
+    The watch statistic the withdrawn refusal became (see the module
+    docstring). Every kind, including ``combat``, because the number is a
+    reading of the collector's attribution and a count taken over only the
+    kinds some rule happened to reach would move whenever the rules did.
+    """
+    return any(event.attributed_to == UNRESOLVED for event in events_of(record))
