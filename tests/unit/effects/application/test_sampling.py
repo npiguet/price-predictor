@@ -9,6 +9,7 @@ acting ability text sample uniformly because rarity has nothing to key on.
 from __future__ import annotations
 
 import random
+from collections import Counter
 
 import pytest
 
@@ -16,6 +17,7 @@ from effects.application.train_effect_model import (
     DEFAULT_KIND_MIX,
     RARITY_CAP,
     UNIFORM_CLASSES,
+    batches_without_replacement,
     class_counts,
     effective_games,
     parse_kind_mix,
@@ -418,3 +420,64 @@ class TestBatchPlanning:
         mix = renormalize_mix(DEFAULT_KIND_MIX, pools)
         plan = plan_batch(pools, {}, mix, batch_size=16, rng=random.Random(0))
         assert plan.unique_ability_texts(lambda r: "bolt") == {"bolt"}
+
+
+class TestBatchesWithoutReplacement:
+    """A shard is one weighted shuffle per pass, not a draw with replacement (FR-086)."""
+
+    def _records(self, n):
+        return [
+            _record(RecordKind.RESOLUTION, record_id=f"r{i}", game_id=f"g{i % 4}")
+            for i in range(n)
+        ]
+
+    def test_one_pass_visits_every_record_exactly_once(self):
+        records = self._records(10)
+        batches = batches_without_replacement(
+            records, [1.0] * 10, batch_size=5, rng=random.Random(1),
+        )
+        seen = [r.record_id for _ in range(2) for r in next(batches).records]
+        assert sorted(seen) == sorted(r.record_id for r in records)
+
+    def test_the_ragged_tail_is_dropped_and_a_new_pass_begins(self):
+        records = self._records(7)
+        batches = batches_without_replacement(
+            records, [1.0] * 7, batch_size=3, rng=random.Random(1),
+        )
+        first_pass = [next(batches).records for _ in range(2)]
+        assert all(len(b) == 3 for b in first_pass)
+        third = next(batches).records
+        assert len(third) == 3  # a fresh shuffle, not the 1-record tail
+
+    def test_a_heavier_record_comes_earlier_on_average(self):
+        records = self._records(2)
+        firsts = Counter()
+        for seed in range(200):
+            batches = batches_without_replacement(
+                records, [1.0, 10.0], batch_size=1, rng=random.Random(seed),
+            )
+            firsts[next(batches).records[0].record_id] += 1
+        assert firsts["r1"] > 150
+
+    def test_records_are_grouped_by_game(self):
+        records = self._records(8)
+        plan = next(batches_without_replacement(
+            records, [1.0] * 8, batch_size=8, rng=random.Random(3),
+        ))
+        assert set(plan.by_game) == {"g0", "g1", "g2", "g3"}
+        assert all(
+            r.game_id == game
+            for game, group in plan.by_game.items() for r in group
+        )
+
+    def test_no_records_yields_nothing(self):
+        assert list(
+            batches_without_replacement([], [], batch_size=4, rng=random.Random(0))
+        ) == []
+
+    def test_a_batch_larger_than_the_shard_is_the_whole_shard(self):
+        records = self._records(3)
+        plan = next(batches_without_replacement(
+            records, [1.0] * 3, batch_size=32, rng=random.Random(0),
+        ))
+        assert len(plan.records) == 3

@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import random
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -714,6 +714,42 @@ def plan_batch(
         plan[record.game_id].append(record)
         drawn += 1
     return BatchPlan(dict(plan))
+
+
+def weighted_order(weights: Sequence[float], rng: random.Random) -> list[int]:
+    """Indices in a weighted shuffle: each drawn once, heavier ones earlier.
+
+    Efraimidis–Spirakis: key ``u ** (1 / w)`` per item, sorted descending, is a
+    sample without replacement in proportion to ``w``. One shuffle per pass is
+    what lets a shard be seen whole rather than resampled from with
+    replacement, which is how a sixteen-record shard was replayed 640 times.
+    """
+    keys = [
+        rng.random() ** (1.0 / max(float(weight), 1e-9)) for weight in weights
+    ]
+    return sorted(range(len(keys)), key=keys.__getitem__, reverse=True)
+
+
+def batches_without_replacement(
+    records: Sequence[EffectRecord], weights: Sequence[float], *,
+    batch_size: int, rng: random.Random,
+) -> Iterator[BatchPlan]:
+    """Endless full batches over ``records``: one weighted shuffle per pass.
+
+    A batch smaller than ``batch_size`` is yielded only when the whole shard
+    is smaller; otherwise the ragged tail is dropped and the next pass
+    starts, so every step trains on a full batch.
+    """
+    if not records:
+        return
+    size = min(batch_size, len(records))
+    while True:
+        order = weighted_order(weights, rng)
+        for start in range(0, len(order) - size + 1, size):
+            plan: dict[str, list[EffectRecord]] = defaultdict(list)
+            for index in order[start:start + size]:
+                plan[records[index].game_id].append(records[index])
+            yield BatchPlan(dict(plan))
 
 
 def class_counts(records: Iterable[EffectRecord]) -> Counter[str]:
