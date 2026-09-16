@@ -125,36 +125,21 @@ def reports_now(*, index: int, budget: int) -> bool:
     return index + 1 >= budget
 
 
-def module_grad_norms(modules: Mapping[str, torch.nn.Module]) -> dict[str, float]:
-    """Pre-clip L2 gradient norm of each module, for reporting only.
+def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
+    """One optimizer group per module, named for ``clip_per_group``.
 
-    Measured here rather than read off the optimizer because the optimizer holds
-    exactly one parameter group: ``clip_per_group`` then reports a single number
-    covering everything, which cannot answer the question the number is for. The
-    effect head's loss reaches the ability encoder through the ``e`` path and no
-    other, so an encoder norm near zero beside a healthy head norm is the
-    signature of that path being cut — and a run with it cut still reports a
-    falling loss.
-
-    Deliberately not a change to how gradients are clipped. Giving the optimizer
-    one group per module would clip each at ``max_norm`` separately instead of
-    the whole together, which is a different optimizer rather than a different
-    log line.
-
-    Summed on the device and read once per module, on the single step per shard
-    that reports.
+    Clipped apart rather than together (FR-095): the head's gradient norm ran
+    five to twenty times the encoder's in the first run, and a joint clip at
+    1.0 scaled the encoder's update by the head's norm — the one path the
+    effect loss reaches the encoder through, cut to a twentieth.
     """
-    norms: dict[str, float] = {}
-    for name, module in modules.items():
-        squared = None
-        for parameter in module.parameters():
-            if parameter.grad is None:
-                continue
-            term = parameter.grad.detach().pow(2).sum()
-            squared = term if squared is None else squared + term
-        if squared is not None:
-            norms[name] = float(squared) ** 0.5
-    return norms
+    groups = [
+        {"name": "encoder", "params": list(encoder.parameters())},
+        {"name": "head", "params": list(model.parameters())},
+    ]
+    if identity_table is not None:
+        groups.append({"name": "identity", "params": list(identity_table.parameters())})
+    return groups
 
 
 def _format_norms(norms: Mapping[str, float]) -> str:
@@ -162,7 +147,7 @@ def _format_norms(norms: Mapping[str, float]) -> str:
     if not norms:
         return ""
     body = ", ".join(f"{name} {value:.2f}" for name, value in norms.items())
-    return f"\n  |g| {body} (clipped together at {MAX_GRAD_NORM:g})"
+    return f"\n  |g| {body} (clipped per group at {MAX_GRAD_NORM:g})"
 
 
 def _format_parts(parts: Mapping[str, float]) -> str:
@@ -617,11 +602,9 @@ class TrainingLoop:
             else None
         )
 
-        trainable = [*encoder.parameters(), *model.parameters()]
-        if self.identity_table is not None:
-            trainable += list(self.identity_table.parameters())
         optimizer = torch.optim.AdamW(
-            trainable, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
+            parameter_groups(encoder, model, self.identity_table),
+            lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY,
         )
         warmup = warmup_steps(
             epochs=self.config.epochs, steps_per_epoch=self.config.steps_per_epoch,
@@ -779,16 +762,10 @@ class TrainingLoop:
                 continue
             loss, batch_parts = computed
             (loss / self.config.grad_accum).backward()
-            if due:
-                # Read before the clip, and per module rather than per optimizer
-                # group, because the optimizer holds exactly one group.
-                norms = module_grad_norms(
-                    {"encoder": encoder, "head": model}
-                    | ({"identity": self.identity_table}
-                       if self.identity_table is not None else {})
-                )
             if (step + 1) % self.config.grad_accum == 0:
-                clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                clipped = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                if due:
+                    norms = clipped
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
             running += loss.detach()
