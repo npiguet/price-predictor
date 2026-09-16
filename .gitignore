@@ -52,3 +52,6 @@ replay_pid*.log
 
 # Conversion output
 output/
+
+# SDD worktrees
+/.worktrees/
