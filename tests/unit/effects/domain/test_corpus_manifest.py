@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from effects.domain.corpus_manifest import ClassCounts, CorpusManifest, SourceShard
 
 
@@ -33,6 +35,11 @@ def manifest(**overrides) -> CorpusManifest:
     )
     base.update(overrides)
     return CorpusManifest(**base)
+
+
+@pytest.fixture
+def manifest_dict() -> dict:
+    return manifest().as_dict()
 
 
 def test_round_trips_through_a_dict():
@@ -82,3 +89,33 @@ def test_digest_changes_when_the_delivered_mixture_changes():
     assert manifest().digest() != manifest(
         delivered_mix={"rewrite": 0.5, "combat": 0.5},
     ).digest()
+
+
+def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
+    """Every field this rework added has a default (FR-143 compatibility)."""
+    for key in (
+        "quality_dropped", "games_by_source", "held_out_games_by_source",
+        "shard_records", "validation_sample", "max_events_per_record",
+    ):
+        manifest_dict.pop(key, None)
+    loaded = CorpusManifest.from_dict(manifest_dict)
+    assert loaded.quality_dropped == {}
+    assert loaded.games_by_source == {}
+    assert loaded.held_out_games_by_source == {}
+    assert loaded.shard_records == 0
+    assert loaded.validation_sample == 0
+    assert loaded.max_events_per_record == 0
+
+
+def test_the_new_fields_round_trip(manifest_dict):
+    manifest_dict.update({
+        "quality_dropped": {"no-ability": 3},
+        "games_by_source": {"depleted": 10, "full-strength": 4},
+        "held_out_games_by_source": {"depleted": 1, "full-strength": 4},
+        "shard_records": 2000,
+        "validation_sample": 2048,
+        "max_events_per_record": 64,
+    })
+    loaded = CorpusManifest.from_dict(manifest_dict)
+    assert loaded.as_dict()["quality_dropped"] == {"no-ability": 3}
+    assert CorpusManifest.from_dict(loaded.as_dict()) == loaded

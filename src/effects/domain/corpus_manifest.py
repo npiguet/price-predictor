@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
@@ -98,6 +98,23 @@ class CorpusManifest:
     #: sampling class within the training output alone.
     unique_texts: dict[str, int]
     shortfall: dict[str, int]
+    #: Records refused by ``effects.domain.record_quality`` in both passes,
+    #: by reason (FR-148). Empty on a manifest written before the rule existed.
+    quality_dropped: dict[str, int] = field(default_factory=dict)
+    #: Games per top-level source directory under ``--records-dir``
+    #: ("depleted", "full-strength", …; "." for shards at the root), and how
+    #: many of them name a held-out card. A depleted directory whose held-out
+    #: count is not zero is a leak in collection, and this is where it shows
+    #: (FR-149).
+    games_by_source: dict[str, int] = field(default_factory=dict)
+    held_out_games_by_source: dict[str, int] = field(default_factory=dict)
+    #: ``--shard-records``: the size output shards were repacked to. 0 on a
+    #: manifest from before repacking, whose shards mirror their sources.
+    shard_records: int = 0
+    #: ``--validation-sample``: records per stratum in ``validation/samples/``.
+    validation_sample: int = 0
+    #: ``--max-events-per-record`` the quality rule used.
+    max_events_per_record: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -138,6 +155,14 @@ class CorpusManifest:
             per_stratum={k: int(v) for k, v in data["per_stratum"].items()},
             unique_texts={k: int(v) for k, v in data["unique_texts"].items()},
             shortfall={k: int(v) for k, v in data["shortfall"].items()},
+            quality_dropped={k: int(v) for k, v in data.get("quality_dropped", {}).items()},
+            games_by_source={k: int(v) for k, v in data.get("games_by_source", {}).items()},
+            held_out_games_by_source={
+                k: int(v) for k, v in data.get("held_out_games_by_source", {}).items()
+            },
+            shard_records=int(data.get("shard_records", 0)),
+            validation_sample=int(data.get("validation_sample", 0)),
+            max_events_per_record=int(data.get("max_events_per_record", 0)),
         )
 
     def digest(self) -> str:

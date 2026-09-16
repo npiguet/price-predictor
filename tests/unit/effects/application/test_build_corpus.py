@@ -843,3 +843,24 @@ def test_the_manifest_records_the_variant_tree_it_read(
     ))
 
     assert CorpusStore(out).load().variant_scripts == variant_root
+
+
+def test_the_store_names_the_new_outputs(tmp_path):
+    store = CorpusStore(tmp_path / "corpus")
+    assert store.gate_one_dir == tmp_path / "corpus" / "validation" / "gate-one"
+    assert store.samples_dir == tmp_path / "corpus" / "validation" / "samples"
+    assert store.sample_path("card-disjoint") == (
+        tmp_path / "corpus" / "validation" / "samples" / "card-disjoint.jsonl.gz"
+    )
+    assert store.parts_dir_for("training") == tmp_path / "corpus" / ".parts" / "training"
+
+
+def test_clear_outputs_removes_the_new_outputs_too(tmp_path):
+    store = CorpusStore(tmp_path / "corpus")
+    for directory in (store.gate_one_dir, store.samples_dir, store.parts_dir_for("training")):
+        directory.mkdir(parents=True)
+        (directory / "x").write_text("x")
+    store.clear_outputs()
+    assert not store.gate_one_dir.exists()
+    assert not store.samples_dir.exists()
+    assert not store.parts_dir.exists()

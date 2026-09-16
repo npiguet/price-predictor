@@ -38,6 +38,31 @@ class CorpusStore:
     def game_disjoint_dir(self) -> Path:
         return self.directory / "validation" / "game-disjoint"
 
+    @property
+    def gate_one_dir(self) -> Path:
+        """Resolution records of card-disjoint games whose acting text is held out."""
+        return self.directory / "validation" / "gate-one"
+
+    @property
+    def samples_dir(self) -> Path:
+        return self.directory / "validation" / "samples"
+
+    def sample_path(self, stratum: str) -> Path:
+        """The fixed validation sample the trainer reads for ``stratum``."""
+        return self.samples_dir / f"{stratum}.jsonl.gz"
+
+    @property
+    def parts_dir(self) -> Path:
+        """Per-source parts the write pass leaves for the repack step.
+
+        Outside every stratum directory, because ``iter_shards`` is recursive
+        and a part left under ``training/`` would be read as a shard.
+        """
+        return self.directory / ".parts"
+
+    def parts_dir_for(self, stratum: str) -> Path:
+        return self.parts_dir / stratum
+
     def clear_outputs(self) -> None:
         """Delete the three shard directories, leaving the manifest in place.
 
@@ -56,6 +81,7 @@ class CorpusStore:
 
         for directory in (
             self.training_dir, self.card_disjoint_dir, self.game_disjoint_dir,
+            self.gate_one_dir, self.samples_dir, self.parts_dir,
         ):
             shutil.rmtree(directory, ignore_errors=True)
 
