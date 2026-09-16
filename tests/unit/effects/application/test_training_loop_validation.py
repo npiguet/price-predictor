@@ -70,3 +70,31 @@ def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
 
     assert provenance.holdout_permille == 30
     assert provenance.holdout_max_carriers == 5
+
+
+def test_validation_batches_drop_the_augmentations_but_keep_the_withholding():
+    """A validation number must not move with the draw (FR-082).
+
+    Keyword expansion and context dropout vary what the model sees from one
+    step to the next, which is what they are for in training and exactly what a
+    number compared across epochs must not have. The withheld keyword is not an
+    augmentation but a split, so it stays withheld: handing it back at
+    validation would score the one thing training never saw.
+    """
+    loop = TrainingLoop(
+        TrainEffectModelConfig(
+            corpus="unused", keyword_expand_p=0.5, context_dropout=0.3,
+            withhold_keyword="lifelink",
+        ),
+        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
+        inherited=None, training_shards=[], validation_samples={},
+        holdout_permille=20, holdout_max_carriers=8,
+        gate_one_records=0, rarity={}, corpus_digest="",
+    )
+
+    training = loop._batcher(None, None, {})
+    assert (training.keyword_expand_p, training.context_dropout) == (0.5, 0.3)
+
+    scoring = loop._batcher(None, None, {}, training=False)
+    assert (scoring.keyword_expand_p, scoring.context_dropout) == (0.0, 0.0)
+    assert scoring.withhold_keyword == "lifelink"

@@ -38,6 +38,7 @@ from pathlib import Path
 
 import torch
 
+from effects.application.gate_one import measure
 from effects.application.surface_batching import (
     IDENTITY_TABLE_SIZE,
     SurfaceBatcher,
@@ -57,6 +58,7 @@ from effects.application.train_effect_model import (
     batches_without_replacement,
     check_holdout,
     epoch_shards,
+    fields_for_epoch,
     learning_rate_at,
     load_shard,
     rarity_coverage,
@@ -117,6 +119,15 @@ def reports_now(*, index: int, budget: int) -> bool:
         budget: steps this shard gets.
     """
     return index + 1 >= budget
+
+
+def resets_at(config, *, epoch: int) -> bool:
+    """Whether the early stopper forgets its best at the start of ``epoch``.
+
+    True once, at the curriculum epoch: the loss gains twenty-five field terms
+    there, so an earlier best would be a different objective's number.
+    """
+    return config.curriculum_epoch > 1 and epoch == config.curriculum_epoch
 
 
 def parameter_groups(encoder, model, identity_table=None) -> list[dict]:
@@ -303,8 +314,18 @@ class TrainingLoop:
                 break
         return widths
 
-    def _batcher(self, tokenizer, sidecars, widths) -> SurfaceBatcher:
-        """The records-to-inputs pipeline, shared with the gate-1 evaluator."""
+    def _batcher(
+        self, tokenizer, sidecars, widths, *, training: bool = True,
+    ) -> SurfaceBatcher:
+        """The records-to-inputs pipeline, shared with the gate-1 evaluator.
+
+        ``training=False`` turns the two augmentations off: keyword expansion
+        and context dropout are there to vary what the model sees from one
+        step to the next, and a validation number they varied would move with
+        the draw rather than with the model. The withheld keyword stays
+        withheld — it is a split, not an augmentation, and a validation batch
+        that handed it back would score the one thing training never saw.
+        """
         return SurfaceBatcher(
             tokenizer=tokenizer,
             sidecars=sidecars,
@@ -314,8 +335,8 @@ class TrainingLoop:
             widths=widths,
             device=self.device,
             withhold_keyword=self.config.withhold_keyword,
-            keyword_expand_p=self.config.keyword_expand_p,
-            context_dropout=self.config.context_dropout,
+            keyword_expand_p=self.config.keyword_expand_p if training else 0.0,
+            context_dropout=self.config.context_dropout if training else 0.0,
             rng=self.rng,
             identity_table=self.identity_table,
         )
@@ -324,7 +345,7 @@ class TrainingLoop:
 
     def _loss_for(
         self, plan, encoder, model, tokenizer, sidecars, widths, step,
-        *, report_parts: bool = False,
+        *, report_parts: bool = False, fields=None, training: bool = True,
     ):
         """``(loss, parts)`` for one planned batch, or ``None`` when empty.
 
@@ -332,21 +353,28 @@ class TrainingLoop:
         device synchronization per active field. Passed only on the batch a
         progress line is about to report, so the cost lands a few times a
         minute rather than on all five thousand steps of an epoch.
+
+        ``fields`` is the epoch's own field set (FR-082): every batch of an
+        epoch scores the same objective, and validation scores that same one,
+        so the two numbers printed side by side are comparable. Left ``None``
+        the batch derives its own from the classes it holds, which is what a
+        caller building its own batches — the gate-1 evaluator — needs.
         """
         records = plan.records
         if not records:
             return None
-        batch, surfaces = self._batcher(tokenizer, sidecars, widths).build(
-            records, encoder,
-        )
+        batch, surfaces = self._batcher(
+            tokenizer, sidecars, widths, training=training,
+        ).build(records, encoder)
         hidden = model(**batch)
         outputs = model.per_entity(hidden)
 
-        present = {sampling_class(record) for record in records}
-        fields = active_fields(
-            present_classes=frozenset(present), step=step,
-            curriculum_step=self.config.curriculum_step,
-        )
+        if fields is None:
+            present = {sampling_class(record) for record in records}
+            fields = active_fields(
+                present_classes=frozenset(present), step=step,
+                curriculum_step=self.config.curriculum_step,
+            )
         targets = [derive_targets(record) for record in records]
         gate, field_targets, mask, index = entity_target_tensors(
             surfaces, targets, fields,
@@ -470,6 +498,15 @@ class TrainingLoop:
             # nothing looks at until the epoch closes.
             running = torch.zeros((), device=self.device)
             taken = 0
+            fields = fields_for_epoch(
+                self.config, present=frozenset(self.present), epoch=epoch,
+            )
+            if resets_at(self.config, epoch=epoch):
+                stopper.reset()
+                logger.info(
+                    "epoch %d enables the sparse field group (%d fields now); "
+                    "the early stopper starts over", epoch, len(fields),
+                )
             shards = epoch_shards(
                 self.training_shards, epoch=epoch,
                 per_epoch=self.config.shards_per_epoch,
@@ -486,7 +523,7 @@ class TrainingLoop:
                     tokenizer=tokenizer, sidecars=sidecars, widths=widths,
                     optimizer=optimizer, warmup=warmup, running=running,
                     step=step, taken=taken, epoch=epoch, position=position,
-                    of=len(shards),
+                    of=len(shards), fields=fields,
                 )
 
             card_parts: dict[str, float] = {}
@@ -495,18 +532,38 @@ class TrainingLoop:
                 train_loss=float(running) / max(taken, 1),
                 card_disjoint_loss=self._validate(
                     self.card_disjoint, encoder, model, tokenizer, sidecars,
-                    widths, step, parts=card_parts,
+                    widths, step, parts=card_parts, fields=fields,
                 ),
                 game_disjoint_loss=self._validate(
                     self.game_disjoint, encoder, model, tokenizer, sidecars,
-                    widths, step,
+                    widths, step, fields=fields,
                 ),
             )
+            # Gate 1's three numbers on the card-disjoint sample, every epoch.
+            # The loss says the objective fell; these say whether the model
+            # knows *that* something happens, *what*, and *how much* — which
+            # is what the gate is eventually scored on, and a run whose loss
+            # falls while all three sit still is worth seeing early.
+            metrics = measure(
+                self.card_disjoint, encoder, model,
+                self._batcher(tokenizer, sidecars, widths, training=False),
+                fields=fields,
+            )
+            # `measure` calls `eval()` and does not call `train()` back — its
+            # other caller is the evaluator, which never trains. The next
+            # epoch's first line does, so this only matters for the save
+            # below, but a mode left flipped by a diagnostic is not a thing to
+            # leave for the next reader to rediscover.
+            encoder.train()
+            model.train()
             logger.info(
                 "epoch %d | train %.4f | card-disjoint %.4f | "
-                "game-disjoint %.4f%s",
+                "game-disjoint %.4f | gate F1 %.3f | zone acc %.3f | "
+                "deviance %.3f%s",
                 result.epoch, result.train_loss, result.card_disjoint_loss,
-                result.game_disjoint_loss, _format_parts(card_parts),
+                result.game_disjoint_loss, metrics.affected_gate_f1,
+                metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
+                _format_parts(card_parts),
             )
             if sidecars.unresolved:
                 worst = sorted(
@@ -549,6 +606,7 @@ class TrainingLoop:
     def _train_on_shard(
         self, shard, budget, *, encoder, model, tokenizer, sidecars,
         widths, optimizer, warmup, running, step, taken, epoch, position, of,
+        fields,
     ) -> tuple[int, int]:
         """Load one shard, take ``budget`` steps on it, and let it go.
 
@@ -604,7 +662,7 @@ class TrainingLoop:
             due = reports_now(index=index, budget=budget)
             computed = self._loss_for(
                 plan, encoder, model, tokenizer, sidecars, widths, step,
-                report_parts=due,
+                report_parts=due, fields=fields,
             )
             if computed is None:
                 continue
@@ -641,7 +699,7 @@ class TrainingLoop:
 
     def _validate(
         self, records, encoder, model, tokenizer, sidecars, widths, step,
-        *, parts: dict[str, float] | None = None,
+        *, parts: dict[str, float] | None = None, fields=None,
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
 
@@ -654,9 +712,12 @@ class TrainingLoop:
         batch does, and the two numbers printed side by side were never
         measuring the same thing.
 
-        Fixed-size batches over a shuffled sample fix both. ``parts`` collects
-        the loss by field, averaged over batches, which is what says *which*
-        term is not moving when the total is not moving.
+        Fixed-size batches over a shuffled sample fix both, and ``fields`` is
+        the epoch's own set rather than each batch's, so the validation number
+        and the training number beside it score the same objective even where a
+        batch happens to hold no record of some class. ``parts`` collects the
+        loss by field, averaged over batches, which is what says *which* term
+        is not moving when the total is not moving.
 
         Records are still grouped by game *within* a batch, for the same reason
         training groups them: one encode of an ability text then serves every
@@ -682,6 +743,7 @@ class TrainingLoop:
                 computed = self._loss_for(
                     BatchPlan(dict(grouped)), encoder, model, tokenizer,
                     sidecars, widths, step, report_parts=parts is not None,
+                    fields=fields, training=False,
                 )
                 if computed is None:
                     continue

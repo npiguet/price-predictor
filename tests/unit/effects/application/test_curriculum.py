@@ -9,8 +9,8 @@ from effects.application.train_effect_model import (
 )
 from effects.domain.effect_model import (
     CLASS_RESOLUTION_EFFECT,
-    FieldGroup,
     PER_ENTITY_FIELDS,
+    FieldGroup,
 )
 
 PRESENT = frozenset({CLASS_RESOLUTION_EFFECT})
@@ -40,3 +40,23 @@ def test_the_stopper_resets():
     stopper.reset()
     assert stopper.best == float("inf") and stopper.since_best == 0
     assert stopper.update(5.0)          # a worse number is a new best after the reset
+
+
+def test_the_loop_resets_the_stopper_when_the_curriculum_switches():
+    """Losses before and after the sparse group enables do not compare (FR-082).
+
+    The reset fires once, at the curriculum epoch, and never at epoch 1 — a
+    ``--curriculum-epoch 1`` run enables the sparse group from its first step,
+    so there is no earlier best measuring a different objective to forget.
+    """
+    from effects.application import training_loop
+
+    config = TrainEffectModelConfig(
+        corpus="x", steps_per_epoch=10, curriculum_epoch=2, epochs=3,
+    )
+    assert training_loop.resets_at(config, epoch=1) is False
+    assert training_loop.resets_at(config, epoch=2) is True
+    assert training_loop.resets_at(config, epoch=3) is False
+    assert training_loop.resets_at(
+        TrainEffectModelConfig(corpus="x", curriculum_epoch=1), epoch=1,
+    ) is False
