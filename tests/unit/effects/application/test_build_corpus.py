@@ -1009,3 +1009,16 @@ def test_the_cli_exposes_the_rework_flags():
     assert (args.shard_records, args.max_events_per_record, args.validation_sample) == (500, 32, 64)
     defaults = build_parser().parse_args(["build-corpus"])
     assert (defaults.shard_records, defaults.max_events_per_record, defaults.validation_sample) == (2000, 64, 2048)
+
+    # The zero reading for each of the three flags must survive in --help,
+    # not just in the docstring: this is what would have caught it silently
+    # vanishing from --max-events-per-record's help text.
+    subparsers_action = next(
+        action for action in build_parser()._actions
+        if getattr(action, "choices", None) and "build-corpus" in action.choices
+    )
+    max_events_action = next(
+        action for action in subparsers_action.choices["build-corpus"]._actions
+        if "--max-events-per-record" in action.option_strings
+    )
+    assert "0 disables" in max_events_action.help

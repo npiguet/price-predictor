@@ -559,7 +559,8 @@ def _build_corpus_parser(subparsers) -> None:
         "--max-events-per-record", type=int, default=64,
         help=(
             "A record carrying more events than this is refused as a game "
-            "dump rather than an ability (default: 64)"
+            "dump rather than an ability; 0 disables the event-flood rule "
+            "(default: 64)"
         ),
     )
     parser.add_argument(
