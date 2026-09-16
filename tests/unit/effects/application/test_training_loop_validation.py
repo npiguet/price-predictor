@@ -36,6 +36,7 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
         TrainEffectModelConfig(corpus="unused"),
         held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
         inherited=None, training_shards=[], validation_samples=samples,
+        holdout_permille=20, holdout_max_carriers=8,
         gate_one_records=0, rarity={}, corpus_digest="",
     )
     loop._load_validation()
@@ -48,3 +49,24 @@ def test_the_loop_loads_both_samples_and_the_probe(samples):
 def test_run_refuses_to_train_without_a_corpus(caplog):
     assert run(TrainEffectModelConfig()) == 1
     assert "--corpus" in caplog.text
+
+
+def test_the_checkpoint_records_the_corpuss_holdout_rule_not_a_constant():
+    """The manifest carries the rule the corpus was composed against (FR-134).
+
+    A constant here would be a second spelling of it, and a corpus built with
+    anything but the defaults would be described by a checkpoint that never
+    read it.
+    """
+    loop = TrainingLoop(
+        TrainEffectModelConfig(corpus="unused"),
+        held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
+        inherited=None, training_shards=[], validation_samples={},
+        holdout_permille=30, holdout_max_carriers=5,
+        gate_one_records=0, rarity={}, corpus_digest="",
+    )
+
+    provenance = loop._provenance()
+
+    assert provenance.holdout_permille == 30
+    assert provenance.holdout_max_carriers == 5

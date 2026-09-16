@@ -289,6 +289,7 @@ class TestPoolsKeyByAbilityText:
             TrainEffectModelConfig(),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=None, training_shards=[], validation_samples={},
+            holdout_permille=20, holdout_max_carriers=8,
         )
 
         weights = loop._weighted([*common_records, *rare_records], sidecars)
@@ -311,6 +312,7 @@ class TestProvenanceRecordsTheCorpus:
             TrainEffectModelConfig(corpus="output/effects/corpus"),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=None, training_shards=[], validation_samples={},
+            holdout_permille=20, holdout_max_carriers=8,
             corpus_digest="abc123",
         )
 
@@ -331,6 +333,7 @@ class TestProvenanceRecordsTheCorpus:
             TrainEffectModelConfig(),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=None, training_shards=[], validation_samples={},
+            holdout_permille=20, holdout_max_carriers=8,
         )
 
         provenance = loop._provenance()

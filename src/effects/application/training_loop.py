@@ -43,8 +43,6 @@ from effects.application.surface_batching import (
     SurfaceBatcher,
 )
 from effects.application.train_effect_model import (
-    HOLDOUT_MAX_CARRIERS,
-    HOLDOUT_PERMILLE,
     LEARNING_RATE,
     MAX_GRAD_NORM,
     WEIGHT_DECAY,
@@ -176,6 +174,8 @@ class TrainingLoop:
         inherited: CorpusSplit | None,
         training_shards: Sequence[Path],
         validation_samples: Mapping[str, Path],
+        holdout_permille: int,
+        holdout_max_carriers: int,
         gate_one_records: int = 0,
         rarity: Mapping[str, int] | None = None,
         corpus_digest: str = "",
@@ -188,6 +188,12 @@ class TrainingLoop:
         #: build decided what is in them, so two runs of the same corpus
         #: select their checkpoints on the same records.
         self.validation_samples = dict(validation_samples)
+        #: The holdout rule the corpus was composed against, read from its
+        #: manifest and stamped onto the checkpoint. The trainer has no flags
+        #: for it any more: a depleted collection run was generated against
+        #: these two numbers, and re-deriving them here could only disagree.
+        self.holdout_permille = holdout_permille
+        self.holdout_max_carriers = holdout_max_carriers
         #: Records in the manifest's gate-1 slice — resolution records whose
         #: acting text is on no training card. Read rather than counted here
         #: (FR-088b): the build already sized the slice.
@@ -699,10 +705,12 @@ class TrainingLoop:
     def _provenance(self) -> SplitProvenance:
         """What the checkpoint records about the data it saw.
 
-        Both strata are enumerated from the games this run actually read, so a
-        run that stops early names fewer games than a full one. That is what the
-        evaluator needs: it scores only games the checkpoint recorded, and a
-        game the model never saw is neither training nor validation.
+        Both strata are the corpus's own, read from the manifest rather than
+        derived here, so every run against one dataset records the same split
+        whatever it read or how early it stopped. That is what the evaluator
+        needs: it scores the games the checkpoint names, and a boundary
+        recomputed against a grown corpus would not be the one this model
+        trained against.
         """
         split = self.accumulator.split()
         return SplitProvenance(
@@ -716,11 +724,11 @@ class TrainingLoop:
                 Path(self.config.keyword_definitions)
             ),
             withheld_keyword=self.config.withhold_keyword,
-            # The corpus's own, not this run's: `build-corpus` composed the
-            # holdout and the manifest records it. Kept on the checkpoint so
-            # `holdout-cards` and the evaluator still read one number.
-            holdout_permille=HOLDOUT_PERMILLE,
-            holdout_max_carriers=HOLDOUT_MAX_CARRIERS,
+            # The corpus's own, straight off its manifest: `build-corpus`
+            # composed the holdout, and a constant here would be a second
+            # spelling of it that nothing would report disagreeing.
+            holdout_permille=self.holdout_permille,
+            holdout_max_carriers=self.holdout_max_carriers,
             corpus_path=self.config.corpus or "",
             corpus_digest=self.corpus_digest,
         )

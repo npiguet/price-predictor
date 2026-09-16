@@ -1156,6 +1156,8 @@ def run(config: TrainEffectModelConfig) -> int:
         inherited=inherited,
         training_shards=training_shards,
         validation_samples=validation_samples,
+        holdout_permille=manifest.holdout_permille,
+        holdout_max_carriers=manifest.holdout_max_carriers,
         gate_one_records=manifest.per_stratum.get("gate-one", 0),
         rarity=manifest.rarity,
         corpus_digest=manifest.digest(),
