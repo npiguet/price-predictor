@@ -1082,6 +1082,19 @@ def build(config: BuildCorpusConfig) -> int:
     )
     _repack_outputs(store, shard_records=config.shard_records)
 
+    if config.validation_sample > 0:
+        from effects.application.validation_samples import draw_samples, write_samples
+
+        samples = draw_samples(
+            card_disjoint=store.card_disjoint_dir, game_disjoint=store.game_disjoint_dir,
+            gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
+            seed=config.seed,
+        )
+        for stratum, count in write_samples(store, samples).items():
+            logger.info("%-22s %9d record(s) sampled for validation", stratum, count)
+    else:
+        logger.info("no validation sample written (--validation-sample 0)")
+
     per_class = {
         name: ClassCounts(
             read=written.read.get(name, 0),

@@ -52,7 +52,7 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import iter_shards, read_records, write_shard
+from effects.infrastructure.record_io import iter_shards, read_records, read_shard, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 _HELD_OUT_CARD = "Held Out Bears"
@@ -987,3 +987,14 @@ def test_output_shards_are_repacked_and_the_parts_removed(tmp_path, a_corpus):
     names = sorted(p.name for p in store.training_dir.glob("*.jsonl.gz"))
     assert names and names[0] == "shard-00001.jsonl.gz"
     assert store.load().shard_records == 2
+
+
+def test_the_build_writes_a_validation_sample_per_stratum(tmp_path, a_corpus):
+    assert build(BuildCorpusConfig(records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+                                   output=tmp_path / "out", workers=1,
+                                   validation_sample=4)) == 0
+    store = CorpusStore(tmp_path / "out")
+    for stratum in ("card-disjoint", "game-disjoint"):
+        assert store.sample_path(stratum).exists()
+        assert 0 < sum(1 for _ in read_shard(store.sample_path(stratum))) <= 4 * 8
+    assert store.load().validation_sample == 4
