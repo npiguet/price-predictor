@@ -36,6 +36,8 @@ import pytest
 
 from effects.application.build_corpus import (
     BuildCorpusConfig,
+    BuildCorpusError,
+    _check_samples,
     _output_name,
     build,
     source_of,
@@ -581,10 +583,15 @@ def a_mixture_corpus(tmp_path: Path) -> CorpusFixture:
 
 
 def _mixture_config(output: Path, records: Path, cards: tuple[str, ...]):
+    # ``validation_sample=0``: this corpus's card-disjoint stratum holds one
+    # ``resolution-effect`` record and the mixture under test names neither
+    # resolution class, so its sample is empty by construction and the
+    # empty-sample guard would refuse the build. That guard is exercised
+    # against this same fixture below; here the subject is the mixture.
     return BuildCorpusConfig(
         records_dir=records, cards_folders=cards, output=output, workers=1,
         text_cap=_MIX_TEXT_CAP, class_mix={"rewrite": 0.5, "combat": 0.5},
-        game_disjoint_target=0,
+        game_disjoint_target=0, validation_sample=0,
     )
 
 
@@ -1008,7 +1015,11 @@ def test_the_cli_exposes_the_rework_flags():
     ])
     assert (args.shard_records, args.max_events_per_record, args.validation_sample) == (500, 32, 64)
     defaults = build_parser().parse_args(["build-corpus"])
-    assert (defaults.shard_records, defaults.max_events_per_record, defaults.validation_sample) == (2000, 64, 2048)
+    assert (
+        defaults.shard_records,
+        defaults.max_events_per_record,
+        defaults.validation_sample,
+    ) == (2000, 64, 2048)
 
     # The zero reading for each of the three flags must survive in --help,
     # not just in the docstring: this is what would have caught it silently
@@ -1022,3 +1033,101 @@ def test_the_cli_exposes_the_rework_flags():
         if "--max-events-per-record" in action.option_strings
     )
     assert "0 disables" in max_events_action.help
+
+
+# ── C1: combat is exempt from the unattributed rule ───────────────────
+
+
+def _unresolved_event() -> Event:
+    return Event(
+        type=EventType.DAMAGE_DEALT, subjects=("P0",), attributed_to="unresolved",
+    )
+
+
+def test_a_combat_record_with_an_unresolved_event_reaches_training(tmp_path, a_corpus):
+    """Nothing resolves in a damage step, so the collector stamps every combat
+    event ``unresolved`` by design and the cause lives in ``cause``. Judged by
+    the unattributed rule the class was 98.9% refused on the real corpus —
+    a statement about the rule, not about the records.
+    """
+    corpus = a_corpus.with_extra_records([
+        replace(
+            _combat("g-clean-1.combat", "g-clean-1"),
+            payload=CombatPayload(attackers=("E0",), events=(_unresolved_event(),)),
+        ),
+    ])
+    assert build(BuildCorpusConfig(
+        records_dir=corpus.records, cards_folders=corpus.cards,
+        output=tmp_path / "out", workers=1, game_disjoint_target=1,
+    )) == 0
+
+    store = CorpusStore(tmp_path / "out")
+    trained = {r.record_id for r in read_records(store.training_dir)}
+    assert "g-clean-1.combat" in trained
+
+
+# ── C1 guard: a whole class refused stops the build ───────────────────
+
+
+def test_a_class_refused_past_the_share_stops_the_build(tmp_path, a_corpus):
+    """A class the quality rules refuse wholesale is a rule bug or an
+    unpatched checkout, not a corpus to train on. Written silently it is a
+    dataset missing a sampling class, which the trainer reports as a class the
+    corpus happens not to hold.
+    """
+    corpus = a_corpus.with_extra_records([
+        replace(
+            _combat(f"g-clean-1.flood-{n}", "g-clean-1"),
+            payload=CombatPayload(
+                attackers=("E0",),
+                events=tuple(
+                    Event(type=EventType.DAMAGE_DEALT, subjects=("P0",),
+                          attributed_to="root")
+                    for _ in range(100)
+                ),
+            ),
+        )
+        for n in range(5)
+    ])
+
+    with pytest.raises(BuildCorpusError, match="combat") as raised:
+        build(BuildCorpusConfig(
+            records_dir=corpus.records, cards_folders=corpus.cards,
+            output=tmp_path / "out", workers=1, game_disjoint_target=1,
+        ))
+
+    message = str(raised.value)
+    assert "unresolved" in message and "degraded" in message
+
+
+# ── I3: a stratum with an empty sample is a build that failed quietly ──
+
+
+def test_an_empty_stratum_sample_is_refused(tmp_path):
+    with pytest.raises(BuildCorpusError, match="card-disjoint"):
+        _check_samples({"card-disjoint": 0, "game-disjoint": 12}, size=2048)
+
+
+def test_check_samples_passes_when_every_stratum_has_records():
+    _check_samples({"card-disjoint": 4, "game-disjoint": 12}, size=2048)
+
+
+def test_check_samples_says_nothing_when_no_sample_was_asked_for():
+    _check_samples({"card-disjoint": 0, "game-disjoint": 0}, size=0)
+
+
+def test_a_stratum_whose_sample_comes_out_empty_stops_the_build(
+    tmp_path, a_mixture_corpus,
+):
+    """The mixture names neither resolution class and the card-disjoint
+    stratum holds nothing else, so its sample is empty. Shipped, the trainer
+    validates ``nan`` on the stratum that selects the best checkpoint.
+    """
+    with pytest.raises(BuildCorpusError, match="card-disjoint"):
+        build(replace(
+            _mixture_config(
+                tmp_path / "curated", a_mixture_corpus.records,
+                a_mixture_corpus.cards,
+            ),
+            validation_sample=8,
+        ))

@@ -6,9 +6,12 @@ from collections import Counter
 
 import pytest
 
-from effects.application.validation_samples import class_quota, draw_samples
+from effects.application.train_effect_model import sampling_class
+from effects.application.validation_samples import _Smallest, class_quota, draw_samples
 from effects.domain.effect_model import (
-    CLASS_COMBAT, CLASS_RESOLUTION_COST, CLASS_RESOLUTION_EFFECT,
+    CLASS_COMBAT,
+    CLASS_RESOLUTION_COST,
+    CLASS_RESOLUTION_EFFECT,
 )
 from effects.domain.records import CombatPayload, Moment, RecordKind
 from effects.infrastructure.record_io import write_shard
@@ -29,7 +32,10 @@ def strata(tmp_path, make_record):  # noqa: F811 -- shadows the imported fixture
                            payload=CombatPayload())
     card = [res(i, f"cg{i % 3}") for i in range(30)] + [combat(i, f"cg{i % 3}") for i in range(30)]
     gate = card[:6]                       # six of the card-disjoint resolutions are gate-one
-    game = [res(i, f"gg{i % 3}") for i in range(100, 130)] + [combat(i, f"gg{i % 3}") for i in range(100, 130)]
+    game = (
+        [res(i, f"gg{i % 3}") for i in range(100, 130)]
+        + [combat(i, f"gg{i % 3}") for i in range(100, 130)]
+    )
     for name, records in (("card", card), ("game", game), ("gate", gate)):
         write_shard(tmp_path / name / "shard-00001.jsonl.gz", records)
     return tmp_path
@@ -61,7 +67,9 @@ def test_the_draw_is_seeded_and_shuffled(strata):
                      gate_one=strata / "gate", mix=MIX, size=20, seed=1)
     c = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
                      gate_one=strata / "gate", mix=MIX, size=20, seed=2)
-    ids = lambda s: [r.record_id for r in s["game-disjoint"]]
+    def ids(sample):
+        return [r.record_id for r in sample["game-disjoint"]]
+
     assert ids(a) == ids(b)
     assert ids(a) != ids(c)
     classes = [sampling_class(r) for r in a["game-disjoint"]]
@@ -69,8 +77,10 @@ def test_the_draw_is_seeded_and_shuffled(strata):
 
 
 def test_a_short_class_takes_what_there_is(strata):
-    samples = draw_samples(card_disjoint=strata / "card", game_disjoint=strata / "game",
-                           gate_one=strata / "gate", mix={CLASS_RESOLUTION_COST: 1.0}, size=5, seed=1)
+    samples = draw_samples(
+        card_disjoint=strata / "card", game_disjoint=strata / "game",
+        gate_one=strata / "gate", mix={CLASS_RESOLUTION_COST: 1.0}, size=5, seed=1,
+    )
     assert samples["card-disjoint"] == []
 
 
@@ -87,4 +97,14 @@ def test_zero_validation_sample_reads_nothing_and_draws_nothing(strata, monkeypa
     assert samples == {"card-disjoint": [], "game-disjoint": []}
 
 
-from effects.application.train_effect_model import sampling_class  # noqa: E402
+def test_two_records_with_one_id_do_not_compare_the_records_themselves(make_record):  # noqa: F811
+    """``_Smallest`` broke its tie on the record when hash and id both matched.
+
+    ``EffectRecord`` is a dataclass with no ordering, so the comparison the
+    heap falls through to raises ``TypeError`` rather than picking a winner.
+    A monotonic counter never ties, so the record is never reached.
+    """
+    heap = _Smallest(4)
+    heap.offer(7, make_record(record_id="same", game_id="g1"))
+    heap.offer(7, make_record(record_id="same", game_id="g2"))
+    assert len(heap.records()) == 2

@@ -1,9 +1,13 @@
 """Where a curated dataset lives on disk (FR-135).
 
 The directory layout is the contract: ``training/``,
-``validation/card-disjoint/`` and ``validation/game-disjoint/`` hold ordinary
-shards, so every existing reader loads them unchanged, and ``manifest.json``
-holds the decisions that produced them.
+``validation/card-disjoint/``, ``validation/game-disjoint/`` and
+``validation/gate-one/`` hold ordinary shards, so every existing reader loads
+them unchanged, and ``manifest.json`` holds the decisions that produced them.
+
+``validation/gate-one/`` and ``validation/samples/`` hold **copies** of
+records that are also in the strata beside them, so a consumer reads one
+directory at a time and never ``validation/`` or the corpus root recursively.
 """
 
 from __future__ import annotations
@@ -40,7 +44,17 @@ class CorpusStore:
 
     @property
     def gate_one_dir(self) -> Path:
-        """Resolution records of card-disjoint games whose acting text is held out."""
+        """Resolution records of card-disjoint games whose acting text is held out.
+
+        **These records are copies.** Every one of them is still in
+        ``card-disjoint/`` as well; the slice exists so the evaluator reads
+        gate 1's unique-text population without re-filtering the whole
+        stratum. ``validation/samples/`` holds copies too, drawn from the
+        strata beside it. So no consumer may read ``validation/`` or the
+        corpus root recursively -- ``iter_shards`` recurses, and a reader
+        pointed one level up counts those records two and three times over.
+        Read one directory at a time.
+        """
         return self.directory / "validation" / "gate-one"
 
     @property
@@ -64,7 +78,10 @@ class CorpusStore:
         return self.parts_dir / stratum
 
     def clear_outputs(self) -> None:
-        """Delete the three shard directories, leaving the manifest in place.
+        """Delete every output directory, leaving the manifest in place.
+
+        Every output in ``OUTPUTS`` plus the samples and the parts directory:
+        each is rewritten whole by the next build.
 
         A dataset is rebuilt whole rather than extended (FR-144): the split and
         the rarity table are corpus-wide, so a shard left over from an earlier

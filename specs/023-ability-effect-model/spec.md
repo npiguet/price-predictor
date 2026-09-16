@@ -553,9 +553,10 @@ loss.
   `validation/samples/card-disjoint.jsonl.gz` and `validation/samples/game-disjoint.jsonl.gz` (the
   trainer's per-epoch validation set, drawing its card-disjoint resolution classes from
   `validation/gate-one/`), and `manifest.json`. Each shard directory MUST hold shards in the corpus
-  shard format (FR-027), so every existing reader loads them unchanged, and MUST be repacked to at
-  most `--shard-records` (default 2000) records per shard, cut at game boundaries so a game is never
-  split across shards; `--shard-records 0` keeps one output shard per source shard.
+  shard format (FR-027), so every existing reader loads them unchanged, and MUST be repacked so that
+  each shard holds **at least** `--shard-records` (default 2000) records and closes at the first game
+  boundary thereafter; the final shard of a stratum MAY be shorter, and a game MUST never be split
+  across shards. `--shard-records 0` keeps one output shard per source shard.
 - **FR-136**: Training records MUST be selected per record and both validation strata per **game**.
   Whole-game selection is what keeps intra-game joins intact: `evaluate-effect-model` resolves a probe
   record's `mirror_of` to a `record_id` in the same stratum, and a stratum holding one half of a pair
@@ -616,10 +617,17 @@ loss.
   alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
   score them partly on games the model trained on.
-- **FR-148**: `build-corpus` MUST refuse a resolution record with no acting ability, any record
-  carrying an event attributed to `unresolved`, and any record carrying more than
-  `--max-events-per-record` events (default 64), in both passes, and MUST record the count per
-  reason in the manifest as `quality_dropped`.
+- **FR-148**: `build-corpus` MUST refuse a resolution record with no acting ability, any
+  **non-combat** record carrying an event attributed to `unresolved`, and any record carrying more
+  than `--max-events-per-record` events (default 64), in both passes, and MUST record the count per
+  reason in the manifest as `quality_dropped`. The unattributed rule MUST NOT be applied to `combat`
+  records: a damage step resolves nothing, so the collector has no acting chain to attribute a
+  combat-damage event to and stamps every one `unresolved` by design, with the cause carried in the
+  event's `cause`. Applied to combat the rule refuses ~98.9% of the class. `build-corpus` MUST
+  additionally refuse to write the dataset when the quality rules refuse more than half of any one
+  sampling class's records, naming the class and its counts: a whole class refused means an
+  unpatched (`degraded`) checkout or a rule that does not fit that kind, and written silently the
+  dataset is simply missing a sampling class.
 - **FR-149**: `build-corpus` MUST record, per top-level directory under `--records-dir`, the games
   it read and the games naming a held-out card (`games_by_source`, `held_out_games_by_source`),
   and MUST warn when a directory routes more than none and fewer than 5% of its games.

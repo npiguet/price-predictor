@@ -329,3 +329,28 @@ class TestProgressSaysWhetherToWait:
 
     def test_the_last_line_says_nothing_is_left(self):
         assert "0 min left" in progress_line(done=10, total=10, elapsed=5.0)
+
+
+def test_a_refused_record_still_routes_its_game_to_the_card_disjoint_stratum(tmp_path):
+    """I1: held-out routing is decided before the quality check.
+
+    A game whose only mention of a held-out card sits on a record the quality
+    rules refuse is still a game that played that card. Routed on the surviving
+    records alone it becomes a training game, and the card-disjoint split
+    stops being card-disjoint.
+    """
+    write_shard(tmp_path / "run.0-a.jsonl.gz", [
+        a_record(
+            record_id="junk", game_id="g1", ability=(),
+            entity_names=("Soul Echo",),
+        ),
+    ])
+    init_survey_worker(SurveyConfig(
+        records_dir=str(tmp_path), held_out_names=frozenset({"soul echo"}),
+        held_out_script_files=frozenset(), text_cap=200, seed=1, max_events=64,
+    ))
+
+    out = survey_shard("run.0-a.jsonl.gz")
+
+    assert out.held_out_games == {"g1"}
+    assert out.games == set()

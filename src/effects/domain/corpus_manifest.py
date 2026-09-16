@@ -85,11 +85,13 @@ class CorpusManifest:
     sources: tuple[SourceShard, ...]
     per_class: dict[str, ClassCounts]
     #: Records written to each output: "training", "card-disjoint",
-    #: "game-disjoint", and "dropped-held-out" for held-out games the
-    #: card-disjoint cap declined. The per-stratum sibling of ``per_class``'s
-    #: per-class breakdown (FR-143, FR-145).
+    #: "game-disjoint", "gate-one", and "dropped-held-out" for held-out games
+    #: the card-disjoint cap declined. The per-stratum sibling of
+    #: ``per_class``'s per-class breakdown (FR-143, FR-145). "gate-one"
+    #: overlaps "card-disjoint" -- its records are written to both -- so these
+    #: values do not sum to a record total.
     per_stratum: dict[str, int]
-    #: Distinct ability texts in each of the three real outputs (not
+    #: Distinct ability texts in every output in ``OUTPUTS`` (not
     #: "dropped-held-out", which writes nothing). Read together with
     #: ``per_stratum``, this is the pair FR-145 asks an operator to read: a
     #: stratum can hold plenty of records and still have flattened its tail,

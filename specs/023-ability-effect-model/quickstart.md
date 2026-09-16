@@ -471,11 +471,14 @@ ability texts, decides the split, computes the rarity table corpus-wide, and a s
 writes:
 
 ```
-training/                          shard-00001.jsonl.gz … (--shard-records each, games never split)
+training/                          shard-00001.jsonl.gz … (at least --shard-records each, closing at
+                                   the next game boundary; a game is never split, the last may be short)
 validation/card-disjoint/          whole held-out games, repacked the same way
 validation/game-disjoint/          whole clean games, repacked the same way
-validation/gate-one/               resolution records of card-disjoint games whose acting text is held out
-validation/samples/card-disjoint.jsonl.gz   the trainer's per-epoch validation set; its resolution classes come from gate-one
+validation/gate-one/               COPIES: resolution records that also remain in card-disjoint/, the
+                                   ones whose acting text is held out
+validation/samples/card-disjoint.jsonl.gz   COPIES: the trainer's per-epoch validation set; its
+                                   resolution classes come from gate-one
 validation/samples/game-disjoint.jsonl.gz
 manifest.json                      + quality_dropped, games_by_source, held_out_games_by_source, shard_records, validation_sample
 ```
@@ -483,9 +486,20 @@ manifest.json                      + quality_dropped, games_by_source, held_out_
 Training records are selected per record; both validation strata are selected per **game**, which is
 what keeps a probe and the combat record its `mirror_of` names in the same stratum.
 
+**`validation/gate-one/` and `validation/samples/` hold copies.** Gate-one is a copy of records that
+remain in `card-disjoint/`, and each sample is a copy drawn from the stratum beside it. Shard
+discovery recurses, so no consumer may read `validation/` or the corpus root as one directory — it
+would count those records two and three times over. Read one directory at a time. The manifest's
+`per_stratum` reflects this: `gate-one` overlaps `card-disjoint`, so its values do not sum to a
+record total.
+
 Three kinds of record are refused on sight and counted in `quality_dropped`: a resolution record with
-no acting ability, a record with an event attributed to `unresolved`, and a record with more than
-`--max-events-per-record` events. The per-source report warns when a directory routes a few games to
+no acting ability, a **non-combat** record with an event attributed to `unresolved`, and a record with
+more than `--max-events-per-record` events. Combat records are exempt from the second rule because a
+damage step resolves nothing — the collector has no acting chain to attribute the damage to and
+stamps every combat event `unresolved` by design, putting the cause in the event's `cause` — so the
+rule applied there refuses ~98.9% of the class. A build whose rules refuse more than half of any one
+sampling class stops rather than writing a dataset missing that class. The per-source report warns when a directory routes a few games to
 the card-disjoint stratum; a depleted directory should route none, and a small count there is a leak
 in collection (in the first corpus, The Hobbit and Marvel Super Heroes boosters).
 

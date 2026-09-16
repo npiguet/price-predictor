@@ -38,21 +38,32 @@ def class_quota(mix: Mapping[str, float], size: int) -> dict[str, int]:
 
 
 class _Smallest:
-    """The ``cap`` records with the smallest hashes seen, by heap."""
+    """The ``cap`` records with the smallest hashes seen, by heap.
+
+    The tie-break is a monotonic counter rather than the record. ``record_id``
+    is unique across a healthy corpus but the corpus is what this is reading,
+    and a repeated id -- which is exactly the defect ``validate-corpus``
+    exists to catch -- put two records with an equal key into one heap, where
+    the comparison falls through to ``EffectRecord``. That has no ordering, so
+    it raises ``TypeError`` and the build dies drawing a validation sample. A
+    counter never ties, so the record is never compared.
+    """
 
     def __init__(self, cap: int) -> None:
         self.cap = cap
-        self._heap: list[tuple[int, str, EffectRecord]] = []
+        self._heap: list[tuple[int, str, int, EffectRecord]] = []
+        self._offered = 0
 
     def offer(self, value: int, record: EffectRecord) -> None:
-        item = (-value, record.record_id, record)
+        self._offered += 1
+        item = (-value, record.record_id, self._offered, record)
         if len(self._heap) < self.cap:
             heapq.heappush(self._heap, item)
         elif item > self._heap[0]:
             heapq.heappushpop(self._heap, item)
 
     def records(self) -> list[EffectRecord]:
-        return [record for _, _, record in sorted(self._heap, reverse=True)]
+        return [item[-1] for item in sorted(self._heap, reverse=True)]
 
     def __len__(self) -> int:
         return len(self._heap)

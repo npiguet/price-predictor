@@ -61,3 +61,16 @@ def test_a_max_events_of_zero_means_no_cap_rather_than_refuse_everything(make_re
 def test_no_ability_wins_over_the_other_reasons(make_record):
     payload = ResolutionPayload(events=tuple(_event("unresolved") for _ in range(65)))
     assert quality_defect(make_record(ability=(), payload=payload)) == NO_ABILITY
+
+
+def test_a_combat_record_is_exempt_from_the_unattributed_rule(make_record):
+    """Nothing resolves in a damage step, so the collector stamps every combat
+    event ``unresolved`` by design — the cause lives in ``cause``. Applying the
+    rule here refused 98.9% of the combat records in the real corpus."""
+    payload = CombatPayload(events=(_event("unresolved"),))
+    assert quality_defect(make_record(kind=RecordKind.COMBAT, payload=payload)) is None
+
+
+def test_a_resolution_record_is_still_refused_for_the_same_event(make_record):
+    payload = ResolutionPayload(events=(_event("unresolved"),))
+    assert quality_defect(make_record(payload=payload)) == UNATTRIBUTED

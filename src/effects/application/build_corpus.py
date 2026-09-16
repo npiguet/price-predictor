@@ -191,6 +191,16 @@ def survey_shard(relative: str) -> ShardSurvey:
 
     for record in read_shard(path):
         out.records += 1
+        # Above the quality check on purpose: a game that played a held-out
+        # card played it whether or not the record saying so survives the
+        # rules. Routed on the surviving records alone, a game whose only
+        # held-out mention sits on a refused record becomes a training game
+        # and the card-disjoint split stops being card-disjoint. ``games`` is
+        # counted below the check instead, because that one is a count of the
+        # records the build will actually write.
+        held = record_names_held_out_card(record, held_out)
+        if held:
+            out.held_out_games.add(record.game_id)
         defect = quality_defect(record, max_events=config.max_events)
         if defect is not None:
             out.quality_dropped[defect] += 1
@@ -198,9 +208,6 @@ def survey_shard(relative: str) -> ShardSurvey:
         out.games.add(record.game_id)
         name = sampling_class(record)
         out.class_records[name] += 1
-        held = record_names_held_out_card(record, held_out)
-        if held:
-            out.held_out_games.add(record.game_id)
         key = ability_key(record)
         if key is None:
             continue
@@ -696,13 +703,23 @@ def decide(
 #: twice by the same number.
 _CLASS_SEED_OFFSET = 0x9E3779B9
 
+#: How much of one sampling class the quality rules may refuse before the
+#: build stops instead of writing the dataset. A class refused past this is
+#: not a dirty corpus: it is a rule that does not fit the kind, or a corpus
+#: collected against an unpatched Forge, and either way the dataset silently
+#: loses a whole class the trainer then reports as one the corpus happens not
+#: to hold. The unattributed rule refused 98.9% of combat records exactly this
+#: way and nothing said so.
+MAX_REFUSED_SHARE = 0.5
+
 #: Every write-pass stratum, in report order. All but the last are the real
 #: outputs -- shard directories a downstream reader loads, and what
-#: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is just that
-#: prefix; "dropped-held-out" is accounting only, since nothing is written
-#: for it, so it is counted in ``per_stratum`` but never carries a
-#: unique-text figure. "gate-one" is a *slice* of "card-disjoint" rather
-#: than a fourth destination: its records are written twice on purpose, so
+#: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is exactly that
+#: prefix, so "every output in OUTPUTS" is what the reports iterate;
+#: "dropped-held-out" is accounting only, since nothing is written for it, so
+#: it is counted in ``per_stratum`` but never carries a unique-text figure.
+#: "gate-one" is a *slice* of "card-disjoint" rather than a fourth
+#: destination: its records are written twice on purpose, so
 #: the evaluator reads gate 1's unique-text stratum without re-filtering the
 #: whole card-disjoint output, and its per-stratum count therefore overlaps
 #: card-disjoint's rather than partitioning with it.
@@ -748,9 +765,9 @@ class WriteResult:
     #: as per class, and a stratum nobody counted is a stratum nobody notices
     #: is empty.
     stratum: Counter[str] = field(default_factory=Counter)
-    #: Ability keys admitted to each of the three real outputs -- "training"
-    #: / "card-disjoint" / "game-disjoint", never "dropped-held-out", which
-    #: writes nothing -- the same role ``kept_keys`` plays per class, but per
+    #: Ability keys admitted to each output in ``OUTPUTS``, never
+    #: "dropped-held-out", which writes nothing -- the same role
+    #: ``kept_keys`` plays per class, but per
     #: stratum instead: ``build()`` folds these through ``decisions.key_text``
     #: to get each output's unique-ability-text count (FR-143, FR-145).
     stratum_keys: dict[str, set[str]] = field(default_factory=dict)
@@ -758,6 +775,11 @@ class WriteResult:
     #: (FR-148). Counted before every routing decision, so a defective record
     #: reaches no output at all and belongs to no class's read count.
     quality_dropped: Counter[str] = field(default_factory=Counter)
+    #: The same refusals by sampling class rather than by reason, which is the
+    #: axis ``MAX_REFUSED_SHARE`` is judged on: a corpus can be a few percent
+    #: junk overall and still have lost one whole class, and
+    #: ``quality_dropped`` cannot tell the two apart.
+    refused_by_class: Counter[str] = field(default_factory=Counter)
 
 
 _WRITE: WriteConfig | None = None
@@ -774,7 +796,7 @@ def _output_name(relative: str) -> str:
     ``depleted/run.0-a.jsonl.gz`` and ``full-strength/run.0-a.jsonl.gz`` are
     different shards and must not write to one file — and neither may any other
     pair of distinct relative paths, because ``write_shard`` opens in truncate
-    mode, so a collision is a silent overwrite in all three outputs with no
+    mode, so a collision is a silent overwrite in every output with no
     stable answer, under ``workers > 1``, as to which source survives.
 
     A plain ``"/" -> "__"`` substitution is not injective: ``"a_/b"`` and
@@ -816,6 +838,7 @@ def write_shard_pass(relative: str) -> WriteResult:
         defect = quality_defect(record, max_events=config.max_events)
         if defect is not None:
             out.quality_dropped[defect] += 1
+            out.refused_by_class[name] += 1
             continue
         out.read[name] += 1
         if record.game_id in config.card_disjoint:
@@ -840,7 +863,7 @@ def write_shard_pass(relative: str) -> WriteResult:
         if record.game_id in config.held_out_games:
             # Held out but not admitted to the stratum: dropped, never trained
             # on (FR-088). Nothing is written for it, so it earns no entry in
-            # stratum_keys -- only the three real outputs do.
+            # stratum_keys -- only an output in OUTPUTS does.
             out.stratum["dropped-held-out"] += 1
             continue
         value = record_hash(record.record_id, seed=config.seed)
@@ -891,6 +914,7 @@ def run_write_pass(
         total.read.update(part.read)
         total.stratum.update(part.stratum)
         total.quality_dropped.update(part.quality_dropped)
+        total.refused_by_class.update(part.refused_by_class)
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
         for name, keys in part.stratum_keys.items():
@@ -947,6 +971,59 @@ def _repack_outputs(store: CorpusStore, *, shard_records: int) -> None:
             stratum, len(parts), len(paths),
         )
     shutil.rmtree(store.parts_dir, ignore_errors=True)
+
+
+def _check_refusals(written: WriteResult) -> None:
+    """Stop when the quality rules refused most of any one sampling class.
+
+    A few percent refused per class is what the rules are for. A majority is
+    one of two things, and the message names both because the counts alone do
+    not separate them: a corpus collected against an unpatched (degraded)
+    Forge, which resolves no attribution and stamps every event
+    ``unresolved``, or a rule that does not fit the kind it is being applied
+    to. Written anyway, the dataset is simply missing a sampling class, and
+    the trainer reports that as a class this corpus happens not to hold.
+    """
+    for name in sorted(written.refused_by_class):
+        refused = written.refused_by_class[name]
+        kept = written.read.get(name, 0)
+        total = refused + kept
+        if not total or refused <= MAX_REFUSED_SHARE * total:
+            continue
+        raise BuildCorpusError(
+            f"{name}: {refused} of the {total} record(s) read were refused by "
+            f"the record-quality rules ({100.0 * refused / total:.1f}%), past "
+            f"the {100.0 * MAX_REFUSED_SHARE:.0f}% a class may lose. A whole "
+            "class refused is usually one of two things rather than a dirty "
+            "corpus: an unpatched (degraded) checkout, which resolves no "
+            "attribution and stamps every event `unresolved`, or a quality "
+            "rule that is wrong for this kind of record. Read the "
+            "quality_dropped breakdown and the mode the shards were collected "
+            "in before rebuilding."
+        )
+
+
+def _check_samples(counts: dict[str, int], *, size: int) -> None:
+    """Stop when a stratum's validation sample came out empty.
+
+    ``--validation-sample`` is what the trainer validates on and what selects
+    the best checkpoint, so an empty one makes every epoch validate ``nan`` on
+    that stratum -- reported, if at all, as a stratum the corpus happens not
+    to hold. ``size <= 0`` asked for no sample at all, so nothing is wrong.
+    """
+    if size <= 0:
+        return
+    for stratum in sorted(counts):
+        if counts[stratum]:
+            continue
+        raise BuildCorpusError(
+            f"the {stratum} validation sample is empty: --validation-sample "
+            f"{size} was asked for and no record of any sampled class was "
+            f"found in the {stratum} stratum. The trainer validates on this "
+            "sample, so a build that shipped it would validate nan every "
+            "epoch and select no checkpoint. Check that the stratum holds "
+            "records of the classes --class-mix names."
+        )
 
 
 def build(config: BuildCorpusConfig) -> int:
@@ -1080,6 +1157,21 @@ def build(config: BuildCorpusConfig) -> int:
         ),
         workers=config.workers,
     )
+    _check_refusals(written)
+    if survey.quality_dropped != written.quality_dropped:
+        # Both passes run the same rule over the same shards, so they must
+        # agree. A disagreement means the two passes read different records --
+        # a corpus appended to between them, or a rule that is not pure over
+        # the record -- and every count the manifest carries is then about a
+        # corpus that no longer exists.
+        logger.warning(
+            "The survey and the write pass disagree about which records are "
+            "refused: survey %s, write pass %s. Both read the same shards "
+            "under the same rule, so this means the corpus changed between "
+            "the passes.",
+            dict(sorted(survey.quality_dropped.items())),
+            dict(sorted(written.quality_dropped.items())),
+        )
     _repack_outputs(store, shard_records=config.shard_records)
 
     if config.validation_sample > 0:
@@ -1090,8 +1182,10 @@ def build(config: BuildCorpusConfig) -> int:
             gate_one=store.gate_one_dir, mix=config.mix(), size=config.validation_sample,
             seed=config.seed,
         )
-        for stratum, count in write_samples(store, samples).items():
+        sampled = write_samples(store, samples)
+        for stratum, count in sampled.items():
             logger.info("%-22s %9d record(s) sampled for validation", stratum, count)
+        _check_samples(sampled, size=config.validation_sample)
     else:
         logger.info("no validation sample written (--validation-sample 0)")
 
@@ -1109,9 +1203,9 @@ def build(config: BuildCorpusConfig) -> int:
     }
     # The same fold as per_class's unique_texts, one axis over: by output
     # (stratum) rather than by sampling class (FR-143, FR-145). per_stratum
-    # covers all four strata written.stratum can hold; unique_texts only the
-    # three that are actual outputs -- dropped-held-out writes nothing, so it
-    # has no ability texts of its own to count.
+    # covers every name in STRATA; unique_texts covers every output in
+    # OUTPUTS -- dropped-held-out writes nothing, so it has no ability texts
+    # of its own to count.
     per_stratum = {name: written.stratum.get(name, 0) for name in STRATA}
     trained = sum(written.kept.values())
     delivered_mix = {
