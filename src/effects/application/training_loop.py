@@ -111,19 +111,58 @@ logger = logging.getLogger(__name__)
 PROBE_RECORDS = 64
 
 
-#: Seconds between within-shard progress lines, matching the draft trainer's.
-#: A wall-clock interval rather than a step count because a step's cost varies
-#: with how many entities its records carry, and a count that reads well on one
-#: shard goes silent for minutes on another.
-STEP_LOG_INTERVAL = 15.0
+def reports_now(*, index: int, budget: int) -> bool:
+    """Whether the step at ``index`` should read its numbers back.
+
+    The last step of the shard, and only that one. Reading a loss term back is
+    a device synchronization and the shard already logs a line when it ends, so
+    the numbers ride that line and cost one synchronized step per shard.
+
+    Args:
+        index: zero-based step within the shard.
+        budget: steps this shard gets.
+    """
+    return index + 1 >= budget
+
+
+def module_grad_norms(modules: Mapping[str, torch.nn.Module]) -> dict[str, float]:
+    """Pre-clip L2 gradient norm of each module, for reporting only.
+
+    Measured here rather than read off the optimizer because the optimizer holds
+    exactly one parameter group: ``clip_per_group`` then reports a single number
+    covering everything, which cannot answer the question the number is for. The
+    effect head's loss reaches the ability encoder through the ``e`` path and no
+    other, so an encoder norm near zero beside a healthy head norm is the
+    signature of that path being cut — and a run with it cut still reports a
+    falling loss.
+
+    Deliberately not a change to how gradients are clipped. Giving the optimizer
+    one group per module would clip each at ``max_norm`` separately instead of
+    the whole together, which is a different optimizer rather than a different
+    log line.
+
+    Summed on the device and read once per module, on the single step per shard
+    that reports.
+    """
+    norms: dict[str, float] = {}
+    for name, module in modules.items():
+        squared = None
+        for parameter in module.parameters():
+            if parameter.grad is None:
+                continue
+            term = parameter.grad.detach().pow(2).sum()
+            squared = term if squared is None else squared + term
+        if squared is not None:
+            norms[name] = float(squared) ** 0.5
+    return norms
 
 
 def _format_norms(norms: Mapping[str, float]) -> str:
-    """The pre-clip gradient norms, or nothing before the first clip."""
+    """The pre-clip gradient norms, or nothing before the first backward."""
     if not norms:
         return ""
     body = ", ".join(f"{name} {value:.2f}" for name, value in norms.items())
-    return f"\n  |g| {body} (clip {MAX_GRAD_NORM:g})"
+    return f"\n  |g| {body} (clipped together at {MAX_GRAD_NORM:g})"
 
 
 def _format_parts(parts: Mapping[str, float]) -> str:
@@ -707,9 +746,10 @@ class TrainingLoop:
         pools, weights = self._pools(training, sidecars)
         # Accumulated on the device like the epoch's own running loss, and read
         # back once per progress line rather than once per step.
-        window = torch.zeros((), device=self.device)
-        window_steps = 0
-        window_opened = time.monotonic()
+        # Accumulated on the device like the epoch's own running loss, and read
+        # back once, on the line this shard logs when it ends.
+        shard_loss = torch.zeros((), device=self.device)
+        shard_steps = 0
         parts: dict[str, float] = {}
         norms: dict[str, float] = {}
         learning_rate = 0.0
@@ -724,10 +764,13 @@ class TrainingLoop:
             )
             # Decided before the forward pass: the decomposition has to be
             # asked for while the loss is being computed, not after.
-            due = (
-                time.monotonic() - window_opened >= STEP_LOG_INTERVAL
-                and index + 1 < budget
-            )
+            #
+            # The last step of every shard reports, whatever the clock says, so
+            # the shard's own line always carries a decomposition. A wall-clock
+            # interval alone was silent here: it was written when a shard took
+            # 278 steps over three minutes, and a shard now takes twenty over
+            # seconds, so the window never elapsed and no shard ever reported.
+            due = reports_now(index=index, budget=budget)
             computed = self._loss_for(
                 plan, encoder, model, tokenizer, sidecars, widths, step,
                 report_parts=due,
@@ -736,42 +779,37 @@ class TrainingLoop:
                 continue
             loss, batch_parts = computed
             (loss / self.config.grad_accum).backward()
+            if due:
+                # Read before the clip, and per module rather than per optimizer
+                # group, because the optimizer holds exactly one group.
+                norms = module_grad_norms(
+                    {"encoder": encoder, "head": model}
+                    | ({"identity": self.identity_table}
+                       if self.identity_table is not None else {})
+                )
             if (step + 1) % self.config.grad_accum == 0:
-                # Pre-clip L2 norms per parameter group, which this already
-                # computes and reads back; dropping them left the run's only
-                # view of whether the encoder is learning on the floor.
-                norms = clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
+                clip_per_group(optimizer, max_norm=MAX_GRAD_NORM)
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
             running += loss.detach()
-            window += loss.detach()
-            window_steps += 1
+            shard_loss += loss.detach()
+            shard_steps += 1
             step += 1
             taken += 1
             if batch_parts:
                 parts = batch_parts
-            if due and window_steps:
-                elapsed = time.monotonic() - window_opened
-                logger.info(
-                    "epoch %d | shard %d/%d | step %d/%d (%.0f%%) | "
-                    "loss %.4f | lr %.2e | %.1f steps/s%s%s",
-                    epoch, position, of, index + 1, budget,
-                    100 * (index + 1) / budget,
-                    float(window) / window_steps, learning_rate,
-                    window_steps / elapsed,
-                    _format_norms(norms), _format_parts(parts),
-                )
-                window = torch.zeros((), device=self.device)
-                window_steps = 0
-                window_opened = time.monotonic()
             if self.context_cache is not None:
                 self.context_cache.note_batch()
 
+        trained = time.perf_counter() - started - loaded
         logger.info(
             "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
-            "%d steps | load %.1fs, train %.1fs",
+            "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
+            "load %.1fs, train %.1fs%s%s",
             epoch, position, of, shard.name, len(training), held_back, budget,
-            loaded, time.perf_counter() - started - loaded,
+            float(shard_loss) / shard_steps if shard_steps else float("nan"),
+            learning_rate, budget / trained if trained > 0 else float("nan"),
+            loaded, trained, _format_norms(norms), _format_parts(parts),
         )
         del training, pools, weights
         return step, taken

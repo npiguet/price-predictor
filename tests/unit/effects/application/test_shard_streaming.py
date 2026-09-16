@@ -394,3 +394,29 @@ class TestProgressFormatting:
         from effects.application.training_loop import _format_parts
 
         assert _format_parts({}) == ""
+
+
+class TestWhenAStepReportsItsNumbers:
+    """Reading a loss term back is a device sync, so one step per shard does it.
+
+    That step is the shard's last, and its numbers ride the line the shard
+    already logs when it ends. An earlier version gated this on a fifteen-second
+    wall clock and went silent the moment an epoch spread over 256 shards: a
+    shard's twenty steps take a few seconds, so the window never elapsed and no
+    shard ever reported a loss, a gradient norm or a field breakdown.
+    """
+
+    def test_the_last_step_of_a_shard_reports(self):
+        from effects.application.training_loop import reports_now
+
+        assert reports_now(index=19, budget=20)
+
+    def test_a_one_step_shard_still_reports(self):
+        from effects.application.training_loop import reports_now
+
+        assert reports_now(index=0, budget=1)
+
+    def test_no_earlier_step_reports(self):
+        from effects.application.training_loop import reports_now
+
+        assert not any(reports_now(index=i, budget=20) for i in range(19))

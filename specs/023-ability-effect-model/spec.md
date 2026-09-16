@@ -836,11 +836,13 @@ loss.
   a stratum's loss is also the mean over its batches, and whole-game batches make that a mean over
   as many numbers as the stratum has games. Validation MUST report the loss by field.
 - **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
-  shard as it goes, naming the shard, its record counts, and its timings. Within a shard it MUST also
-  log progress on a wall-clock interval, carrying the running training loss, the loss decomposed by
-  field, the pre-clip gradient norm of each parameter group, the learning rate and the step rate. An
-  epoch is long enough that its closing line is the only signal a run gives for many minutes, and a
-  single field carrying the whole loss is invisible in the total.
+  shard as it goes, naming the shard, its record counts, and its timings. That line MUST also carry
+  the shard's mean training loss, the loss decomposed by field, the pre-clip gradient norm of each
+  **module**, the learning rate and the step rate. Reading a loss term back is a device
+  synchronization, so exactly one step per shard MUST do it — the shard's last. The norms are per
+  module rather than per optimizer group because the optimizer holds one group, and a single number
+  covering the encoder and the head together cannot say which produced the gradient; measuring them
+  MUST NOT change how gradients are clipped.
 - **FR-129**: A provenance key naming a script file with no sidecar under its tree MUST NOT stop a run.
   The ability contributes no text, and the reader MUST count the occurrence per script file so the
   share is visible — an unconfigured *tree* still raises, being a misconfigured run rather than a gap
