@@ -32,7 +32,6 @@ from effects.application.train_effect_model import (
     HeldOutCards,
     SplitAccumulator,
     epoch_shards,
-    reserved_shard_indices,
     shard_games,
     steps_per_shard,
 )
@@ -74,31 +73,6 @@ def _record(game_id: str, entities=()) -> EffectRecord:
 
 def _held() -> HeldOutCards:
     return HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
-
-
-class TestReservedShardIndices:
-    """Which shards are held back for validation."""
-
-    def test_the_reserved_shards_spread_across_the_corpus(self):
-        # Consecutive shards come from one worker over one stretch of
-        # collection, so taking the first four would sample one worker's
-        # opening games rather than the corpus.
-        picked = sorted(reserved_shard_indices(701, reserved=4))
-        assert picked == [87, 262, 438, 613]
-
-    def test_reserving_none_holds_nothing_back(self):
-        assert reserved_shard_indices(701, reserved=0) == frozenset()
-
-    def test_reserving_more_than_exist_holds_back_every_shard(self):
-        assert reserved_shard_indices(3, reserved=10) == frozenset({0, 1, 2})
-
-    def test_an_empty_corpus_reserves_nothing(self):
-        assert reserved_shard_indices(0, reserved=4) == frozenset()
-
-    def test_every_reserved_index_is_addressable(self):
-        for count in range(1, 40):
-            picked = reserved_shard_indices(count, reserved=4)
-            assert all(0 <= index < count for index in picked)
 
 
 class TestShardGames:
@@ -266,106 +240,6 @@ class TestEpochShards:
 
     def test_fewer_steps_than_shards_still_sums_correctly(self):
         assert sum(steps_per_shard(5, 18)) == 5
-
-
-class TestFullStrengthShardsReserveThemselves:
-    """A full-strength run's shards are the card-disjoint stratum (T167).
-
-    Nothing names them: they are recognised by holding a held-out card, which a
-    depleted shard cannot. Without this they would be training shards, read and
-    then skipped game by game, and per-epoch validation would never see the
-    stratum it selects checkpoints on.
-    """
-
-    def test_a_shard_holding_a_held_out_card_is_always_reserved(self) -> None:
-        from effects.application.train_effect_model import reserve_shards
-
-        shards = [Path(f"shard-{n}.jsonl") for n in range(10)]
-        full_strength = {shards[2], shards[7]}
-
-        reserved = reserve_shards(
-            shards, reserved=2, holds_held_out_card=full_strength.__contains__,
-        )
-
-        assert 2 in reserved and 7 in reserved
-
-    def test_the_even_spread_is_taken_from_the_depleted_shards(self) -> None:
-        from effects.application.train_effect_model import reserve_shards
-
-        shards = [Path(f"shard-{n}.jsonl") for n in range(10)]
-        full_strength = {shards[2], shards[7]}
-
-        reserved = reserve_shards(
-            shards, reserved=2, holds_held_out_card=full_strength.__contains__,
-        )
-
-        assert len(reserved - {2, 7}) == 2, (
-            "the game-disjoint stratum needs its own shards, not the "
-            "full-strength ones it would share with card-disjoint"
-        )
-
-    def test_with_no_full_strength_shards_it_is_the_plain_even_spread(self) -> None:
-        from effects.application.train_effect_model import (
-            reserve_shards,
-            reserved_shard_indices,
-        )
-
-        shards = [Path(f"shard-{n}.jsonl") for n in range(10)]
-
-        assert reserve_shards(
-            shards, reserved=3, holds_held_out_card=lambda _: False,
-        ) == reserved_shard_indices(10, reserved=3)
-
-
-class TestTheFullStrengthProbe:
-    """Recognising a full-strength shard without reading it whole.
-
-    Reserving happens before the first epoch, and parsing all 701 shards to
-    decide it would read the corpus twice over. The probe reads the opening
-    records of each and stops at the first held-out card.
-
-    Being a probe rather than a proof costs nothing that matters: a shard it
-    misses stays a training shard, and `shard_games` still routes every one of
-    its games to the card-disjoint stratum when the epoch reads it. What is lost
-    is the shard's validation records, not the purity of training.
-    """
-
-    def test_it_stops_at_the_first_held_out_card(self) -> None:
-        from effects.application.train_effect_model import records_name_held_out
-
-        held = HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
-        seen = []
-
-        def _records():
-            for name in ("Bear", "Serra Angel", "Ogre"):
-                seen.append(name)
-                yield _naming(name)
-
-        assert records_name_held_out(_records(), held, limit=100) is True
-        assert seen == ["Bear", "Serra Angel"], "it read past the answer"
-
-    def test_a_depleted_shard_reads_as_clean(self) -> None:
-        from effects.application.train_effect_model import records_name_held_out
-
-        held = HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
-        records = (_naming(n) for n in ("Bear", "Ogre", "Elf"))
-
-        assert records_name_held_out(records, held, limit=100) is False
-
-    def test_it_reads_no_more_than_the_limit(self) -> None:
-        from effects.application.train_effect_model import records_name_held_out
-
-        held = HeldOutCards(names=frozenset({"Serra Angel"}), script_files=frozenset())
-        read = 0
-
-        def _records():
-            nonlocal read
-            while True:
-                read += 1
-                yield _naming("Bear")
-
-        assert records_name_held_out(_records(), held, limit=8) is False
-        assert read == 8
 
 
 class TestProgressFormatting:

@@ -69,10 +69,14 @@ class TestScriptSurface:
 
 
 class TestVariantScriptsFlag:
+    #: ``train-effect-model`` refuses to parse without a corpus (FR-125
+    #: withdrawn), so every trainer parse here carries one.
+    _TRAIN = ("train-effect-model", "--corpus", "output/effects/corpus")
+
     def test_the_trainer_accepts_it_and_defaults_to_absent(self):
-        assert parse("train-effect-model").variant_scripts is None
+        assert parse(*self._TRAIN).variant_scripts is None
         assert parse(
-            "train-effect-model", "--variant-scripts", "output/effects/v/",
+            *self._TRAIN, "--variant-scripts", "output/effects/v/",
         ).variant_scripts == "output/effects/v/"
 
     def test_encode_abilities_accepts_it_and_defaults_to_absent(self):
@@ -89,10 +93,10 @@ class TestVariantScriptsFlag:
 
     def test_absent_by_default_everywhere_it_appears(self):
         """A stage-one checkpoint keeps working unchanged."""
-        for command in (
-            "train-effect-model", "encode-abilities", "evaluate-effect-model",
+        for argv in (
+            self._TRAIN, ("encode-abilities",), ("evaluate-effect-model",),
         ):
-            assert parse(command).variant_scripts is None, command
+            assert parse(*argv).variant_scripts is None, argv
 
 
 class TestSurfaceFollowsTheVocabulary:

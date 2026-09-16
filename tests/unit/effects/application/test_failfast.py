@@ -270,7 +270,7 @@ class TestWithheldKeyword:
 class TestConfigDefaults:
     def test_the_defaults_are_the_contracts(self):
         config = TrainEffectModelConfig()
-        assert config.records_dir == Path("output/effects/records/")
+        assert config.corpus is None
         assert config.e_dim == 64
         assert config.e_noise == 0.05
         assert config.keyword_expand_p == 0.25
@@ -470,44 +470,6 @@ class TestCorpusPathResolution:
                 provenance, corpus=tmp_path, checkpoint=self._CHECKPOINT,
             )
         assert caplog.text == ""
-
-
-class TestCorpusFlags:
-    """``--corpus`` refuses a flag its manifest already decides (FR-146).
-
-    Continuing on a disagreement would produce a run whose split, holdout or
-    rarity table silently does not match what the manifest says it is —
-    exactly the case this module exists for.
-    """
-
-    @pytest.mark.parametrize("field,value", [
-        ("records_dir", "output/effects/records"),
-        ("split_from", "models/effects/effect-model/latest.pt"),
-        ("reserved_shards", 9),
-        ("holdout_permille", 30),
-        ("holdout_max_carriers", 4),
-    ])
-    def test_corpus_refuses_the_flags_the_manifest_already_decides(
-        self, field, value,
-    ) -> None:
-        from effects.application.train_effect_model import (
-            TrainEffectModelConfig,
-            validate_corpus_flags,
-        )
-
-        config = TrainEffectModelConfig(
-            corpus="output/effects/corpus", **{field: value},
-        )
-        with pytest.raises(ValueError, match=field.replace("_", "-")):
-            validate_corpus_flags(config)
-
-    def test_corpus_alone_is_accepted(self) -> None:
-        from effects.application.train_effect_model import (
-            TrainEffectModelConfig,
-            validate_corpus_flags,
-        )
-
-        validate_corpus_flags(TrainEffectModelConfig(corpus="output/effects/corpus"))
 
 
 class TestCorpusSurface:

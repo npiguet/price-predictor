@@ -22,6 +22,10 @@ def parse(*argv: str):
     return build_parser().parse_args(argv)
 
 
+#: ``train-effect-model`` takes no defaults without a corpus any more.
+TRAIN = ("train-effect-model", "--corpus", "output/effects/corpus")
+
+
 class TestBuildVocab:
     def test_the_defaults_are_the_contracts(self):
         args = parse("build-vocab")
@@ -63,8 +67,8 @@ class TestExtractKeywordDefinitions:
 
 class TestTrainEffectModel:
     def test_the_path_defaults_are_the_contracts(self):
-        args = parse("train-effect-model")
-        assert args.records_dir == "output/effects/records/"
+        args = parse(*TRAIN)
+        assert args.corpus == "output/effects/corpus"
         assert args.vocab_path == "models/effects/vocab.txt"
         assert args.printings_path == "resources/AllPrintings.json"
         assert args.keyword_definitions == "output/effects/keyword-definitions.json"
@@ -73,20 +77,20 @@ class TestTrainEffectModel:
         assert args.variant_scripts is None
 
     def test_the_architecture_defaults_are_the_contracts(self):
-        args = parse("train-effect-model")
+        args = parse(*TRAIN)
         assert args.e_dim == 64
         assert args.e_noise == 0.05
         assert args.keyword_expand_p == 0.25
         assert args.context_dropout == 0.15
 
     def test_the_auxiliary_weights_are_the_contracts(self):
-        args = parse("train-effect-model")
+        args = parse(*TRAIN)
         assert args.mlm_weight == 0.1
         assert args.mlm_mask_prob == 0.15
         assert args.api_weight == 0.05
 
     def test_the_schedule_defaults_are_the_contracts(self):
-        args = parse("train-effect-model")
+        args = parse(*TRAIN)
         assert args.curriculum_epoch == 3
         assert args.batch_size == 32
         assert args.grad_accum == 1
@@ -96,29 +100,29 @@ class TestTrainEffectModel:
 
     def test_the_context_cache_is_off_by_default(self):
         """It is a documented fallback for the GPU budget, not the default."""
-        args = parse("train-effect-model")
+        args = parse(*TRAIN)
         assert args.context_cache is False
         assert args.cache_refresh == 500
-        assert parse("train-effect-model", "--context-cache").context_cache
+        assert parse(*TRAIN, "--context-cache").context_cache
 
-    def test_the_mixture_defaults_to_the_eight_class_one(self):
-        assert parse("train-effect-model").kind_mix is None
+    def test_the_corpus_is_required(self):
+        """FR-125 withdrawn: raw shards are no longer a training input."""
+        with pytest.raises(SystemExit):
+            parse("train-effect-model")
 
     def test_the_variant_choices_are_the_five(self):
         for variant in ("full", "identity", "state-only", "no-state", "taxonomy"):
-            assert parse(
-                "train-effect-model", "--variant", variant,
-            ).variant == variant
+            assert parse(*TRAIN, "--variant", variant).variant == variant
         with pytest.raises(SystemExit):
-            parse("train-effect-model", "--variant", "oracle")
+            parse(*TRAIN, "--variant", "oracle")
 
     def test_full_is_the_default_variant(self):
-        assert parse("train-effect-model").variant == "full"
+        assert parse(*TRAIN).variant == "full"
 
     def test_withhold_keyword_defaults_to_none(self):
-        assert parse("train-effect-model").withhold_keyword is None
+        assert parse(*TRAIN).withhold_keyword is None
         assert parse(
-            "train-effect-model", "--withhold-keyword", "cascade",
+            *TRAIN, "--withhold-keyword", "cascade",
         ).withhold_keyword == "cascade"
 
 
@@ -154,12 +158,10 @@ class TestVariantAcceptsCorpusAtThePreflightCheck:
 
         assert run_train_effect_model(args) == 0
 
-    def test_a_variant_with_neither_route_is_still_refused(self):
-        from effects.infrastructure.cli import run_train_effect_model
-
-        args = parse("train-effect-model", "--variant", "identity")
-
-        assert run_train_effect_model(args) == 2
+    def test_a_variant_without_a_corpus_never_reaches_the_check(self):
+        """``--corpus`` is required, so the parser refuses first."""
+        with pytest.raises(SystemExit):
+            parse("train-effect-model", "--variant", "identity")
 
 
 class TestBuildCorpusDispatch:
@@ -299,42 +301,6 @@ class TestTrainEffectModelSurfaceMismatch:
         assert run_train_effect_model(args) == 2
 
 
-class TestCorpusExclusiveFlagsAtThePreflightCheck:
-    """``validate_corpus_flags`` ran only inside ``run()`` and raised a bare
-    ``ValueError`` nothing caught, so ``train-effect-model --corpus DIR
-    --records-dir X`` printed a stack trace where its sibling guard one line
-    over printed a message and exited 2.
-
-    Tested through the dispatcher rather than through the library function,
-    because that is exactly how the last gap of this shape survived its own
-    fix round: the library was right and the entry point never called it.
-    """
-
-    def test_a_flag_the_manifest_records_is_refused_with_an_exit_code(self):
-        from effects.infrastructure.cli import run_train_effect_model
-
-        args = parse(
-            "train-effect-model", "--corpus", "output/effects/corpus",
-            "--records-dir", "output/effects/other-records",
-        )
-
-        assert run_train_effect_model(args) == 2
-
-    def test_the_refusal_happens_before_the_trainer_is_entered(self, monkeypatch):
-        from effects.infrastructure.cli import run_train_effect_model
-
-        def explode(config):
-            raise AssertionError("run() must not be reached")
-
-        monkeypatch.setattr("effects.application.train_effect_model.run", explode)
-        args = parse(
-            "train-effect-model", "--corpus", "output/effects/corpus",
-            "--holdout-permille", "30",
-        )
-
-        assert run_train_effect_model(args) == 2
-
-
 class TestBuildCorpus:
     """Every ``build-corpus`` default, pinned.
 
@@ -353,15 +319,13 @@ class TestBuildCorpus:
         assert args.variant_scripts is None
 
     def test_the_holdout_defaults_match_the_trainers(self):
-        """The same two values must be passed here, at `holdout-cards` and at
-        training, or the depleted corpus and the split disagree."""
+        """The same two values must be passed here and at `holdout-cards`, or
+        the depleted corpus and the split disagree. The trainer no longer
+        spells them at all: it reads the manifest this build writes."""
         args = parse("build-corpus")
-        assert args.holdout_permille == parse("train-effect-model").holdout_permille
-        assert (
-            args.holdout_max_carriers
-            == parse("train-effect-model").holdout_max_carriers
-        )
         assert (args.holdout_permille, args.holdout_max_carriers) == (20, 8)
+        holdout = parse("holdout-cards", "--out", "output/effects/holdout.txt")
+        assert (holdout.holdout_permille, holdout.holdout_max_carriers) == (20, 8)
 
     def test_the_selection_defaults_are_the_contracts(self):
         args = parse("build-corpus")

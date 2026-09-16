@@ -46,7 +46,6 @@ DEFAULT_ABILITIES_ROOT = "output/effects/abilities/"
 #: trainer's own constants are the source; `test_holdout_cli.py` pins them.
 HOLDOUT_PERMILLE = 20
 HOLDOUT_MAX_CARRIERS = 8
-MIN_HOLDOUT_RECORDS = 2000
 DEFAULT_CHECKPOINT = "models/effects/effect-model/latest.pt"
 DEFAULT_PRINTINGS = "resources/AllPrintings.json"
 
@@ -1147,25 +1146,20 @@ def run_collect_variants(args: argparse.Namespace) -> int:
 
 
 def _train_effect_model_parser(subparsers) -> None:
-    from effects.application.train_effect_model import (
-        DEFAULT_SHARDS_PER_EPOCH,
-        RESERVED_VALIDATION_SHARDS,
-    )
+    from effects.application.train_effect_model import DEFAULT_SHARDS_PER_EPOCH
 
     parser = subparsers.add_parser(
         "train-effect-model",
         help="Train the ability encoder and effect head jointly from random init",
     )
     parser.set_defaults(func=run_train_effect_model)
-    parser.add_argument("--records-dir", type=str, default=DEFAULT_RECORDS_DIR)
     parser.add_argument(
-        "--corpus", type=str, default=None,
+        "--corpus", type=str, required=True,
         help=(
-            "A curated dataset directory built by `build-corpus`. Its "
-            "manifest already records the split, holdout and rarity table, "
-            "so --records-dir, --reserved-shards, --split-from, "
-            "--holdout-permille and --holdout-max-carriers cannot be passed "
-            "alongside it."
+            "A curated dataset directory built by `build-corpus`, and the "
+            "trainer's only input: its manifest records the split, the "
+            "holdout, the validation samples and the rarity table. Training "
+            "straight from raw shards was withdrawn with FR-125."
         ),
     )
     _add_cards_folder(parser)
@@ -1211,10 +1205,6 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument(
-        "--kind-mix", type=str, default=None,
-        help="class=share,… (default: the eight-class mixture)",
-    )
-    parser.add_argument(
         "--context-cache", action="store_true",
         help=(
             "Switch context gradient to a stop-gradient momentum cache — the "
@@ -1233,53 +1223,12 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
-        "--workers", type=int, default=0,
-        help=(
-            "Processes the pre-training validation sweep reads shards across "
-            "(default: CPU count). Each returns the sample its shards "
-            "contributed rather than the shards themselves, so the records "
-            "crossing a process boundary are the few thousand the mixture keeps"
-        ),
-    )
-    parser.add_argument(
         "--seed", type=int, default=None,
         help=(
             "Seeds weight init, batch planning and each epoch's shard draw. "
             "Drawn from the OS and reported at startup when omitted, so runs "
             "differ by default and any one of them can be repeated by passing "
             "back the seed it logged"
-        ),
-    )
-    parser.add_argument(
-        "--holdout-permille", type=int, default=HOLDOUT_PERMILLE,
-        help=(
-            "An eligible ability text is held out when crc32(text) %% 1000 is "
-            "below this. Must match the value the corpus was depleted against "
-            f"(default: {HOLDOUT_PERMILLE})"
-        ),
-    )
-    parser.add_argument(
-        "--holdout-max-carriers", type=int, default=HOLDOUT_MAX_CARRIERS,
-        help=(
-            "A text more cards than this carry is never eligible for the "
-            "holdout, so depleting it cannot empty the corpus "
-            f"(default: {HOLDOUT_MAX_CARRIERS})"
-        ),
-    )
-    parser.add_argument(
-        "--min-holdout-records", type=int, default=MIN_HOLDOUT_RECORDS,
-        help=(
-            "Warn when the card-disjoint stratum holds fewer unique-text "
-            "resolution records than this; empty is a hard failure "
-            f"(default: {MIN_HOLDOUT_RECORDS})"
-        ),
-    )
-    parser.add_argument(
-        "--reserved-shards", type=int, default=RESERVED_VALIDATION_SHARDS,
-        help=(
-            "Shards held back for validation and never trained on; their games "
-            "supply both validation strata "
-            f"(default: {RESERVED_VALIDATION_SHARDS})"
         ),
     )
     parser.add_argument("--epochs", type=int, default=40)
@@ -1299,7 +1248,6 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         MissingSplitError,
         SurfaceMismatchError,
         require_split_from,
-        validate_corpus_flags,
     )
 
     split_from = Path(args.split_from) if args.split_from else None
@@ -1310,14 +1258,6 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
         return 2
 
     config = train_config_from(args)
-    try:
-        # Pre-flighted here as well as inside `run`, for the same reason its
-        # sibling one line above is: a bare ValueError out of `run` reaches the
-        # operator as a stack trace.
-        validate_corpus_flags(config)
-    except ValueError as exc:
-        logger.error("%s", exc)
-        return 2
 
     from effects.application.train_effect_model import run as train
 
@@ -1338,7 +1278,6 @@ def train_config_from(args: argparse.Namespace):
     from effects.application.train_effect_model import TrainEffectModelConfig
 
     return TrainEffectModelConfig(
-        records_dir=Path(args.records_dir),
         corpus=args.corpus,
         cards_folders=resolve_cards_folders(args.cards_folders),
         variant_scripts=(
@@ -1360,20 +1299,14 @@ def train_config_from(args: argparse.Namespace):
         curriculum_epoch=args.curriculum_epoch,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
-        kind_mix=args.kind_mix,
         context_cache=args.context_cache,
         cache_refresh=args.cache_refresh,
         steps_per_epoch=args.steps_per_epoch,
         shards_per_epoch=args.shards_per_epoch,
         seed=args.seed,
-        workers=args.workers,
-        reserved_shards=args.reserved_shards,
         epochs=args.epochs,
         patience=args.patience,
         withhold_keyword=args.withhold_keyword,
-        holdout_permille=args.holdout_permille,
-        holdout_max_carriers=args.holdout_max_carriers,
-        min_holdout_records=args.min_holdout_records,
     )
 
 
