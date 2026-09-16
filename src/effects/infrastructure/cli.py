@@ -1204,7 +1204,10 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument("--mlm-weight", type=float, default=0.1)
     parser.add_argument("--mlm-mask-prob", type=float, default=0.15)
     parser.add_argument("--api-weight", type=float, default=0.05)
-    parser.add_argument("--curriculum-step", type=int, default=10000)
+    parser.add_argument(
+        "--curriculum-epoch", type=int, default=3,
+        help="Epoch whose first step enables the sparse field group (default: 3)",
+    )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--grad-accum", type=int, default=1)
     parser.add_argument(
@@ -1354,7 +1357,7 @@ def train_config_from(args: argparse.Namespace):
         mlm_weight=args.mlm_weight,
         mlm_mask_prob=args.mlm_mask_prob,
         api_weight=args.api_weight,
-        curriculum_step=args.curriculum_step,
+        curriculum_epoch=args.curriculum_epoch,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
         kind_mix=args.kind_mix,

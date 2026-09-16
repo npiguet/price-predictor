@@ -985,7 +985,12 @@ class TrainEffectModelConfig:
     mlm_weight: float = 0.1
     mlm_mask_prob: float = 0.15
     api_weight: float = 0.05
-    curriculum_step: int = 10_000
+    #: The epoch whose first step enables the sparse field group (FR-082).
+    #: An epoch rather than a step so validation before and after the switch
+    #: scores different field sets at an epoch boundary, never inside one:
+    #: the first run enabled the group at shard 244 of epoch 2 and validated
+    #: twenty-five untrained heads at that epoch's end, a 134-loss spike.
+    curriculum_epoch: int = 3
     batch_size: int = 32
     grad_accum: int = 1
     kind_mix: str | None = None
@@ -997,6 +1002,11 @@ class TrainEffectModelConfig:
     epochs: int = 40
     patience: int = 5
     withhold_keyword: str | None = None
+
+    @property
+    def curriculum_step(self) -> int:
+        """The optimizer step the sparse group enables at; 0 for epoch 1."""
+        return max(0, self.curriculum_epoch - 1) * self.steps_per_epoch
 
     def resolved_model_output(self) -> Path:
         from effects.infrastructure.effect_model_store import model_output_for
@@ -1086,6 +1096,17 @@ def warmup_steps(*, epochs: int, steps_per_epoch: int) -> int:
     return max(1, int(epochs * steps_per_epoch * WARMUP_FRACTION))
 
 
+def fields_for_epoch(config: TrainEffectModelConfig, *, present: frozenset[str], epoch: int):
+    """The field set every step of ``epoch`` trains with, and validation scores."""
+    from effects.domain.effect_model import active_fields
+
+    return active_fields(
+        present_classes=present,
+        step=(epoch - 1) * config.steps_per_epoch,
+        curriculum_step=config.curriculum_step,
+    )
+
+
 def learning_rate_at(step: int, *, warmup: int) -> float:
     """Linear warmup, then constant.
 
@@ -1148,6 +1169,11 @@ class EarlyStopper:
             return True
         self.since_best += 1
         return False
+
+    def reset(self) -> None:
+        """Forget the best: the objective changed, so no earlier number compares."""
+        self.best = float("inf")
+        self.since_best = 0
 
     @property
     def should_stop(self) -> bool:

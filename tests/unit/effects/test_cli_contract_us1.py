@@ -87,7 +87,7 @@ class TestTrainEffectModel:
 
     def test_the_schedule_defaults_are_the_contracts(self):
         args = parse("train-effect-model")
-        assert args.curriculum_step == 10000
+        assert args.curriculum_epoch == 3
         assert args.batch_size == 32
         assert args.grad_accum == 1
         assert args.steps_per_epoch == 5000

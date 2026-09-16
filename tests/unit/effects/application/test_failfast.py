@@ -278,6 +278,7 @@ class TestConfigDefaults:
         assert (config.mlm_weight, config.mlm_mask_prob) == (0.1, 0.15)
         assert config.api_weight == 0.05
         assert config.curriculum_step == 10_000
+        assert config.curriculum_epoch == 3
         assert (config.batch_size, config.grad_accum) == (32, 1)
         assert (config.steps_per_epoch, config.epochs, config.patience) == (
             5_000, 40, 5
