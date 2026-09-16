@@ -468,9 +468,26 @@ the second mismatch rather than reporting it, but nothing catches the first.
 
 Two passes. A parallel survey reads every shard once, then one process folds provenance keys to
 ability texts, decides the split, computes the rarity table corpus-wide, and a second parallel pass
-writes `training/`, `validation/card-disjoint/`, `validation/game-disjoint/` and `manifest.json`.
+writes:
+
+```
+training/                          shard-00001.jsonl.gz … (--shard-records each, games never split)
+validation/card-disjoint/          whole held-out games, repacked the same way
+validation/game-disjoint/          whole clean games, repacked the same way
+validation/gate-one/               resolution records of card-disjoint games whose acting text is held out
+validation/samples/card-disjoint.jsonl.gz   the trainer's per-epoch validation set; its resolution classes come from gate-one
+validation/samples/game-disjoint.jsonl.gz
+manifest.json                      + quality_dropped, games_by_source, held_out_games_by_source, shard_records, validation_sample
+```
+
 Training records are selected per record; both validation strata are selected per **game**, which is
 what keeps a probe and the combat record its `mirror_of` names in the same stratum.
+
+Three kinds of record are refused on sight and counted in `quality_dropped`: a resolution record with
+no acting ability, a record with an event attributed to `unresolved`, and a record with more than
+`--max-events-per-record` events. The per-source report warns when a directory routes a few games to
+the card-disjoint stratum; a depleted directory should route none, and a small count there is a leak
+in collection (in the first corpus, The Hobbit and Marvel Super Heroes boosters).
 
 **Read the delivered-against-requested table it prints.** The manifest records the mixture the run
 asked for and the mixture the data actually holds, and they are not identical: availability is counted

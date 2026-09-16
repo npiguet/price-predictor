@@ -548,9 +548,14 @@ loss.
 
 - **FR-135**: `python -m effects build-corpus` MUST read the raw shard corpus under `--records-dir`
   once and write a curated dataset under `--output` (default `output/effects/corpus/`) holding
-  `training/`, `validation/card-disjoint/`, `validation/game-disjoint/` and `manifest.json`. Each
-  output directory MUST hold shards in the corpus shard format (FR-027), so every existing reader
-  loads them unchanged.
+  `training/`, `validation/card-disjoint/`, `validation/game-disjoint/`, `validation/gate-one/`
+  (resolution records of card-disjoint games whose acting text is held out),
+  `validation/samples/card-disjoint.jsonl.gz` and `validation/samples/game-disjoint.jsonl.gz` (the
+  trainer's per-epoch validation set, drawing its card-disjoint resolution classes from
+  `validation/gate-one/`), and `manifest.json`. Each shard directory MUST hold shards in the corpus
+  shard format (FR-027), so every existing reader loads them unchanged, and MUST be repacked to at
+  most `--shard-records` (default 2000) records per shard, cut at game boundaries so a game is never
+  split across shards; `--shard-records 0` keeps one output shard per source shard.
 - **FR-136**: Training records MUST be selected per record and both validation strata per **game**.
   Whole-game selection is what keeps intra-game joins intact: `evaluate-effect-model` resolves a probe
   record's `mirror_of` to a `record_id` in the same stratum, and a stratum holding one half of a pair
@@ -611,6 +616,13 @@ loss.
   alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
   score them partly on games the model trained on.
+- **FR-148**: `build-corpus` MUST refuse a resolution record with no acting ability, any record
+  carrying an event attributed to `unresolved`, and any record carrying more than
+  `--max-events-per-record` events (default 64), in both passes, and MUST record the count per
+  reason in the manifest as `quality_dropped`.
+- **FR-149**: `build-corpus` MUST record, per top-level directory under `--records-dir`, the games
+  it read and the games naming a held-out card (`games_by_source`, `held_out_games_by_source`),
+  and MUST warn when a directory routes more than none and fewer than 5% of its games.
 
 #### Training
 
