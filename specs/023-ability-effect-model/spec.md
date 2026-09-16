@@ -814,6 +814,21 @@ loss.
   per stratum, and MUST reuse those same records every epoch — an early-stopping rule reading a
   freshly drawn sample each epoch would measure which records got drawn rather than whether the model
   improved.
+- **FR-127a**: The captured sample MUST follow the **training** sampling mixture, not the proportions
+  the stratum holds on disk. `build-corpus` mixes the training stratum and leaves both validation
+  strata as collected, and the two differ by more than a factor of five on the largest class, so a
+  loss read off the natural proportions measures a different objective than the one training
+  descends. A class the stratum cannot supply at its share MUST be reported as short rather than
+  silently under-filled.
+- **FR-127b**: The shards the sample is drawn from MUST be drawn across the stratum rather than taken
+  from the head of its shard list, which is one collection run's. Reading MAY stop as soon as the
+  sample is full, and MUST NOT when the split is derived from the shards rather than inherited from a
+  manifest — a shard skipped there is a game the checkpoint cannot enumerate.
+- **FR-127c**: Validation MUST batch at `--batch-size` over the shuffled sample rather than one game
+  per batch. A batch's class composition decides which fields carry loss at all, so a whole-game
+  batch scores a different field set than a training batch and the two numbers are not comparable;
+  a stratum's loss is also the mean over its batches, and whole-game batches make that a mean over
+  as many numbers as the stratum has games. Validation MUST report the loss by field.
 - **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
   shard as it goes, naming the shard, its record counts, and its timings. Within a shard it MUST also
   log progress on a wall-clock interval, carrying the running training loss, the loss decomposed by

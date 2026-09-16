@@ -226,40 +226,129 @@ class TrainingLoop:
             roots["variant-scripts"] = Path(self.config.variant_scripts)
         return SidecarCache(roots)
 
+    def _class_quota(self) -> dict[str, int]:
+        """How many records of each class a stratum's sample should hold.
+
+        The **training** mixture, because that is the distribution the loss is
+        optimized against and a validation number drawn from any other one
+        measures a different objective. ``build-corpus`` mixes the training
+        stratum and leaves both validation strata in the proportions collection
+        produced, which is five times the share of ``playability-decision`` and
+        a sixth the share of ``combat``. Scored on that, a validation loss is
+        mostly a reading of one class training spends a tenth of its batches on,
+        and it barely moves when the classes training works hardest on improve.
+        """
+        wanted = parse_kind_mix(self.config.kind_mix)
+        return {
+            name: max(1, round(share * VALIDATION_RECORDS_PER_STRATUM))
+            for name, share in wanted.items()
+        }
+
+    def _sample_is_full(self, pools: Mapping[str, Mapping[str, list]]) -> bool:
+        """Whether both strata can fill every class the mixture asks for."""
+        quota = self._class_quota()
+        return all(
+            len(pools[stratum].get(name, ())) >= size
+            for stratum in ("card-disjoint", "game-disjoint")
+            for name, size in quota.items()
+        )
+
     def _capture_validation(self) -> None:
-        """Read the reserved shards once and keep a capped sample of each stratum.
+        """Read reserved shards once and keep a mixture-matched sample of each.
 
         Captured once rather than redrawn per epoch because ``--patience``
         compares this epoch's loss against the best so far. A validation set that
         changed every epoch would make that comparison measure which records got
         drawn rather than whether the model improved.
+
+        The shards are **shuffled** before reading, and only as many are read as
+        the sample needs. A stratum's shard list is in path order, so its opening
+        shards are one collection run's: taking the sample from the front drew
+        every card-disjoint validation record from the depleted run that sorts
+        first — 0.9% of the stratum, eight games — and then read the remaining
+        1,400 shards to keep nothing from them. Reading stops early only when the
+        split came from a curated dataset's manifest; derived from the shards
+        themselves it has to see every one of them, since a shard it skipped is a
+        game the checkpoint would fail to enumerate.
         """
-        cap = VALIDATION_RECORDS_PER_STRATUM
-        for position, shard in enumerate(self.validation_shards, start=1):
+        quota = self._class_quota()
+        pools: dict[str, dict[str, list]] = {
+            "card-disjoint": defaultdict(list),
+            "game-disjoint": defaultdict(list),
+        }
+        inherited = self.accumulator.inherited
+        shards = list(self.validation_shards)
+        if inherited:
+            random.Random(f"{self.seed}:validation").shuffle(shards)
+        split = self.accumulator.split()
+        for position, shard in enumerate(shards, start=1):
             started = time.perf_counter()
             records = load_shard(shard)
-            self.accumulator.note_shard(records, self.held_out, reserved=True)
-            split = self.accumulator.split()
+            if not inherited:
+                self.accumulator.note_shard(records, self.held_out, reserved=True)
+                split = self.accumulator.split()
             self.present.update(class_counts(records))
             for record in records:
                 if len(self.probe) < PROBE_RECORDS:
                     self.probe.append(record)
                 if record.game_id in split.card_disjoint_games:
-                    target = self.card_disjoint
+                    stratum = "card-disjoint"
                 elif record.game_id in split.game_disjoint_games:
-                    target = self.game_disjoint
+                    stratum = "game-disjoint"
                 else:
                     continue
-                if len(target) < cap:
-                    target.append(record)
+                name = sampling_class(record)
+                bucket = pools[stratum][name]
+                # Held only up to what the mixture will take, so a class the
+                # corpus is thick in cannot grow the resident sample without
+                # bound while a scarce one is what the read is still waiting on.
+                if len(bucket) < quota.get(name, 0):
+                    bucket.append(record)
             logger.info(
                 "validation shard %d/%d %s | %d records over %d games | "
-                "load %.1fs | held card-disjoint %d/%d, game-disjoint %d/%d",
-                position, len(self.validation_shards), shard.name, len(records),
+                "load %.1fs | sampled card-disjoint %d/%d, game-disjoint %d/%d",
+                position, len(shards), shard.name, len(records),
                 len({r.game_id for r in records}), time.perf_counter() - started,
-                len(self.card_disjoint), cap, len(self.game_disjoint), cap,
+                sum(len(v) for v in pools["card-disjoint"].values()),
+                sum(quota.values()),
+                sum(len(v) for v in pools["game-disjoint"].values()),
+                sum(quota.values()),
             )
             del records
+            if inherited and self._sample_is_full(pools):
+                logger.info(
+                    "Both validation strata match the training mixture after "
+                    "%d of %d shards; the rest are not read.",
+                    position, len(shards),
+                )
+                break
+
+        for stratum, target in (
+            ("card-disjoint", self.card_disjoint),
+            ("game-disjoint", self.game_disjoint),
+        ):
+            for name in sorted(pools[stratum]):
+                target.extend(pools[stratum][name])
+            # Shuffled, because the batches cut out of this list have to mix
+            # classes the way a training batch does. Collected class by class
+            # and left in that order, every batch would hold one class, and
+            # `active_fields` would score each against only the fields that
+            # class supervises — a different and smaller objective per batch.
+            random.Random(f"{self.seed}:{stratum}").shuffle(target)
+            short = {
+                name: size - len(pools[stratum].get(name, ()))
+                for name, size in quota.items()
+                if len(pools[stratum].get(name, ())) < size
+            }
+            logger.info(
+                "%s validation: %d records over %d games, %d classes%s",
+                stratum, len(target), len({r.game_id for r in target}),
+                len(pools[stratum]),
+                "" if not short else
+                " — short of the mixture on " + ", ".join(
+                    f"{name} by {count}" for name, count in sorted(short.items())
+                ),
+            )
 
     def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
         """Measure each slot kind's width from a real record.
@@ -520,12 +609,13 @@ class TrainingLoop:
                     of=len(shards),
                 )
 
+            card_parts: dict[str, float] = {}
             result = EpochResult(
                 epoch=epoch,
                 train_loss=float(running) / max(taken, 1),
                 card_disjoint_loss=self._validate(
                     self.card_disjoint, encoder, model, tokenizer, sidecars,
-                    widths, step,
+                    widths, step, parts=card_parts,
                 ),
                 game_disjoint_loss=self._validate(
                     self.game_disjoint, encoder, model, tokenizer, sidecars,
@@ -533,9 +623,10 @@ class TrainingLoop:
                 ),
             )
             logger.info(
-                "epoch %d | train %.4f | card-disjoint %.4f | game-disjoint %.4f",
+                "epoch %d | train %.4f | card-disjoint %.4f | "
+                "game-disjoint %.4f%s",
                 result.epoch, result.train_loss, result.card_disjoint_loss,
-                result.game_disjoint_loss,
+                result.game_disjoint_loss, _format_parts(card_parts),
             )
             if sidecars.unresolved:
                 worst = sorted(
@@ -677,30 +768,65 @@ class TrainingLoop:
 
     def _validate(
         self, records, encoder, model, tokenizer, sidecars, widths, step,
+        *, parts: dict[str, float] | None = None,
     ) -> float:
+        """Mean loss over the stratum, batched the way training batches.
+
+        One batch per game is what this did, and a game is not a batch. Eight
+        games is eight numbers, and one of them blowing up moves the mean by a
+        factor of twenty-eight. Worse, a batch's class composition decides which
+        fields carry loss at all — ``active_fields`` keeps a field only while
+        some class in the batch supervises it — so a batch holding one game's
+        natural proportions scores a different set of fields than a training
+        batch does, and the two numbers printed side by side were never
+        measuring the same thing.
+
+        Fixed-size batches over a shuffled sample fix both. ``parts`` collects
+        the loss by field, averaged over batches, which is what says *which*
+        term is not moving when the total is not moving.
+
+        Records are still grouped by game *within* a batch, for the same reason
+        training groups them: one encode of an ability text then serves every
+        record of that game which references it.
+        """
         if not records:
             return float("nan")
         encoder.eval()
         model.eval()
-        by_game: dict[str, list] = defaultdict(list)
-        for record in records:
-            by_game[record.game_id].append(record)
         from effects.application.train_effect_model import BatchPlan
 
+        size = self.config.batch_size
         total = torch.zeros((), device=self.device)
         batches = 0
+        summed: dict[str, float] = defaultdict(float)
+        counted: dict[str, int] = defaultdict(int)
         with torch.no_grad():
-            for game_id, group in by_game.items():
+            for start in range(0, len(records), size):
+                chunk = records[start:start + size]
+                grouped: dict[str, list] = defaultdict(list)
+                for record in chunk:
+                    grouped[record.game_id].append(record)
                 computed = self._loss_for(
-                    BatchPlan({game_id: group}), encoder, model, tokenizer,
-                    sidecars, widths, step,
+                    BatchPlan(dict(grouped)), encoder, model, tokenizer,
+                    sidecars, widths, step, report_parts=parts is not None,
                 )
-                if computed is not None:
-                    # Accumulated on the device; read once below.
-                    total += computed[0]
-                    batches += 1
+                if computed is None:
+                    continue
+                # Accumulated on the device; read once below.
+                total += computed[0]
+                batches += 1
+                for name, value in computed[1].items():
+                    summed[name] += value
+                    counted[name] += 1
         encoder.train()
         model.train()
+        if parts is not None:
+            # Averaged over the batches that carried each field rather than over
+            # every batch: a field its batch did not supervise contributes no
+            # zero, which would read as the model having got it right.
+            parts.update(
+                {name: summed[name] / counted[name] for name in summed}
+            )
         return float(total) / batches if batches else float("nan")
 
     def _provenance(self) -> SplitProvenance:
