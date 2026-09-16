@@ -3,7 +3,9 @@ fixed training corpus and two fixed validation strata on disk.
 
 ``a_corpus`` is the load-bearing fixture. It builds a small but real raw
 corpus: a converted card tree with sidecars (a held-out card, plus two
-ordinary ones), and two raw shards covering four games —
+ordinary ones), and two raw shards — one under ``full-strength/`` and one
+under ``depleted/``, the two source directories FR-149 reports against —
+covering four games, no game spanning both —
 
 - ``g-tainted`` carries an entity named after the held-out card *and* a
   resolvable acting ability, so the survey marks it held-out *and* admits it
@@ -27,12 +29,17 @@ default ``--holdout-permille 20``, per the task brief.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
-from effects.application.build_corpus import BuildCorpusConfig, _output_name, build
+from effects.application.build_corpus import (
+    BuildCorpusConfig,
+    _output_name,
+    build,
+    source_of,
+)
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
@@ -45,7 +52,7 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 from effects.infrastructure.corpus_store import CorpusStore
-from effects.infrastructure.record_io import read_records, write_shard
+from effects.infrastructure.record_io import iter_shards, read_records, write_shard
 from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 _HELD_OUT_CARD = "Held Out Bears"
@@ -161,6 +168,47 @@ class CorpusFixture:
     records: Path
     cards: tuple[str, ...]
 
+    @staticmethod
+    def resolution(
+        record_id: str,
+        *,
+        game: str,
+        ability: tuple[ProvenanceKey, ...] = (_BOLT_KEY,),
+        events: tuple[Event, ...] = (),
+    ) -> EffectRecord:
+        """A resolution record built the way the fixture builds ``g-tainted``'s.
+
+        ``ability=()`` is normalized to ``None`` so the record round-trips
+        through the shard writer as one with no acting line at all, which is
+        what ``quality_defect`` refuses as ``no-ability``.
+        """
+        record = _resolution(record_id, game, ability=ability or None)
+        if events:
+            record = replace(record, payload=ResolutionPayload(events=events))
+        return record
+
+    def with_extra_records(self, records: list[EffectRecord]) -> CorpusFixture:
+        """Append ``records`` as one more raw shard under the same root.
+
+        Under ``full-strength/`` because every game these tests add records to
+        already lives there, and a game split across two source directories
+        would be counted once per directory in ``games_by_source``.
+        """
+        write_shard(self.records / "full-strength" / "run.0-extra.jsonl.gz", records)
+        return self
+
+    @property
+    def source_dirs(self) -> set[str]:
+        """The top-level directory of every raw shard currently on disk."""
+        return {
+            source_of(shard.relative_to(self.records).as_posix())
+            for shard in iter_shards(self.records)
+        }
+
+    @property
+    def game_count(self) -> int:
+        return len({record.game_id for record in read_records(self.records)})
+
 
 @pytest.fixture
 def a_corpus(tmp_path: Path) -> CorpusFixture:
@@ -200,9 +248,12 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
         _resolution("g-clean-3.1", "g-clean-3", ability=(_BOLT_KEY,)),
     ]
 
+    # Two source directories, the way a real corpus keeps a full-strength
+    # collection run apart from a depleted one (FR-149): the tainted game is
+    # full-strength by construction, and no game spans the two.
     records_dir = root / "records"
-    write_shard(records_dir / "run.0-a.jsonl.gz", shard_a)
-    write_shard(records_dir / "run.0-b.jsonl.gz", shard_b)
+    write_shard(records_dir / "full-strength" / "run.0-a.jsonl.gz", shard_a)
+    write_shard(records_dir / "depleted" / "run.0-b.jsonl.gz", shard_b)
 
     return CorpusFixture(records=records_dir, cards=(str(root / "cardsfolder"),))
 
@@ -415,7 +466,8 @@ def test_build_refuses_a_corpus_no_game_of_which_names_a_held_out_card(
     depleted = tmp_path / "depleted-only"
     depleted.mkdir()
     shutil.copy(
-        a_corpus.records / "run.0-b.jsonl.gz", depleted / "run.0-b.jsonl.gz",
+        a_corpus.records / "depleted" / "run.0-b.jsonl.gz",
+        depleted / "run.0-b.jsonl.gz",
     )
     out = tmp_path / "curated"
 
@@ -864,3 +916,74 @@ def test_clear_outputs_removes_the_new_outputs_too(tmp_path):
     assert not store.gate_one_dir.exists()
     assert not store.samples_dir.exists()
     assert not store.parts_dir.exists()
+
+
+# ── quality, the gate-one slice, per-source reporting, repacking ───────
+
+
+def test_source_of_is_the_first_path_component():
+    assert source_of("depleted/run.0-a.jsonl.gz") == "depleted"
+    assert source_of("run.0-a.jsonl.gz") == "."
+
+
+def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
+    """A junk resolution record in a training game and one in a held-out game both vanish."""
+    from effects.domain.record_quality import NO_ABILITY, UNATTRIBUTED
+    corpus = a_corpus.with_extra_records([
+        a_corpus.resolution("junk-train", game="g-clean-1", ability=()),
+        a_corpus.resolution(
+            "junk-held", game="g-tainted",
+            events=(Event(
+                type=EventType.DAMAGE_DEALT, subjects=("P0",),
+                attributed_to="unresolved",
+            ),),
+        ),
+    ])
+    assert build(BuildCorpusConfig(records_dir=corpus.records, output=tmp_path / "out",
+                                   cards_folders=corpus.cards, workers=1)) == 0
+    store = CorpusStore(tmp_path / "out")
+    ids = {r.record_id for d in (store.training_dir, store.card_disjoint_dir,
+                                  store.game_disjoint_dir, store.gate_one_dir)
+           for r in read_records(d)}
+    assert "junk-train" not in ids and "junk-held" not in ids
+    assert store.load().quality_dropped == {NO_ABILITY: 1, UNATTRIBUTED: 1}
+
+
+def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tmp_path, a_corpus):
+    assert build(BuildCorpusConfig(records_dir=a_corpus.records, output=tmp_path / "out",
+                                   cards_folders=a_corpus.cards, workers=1)) == 0
+    store = CorpusStore(tmp_path / "out")
+    manifest = store.load()
+    slice_ = list(read_records(store.gate_one_dir))
+    assert slice_, "g-tainted resolves the held-out text, so the slice is not empty"
+    assert all(r.kind is RecordKind.RESOLUTION for r in slice_)
+    assert all(r.game_id in manifest.card_disjoint_games for r in slice_)
+    assert all(_HELD_OUT_KEY in (r.ability or ()) for r in slice_)
+    card_disjoint_ids = {r.record_id for r in read_records(store.card_disjoint_dir)}
+    assert {r.record_id for r in slice_} <= card_disjoint_ids
+    assert manifest.per_stratum["gate-one"] == len(slice_)
+
+
+def test_games_are_reported_per_source_directory(tmp_path, a_corpus):
+    """Shards live under depleted/ and full-strength/ in the fixture."""
+    assert build(BuildCorpusConfig(records_dir=a_corpus.records, output=tmp_path / "out",
+                                   cards_folders=a_corpus.cards, workers=1)) == 0
+    manifest = CorpusStore(tmp_path / "out").load()
+    assert set(manifest.games_by_source) == set(a_corpus.source_dirs)
+    assert sum(manifest.games_by_source.values()) == a_corpus.game_count
+    assert all(manifest.held_out_games_by_source.get(s, 0) <= n
+               for s, n in manifest.games_by_source.items())
+
+
+def test_output_shards_are_repacked_and_the_parts_removed(tmp_path, a_corpus):
+    # ``game_disjoint_target=1`` as everywhere else in this file: the default
+    # 1000 takes all three clean games into the game-disjoint stratum, leaving
+    # the training output — the one this test reads back — empty.
+    assert build(BuildCorpusConfig(records_dir=a_corpus.records, output=tmp_path / "out",
+                                   cards_folders=a_corpus.cards, workers=1,
+                                   game_disjoint_target=1, shard_records=2)) == 0
+    store = CorpusStore(tmp_path / "out")
+    assert not store.parts_dir.exists()
+    names = sorted(p.name for p in store.training_dir.glob("*.jsonl.gz"))
+    assert names and names[0] == "shard-00001.jsonl.gz"
+    assert store.load().shard_records == 2

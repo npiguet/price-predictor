@@ -25,6 +25,7 @@ from effects.application.build_corpus import (
     parse_ability_key,
     progress_line,
     run_survey,
+    survey_shard,
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.provenance import ProvenanceKey
@@ -168,6 +169,7 @@ def test_survey_counts_records_classes_and_games(tmp_path):
             held_out_script_files=frozenset(),
             text_cap=200,
             seed=42,
+            max_events=64,
         ),
         workers=1,
     )
@@ -180,10 +182,20 @@ def test_survey_counts_records_classes_and_games(tmp_path):
 
 
 def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
+    # Both records carry an acting ability: a resolution record without one is
+    # refused by the quality rule (FR-148) before it is routed at all, so a
+    # test written on bare resolutions would assert against an empty survey.
+    keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
     shard = tmp_path / "run.0-a.jsonl.gz"
     write_shard(shard, [
-        a_record(record_id="run.0-a.0", game_id="g1", entity_names=("Soul Echo",)),
-        a_record(record_id="run.0-a.1", game_id="g2", entity_names=("Grizzly Bears",)),
+        a_record(
+            record_id="run.0-a.0", game_id="g1", ability=keys,
+            entity_names=("Soul Echo",),
+        ),
+        a_record(
+            record_id="run.0-a.1", game_id="g2", ability=keys,
+            entity_names=("Grizzly Bears",),
+        ),
     ])
 
     survey = run_survey(
@@ -194,6 +206,7 @@ def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
             held_out_script_files=frozenset(),
             text_cap=200,
             seed=42,
+            max_events=64,
         ),
         workers=1,
     )
@@ -215,6 +228,7 @@ def test_survey_counts_games_not_records_for_rarity(tmp_path):
         config=SurveyConfig(
             records_dir=str(tmp_path), held_out_names=frozenset(),
             held_out_script_files=frozenset(), text_cap=200, seed=42,
+            max_events=64,
         ),
         workers=1,
     )
@@ -233,6 +247,7 @@ def test_survey_records_each_shards_name_relative_to_the_corpus_root(tmp_path):
         config=SurveyConfig(
             records_dir=str(tmp_path), held_out_names=frozenset(),
             held_out_script_files=frozenset(), text_cap=200, seed=42,
+            max_events=64,
         ),
         workers=1,
     )
@@ -244,6 +259,7 @@ def test_merging_shard_surveys_unions_games_and_sums_records():
     config = SurveyConfig(
         records_dir=".", held_out_names=frozenset(),
         held_out_script_files=frozenset(), text_cap=2, seed=42,
+        max_events=64,
     )
     init_survey_worker(config)
     # Two shards, same ability, disjoint games.
@@ -272,6 +288,26 @@ def test_merge_surveys_fails_loudly_when_the_worker_was_never_initialized(
 
     with pytest.raises(AssertionError, match="init_survey_worker"):
         merge_surveys([])
+
+
+def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
+    """A record with no acting ability is not a key, a class or a game (FR-148)."""
+    from effects.domain.record_quality import NO_ABILITY
+
+    bolt = (ProvenanceKey("cardsfolder/c/common_bolt.txt", 0, "spell", 0),)
+    write_shard(tmp_path / "run.0-a.jsonl.gz", [
+        a_record(record_id="clean", game_id="g1", ability=bolt),
+        a_record(record_id="junk", game_id="g2", ability=()),
+    ])
+    init_survey_worker(SurveyConfig(
+        records_dir=str(tmp_path), held_out_names=frozenset(),
+        held_out_script_files=frozenset(), text_cap=200, seed=1, max_events=64,
+    ))
+    out = survey_shard("run.0-a.jsonl.gz")
+    assert out.quality_dropped == {NO_ABILITY: 1}
+    assert out.records == 2
+    assert out.games == {"g1"}
+    assert sum(out.class_records.values()) == 1
 
 
 class TestProgressSaysWhetherToWait:

@@ -27,9 +27,11 @@ from typing import TYPE_CHECKING
 from effects.domain.corpus_curation import CapHeap, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.records import EffectRecord
+from effects.domain.record_quality import quality_defect
+from effects.domain.records import EffectRecord, RecordKind
 
 if TYPE_CHECKING:
+    from effects.infrastructure.corpus_store import CorpusStore
     from effects.infrastructure.sidecar_io import SidecarCache
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,11 @@ class SurveyConfig:
     held_out_script_files: frozenset[str]
     text_cap: int
     seed: int
+    #: ``--max-events-per-record``, passed through to ``quality_defect``. No
+    #: default: the survey counts what the write pass will keep, so a survey
+    #: run under a different rule than the write pass reports availability for
+    #: records that are about to be refused.
+    max_events: int
 
 
 @dataclass(slots=True)
@@ -126,6 +133,10 @@ class ShardSurvey:
     held_out_text_games: dict[str, set[str]] = field(default_factory=dict)
     held_out_games: set[str] = field(default_factory=set)
     games: set[str] = field(default_factory=set)
+    #: Records this shard's survey refused, by reason (FR-148). Counted
+    #: rather than silently skipped: a corpus that is a third junk should say
+    #: so in the manifest rather than in nothing.
+    quality_dropped: Counter[str] = field(default_factory=Counter)
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,6 +153,13 @@ class Survey:
     held_out_text_games: dict[str, set[str]]
     held_out_games: frozenset[str]
     games: frozenset[str]
+    quality_dropped: Counter[str] = field(default_factory=Counter)
+    #: Distinct games per top-level source directory, and how many of those
+    #: name a held-out card. What FR-149's report is computed from: a
+    #: directory of depleted shards whose held-out count is not zero is a leak
+    #: in collection, and nothing else in the build would notice.
+    games_by_source: dict[str, int] = field(default_factory=dict)
+    held_out_games_by_source: dict[str, int] = field(default_factory=dict)
 
 
 _CONFIG: SurveyConfig | None = None
@@ -173,6 +191,10 @@ def survey_shard(relative: str) -> ShardSurvey:
 
     for record in read_shard(path):
         out.records += 1
+        defect = quality_defect(record, max_events=config.max_events)
+        if defect is not None:
+            out.quality_dropped[defect] += 1
+            continue
         out.games.add(record.game_id)
         name = sampling_class(record)
         out.class_records[name] += 1
@@ -196,6 +218,16 @@ def survey_shard(relative: str) -> ShardSurvey:
     return out
 
 
+def source_of(relative: str) -> str:
+    """The top-level directory a raw shard sits in: ``depleted``, ``full-strength``…
+
+    ``"."`` for a shard at the root. What FR-149 reports held-out games
+    against: a collection run is a directory, and a leak is a directory that
+    should hold none.
+    """
+    return relative.split("/", 1)[0] if "/" in relative else "."
+
+
 def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     """Combine shard surveys into one corpus-wide picture."""
     config = _CONFIG
@@ -212,6 +244,9 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
 
     class_key_records: dict[str, Counter[str]] = defaultdict(Counter)
     held_out_text_games: dict[str, set[str]] = defaultdict(set)
+    quality_dropped: Counter[str] = Counter()
+    games_by_source: dict[str, set[str]] = defaultdict(set)
+    held_by_source: dict[str, set[str]] = defaultdict(set)
 
     for part in parts:
         shards.append(SourceShard(name=part.name, size=part.size))
@@ -222,6 +257,10 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
             class_key_records[name].update(per_key)
         held_out_games |= part.held_out_games
         games |= part.games
+        quality_dropped.update(part.quality_dropped)
+        source = source_of(part.name)
+        games_by_source[source] |= part.games
+        held_by_source[source] |= part.held_out_games
         for key, ids in part.held_out_text_games.items():
             held_out_text_games[key] |= ids
         for key, hashed in part.key_games.items():
@@ -244,6 +283,9 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         held_out_text_games=dict(held_out_text_games),
         held_out_games=frozenset(held_out_games),
         games=frozenset(games),
+        quality_dropped=quality_dropped,
+        games_by_source={s: len(g) for s, g in games_by_source.items()},
+        held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
     )
 
 
@@ -329,6 +371,9 @@ class BuildCorpusConfig:
     training_records: int = 0
     game_disjoint_target: int = 1000
     card_disjoint_text_cap: int = 50
+    shard_records: int = 2000
+    max_events: int = 64
+    validation_sample: int = 2048
     seed: int = 42
     workers: int | None = None
     verify: bool = False
@@ -356,6 +401,9 @@ class BuildCorpusConfig:
             ("--card-disjoint-text-cap", self.card_disjoint_text_cap),
             ("--game-disjoint-games", self.game_disjoint_target),
             ("--training-records", self.training_records),
+            ("--shard-records", self.shard_records),
+            ("--max-events-per-record", self.max_events),
+            ("--validation-sample", self.validation_sample),
         ):
             if value < 0:
                 raise BuildCorpusError(
@@ -387,6 +435,12 @@ class Decisions:
     shortfall: dict[str, int]
     capped_class_records: dict[str, int]
     key_text: dict[str, str]
+    #: Rendered survey keys whose ability text is held out. What routes the
+    #: gate-one slice: a card-disjoint resolution record acting on one of
+    #: these is the unique-text stratum gate 1's three margins are measured
+    #: on, and picking it out at write time is what saves the evaluator a
+    #: second pass over the whole stratum.
+    gate_one_keys: frozenset[str]
 
 
 def _text_of_rendered_key(
@@ -588,9 +642,14 @@ def decide(
     rarity = {text: len(games) for text, games in text_games.items()}
     thresholds = {key: text_heaps[text].threshold() for key, text in key_text.items()}
 
+    held_out_text_of_key = _held_out_text_of_key(survey, sidecars, held_out_texts)
+    # Only ``survey.held_out_text_games`` is walked, which is keyed on records
+    # of held-out games -- exactly the population the gate-one slice draws
+    # from, since the slice is a subset of the card-disjoint stratum.
+    gate_one_keys = frozenset(held_out_text_of_key)
     card_disjoint = _card_disjoint_games(
         survey,
-        _held_out_text_of_key(survey, sidecars, held_out_texts),
+        held_out_text_of_key,
         cap=config.card_disjoint_text_cap,
         seed=config.seed,
     )
@@ -617,6 +676,7 @@ def decide(
         shortfall=shortfall,
         capped_class_records=capped,
         key_text=key_text,
+        gate_one_keys=gate_one_keys,
     )
 
 
@@ -627,22 +687,38 @@ def decide(
 #: twice by the same number.
 _CLASS_SEED_OFFSET = 0x9E3779B9
 
-#: Every write-pass stratum, in report order. The first three are the real
+#: Every write-pass stratum, in report order. All but the last are the real
 #: outputs -- shard directories a downstream reader loads, and what
 #: FR-143/FR-145 mean by "each output" -- and ``OUTPUTS`` is just that
 #: prefix; "dropped-held-out" is accounting only, since nothing is written
 #: for it, so it is counted in ``per_stratum`` but never carries a
-#: unique-text figure.
-STRATA: tuple[str, ...] = ("training", "card-disjoint", "game-disjoint", "dropped-held-out")
+#: unique-text figure. "gate-one" is a *slice* of "card-disjoint" rather
+#: than a fourth destination: its records are written twice on purpose, so
+#: the evaluator reads gate 1's unique-text stratum without re-filtering the
+#: whole card-disjoint output, and its per-stratum count therefore overlaps
+#: card-disjoint's rather than partitioning with it.
+STRATA: tuple[str, ...] = (
+    "training", "card-disjoint", "game-disjoint", "gate-one", "dropped-held-out",
+)
 OUTPUTS: tuple[str, ...] = STRATA[:-1]
 
 
 @dataclass(frozen=True, slots=True)
 class WriteConfig:
+    """Where one shard's records go, and by what rule.
+
+    The four output directories name **parts** directories rather than the
+    strata themselves: a worker writes one part per source shard, and
+    ``build()`` repacks the parts into uniform shards afterwards.
+    """
+
     records_dir: str
     training_dir: str
     card_disjoint_dir: str
     game_disjoint_dir: str
+    gate_one_dir: str
+    gate_one_keys: frozenset[str]
+    max_events: int
     thresholds: dict[str, int | None]
     class_admit: dict[str, float]
     card_disjoint: frozenset[str]
@@ -669,6 +745,10 @@ class WriteResult:
     #: stratum instead: ``build()`` folds these through ``decisions.key_text``
     #: to get each output's unique-ability-text count (FR-143, FR-145).
     stratum_keys: dict[str, set[str]] = field(default_factory=dict)
+    #: Records refused by ``effects.domain.record_quality``, by reason
+    #: (FR-148). Counted before every routing decision, so a defective record
+    #: reaches no output at all and belongs to no class's read count.
+    quality_dropped: Counter[str] = field(default_factory=Counter)
 
 
 _WRITE: WriteConfig | None = None
@@ -703,7 +783,7 @@ def _output_name(relative: str) -> str:
 
 
 def write_shard_pass(relative: str) -> WriteResult:
-    """Filter one shard into the three outputs. Module-level so it pickles."""
+    """Filter one shard into its output parts. Module-level so it pickles."""
     from effects.application.train_effect_model import sampling_class
     from effects.domain.corpus_curation import keeps, record_hash
     from effects.infrastructure.record_io import read_shard, write_shard
@@ -714,6 +794,7 @@ def write_shard_pass(relative: str) -> WriteResult:
     training: list = []
     card_disjoint: list = []
     game_disjoint: list = []
+    gate_one: list = []
 
     for record in read_shard(Path(config.records_dir) / relative):
         name = sampling_class(record)
@@ -721,12 +802,25 @@ def write_shard_pass(relative: str) -> WriteResult:
         # validation strata, which never used to look at it at all -- needs
         # it to track which ability texts that output actually holds.
         key = ability_key(record)
+        # Before the read count, so a refused record is not counted as read
+        # against a class whose availability the survey computed without it.
+        defect = quality_defect(record, max_events=config.max_events)
+        if defect is not None:
+            out.quality_dropped[defect] += 1
+            continue
         out.read[name] += 1
         if record.game_id in config.card_disjoint:
             card_disjoint.append(record)
             out.stratum["card-disjoint"] += 1
             if key is not None:
                 out.stratum_keys.setdefault("card-disjoint", set()).add(key)
+            if (
+                record.kind is RecordKind.RESOLUTION
+                and key is not None and key in config.gate_one_keys
+            ):
+                gate_one.append(record)
+                out.stratum["gate-one"] += 1
+                out.stratum_keys.setdefault("gate-one", set()).add(key)
             continue
         if record.game_id in config.game_disjoint:
             game_disjoint.append(record)
@@ -767,6 +861,7 @@ def write_shard_pass(relative: str) -> WriteResult:
         (config.training_dir, training),
         (config.card_disjoint_dir, card_disjoint),
         (config.game_disjoint_dir, game_disjoint),
+        (config.gate_one_dir, gate_one),
     ):
         if records:
             write_shard(Path(directory) / shard_name, records)
@@ -777,7 +872,7 @@ def run_write_pass(
     names: list[str], *, config: WriteConfig, workers: int | None,
     progress_every: int = 50,
 ) -> WriteResult:
-    """Write every shard's three outputs, in parallel, reporting progress."""
+    """Write every shard's output parts, in parallel, reporting progress."""
     started = time.monotonic()
     total = WriteResult()
 
@@ -786,6 +881,7 @@ def run_write_pass(
         total.dropped_by_cap.update(part.dropped_by_cap)
         total.read.update(part.read)
         total.stratum.update(part.stratum)
+        total.quality_dropped.update(part.quality_dropped)
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
         for name, keys in part.stratum_keys.items():
@@ -815,6 +911,33 @@ def run_write_pass(
                     elapsed=time.monotonic() - started,
                 ))
     return total
+
+
+def _repack_outputs(store: CorpusStore, *, shard_records: int) -> None:
+    """Stream each stratum's parts into uniform shards, then drop the parts.
+
+    The write pass writes one part per source shard, so an output's shard
+    sizes mirror the raw corpus's -- hundreds of tiny files beside a handful
+    of huge ones. The trainer reads a shard at a time and takes that shard's
+    share of an epoch's steps, so uneven shards make the step budget uneven.
+    """
+    import shutil
+
+    from effects.infrastructure.record_io import iter_shards, repack_shards
+
+    for stratum, target in (
+        ("training", store.training_dir),
+        ("card-disjoint", store.card_disjoint_dir),
+        ("game-disjoint", store.game_disjoint_dir),
+        ("gate-one", store.gate_one_dir),
+    ):
+        parts = iter_shards(store.parts_dir_for(stratum))
+        paths = repack_shards(parts, target, shard_records=shard_records)
+        logger.info(
+            "%-22s %d part(s) repacked into %d shard(s)",
+            stratum, len(parts), len(paths),
+        )
+    shutil.rmtree(store.parts_dir, ignore_errors=True)
 
 
 def build(config: BuildCorpusConfig) -> int:
@@ -893,6 +1016,7 @@ def build(config: BuildCorpusConfig) -> int:
             held_out_script_files=held_out.script_files,
             text_cap=config.text_cap,
             seed=config.seed,
+            max_events=config.max_events,
         ),
         workers=config.workers,
     )
@@ -932,9 +1056,12 @@ def build(config: BuildCorpusConfig) -> int:
         [shard.name for shard in survey.shards],
         config=WriteConfig(
             records_dir=str(records_dir),
-            training_dir=str(store.training_dir),
-            card_disjoint_dir=str(store.card_disjoint_dir),
-            game_disjoint_dir=str(store.game_disjoint_dir),
+            training_dir=str(store.parts_dir_for("training")),
+            card_disjoint_dir=str(store.parts_dir_for("card-disjoint")),
+            game_disjoint_dir=str(store.parts_dir_for("game-disjoint")),
+            gate_one_dir=str(store.parts_dir_for("gate-one")),
+            gate_one_keys=decisions.gate_one_keys,
+            max_events=config.max_events,
             thresholds=decisions.thresholds,
             class_admit=admit,
             card_disjoint=decisions.card_disjoint,
@@ -944,6 +1071,7 @@ def build(config: BuildCorpusConfig) -> int:
         ),
         workers=config.workers,
     )
+    _repack_outputs(store, shard_records=config.shard_records)
 
     per_class = {
         name: ClassCounts(
@@ -997,6 +1125,12 @@ def build(config: BuildCorpusConfig) -> int:
         per_stratum=per_stratum,
         unique_texts=unique_texts,
         shortfall=decisions.shortfall,
+        quality_dropped=dict(written.quality_dropped),
+        games_by_source=survey.games_by_source,
+        held_out_games_by_source=survey.held_out_games_by_source,
+        shard_records=config.shard_records,
+        validation_sample=config.validation_sample,
+        max_events_per_record=config.max_events,
     )
     store.save(manifest)
 
@@ -1011,6 +1145,19 @@ def build(config: BuildCorpusConfig) -> int:
             name, per_stratum[name], unique_texts[name],
         )
     logger.info("%-22s %9d record(s)", "dropped-held-out", per_stratum["dropped-held-out"])
+    for source in sorted(survey.games_by_source):
+        games = survey.games_by_source[source]
+        held = survey.held_out_games_by_source.get(source, 0)
+        share = held / games if games else 0.0
+        report = logger.warning if 0 < share < 0.05 else logger.info
+        report(
+            "%-22s %7d game(s), %6d name a held-out card (%.1f%%)%s",
+            source, games, held, 100.0 * share,
+            " — a few held-out games in a directory that should hold none is "
+            "a leak in collection, not a full-strength source" if 0 < share < 0.05 else "",
+        )
+    for reason, count in sorted(written.quality_dropped.items()):
+        logger.info("%-22s %9d record(s) refused", reason, count)
     # Requested against delivered, side by side: the mixture in `class_mix` is
     # what the build was asked for, and only this says whether it got it.
     requested = config.mix()
