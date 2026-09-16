@@ -408,6 +408,7 @@ Flags:
 | `--steps-per-epoch` | 5000 | optimizer steps per epoch |
 | `--shards-per-epoch` | 256 | training shards an epoch draws, one resident at a time |
 | `--seed` | _(drawn from the OS)_ | weight init, batch planning and the shard draw |
+| `--workers` | _(CPU count)_ | processes the pre-training validation sweep reads shards across |
 | `--epochs` | 40 | epoch bound |
 | `--patience` | 5 | epochs without a card-disjoint validation best before stopping |
 

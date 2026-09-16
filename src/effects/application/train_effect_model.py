@@ -535,6 +535,22 @@ class SplitAccumulator:
                 self._game_disjoint |= clean
         return tainted, clean
 
+    def note_games(
+        self, *, card_disjoint: Iterable[str], game_disjoint: Iterable[str],
+    ) -> None:
+        """Record games already routed, without the records that routed them.
+
+        The parallel validation sweep decides a shard's strata in the worker
+        that read it — which it can, because a game never spans two shards — and
+        returns the game ids rather than the records. This is how those reach
+        the accumulator, and it is the same accumulation ``note_shard`` does
+        with the shard in hand.
+        """
+        if self._inherited is not None:
+            return
+        self._card_disjoint |= set(card_disjoint)
+        self._game_disjoint |= set(game_disjoint)
+
     def split(self) -> CorpusSplit:
         if self._inherited is not None:
             return self._inherited
@@ -908,6 +924,10 @@ class TrainEffectModelConfig:
     holdout_max_carriers: int = HOLDOUT_MAX_CARRIERS
     #: Unique-text resolution records the card-disjoint stratum warns below.
     min_holdout_records: int = MIN_HOLDOUT_RECORDS
+    #: Processes the pre-training validation sweep runs across. 0 takes the
+    #: CPU count. Processes rather than threads because the cost is
+    #: ``json.loads`` and record construction, both of which hold the GIL.
+    workers: int = 0
     #: Seeds weight init, batch planning and each epoch's shard draw.
     #:
     #: ``None`` draws one from the OS and logs it, because these runs are not

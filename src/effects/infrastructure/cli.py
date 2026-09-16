@@ -1204,6 +1204,15 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--workers", type=int, default=0,
+        help=(
+            "Processes the pre-training validation sweep reads shards across "
+            "(default: CPU count). Each returns the sample its shards "
+            "contributed rather than the shards themselves, so the records "
+            "crossing a process boundary are the few thousand the mixture keeps"
+        ),
+    )
+    parser.add_argument(
         "--seed", type=int, default=None,
         help=(
             "Seeds weight init, batch planning and each epoch's shard draw. "
@@ -1328,6 +1337,7 @@ def train_config_from(args: argparse.Namespace):
         steps_per_epoch=args.steps_per_epoch,
         shards_per_epoch=args.shards_per_epoch,
         seed=args.seed,
+        workers=args.workers,
         reserved_shards=args.reserved_shards,
         epochs=args.epochs,
         patience=args.patience,

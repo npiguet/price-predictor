@@ -824,6 +824,12 @@ loss.
   from the head of its shard list, which is one collection run's. Reading MAY stop as soon as the
   sample is full, and MUST NOT when the split is derived from the shards rather than inherited from a
   manifest — a shard skipped there is a game the checkpoint cannot enumerate.
+- **FR-127b-i**: The sweep MUST read shards across `--workers` processes, and a worker MUST return
+  the digest of its shards — the games it routed to each stratum, its class histogram, and the
+  records its share of the mixture kept — rather than the records it read. Returning whole shards
+  would spend more on pickling them than parallelism saves, and the routing is decidable in the
+  worker because a game never spans two shards. Threads MUST NOT be used for it: the cost is
+  `json.loads` and record construction, both of which hold the GIL.
 - **FR-127c**: Validation MUST batch at `--batch-size` over the shuffled sample rather than one game
   per batch. A batch's class composition decides which fields carry loss at all, so a whole-game
   batch scores a different field set than a training batch and the two numbers are not comparable;

@@ -27,6 +27,7 @@ The loop's shape follows four constraints from the spec:
 from __future__ import annotations
 
 import logging
+import os
 import random
 import time
 from collections import defaultdict
@@ -99,6 +100,7 @@ from effects.infrastructure.effect_model_store import (
     content_hash,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
+from effects.infrastructure.shard_sweep import sweep
 from effects.infrastructure.sidecar_io import SidecarCache
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 from price_predictor.infrastructure.torch_training import clip_per_group
@@ -280,46 +282,54 @@ class TrainingLoop:
         shards = list(self.validation_shards)
         if inherited:
             random.Random(f"{self.seed}:validation").shuffle(shards)
-        split = self.accumulator.split()
-        for position, shard in enumerate(shards, start=1):
-            started = time.perf_counter()
-            records = load_shard(shard)
+        workers = self.config.workers or (os.cpu_count() or 1)
+        started = time.perf_counter()
+        done = 0
+        logger.info(
+            "Sweeping %d reserved shards across %d workers for the validation "
+            "sample.", len(shards), min(workers, max(1, len(shards))),
+        )
+        for digest in sweep(
+            shards,
+            held_out=self.held_out,
+            # Given to the workers when the manifest already decided it, so a
+            # worker routes rather than deriving a split it can only see part of.
+            split=self.accumulator.split() if inherited else None,
+            quota=quota,
+            probe_cap=PROBE_RECORDS,
+            workers=workers,
+        ):
+            done += len(digest.shards)
+            self.present.update(digest.classes)
+            for stratum in ("card-disjoint", "game-disjoint"):
+                for name, records in digest.sample[stratum].items():
+                    room = quota.get(name, 0) - len(pools[stratum][name])
+                    if room > 0:
+                        pools[stratum][name].extend(records[:room])
             if not inherited:
-                self.accumulator.note_shard(records, self.held_out, reserved=True)
-                split = self.accumulator.split()
-            self.present.update(class_counts(records))
-            for record in records:
+                # The derived split is the union of what the workers routed, and
+                # it has to be complete, so this sweep reads every shard.
+                self.accumulator.note_games(
+                    card_disjoint=digest.games["card-disjoint"],
+                    game_disjoint=digest.games["game-disjoint"],
+                )
+            for record in digest.probe:
                 if len(self.probe) < PROBE_RECORDS:
                     self.probe.append(record)
-                if record.game_id in split.card_disjoint_games:
-                    stratum = "card-disjoint"
-                elif record.game_id in split.game_disjoint_games:
-                    stratum = "game-disjoint"
-                else:
-                    continue
-                name = sampling_class(record)
-                bucket = pools[stratum][name]
-                # Held only up to what the mixture will take, so a class the
-                # corpus is thick in cannot grow the resident sample without
-                # bound while a scarce one is what the read is still waiting on.
-                if len(bucket) < quota.get(name, 0):
-                    bucket.append(record)
             logger.info(
-                "validation shard %d/%d %s | %d records over %d games | "
-                "load %.1fs | sampled card-disjoint %d/%d, game-disjoint %d/%d",
-                position, len(shards), shard.name, len(records),
-                len({r.game_id for r in records}), time.perf_counter() - started,
+                "validation sweep %d/%d shards | %.0fs | sampled "
+                "card-disjoint %d/%d, game-disjoint %d/%d",
+                done, len(shards), time.perf_counter() - started,
                 sum(len(v) for v in pools["card-disjoint"].values()),
                 sum(quota.values()),
                 sum(len(v) for v in pools["game-disjoint"].values()),
                 sum(quota.values()),
             )
-            del records
             if inherited and self._sample_is_full(pools):
                 logger.info(
                     "Both validation strata match the training mixture after "
                     "%d of %d shards; the rest are not read.",
-                    position, len(shards),
+                    done, len(shards),
                 )
                 break
 

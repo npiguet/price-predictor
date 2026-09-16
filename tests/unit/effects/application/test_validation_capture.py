@@ -146,11 +146,17 @@ def loop_with_shards(monkeypatch):
         read.append(path)
         return _natural_shard(f"g{int(path.stem.split('.')[0][1:])}")
 
-    monkeypatch.setattr(module, "load_shard", fake_load)
+    # Patched where the sweep worker resolves it, not where the loop imported
+    # it: `digest_shards` imports from `train_effect_model` at call time.
+    from effects.application import train_effect_model as source
+
+    monkeypatch.setattr(source, "load_shard", fake_load)
 
     def build(*, inherited: bool):
         return module.TrainingLoop(
-            TrainEffectModelConfig(),
+            # One worker keeps the sweep in this process, which is what lets the
+            # substituted shard reader above be seen at all.
+            TrainEffectModelConfig(workers=1),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
             inherited=CorpusSplit(
                 held_out_cards=(),
@@ -254,3 +260,97 @@ class TestHowManyShardsAreRead:
             "the sample came off the front of the shard list, which on a "
             "curated corpus is one collection run's shards"
         )
+
+
+class TestTheSweepReturnsSamplesNotShards:
+    """What crosses a process boundary, which is the whole reason for it."""
+
+    def test_a_digest_carries_far_fewer_records_than_it_read(self):
+        """Handing whole shards back would cost more to pickle than to read."""
+        from effects.infrastructure import shard_sweep
+
+        paths = [Path(f"validation/s{i:03d}.jsonl.gz") for i in range(8)]
+        read = {p: _natural_shard(f"g{i}") for i, p in enumerate(paths)}
+        shard_sweep._init_worker(
+            None,
+            CorpusSplit(
+                held_out_cards=(),
+                card_disjoint_games=frozenset(f"g{i}" for i in range(8)),
+                game_disjoint_games=frozenset(),
+            ),
+            {"resolution-effect": 5, "playability-decision": 5},
+            4,
+        )
+        import effects.application.train_effect_model as source
+
+        original = source.load_shard
+        source.load_shard = lambda p: read[p]
+        try:
+            digest = shard_sweep.digest_shards(paths)
+        finally:
+            source.load_shard = original
+
+        kept = sum(
+            len(v)
+            for stratum in digest.sample.values()
+            for v in stratum.values()
+        )
+        assert sum(len(r) for r in read.values()) == 8 * 106
+        assert kept <= 10, f"{kept} records came back from 848 read"
+
+    def test_a_digest_carries_the_game_ids_a_derived_split_needs(self):
+        """The split is accumulated from these rather than from the records."""
+        from effects.infrastructure import shard_sweep
+
+        paths = [Path("validation/s000.jsonl.gz")]
+        shard_sweep._init_worker(
+            None,
+            CorpusSplit(
+                held_out_cards=(),
+                card_disjoint_games=frozenset({"g0"}),
+                game_disjoint_games=frozenset(),
+            ),
+            {}, 0,
+        )
+        import effects.application.train_effect_model as source
+
+        original = source.load_shard
+        source.load_shard = lambda p: _natural_shard("g0")
+        try:
+            digest = shard_sweep.digest_shards(paths)
+        finally:
+            source.load_shard = original
+
+        assert digest.games["card-disjoint"] == {"g0"}
+        assert digest.classes.total() == 106
+
+
+class TestChunking:
+    """How the shard list is split into runs."""
+
+    def test_every_shard_lands_in_exactly_one_run(self):
+        from effects.infrastructure.shard_sweep import chunk
+
+        shards = [Path(f"s{i}") for i in range(97)]
+        runs = chunk(shards, workers=6)
+        flat = [s for run in runs for s in run]
+        assert flat == shards
+
+    def test_a_worker_takes_several_shards_per_run(self):
+        """A process start is paid once per run, not once per shard."""
+        from effects.infrastructure.shard_sweep import chunk
+
+        runs = chunk([Path(f"s{i}") for i in range(1000)], workers=6)
+        assert min(len(run) for run in runs) > 1
+
+    def test_there_are_more_runs_than_workers(self):
+        """So one run of large shards cannot hold the whole sweep up."""
+        from effects.infrastructure.shard_sweep import chunk
+
+        runs = chunk([Path(f"s{i}") for i in range(1000)], workers=6)
+        assert len(runs) > 6
+
+    def test_an_empty_corpus_yields_no_runs(self):
+        from effects.infrastructure.shard_sweep import chunk
+
+        assert chunk([], workers=6) == []
