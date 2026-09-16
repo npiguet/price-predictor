@@ -39,7 +39,7 @@ records that cannot be recollected.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import IO, Any
@@ -680,6 +680,72 @@ def write_shard(path: Path, records: Iterable[EffectRecord]) -> int:
             handle.write(format_record_line(record))
             handle.write("\n")
             written += 1
+    return written
+
+
+def repack_shards(
+    parts: Sequence[Path], out_dir: Path, *, shard_records: int,
+    prefix: str = "shard",
+) -> list[Path]:
+    """Stream ``parts`` into shards of about ``shard_records`` records each.
+
+    A shard closes once it holds at least ``shard_records`` records *and* the
+    next record belongs to a different game, so a game never spans two shards:
+    the evaluator resolves a probe's ``mirror_of`` within its stratum, and the
+    trainer's per-game text sharing wants a game's records together.
+
+    ``shard_records <= 0`` writes one shard per part, which is what the write
+    pass did before repacking existed. Parts are not deleted here.
+    """
+    import gzip
+
+    parts = [Path(p) for p in parts]
+    if not parts:
+        return []
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+
+    def open_next():
+        path = out_dir / f"{prefix}-{len(written) + 1:05d}.jsonl.gz"
+        written.append(path)
+        return gzip.open(path, "wt", encoding="utf-8")
+
+    if shard_records <= 0:
+        for part in parts:
+            with open_next() as handle:
+                for record in read_shard(part):
+                    handle.write(format_record_line(record))
+                    handle.write("\n")
+        return written
+
+    handle = open_next()
+    count = 0
+    last_game: str | None = None
+    threshold_game: str | None = None
+    close_after_game: str | None = None
+    try:
+        for part in parts:
+            for record in read_shard(part):
+                if close_after_game is not None and record.game_id != close_after_game:
+                    handle.close()
+                    handle = open_next()
+                    count = 0
+                    threshold_game = None
+                    close_after_game = None
+                handle.write(format_record_line(record))
+                handle.write("\n")
+                count += 1
+                last_game = record.game_id
+                if threshold_game is None and count >= shard_records:
+                    threshold_game = record.game_id
+                elif threshold_game is not None and record.game_id != threshold_game and close_after_game is None:
+                    close_after_game = record.game_id
+    finally:
+        handle.close()
+    if count == 0:
+        # Only possible when every part was empty: drop the empty file.
+        written.pop().unlink()
     return written
 
 
