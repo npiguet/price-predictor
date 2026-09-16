@@ -1,6 +1,6 @@
 """The training loop itself, separated from the pure functions it drives.
 
-``train_effect_model`` owns the split, the mixture and the schedule — all pure
+``train_effect_model`` owns reading the corpus and the schedule — all pure
 functions of their inputs, all unit-testable with no torch. This module owns the
 part that needs a GPU: assembling batches into tensors, stepping the optimizer,
 and validating between epochs.
@@ -16,10 +16,12 @@ The loop's shape follows four constraints from the spec:
   corpus rather than re-reading its opening slice.
 - **Validation runs on both strata every epoch, and the best checkpoint is
   chosen by the card-disjoint one** — the number that stands in for deployment
-  to an unseen set, rather than in-distribution fit. Its records come from
-  reserved shards the run never trains on, and they are captured once: a
-  validation set redrawn each epoch would make ``--patience`` measure which
-  records got drawn rather than whether the model improved.
+  to an unseen set, rather than in-distribution fit. Its records are the
+  corpus's own fixed samples, read once and never redrawn (FR-089): a
+  validation set the trainer drew for itself would make ``--patience`` measure
+  which records got drawn rather than whether the model improved, and the
+  card-disjoint sample is the build's gate-1 slice rather than whatever
+  arrived first.
 - **The batch groups each game's records together**, so one encode of an ability
   text serves every record in that game that mentions it.
 """
@@ -27,7 +29,6 @@ The loop's shape follows four constraints from the spec:
 from __future__ import annotations
 
 import logging
-import os
 import random
 import time
 from collections import defaultdict
@@ -42,10 +43,10 @@ from effects.application.surface_batching import (
     SurfaceBatcher,
 )
 from effects.application.train_effect_model import (
+    HOLDOUT_MAX_CARRIERS,
+    HOLDOUT_PERMILLE,
     LEARNING_RATE,
     MAX_GRAD_NORM,
-    RANDOM_SEED,
-    VALIDATION_RECORDS_PER_STRATUM,
     WEIGHT_DECAY,
     ContextCache,
     CorpusSplit,
@@ -55,19 +56,15 @@ from effects.application.train_effect_model import (
     SplitAccumulator,
     TrainEffectModelConfig,
     ability_text_of,
+    batches_without_replacement,
     check_holdout,
-    class_counts,
     epoch_shards,
     learning_rate_at,
     load_shard,
-    parse_kind_mix,
-    plan_batch,
     rarity_coverage,
-    renormalize_mix,
     sample_weights,
     sampling_class,
     steps_per_shard,
-    unique_text_resolution_records,
     variant_masks,
     warmup_steps,
 )
@@ -100,7 +97,6 @@ from effects.infrastructure.effect_model_store import (
     content_hash,
 )
 from effects.infrastructure.model_runner import IDENTITY_TABLE_KEY
-from effects.infrastructure.shard_sweep import sweep
 from effects.infrastructure.sidecar_io import SidecarCache
 from price_predictor.infrastructure.tokenizer_store import load_vocabulary
 from price_predictor.infrastructure.torch_training import clip_per_group
@@ -178,19 +174,26 @@ class TrainingLoop:
         *,
         held_out: HeldOutCards,
         inherited: CorpusSplit | None,
-        validation_shards: Sequence[Path],
         training_shards: Sequence[Path],
+        validation_samples: Mapping[str, Path],
+        gate_one_records: int = 0,
         rarity: Mapping[str, int] | None = None,
         corpus_digest: str = "",
     ) -> None:
         self.config = config
         self.held_out = held_out
-        self.validation_shards = list(validation_shards)
         self.training_shards = list(training_shards)
-        #: A curated dataset's corpus-wide ``text -> games`` table (FR-146),
-        #: threaded into every ``sample_weights`` call this run makes. ``None``
-        #: for an ordinary ``--records-dir`` run, which weights by the resident
-        #: shard's own counts instead.
+        #: The corpus's fixed validation samples, one file per stratum
+        #: (FR-089). Read once by ``_load_validation`` and never redrawn: the
+        #: build decided what is in them, so two runs of the same corpus
+        #: select their checkpoints on the same records.
+        self.validation_samples = dict(validation_samples)
+        #: Records in the manifest's gate-1 slice — resolution records whose
+        #: acting text is on no training card. Read rather than counted here
+        #: (FR-088b): the build already sized the slice.
+        self.gate_one_records = gate_one_records
+        #: The curated dataset's corpus-wide ``text -> games`` table (FR-146),
+        #: threaded into every ``sample_weights`` call this run makes.
         self.rarity = rarity
         #: Whether this run has already said how much of a shard the
         #: rarity table names. Once per run rather than once per shard:
@@ -199,8 +202,7 @@ class TrainingLoop:
         #: exactly like a healthy one.
         self._rarity_reported = False
         #: The curated dataset's manifest digest at read time (FR-147), read
-        #: into the checkpoint's provenance by ``_provenance`` below. ``""``
-        #: for an ordinary ``--records-dir`` run, which has no dataset to pin.
+        #: into the checkpoint's provenance by ``_provenance`` below.
         self.corpus_digest = corpus_digest
         self.accumulator = (
             SplitAccumulator.inheriting(inherited) if inherited is not None
@@ -252,136 +254,20 @@ class TrainingLoop:
             roots["variant-scripts"] = Path(self.config.variant_scripts)
         return SidecarCache(roots)
 
-    def _class_quota(self) -> dict[str, int]:
-        """How many records of each class a stratum's sample should hold.
-
-        The **training** mixture, because that is the distribution the loss is
-        optimized against and a validation number drawn from any other one
-        measures a different objective. ``build-corpus`` mixes the training
-        stratum and leaves both validation strata in the proportions collection
-        produced, which is five times the share of ``playability-decision`` and
-        a sixth the share of ``combat``. Scored on that, a validation loss is
-        mostly a reading of one class training spends a tenth of its batches on,
-        and it barely moves when the classes training works hardest on improve.
-        """
-        wanted = parse_kind_mix(self.config.kind_mix)
-        return {
-            name: max(1, round(share * VALIDATION_RECORDS_PER_STRATUM))
-            for name, share in wanted.items()
+    def _load_validation(self) -> None:
+        """Read the corpus's fixed samples; nothing is drawn here (FR-089)."""
+        self.card_disjoint = load_shard(self.validation_samples["card-disjoint"])
+        self.game_disjoint = load_shard(self.validation_samples["game-disjoint"])
+        self.probe = self.card_disjoint[:PROBE_RECORDS] or self.game_disjoint[:PROBE_RECORDS]
+        self.present = {
+            sampling_class(record) for record in (*self.card_disjoint, *self.game_disjoint)
         }
-
-    def _sample_is_full(self, pools: Mapping[str, Mapping[str, list]]) -> bool:
-        """Whether both strata can fill every class the mixture asks for."""
-        quota = self._class_quota()
-        return all(
-            len(pools[stratum].get(name, ())) >= size
-            for stratum in ("card-disjoint", "game-disjoint")
-            for name, size in quota.items()
-        )
-
-    def _capture_validation(self) -> None:
-        """Read reserved shards once and keep a mixture-matched sample of each.
-
-        Captured once rather than redrawn per epoch because ``--patience``
-        compares this epoch's loss against the best so far. A validation set that
-        changed every epoch would make that comparison measure which records got
-        drawn rather than whether the model improved.
-
-        The shards are **shuffled** before reading, and only as many are read as
-        the sample needs. A stratum's shard list is in path order, so its opening
-        shards are one collection run's: taking the sample from the front drew
-        every card-disjoint validation record from the depleted run that sorts
-        first — 0.9% of the stratum, eight games — and then read the remaining
-        1,400 shards to keep nothing from them. Reading stops early only when the
-        split came from a curated dataset's manifest; derived from the shards
-        themselves it has to see every one of them, since a shard it skipped is a
-        game the checkpoint would fail to enumerate.
-        """
-        quota = self._class_quota()
-        pools: dict[str, dict[str, list]] = {
-            "card-disjoint": defaultdict(list),
-            "game-disjoint": defaultdict(list),
-        }
-        inherited = self.accumulator.inherited
-        shards = list(self.validation_shards)
-        if inherited:
-            random.Random(f"{self.seed}:validation").shuffle(shards)
-        workers = self.config.workers or (os.cpu_count() or 1)
-        started = time.perf_counter()
-        done = 0
-        logger.info(
-            "Sweeping %d reserved shards across %d workers for the validation "
-            "sample.", len(shards), min(workers, max(1, len(shards))),
-        )
-        for digest in sweep(
-            shards,
-            held_out=self.held_out,
-            # Given to the workers when the manifest already decided it, so a
-            # worker routes rather than deriving a split it can only see part of.
-            split=self.accumulator.split() if inherited else None,
-            quota=quota,
-            probe_cap=PROBE_RECORDS,
-            workers=workers,
-        ):
-            done += len(digest.shards)
-            self.present.update(digest.classes)
-            for stratum in ("card-disjoint", "game-disjoint"):
-                for name, records in digest.sample[stratum].items():
-                    room = quota.get(name, 0) - len(pools[stratum][name])
-                    if room > 0:
-                        pools[stratum][name].extend(records[:room])
-            if not inherited:
-                # The derived split is the union of what the workers routed, and
-                # it has to be complete, so this sweep reads every shard.
-                self.accumulator.note_games(
-                    card_disjoint=digest.games["card-disjoint"],
-                    game_disjoint=digest.games["game-disjoint"],
-                )
-            for record in digest.probe:
-                if len(self.probe) < PROBE_RECORDS:
-                    self.probe.append(record)
+        for stratum, records in (("card-disjoint", self.card_disjoint),
+                                 ("game-disjoint", self.game_disjoint)):
             logger.info(
-                "validation sweep %d/%d shards | %.0fs | sampled "
-                "card-disjoint %d/%d, game-disjoint %d/%d",
-                done, len(shards), time.perf_counter() - started,
-                sum(len(v) for v in pools["card-disjoint"].values()),
-                sum(quota.values()),
-                sum(len(v) for v in pools["game-disjoint"].values()),
-                sum(quota.values()),
-            )
-            if inherited and self._sample_is_full(pools):
-                logger.info(
-                    "Both validation strata match the training mixture after "
-                    "%d of %d shards; the rest are not read.",
-                    done, len(shards),
-                )
-                break
-
-        for stratum, target in (
-            ("card-disjoint", self.card_disjoint),
-            ("game-disjoint", self.game_disjoint),
-        ):
-            for name in sorted(pools[stratum]):
-                target.extend(pools[stratum][name])
-            # Shuffled, because the batches cut out of this list have to mix
-            # classes the way a training batch does. Collected class by class
-            # and left in that order, every batch would hold one class, and
-            # `active_fields` would score each against only the fields that
-            # class supervises — a different and smaller objective per batch.
-            random.Random(f"{self.seed}:{stratum}").shuffle(target)
-            short = {
-                name: size - len(pools[stratum].get(name, ()))
-                for name, size in quota.items()
-                if len(pools[stratum].get(name, ())) < size
-            }
-            logger.info(
-                "%s validation: %d records over %d games, %d classes%s",
-                stratum, len(target), len({r.game_id for r in target}),
-                len(pools[stratum]),
-                "" if not short else
-                " — short of the mixture on " + ", ".join(
-                    f"{name} by {count}" for name, count in sorted(short.items())
-                ),
+                "%s validation: %d records over %d games, %d classes",
+                stratum, len(records), len({r.game_id for r in records}),
+                len({sampling_class(r) for r in records}),
             )
 
     def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
@@ -473,72 +359,37 @@ class TrainingLoop:
         )
         return loss, parts
 
-    def _pools(self, records: list, sidecars: SidecarCache) -> tuple[dict, dict]:
-        """Sampling pools and rarity weights for one shard's training records.
-
-        Keyed by the acting ability's text (:func:`ability_text_of`), not by
-        ``record_id``: a record id is unique per record, so keying on it would
-        give ``effective_games`` a count of exactly 1 for every key and every
-        record the same weight, silently disabling rarity weighting outright.
-
-        With a curated dataset's rarity table (``self.rarity``), weighting
-        reads it text by text, falling back to this shard's own count for a
-        text the table does not name — a shard collected after the table was
-        built still weights sanely rather than at zero. Without one, weighting
-        counts the games of the shard in hand rather than the games of the
-        whole corpus, which is the one thing reading shard by shard costs: an
-        ability that is rare corpus-wide but appears in several of this
-        shard's games is under-weighted while this shard is resident.
-        Abilities that are common are common in every shard, so they are
-        unaffected either way.
-        """
+    def _weighted(self, records: list, sidecars: SidecarCache) -> list[float]:
+        """Rarity weights for a shard's records, from the manifest's table (FR-086)."""
         def text_of(record: EffectRecord) -> str | None:
             return ability_text_of(record, sidecars, self.surface)
 
         if self.rarity is not None and not self._rarity_reported:
             self._rarity_reported = True
-            found, distinct = rarity_coverage(
-                (text_of(record) for record in records), self.rarity,
-            )
+            found, distinct = rarity_coverage((text_of(r) for r in records), self.rarity)
             share = 100.0 * found / distinct if distinct else 0.0
             report = logger.info if found else logger.warning
             report(
                 "Rarity table names %d of this shard's %d distinct ability "
-                "text(s) (%.1f%%); the rest weigh by this shard's own game "
-                "count. A table naming none of them means the dataset and the "
-                "vocabulary disagree about the encoding surface.",
+                "text(s) (%.1f%%); the rest weigh by this shard's own game count.",
                 found, distinct, share,
             )
-
-        pools: dict[str, list] = defaultdict(list)
-        for record in records:
-            pools[sampling_class(record)].append(record)
-        weights = {
-            name: sample_weights(group, text_of, rarity=self.rarity)
-            for name, group in pools.items()
-        }
-        return dict(pools), weights
+        return sample_weights(records, text_of, rarity=self.rarity)
 
     # ── the run ─────────────────────────────────────────────────────────
 
     def execute(self) -> int:
         logger.info(
-            "Reading %d reserved shards for validation before training starts.",
-            len(self.validation_shards),
+            "Reading the corpus's validation samples: %s.",
+            ", ".join(str(path) for path in self.validation_samples.values()),
         )
-        self._capture_validation()
+        self._load_validation()
         if not self.probe:
             logger.error(
-                "The %d reserved shards hold no records, so there is nothing to "
-                "measure feature widths from.", len(self.validation_shards),
+                "The corpus's validation samples hold no records, so there is "
+                "nothing to measure feature widths from.",
             )
             return 1
-        if not self.card_disjoint and not self.game_disjoint:
-            logger.warning(
-                "No validation records in the reserved shards: every game there "
-                "is a training game. Early stopping has nothing to read, so the "
-                "run will train for all %d epochs.", self.config.epochs,
-            )
 
         logger.info(
             "Seed %d (%s), %d of %d training shards per epoch, drawn across "
@@ -549,28 +400,19 @@ class TrainingLoop:
             min(self.config.shards_per_epoch, len(self.training_shards)),
             len(self.training_shards),
         )
-        mix = renormalize_mix(parse_kind_mix(self.config.kind_mix), self.present)
         logger.info("Classes present: %s", ", ".join(sorted(self.present)))
-        logger.info(
-            "Sampling mixture over the classes present: %s",
-            ", ".join(f"{name} {share:.0%}" for name, share in sorted(mix.items())),
-        )
 
         tokenizer = self._build_tokenizer()
         sidecars = self._build_sidecars()
         widths = self._feature_widths(self.probe)
 
-        # Sized after the sidecars exist, because an acting line's text is what
-        # says whether a record is in gate 1's slice. An empty stratum stops the
-        # run: left alone it trains for its full patience, validates `nan` every
-        # epoch, and saves no checkpoint at all.
-        text_of = self._batcher(tokenizer, sidecars, widths).text_of
+        # The gate-1 slice is the build's count, not this run's (FR-088b). An
+        # empty card-disjoint sample stops the run: left alone it trains for
+        # its full patience, validates `nan` every epoch, and saves no
+        # checkpoint at all.
         warning = check_holdout(
             card_disjoint_records=len(self.card_disjoint),
-            unique_text_records=unique_text_resolution_records(
-                self.card_disjoint, self.held_out.texts, text_of=text_of,
-            ),
-            minimum=self.config.min_holdout_records,
+            unique_text_records=self.gate_one_records,
         )
         if warning:
             logger.warning("%s", warning)
@@ -634,7 +476,7 @@ class TrainingLoop:
                 if budget <= 0:
                     continue
                 step, taken = self._train_on_shard(
-                    shard, budget, mix=mix, encoder=encoder, model=model,
+                    shard, budget, encoder=encoder, model=model,
                     tokenizer=tokenizer, sidecars=sidecars, widths=widths,
                     optimizer=optimizer, warmup=warmup, running=running,
                     step=step, taken=taken, epoch=epoch, position=position,
@@ -699,7 +541,7 @@ class TrainingLoop:
         return 0
 
     def _train_on_shard(
-        self, shard, budget, *, mix, encoder, model, tokenizer, sidecars,
+        self, shard, budget, *, encoder, model, tokenizer, sidecars,
         widths, optimizer, warmup, running, step, taken, epoch, position, of,
     ) -> tuple[int, int]:
         """Load one shard, take ``budget`` steps on it, and let it go.
@@ -726,7 +568,10 @@ class TrainingLoop:
             )
             return step, taken
 
-        pools, weights = self._pools(training, sidecars)
+        weights = self._weighted(training, sidecars)
+        batches = batches_without_replacement(
+            training, weights, batch_size=self.config.batch_size, rng=self.rng,
+        )
         # Accumulated on the device like the epoch's own running loss, and read
         # back once per progress line rather than once per step.
         # Accumulated on the device like the epoch's own running loss, and read
@@ -741,10 +586,7 @@ class TrainingLoop:
                 group["lr"] = learning_rate = learning_rate_at(
                     step, warmup=warmup,
                 )
-            plan = plan_batch(
-                pools, weights, mix,
-                batch_size=self.config.batch_size, rng=self.rng,
-            )
+            plan = next(batches)
             # Decided before the forward pass: the decomposition has to be
             # asked for while the loss is being computed, not after.
             #
@@ -788,7 +630,7 @@ class TrainingLoop:
             learning_rate, budget / trained if trained > 0 else float("nan"),
             loaded, trained, _format_norms(norms), _format_parts(parts),
         )
-        del training, pools, weights
+        del training, weights, batches
         return step, taken
 
     def _validate(
@@ -874,8 +716,11 @@ class TrainingLoop:
                 Path(self.config.keyword_definitions)
             ),
             withheld_keyword=self.config.withhold_keyword,
-            holdout_permille=self.config.holdout_permille,
-            holdout_max_carriers=self.config.holdout_max_carriers,
+            # The corpus's own, not this run's: `build-corpus` composed the
+            # holdout and the manifest records it. Kept on the checkpoint so
+            # `holdout-cards` and the evaluator still read one number.
+            holdout_permille=HOLDOUT_PERMILLE,
+            holdout_max_carriers=HOLDOUT_MAX_CARRIERS,
             corpus_path=self.config.corpus or "",
             corpus_digest=self.corpus_digest,
         )

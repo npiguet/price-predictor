@@ -21,9 +21,7 @@ from effects.application.train_effect_model import (
     class_counts,
     effective_games,
     parse_kind_mix,
-    plan_batch,
     rarity_weights,
-    renormalize_mix,
     sample_weights,
     sampling_class,
 )
@@ -138,33 +136,14 @@ class TestSamplingClass:
 
 
 class TestMixture:
+    """The mixture is now ``build-corpus --class-mix``: it sets the on-disk
+    proportions of the training stratum, and the trainer samples what the
+    corpus holds rather than re-mixing per batch (FR-086)."""
+
     def test_the_default_mixture_is_the_eight_class_one(self):
         assert sum(DEFAULT_KIND_MIX.values()) == pytest.approx(1.0)
         assert DEFAULT_KIND_MIX[CLASS_RESOLUTION_EFFECT] == 0.30
         assert DEFAULT_KIND_MIX[CLASS_PLAYABILITY_LEGALITY] == 0.05
-
-    def test_it_renormalizes_over_the_classes_present(self):
-        """A stage-one corpus has three of eight."""
-        stage_one = {CLASS_RESOLUTION_EFFECT, CLASS_RESOLUTION_COST, CLASS_COMBAT}
-        mix = renormalize_mix(DEFAULT_KIND_MIX, stage_one)
-        assert set(mix) == stage_one
-        assert sum(mix.values()) == pytest.approx(1.0)
-
-    def test_renormalizing_keeps_the_relative_shares(self):
-        stage_one = {CLASS_RESOLUTION_EFFECT, CLASS_COMBAT}
-        mix = renormalize_mix(DEFAULT_KIND_MIX, stage_one)
-        assert mix[CLASS_RESOLUTION_EFFECT] / mix[CLASS_COMBAT] == pytest.approx(
-            DEFAULT_KIND_MIX[CLASS_RESOLUTION_EFFECT]
-            / DEFAULT_KIND_MIX[CLASS_COMBAT]
-        )
-
-    def test_a_corpus_with_no_scoring_class_is_rejected(self):
-        with pytest.raises(ValueError, match="no sampling class"):
-            renormalize_mix(DEFAULT_KIND_MIX, set())
-
-    def test_an_absent_class_takes_no_share(self):
-        mix = renormalize_mix(DEFAULT_KIND_MIX, {CLASS_COMBAT})
-        assert mix == {CLASS_COMBAT: 1.0}
 
     def test_the_flag_parses_as_class_equals_share(self):
         mix = parse_kind_mix(f"{CLASS_COMBAT}=0.5,{CLASS_TRIGGER}=0.5")
@@ -265,7 +244,7 @@ class TestSampleWeightsRarityTable:
 
 
 class TestPoolsKeyByAbilityText:
-    """``TrainingLoop._pools`` must key rarity by ability text, not record id.
+    """``TrainingLoop._weighted`` must key rarity by ability text, not record id.
 
     A ``record_id`` is unique per record, so keying on it gives
     ``effective_games`` a count of exactly 1 for every key and every record in
@@ -309,13 +288,12 @@ class TestPoolsKeyByAbilityText:
         loop = TrainingLoop(
             TrainEffectModelConfig(),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, validation_shards=[], training_shards=[],
+            inherited=None, training_shards=[], validation_samples={},
         )
 
-        _, weights = loop._pools([*common_records, *rare_records], sidecars)
+        weights = loop._weighted([*common_records, *rare_records], sidecars)
 
-        class_weights = weights[CLASS_RESOLUTION_EFFECT]
-        assert class_weights[-1] > class_weights[0]
+        assert weights[-1] > weights[0]
 
 
 class TestProvenanceRecordsTheCorpus:
@@ -332,7 +310,7 @@ class TestProvenanceRecordsTheCorpus:
         loop = TrainingLoop(
             TrainEffectModelConfig(corpus="output/effects/corpus"),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, validation_shards=[], training_shards=[],
+            inherited=None, training_shards=[], validation_samples={},
             corpus_digest="abc123",
         )
 
@@ -341,8 +319,8 @@ class TestProvenanceRecordsTheCorpus:
         assert provenance.corpus_path == "output/effects/corpus"
         assert provenance.corpus_digest == "abc123"
 
-    def test_an_ordinary_run_records_no_corpus(self):
-        """A ``--records-dir`` run has no curated dataset to pin."""
+    def test_a_run_without_a_digest_records_no_corpus(self):
+        """Nothing is pinned until a manifest has been read."""
         from effects.application.train_effect_model import (
             HeldOutCards,
             TrainEffectModelConfig,
@@ -352,74 +330,13 @@ class TestProvenanceRecordsTheCorpus:
         loop = TrainingLoop(
             TrainEffectModelConfig(),
             held_out=HeldOutCards(names=frozenset(), script_files=frozenset()),
-            inherited=None, validation_shards=[], training_shards=[],
+            inherited=None, training_shards=[], validation_samples={},
         )
 
         provenance = loop._provenance()
 
         assert provenance.corpus_path == ""
         assert provenance.corpus_digest == ""
-
-
-class TestBatchPlanning:
-    def _pools(self):
-        return {
-            CLASS_RESOLUTION_EFFECT: [
-                _record(RecordKind.RESOLUTION, game_id=f"g{i}", record_id=f"g{i}.1")
-                for i in range(4)
-            ],
-            CLASS_COMBAT: [
-                _record(RecordKind.COMBAT, game_id=f"h{i}", record_id=f"h{i}.1")
-                for i in range(4)
-            ],
-        }
-
-    def test_a_batch_draws_the_requested_number_of_records(self):
-        pools = self._pools()
-        mix = renormalize_mix(DEFAULT_KIND_MIX, pools)
-        plan = plan_batch(pools, {}, mix, batch_size=16, rng=random.Random(0))
-        assert len(plan.records) == 16
-
-    def test_records_are_grouped_by_the_game_they_came_from(self):
-        """Grouping is what lets one encode of a text serve many records."""
-        pools = self._pools()
-        mix = renormalize_mix(DEFAULT_KIND_MIX, pools)
-        plan = plan_batch(pools, {}, mix, batch_size=16, rng=random.Random(0))
-        for game_id, group in plan.by_game.items():
-            assert all(record.game_id == game_id for record in group)
-
-    def test_the_mixture_steers_which_classes_are_drawn(self):
-        pools = self._pools()
-        heavy = plan_batch(
-            pools, {}, {CLASS_COMBAT: 1.0}, batch_size=20, rng=random.Random(0),
-        )
-        assert {r.kind for r in heavy.records} == {RecordKind.COMBAT}
-
-    def test_an_empty_class_is_skipped_rather_than_stalling_the_draw(self):
-        pools = {CLASS_COMBAT: self._pools()[CLASS_COMBAT], CLASS_TRIGGER: []}
-        plan = plan_batch(
-            pools, {}, {CLASS_COMBAT: 0.5, CLASS_TRIGGER: 0.5},
-            batch_size=10, rng=random.Random(0),
-        )
-        assert len(plan.records) == 10
-
-    def test_an_empty_mixture_draws_nothing(self):
-        assert plan_batch({}, {}, {}, batch_size=4, rng=random.Random(0)).records == []
-
-    def test_a_batch_is_reproducible_under_a_seeded_rng(self):
-        pools = self._pools()
-        mix = renormalize_mix(DEFAULT_KIND_MIX, pools)
-        first = plan_batch(pools, {}, mix, batch_size=12, rng=random.Random(5))
-        second = plan_batch(pools, {}, mix, batch_size=12, rng=random.Random(5))
-        assert [r.record_id for r in first.records] == [
-            r.record_id for r in second.records
-        ]
-
-    def test_unique_ability_texts_deduplicates_across_the_batch(self):
-        pools = self._pools()
-        mix = renormalize_mix(DEFAULT_KIND_MIX, pools)
-        plan = plan_batch(pools, {}, mix, batch_size=16, rng=random.Random(0))
-        assert plan.unique_ability_texts(lambda r: "bolt") == {"bolt"}
 
 
 class TestBatchesWithoutReplacement:
