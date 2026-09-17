@@ -376,8 +376,8 @@ loss.
   into the same `--effect-records` directory, differing only in `--exclude-cards`. A depleted run
   opens pools with every held-out card removed; a full-strength run opens them normally and supplies
   the card-disjoint stratum.
-  No record field marks which run a shard came from — the split is derived from the records, as
-  everywhere else (FR-088, FR-125).
+  No record field marks which run a shard came from — the split is decided once by `build-corpus`
+  (FR-137) and recorded in its manifest; the trainer reads it and derives nothing.
 - **FR-131**: `python -m effects holdout-cards --out PATH` MUST write the depletion list: one Forge
   canonical card name per line, every card under `--cards-folder` carrying a held-out text. It MUST
   select texts by the same rule and the same flags as FR-088, and MUST report the card count and the
@@ -609,12 +609,14 @@ loss.
   condition and exiting non-zero. An empty holdout MUST be refused before the survey pass, naming each
   `--cards-folder` path tried and whether it existed; an empty card-disjoint stratum MUST be refused
   after it and before anything is written.
-- **FR-146**: `train-effect-model --corpus DIR` MUST read a curated dataset instead of the raw
-  corpus, taking the split, the rarity table and both validation strata from its manifest. It MUST
-  refuse `--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and
-  `--holdout-max-carriers` alongside it — each names a decision the manifest already records, and two
-  spellings of one decision is a disagreement nothing would report. FR-125 still binds: a curated
-  corpus is read one shard at a time like any other.
+- **FR-146**: `--corpus DIR` MUST be the trainer's only input and MUST be required: `train-effect-model`
+  reads a curated dataset rather than a raw shard corpus, taking the split, the holdout rule and the
+  rarity table from its manifest rather than computing any of them. `--records-dir`, `--reserved-shards`,
+  `--holdout-permille` and `--holdout-max-carriers` are no longer flags of the trainer's — each named a
+  decision the manifest now carries instead. `--split-from` MAY still be passed on a variant run, but
+  only for compatibility with an older invocation: it inherits nothing beyond what the manifest already
+  fixes, and the split it would otherwise compute is never read. The curated corpus is still read one
+  training shard at a time, never whole.
 - **FR-147**: A checkpoint trained with `--corpus` MUST record the manifest's path and digest
   alongside its split (FR-090), and `evaluate-effect-model` MUST fail fast when the dataset it reads
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
@@ -668,9 +670,10 @@ loss.
   it; an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below
   `--holdout-permille` (default 20). Membership MUST depend on the text's own bytes alone, so adding
   cards never reassigns an existing text. A card is held-out when any of its lines carries a held-out
-  text. Training MUST exclude every game with a record naming a held-out card, in every shard the run
-  reads and not only the reserved ones. Game-disjoint validation MUST be the games of the reserved
-  shards (FR-125) that name no held-out card.
+  text. Training MUST exclude every game with a record naming a held-out card — decided once, by
+  `build-corpus`, over the whole raw corpus, rather than computed live by the trainer. Game-disjoint
+  validation MUST be the fixed sample `validation/samples/game-disjoint.jsonl.gz`, which `build-corpus`
+  draws once from the game-disjoint stratum (FR-135) and the trainer reads whole.
 - **FR-088a**: The hash MUST be stable across processes, machines and interpreter versions. The
   salted built-in `hash()` over `str` MUST NOT be used.
 - **FR-088b**: `train-effect-model` MUST report, before its first epoch, the held-out text count, the
