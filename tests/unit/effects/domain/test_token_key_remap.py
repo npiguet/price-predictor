@@ -7,10 +7,12 @@ from pathlib import Path
 import pytest
 
 from effects.domain.token_key_remap import (
+    RemapCounts,
     TokenKeyRemapper,
     TokenScriptFacts,
     load_token_script_facts,
     parse_token_script,
+    remap_record_dict,
 )
 
 GOBLIN = (
@@ -155,3 +157,88 @@ def test_a_stem_without_a_converted_sidecar_is_never_chosen(remapper):
 def test_a_mismatching_entity_resolves_nothing(remapper):
     elf = {"colors": ["G"], "types": ["creature"], "subtypes": ["elf"], "pt": {"base": [1, 1]}}
     assert remapper.resolve("goblin token", entity=elf, printed_keys=[_key("spell")]) is None
+
+
+def _prov_key(script_file: str, kind: str = "spell", index: int = 0) -> dict:
+    """A provenance-key dict naming ``script_file``, for the raw-JSON tests below."""
+    return {"script_file": script_file, "face": 0, "trait_kind": kind, "index_within_kind": index}
+
+
+def _record(entities, ability=None, extra=None) -> dict:
+    return {
+        "record_id": "r1", "kind": "resolution", "ability": ability or [],
+        "state": {"entities": entities, "players": []}, "payload": extra or {},
+    }
+
+
+def _goblin_entity() -> dict:
+    # Every token entity carries a spell key at index 0 for its own cast spell
+    # (Task 1's resolve() expects script spell lines + 1), so a printed list
+    # that only ever shows a keyword key would resolve to nothing.
+    script_file = "cardsfolder/g/goblin_token.txt"
+    return {
+        "id": "E1", "name": "Goblin Token", "colors": ["R"], "types": ["creature"],
+        "subtypes": ["goblin"], "pt": {"base": [1, 1]},
+        "printed": [_prov_key(script_file, "spell"), _prov_key(script_file, "keyword")],
+        "granted_attached": [], "granted_temporary": {"abilities": []},
+    }
+
+
+def test_entity_keys_are_rewritten_with_the_entitys_context(remapper):
+    data = _record([_goblin_entity()])
+    counts = RemapCounts()
+    remap_record_dict(data, remapper, counts)
+    printed = data["state"]["entities"][0]["printed"]
+    assert printed[0]["trait_kind"] == "spell"
+    assert printed[0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert printed[1]["trait_kind"] == "keyword"
+    assert printed[1]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert counts.remapped == 2 and not counts.ambiguous
+
+
+def test_the_acting_ability_reuses_the_entitys_resolution(remapper):
+    ability = [_prov_key("cardsfolder/g/goblin_token.txt", "keyword")]
+    data = _record([_goblin_entity()], ability=ability)
+    remap_record_dict(data, remapper, RemapCounts())
+    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+
+
+def test_a_key_with_no_carrying_entity_resolves_by_name_only(remapper):
+    data = _record([], ability=[_prov_key("cardsfolder/f/food_token.txt")])
+    counts = RemapCounts()
+    remap_record_dict(data, remapper, counts)
+    assert data["ability"][0]["script_file"] == "tokenscripts/c_a_food_sac.txt"
+    data = _record([], ability=[_prov_key("cardsfolder/g/goblin_token.txt")])
+    remap_record_dict(data, remapper, counts)
+    assert data["ability"][0]["script_file"] == "cardsfolder/g/goblin_token.txt"
+    assert counts.ambiguous == {"goblin_token": 1}
+
+
+def test_keys_inside_payloads_are_reached(remapper):
+    payload = {
+        "candidates": [
+            {"ability": [_prov_key("cardsfolder/f/food_token.txt")], "responsible_static": []},
+        ],
+    }
+    data = _record([], extra=payload)
+    remap_record_dict(data, remapper, RemapCounts())
+    assert data["payload"]["candidates"][0]["ability"][0]["script_file"] == (
+        "tokenscripts/c_a_food_sac.txt"
+    )
+
+
+def test_a_real_card_key_is_untouched(remapper):
+    data = _record([], ability=[_prov_key("cardsfolder/f/food_chain.txt")])
+    counts = RemapCounts()
+    remap_record_dict(data, remapper, counts)
+    assert data["ability"][0]["script_file"] == "cardsfolder/f/food_chain.txt"
+    assert counts.remapped == 0 and not counts.ambiguous
+
+
+def test_counts_merge():
+    a, b = RemapCounts(), RemapCounts()
+    a.remapped, b.remapped = 2, 3
+    a.ambiguous["x"] += 1
+    b.ambiguous["x"] += 2
+    a.merge(b)
+    assert a.remapped == 5 and a.ambiguous == {"x": 3}

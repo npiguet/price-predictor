@@ -191,3 +191,131 @@ class TokenKeyRemapper:
             if {**f.trait_counts, "spell": f.trait_counts["spell"] + 1} == counts
         ]
         return self._settle(candidates)
+
+
+@dataclass
+class RemapCounts:
+    """How many old token keys one pass over the corpus touched.
+
+    ``ambiguous`` counts a key that stayed as it was, keyed by the old
+    script's filename stem (``goblin_token``), so a build's log can name
+    which token names most need a converted sidecar or richer context to
+    settle.
+    """
+
+    remapped: int = 0
+    ambiguous: Counter = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.ambiguous is None:
+            self.ambiguous = Counter()
+
+    def merge(self, other: "RemapCounts") -> None:
+        """Fold another counts (e.g. another shard's) into this one."""
+        self.remapped += other.remapped
+        self.ambiguous.update(other.ambiguous)
+
+
+_KEY_FIELDS = {"script_file", "face", "trait_kind", "index_within_kind"}
+
+
+def _is_key(obj: object) -> bool:
+    """Whether ``obj`` is a provenance-key dict rather than a plain container."""
+    return isinstance(obj, Mapping) and _KEY_FIELDS <= obj.keys()
+
+
+def _stem_of(script_file: str) -> str:
+    return script_file.rsplit("/", 1)[-1][:-4]
+
+
+def _rewrite(key: dict, stem: str) -> None:
+    key["script_file"] = f"tokenscripts/{stem}.txt"
+
+
+def _walk(obj, visit) -> None:
+    """Call ``visit`` on every provenance-key dict below ``obj``.
+
+    Stops descending into a dict once it is itself a key dict, so a key's
+    own fields never get mistaken for nested containers holding more keys.
+    """
+    if isinstance(obj, dict):
+        if _is_key(obj):
+            visit(obj)
+            return
+        for value in obj.values():
+            _walk(value, visit)
+    elif isinstance(obj, list):
+        for item in obj:
+            _walk(item, visit)
+
+
+def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCounts) -> None:
+    """Rewrite every old token key in one record's raw JSON, in place.
+
+    Entities resolve first, each against its own colours, types, P/T and
+    printed-key counts (the contract's steps 2-3). Every other key list in
+    the record -- the acting ``ability``, playability candidates,
+    ``responsible_static``, ``replaced_by``, and anything else under a
+    non-``state`` field -- then reuses whichever stem an entity already
+    found for the same old ``script_file`` in this record, falling back to
+    resolving by name alone (step 1) when no entity carried it. A key that
+    stays ambiguous is counted once, keyed by the old script's stem.
+    """
+    memo: dict[str, str | None] = {}
+
+    def resolve_for_entity(entity: dict, script_file: str) -> str | None:
+        name = remapper.is_old_token_key(script_file)
+        if name is None:
+            return None
+        if script_file not in memo:
+            memo[script_file] = remapper.resolve(
+                name, entity=entity, printed_keys=entity.get("printed") or (),
+            )
+        return memo[script_file]
+
+    state = data.get("state") or {}
+    entities = state.get("entities") or ()
+
+    for entity in entities:
+        def visit_entity_key(key: dict, entity: dict = entity) -> None:
+            stem = resolve_for_entity(entity, key["script_file"])
+            if stem is not None:
+                _rewrite(key, stem)
+                counts.remapped += 1
+
+        for field in ("printed", "granted_attached"):
+            _walk(entity.get(field) or [], visit_entity_key)
+        _walk((entity.get("granted_temporary") or {}).get("abilities") or [], visit_entity_key)
+
+    def visit_other(key: dict) -> None:
+        script_file = key["script_file"]
+        name = remapper.is_old_token_key(script_file)
+        if name is None:
+            return
+        if script_file in memo:
+            stem = memo[script_file]
+        else:
+            stem = memo[script_file] = remapper.resolve(name)
+        if stem is None:
+            counts.ambiguous[_stem_of(script_file)] += 1
+            return
+        _rewrite(key, stem)
+        counts.remapped += 1
+
+    for field, value in data.items():
+        if field == "state":
+            continue
+        _walk(value, visit_other)
+
+    # Entity keys that stayed ambiguous are counted once per key, here
+    # rather than inside visit_entity_key above: a rewritten key's
+    # script_file no longer looks like an old key, so this second pass
+    # over the same fields only ever finds the ones that never resolved.
+    for entity in entities:
+        def count_left(key: dict) -> None:
+            if remapper.is_old_token_key(key["script_file"]) is not None:
+                counts.ambiguous[_stem_of(key["script_file"])] += 1
+
+        for field in ("printed", "granted_attached"):
+            _walk(entity.get(field) or [], count_left)
+        _walk((entity.get("granted_temporary") or {}).get("abilities") or [], count_left)
