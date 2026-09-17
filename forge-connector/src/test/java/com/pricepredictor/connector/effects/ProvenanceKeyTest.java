@@ -321,6 +321,23 @@ class ProvenanceKeyTest {
         assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(copy));
     }
 
+    /**
+     * A token copy of a printed card: {@code isToken()} is true (the copier
+     * sets {@code GamePieceType.TOKEN} on every copy it makes, real permanent
+     * or not) but the image key is the printed card's, not a {@code t:} key.
+     * {@code ImageKeys.getTokenImageName} rejects a non-token key outright, so
+     * this must still reach the cardsfolder path — the case the class doc for
+     * {@code tokenScriptStem} names explicitly.
+     */
+    @Test
+    void aTokenCopyOfAPrintedCardStillKeysIntoTheCardTree() {
+        Card copy = TestCards.copiedToken("c_a_food_sac");
+        copy.setName("Lightning Bolt");
+        copy.setImageKey(card("Lightning Bolt").getImageKey());
+
+        assertEquals("cardsfolder/l/lightning_bolt.txt", ProvenanceKey.scriptFileOf(copy));
+    }
+
     // ── engine-built command-zone cards ─────────────────────────────────
 
     /**
