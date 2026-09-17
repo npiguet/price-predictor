@@ -193,6 +193,36 @@ class ProvenanceSidecarTest {
         }
     }
 
+    // ── the synthetic land mana line claims its runtime abilities ────────
+
+    @Test
+    void aBasicLandsManaLineClaimsTheRuntimeManaAbility() {
+        // Forge builds the mana ability from the land type at runtime; the
+        // converter renders it as one canonical line. Before this claim the
+        // line had no key and the runtime ability sat in dropped_keys, so
+        // every mana activation record joined to nothing.
+        Converted mountain = convert("m/mountain.txt");
+        List<ProvenanceSidecar.Line> mana = mountain.sidecar().lines().stream()
+                .filter(line -> line.lineKind().equals("activated")).toList();
+        assertEquals(1, mana.size(), mountain.lines().toString());
+        List<ProvenanceKey> keys = mana.get(0).provenance();
+        assertEquals(1, keys.size(), keys.toString());
+        assertEquals(ProvenanceKey.KIND_SPELL, keys.get(0).traitKind());
+        assertTrue(keys.get(0).indexWithinKind() >= 1, keys.toString());
+        assertEquals(1, mountain.sidecar().droppedKeys().size(),
+                mountain.sidecar().droppedKeys().toString());
+        assertEquals(0, mountain.sidecar().droppedKeys().get(0).indexWithinKind());
+    }
+
+    @Test
+    void aDualLandsManaLineClaimsBothRuntimeManaAbilities() {
+        Converted tundra = convert("t/tundra.txt");
+        List<ProvenanceSidecar.Line> mana = tundra.sidecar().lines().stream()
+                .filter(line -> line.lineKind().equals("activated")).toList();
+        assertEquals(1, mana.size(), tundra.lines().toString());
+        assertEquals(2, mana.get(0).provenance().size(), mana.get(0).provenance().toString());
+    }
+
     // ── the script surface and role spans ───────────────────────────────
 
     @Test

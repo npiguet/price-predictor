@@ -268,6 +268,13 @@ public class RulesParser {
 
         // --- Spell abilities — route to variants ---
         boolean isAlternateFace = face.getType().hasSubtype("Adventure") || face.getType().hasSubtype("Omen");
+        // Runtime mana abilities of a basic-typed face, skipped in the loop
+        // and rendered once by the synthetic block below. Kept with their
+        // keys so the synthetic line can claim them: without the claim the
+        // land's mana ability is a dropped key, and every activation record
+        // that names it joins to nothing.
+        List<SpellAbility> landManaAbilities = new ArrayList<>();
+        List<ProvenanceKey> landManaKeys = new ArrayList<>();
         int spellIndex = -1;
         for (SpellAbility sa : card.getSpellAbilities()) {
             spellIndex++;
@@ -297,7 +304,11 @@ public class RulesParser {
                 // With FModel initialization, CardFactory now produces fully-resolved
                 // Card objects that include these mana abilities in SpellAbilities,
                 // so without this guard they would be double-counted.
-                if (sa.isManaAbility() && buildLandManaDescription(face) != null) continue;
+                if (sa.isManaAbility() && buildLandManaDescription(face) != null) {
+                    landManaAbilities.add(sa);
+                    landManaKeys.add(spellKey);
+                    continue;
+                }
                 addIfNotNull(abilities, ActivatedAbilityEntry.of(sa));
             } else if (sa.isSpell()) {
                 // Skip SAs that are handled by the triggers or replacements loops.
@@ -367,7 +378,13 @@ public class RulesParser {
         // --- Synthetic land mana ---
         String landDesc = buildLandManaDescription(face);
         if (landDesc != null) {
-            abilities.add(new TextAbility(AbilityType.ACTIVATED, landDesc));
+            TextAbility landMana = new TextAbility(AbilityType.ACTIVATED, landDesc);
+            abilities.add(landMana);
+            if (recorder != null) {
+                for (int i = 0; i < landManaAbilities.size(); i++) {
+                    recorder.attribute(landMana, landManaKeys.get(i), landManaAbilities.get(i));
+                }
+            }
         }
 
         // --- Post-processing ---
