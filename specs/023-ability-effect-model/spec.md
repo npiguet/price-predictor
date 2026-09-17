@@ -652,15 +652,27 @@ loss.
   (`ProvenanceKey.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
 - **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
   does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
-  the stem by name, then by the carrying entity's colours, types and P/T, then by its printed-key
-  counts per trait kind — counting one more `spell` key than the script declares, for the
-  permanent's own cast spell — and MUST leave a key untouched when more than one script remains. A
-  key under `state.entities` (`printed`, `granted_attached`, `granted_temporary`) MUST resolve per
-  entity, against that entity's own characteristics; every other key site (the acting `ability`,
-  playability candidates, `responsible_static`, `replaced_by`) MUST be rewritten only when every
-  entity in the record that carried the same old key agrees on one stem, and MUST otherwise resolve
-  by name alone or stay untouched. It MUST record `token_keys_remapped`, `token_keys_ambiguous` and
-  `forge_tokenscripts` in the manifest. `--no-remap-token-keys` turns the step off.
+  the stem by name, then by the carrying entity's colours, core types, supertypes, subtypes and P/T,
+  and MUST leave a key untouched when more than one script remains. There is no third step: a
+  snapshot's `printed` list carries a token's **spell** abilities only — a `K:`, `T:`, `S:` or `R:`
+  line produces no printed key at all — so two same-stat scripts of one name that differ only by a
+  keyword or an ability are indistinguishable from a record and MUST stay ambiguous rather than be
+  settled by a count the snapshot never carried. A key under `state.entities` (`printed`,
+  `granted_attached`, `granted_temporary`) MUST resolve per entity, against that entity's own
+  characteristics; every other key site (the acting `ability`, playability candidates,
+  `responsible_static`, `replaced_by`) MUST be rewritten only when every entity in the record that
+  carried the same old key agrees on one stem, and MUST otherwise resolve by name alone or stay
+  untouched. It MUST record `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts`
+  in the manifest, the first two counted on the records the build **writes**.
+  `--no-remap-token-keys` turns the step off.
+  - **What the remap corrects.** Every old token key in the corpus is `(spell, 0)`, the permanent's
+    own cast-spell trait, which is a `dropped_keys` entry in all but a handful of token sidecars: it
+    maps to no ability text before or after the rewrite. The token's ability lines were already
+    keyed under `tokenscripts/<stem>.txt` by the old collector and resolve as they are. The remap is
+    therefore an archival correction of a contentless key, not a recovery of lost ability text.
+  - **Known limitation.** Step 2 compares the snapshot's **in-game** colours, types and P/T, so a
+    token a continuous effect has altered can match a different same-name script than the one it was
+    created from.
 
 #### Training
 
