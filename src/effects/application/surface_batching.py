@@ -85,8 +85,48 @@ class SurfaceBatcher:
         self.context_dropout = context_dropout
         self.rng = rng or random.Random(0)
         self.identity_table = identity_table
+        #: ``key -> (text, line)``, the join's answer for one key on this
+        #: run's surface. ``SidecarCache`` already reads each card once, but
+        #: the *key* is still resolved three or four times per batch — once by
+        #: ``batch_texts`` and again by ``has_line`` and ``e_for`` for every
+        #: record the key's entity appears in — and each of those walks the
+        #: sidecar's lines and re-renders the text. The answer depends only on
+        #: the key and on ``self.surface``, both fixed for the batcher's life,
+        #: so it is computed once. (Swapping ``self.sidecars`` after the fact
+        #: would serve stale answers; nothing but the tests does that.)
+        self._text_by_key: dict[object, tuple[str | None, object]] = {}
 
     # ── the encoding text ───────────────────────────────────────────────
+
+    def _resolve(self, key) -> tuple[str | None, object]:
+        """``(text, line)`` for one key, memoised; see ``_text_by_key``.
+
+        The mismatch ``KeyError`` is deliberately not cached — it is raised
+        from inside the ``try`` and nothing is stored — because a failure
+        remembered as "no text" is exactly the fail-loudly case going quiet.
+        """
+        cached = self._text_by_key.get(key)
+        if cached is not None:
+            return cached
+        try:
+            line = self.sidecars.line_for(key)
+        except UnconfiguredTree:
+            line = None
+        if line is None:
+            resolved: tuple[str | None, object] = (None, None)
+        else:
+            text = encoding_text(
+                line, self.sidecars.prose_for(key), self.surface,
+            )
+            resolved = (
+                text or (
+                    f"{key.script_file}:{key.trait_kind}:"
+                    f"{key.index_within_kind}"
+                ),
+                line,
+            )
+        self._text_by_key[key] = resolved
+        return resolved
 
     def text_of(self, key) -> str | None:
         """The text one ability key is encoded from, on this run's surface.
@@ -98,16 +138,7 @@ class SurfaceBatcher:
         A key the sidecar does not describe raises: that is the contract's
         fail-loudly case, and reading it as no text is what hid it.
         """
-        try:
-            line = self.sidecars.line_for(key)
-        except UnconfiguredTree:
-            return None
-        if line is None:
-            return None
-        text = encoding_text(line, self.sidecars.prose_for(key), self.surface)
-        return text or (
-            f"{key.script_file}:{key.trait_kind}:{key.index_within_kind}"
-        )
+        return self._resolve(key)[0]
 
     def batch_texts(self, records) -> dict[str, object]:
         """Every ability text this batch's surfaces reference, to its line.
@@ -117,18 +148,14 @@ class SurfaceBatcher:
         text left out of the encode reaches the model as a zero vector.
 
         The line comes along because the ``taxonomy`` baseline reads the
-        sidecar's script facts rather than the text.
+        sidecar's script facts rather than the text; it rides in the memo
+        beside the text so noting a key is one lookup rather than a join
+        followed by a second join inside ``text_of``.
         """
         texts: dict[str, object] = {}
 
         def note(key) -> str | None:
-            try:
-                line = self.sidecars.line_for(key)
-            except UnconfiguredTree:
-                return None
-            if line is None:
-                return None
-            text = self.text_of(key)
+            text, line = self._resolve(key)
             if text is not None:
                 texts.setdefault(text, line)
             return text

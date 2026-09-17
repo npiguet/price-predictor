@@ -74,14 +74,53 @@ def test_the_state_only_variant_keeps_the_zero_token_for_a_real_line():
     assert abilities[0].e == (0.0,) * 4
 
 
-def test_a_sidecar_mismatch_raises_out_of_the_batcher():
-    class _Mismatching(_Sidecars):
-        def line_for(self, key):
-            raise KeyError(
-                f"provenance key {key} appears in neither the lines nor the "
-                "dropped_keys"
-            )
+class _Counting(_Sidecars):
+    """Records every join, which is what the memo exists to stop repeating."""
 
+    def __init__(self) -> None:
+        self.calls: list = []
+
+    def line_for(self, key):
+        self.calls.append(key)
+        return _LINES.get(key)
+
+
+class _Mismatching(_Sidecars):
+    """The sidecar disagrees with the record: the fail-loudly case."""
+
+    def line_for(self, key):
+        raise KeyError(
+            f"provenance key {key} appears in neither the lines nor the "
+            "dropped_keys"
+        )
+
+
+def test_a_key_is_joined_once_however_often_the_batch_asks():
+    # Three keys, asked for by `batch_texts` and then three more times per
+    # record inside `surface_for`, over two passes.
+    sidecars = _Counting()
+    batcher = _batcher()
+    batcher.sidecars = sidecars
+    records = [_record()]
+    for _ in range(2):
+        texts = batcher.batch_texts(records)
+        rows = {text: row for row, text in enumerate(sorted(texts))}
+        batcher.surface_for(records[0], rows)
+
+    assert sidecars.calls == [_ACT, _PHANTOM, _ANTHEM]
+
+
+def test_a_sidecar_mismatch_is_never_memoised():
+    # A mismatch is the one answer the memo must not keep: swallowing it once
+    # would turn "the sidecar does not describe this card" into no text at all.
+    batcher = _batcher()
+    batcher.sidecars = _Mismatching()
+    for _ in range(3):
+        with pytest.raises(KeyError, match="neither the lines"):
+            batcher.text_of(_ACT)
+
+
+def test_a_sidecar_mismatch_raises_out_of_the_batcher():
     batcher = _batcher()
     batcher.sidecars = _Mismatching()
     with pytest.raises(KeyError, match="neither the lines"):
