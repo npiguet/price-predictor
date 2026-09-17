@@ -82,10 +82,14 @@ from effects.domain.effect_head_input import (
     player_features,
 )
 from effects.domain.effect_model import (
+    FLOOR_EPSILON,
     SAMPLING_CLASSES,
     EffectModel,
     EffectModelConfig,
+    EntityTargetBatch,
+    FieldSpec,
     active_fields,
+    constant_predictor_floor,
     entity_target_tensors,
     per_entity_loss,
 )
@@ -156,18 +160,77 @@ def _format_norms(norms: Mapping[str, float]) -> str:
     return f"\n  |g| {body} (clipped per group at {MAX_GRAD_NORM:g})"
 
 
-def _format_parts(parts: Mapping[str, float]) -> str:
-    """Each field's loss term, largest first.
+def _explained(name: str, value: float, floor: Mapping[str, float] | None) -> str:
+    """How much of the constant predictor's loss this field's head removed.
+
+    ``1 - loss/floor`` against the best constant prediction for the field
+    (FR-127c): zero is the base rate, negative is worse than predicting it. A
+    field's loss is a number in nats with no scale of its own, so on its own it
+    cannot say whether the head learned the field or learned how often it fires.
+
+    A field whose targets never vary has no deviance to explain and reads
+    ``n/a`` rather than dividing by nothing at all.
+    """
+    if floor is None:
+        return ""
+    reference = floor.get(name)
+    if reference is None or reference < FLOOR_EPSILON:
+        return " (n/a)"
+    return f" ({round(100.0 * (1.0 - value / reference))}%)"
+
+
+def _format_parts(
+    parts: Mapping[str, float], floor: Mapping[str, float] | None = None,
+) -> str:
+    """Each field's loss term, largest first, and what it explains.
 
     Ordered by size rather than by name because the question this line answers
     is which term the loss is made of: a single field carrying nearly all of it
     is what a blow-up looks like, and alphabetical order buries that.
+
+    ``floor`` is the card-disjoint constant-predictor floor and is passed only
+    for that breakdown; the per-shard training line has no floor of its own —
+    its records change every shard — and prints the terms alone.
     """
     if not parts:
         return ""
     ranked = sorted(parts.items(), key=lambda kv: -kv[1])
-    body = ", ".join(f"{name} {value:.3f}" for name, value in ranked)
+    body = ", ".join(
+        f"{name} {value:.3f}{_explained(name, value, floor)}"
+        for name, value in ranked
+    )
     return f"\n  fields: {body}"
+
+
+def _format_floor(floor: Mapping[str, float]) -> str:
+    """The floor itself, ordered like the breakdown it scales."""
+    ranked = sorted(floor.items(), key=lambda kv: -kv[1])
+    return ", ".join(f"{name} {value:.3f}" for name, value in ranked)
+
+
+class FloorCache:
+    """The constant-predictor floor, held across the epochs that share it.
+
+    The floor is a property of the validation targets and the active field set.
+    The first never moves — the corpus's samples are fixed (FR-089) — and the
+    second moves once, at the curriculum step, where the sparse group arrives
+    and a floor computed before it would scale the new terms against nothing.
+    So the field set is the cache key, and an epoch that shares it reuses the
+    floor rather than paying a second pass over the sample for the same numbers.
+    """
+
+    def __init__(self) -> None:
+        self._fields: tuple[FieldSpec, ...] | None = None
+        self.floor: dict[str, float] = {}
+
+    def stale(self, fields: tuple[FieldSpec, ...]) -> bool:
+        return self._fields != fields
+
+    def update(
+        self, fields: tuple[FieldSpec, ...], floor: Mapping[str, float],
+    ) -> None:
+        self._fields = fields
+        self.floor = dict(floor)
 
 
 class TrainingLoop:
@@ -247,6 +310,9 @@ class TrainingLoop:
         self.context_cache = (
             ContextCache(config.cache_refresh) if config.context_cache else None
         )
+        #: What each card-disjoint field term is scaled against, recomputed
+        #: when the curriculum changes the field set and not otherwise.
+        self.floor = FloorCache()
         self.card_disjoint: list = []
         self.game_disjoint: list = []
         self.probe: list = []
@@ -373,6 +439,7 @@ class TrainingLoop:
     def _loss_for(
         self, plan, encoder, model, tokenizer, sidecars, widths, step,
         *, report_parts: bool = False, fields=None, training: bool = True,
+        collect: list[EntityTargetBatch] | None = None,
     ):
         """``(loss, parts)`` for one planned batch, or ``None`` when empty.
 
@@ -386,6 +453,11 @@ class TrainingLoop:
         so the two numbers printed side by side are comparable. Left ``None``
         the batch derives its own from the classes it holds, which is what
         other callers building their own batches need.
+
+        ``collect`` receives this batch's targets, which is how the
+        constant-predictor floor is scored over exactly the entities the loss
+        was. The targets do not depend on the weights, so the pass that reads
+        the loss hands them over rather than a second pass re-deriving them.
         """
         records = plan.records
         if not records:
@@ -406,6 +478,11 @@ class TrainingLoop:
         gate, field_targets, mask, index = entity_target_tensors(
             surfaces, targets, fields,
         )
+        if collect is not None:
+            # Kept on the host: the floor is scored once per field set, and a
+            # copy of every validation target on the device would sit beside
+            # the model for the rest of the run.
+            collect.append(EntityTargetBatch(gate, field_targets, mask))
         # One batched gather rather than a slice per row: `index` selects each
         # surface's [CARD] and [PLAYER] columns, and the rows are independent.
         index = index.to(self.device)
@@ -560,18 +637,34 @@ class TrainingLoop:
                 )
 
             card_parts: dict[str, float] = {}
+            # Collected only on the epoch that has a floor to compute: the
+            # targets are a copy of the whole sample, and holding them past the
+            # one pass that reads them would cost that for nothing.
+            collected: list[EntityTargetBatch] | None = (
+                [] if self.floor.stale(fields) else None
+            )
             result = EpochResult(
                 epoch=epoch,
                 train_loss=float(running) / max(taken, 1),
                 card_disjoint_loss=self._validate(
                     self.card_disjoint, encoder, model, tokenizer, sidecars,
                     widths, step, parts=card_parts, fields=fields,
+                    collect=collected,
                 ),
                 game_disjoint_loss=self._validate(
                     self.game_disjoint, encoder, model, tokenizer, sidecars,
                     widths, step, fields=fields,
                 ),
             )
+            if collected is not None:
+                self.floor.update(
+                    fields, constant_predictor_floor(collected, fields=fields),
+                )
+                del collected
+                logger.info(
+                    "Constant-predictor floor (card-disjoint): %s",
+                    _format_floor(self.floor.floor),
+                )
             # Gate 1's three numbers on the whole card-disjoint sample, every
             # epoch. The loss says the objective fell; these say whether the
             # model knows *that* something happens, *what*, and *how much* —
@@ -600,7 +693,7 @@ class TrainingLoop:
                 result.epoch, result.train_loss, result.card_disjoint_loss,
                 result.game_disjoint_loss, metrics.affected_gate_f1,
                 metrics.zone_outcome_accuracy, metrics.mean_poisson_deviance,
-                _format_parts(card_parts),
+                _format_parts(card_parts, self.floor.floor),
             )
             if sidecars.unresolved:
                 worst = sorted(
@@ -741,6 +834,7 @@ class TrainingLoop:
     def _validate(
         self, records, encoder, model, tokenizer, sidecars, widths, step,
         *, parts: dict[str, float] | None = None, fields=None,
+        collect: list[EntityTargetBatch] | None = None,
     ) -> float:
         """Mean loss over the stratum, batched the way training batches.
 
@@ -758,7 +852,10 @@ class TrainingLoop:
         and the training number beside it score the same objective even where a
         batch happens to hold no record of some class. ``parts`` collects the
         loss by field, averaged over batches, which is what says *which* term
-        is not moving when the total is not moving.
+        is not moving when the total is not moving. ``collect`` takes each
+        batch's targets along the way, so the constant-predictor floor those
+        terms are scaled by is scored on this sample and this masking rather
+        than on a second pass's.
 
         Records are still grouped by game *within* a batch, for the same reason
         training groups them: one encode of an ability text then serves every
@@ -784,7 +881,7 @@ class TrainingLoop:
                 computed = self._loss_for(
                     BatchPlan(dict(grouped)), encoder, model, tokenizer,
                     sidecars, widths, step, report_parts=parts is not None,
-                    fields=fields, training=False,
+                    fields=fields, training=False, collect=collect,
                 )
                 if computed is None:
                     continue

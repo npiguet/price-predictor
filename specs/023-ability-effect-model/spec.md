@@ -903,7 +903,12 @@ loss.
   per batch. A batch's class composition decides which fields carry loss at all, so a whole-game
   batch scores a different field set than a training batch and the two numbers are not comparable;
   a stratum's loss is also the mean over its batches, and whole-game batches make that a mean over
-  as many numbers as the stratum has games. Validation MUST report the loss by field.
+  as many numbers as the stratum has games. Validation MUST report the loss by field. The
+  card-disjoint breakdown MUST carry, beside each field's loss, its explained deviance against a
+  constant-predictor floor — the loss the best constant prediction for that field reaches on the
+  same sample under the same masking, normalization and batch averaging — so a term says whether
+  the head learned the field or is repeating its base rate. That floor MUST be computed from the
+  sample's own targets and recomputed whenever the active field set changes.
 - **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
   shard as it goes, naming the shard, its record counts, and its timings. That line MUST also carry
   the shard's mean training loss, the loss decomposed by field, the pre-clip gradient norm of each

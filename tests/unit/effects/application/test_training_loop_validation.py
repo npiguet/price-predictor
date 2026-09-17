@@ -11,8 +11,13 @@ from effects.application.train_effect_model import (
     TrainEffectModelConfig,
     run,
 )
-from effects.application.training_loop import TrainingLoop
-from effects.domain.effect_model import SAMPLING_CLASSES
+from effects.application.training_loop import (
+    FloorCache,
+    TrainingLoop,
+    _format_floor,
+    _format_parts,
+)
+from effects.domain.effect_model import FIELDS_BY_NAME, SAMPLING_CLASSES
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
@@ -153,3 +158,69 @@ def test_a_sample_naming_every_class_says_nothing(caplog):
         loop._warn_missing_classes()
 
     assert caplog.text == ""
+
+
+class TestExplainedDeviance:
+    """The card-disjoint breakdown says how far each head beat a constant.
+
+    A field's loss is a number in nats with no scale of its own, so the epoch
+    line carries `1 - loss/floor` beside it: zero is the base rate, negative is
+    worse than predicting it (FR-127c).
+    """
+
+    def test_each_field_carries_its_explained_deviance(self):
+        line = _format_parts(
+            {"gate": 2.878, "damage_taken": 0.761},
+            floor={"gate": 3.105, "damage_taken": 1.902},
+        )
+        assert line == "\n  fields: gate 2.878 (7%), damage_taken 0.761 (60%)"
+
+    def test_the_largest_term_still_comes_first(self):
+        line = _format_parts(
+            {"damage_taken": 0.761, "gate": 2.878},
+            floor={"gate": 3.105, "damage_taken": 1.902},
+        )
+        assert line.index("gate") < line.index("damage_taken")
+
+    def test_a_head_worse_than_the_constant_reads_negative(self):
+        line = _format_parts({"gate": 4.0}, floor={"gate": 2.0})
+        assert "gate 4.000 (-100%)" in line
+
+    def test_a_field_with_no_deviance_to_explain_reads_not_applicable(self):
+        """A field whose targets never vary has nothing for a head to beat."""
+        line = _format_parts({"types_gained": 0.0}, floor={"types_gained": 0.0})
+        assert "types_gained 0.000 (n/a)" in line
+
+    def test_the_per_shard_training_breakdown_is_unchanged(self):
+        assert _format_parts({"gate": 2.0}) == "\n  fields: gate 2.000"
+
+    def test_the_floor_is_logged_largest_first(self):
+        assert _format_floor(
+            {"damage_taken": 1.902, "gate": 3.105},
+        ) == "gate 3.105, damage_taken 1.902"
+
+
+class TestFloorCache:
+    """The floor moves only with the active field set (FR-127c).
+
+    The validation targets are fixed for the run, so the floor is too — until
+    the curriculum step admits the sparse group, which is a different objective
+    and needs its own floor.
+    """
+
+    def test_it_is_recomputed_exactly_when_the_fields_change(self):
+        cache = FloorCache()
+        dense = (FIELDS_BY_NAME["damage_taken"],)
+        sparse = (*dense, FIELDS_BY_NAME["control_change"])
+
+        computed = []
+        for epoch, fields in ((1, dense), (2, dense), (3, sparse), (4, sparse)):
+            if cache.stale(fields):
+                computed.append(epoch)
+                cache.update(fields, {"gate": float(epoch)})
+
+        assert computed == [1, 3]
+        assert cache.floor == {"gate": 3.0}
+
+    def test_an_unfilled_cache_scales_nothing(self):
+        assert FloorCache().floor == {}
