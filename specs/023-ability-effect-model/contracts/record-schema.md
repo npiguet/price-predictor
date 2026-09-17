@@ -279,9 +279,15 @@ to-do:
 - `token_created` — `EffectRecordOutcomes.note` from `TokenEffectBase.makeTokenTable(TokenCreateTable, …)`,
   the method shared by all six token-making effects (`Amass`, `Endure`, `Incubate`, `Investigate`,
   `Recruit`, `Token` itself, and `CopyPermanent`'s token copies) rather than `TokenEffect` alone — script
-  id and characteristics are read off the created `Card` itself (the same convention
-  `SnapshotBuilder.entityToJson` already uses: `token_script_id = card.isToken() ? card.getName() : null`),
-  which is in scope at that one shared site for every caller, not "one frame away" the way it would be from
+  id and characteristics are read off the created `Card` itself, the same site `SnapshotBuilder.entityToJson`
+  reads from. Since 2026-09-17 that site's `token_script_id` is the token's script stem
+  (`c_a_food_sac`), falling back to the printed name only for a token whose script cannot be named
+  (`card.isToken() ? tokenScriptIdOf(card) : null`, not the plain printed-name lookup this contract
+  used to quote); a snapshot taken before that date carries the printed name instead. `token_created`'s
+  own `token_script_id` payload field is emitted by a different, Forge-side site
+  (`TokenEffectBase.makeTokenTable`) and may still read the printed name until that emitter is updated
+  to the same convention — this contract does not claim it already has been. It
+  is in scope at that one shared site for every caller, not "one frame away" the way it would be from
   any single effect. `count` is `allTokens.size()`, the engine's own tally of what actually entered play —
   a `CreateToken` replacement (Doubling Season) can change it from what was requested, the same
   `cards.size()` vs `madeCards.size()` shape Task 7 shipped once already.

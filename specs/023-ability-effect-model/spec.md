@@ -647,12 +647,20 @@ loss.
 - **FR-149**: `build-corpus` MUST record, per top-level directory under `--records-dir`, the games
   it read and the games naming a held-out card (`games_by_source`, `held_out_games_by_source`),
   and MUST warn when a directory routes more than none and fewer than 5% of its games.
+- **FR-150**: The collector MUST resolve a token host with no `PaperToken` through its image key
+  against the token database before falling back to a `cardsfolder` path
+  (`ProvenanceKey.tokenScriptStemOf`; verified by `CopiedTokenProvenanceTest`).
 - **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
   does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
   the stem by name, then by the carrying entity's colours, types and P/T, then by its printed-key
-  counts per trait kind, and MUST leave a key untouched when more than one script remains. It MUST
-  record `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts` in the manifest.
-  `--no-remap-token-keys` turns the step off.
+  counts per trait kind — counting one more `spell` key than the script declares, for the
+  permanent's own cast spell — and MUST leave a key untouched when more than one script remains. A
+  key under `state.entities` (`printed`, `granted_attached`, `granted_temporary`) MUST resolve per
+  entity, against that entity's own characteristics; every other key site (the acting `ability`,
+  playability candidates, `responsible_static`, `replaced_by`) MUST be rewritten only when every
+  entity in the record that carried the same old key agrees on one stem, and MUST otherwise resolve
+  by name alone or stay untouched. It MUST record `token_keys_remapped`, `token_keys_ambiguous` and
+  `forge_tokenscripts` in the manifest. `--no-remap-token-keys` turns the step off.
 
 #### Training
 
