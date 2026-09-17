@@ -1,6 +1,7 @@
 package com.pricepredictor.connector.effects;
 
 import forge.StaticData;
+import forge.card.GamePieceType;
 import forge.game.Game;
 import forge.game.GameRules;
 import forge.game.GameType;
@@ -70,6 +71,29 @@ final class TestCards {
             throw new AssertionError("token script not in the database: " + scriptStem);
         }
         return CardFactory.getCard(paper, null, nextCardId++, GAME);
+    }
+
+    /**
+     * A token the way {@code GameCopier} rebuilds one in a forked game:
+     * {@code TokenInfo.toCard} makes a bare {@code Card}, copies the name,
+     * image key, colour, types and P/T, and never sets a paper card. Every
+     * ability-bearing token in a forked combat record arrives like this.
+     */
+    static Card copiedToken(String scriptStem) {
+        Card original = token(scriptStem);
+        Card copy = new Card(nextCardId++, GAME);
+        copy.setName(original.getName());
+        copy.setImageKey(original.getImageKey());
+        copy.setGamePieceType(GamePieceType.TOKEN);
+        for (forge.card.CardType.CoreType type : original.getType().getCoreTypes()) {
+            copy.addType(type.toString());
+        }
+        for (String subtype : original.getType().getSubtypes()) {
+            copy.addType(subtype);
+        }
+        copy.setBasePower(original.getBasePower());
+        copy.setBaseToughness(original.getBaseToughness());
+        return copy;
     }
 
     /** The first ability on a card whose API matches, for the emitter tests. */

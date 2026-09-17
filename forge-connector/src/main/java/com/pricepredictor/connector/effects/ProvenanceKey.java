@@ -1,5 +1,7 @@
 package com.pricepredictor.connector.effects;
 
+import forge.ImageKeys;
+import forge.StaticData;
 import forge.card.CardRules;
 import forge.card.CardStateName;
 import forge.card.ICardFace;
@@ -602,22 +604,35 @@ public record ProvenanceKey(
     /**
      * A token's script-file stem, or null when the card did not come from a
      * token script — including a token copy of a printed card.
+     *
+     * <p>Two sources, tried in order. A {@link PaperToken} is the token as
+     * Forge read it from {@code tokenscripts}, and its image filename starts
+     * with the script stem. A token that was rebuilt by {@code TokenInfo} —
+     * every token in a {@code GameCopier} fork — has no paper card at all, but
+     * {@code TokenInfo.toCard} copies the image key, and a token image key is
+     * {@code t:<stem>[|edition|…]}. The stem read either way is checked
+     * against the token database, so a key that names no script (a token copy
+     * of a printed card carries the printed card's image key, which is not a
+     * token key) yields null rather than a fabricated path.
      */
     private static String tokenScriptStem(Card host) {
         try {
             IPaperCard paper = host.getPaperCard();
-            if (!(paper instanceof PaperToken token)) {
-                return null;
+            String image = null;
+            if (paper instanceof PaperToken token) {
+                image = token.getImageFilename(1);
+            } else if (host.isToken()) {
+                image = ImageKeys.getTokenImageName(host.getImageKey());
             }
-            // "c_1_1_eldrazi_scion_sac|OGW" or "…|OGW|12|1": the script stem is
-            // everything before the first separator.
-            String image = token.getImageFilename(1);
             if (image == null || image.isEmpty()) {
                 return null;
             }
             int bar = image.indexOf('|');
-            String stem = bar < 0 ? image : image.substring(0, bar);
-            return stem.isEmpty() ? null : stem.replace(' ', '_');
+            String stem = (bar < 0 ? image : image.substring(0, bar)).replace(' ', '_');
+            if (stem.isEmpty() || !StaticData.instance().getAllTokens().containsRule(stem)) {
+                return null;
+            }
+            return stem;
         } catch (RuntimeException e) {
             return null;
         }

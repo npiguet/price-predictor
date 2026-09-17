@@ -284,6 +284,43 @@ class ProvenanceKeyTest {
                 ProvenanceKey.of(asStackCopy(gainLife)));
     }
 
+    /**
+     * A forked game's tokens are rebuilt by {@code TokenInfo}, which drops the
+     * {@code PaperToken}. The first corpus keyed those to
+     * {@code cardsfolder/z/zombie_token.txt}, a file no tree holds, so every
+     * Food, Treasure and Zombie on a forked board reached the model as no text.
+     * The image key survives the copy and names the script stem (FR-150).
+     */
+    @Test
+    void aCopiedTokenWithNoPaperCardStillKeysIntoTheTokenTree() {
+        Card copy = TestCards.copiedToken("c_a_food_sac");
+
+        assertNull(copy.getPaperCard(), "the fixture must reproduce the copier's shape");
+        assertEquals("tokenscripts/c_a_food_sac.txt", ProvenanceKey.scriptFileOf(copy));
+    }
+
+    /** And a real card's copy is not mistaken for a token: no image-key path for it. */
+    @Test
+    void aCopiedPrintedCardStillKeysIntoTheCardTree() {
+        Card bolt = card("Lightning Bolt");
+        Card copy = new Card(TestCards.nextCardId(), TestCards.game());
+        copy.setName(bolt.getName());
+        copy.setImageKey(bolt.getImageKey());
+
+        assertEquals("cardsfolder/l/lightning_bolt.txt", ProvenanceKey.scriptFileOf(copy));
+    }
+
+    /** A token image key the database does not know is not turned into a path. */
+    @Test
+    void anUnknownTokenImageKeyFallsThroughToNull() {
+        Card copy = TestCards.copiedToken("c_a_food_sac");
+        copy.setImageKey(forge.ImageKeys.getTokenKey("no_such_token_xyz"));
+
+        // Falls through to the name-derived cardsfolder path, exactly as before
+        // this change; what must not happen is a fabricated tokenscripts path.
+        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(copy));
+    }
+
     // ── engine-built command-zone cards ─────────────────────────────────
 
     /**
