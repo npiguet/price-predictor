@@ -481,7 +481,8 @@ validation/samples/card-disjoint.jsonl.gz   COPIES: the trainer's per-epoch vali
                                    resolution classes come from gate-one
 validation/samples/game-disjoint.jsonl.gz
 manifest.json                      + quality_dropped, unattributed_records, games_by_source,
-                                   held_out_games_by_source, shard_records, validation_sample
+                                   held_out_games_by_source, shard_records, validation_sample,
+                                   token_keys_remapped, token_keys_ambiguous, forge_tokenscripts
 ```
 
 Training records are selected per record; both validation strata are selected per **game**, which is
@@ -513,6 +514,11 @@ corpus. The per-source report warns when a directory routes a few games to
 the card-disjoint stratum; a depleted directory should route none, and a small count there is a leak
 in collection (in the first corpus, The Hobbit and Marvel Super Heroes boosters).
 
+The run also logs a `token keys` line: how many old provenance keys (the collector's pre-2026-09-17
+mis-key of a forked token to a `cardsfolder` path) were remapped to `tokenscripts/`, and how many
+stayed ambiguous over how many stems, naming the five worst. `--no-remap-token-keys` logs `not
+remapped` there instead and leaves every key exactly as collected.
+
 **Read the delivered-against-requested table it prints.** The manifest records the mixture the run
 asked for and the mixture the data actually holds, and they are not identical: availability is counted
 over every game while admission applies only to training candidates. The gap is a few percent, and it
@@ -524,6 +530,14 @@ to measure — usually the relative `--cards-folder` paths failing to resolve fr
 the repository root. No game naming a held-out card means the same outcome by a different route, and
 on this corpus it usually means `--records-dir` was pointed at `records/depleted/` rather than
 `records/`, so the full-strength shards from step 3b were never read.
+
+`--forge-tokenscripts` (default `../forge/forge-gui/res/tokenscripts`) points the build at Forge's
+raw token scripts, read once so the two passes can remap the old collector's token keys: a
+provenance key naming a `cardsfolder` path no converted tree holds, whose filename stem names a
+token's printed name, is rewritten to the `tokenscripts/` script it meant. The build refuses to
+start when the remap is on and that directory is missing. `--no-remap-token-keys` turns the step
+off; every key, resolved or not, is then written exactly as collected, and a token's context
+abilities resolve to no text, as they did before the remap existed.
 
 `--text-cap` (default 200) is the ceiling on records per unique ability text, and it is a ceiling and
 never a floor: a text below it keeps everything it has, so step 4's tail survives curation whole. The

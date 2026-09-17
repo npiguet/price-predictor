@@ -528,7 +528,10 @@ loss.
 - **FR-078**: The created-objects head MUST sit at `[GLOBAL]` with K = 4 group slots, each
   `{present, scripted flag, token-script id or characteristic fields (P/T, type flags, keyword flags),
   count}`, in a canonical order — sorted by token-script id, characteristics-only groups last by
-  descending count — with an overflow flag covering more than 4 distinct groups.
+  descending count — with an overflow flag covering more than 4 distinct groups. The token-script id
+  MUST be the token's script stem (`c_a_food_sac`), falling back to the printed name only for a token
+  whose script cannot be named; a shard collected before 2026-09-17 carries the printed name in that
+  field regardless of which token it names.
 - **FR-079**: The verdict head MUST sit at `[ACT]`, carrying playability verdict bits (can-play,
   affordable, has-legal-target), predicted cost paid, and the trigger-fired bit.
 - **FR-080**: Counts and open-ended magnitudes (damage, counters, life, draws, mana) MUST use
@@ -644,6 +647,12 @@ loss.
 - **FR-149**: `build-corpus` MUST record, per top-level directory under `--records-dir`, the games
   it read and the games naming a held-out card (`games_by_source`, `held_out_games_by_source`),
   and MUST warn when a directory routes more than none and fewer than 5% of its games.
+- **FR-151**: `build-corpus` MUST remap a provenance key whose script file the converted card tree
+  does not hold and whose filename stem names a token script to `tokenscripts/<stem>.txt`, resolving
+  the stem by name, then by the carrying entity's colours, types and P/T, then by its printed-key
+  counts per trait kind, and MUST leave a key untouched when more than one script remains. It MUST
+  record `token_keys_remapped`, `token_keys_ambiguous` and `forge_tokenscripts` in the manifest.
+  `--no-remap-token-keys` turns the step off.
 
 #### Training
 

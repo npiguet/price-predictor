@@ -242,6 +242,8 @@ differing only in hyperparameters read the same records.
 | `--training-records` | 0 (no ceiling beyond `--text-cap`) |
 | `--game-disjoint-games` | 1000 |
 | `--card-disjoint-text-cap` | 50 — max card-disjoint games per held-out ability text |
+| `--forge-tokenscripts` | `../forge/forge-gui/res/tokenscripts` — Forge's raw token scripts, read to remap the old collector's token keys (FR-151); the build refuses to start when the remap is on and this directory is missing |
+| `--no-remap-token-keys` | off — build without the token-key remap; every key is written exactly as collected |
 | `--seed` | 42 |
 | `--workers` | CPU count |
 | `--verify` | off — report drift against an existing manifest and write nothing |
