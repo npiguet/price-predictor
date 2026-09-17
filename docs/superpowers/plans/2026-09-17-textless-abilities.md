@@ -1329,6 +1329,16 @@ Order matters: the refusal rule (Task 3) reads the sidecars, so the sidecars mus
 
 No recollection is needed; the raw records' keys are runtime ordinals and join to the regenerated sidecars.
 
+What the reconversion does **not** oblige you to redo:
+
+- **The vocabulary stays as it is.** `models/effects/vocab-script.txt` needs no rebuild. The only text the reconversion makes newly reachable is the basic lands' synthetic mana line, whose `script_text` is already in the vocabulary — the line was always rendered, only unclaimed.
+- **`encode-abilities` needs no re-run.** Claiming a key changes the sidecar's provenance lists and nothing else: the rendered text is byte-identical, so every `.npz` row still matches `lines[i]` and the ability cache stays aligned.
+
+What to expect while it runs:
+
+- **Refusal rates of forty-something percent on the two resolution classes are the healthy outcome.** `resolution-effect` and `resolution-cost` should land in the low to mid forties percent refused — that is the implicit permanent spell being taken out of the class. Read a figure above fifty as "the reconversion did not land" and check the sidecars before blaming the corpus; the build's own guard fails the run past that point anyway.
+- **Watch memory at high `--workers` on the first full build.** Each survey worker and each write worker holds its own `SidecarCache`, roughly a hundred megabytes once a full card tree is resident, and the caches are per process rather than shared.
+
 ## Self-review notes
 
 - Spec coverage: FR-073 (Task 1), fail-loudly rule of the sidecar contract (Task 2), FR-148 and manifest field (Task 3), FR-152 and the contract's rule table (Tasks 3 and 5), the design record's "order of operations" (runbook). The out-of-scope runtime-only join is kept out by the `RUNTIME_ONLY` exception in Task 3.

@@ -628,29 +628,30 @@ loss.
   hashes differently. A rebuilt dataset is a different split, so scoring the gates against it would
   score them partly on games the model trained on.
 - **FR-148**: `build-corpus` MUST refuse a record for exactly three reasons — a resolution record
-  with no acting ability; a resolution record whose every acting key maps to no rendered line (a key
-  the sidecar lists as dropped, or one naming an unconverted script), a key past what the face
-  declared keeping the record because its text sits on a keyword line the join does not reach; and
-  any record carrying more than `--max-events-per-record` events (default 64) — in both passes, and
-  MUST record the count per reason in the manifest as `quality_dropped`. It MUST record, as
-  `no_acting_text_scripts`, the refused count per acting script file, and log the largest. A key in
+  with no acting ability; a resolution record whose every acting key maps to no rendered line (a
+  key the sidecar lists as dropped, or one naming an unconverted script), a key outside every
+  `(face, trait_kind)` range the sidecar declared keeping the record, because it is a trait Forge
+  attached to a live card rather than a contentless one; and any record carrying more than
+  `--max-events-per-record` events (default 64) — in both passes, and MUST record the count per
+  reason in the manifest as `quality_dropped`. It MUST record, as `no_acting_text_scripts`, the
+  refused count per acting script file, and log the largest. A key inside a declared range and in
   neither of the sidecar's lists MUST fail the build. An event attributed to `unresolved` MUST NOT
   be a refusal reason. It MUST instead be counted: `build-corpus` MUST record in the manifest, as
   `unattributed_records`, the number of records it **kept** carrying at least one such event, and
-  MUST log that count and its share of kept records. `attributed_to` names the sub-ability clause that produced an event, and
-  `unresolved` means the collector walked the acting chain and no clause claimed it — a failure to
-  attribute, not a failure to belong, because the bracket collector records the events that happened
-  inside the ability's own resolution. On the full-strength corpus 12.3% of resolution records with
-  an acting ability have every event stamped `unresolved` with none exceeding ten events, and
-  another 1% carry one unattributed side effect (a state-based-action `zone_change` death, a
-  `choice_made`, a `tapped`); a `combat` record has no acting chain at all, so 98.9% of that class
-  is stamped `unresolved` by design with the cause in the event's `cause`. Refusing on it discards
-  legitimate resolution outcomes, the "died" zone outcome among them, while the whole-game dumps it
-  was reaching for are caught by the no-ability and event-flood rules. `build-corpus` MUST also
-  refuse to write the dataset when the quality rules refuse more than half of any one sampling
-  class's records, naming the class and its counts: a whole class refused means an unpatched
-  (`degraded`) checkout or a rule that does not fit that kind, and written silently the dataset is
-  simply missing a sampling class.
+  MUST log that count and its share of kept records. `attributed_to` names the sub-ability clause
+  that produced an event, and `unresolved` means the collector walked the acting chain and no
+  clause claimed it — a failure to attribute, not a failure to belong, because the bracket
+  collector records the events that happened inside the ability's own resolution. On the
+  full-strength corpus 12.3% of resolution records with an acting ability have every event stamped
+  `unresolved` with none exceeding ten events, and another 1% carry one unattributed side effect
+  (a state-based-action `zone_change` death, a `choice_made`, a `tapped`); a `combat` record has
+  no acting chain at all, so 98.9% of that class is stamped `unresolved` by design with the cause
+  in the event's `cause`. Refusing on it discards legitimate resolution outcomes, the "died" zone
+  outcome among them, while the whole-game dumps it was reaching for are caught by the no-ability
+  and event-flood rules. `build-corpus` MUST also refuse to write the dataset when the quality
+  rules refuse more than half of any one sampling class's records, naming the class and its
+  counts: a whole class refused means an unpatched (`degraded`) checkout or a rule that does not
+  fit that kind, and written silently the dataset is simply missing a sampling class.
 - **FR-149**: `build-corpus` MUST record, per top-level directory under `--records-dir`, the games
   it read and the games naming a held-out card (`games_by_source`, `held_out_games_by_source`),
   and MUST warn when a directory routes more than none and fewer than 5% of its games.

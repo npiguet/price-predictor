@@ -101,6 +101,15 @@ in either tree. No recollection recovers anything.
    after decisions 3 and 4 because the resolution class shrinks by more than
    half and the rarity table is keyed by text.
 
+6. **The manifest's textless tally stays outside the digest.** The digest
+   identifies the dataset: its split, its contents, and the decisions that
+   produced them. `evaluate-effect-model` refuses a corpus whose digest is not
+   the one the checkpoint recorded, so a field added to the manifest later must
+   not move it, or every checkpoint trained against a manifest written before
+   the field existed stops being evaluable. `no_acting_text_scripts` is a count
+   an operator reads and no sampling decision depends on, so `digest()` drops it
+   from the hashed payload while the manifest file still carries it.
+
 ## Order of operations
 
 Decision 3 refuses on "no text", so it must run against sidecars that already
