@@ -508,7 +508,10 @@ loss.
   `[GLOBAL] [ACT] [PLAYER]… [CARD] e e … [CARD] e …` — with position ids resetting at each `[CARD]`
   and each slot carrying the contents defined in the root spec.
 - **FR-073**: An entity's ability tokens MUST be its printed and attachment-granted lines only;
-  temporary grants ride the overlay.
+  temporary grants ride the overlay. A key that resolves to no rendered line MUST contribute no
+  token: Forge's implicit permanent-spell object is such a key on every permanent, and a token for
+  it is board content no rules text produced. A line a variant masks out MUST keep its token, so
+  the variant keeps the geometry it is compared on.
 - **FR-074**: Numeric overlay and player scalars MUST enter as raw values plus a log1p copy, with no
   binning.
 - **FR-075**: Context ability tokens MUST be dropped at probability `--context-dropout` during

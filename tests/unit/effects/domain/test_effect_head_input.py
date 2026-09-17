@@ -450,3 +450,47 @@ class TestFeatureWidths:
         assert len(card_features(creature, record)) == len(
             card_features(land, record)
         )
+
+
+class TestKeysWithNoLine:
+    """A key the sidecar maps to no line is not an ability (FR-073).
+
+    Forge attaches an implicit cast-this-permanent object to every permanent,
+    and the converter renders no line for it. Without the predicate the
+    surface carried a zero-vector token for it on almost every entity.
+    """
+
+    _PHANTOM = ProvenanceKey("cardsfolder/s/serra_angel.txt", 0, "spell", 0)
+
+    def test_a_key_with_no_line_gets_no_ability_token(self):
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", printed=(self._PHANTOM, _ANTHEM)),
+        )))
+        surface = _build(record, has_line=lambda key: key in _VECTORS)
+        abilities = surface.of_kind(SlotKind.ABILITY)
+        assert [slot.e for slot in abilities] == [_VECTORS[_ANTHEM]]
+
+    def test_positions_stay_contiguous_after_a_skip(self):
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", printed=(self._PHANTOM, _ANTHEM, _WARD)),
+        )))
+        surface = _build(record, has_line=lambda key: key in _VECTORS)
+        positions = [
+            slot.position for slot in surface.slots
+            if slot.kind in (SlotKind.CARD, SlotKind.ABILITY)
+        ]
+        assert positions == [0, 1, 2]
+
+    def test_a_masked_line_keeps_its_zero_token(self):
+        """The state-only control zeroes ``e`` but keeps the geometry."""
+        record = _record(state=_snapshot(entities=(_entity("E1", printed=(_ANTHEM,)),)))
+        surface = build_effect_head_input(
+            record, e_for=lambda key: None, e_dim=E_DIM, has_line=lambda key: True,
+        )
+        assert [slot.e for slot in surface.of_kind(SlotKind.ABILITY)] == [_ZERO]
+
+    def test_without_the_predicate_every_key_keeps_its_token(self):
+        record = _record(state=_snapshot(entities=(
+            _entity("E1", printed=(self._PHANTOM,)),
+        )))
+        assert [slot.e for slot in _build(record).of_kind(SlotKind.ABILITY)] == [_ZERO]

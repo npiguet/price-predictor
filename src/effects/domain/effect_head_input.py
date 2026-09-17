@@ -356,6 +356,7 @@ def build_effect_head_input(
     *,
     e_for,
     e_dim: int,
+    has_line=None,
     candidate_index: int | None = None,
     subtype_tokens_for=None,
     context_dropout: float = 0.0,
@@ -372,6 +373,13 @@ def build_effect_head_input(
             flow back through. A key that resolves to neither contributes a zero
             vector rather than dropping the token, so the entity keeps its shape.
         e_dim: bottleneck width, for the zero vectors above.
+        has_line: ``ProvenanceKey -> bool``, whether the key maps to a rendered
+            line at all. An entity key with no line contributes no token:
+            Forge attaches an implicit cast-this-permanent object to every
+            permanent, the converter renders no line for it, and a token for
+            it is board content no rules text produced. Distinct from ``e_for``
+            returning None, which keeps a zero token so a variant that masks
+            ``e`` keeps the geometry. None keeps every key.
         candidate_index: a ``playability``/``decision`` record trains as one
             example per candidate; this selects which candidate's ``e`` sits in
             ``[ACT]``.
@@ -431,6 +439,8 @@ def build_effect_head_input(
         position += 1
         is_context = entity.id != source_id
         for key in _ability_keys(entity):
+            if has_line is not None and not has_line(key):
+                continue
             if (
                 is_context
                 and context_dropout > 0.0

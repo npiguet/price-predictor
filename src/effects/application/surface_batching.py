@@ -227,9 +227,15 @@ class SurfaceBatcher:
             text = self.text_of(key)
             return None if text is None else rows.get(text)
 
+        def has_line(key) -> bool:
+            # Asked before the mask, so a masked line keeps its zero token
+            # and a dropped key gets none: the two are different facts.
+            return self.text_of(key) is not None
+
         return build_effect_head_input(
             record,
             e_for=e_for,
+            has_line=has_line,
             e_dim=self.e_dim,
             context_dropout=self.context_dropout,
             rng=self.rng,
