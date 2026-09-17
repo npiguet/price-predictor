@@ -76,6 +76,12 @@ class AbilityTokenizer:
     MASK = "[MASK]"
     CLS = "[CLS]"
 
+    #: Bound on :attr:`_tokenize_cache`. A training run tokenizes on the order
+    #: of 30,000 unique texts, so this is a guard against something unbounded
+    #: (a corpus-construction pass over a whole raw corpus, say) rather than a
+    #: policy tuned to a normal run's working set.
+    _TOKENIZE_CACHE_CAP = 500_000
+
     def __init__(
         self,
         vocab: dict[str, int],
@@ -97,13 +103,24 @@ class AbilityTokenizer:
             self._keyword_token(name): definition
             for name, definition in self._definitions.items()
         }
-        # Multi-word vocabulary entries, longest first so "double strike" is
-        # merged before "strike".
-        self._multi_word = sorted(
+        # Multi-word vocabulary entries, indexed by first word so
+        # _multi_word_at compares a token only against the entries that could
+        # possibly match it, rather than every multi-word entry in the
+        # vocabulary at every token position. Longest first within a bucket
+        # (by word count) so "double strike" is merged before "strike".
+        multi_word = sorted(
             (t for t in vocab if "_" in t and not t.startswith("[")),
             key=lambda t: t.count("_"), reverse=True,
         )
-        self._multi_word_parts = {t: t.split("_") for t in self._multi_word}
+        self._multi_word_by_first: dict[str, list[tuple[str, list[str]]]] = {}
+        for entry in multi_word:
+            parts = entry.split("_")
+            self._multi_word_by_first.setdefault(parts[0], []).append(
+                (entry, parts),
+            )
+        #: Memoises :meth:`tokenize` for the (overwhelmingly common)
+        #: no-``role_spans`` case. See :meth:`tokenize` for why.
+        self._tokenize_cache: dict[str, tuple[Token, ...]] = {}
 
     # ── ids ─────────────────────────────────────────────────────────────
 
@@ -143,14 +160,39 @@ class AbilityTokenizer:
 
         ``role_spans`` are character ranges over this same text, as the sidecar
         records them for the line.
+
+        With no ``role_spans`` the result depends on ``text`` alone, and
+        :class:`~effects.application.surface_batching.SurfaceBatcher` calls
+        this once per unique ability text in *every* batch of every epoch —
+        the same tens of thousands of lines, retokenized from scratch each
+        time. A profile of a training run put 80% of its wall time in this
+        method for exactly that reason, so the no-``role_spans`` result is
+        cached on the instance (bounded by :attr:`_TOKENIZE_CACHE_CAP`) and a
+        **new list** is always handed back: ``Token`` is frozen, so sharing its
+        elements is safe, but a caller (``expand_keywords``) builds its own
+        list from what it's given, and must never be handed the cached list
+        itself to build it from. A call carrying ``role_spans`` bypasses the
+        cache: those calls are rare — only the corpus/record-building path
+        attaches spans — and the result depends on the spans too, so keying
+        the cache on the text alone would silently reuse a role assignment
+        from an unrelated span set, and keying it on both text and spans would
+        cache something the hot path never repeats.
         """
+        if not role_spans:
+            cached = self._tokenize_cache.get(text)
+            if cached is not None:
+                return list(cached)
+            tokens = self._merge_multi_word(self._split_with_offsets(text), text)
+            if len(self._tokenize_cache) >= self._TOKENIZE_CACHE_CAP:
+                self._tokenize_cache.clear()
+            self._tokenize_cache[text] = tuple(tokens)
+            return list(tokens)
         tokens = self._split_with_offsets(text)
         tokens = self._merge_multi_word(tokens, text)
-        if role_spans:
-            tokens = [
-                replace(token, role=self._role_at(token, role_spans))
-                for token in tokens
-            ]
+        tokens = [
+            replace(token, role=self._role_at(token, role_spans))
+            for token in tokens
+        ]
         return tokens
 
     def _split_with_offsets(self, text: str) -> list[Token]:
@@ -171,7 +213,7 @@ class AbilityTokenizer:
 
     def _merge_multi_word(self, tokens: list[Token], text: str) -> list[Token]:
         """Join runs of words that spell a multi-word vocabulary entry."""
-        if not self._multi_word:
+        if not self._multi_word_by_first:
             return tokens
         merged: list[Token] = []
         index = 0
@@ -195,8 +237,13 @@ class AbilityTokenizer:
     def _multi_word_at(
         self, tokens: list[Token], index: int,
     ) -> tuple[str, int] | None:
-        for entry in self._multi_word:
-            parts = self._multi_word_parts[entry]
+        # Only entries whose first word matches the token here can possibly
+        # match, so this is the whole speedup: no comparison against the rest
+        # of the vocabulary's multi-word entries.
+        candidates = self._multi_word_by_first.get(tokens[index].text)
+        if not candidates:
+            return None
+        for entry, parts in candidates:
             end = index + len(parts)
             if end > len(tokens):
                 continue

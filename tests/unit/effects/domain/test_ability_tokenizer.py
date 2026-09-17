@@ -243,6 +243,99 @@ class TestKeywordExpansion:
         assert bare.expand_keywords(tokens, probability=1.0) == tokens
 
 
+class TestMultiWordIndexing:
+    """``_multi_word_at`` looks candidates up by first word (perf fix).
+
+    The vocabulary below stacks four multi-word entries that share a first
+    word ("first"), plus the two-word entries the base fixture already
+    carries, so a bucket has to preserve its longest-first order and a
+    mismatch on the second word has to fall through to the next candidate in
+    the same bucket rather than a different one.
+    """
+
+    @pytest.fixture
+    def indexed(self) -> AbilityTokenizer:
+        return AbilityTokenizer(
+            _vocab(("first_blood", "first_strike_damage", "damage", "blood")),
+            _definitions(),
+        )
+
+    def test_the_longest_same_bucket_entry_wins(self, indexed):
+        text = "you gain first strike damage"
+        texts = [t.text for t in indexed.tokenize(text)]
+        assert "first_strike_damage" in texts
+        assert "first_strike" not in texts
+
+    def test_a_first_word_match_with_a_differing_rest_falls_through(self, indexed):
+        """"first" also opens "first_blood", but the text says "first strike":
+        that candidate must be rejected and "first_strike" tried next."""
+        texts = [t.text for t in indexed.tokenize("gains first strike")]
+        assert "first_strike" in texts
+        assert "first_blood" not in texts
+
+    def test_an_entry_that_would_overrun_the_text_end_is_skipped(self, indexed):
+        """"first_strike_damage" needs a third word "damage" that isn't there;
+        the shorter "first_strike" in the same bucket must still match."""
+        texts = [t.text for t in indexed.tokenize("creature gains first strike")]
+        assert texts[-1] == "first_strike"
+
+    def test_a_merged_three_part_tokens_span_covers_first_to_last_word(self, indexed):
+        text = "gains first strike damage now"
+        merged = next(
+            t for t in indexed.tokenize(text) if t.text == "first_strike_damage"
+        )
+        assert text[merged.start:merged.end] == "first strike damage"
+
+    def test_a_lone_word_with_no_multi_word_bucket_is_unaffected(self, indexed):
+        texts = [t.text for t in indexed.tokenize("deal damage")]
+        assert texts == ["deal", "damage"]
+
+
+class TestTokenizeCache:
+    def test_repeated_tokenizing_returns_equal_but_distinct_lists(self, tokenizer):
+        first = tokenizer.tokenize("draw a card")
+        second = tokenizer.tokenize("draw a card")
+        assert first == second
+        assert first is not second
+
+    def test_mutating_one_result_does_not_affect_the_other(self, tokenizer):
+        first = tokenizer.tokenize("draw a card")
+        second = tokenizer.tokenize("draw a card")
+        first.append(Token(text="extra", token_id=0))
+        assert second[-1].text != "extra"
+        assert len(second) == 3
+
+    def test_role_spans_bypass_the_cache(self, tokenizer, monkeypatch):
+        calls = []
+        original = AbilityTokenizer._split_with_offsets
+
+        def counting(self, text):
+            calls.append(text)
+            return original(self, text)
+
+        monkeypatch.setattr(AbilityTokenizer, "_split_with_offsets", counting)
+
+        tokenizer.tokenize("draw a card")
+        tokenizer.tokenize("draw a card")
+        assert calls == ["draw a card"]
+
+        tokenizer.tokenize("draw a card", (RoleSpan(0, 4, "cost"),))
+        assert calls == ["draw a card", "draw a card"]
+
+        tokenizer.tokenize("draw a card")
+        assert calls == ["draw a card", "draw a card"]
+
+    def test_the_cache_is_capped(self, tokenizer, monkeypatch):
+        monkeypatch.setattr(AbilityTokenizer, "_TOKENIZE_CACHE_CAP", 2)
+        first = tokenizer.tokenize("draw a card")
+        tokenizer.tokenize("deal damage")
+        tokenizer.tokenize("put counter")
+        assert len(tokenizer._tokenize_cache) <= 2
+        assert [t.text for t in tokenizer.tokenize("draw a card")] == [
+            t.text for t in first
+        ]
+
+
 class TestTokenShape:
     def test_a_token_is_immutable(self, tokenizer):
         token = tokenizer.tokenize("draw")[0]
