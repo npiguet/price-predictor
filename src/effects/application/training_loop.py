@@ -82,6 +82,7 @@ from effects.domain.effect_head_input import (
     player_features,
 )
 from effects.domain.effect_model import (
+    SAMPLING_CLASSES,
     EffectModel,
     EffectModelConfig,
     active_fields,
@@ -287,6 +288,25 @@ class TrainingLoop:
                 len({sampling_class(r) for r in records}),
             )
 
+    def _warn_missing_classes(self) -> None:
+        """Say which sampling classes the validation samples do not name.
+
+        ``self.present`` comes from those two samples alone, and it is what
+        ``fields_for_epoch`` builds every epoch's field set from. A class the
+        training shards carry but neither sample happens to hold drops each
+        field only that class supervises — for the whole run, with nothing
+        else saying so, because every number printed still looks valid.
+        """
+        missing = [name for name in SAMPLING_CLASSES if name not in self.present]
+        if not missing:
+            return
+        logger.warning(
+            "The corpus's validation samples name %d of the %d sampling "
+            "classes; %s are missing, so the fields only those classes "
+            "supervise carry no loss this run.",
+            len(self.present), len(SAMPLING_CLASSES), ", ".join(missing),
+        )
+
     def _feature_widths(self, records: Sequence) -> dict[SlotKind, int]:
         """Measure each slot kind's width from a real record.
 
@@ -337,7 +357,14 @@ class TrainingLoop:
             withhold_keyword=self.config.withhold_keyword,
             keyword_expand_p=self.config.keyword_expand_p if training else 0.0,
             context_dropout=self.config.context_dropout if training else 0.0,
-            rng=self.rng,
+            # A dedicated stream for scoring: sharing the training generator
+            # made how many validation batches ran decide which records the
+            # next epoch's shuffle drew, so a run's training path moved with
+            # the size of its validation samples.
+            rng=(
+                self.rng if training
+                else random.Random(f"{self.seed}:validation")
+            ),
             identity_table=self.identity_table,
         )
 
@@ -418,6 +445,7 @@ class TrainingLoop:
             ", ".join(str(path) for path in self.validation_samples.values()),
         )
         self._load_validation()
+        self._warn_missing_classes()
         if not self.probe:
             logger.error(
                 "The corpus's validation samples hold no records, so there is "
@@ -493,6 +521,11 @@ class TrainingLoop:
         for epoch in range(1, self.config.epochs + 1):
             encoder.train()
             model.train()
+            # With --grad-accum > 1 the last steps of an epoch can leave a
+            # partial accumulation staged for a step that never comes; dropping
+            # it here keeps it from crossing into the next epoch or over the
+            # curriculum switch, where the objective is no longer the same one.
+            optimizer.zero_grad(set_to_none=True)
             # Accumulated on the device and read once at the end of the epoch.
             # Reading it per step would synchronize once per batch for a number
             # nothing looks at until the epoch closes.

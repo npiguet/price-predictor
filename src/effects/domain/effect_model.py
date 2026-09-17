@@ -483,7 +483,9 @@ def per_entity_loss(
         report_parts: read each term back as a Python float for logging. Off by
             default: every read is a device synchronization, and with fifteen
             active fields that is fifteen stalls on a path the training loop
-            walks once per batch and whose result it discards.
+            walks once per batch and whose result it discards. Each reported
+            term is divided by the same record count the total is, so the
+            breakdown a log line prints sums to the loss printed beside it.
 
     The gate trains on every entity — players included, since the head is mapped
     over ``[PLAYER]`` outputs too. Conditional fields train only where the
@@ -520,6 +522,11 @@ def per_entity_loss(
         total = total + loss
 
     records = max(int(outputs.shape[0]), 1)
+    # The parts were summed over the batch like the total; dividing them by the
+    # same record count is what makes the printed breakdown add up to the
+    # printed loss rather than to `records` times it.
+    if report_parts:
+        parts = {name: value / records for name, value in parts.items()}
     return total / records, parts
 
 

@@ -1063,6 +1063,17 @@ def run(config: TrainEffectModelConfig) -> int:
     one shard at a time, inside the loop.
     """
     require_split_from(config.variant, config.split_from, corpus=config.corpus)
+    if config.split_from is not None:
+        logger.warning(
+            "--split-from %s is accepted for compatibility with an older "
+            "invocation, but nothing is read from this path: the manifest of "
+            "--corpus is authoritative for the split.", config.split_from,
+        )
+    if config.context_cache:
+        logger.warning(
+            "--context-cache is accepted but not wired into the batcher in "
+            "this trainer; context abilities are re-encoded live."
+        )
 
     if config.corpus is None:
         logger.error(
@@ -1104,9 +1115,9 @@ def run(config: TrainEffectModelConfig) -> int:
     )
     logger.info(
         "Curated corpus at %s: %d training shards, %d gate-one record(s), "
-        "%d card(s) held out.",
+        "%d held-out ability text(s) on %d card(s).",
         config.corpus, len(training_shards), manifest.per_stratum.get("gate-one", 0),
-        len(manifest.held_out_cards),
+        len(manifest.held_out_texts), len(manifest.held_out_cards),
     )
 
     from effects.application.training_loop import TrainingLoop

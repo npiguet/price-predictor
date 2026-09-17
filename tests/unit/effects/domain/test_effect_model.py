@@ -323,6 +323,22 @@ class TestLosses:
         assert batched == pytest.approx(float(narrow_loss), rel=1e-5)
         assert wide_loss > narrow_loss
 
+    def test_the_reported_parts_sum_to_the_printed_loss(self):
+        """The breakdown is of the number beside it, not of an unscaled sum.
+
+        Each term was reported raw while the total was divided by the record
+        count, so a two-record batch printed fields summing to twice its loss.
+        """
+        outputs = self._outputs()
+        targets = {"damage_taken": torch.ones(2, 3)}
+        fields = (FIELDS_BY_NAME["damage_taken"],)
+        total, parts = per_entity_loss(
+            outputs, torch.ones(2, 3), targets, torch.ones(2, 3),
+            fields=fields, report_parts=True,
+        )
+        assert set(parts) == {"gate", "damage_taken"}
+        assert sum(parts.values()) == pytest.approx(float(total), abs=1e-4)
+
     def test_padded_entities_contribute_nothing(self):
         outputs = self._outputs()
         full = per_entity_loss(

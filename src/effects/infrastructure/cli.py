@@ -1170,8 +1170,9 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument(
         "--split-from", type=str, default=None,
         help=(
-            "Inherit another checkpoint's split, vocabulary and "
-            "keyword-definition paths. Required for every --variant run."
+            "Accepted for compatibility with older invocations of a --variant "
+            "run; nothing is read from this path. The manifest of --corpus is "
+            "authoritative for the split."
         ),
     )
     parser.add_argument("--vocab-path", type=str, default=DEFAULT_VOCAB_PATH)
@@ -1207,8 +1208,10 @@ def _train_effect_model_parser(subparsers) -> None:
     parser.add_argument(
         "--context-cache", action="store_true",
         help=(
-            "Switch context gradient to a stop-gradient momentum cache — the "
-            "documented fallback when live re-encoding exceeds the GPU budget"
+            "Accepted and ignored (not implemented): the stop-gradient "
+            "momentum cache is specified as the fallback for when live "
+            "re-encoding exceeds the GPU budget, but the trainer's batcher "
+            "has no cache and re-encodes context abilities live"
         ),
     )
     parser.add_argument("--cache-refresh", type=int, default=500)
@@ -1245,6 +1248,7 @@ def _train_effect_model_parser(subparsers) -> None:
 
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
+        EmptyHoldoutError,
         SurfaceMismatchError,
         require_split_from,
     )
@@ -1264,6 +1268,12 @@ def run_train_effect_model(args: argparse.Namespace) -> int:
     except SurfaceMismatchError as exc:
         # The dataset's rarity table and --vocab-path disagree about the
         # encoding surface, which is only knowable once the manifest is read.
+        logger.error("%s", exc)
+        return 2
+    except EmptyHoldoutError as exc:
+        # Raised from inside the loop, once the corpus's card-disjoint sample
+        # turns out to be empty. A corpus problem with an exit-code row of its
+        # own, not a crash to hand an operator as a traceback.
         logger.error("%s", exc)
         return 2
 
