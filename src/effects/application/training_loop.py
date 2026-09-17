@@ -317,7 +317,7 @@ class TrainingLoop:
     def _batcher(
         self, tokenizer, sidecars, widths, *, training: bool = True,
     ) -> SurfaceBatcher:
-        """The records-to-inputs pipeline, shared with the gate-1 evaluator.
+        """The records-to-inputs pipeline, built the same way for other callers.
 
         ``training=False`` turns the two augmentations off: keyword expansion
         and context dropout are there to vary what the model sees from one
@@ -357,8 +357,8 @@ class TrainingLoop:
         ``fields`` is the epoch's own field set (FR-082): every batch of an
         epoch scores the same objective, and validation scores that same one,
         so the two numbers printed side by side are comparable. Left ``None``
-        the batch derives its own from the classes it holds, which is what a
-        caller building its own batches — the gate-1 evaluator — needs.
+        the batch derives its own from the classes it holds, which is what
+        other callers building their own batches need.
         """
         records = plan.records
         if not records:
@@ -539,11 +539,15 @@ class TrainingLoop:
                     widths, step, fields=fields,
                 ),
             )
-            # Gate 1's three numbers on the card-disjoint sample, every epoch.
-            # The loss says the objective fell; these say whether the model
-            # knows *that* something happens, *what*, and *how much* — which
-            # is what the gate is eventually scored on, and a run whose loss
-            # falls while all three sit still is worth seeing early.
+            # Gate 1's three numbers on the whole card-disjoint sample, every
+            # epoch. The loss says the objective fell; these say whether the
+            # model knows *that* something happens, *what*, and *how much* —
+            # a progress reading, not the gate itself: the evaluator's actual
+            # gate 1 scores only the unique-text stratum (records whose acting
+            # text is on no training card), while this sample also carries
+            # card-disjoint records whose text the model has seen elsewhere. A
+            # run whose loss falls while all three sit still is worth seeing
+            # early regardless.
             metrics = measure(
                 self.card_disjoint, encoder, model,
                 self._batcher(tokenizer, sidecars, widths, training=False),

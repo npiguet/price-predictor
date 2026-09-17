@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 import random
-from collections import Counter, defaultdict
+from collections import defaultdict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -554,12 +554,6 @@ class BatchPlan:
     def records(self) -> list[EffectRecord]:
         return [r for group in self.by_game.values() for r in group]
 
-    def unique_ability_texts(self, text_of) -> set[str]:
-        return {
-            text for record in self.records
-            if (text := text_of(record)) is not None
-        }
-
 
 def weighted_order(weights: Sequence[float], rng: random.Random) -> list[int]:
     """Indices in a weighted shuffle: each drawn once, heavier ones earlier.
@@ -595,11 +589,6 @@ def batches_without_replacement(
             for index in order[start:start + size]:
                 plan[records[index].game_id].append(records[index])
             yield BatchPlan(dict(plan))
-
-
-def class_counts(records: Iterable[EffectRecord]) -> Counter[str]:
-    """How many records of each sampling class a corpus holds."""
-    return Counter(sampling_class(record) for record in records)
 
 
 # ── variants (FR-094) ───────────────────────────────────────────────────
@@ -677,35 +666,6 @@ class MissingSplitError(RuntimeError):
     """A variant run was started without ``--split-from``."""
 
 
-def unique_text_resolution_records(
-    records: Iterable[EffectRecord],
-    held_out_texts: frozenset[str],
-    *,
-    text_of,
-) -> int:
-    """Resolution records in the stratum whose acting text is held out.
-
-    Args:
-        text_of: a provenance key to the text it is encoded from — the
-            batcher's own, so this counts what gate 1 will actually read.
-
-    This is gate 1's slice. Under depletion no training game holds a card
-    carrying a held-out text, so "acting text appears on no training card" and
-    "acting text is held out" name the same records, and the stratum can be
-    sized from the holdout without scanning the training corpus.
-    """
-    count = 0
-    for record in records:
-        if record.kind is not RecordKind.RESOLUTION:
-            continue
-        for key in record.ability or ():
-            text = text_of(key)
-            if text is not None and text in held_out_texts:
-                count += 1
-                break
-    return count
-
-
 class EmptyHoldoutError(RuntimeError):
     """The card-disjoint stratum holds no records."""
 
@@ -762,8 +722,9 @@ def require_split_from(
     result and is not one. A shared ``--corpus`` satisfies this at least as
     firmly as ``--split-from``: the manifest enumerates the split directly, so
     every run reading the same curated dataset trains against the same games
-    (FR-146). ``validate_corpus_flags`` already refuses the two together, so a
-    caller never has both to offer at once.
+    (FR-146). ``--corpus`` is required on every run, so ``--split-from`` is
+    accepted alongside it only for a variant run's compatibility with an
+    older invocation; the split it would have computed is never read.
     """
     if variant != VARIANT_FULL and split_from is None and corpus is None:
         raise MissingSplitError(

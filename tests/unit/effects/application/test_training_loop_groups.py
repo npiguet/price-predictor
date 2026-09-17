@@ -12,7 +12,8 @@ def test_groups_are_named_and_cover_every_parameter():
     encoder, head = torch.nn.Linear(2, 2), torch.nn.Linear(2, 3)
     groups = parameter_groups(encoder, head)
     assert [g["name"] for g in groups] == ["encoder", "head"]
-    assert sum(len(g["params"]) for g in groups) == len(list(encoder.parameters())) + len(list(head.parameters()))
+    total_params = len(list(encoder.parameters())) + len(list(head.parameters()))
+    assert sum(len(g["params"]) for g in groups) == total_params
     identity = torch.nn.Embedding(4, 2)
     assert [g["name"] for g in parameter_groups(encoder, head, identity)][-1] == "identity"
 

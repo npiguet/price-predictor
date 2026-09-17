@@ -50,11 +50,6 @@ def _entity(name: str) -> EntityState:
     )
 
 
-def _naming(card: str) -> EffectRecord:
-    """A record whose board holds one named card."""
-    return _record("g", entities=(_entity(card),))
-
-
 def _record(game_id: str, entities=()) -> EffectRecord:
     return EffectRecord(
         record_id=f"{game_id}.1", run_id="run", timestamp="t", game_id=game_id,

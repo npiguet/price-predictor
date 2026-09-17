@@ -18,7 +18,6 @@ from effects.application.train_effect_model import (
     RARITY_CAP,
     UNIFORM_CLASSES,
     batches_without_replacement,
-    class_counts,
     effective_games,
     parse_kind_mix,
     rarity_weights,
@@ -125,14 +124,6 @@ class TestSamplingClass:
 
     def test_every_class_is_reachable(self):
         assert set(SAMPLING_CLASSES) == set(DEFAULT_KIND_MIX)
-
-    def test_class_counts_tallies_a_corpus(self):
-        counts = class_counts([
-            _record(RecordKind.COMBAT), _record(RecordKind.COMBAT),
-            _record(RecordKind.RESOLUTION),
-        ])
-        assert counts[CLASS_COMBAT] == 2
-        assert counts[CLASS_RESOLUTION_EFFECT] == 1
 
 
 class TestMixture:
@@ -243,14 +234,12 @@ class TestSampleWeightsRarityTable:
         )
 
 
-class TestPoolsKeyByAbilityText:
+class TestWeightsKeyByAbilityText:
     """``TrainingLoop._weighted`` must key rarity by ability text, not record id.
 
     A ``record_id`` is unique per record, so keying on it gives
     ``effective_games`` a count of exactly 1 for every key and every record in
-    a pool the same weight — rarity weighting silently does nothing. This is
-    the live defect task 7 fixes: it fails against the pre-fix ``record_id``
-    key and passes once the key is the acting ability's text.
+    a pool the same weight — rarity weighting silently does nothing.
     """
 
     def test_a_single_game_ability_outweighs_a_many_game_one(self):

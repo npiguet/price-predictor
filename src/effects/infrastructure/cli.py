@@ -1245,17 +1245,15 @@ def _train_effect_model_parser(subparsers) -> None:
 
 def run_train_effect_model(args: argparse.Namespace) -> int:
     from effects.application.train_effect_model import (
-        MissingSplitError,
         SurfaceMismatchError,
         require_split_from,
     )
 
     split_from = Path(args.split_from) if args.split_from else None
-    try:
-        require_split_from(args.variant, split_from, corpus=args.corpus)
-    except MissingSplitError as exc:
-        logger.error("%s", exc)
-        return 2
+    # --corpus is required at the parser, so require_split_from's
+    # corpus-is-None branch can never fire from here; kept as a defensive
+    # pre-flight check rather than caught, since it cannot raise.
+    require_split_from(args.variant, split_from, corpus=args.corpus)
 
     config = train_config_from(args)
 
