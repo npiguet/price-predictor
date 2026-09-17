@@ -30,6 +30,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
@@ -802,39 +803,53 @@ def collate_surfaces(
     with :func:`scatter_e_rows`. Resolving it here would mean pulling the
     encoder's vectors back to the host once per ability slot, which both costs a
     synchronization per slot and severs the gradient.
+
+    The padding is done in numpy and handed to torch once per array, because a
+    batch of 32 surfaces holds about two thousand slots and the per-slot
+    ``torch.tensor`` this used to build was the expensive part: each one takes
+    the tensor-construction path for a handful of floats, and there were three
+    hundred thousand of them over a four-shard run. numpy pads into a buffer
+    that is already the right shape and ``torch.from_numpy`` wraps it without
+    copying, so the same bytes reach the model.
     """
     batch = len(surfaces)
     width = max((len(s.slots) for s in surfaces), default=1)
     features = {
-        kind: torch.zeros(batch, width, size) for kind, size in widths.items()
+        kind: np.zeros((batch, width, size), dtype=np.float32)
+        for kind, size in widths.items()
     }
-    slot_kinds = torch.zeros(batch, width, dtype=torch.long)
-    positions = torch.zeros(batch, width, dtype=torch.long)
-    e_vectors = torch.zeros(batch, width, e_dim)
-    e_rows = torch.full((batch, width), -1, dtype=torch.long)
-    attention = torch.zeros(batch, width, dtype=torch.long)
+    slot_kinds = np.zeros((batch, width), dtype=np.int64)
+    positions = np.zeros((batch, width), dtype=np.int64)
+    e_vectors = np.zeros((batch, width, e_dim), dtype=np.float32)
+    e_rows = np.full((batch, width), -1, dtype=np.int64)
+    attention = np.zeros((batch, width), dtype=np.int64)
 
     for row, surface in enumerate(surfaces):
-        for column, slot in enumerate(surface.slots):
-            slot_kinds[row, column] = int(slot.kind)
-            positions[row, column] = slot.position
-            attention[row, column] = 1
+        slots = surface.slots
+        # Whole rows at a time: these three are one scalar per slot, and a
+        # numpy element assignment costs about what the row assignment does.
+        filled = len(slots)
+        slot_kinds[row, :filled] = [int(slot.kind) for slot in slots]
+        positions[row, :filled] = [slot.position for slot in slots]
+        attention[row, :filled] = 1
+        for column, slot in enumerate(slots):
             if slot.features and slot.kind in features:
-                values = torch.tensor(slot.features, dtype=torch.float32)
-                features[slot.kind][row, column, : values.shape[0]] = values
+                values = slot.features
+                features[slot.kind][row, column, : len(values)] = values
             if isinstance(slot.e, int):
                 e_rows[row, column] = slot.e
             elif slot.e is not None:
-                vector = torch.tensor(slot.e, dtype=torch.float32)
-                e_vectors[row, column, : vector.shape[0]] = vector
+                e_vectors[row, column, : len(slot.e)] = slot.e
 
     return {
-        "slot_features": features,
-        "slot_kinds": slot_kinds,
-        "positions": positions,
-        "e_vectors": e_vectors,
-        "e_rows": e_rows,
-        "attention_mask": attention,
+        "slot_features": {
+            kind: torch.from_numpy(array) for kind, array in features.items()
+        },
+        "slot_kinds": torch.from_numpy(slot_kinds),
+        "positions": torch.from_numpy(positions),
+        "e_vectors": torch.from_numpy(e_vectors),
+        "e_rows": torch.from_numpy(e_rows),
+        "attention_mask": torch.from_numpy(attention),
     }
 
 
