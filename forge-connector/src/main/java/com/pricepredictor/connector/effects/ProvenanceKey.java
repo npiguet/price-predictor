@@ -587,7 +587,7 @@ public record ProvenanceKey(
             return CardFilenames.scriptFile(
                     SourceTree.VARIANT_SCRIPTS, host.getName());
         }
-        String stem = tokenScriptStem(host);
+        String stem = tokenScriptStemOf(host);
         if (stem != null) {
             return CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem);
         }
@@ -621,7 +621,7 @@ public record ProvenanceKey(
      * of a printed card carries the printed card's image key, which is not a
      * token key) yields null rather than a fabricated path.
      */
-    private static String tokenScriptStem(Card host) {
+    static String tokenScriptStemOf(Card host) {
         try {
             IPaperCard paper = host.getPaperCard();
             String image = null;

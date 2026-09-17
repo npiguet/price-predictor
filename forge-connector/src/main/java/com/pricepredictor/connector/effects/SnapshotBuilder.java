@@ -507,7 +507,7 @@ public final class SnapshotBuilder {
                 + ",\"face\":" + faceOf(card)
                 + ",\"copy_source\":" + Json.string(copySourceOf(card))
                 + ",\"token_script_id\":"
-                + Json.string(card.isToken() ? card.getName() : null)
+                + Json.string(tokenScriptIdOf(card))
                 + ",\"types\":" + typeJson(card, without)
                 + ",\"subtypes\":" + subtypeJson(card, without)
                 + ",\"supertypes\":" + supertypeJson(card, without)
@@ -526,6 +526,19 @@ public final class SnapshotBuilder {
                 + ",\"granted_temporary\":" + grantedTemporaryJson(card, without)
                 + ",\"printed\":" + keyJson(printedKeys(card))
                 + ",\"stack_extras\":" + stackExtrasJson(card) + "}";
+    }
+
+    /**
+     * The token's script stem — what FR-078 means by a token-script id — or
+     * the printed name when no script can be named (an engine-built token with
+     * no image key), so a token is never reported as a non-token.
+     */
+    private static String tokenScriptIdOf(Card card) {
+        if (!card.isToken()) {
+            return null;
+        }
+        String stem = ProvenanceKey.tokenScriptStemOf(card);
+        return stem != null ? stem : card.getName();
     }
 
     private String zoneName(Card card) {

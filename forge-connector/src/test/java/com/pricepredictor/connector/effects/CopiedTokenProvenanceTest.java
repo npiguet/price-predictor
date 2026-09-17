@@ -100,14 +100,12 @@ class CopiedTokenProvenanceTest {
      */
     @Test
     void aTokenOnAForkedBoardKeysIntoTheTokenTree() {
-        Game game = twoPlayerGameInAMainPhase();
-        Player owner = game.getPlayers().get(0);
-        Card food = CardFactory.getCard(
-                StaticData.instance().getAllTokens().getToken("c_a_food_sac"),
-                owner, game);
-        game.getAction().moveToPlay(food, owner, null, null);
+        ForkedBoard board = boardWithFoodTokenAndItsFork();
+        Game game = board.game();
+        Game fork = board.fork();
+        Card food = game.getCardsIn(ZoneType.Battlefield).stream()
+                .findFirst().orElseThrow();
 
-        Game fork = new GameCopier(game).makeCopy();
         // The guard the whole-snapshot assertions rest on: one entity, so no
         // other card can satisfy them on the token's behalf.
         assertEquals(1, game.getCardsIn(ZoneType.Battlefield).size(),
@@ -133,6 +131,39 @@ class CopiedTokenProvenanceTest {
         String mainline = new SnapshotBuilder(game, STAGE_TWO).toJson(null, List.of());
         assertEquals(printedBlock(mainline), printedBlock(forked),
                 "the fork's printed keys differ from the board it was forked from");
+    }
+
+    /** FR-078 calls the field a token-script id; the printed name collapses distinct scripts. */
+    @Test
+    void theSnapshotNamesTheTokenScriptNotThePrintedName() {
+        ForkedBoard board = boardWithFoodTokenAndItsFork();
+        String mainline = new SnapshotBuilder(board.game(), STAGE_TWO).toJson(null, List.of());
+        String forked = new SnapshotBuilder(board.fork(), STAGE_TWO).toJson(null, List.of());
+
+        assertTrue(mainline.contains("\"token_script_id\":\"c_a_food_sac\""), mainline);
+        assertTrue(forked.contains("\"token_script_id\":\"c_a_food_sac\""), forked);
+        assertFalse(forked.contains("\"token_script_id\":\"Food Token\""), forked);
+    }
+
+    /** A mainline board holding a single Food token, and the fork made from it. */
+    private record ForkedBoard(Game game, Game fork) {}
+
+    /**
+     * Builds the board {@link #aTokenOnAForkedBoardKeysIntoTheTokenTree} and
+     * {@link #theSnapshotNamesTheTokenScriptNotThePrintedName} both need: a
+     * two-player game with a single Food token on the battlefield, forked once
+     * with {@link GameCopier}.
+     */
+    private static ForkedBoard boardWithFoodTokenAndItsFork() {
+        Game game = twoPlayerGameInAMainPhase();
+        Player owner = game.getPlayers().get(0);
+        Card food = CardFactory.getCard(
+                StaticData.instance().getAllTokens().getToken("c_a_food_sac"),
+                owner, game);
+        game.getAction().moveToPlay(food, owner, null, null);
+
+        Game fork = new GameCopier(game).makeCopy();
+        return new ForkedBoard(game, fork);
     }
 
     /**
