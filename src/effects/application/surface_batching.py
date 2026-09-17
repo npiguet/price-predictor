@@ -37,6 +37,7 @@ from effects.domain.effect_head_input import (
     continuous_masked_keywords,
 )
 from effects.domain.effect_model import collate_surfaces, scatter_e_rows
+from effects.infrastructure.sidecar_io import UnconfiguredTree
 
 #: Rows in the ``identity`` baseline's free-embedding table. Ample for the
 #: corpus's distinct ability texts, so collisions stay rare.
@@ -93,10 +94,13 @@ class SurfaceBatcher:
         The single definition of it. Two of these that disagree miss every
         lookup, and the model then trains on a zero vector while every number
         it reports still moves.
+
+        A key the sidecar does not describe raises: that is the contract's
+        fail-loudly case, and reading it as no text is what hid it.
         """
         try:
             line = self.sidecars.line_for(key)
-        except KeyError:
+        except UnconfiguredTree:
             return None
         if line is None:
             return None
@@ -120,7 +124,7 @@ class SurfaceBatcher:
         def note(key) -> str | None:
             try:
                 line = self.sidecars.line_for(key)
-            except KeyError:
+            except UnconfiguredTree:
                 return None
             if line is None:
                 return None

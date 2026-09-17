@@ -195,6 +195,16 @@ class UnconvertedScript(KeyError):
     """
 
 
+class UnconfiguredTree(KeyError):
+    """A key names a source tree this run configured no converted root for.
+
+    Distinct from :class:`UnconvertedScript` (the tree exists, the card was
+    never converted) and from the mismatch ``KeyError`` (the sidecar exists and
+    disagrees with the record). A variant key on a run without
+    ``--variant-scripts`` is the expected case, and it reads as no text.
+    """
+
+
 class SidecarCache:
     """Sidecars held by script file, read once per card.
 
@@ -222,7 +232,7 @@ class SidecarCache:
     def path_for(self, script_file: str) -> Path:
         tree, _, relative = script_file.partition("/")
         if tree not in self._roots:
-            raise KeyError(
+            raise UnconfiguredTree(
                 f"no converted root configured for source tree {tree!r}; "
                 f"known trees: {sorted(self._roots)}"
             )

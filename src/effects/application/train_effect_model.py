@@ -1008,10 +1008,11 @@ def text_for_key(key, sidecars, surface: str) -> str | None:
     rather than collapsing into every other unreadable line.
     """
     from effects.domain.ability_encoder import encoding_text
+    from effects.infrastructure.sidecar_io import UnconfiguredTree
 
     try:
         line = sidecars.line_for(key)
-    except KeyError:
+    except UnconfiguredTree:
         return None
     if line is None:
         return None

@@ -7,6 +7,7 @@ token and every number it reports would still move.
 
 from __future__ import annotations
 
+import pytest
 import torch
 
 from effects.application.surface_batching import SurfaceBatcher
@@ -71,3 +72,17 @@ def test_the_state_only_variant_keeps_the_zero_token_for_a_real_line():
     abilities = surface.of_kind(SlotKind.ABILITY)
     assert len(abilities) == 1
     assert abilities[0].e == (0.0,) * 4
+
+
+def test_a_sidecar_mismatch_raises_out_of_the_batcher():
+    class _Mismatching(_Sidecars):
+        def line_for(self, key):
+            raise KeyError(
+                f"provenance key {key} appears in neither the lines nor the "
+                "dropped_keys"
+            )
+
+    batcher = _batcher()
+    batcher.sidecars = _Mismatching()
+    with pytest.raises(KeyError, match="neither the lines"):
+        batcher.batch_texts([_record()])

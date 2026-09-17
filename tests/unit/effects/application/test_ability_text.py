@@ -9,9 +9,17 @@ extraction cannot drift the two apart.
 
 from __future__ import annotations
 
-from effects.domain.provenance import ProvenanceKey, SidecarLine
+import pytest
+
+from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import EffectRecord, Moment, RecordKind, ResolutionPayload
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
+from effects.infrastructure.sidecar_io import (
+    SidecarCache,
+    UnconfiguredTree,
+    UnconvertedScript,
+    write_sidecar,
+)
 
 
 def _entity(name: str, **overrides) -> EntityState:
@@ -50,6 +58,13 @@ class FakeSidecarCache:
     No sidecar fake existed anywhere in the test tree before this one; a later
     task that needs a sidecar double should import this rather than write a
     third.
+
+    A key's ``script_file`` decides which of the real cache's two failure
+    shapes ``line_for`` mirrors when the key itself is not registered: a
+    script_file no registered key names at all reads as no text, the same way
+    a script the converted corpus never held does; a script_file some other
+    registered key *does* name is a sidecar that exists and disagrees with
+    this key, so it raises the way a real reconversion mismatch would.
     """
 
     def __init__(
@@ -59,9 +74,19 @@ class FakeSidecarCache:
     ) -> None:
         self._lines = lines
         self._prose = dict(prose or {})
+        self._known_scripts = {key.script_file for key in lines}
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:
-        return self._lines[key]
+        if key in self._lines:
+            return self._lines[key]
+        if key.script_file not in self._known_scripts:
+            return None
+        raise KeyError(
+            f"provenance key {key} appears in neither the lines nor the "
+            f"dropped_keys of {key.script_file}; the sidecar does not "
+            "describe the card this record was collected against "
+            "(reconversion between collection and training?)"
+        )
 
     def prose_for(self, key: ProvenanceKey) -> str | None:
         return self._prose.get(key)
@@ -85,3 +110,52 @@ def test_text_for_key_and_ability_text_of_agree_on_one_key():
     assert text_for_key(key, sidecars, "script") == ability_text_of(
         record, sidecars, "script"
     )
+
+
+def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
+    """The contract's fail-loudly case: the sidecar does not describe the card."""
+    from effects.application.train_effect_model import text_for_key
+    from effects.infrastructure.sidecar_io import sidecar_path_for
+
+    script = "cardsfolder/p/plague_sliver.txt"
+    txt = tmp_path / "cardsfolder" / "p" / "plague_sliver.txt"
+    txt.parent.mkdir(parents=True)
+    txt.write_text("name: plague sliver\n", encoding="utf-8")
+    rendered = ProvenanceKey(script, 0, "static", 0)
+    write_sidecar(
+        ProvenanceSidecar(
+            card="plague sliver", script_file=script,
+            lines=(SidecarLine(line_index=0, line_kind="static",
+                               provenance=(rendered,), script_text="all slivers have"),),
+            dropped_keys=(ProvenanceKey(script, 0, "spell", 0),),
+        ),
+        sidecar_path_for(txt),
+    )
+    sidecars = SidecarCache({"cardsfolder": tmp_path / "cardsfolder"})
+
+    assert text_for_key(rendered, sidecars, "script") == "all slivers have"
+    assert text_for_key(ProvenanceKey(script, 0, "spell", 0), sidecars, "script") is None
+    with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
+        text_for_key(ProvenanceKey(script, 0, "trigger", 0), sidecars, "script")
+
+
+def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):
+    """A variant key without ``--variant-scripts`` resolves to nothing, as pinned
+    by ``test_without_the_variant_tree_a_variant_text_resolves_to_nothing``."""
+    from effects.application.train_effect_model import text_for_key
+
+    sidecars = SidecarCache({"cardsfolder": tmp_path})
+    key = ProvenanceKey("variant-scripts/x.txt", 0, "spell", 0)
+    with pytest.raises(UnconfiguredTree):
+        sidecars.path_for(key.script_file)
+    assert text_for_key(key, sidecars, "script") is None
+
+
+def test_an_unconverted_script_reads_as_no_text(tmp_path):
+    from effects.application.train_effect_model import text_for_key
+
+    sidecars = SidecarCache({"cardsfolder": tmp_path})
+    key = ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 0)
+    with pytest.raises(UnconvertedScript):
+        sidecars.get(key.script_file)
+    assert text_for_key(key, sidecars, "script") is None

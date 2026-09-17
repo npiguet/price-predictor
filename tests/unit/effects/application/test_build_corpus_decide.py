@@ -67,8 +67,9 @@ HELD_OUT_TEXTS = frozenset({"held-out-text"})
 @pytest.fixture
 def fake_sidecars() -> FakeSidecarCache:
     """``reprint-a``/``reprint-b`` resolve to one text; ``held-out-text`` to
-    its own; ``unknown-key`` is left unregistered so ``line_for`` raises
-    ``KeyError`` for it, the same way a real corpus/sidecar mismatch would.
+    its own; ``unknown-key`` names a script no other key here registers, so
+    ``line_for`` reads it as no text, the same way a script the converted
+    corpus never held would.
     """
 
     def _line(text: str, key: ProvenanceKey) -> SidecarLine:
