@@ -252,33 +252,46 @@ def _walk(obj, visit) -> None:
 def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCounts) -> None:
     """Rewrite every old token key in one record's raw JSON, in place.
 
-    Entities resolve first, each against its own colours, types, P/T and
-    printed-key counts (the contract's steps 2-3). Every other key list in
-    the record -- the acting ``ability``, playability candidates,
-    ``responsible_static``, ``replaced_by``, and anything else under a
-    non-``state`` field -- then reuses whichever stem an entity already
-    found for the same old ``script_file`` in this record, falling back to
-    resolving by name alone (step 1) when no entity carried it. A key that
-    stays ambiguous is counted once, keyed by the old script's stem.
+    Each entity resolves *independently* against its own colours, types,
+    P/T and printed-key counts (the contract's steps 2-3) -- never against
+    another entity's resolution -- so two entities sharing one old
+    ``script_file`` (two token copies with different characteristics on one
+    board) are never conflated. Every other key list in the record -- the
+    acting ``ability``, playability candidates, ``responsible_static``,
+    ``replaced_by``, and anything else under a non-``state`` field -- may
+    then reuse an old file's resolution only when every entity that carried
+    it agreed on the same stem; otherwise it falls back to resolving by
+    name alone (step 1). A key that stays ambiguous is counted once, keyed
+    by the old script's stem.
     """
-    memo: dict[str, str | None] = {}
-
-    def resolve_for_entity(entity: dict, script_file: str) -> str | None:
-        name = remapper.is_old_token_key(script_file)
-        if name is None:
-            return None
-        if script_file not in memo:
-            memo[script_file] = remapper.resolve(
-                name, entity=entity, printed_keys=entity.get("printed") or (),
-            )
-        return memo[script_file]
-
     state = data.get("state") or {}
     entities = state.get("entities") or ()
 
+    # Per old script_file, every stem (or None) some entity carrying it
+    # resolved to -- the record-wide memo below trusts a file only when
+    # every entity that carried it agreed.
+    per_file_stems: dict[str, set[str | None]] = {}
+
     for entity in entities:
-        def visit_entity_key(key: dict, entity: dict = entity) -> None:
-            stem = resolve_for_entity(entity, key["script_file"])
+        entity_cache: dict[str, str | None] = {}
+
+        def resolve_for_entity(
+            script_file: str, entity: dict = entity, entity_cache: dict = entity_cache,
+        ) -> str | None:
+            name = remapper.is_old_token_key(script_file)
+            if name is None:
+                return None
+            if script_file not in entity_cache:
+                entity_cache[script_file] = remapper.resolve(
+                    name, entity=entity, printed_keys=entity.get("printed") or (),
+                )
+            return entity_cache[script_file]
+
+        def visit_entity_key(key: dict, resolve_for_entity=resolve_for_entity) -> None:
+            script_file = key["script_file"]
+            stem = resolve_for_entity(script_file)
+            if remapper.is_old_token_key(script_file) is not None:
+                per_file_stems.setdefault(script_file, set()).add(stem)
             if stem is not None:
                 _rewrite(key, stem)
                 counts.remapped += 1
@@ -286,6 +299,14 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
         for field in ("printed", "granted_attached"):
             _walk(entity.get(field) or [], visit_entity_key)
         _walk((entity.get("granted_temporary") or {}).get("abilities") or [], visit_entity_key)
+
+    # Trust an old file's resolution for the record's other key sites only
+    # when every entity that carried it agreed on one non-None stem.
+    memo: dict[str, str | None] = {
+        script_file: next(iter(stems))
+        for script_file, stems in per_file_stems.items()
+        if len(stems) == 1 and None not in stems
+    }
 
     def visit_other(key: dict) -> None:
         script_file = key["script_file"]

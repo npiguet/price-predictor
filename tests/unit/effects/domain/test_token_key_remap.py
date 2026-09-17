@@ -203,6 +203,58 @@ def test_the_acting_ability_reuses_the_entitys_resolution(remapper):
     assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
 
 
+def _elf_entity() -> dict:
+    # Carries the same old key as the goblin above but never matches any
+    # goblin script's colours/subtypes, so it resolves to nothing (mirrors
+    # test_a_mismatching_entity_resolves_nothing's fixture).
+    script_file = "cardsfolder/g/goblin_token.txt"
+    return {
+        "id": "E2", "name": "Elf Token", "colors": ["G"], "types": ["creature"],
+        "subtypes": ["elf"], "pt": {"base": [1, 1]},
+        "printed": [_prov_key(script_file, "spell")],
+        "granted_attached": [], "granted_temporary": {"abilities": []},
+    }
+
+
+def test_entities_that_disagree_each_resolve_on_their_own_context(remapper):
+    """Two entities sharing one old key are never conflated (review round 1)."""
+    script_file = "cardsfolder/g/goblin_token.txt"
+    data = _record([_goblin_entity(), _elf_entity()], ability=[_prov_key(script_file, "spell")])
+    counts = RemapCounts()
+    remap_record_dict(data, remapper, counts)
+    goblin_printed = data["state"]["entities"][0]["printed"]
+    elf_printed = data["state"]["entities"][1]["printed"]
+    assert goblin_printed[0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert goblin_printed[1]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    # The elf never matches any goblin script's colours/subtypes, so its own
+    # key -- despite naming the same old file -- stays untouched.
+    assert elf_printed[0]["script_file"] == script_file
+    # The entities disagreed (one resolved, one didn't), so the acting key
+    # is not trusted to follow either of them and stays untouched too.
+    assert data["ability"][0]["script_file"] == script_file
+    assert counts.remapped == 2
+    # The elf's leftover key (final pass) and the acting key (visit_other)
+    # are each counted where they were visited.
+    assert counts.ambiguous == {"goblin_token": 2}
+
+
+def test_entities_that_agree_let_the_acting_key_follow_them(remapper):
+    """Two entities resolving to the same stem let the acting key reuse it."""
+    script_file = "cardsfolder/g/goblin_token.txt"
+    entity_a, entity_b = _goblin_entity(), _goblin_entity()
+    entity_b["id"] = "E2"
+    data = _record([entity_a, entity_b], ability=[_prov_key(script_file, "spell")])
+    counts = RemapCounts()
+    remap_record_dict(data, remapper, counts)
+    for entity in data["state"]["entities"]:
+        for key in entity["printed"]:
+            assert key["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    # By name alone "goblin token" is ambiguous (test_an_ambiguous_name_needs_the_entity);
+    # the acting key resolves anyway because both entities agreed.
+    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert counts.remapped == 5 and not counts.ambiguous
+
+
 def test_a_key_with_no_carrying_entity_resolves_by_name_only(remapper):
     data = _record([], ability=[_prov_key("cardsfolder/f/food_token.txt")])
     counts = RemapCounts()
