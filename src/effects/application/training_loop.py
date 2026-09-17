@@ -609,7 +609,9 @@ class TrainingLoop:
                 logger.info(
                     "%d ability scripts the converted corpus does not hold, "
                     "%d lookups so far; those abilities reach the model as no "
-                    "text. Most asked: %s",
+                    "text. Most asked: %s. A `_token` stem under cardsfolder/ "
+                    "is a token keyed to the wrong tree; a variant-scripts/ key "
+                    "needs --variant-scripts.",
                     len(sidecars.unresolved),
                     sum(sidecars.unresolved.values()),
                     ", ".join(f"{name} ({hits})" for name, hits in worst),
