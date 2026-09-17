@@ -67,6 +67,17 @@ class CopiedTokenProvenanceTest {
      * it clones the match's registered players and replays the phase handler's
      * turn onto the fork, so a game that has taken no turn at all forks with a
      * null active player and the copy's own event bus logs an NPE.
+     *
+     * <p>Both seats get an <b>empty</b> deck on purpose, and that is
+     * load-bearing rather than incidental: the token has to be the only entity
+     * in either snapshot, because the assertions below read the whole rendered
+     * JSON -- {@code contains} over the two script paths, and a
+     * {@link #printedBlock} that takes the <em>first</em> {@code printed}
+     * array. A second permanent on the board would let some other card satisfy
+     * the {@code tokenscripts} check, or hand {@code printedBlock} somebody
+     * else's keys, and the test would keep passing while checking nothing. The
+     * entity count is asserted in the test so a fixture that stops holding
+     * this fails loudly instead.
      */
     private static Game twoPlayerGameInAMainPhase() {
         Deck deck = new Deck();
@@ -97,6 +108,12 @@ class CopiedTokenProvenanceTest {
         game.getAction().moveToPlay(food, owner, null, null);
 
         Game fork = new GameCopier(game).makeCopy();
+        // The guard the whole-snapshot assertions rest on: one entity, so no
+        // other card can satisfy them on the token's behalf.
+        assertEquals(1, game.getCardsIn(ZoneType.Battlefield).size(),
+                "the fixture's board must hold the token and nothing else");
+        assertEquals(1, fork.getCardsIn(ZoneType.Battlefield).size(),
+                "the fork's board must hold the token and nothing else");
         Card copied = fork.getCardsIn(ZoneType.Battlefield).stream()
                 .filter(c -> food.getName().equals(c.getName()))
                 .findFirst().orElseThrow();
@@ -118,7 +135,13 @@ class CopiedTokenProvenanceTest {
                 "the fork's printed keys differ from the board it was forked from");
     }
 
-    /** The one entity's {@code printed} array, as rendered. */
+    /**
+     * The one entity's {@code printed} array, as rendered.
+     *
+     * <p>Takes the first one in the snapshot, which names the token only
+     * because the fixture puts nothing else on the board -- see
+     * {@link #twoPlayerGameInAMainPhase}.
+     */
     private static String printedBlock(String snapshot) {
         int open = snapshot.indexOf(PRINTED_KEY);
         assertTrue(open >= 0, snapshot);
