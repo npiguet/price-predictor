@@ -9,10 +9,14 @@ against the shared resolver (`ProvenanceKey.scriptFileOf` on the Java side,
 ## Commands run
 
 ```bash
-grep -rnE 'isToken\(|PaperToken|tokenscripts|TOKENSCRIPTS|getAllTokens|TokenInfo|token_script_id|_token' \
-    forge-connector/src/main/java --include=*.java | grep -vE '^\s*//|^\S+:\s*\*'
+grep -rnE 'isToken\(|PaperToken|tokenscripts|TOKENSCRIPTS|getAllTokens|TokenInfo|token_script_id|_token' forge-connector/src/main/java --include=*.java | grep -vE ':[0-9]+:\s*(//|\*|/\*)'
 grep -rnE 'tokenscripts|token_script|_token\.txt' src/effects --include=*.py | grep -v tests
 ```
+
+(Re-run against the current tree, the Java command above reproduces exactly the fifteen
+non-comment hits the table below collapses into fourteen rows — `SnapshotBuilder.java`'s
+`509` and `510` share one row. Line numbers in the table were re-checked against this run
+and updated where the javadoc rewrite in this fix wave shifted them.)
 
 ## Java (`forge-connector/src/main/java`)
 
@@ -24,10 +28,10 @@ grep -rnE 'tokenscripts|token_script|_token\.txt' src/effects --include=*.py | g
 | `ConvertMain.java:64` `report("tokenscripts", tokens)` | prints the conversion summary label | cosmetic | consistent by construction |
 | `ConvertMain.java:67` `"  tokenscripts: skipped, no such directory (...)"` | prints when no tokens directory is found | cosmetic | consistent by construction |
 | `ProvenanceKey.java:19` `import forge.item.PaperToken;` | import for `tokenScriptStem` | — | shared resolver (Task 1/2) |
-| `ProvenanceKey.java:586` `CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem)` | `scriptFileOf` files a token under the token tree once `tokenScriptStem` returns a stem | is the resolver | shared resolver |
-| `ProvenanceKey.java:622` `if (paper instanceof PaperToken token)` | first path: a paper token's own image filename | is the resolver | shared resolver |
-| `ProvenanceKey.java:624` `else if (host.isToken())` | second path: a `TokenInfo`-rebuilt token (forked board) reads its image key | is the resolver | shared resolver |
-| `ProvenanceKey.java:632` `!StaticData.instance().getAllTokens().containsRule(stem)` | gates the stem against the token rules DB before it is trusted (FR-150) | is the resolver | shared resolver |
+| `ProvenanceKey.java:592` `CardFilenames.scriptFileForStem(SourceTree.TOKENSCRIPTS, stem)` | `scriptFileOf` files a token under the token tree once `tokenScriptStem` returns a stem | is the resolver | shared resolver |
+| `ProvenanceKey.java:628` `if (paper instanceof PaperToken token)` | first path: a paper token's own image filename | is the resolver | shared resolver |
+| `ProvenanceKey.java:630` `else if (host.isToken())` | second path: a `TokenInfo`-rebuilt token (forked board) reads its image key | is the resolver | shared resolver |
+| `ProvenanceKey.java:638` `!StaticData.instance().getAllTokens().containsRule(stem)` | gates the stem against the token rules DB before it is trusted (FR-150) | is the resolver | shared resolver |
 | `SnapshotBuilder.java:509-510` `"token_script_id": card.isToken() ? card.getName() : null` | writes the corpus's `token_script_id` field from the printed **name**, not the script stem | does not call `scriptFileOf`/`tokenScriptStem` | **needs decision** — see below |
 | `SourceTree.java:46` `TOKENSCRIPTS` constant | names the flat token tree | is part of the resolver's vocabulary | consistent by construction |
 | `SourceTree.java:50` `isFlat(tree)` includes `TOKENSCRIPTS` | tree-layout predicate `scriptFileOf`/`CardFilenames` rely on | is part of the resolver's vocabulary | consistent by construction |
@@ -77,8 +81,37 @@ missing it.
 
 | site | what it does | verdict |
 |---|---|---|
-| Endure hotfix tokens `w_2_2_spirit` / `w_3_3_spirit` | These tokens register in the token rules DB under key `w_x_x_spirit`, not their own stem. After the FR-150 `containsRule` gate (`ProvenanceKey.java:632`), `w_2_2_spirit`/`w_3_3_spirit` fail the check and `tokenScriptStem` returns null, so `scriptFileOf` falls back to a `cardsfolder` path derived from the printed name instead of filing under `tokenscripts`. | needs change in principle, but **pre-existing and harmless today**: `cardsfolder/w/w_x_x_spirit.txt` is the wrong tree, but that script has no abilities, so no ability text is lost. Left as-is; flagging for whoever next touches Endure-hotfix tokens. |
-| Food token `c_a_food_sac` | Renders **two** printed keys (`spell#0` and `spell#1`) for what is one scripted ability, reproduced on both the mainline board and the FR-150 forked-board test. Pre-existing (not introduced by Tasks 1/2). Whether the second printed key (index 1) joins to the sidecar or falls into `dropped_keys` is **unknown** — not verified in this audit. | not fixed here; needs its own investigation of the Food-token conversion/dedup path before a verdict can be assigned. |
+| Endure hotfix tokens `w_2_2_spirit` / `w_3_3_spirit` | These tokens register in the token rules DB under key `w_x_x_spirit`, not their own stem. After the FR-150 `containsRule` gate (`ProvenanceKey.java:638`), `w_2_2_spirit`/`w_3_3_spirit` fail the check and `tokenScriptStem` returns null, so `scriptFileOf` falls back to a `cardsfolder` path derived from the printed name instead of filing under `tokenscripts`. | needs change in principle, but **pre-existing and harmless today**: `cardsfolder/w/w_x_x_spirit.txt` is the wrong tree, but that script has no abilities, so no ability text is lost. Left as-is; flagging for whoever next touches Endure-hotfix tokens. |
+| Food token `c_a_food_sac` | **CLOSED.** Renders two printed keys (`spell#0` and `spell#1`) for what is one scripted ability, reproduced on both the mainline board and the FR-150 forked-board test. `output/tokenscripts/c_a_food_sac.provenance.json` lists `{"face":0,"trait_kind":"spell","index_within_kind":0}` under `dropped_keys` and carries exactly one line, `{"face":0,"trait_kind":"spell","index_within_kind":1}` (the `GainLife` line, script text `AB$ GainLife \| Cost$ 2 T Sac<1/CARDNAME/this token> \| LifeAmount$ 3 \| SpellDescription$ You gain 3 life.`). So `spell#0` is the dropped key and `spell#1` is the one line — both keys join by design, per the sidecar's own join rule (`src/effects/infrastructure/sidecar_io.py:10-17`: a key in `dropped_keys` resolves to no line and is kept because the trait is still live at runtime, while the surviving key resolves to the rendered line). Nothing to fix. | closed; verified by reading the sidecar directly. |
+
+## Follow-up (parked)
+
+Items raised by this audit and the whole-plan review that are worth doing but are
+out of scope for a cheap fix here:
+
+- An unknown `t:` stem (a token image key naming a stem the token database does
+  not know — including the Endure hotfix pair above) should yield an unresolved
+  reason from `scriptFileOf`/`tokenScriptStem` rather than silently falling
+  through to a fabricated name-derived `cardsfolder` path. Today it is
+  indistinguishable from a real card whose printed name happens to match.
+- `scriptFileOf` should prefer `SourceTree.relativePathIn(SourceTree.TOKENSCRIPTS,
+  rules.getPath())` for a `PaperToken`, the same way it already prefers
+  `CardRules.getPath()` for a printed card, rather than deriving the token's
+  filename from its image key alone. This closes the Endure hotfix pair
+  generically — `rules.getPath()` names the file Forge actually read
+  (`tokenscripts/w_x_x_spirit.txt`) regardless of what the image key or the
+  rules-DB key happen to be — instead of requiring a one-off fix per
+  differently-keyed token family.
+- `containsRule` (the token-rules-DB gate `tokenScriptStem` checks the stem
+  against) is case-insensitive, but the path `scriptFileOf` emits from a stem
+  is not case-normalized. A stem differing from the rules-DB key only in case
+  passes the gate today and could still emit a path that does not match the
+  file on disk.
+- `isRealToken()` is the predicate the `scriptFileOf` javadoc means when it
+  talks about a token copy of a real permanent (`isToken()` is true for that
+  case too, but the card's abilities are still the printed card's, not a
+  token script's) — worth using by name wherever that distinction is drawn in
+  prose or in code, on merged permanents in particular.
 
 ## Step 3 — fixes made
 
