@@ -10,6 +10,11 @@ Resolving a key to its text needs a ``SidecarCache`` over tens of thousands of
 sidecar files, and building one per worker process would cost more than the
 scan it serves. Keys are in the record; the fold happens once, in the process
 that already has a cache for the holdout.
+
+Both passes read their shards through ``read_shard_remapped``, which repairs
+the old collector's token keys in the raw JSON before a record is built
+(FR-151), so the survey's rarity table and caps and the written shards all
+name the same ability.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ import logging
 import time
 import zlib
 from collections import Counter, defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +34,7 @@ from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.record_quality import has_unattributed_events, quality_defect
 from effects.domain.records import EffectRecord, RecordKind
+from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
 if TYPE_CHECKING:
     from effects.infrastructure.corpus_store import CorpusStore
@@ -93,6 +99,35 @@ def game_hash(game_id: str) -> int:
     return zlib.crc32(game_id.encode("utf-8"))
 
 
+def read_shard_remapped(
+    path: Path, remapper: TokenKeyRemapper | None, counts: RemapCounts,
+) -> Iterator[EffectRecord]:
+    """Every complete record of one shard, its old token keys remapped first.
+
+    The remap works on the raw JSON before the record is built, so both
+    passes see the corrected keys and nothing downstream has to know they
+    were ever wrong: the survey's rarity entry, the per-text cap it sizes and
+    the written shard all name the token script. Reading through the record
+    and rewriting it afterwards would not do -- ``ProvenanceKey`` is frozen
+    and the remap needs the entity dicts the record drops.
+
+    ``remapper is None`` (``--no-remap-token-keys``) is a plain read, and
+    ``counts`` is then left alone.
+    """
+    import json
+
+    from effects.infrastructure.record_io import iter_shard_lines, record_from_dict
+
+    for line in iter_shard_lines(Path(path)):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        data = json.loads(stripped)
+        if remapper is not None:
+            remap_record_dict(data, remapper, counts)
+        yield record_from_dict(data)
+
+
 @dataclass(frozen=True, slots=True)
 class SurveyConfig:
     """What every survey worker needs, sent once through the pool initializer."""
@@ -107,6 +142,10 @@ class SurveyConfig:
     #: run under a different rule than the write pass reports availability for
     #: records that are about to be refused.
     max_events: int
+    #: The old-token-key remap, or None when it is off (FR-151). A plain
+    #: object of dicts and frozensets, so it pickles into every worker with
+    #: the rest of this config rather than being rebuilt per shard.
+    remapper: TokenKeyRemapper | None = None
 
 
 @dataclass(slots=True)
@@ -137,6 +176,9 @@ class ShardSurvey:
     #: rather than silently skipped: a corpus that is a third junk should say
     #: so in the manifest rather than in nothing.
     quality_dropped: Counter[str] = field(default_factory=Counter)
+    #: Old token keys this shard's read rewrote, and the ones it refused to
+    #: guess at (FR-151).
+    remap: RemapCounts = field(default_factory=RemapCounts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +202,10 @@ class Survey:
     #: in collection, and nothing else in the build would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
     held_out_games_by_source: dict[str, int] = field(default_factory=dict)
+    #: The whole corpus's remap counts, summed over the shards. Compared
+    #: against the write pass's own, which must agree: both passes read the
+    #: same shards through the same remapper.
+    remap: RemapCounts = field(default_factory=RemapCounts)
 
 
 _CONFIG: SurveyConfig | None = None
@@ -178,7 +224,6 @@ def survey_shard(relative: str) -> ShardSurvey:
         record_names_held_out_card,
         sampling_class,
     )
-    from effects.infrastructure.record_io import read_shard
 
     config = _CONFIG
     assert config is not None, "init_survey_worker was not run"
@@ -189,7 +234,7 @@ def survey_shard(relative: str) -> ShardSurvey:
     out = ShardSurvey(name=relative, size=path.stat().st_size, records=0)
     heaps: dict[str, CapHeap] = {}
 
-    for record in read_shard(path):
+    for record in read_shard_remapped(path, config.remapper, out.remap):
         out.records += 1
         # Above the quality check on purpose: a game that played a held-out
         # card played it whether or not the record saying so survives the
@@ -254,6 +299,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     quality_dropped: Counter[str] = Counter()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
+    remap = RemapCounts()
 
     for part in parts:
         shards.append(SourceShard(name=part.name, size=part.size))
@@ -265,6 +311,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         held_out_games |= part.held_out_games
         games |= part.games
         quality_dropped.update(part.quality_dropped)
+        remap.merge(part.remap)
         source = source_of(part.name)
         games_by_source[source] |= part.games
         held_by_source[source] |= part.held_out_games
@@ -293,6 +340,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         quality_dropped=quality_dropped,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
+        remap=remap,
     )
 
 
@@ -369,6 +417,12 @@ class BuildCorpusConfig:
     records_dir: Path
     output: Path = Path("output/effects/corpus")
     cards_folders: tuple[str, ...] = ("output/cardsfolder", "output/tokenscripts")
+    #: Forge's own raw token scripts, read to resolve the old collector's
+    #: token keys (FR-151). The *raw* tree, not the converted one: the remap
+    #: tells same-name scripts apart by their ``Colors:``, ``Types:`` and
+    #: ``PT:`` lines, which conversion does not preserve.
+    forge_tokenscripts: Path | None = Path("../forge/forge-gui/res/tokenscripts")
+    remap_token_keys: bool = True
     vocab_path: str = "models/effects/vocab.txt"
     variant_scripts: str | None = None
     holdout_permille: int = 20
@@ -751,6 +805,9 @@ class WriteConfig:
     game_disjoint: frozenset[str]
     held_out_games: frozenset[str]
     seed: int
+    #: The same remapper the survey read through, so both passes see one
+    #: corpus (FR-151); None when ``--no-remap-token-keys``.
+    remapper: TokenKeyRemapper | None = None
 
 
 @dataclass(slots=True)
@@ -786,6 +843,10 @@ class WriteResult:
     #: rather than refused: a clause the collector could not find on the
     #: acting chain does not make the outcome another ability's.
     unattributed: int = 0
+    #: Old token keys this pass rewrote, and the ones it refused to guess at
+    #: (FR-151). The manifest records these rather than the survey's, since
+    #: these are the keys the written dataset actually carries.
+    remap: RemapCounts = field(default_factory=RemapCounts)
 
 
 _WRITE: WriteConfig | None = None
@@ -823,7 +884,7 @@ def write_shard_pass(relative: str) -> WriteResult:
     """Filter one shard into its output parts. Module-level so it pickles."""
     from effects.application.train_effect_model import sampling_class
     from effects.domain.corpus_curation import keeps, record_hash
-    from effects.infrastructure.record_io import read_shard, write_shard
+    from effects.infrastructure.record_io import write_shard
 
     config = _WRITE
     assert config is not None, "init_write_worker was not run"
@@ -833,7 +894,9 @@ def write_shard_pass(relative: str) -> WriteResult:
     game_disjoint: list = []
     gate_one: list = []
 
-    for record in read_shard(Path(config.records_dir) / relative):
+    for record in read_shard_remapped(
+        Path(config.records_dir) / relative, config.remapper, out.remap,
+    ):
         name = sampling_class(record)
         # Computed once, up front: every branch below -- including the two
         # validation strata, which never used to look at it at all -- needs
@@ -924,6 +987,7 @@ def run_write_pass(
         total.quality_dropped.update(part.quality_dropped)
         total.refused_by_class.update(part.refused_by_class)
         total.unattributed += part.unattributed
+        total.remap.merge(part.remap)
         for name, keys in part.kept_keys.items():
             total.kept_keys.setdefault(name, set()).update(keys)
         for name, keys in part.stratum_keys.items():
@@ -1035,6 +1099,83 @@ def _check_samples(counts: dict[str, int], *, size: int) -> None:
         )
 
 
+def _token_key_remapper(
+    config: BuildCorpusConfig, folders: dict[str, Path], card_files: dict[str, str],
+) -> TokenKeyRemapper | None:
+    """The remap both passes read through, or None when it is turned off.
+
+    Built once in the main process and pickled into every worker with its
+    config: it is dicts and frozensets, and re-reading Forge's token scripts
+    per worker would cost more than the scan they serve.
+    """
+    if not config.remap_token_keys:
+        return None
+
+    from effects.domain.token_key_remap import load_token_script_facts
+
+    forge_tokens = Path(config.forge_tokenscripts) if config.forge_tokenscripts else None
+    if forge_tokens is None or not forge_tokens.is_dir():
+        raise BuildCorpusError(
+            f"--forge-tokenscripts {forge_tokens} is not a directory. The old "
+            "collector keyed forked tokens to cardsfolder paths; remapping them "
+            "needs Forge's raw token scripts (their Colors/PT lines) to tell "
+            "same-name scripts apart. Point the flag at "
+            "<forge checkout>/forge-gui/res/tokenscripts/, or pass "
+            "--no-remap-token-keys to build without the remap."
+        )
+    token_dir = folders.get("tokenscripts")
+    # The *converted* token tree: the remap rewrites a key only to a script
+    # this corpus holds a sidecar for, so a token Forge scripts and the
+    # converter never wrote is left alone rather than pointed at nothing.
+    token_sidecars = (
+        frozenset(path.stem for path in Path(token_dir).glob("*.txt"))
+        if token_dir is not None and Path(token_dir).is_dir()
+        else frozenset()
+    )
+    remapper = TokenKeyRemapper(
+        load_token_script_facts(forge_tokens),
+        converted_card_files=frozenset(card_files.values()),
+        token_sidecars=token_sidecars,
+    )
+    logger.info(
+        "Token key remap: %d token name(s) over %d script(s); %d converted token "
+        "sidecar(s).",
+        len(remapper.facts_by_name),
+        sum(len(facts) for facts in remapper.facts_by_name.values()),
+        len(token_sidecars),
+    )
+    if not token_sidecars:
+        logger.warning(
+            "No converted token sidecar under %s, so the remap can resolve "
+            "nothing: every old token key will stay as it was collected. Pass "
+            "--cards-folder output/tokenscripts/ beside the card tree.",
+            token_dir,
+        )
+    return remapper
+
+
+def _report_remap(survey: Survey, written: WriteResult) -> None:
+    """Log what the remap did, and say so when the two passes disagree."""
+    remap = written.remap
+    top = remap.ambiguous.most_common(5)
+    logger.info(
+        "%-22s %9d remapped to tokenscripts/; %d left ambiguous over %d stem(s)%s",
+        "token keys", remap.remapped, sum(remap.ambiguous.values()),
+        len(remap.ambiguous),
+        (" — most: " + ", ".join(f"{stem} ({n})" for stem, n in top)) if top else "",
+    )
+    if survey.remap.remapped != remap.remapped:
+        # Both passes read the same shards through the same remapper, so the
+        # counts must agree. They part company only if the corpus changed
+        # between the passes -- and then the survey sized the caps for a key
+        # the write pass did not write.
+        logger.warning(
+            "The survey remapped %d key(s) and the write pass %d; the passes "
+            "disagree, which means the corpus changed between them.",
+            survey.remap.remapped, remap.remapped,
+        )
+
+
 def build(config: BuildCorpusConfig) -> int:
     """Build a curated dataset, or verify an existing one. Returns an exit code."""
     from effects.application.train_effect_model import (
@@ -1103,6 +1244,8 @@ def build(config: BuildCorpusConfig) -> int:
             "tree has sidecars with script text."
         )
 
+    remapper = _token_key_remapper(config, folders, card_files)
+
     survey = run_survey(
         records_dir,
         config=SurveyConfig(
@@ -1112,6 +1255,7 @@ def build(config: BuildCorpusConfig) -> int:
             text_cap=config.text_cap,
             seed=config.seed,
             max_events=config.max_events,
+            remapper=remapper,
         ),
         workers=config.workers,
     )
@@ -1163,10 +1307,18 @@ def build(config: BuildCorpusConfig) -> int:
             game_disjoint=decisions.game_disjoint,
             held_out_games=survey.held_out_games,
             seed=config.seed,
+            remapper=remapper,
         ),
         workers=config.workers,
     )
     _check_refusals(written)
+    if remapper is not None:
+        _report_remap(survey, written)
+    else:
+        logger.info(
+            "%-22s %9s — every key was written exactly as collected "
+            "(--no-remap-token-keys)", "token keys", "not remapped",
+        )
     kept_records = sum(written.read.values())
     logger.info(
         "%-22s %9d record(s) kept (%.1f%%) name no producing clause for at "
@@ -1265,6 +1417,13 @@ def build(config: BuildCorpusConfig) -> int:
         validation_sample=config.validation_sample,
         max_events_per_record=config.max_events,
         unattributed_records=written.unattributed,
+        token_keys_remapped=written.remap.remapped,
+        # The hundred worst stems, not all of them: a corpus can leave a long
+        # tail of one-off ambiguities, and the manifest is read by people.
+        token_keys_ambiguous=dict(written.remap.ambiguous.most_common(100)),
+        forge_tokenscripts=(
+            str(config.forge_tokenscripts) if remapper is not None else ""
+        ),
     )
     store.save(manifest)
 

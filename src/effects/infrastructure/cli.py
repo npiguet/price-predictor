@@ -448,6 +448,12 @@ def run_collect_coverage(args: argparse.Namespace) -> int:
 #: (specs/2026-09-05-ability-effect-model.md § Curated corpus).
 DEFAULT_CORPUS_OUTPUT = "output/effects/corpus/"
 
+#: Forge's own token scripts, beside the card scripts `convert` reads. The
+#: remap needs the raw tree rather than `output/tokenscripts/`: it tells
+#: same-name token scripts apart by their Colors/Types/PT lines, which
+#: conversion does not preserve.
+DEFAULT_FORGE_TOKENSCRIPTS = "../forge/forge-gui/res/tokenscripts"
+
 
 def _class_mix(text: str) -> dict[str, float]:
     """``--class-mix`` as argparse wants it: parsed through the trainer's own
@@ -571,6 +577,23 @@ def _build_corpus_parser(subparsers) -> None:
         ),
     )
     parser.add_argument(
+        "--forge-tokenscripts", type=str, default=DEFAULT_FORGE_TOKENSCRIPTS,
+        help=(
+            "Forge's raw token scripts, read to remap the old collector's "
+            "token keys: a key naming a cardsfolder path no tree holds, whose "
+            "stem is a token's printed name, is rewritten to the token script "
+            f"it meant (default: {DEFAULT_FORGE_TOKENSCRIPTS})"
+        ),
+    )
+    parser.add_argument(
+        "--no-remap-token-keys", dest="remap_token_keys", action="store_false",
+        help=(
+            "Build without the token-key remap, keeping every key exactly as "
+            "collected. Records of a token's abilities then resolve to no "
+            "ability text at all, as they did before the remap existed"
+        ),
+    )
+    parser.add_argument(
         "--seed", type=int, default=42, help="Selection seed (default: 42)",
     )
     parser.add_argument(
@@ -597,6 +620,10 @@ def run_build_corpus(args: argparse.Namespace) -> int:
             ),
             vocab_path=args.vocab_path,
             variant_scripts=args.variant_scripts,
+            forge_tokenscripts=(
+                Path(args.forge_tokenscripts) if args.forge_tokenscripts else None
+            ),
+            remap_token_keys=args.remap_token_keys,
             holdout_permille=args.holdout_permille,
             holdout_max_carriers=args.holdout_max_carriers,
             text_cap=args.text_cap,
