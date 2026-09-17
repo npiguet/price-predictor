@@ -11,9 +11,11 @@ The loop's shape follows four constraints from the spec:
   10^8 records; a pass would be a week and would make ``--patience`` meaningless.
 - **The corpus is read one shard at a time.** Parsed records cost about 45 KB
   each, so holding the whole corpus would need hundreds of gigabytes. A shard
-  costs about one, and it is released before the next is read. An epoch walks
+  costs about one, and it is released once its steps are taken. An epoch walks
   ``--shards-per-epoch`` of them and the walk advances, so a long run covers the
-  corpus rather than re-reading its opening slice.
+  corpus rather than re-reading its opening slice. The one shard ahead a
+  background thread reads while the resident one trains is the single exception,
+  and it doubles the resident cost rather than raising it by a corpus.
 - **Validation runs on both strata every epoch, and the best checkpoint is
   chosen by the card-disjoint one** — the number that stands in for deployment
   to an unseen set, rather than in-distribution fit. Its records are the
@@ -33,6 +35,7 @@ import random
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 
@@ -623,18 +626,63 @@ class TrainingLoop:
                 seed=self.seed,
             )
             allocation = steps_per_shard(self.config.steps_per_epoch, len(shards))
-            for position, (shard, budget) in enumerate(
-                zip(shards, allocation), start=1,
-            ):
-                if budget <= 0:
-                    continue
-                step, taken = self._train_on_shard(
-                    shard, budget, encoder=encoder, model=model,
-                    tokenizer=tokenizer, sidecars=sidecars, widths=widths,
-                    optimizer=optimizer, warmup=warmup, running=running,
-                    step=step, taken=taken, epoch=epoch, position=position,
-                    of=len(shards), fields=fields,
+            # The shards this epoch will actually read, in order. A shard the
+            # allocation gave no steps was skipped without being read and
+            # still is, so it is dropped here rather than prefetched and
+            # thrown away; its `position` comes along so the log line still
+            # numbers shards the way the draw did.
+            planned = [
+                (position, shard, budget)
+                for position, (shard, budget) in enumerate(
+                    zip(shards, allocation), start=1,
                 )
+                if budget > 0
+            ]
+            # One shard is read while the previous one trains. Reading one is
+            # a gigabyte of gzip and JSON with the GPU idle — about a sixth of
+            # a shard's wall time now that the steps are fast — and the gzip
+            # and the file read release the interpreter lock while the JSON
+            # decode does not, so the overlap is partial, which is still most
+            # of the read. One worker, so the shards are read in the drawn
+            # order and one extra shard is the most that is ever resident.
+            loader = ThreadPoolExecutor(max_workers=1)
+            try:
+                pending = (
+                    loader.submit(load_shard, planned[0][1]) if planned
+                    else None
+                )
+                for index, (position, shard, budget) in enumerate(planned):
+                    waited = time.perf_counter()
+                    try:
+                        records = pending.result()
+                    except Exception:
+                        # Raised here rather than where it was read, so it
+                        # belongs to the shard whose turn it is; the future's
+                        # own traceback names the loader and no shard at all.
+                        logger.error(
+                            "epoch %d | shard %d/%d %s | reading it failed",
+                            epoch, position, len(shards), shard.name,
+                        )
+                        raise
+                    waited = time.perf_counter() - waited
+                    pending = (
+                        loader.submit(load_shard, planned[index + 1][1])
+                        if index + 1 < len(planned) else None
+                    )
+                    step, taken = self._train_on_shard(
+                        shard, budget, records, waited, encoder=encoder,
+                        model=model, tokenizer=tokenizer, sidecars=sidecars,
+                        widths=widths, optimizer=optimizer, warmup=warmup,
+                        running=running, step=step, taken=taken, epoch=epoch,
+                        position=position, of=len(shards), fields=fields,
+                    )
+                    # Before the next shard is waited for, so the one in hand
+                    # and the one being read are the only two resident.
+                    del records
+            finally:
+                # Including on the way out of an exception, where a prefetch
+                # may still be reading a shard nobody will train on.
+                loader.shutdown(wait=True, cancel_futures=True)
 
             card_parts: dict[str, float] = {}
             # Collected only on the epoch that has a floor to compute: the
@@ -738,25 +786,30 @@ class TrainingLoop:
         return 0
 
     def _train_on_shard(
-        self, shard, budget, *, encoder, model, tokenizer, sidecars,
-        widths, optimizer, warmup, running, step, taken, epoch, position, of,
-        fields,
+        self, shard, budget, records, waited, *, encoder, model, tokenizer,
+        sidecars, widths, optimizer, warmup, running, step, taken, epoch,
+        position, of, fields,
     ) -> tuple[int, int]:
-        """Load one shard, take ``budget`` steps on it, and let it go.
+        """Take ``budget`` steps on one already-read shard.
 
-        The shard is released before the next one is read, so resident memory
-        stays at one shard however long the run and however large the corpus.
+        ``records`` were read by the epoch loop's prefetch thread while the
+        previous shard trained; the loop releases them before it waits for the
+        next, so resident memory is the shard in hand plus the one being read
+        — two, rather than the one this held when it did its own reading.
+
+        ``waited`` is how long the loop waited for that read to finish, and it
+        is what the log line reports where it used to report the read itself.
+        The word there is ``wait`` for that reason: it falls to nothing when
+        the steps covered the read, and what is left when it does not is the
+        part of the read the training did not hide.
 
         Returns the advanced ``(step, taken)`` counters.
         """
         started = time.perf_counter()
-        records = load_shard(shard)
         self.accumulator.note_shard(records, self.held_out, reserved=False)
         split = self.accumulator.split()
         training = [r for r in records if split.is_training_game(r.game_id)]
         held_back = len(records) - len(training)
-        del records
-        loaded = time.perf_counter() - started
 
         if not training:
             logger.info(
@@ -818,15 +871,15 @@ class TrainingLoop:
             if self.context_cache is not None:
                 self.context_cache.note_batch()
 
-        trained = time.perf_counter() - started - loaded
+        trained = time.perf_counter() - started
         logger.info(
             "epoch %d | shard %d/%d %s | %d records trainable, %d held back | "
             "%d steps | loss %.4f | lr %.2e | %.1f steps/s | "
-            "load %.1fs, train %.1fs%s%s",
+            "wait %.1fs, train %.1fs%s%s",
             epoch, position, of, shard.name, len(training), held_back, budget,
             float(shard_loss) / shard_steps if shard_steps else float("nan"),
             learning_rate, budget / trained if trained > 0 else float("nan"),
-            loaded, trained, _format_norms(norms), _format_parts(parts),
+            waited, trained, _format_norms(norms), _format_parts(parts),
         )
         del training, weights, batches
         return step, taken
