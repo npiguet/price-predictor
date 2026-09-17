@@ -12,9 +12,12 @@ The join rule it implements is the one thing this module exists for:
   deduplicated that trait away, but it is still live at runtime and still
   produces a key, so the record supervises through its state and payload with
   nothing to join to;
-- a key in neither **fails loudly**, because the only way that happens is a
-  reconversion between collection and training, and a corpus scored against the
-  wrong sidecar is worse than one that stops.
+- a key outside every range the sidecar declared — another face, another trait
+  kind, or an index past the last one declared for its pair — is a trait Forge
+  attached to a live card, resolves to **no** line and is kept;
+- a key *inside* a declared range and in neither list **fails loudly**, because
+  the only way that happens is a reconversion between collection and training,
+  and a corpus scored against the wrong sidecar is worse than one that stops.
 
 Per-line provenance entries omit ``script_file`` — it is the same for every key
 in one file and lives in the header.

@@ -31,7 +31,10 @@ _SCRIPT = "cardsfolder/a/ajanis_pridemate.txt"
 _TRIGGER = ProvenanceKey(_SCRIPT, 0, "trigger", 0)
 _STATIC = ProvenanceKey(_SCRIPT, 0, "static", 0)
 _DROPPED = ProvenanceKey(_SCRIPT, 0, "static", 2)
-_ABSENT = ProvenanceKey(_SCRIPT, 0, "activated", 9)
+#: A gap inside the declared ``static`` range: the fixture declares index 0 on
+#: a line and index 2 as dropped, so index 1 is in neither list while the
+#: converter demonstrably parsed around it. The only remaining mismatch shape.
+_ABSENT = ProvenanceKey(_SCRIPT, 0, "static", 1)
 
 
 def _sidecar() -> ProvenanceSidecar:
@@ -75,7 +78,7 @@ class TestTheThreeJoinCases:
         assert _sidecar().line_for(_DROPPED) is None
         assert _sidecar().row_for(_DROPPED) is None
 
-    def test_a_key_in_neither_fails_loudly(self):
+    def test_a_gap_inside_a_declared_range_fails_loudly(self):
         with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
             _sidecar().line_for(_ABSENT)
 
@@ -87,13 +90,17 @@ class TestTheThreeJoinCases:
 
 
 class TestARuntimeOnlyTrait:
-    """Level up, bestow and scavenge each add a spell ability the card script
-    never declares, so the runtime trait list is longer than the parsed one.
+    """A trait Forge attaches to a live card that the parsed script never had.
 
-    That key belongs to no line and no dropped key, and failing on it stops
-    training on a corpus that is entirely correct — the six cards it hits are
-    not a reconversion. It is told apart by position: past everything the face
-    declared for that kind.
+    Level up, bestow and scavenge each append a spell ability. A static that
+    grants a trigger to other permanents keys that trigger to the granting
+    card's script, which declares no trigger. A disguise creature's face-down
+    state keys to a face the script never wrote down. All three belong to no
+    line and no dropped key, and failing on them stops training on a corpus
+    that is entirely correct.
+
+    They are told apart by what the sidecar declared: nothing at all for the
+    key's ``(face, trait_kind)``, or nothing this far along it.
     """
 
     def test_an_index_past_everything_declared_resolves_to_no_line(self):
@@ -104,16 +111,24 @@ class TestARuntimeOnlyTrait:
         assert _sidecar().row_for(beyond) is None
 
     def test_a_gap_inside_the_declared_range_still_fails(self):
-        """A reconversion moves every key, not the tail of one list — so an
-        index the face declared around but not at is still a mismatch."""
-        inside = ProvenanceKey(_SCRIPT, 0, "static", 1)
-        assert not _sidecar().is_runtime_only(inside)
-        with pytest.raises(KeyError):
-            _sidecar().line_for(inside)
-
-    def test_a_kind_the_face_never_declared_still_fails(self):
-        """Nothing was declared for it, so there is no tail to be past."""
+        """``dropped_keys`` is declared-minus-claimed, so every index the
+        converter parsed is in one of the two lists. A gap between them means
+        the sidecar was rebuilt against a different trait list."""
         assert not _sidecar().is_runtime_only(_ABSENT)
+        with pytest.raises(KeyError):
+            _sidecar().line_for(_ABSENT)
+
+    def test_a_kind_the_face_never_declared_is_runtime_only(self):
+        """Nothing was declared for the kind, so nothing about it was parsed.
+
+        On the real corpus this is a static that grants a trigger to *other*
+        permanents: the granted trigger keys to the granting card's script,
+        which declares no trigger of its own. This fixture does declare a
+        trigger, so ``activated`` stands in for the undeclared kind.
+        """
+        granted = ProvenanceKey(_SCRIPT, 0, "activated", 0)
+        assert _sidecar().is_runtime_only(granted)
+        assert _sidecar().line_for(granted) is None
 
     def test_a_dropped_key_counts_toward_what_was_declared(self):
         """It is a trait the converter saw, so it bounds the parsed range."""
@@ -122,10 +137,12 @@ class TestARuntimeOnlyTrait:
             ProvenanceKey(_SCRIPT, 0, "static", 2)
         )
 
-    def test_another_face_is_bounded_separately(self):
-        """Each face has its own trait list, so face 1 declares nothing here."""
-        assert not _sidecar().is_runtime_only(
-            ProvenanceKey(_SCRIPT, 1, "static", 9)
+    def test_a_face_the_script_never_declared_is_runtime_only(self):
+        """Each face has its own trait list, and a disguise creature's
+        face-down state keys to a face the converted script never wrote
+        down."""
+        assert _sidecar().is_runtime_only(
+            ProvenanceKey(_SCRIPT, 1, "keyword", 0)
         )
 
 

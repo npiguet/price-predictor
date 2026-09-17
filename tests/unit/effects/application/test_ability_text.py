@@ -65,6 +65,11 @@ class FakeSidecarCache:
     a script the converted corpus never held does; a script_file some other
     registered key *does* name is a sidecar that exists and disagrees with
     this key, so it raises the way a real reconversion mismatch would.
+
+    The real cache raises only for a key *inside* a range the sidecar declared;
+    outside one the key is runtime-only. The fake has no declared ranges, so it
+    raises on every unregistered key of a known script, and a test wanting the
+    runtime-only answer registers that key with a ``None`` line instead.
     """
 
     def __init__(
@@ -113,7 +118,14 @@ def test_text_for_key_and_ability_text_of_agree_on_one_key():
 
 
 def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
-    """The contract's fail-loudly case: the sidecar does not describe the card."""
+    """The contract's fail-loudly case: the sidecar does not describe the card.
+
+    Plague Sliver's own static grants a trigger to every other sliver, and that
+    trigger keys to this script, which declares no trigger — runtime-only, and
+    no text. The mismatch is a gap *inside* a declared range: statics 0 and 2
+    are declared here, so static 1 is an index the converter parsed around and
+    put in neither list, which only a reconversion produces.
+    """
     from effects.application.train_effect_model import text_for_key
     from effects.infrastructure.sidecar_io import sidecar_path_for
 
@@ -127,7 +139,10 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
             card="plague sliver", script_file=script,
             lines=(SidecarLine(line_index=0, line_kind="static",
                                provenance=(rendered,), script_text="all slivers have"),),
-            dropped_keys=(ProvenanceKey(script, 0, "spell", 0),),
+            dropped_keys=(
+                ProvenanceKey(script, 0, "spell", 0),
+                ProvenanceKey(script, 0, "static", 2),
+            ),
         ),
         sidecar_path_for(txt),
     )
@@ -135,8 +150,9 @@ def test_a_key_in_neither_list_raises_rather_than_reading_as_no_text(tmp_path):
 
     assert text_for_key(rendered, sidecars, "script") == "all slivers have"
     assert text_for_key(ProvenanceKey(script, 0, "spell", 0), sidecars, "script") is None
+    assert text_for_key(ProvenanceKey(script, 0, "trigger", 0), sidecars, "script") is None
     with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
-        text_for_key(ProvenanceKey(script, 0, "trigger", 0), sidecars, "script")
+        text_for_key(ProvenanceKey(script, 0, "static", 1), sidecars, "script")
 
 
 def test_an_unconfigured_tree_still_reads_as_no_text(tmp_path):

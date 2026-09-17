@@ -14,6 +14,11 @@ from effects.domain.provenance import (
 _SCRIPT = "cardsfolder/m/mogg_war_marshal.txt"
 _LINE = ProvenanceKey(_SCRIPT, 0, "trigger", 0)
 _DROPPED = ProvenanceKey(_SCRIPT, 0, "spell", 0)
+#: A second dropped spell, two along from the first, so the face declares a
+#: ``spell`` range with a gap in it. Index 1 is the only shape left that is a
+#: mismatch rather than a runtime-only trait.
+_DROPPED_FAR = ProvenanceKey(_SCRIPT, 0, "spell", 2)
+_GAP = ProvenanceKey(_SCRIPT, 0, "spell", 1)
 
 
 def _sidecar() -> ProvenanceSidecar:
@@ -21,7 +26,7 @@ def _sidecar() -> ProvenanceSidecar:
         card="mogg war marshal", script_file=_SCRIPT,
         lines=(SidecarLine(line_index=0, line_kind="triggered", provenance=(_LINE,),
                            script_text="when this enters or dies"),),
-        dropped_keys=(_DROPPED,),
+        dropped_keys=(_DROPPED, _DROPPED_FAR),
     )
 
 
@@ -39,11 +44,28 @@ def test_a_key_past_the_declared_indices_is_runtime_only():
     ) is KeyResolution.RUNTIME_ONLY
 
 
-def test_a_key_in_neither_list_raises():
-    """A kind this face declared nothing for at all is the mismatch case.
+def test_an_undeclared_trait_kind_is_runtime_only():
+    """A static that grants a trigger to other permanents keys the granted
+    trigger to the granting card's script, which declares no trigger at all."""
+    assert _sidecar().resolution_of(
+        ProvenanceKey(_SCRIPT, 0, "static", 0)
+    ) is KeyResolution.RUNTIME_ONLY
 
-    ``is_runtime_only`` is positional: it answers True only past an index the
-    sidecar declared, so a kind with nothing declared has no tail to sit in.
+
+def test_an_undeclared_face_is_runtime_only():
+    """A disguise creature's face-down state keys to a face the converted
+    script never wrote down."""
+    assert _sidecar().resolution_of(
+        ProvenanceKey(_SCRIPT, 1, "keyword", 0)
+    ) is KeyResolution.RUNTIME_ONLY
+
+
+def test_a_gap_inside_a_declared_range_raises():
+    """The one shape left that means the sidecar describes another card.
+
+    ``dropped_keys`` is declared-minus-claimed, so every index the converter
+    parsed sits in one of the two lists. A gap between them can only come from
+    a sidecar rebuilt against a different trait list.
     """
     with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
-        _sidecar().resolution_of(ProvenanceKey(_SCRIPT, 0, "static", 0))
+        _sidecar().resolution_of(_GAP)

@@ -95,10 +95,12 @@ def acting_text_defect(
     empty acting slot. Three quarters of the resolution class was that record
     before this rule, weighted like the rarest text in the corpus.
 
-    A ``RUNTIME_ONLY`` key keeps the record: level up, bestow and scavenge are
-    real abilities whose text the join does not reach yet, and refusing them
-    would be a loss rather than a cleanup. A key in neither of the sidecar's
-    lists raises out of ``resolve``, as the contract requires.
+    A ``RUNTIME_ONLY`` key keeps the record: level up, bestow and scavenge, a
+    trigger another card's static granted, and a disguise creature's face-down
+    face are all real abilities whose text the join does not reach yet, and
+    refusing them would be a loss rather than a cleanup. A key inside a range
+    the sidecar declared and in neither of its lists raises out of ``resolve``,
+    as the contract requires.
 
     Separate from ``quality_defect`` rather than another branch of it, because
     this one needs the join and that one needs nothing: a caller with no

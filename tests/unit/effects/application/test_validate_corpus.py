@@ -862,8 +862,13 @@ class TestAnEmptyAbilitySaysWhy:
         assert not _named(validate_corpus(records), "trigger and rewrite").ok
 
 
-def _write_bears_sidecar(root, keyword_indices):
-    """A sidecar for Grizzly Bears declaring exactly these keyword ordinals."""
+def _write_bears_sidecar(root, keyword_indices, spell_indices=()):
+    """A sidecar for Grizzly Bears declaring exactly these ordinals.
+
+    ``spell_indices`` exists so a test can declare a spell *range* with a gap
+    in it: outside a declared range a key is runtime-only, so a planted
+    mismatch of another trait kind has nowhere else to live.
+    """
     sidecar = ProvenanceSidecar(
         card="Grizzly Bears",
         script_file=_BEARS,
@@ -874,6 +879,13 @@ def _write_bears_sidecar(root, keyword_indices):
                 provenance=(ProvenanceKey(_BEARS, 0, "keyword", index),),
             )
             for row, index in enumerate(keyword_indices)
+        ) + tuple(
+            SidecarLine(
+                line_index=len(keyword_indices) + row,
+                line_kind="spell",
+                provenance=(ProvenanceKey(_BEARS, 0, "spell", index),),
+            )
+            for row, index in enumerate(spell_indices)
         ),
     )
     write_sidecar(
@@ -1659,9 +1671,11 @@ class TestNonKeywordKeysAreWatchedNotJudged:
         )
 
     def test_a_spell_mismatch_is_reported_without_failing_the_run(self, tmp_path):
-        sidecars = _write_bears_sidecar(tmp_path, (0,))
+        # Spells 0 and 2 declared, so index 1 is a gap inside the range — the
+        # one shape that is a mismatch rather than a runtime-attached trait.
+        sidecars = _write_bears_sidecar(tmp_path, (0,), spell_indices=(0, 2))
         findings = validate_corpus(
-            [*_healthy(), self._spell_record(3)], None, sidecars,
+            [*_healthy(), self._spell_record(1)], None, sidecars,
         )
         finding = _named(findings, "non-keyword provenance keys")
         assert finding.watched and finding.ok

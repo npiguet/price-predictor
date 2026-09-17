@@ -34,12 +34,14 @@ class KeyResolution(StrEnum):
 
     ``LINE`` is text. ``DROPPED`` is a trait the converter rendered no line for
     — Forge's implicit permanent spell on every permanent, most often — and is
-    no text by design. ``RUNTIME_ONLY`` is a trait Forge adds only to a live
-    card (level up, bestow, scavenge), whose text sits on a keyword line the
-    join does not reach; it is kept apart from ``DROPPED`` because refusing on
-    it would refuse real abilities. ``UNCONVERTED`` is a script no sidecar
-    describes. The fifth outcome, a key in neither list, is not a value: it
-    raises, because the sidecar does not describe the record's card.
+    no text by design. ``RUNTIME_ONLY`` is a trait Forge attaches to a live
+    card that the script never declared — level up, bestow and scavenge, a
+    trigger granted by another card's static, a disguise creature's face-down
+    face — whose text the join does not reach; it is kept apart from
+    ``DROPPED`` because refusing on it would refuse real abilities.
+    ``UNCONVERTED`` is a script no sidecar describes. The fifth outcome, a key
+    inside a declared range and in neither list, is not a value: it raises,
+    because the sidecar does not describe the record's card.
     """
 
     LINE = "line"
@@ -159,14 +161,24 @@ class ProvenanceSidecar:
     a genuine corpus/sidecar mismatch would look identical at the join — and the
     mismatch is the one condition that must fail loudly.
 
-    A third case sits between them: a trait Forge builds only when it
-    instantiates a live card. Level up, bestow and scavenge each add a spell
-    ability the card script never declares, so the runtime trait list is longer
-    than the parsed one and the extra index belongs to no line and no dropped
-    key. It is told apart by position — its index is past every index this face
-    declared for that kind — and treated like a dropped key rather than a
-    mismatch, because a reconversion moves *every* key, not the tail of one
-    card's spell list.
+    A third case sits between them: a trait Forge attaches to a live card that
+    the parsed script never declared. It takes three shapes. Level up, bestow
+    and scavenge each append a spell ability, so the runtime trait list is
+    longer than the parsed one. A static that grants a trigger to *other*
+    permanents — Aura Flux, Plague Sliver — installs that trigger on the
+    recipients while the key names the granting card's script, which declares
+    no trigger at all. And a face the script never wrote down, such as the
+    face-down state disguise gives a creature, carries keys under a face index
+    the sidecar has no notion of.
+
+    All three are told apart the same way, by what the sidecar declared: a key
+    whose ``(face, trait_kind)`` the sidecar never declared, or whose index is
+    past the highest it declared for that pair, is runtime-only and treated
+    like a dropped key. What stays a mismatch is a key *inside* a declared
+    range that sits in neither list. Every declared index is in one of the two
+    lists by construction — ``dropped_keys`` is declared-minus-claimed — so a
+    gap inside the range can only come from a sidecar rebuilt against a
+    different trait list, which is the reconversion the join must fail on.
     """
 
     card: str
@@ -196,14 +208,23 @@ class ProvenanceSidecar:
         object.__setattr__(self, "_declared_max", declared)
 
     def is_runtime_only(self, key: ProvenanceKey) -> bool:
-        """Is this a trait Forge built at instantiation rather than one parsed?
+        """Is this a trait Forge attached to a live card rather than one parsed?
 
-        True when the key's index sits past everything this face declared for
-        its kind — the shape a level-up or bestow ability has, appended to the
-        end of the runtime list.
+        True when the sidecar declared nothing at all for the key's
+        ``(face, trait_kind)``, and true when it declared that pair but not
+        this far along it. A trigger granted by another card's static keys to
+        the granting card's script, which declares no trigger; a disguise
+        creature's face-down state keys to a face the script never wrote down;
+        a level-up or bestow ability is appended past the end of the parsed
+        list. None of the three is a reconversion, and refusing them refuses
+        real abilities.
+
+        False only inside a declared range, where every index is accounted for
+        by one of the two lists and a gap means the sidecar describes a
+        different card.
         """
         highest = self._declared_max.get((key.face, key.trait_kind))
-        return highest is not None and key.index_within_kind > highest
+        return highest is None or key.index_within_kind > highest
 
     @property
     def tree(self) -> str:
