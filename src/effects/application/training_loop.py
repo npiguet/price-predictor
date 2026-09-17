@@ -114,6 +114,37 @@ logger = logging.getLogger(__name__)
 #: Records kept aside to measure feature widths from, before any shard loads.
 PROBE_RECORDS = 64
 
+#: Cap on the fraction of CUDA memory the caching allocator may reserve for
+#: this process (FR-095). On Windows the driver pages excess reservation out
+#: to host RAM instead of raising an out-of-memory error, so an allocator left
+#: unbounded fragments across the corpus's variable batch shapes and reserves
+#: far more than it ever allocates while the run looks merely slow rather than
+#: broken; the cap forces it to free its cache before the card is full instead
+#: of trusting the driver to fail loudly.
+CUDA_MEMORY_FRACTION = 0.9
+
+
+def autocast_enabled(device: torch.device) -> bool:
+    """Whether the forward pass and loss should run under bf16 autocast.
+
+    CUDA only, and only when the card itself supports bf16. Pulled out of
+    `TrainingLoop.__init__` as a pure function so a test can drive the two
+    checks without constructing a loop against a real device.
+
+    Guarded on ``device_count()`` because ``is_available()`` and
+    ``device_count()`` can disagree under ``CUDA_VISIBLE_DEVICES=""``:
+    ``is_available()`` reads the driver's raw, unmasked count, while
+    ``device_count()`` applies the visibility mask that
+    ``is_bf16_supported()`` (via ``get_device_properties``) asserts against —
+    calling it unguarded raises on a masked-empty device rather than reading
+    as unsupported.
+    """
+    return (
+        device.type == "cuda"
+        and torch.cuda.device_count() > 0
+        and torch.cuda.is_bf16_supported()
+    )
+
 
 def reports_now(*, index: int, budget: int) -> bool:
     """Whether the step at ``index`` should read its numbers back.
@@ -310,6 +341,11 @@ class TrainingLoop:
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+        #: Whether `_loss_for` wraps the forward pass and loss in bf16
+        #: autocast (FR-095). Resolved once here rather than at each call, so
+        #: the value logged at startup and the value every batch runs under
+        #: are the same one.
+        self.autocast: bool = autocast_enabled(self.device)
         self.context_cache = (
             ContextCache(config.cache_refresh) if config.context_cache else None
         )
@@ -465,39 +501,49 @@ class TrainingLoop:
         records = plan.records
         if not records:
             return None
-        batch, surfaces = self._batcher(
-            tokenizer, sidecars, widths, training=training,
-        ).build(records, encoder)
-        hidden = model(**batch)
-        outputs = model.per_entity(hidden)
+        # Both training and validation go through here, so both run under
+        # autocast. Backward and the optimizer step stay outside this context
+        # (bf16 needs no grad scaler); the encoder's own forward happens
+        # inside `.build(...)` (`SurfaceBatcher.encode_texts` calls
+        # `encoder(**batch)`), which is why the context has to enclose the
+        # batch build and not just `model(**batch)`.
+        with torch.autocast(
+            device_type="cuda", dtype=torch.bfloat16, enabled=self.autocast,
+        ):
+            batch, surfaces = self._batcher(
+                tokenizer, sidecars, widths, training=training,
+            ).build(records, encoder)
+            hidden = model(**batch)
+            outputs = model.per_entity(hidden)
 
-        if fields is None:
-            present = {sampling_class(record) for record in records}
-            fields = active_fields(
-                present_classes=frozenset(present), step=step,
-                curriculum_step=self.config.curriculum_step,
+            if fields is None:
+                present = {sampling_class(record) for record in records}
+                fields = active_fields(
+                    present_classes=frozenset(present), step=step,
+                    curriculum_step=self.config.curriculum_step,
+                )
+            targets = [derive_targets(record) for record in records]
+            gate, field_targets, mask, index = entity_target_tensors(
+                surfaces, targets, fields,
             )
-        targets = [derive_targets(record) for record in records]
-        gate, field_targets, mask, index = entity_target_tensors(
-            surfaces, targets, fields,
-        )
-        if collect is not None:
-            # Kept on the host: the floor is scored once per field set, and a
-            # copy of every validation target on the device would sit beside
-            # the model for the rest of the run.
-            collect.append(EntityTargetBatch(gate, field_targets, mask))
-        # One batched gather rather than a slice per row: `index` selects each
-        # surface's [CARD] and [PLAYER] columns, and the rows are independent.
-        index = index.to(self.device)
-        gathered = outputs.gather(
-            1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
-        )
-        loss, parts = per_entity_loss(
-            gathered, gate.to(self.device),
-            {k: v.to(self.device) for k, v in field_targets.items()},
-            mask.to(self.device), fields=fields,
-            report_parts=report_parts,
-        )
+            if collect is not None:
+                # Kept on the host: the floor is scored once per field set,
+                # and a copy of every validation target on the device would
+                # sit beside the model for the rest of the run.
+                collect.append(EntityTargetBatch(gate, field_targets, mask))
+            # One batched gather rather than a slice per row: `index` selects
+            # each surface's [CARD] and [PLAYER] columns, and the rows are
+            # independent.
+            index = index.to(self.device)
+            gathered = outputs.gather(
+                1, index.unsqueeze(-1).expand(-1, -1, outputs.shape[-1]),
+            )
+            loss, parts = per_entity_loss(
+                gathered, gate.to(self.device),
+                {k: v.to(self.device) for k, v in field_targets.items()},
+                mask.to(self.device), fields=fields,
+                report_parts=report_parts,
+            )
         return loss, parts
 
     def _weighted(self, records: list, sidecars: SidecarCache) -> list[float]:
@@ -558,6 +604,14 @@ class TrainingLoop:
         )
         if warning:
             logger.warning("%s", warning)
+
+        if self.device.type == "cuda":
+            # The Windows driver pages excess reservation out to host RAM
+            # instead of raising, so the allocator needs an explicit cap: it
+            # fragments on the corpus's variable batch shapes and reserves far
+            # more than it ever allocates, and only a hard cap forces it to
+            # free that cache before the card is full.
+            torch.cuda.set_per_process_memory_fraction(CUDA_MEMORY_FRACTION)
 
         encoder_config = AbilityEncoderConfig(
             vocab_size=tokenizer.vocab_size,
@@ -676,6 +730,12 @@ class TrainingLoop:
                         running=running, step=step, taken=taken, epoch=epoch,
                         position=position, of=len(shards), fields=fields,
                     )
+                    if self.device.type == "cuda":
+                        # The batch shapes change every shard, so the cached
+                        # blocks from the one just trained rarely fit the
+                        # next; releasing them once per shard costs a few
+                        # milliseconds against the paging it prevents.
+                        torch.cuda.empty_cache()
                     # Before the next shard is waited for, so the one in hand
                     # and the one being read are the only two resident.
                     del records

@@ -758,7 +758,8 @@ loss.
 - **FR-095**: The trainer MUST expose the root spec's flag table with its stated defaults, and MUST
   hardcode the stated constants (encoder d_model 256 / 4 layers / 4 heads; effect-head trunk d_model
   256 / 6 layers / 4 heads; `ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup;
-  warmup over the first 5% of scheduled steps; per-parameter-group gradient clip 1.0; seed 42).
+  warmup over the first 5% of scheduled steps; per-parameter-group gradient clip 1.0; seed 42;
+  bf16 autocast for the forward pass and loss on CUDA).
   Per-parameter-group clipping MUST use two groups, `encoder` and `head`, plus `identity` for that
   variant.
 
