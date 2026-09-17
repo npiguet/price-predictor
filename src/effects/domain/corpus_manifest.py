@@ -139,7 +139,10 @@ class CorpusManifest:
     #: are kept, keyed as they were collected.
     token_keys_ambiguous: dict[str, int] = field(default_factory=dict)
     #: Script file -> resolution records refused because every acting key
-    #: mapped to no rendered line (FR-148). Read by an operator, not by code.
+    #: mapped to no rendered line (FR-148), largest 100 only. The refusal is
+    #: dominated by Forge's implicit permanent spell, which every permanent
+    #: carries, so the untrimmed tally is one entry per permanent script the
+    #: corpus ever resolved. Read by an operator, not by code.
     no_acting_text_scripts: dict[str, int] = field(default_factory=dict)
     #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
     #: or "" when the remap was off. Which scripts were on disk decides which

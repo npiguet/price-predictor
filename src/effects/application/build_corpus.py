@@ -1538,7 +1538,10 @@ def build(config: BuildCorpusConfig) -> int:
         unique_texts=unique_texts,
         shortfall=decisions.shortfall,
         quality_dropped=dict(written.quality_dropped),
-        no_acting_text_scripts=dict(written.textless_scripts),
+        # The hundred worst scripts, not all of them: every permanent carries
+        # the implicit spell this refusal is mostly about, and the manifest is
+        # read by people.
+        no_acting_text_scripts=dict(written.textless_scripts.most_common(100)),
         games_by_source=survey.games_by_source,
         held_out_games_by_source=survey.held_out_games_by_source,
         shard_records=config.shard_records,
