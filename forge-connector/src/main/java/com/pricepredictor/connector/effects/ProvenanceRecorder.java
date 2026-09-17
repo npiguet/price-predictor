@@ -106,11 +106,12 @@ public final class ProvenanceRecorder {
     /**
      * Attribute a runtime trait to the abilities its keyword rendered.
      *
-     * <p>A keyword-derived trigger, static or spell returns no entry of its own
-     * — its text is the keyword line — but Forge gives it a trait index, and a
-     * record fired by it names that key. Claiming the key on the keyword's
-     * abilities is what keeps such a record joinable instead of leaving it
-     * pointing at a dropped key with nothing to say about the ability.
+     * <p>A keyword-derived trigger, static, replacement effect or spell returns
+     * no entry of its own — its text is the keyword line — but Forge gives it a
+     * trait index, and a record fired by it names that key. Claiming the key
+     * on the keyword's abilities is what keeps such a record joinable instead
+     * of leaving it pointing at a dropped key with nothing to say about the
+     * ability.
      */
     public void attributeToKeyword(ProvenanceKey key, CardTraitBase trait,
                                    String original) {

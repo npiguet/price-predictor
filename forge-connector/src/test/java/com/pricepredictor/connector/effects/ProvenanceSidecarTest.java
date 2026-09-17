@@ -178,7 +178,7 @@ class ProvenanceSidecarTest {
     @Test
     void aTraitThatProducedNoLineLandsInDroppedKeys() {
         // A trait with no text of its own — the implicit spell every permanent
-        // has - produces no line. It is still live at runtime, so a record can
+        // has — produces no line. It is still live at runtime, so a record can
         // still name it, and the join must resolve it to "no line" rather than
         // failing. A trait whose text a line does carry is claimed by that
         // line and never lands here.
