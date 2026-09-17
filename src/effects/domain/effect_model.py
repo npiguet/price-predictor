@@ -534,8 +534,9 @@ def per_entity_loss(
 
 # ── the constant-predictor floor (FR-127c) ──────────────────────────────
 
-#: A floor under this is no floor at all — a field whose targets never vary has
-#: no deviance for a head to explain, and dividing by it would print noise.
+#: A guard on the division, not the detector: a field whose targets never vary
+#: is given a floor of exactly zero by :func:`constant_predictor_floor`, and
+#: this is what keeps the ratio off a floor too small to divide by anyway.
 FLOOR_EPSILON = 1e-9
 
 #: Rates are clamped away from zero and one before a log: an outcome the sample
@@ -593,6 +594,24 @@ def _supervised(
         return None
     selected = torch.cat(parts)
     return selected if selected.numel() else None
+
+
+def _degenerate(batches: Sequence[EntityTargetBatch], name: str) -> bool:
+    """Whether a field's supervised targets never vary.
+
+    Such a field has no deviance for a head to explain, and the number the rate
+    clamp leaves behind is not a floor: an all-zero count floors at about a
+    millionth of a nat, so a head idling at a log-rate of -5 would report
+    hundreds of thousands of percent worse than constant. The sparse fields
+    this happens to are the ones the breakdown exists to make legible, so they
+    report no deviance rather than a ratio against nothing.
+
+    Whole rows are compared, so a multi-binary field one of whose bits never
+    fires is not degenerate — that bit rides the clamp inside a field the rest
+    of which still varies.
+    """
+    target = _supervised(batches, name)
+    return target is None or bool((target == target[0]).all())
 
 
 def constant_predictor_outputs(
@@ -654,9 +673,15 @@ def constant_predictor_floor(
     learned something.
 
     Averaged over the batches that carried each field, the way the validation
-    pass averages the losses it scales.
+    pass averages the losses it scales. A field whose targets never vary is
+    reported as exactly zero rather than at whatever the rate clamp left it, so
+    the caller reads it as the absence of a floor. The gate is never treated
+    that way: it is supervised on every entity and always has a base rate.
     """
     vector = constant_predictor_outputs(batches, fields=fields)
+    degenerate = {
+        spec.name for spec in fields if _degenerate(batches, spec.name)
+    }
     summed: dict[str, float] = defaultdict(float)
     counted: dict[str, int] = defaultdict(int)
     for batch in batches:
@@ -668,7 +693,10 @@ def constant_predictor_floor(
         for name, value in parts.items():
             summed[name] += value
             counted[name] += 1
-    return {name: summed[name] / counted[name] for name in summed}
+    return {
+        name: 0.0 if name in degenerate else summed[name] / counted[name]
+        for name in summed
+    }
 
 
 def created_objects_loss(

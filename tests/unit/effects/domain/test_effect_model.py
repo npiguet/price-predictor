@@ -642,3 +642,67 @@ class TestConstantPredictorFloor:
         floor = constant_predictor_floor([batch], fields=())
 
         assert floor["gate"] == pytest.approx(4 * math.log(2) / 2, abs=1e-5)
+
+
+class TestDegenerateFields:
+    """A field whose targets never vary has no floor (FR-127c).
+
+    The rate clamp leaves such a field a floor of about a millionth of a nat,
+    and a head's arbitrary output against it reads as hundreds of thousands of
+    percent. The breakdown exists to make exactly these rare fields legible, so
+    the floor is zero and the term reports no deviance at all.
+    """
+
+    def _batch(self, gate, fields):
+        gate = torch.tensor(gate, dtype=torch.float32)
+        return EntityTargetBatch(
+            gate=gate,
+            fields={
+                name: torch.tensor(value, dtype=torch.float32)
+                for name, value in fields.items()
+            },
+            mask=torch.ones_like(gate),
+        )
+
+    def _floor(self, name, values):
+        batch = self._batch(gate=[[1.0] * len(values[0])] * len(values),
+                            fields={name: values})
+        return constant_predictor_floor(
+            [batch], fields=(FIELDS_BY_NAME[name],),
+        )[name]
+
+    def test_a_count_field_nothing_ever_happens_to_has_no_floor(self):
+        assert self._floor("damage_taken", [[0.0, 0.0], [0.0, 0.0]]) == 0.0
+
+    def test_a_binary_field_with_no_positives_has_no_floor(self):
+        assert self._floor("tap_state", [[0.0, 0.0], [0.0, 0.0]]) == 0.0
+
+    def test_a_categorical_field_with_one_class_has_no_floor(self):
+        assert self._floor("zone_outcome", [[0.0, 0.0], [0.0, 0.0]]) == 0.0
+
+    def test_a_signed_delta_that_never_moves_has_no_floor(self):
+        assert self._floor("life_delta", [[0.0, 0.0], [0.0, 0.0]]) == 0.0
+
+    def test_one_nonzero_target_is_enough_to_make_a_floor(self):
+        assert self._floor("damage_taken", [[0.0, 0.0], [0.0, 2.0]]) > 0.0
+
+    def test_a_multi_binary_field_is_degenerate_only_when_its_rows_agree(self):
+        """A bit that never fires still rides the clamp; the field does not."""
+        fires = [1.0] + [0.0] * (len(COLORS) - 1)
+        silent = [0.0] * len(COLORS)
+        constant = [[fires, fires], [fires, fires]]
+        varying = [[fires, silent], [fires, fires]]
+        assert self._floor("colors_gained", constant) == 0.0
+        assert self._floor("colors_gained", varying) > 0.0
+
+    def test_the_gate_keeps_its_floor_whatever_the_fields_do(self):
+        """The gate is supervised on every entity and always has a base rate."""
+        batch = self._batch(
+            gate=[[1.0, 0.0], [1.0, 0.0]],
+            fields={"damage_taken": [[0.0, 0.0], [0.0, 0.0]]},
+        )
+        floor = constant_predictor_floor(
+            [batch], fields=(FIELDS_BY_NAME["damage_taken"],),
+        )
+        assert floor["gate"] == pytest.approx(4 * math.log(2) / 2, abs=1e-5)
+        assert floor["damage_taken"] == 0.0

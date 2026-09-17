@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 import pytest
+import torch
 
 from effects.application.train_effect_model import (
     HeldOutCards,
@@ -17,7 +18,12 @@ from effects.application.training_loop import (
     _format_floor,
     _format_parts,
 )
-from effects.domain.effect_model import FIELDS_BY_NAME, SAMPLING_CLASSES
+from effects.domain.effect_model import (
+    FIELDS_BY_NAME,
+    SAMPLING_CLASSES,
+    EntityTargetBatch,
+    constant_predictor_floor,
+)
 from effects.domain.records import CombatPayload, RecordKind
 from effects.infrastructure.record_io import write_shard
 from tests.unit.effects.domain.conftest import (  # noqa: F401
@@ -224,3 +230,23 @@ class TestFloorCache:
 
     def test_an_unfilled_cache_scales_nothing(self):
         assert FloorCache().floor == {}
+
+
+def test_a_field_whose_targets_never_vary_reads_not_applicable_end_to_end():
+    """From the sample's targets to the epoch line (FR-127c).
+
+    A count nothing ever happens to has no floor, so a head's arbitrary log-rate
+    against it is not a percentage of anything — the term says so rather than
+    reporting the ratio the rate clamp would otherwise produce.
+    """
+    gate = torch.ones(2, 2)
+    batch = EntityTargetBatch(
+        gate=gate, fields={"damage_taken": torch.zeros(2, 2)}, mask=gate,
+    )
+    fields = (FIELDS_BY_NAME["damage_taken"],)
+
+    floor = constant_predictor_floor([batch], fields=fields)
+    line = _format_parts({"damage_taken": 0.0067, "gate": 0.5}, floor)
+
+    assert floor["damage_taken"] == 0.0
+    assert "damage_taken 0.007 (n/a)" in line

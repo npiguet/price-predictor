@@ -908,7 +908,9 @@ loss.
   constant-predictor floor — the loss the best constant prediction for that field reaches on the
   same sample under the same masking, normalization and batch averaging — so a term says whether
   the head learned the field or is repeating its base rate. That floor MUST be computed from the
-  sample's own targets and recomputed whenever the active field set changes.
+  sample's own targets and recomputed whenever the active field set changes. A field whose
+  supervised targets in the sample never vary has no deviance to explain and MUST report none
+  rather than a ratio against a floor that is only a rate clamp.
 - **FR-128**: The trainer MUST log the corpus size before reading anything and MUST log one line per
   shard as it goes, naming the shard, its record counts, and its timings. That line MUST also carry
   the shard's mean training loss, the loss decomposed by field, the pre-clip gradient norm of each
