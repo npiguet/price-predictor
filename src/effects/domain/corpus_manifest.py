@@ -125,14 +125,18 @@ class CorpusManifest:
     #: statement about the collector, not about the corpus.
     unattributed_records: int = 0
     #: Provenance keys the build rewrote from the old collector's
-    #: ``cardsfolder/<name>.txt`` to the token script they meant (FR-151).
-    #: 0 on a manifest built before the remap existed, and on one built with
-    #: ``--no-remap-token-keys``.
+    #: ``cardsfolder/<name>.txt`` to the token script they meant (FR-151),
+    #: counted **on written records**: a record the build refused or dropped
+    #: takes its own remaps with it, so this is what the dataset carries
+    #: rather than what the raw shards held. 0 on a manifest built before the
+    #: remap existed, and on one built with ``--no-remap-token-keys``.
     token_keys_remapped: int = 0
-    #: Old token keys the remap refused to guess at, by the old script's
-    #: filename stem, largest 100 only. A stem here is a token name whose
-    #: scripts the entity's colours, types, P/T and printed-key counts could
-    #: not tell apart -- the records are kept, keyed as they were collected.
+    #: Old token keys the remap refused to guess at, on written records, by
+    #: the old script's filename stem, largest 100 only. A stem here is a
+    #: token name whose scripts the entity's colours, types, supertypes and
+    #: P/T could not tell apart -- most often two same-stat scripts differing
+    #: only by a keyword, which a snapshot does not show at all. The records
+    #: are kept, keyed as they were collected.
     token_keys_ambiguous: dict[str, int] = field(default_factory=dict)
     #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
     #: or "" when the remap was off. Which scripts were on disk decides which

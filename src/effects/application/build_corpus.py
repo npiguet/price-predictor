@@ -202,9 +202,11 @@ class Survey:
     #: in collection, and nothing else in the build would notice.
     games_by_source: dict[str, int] = field(default_factory=dict)
     held_out_games_by_source: dict[str, int] = field(default_factory=dict)
-    #: The whole corpus's remap counts, summed over the shards. Compared
-    #: against the write pass's own, which must agree: both passes read the
-    #: same shards through the same remapper.
+    #: The whole corpus's remap counts, summed over the shards and over
+    #: **every record read** -- including the ones the write pass goes on to
+    #: refuse or drop. The write pass counts written records only, so its
+    #: figures are a subset of these; one exceeding the survey's means the
+    #: corpus changed between the two passes.
     remap: RemapCounts = field(default_factory=RemapCounts)
 
 
@@ -843,9 +845,11 @@ class WriteResult:
     #: rather than refused: a clause the collector could not find on the
     #: acting chain does not make the outcome another ability's.
     unattributed: int = 0
-    #: Old token keys this pass rewrote, and the ones it refused to guess at
-    #: (FR-151). The manifest records these rather than the survey's, since
-    #: these are the keys the written dataset actually carries.
+    #: Old token keys rewritten, and the ones refused, **on written records**
+    #: (FR-151) -- a record this pass refuses or drops contributes neither.
+    #: The manifest records these rather than the survey's, since these are
+    #: the keys the written dataset actually carries; the survey's own counts
+    #: are over every record read and are kept for the cross-check.
     remap: RemapCounts = field(default_factory=RemapCounts)
 
 
@@ -894,64 +898,81 @@ def write_shard_pass(relative: str) -> WriteResult:
     game_disjoint: list = []
     gate_one: list = []
 
+    # The remap's counts land here first and are folded into ``out.remap``
+    # only for a record that reaches an output, so the manifest's figure is
+    # what the written dataset carries rather than what the shards held
+    # (FR-151). A record the quality check refuses, the per-text cap drops
+    # or the held-out rule discards takes its remaps with it.
+    pending = RemapCounts()
+
     for record in read_shard_remapped(
-        Path(config.records_dir) / relative, config.remapper, out.remap,
+        Path(config.records_dir) / relative, config.remapper, pending,
     ):
-        name = sampling_class(record)
-        # Computed once, up front: every branch below -- including the two
-        # validation strata, which never used to look at it at all -- needs
-        # it to track which ability texts that output actually holds.
-        key = ability_key(record)
-        # Before the read count, so a refused record is not counted as read
-        # against a class whose availability the survey computed without it.
-        defect = quality_defect(record, max_events=config.max_events)
-        if defect is not None:
-            out.quality_dropped[defect] += 1
-            out.refused_by_class[name] += 1
-            continue
-        out.read[name] += 1
-        if has_unattributed_events(record):
-            out.unattributed += 1
-        if record.game_id in config.card_disjoint:
-            card_disjoint.append(record)
-            out.stratum["card-disjoint"] += 1
-            if key is not None:
-                out.stratum_keys.setdefault("card-disjoint", set()).add(key)
-            if (
-                record.kind is RecordKind.RESOLUTION
-                and key is not None and key in config.gate_one_keys
-            ):
-                gate_one.append(record)
-                out.stratum["gate-one"] += 1
-                out.stratum_keys.setdefault("gate-one", set()).add(key)
-            continue
-        if record.game_id in config.game_disjoint:
-            game_disjoint.append(record)
-            out.stratum["game-disjoint"] += 1
-            if key is not None:
-                out.stratum_keys.setdefault("game-disjoint", set()).add(key)
-            continue
-        if record.game_id in config.held_out_games:
-            # Held out but not admitted to the stratum: dropped, never trained
-            # on (FR-088). Nothing is written for it, so it earns no entry in
-            # stratum_keys -- only an output in OUTPUTS does.
-            out.stratum["dropped-held-out"] += 1
-            continue
-        value = record_hash(record.record_id, seed=config.seed)
-        if key is not None and not keeps(value, config.thresholds.get(key)):
-            out.dropped_by_cap[name] += 1
-            continue
-        share = config.class_admit.get(name, 0.0)
-        if share < 1.0:
-            draw = record_hash(record.record_id, seed=config.seed + _CLASS_SEED_OFFSET)
-            if draw >= int(share * 2**64):
+        written = False
+        try:
+            name = sampling_class(record)
+            # Computed once, up front: every branch below -- including the two
+            # validation strata, which never used to look at it at all -- needs
+            # it to track which ability texts that output actually holds.
+            key = ability_key(record)
+            # Before the read count, so a refused record is not counted as read
+            # against a class whose availability the survey computed without it.
+            defect = quality_defect(record, max_events=config.max_events)
+            if defect is not None:
+                out.quality_dropped[defect] += 1
+                out.refused_by_class[name] += 1
                 continue
-        training.append(record)
-        out.kept[name] += 1
-        out.stratum["training"] += 1
-        if key is not None:
-            out.kept_keys.setdefault(name, set()).add(key)
-            out.stratum_keys.setdefault("training", set()).add(key)
+            out.read[name] += 1
+            if has_unattributed_events(record):
+                out.unattributed += 1
+            if record.game_id in config.card_disjoint:
+                card_disjoint.append(record)
+                written = True
+                out.stratum["card-disjoint"] += 1
+                if key is not None:
+                    out.stratum_keys.setdefault("card-disjoint", set()).add(key)
+                if (
+                    record.kind is RecordKind.RESOLUTION
+                    and key is not None and key in config.gate_one_keys
+                ):
+                    gate_one.append(record)
+                    out.stratum["gate-one"] += 1
+                    out.stratum_keys.setdefault("gate-one", set()).add(key)
+                continue
+            if record.game_id in config.game_disjoint:
+                game_disjoint.append(record)
+                written = True
+                out.stratum["game-disjoint"] += 1
+                if key is not None:
+                    out.stratum_keys.setdefault("game-disjoint", set()).add(key)
+                continue
+            if record.game_id in config.held_out_games:
+                # Held out but not admitted to the stratum: dropped, never trained
+                # on (FR-088). Nothing is written for it, so it earns no entry in
+                # stratum_keys -- only an output in OUTPUTS does.
+                out.stratum["dropped-held-out"] += 1
+                continue
+            value = record_hash(record.record_id, seed=config.seed)
+            if key is not None and not keeps(value, config.thresholds.get(key)):
+                out.dropped_by_cap[name] += 1
+                continue
+            share = config.class_admit.get(name, 0.0)
+            if share < 1.0:
+                draw = record_hash(record.record_id, seed=config.seed + _CLASS_SEED_OFFSET)
+                if draw >= int(share * 2**64):
+                    continue
+            training.append(record)
+            written = True
+            out.kept[name] += 1
+            out.stratum["training"] += 1
+            if key is not None:
+                out.kept_keys.setdefault(name, set()).add(key)
+                out.stratum_keys.setdefault("training", set()).add(key)
+        finally:
+            if written:
+                out.remap.merge(pending)
+            pending.remapped = 0
+            pending.ambiguous.clear()
 
     shard_name = _output_name(relative)
     # Only where there is something to write. A source shard contributes to one
@@ -1149,7 +1170,9 @@ def _token_key_remapper(
             "No converted token sidecar under %s, so the remap can resolve "
             "nothing: every old token key will stay as it was collected. Pass "
             "--cards-folder output/tokenscripts/ beside the card tree.",
-            token_dir,
+            # The folders actually looked in, not the `tokenscripts` entry that
+            # is missing from them: `None` names nothing an operator can check.
+            ", ".join(str(folder) for folder in config.cards_folders) or "(none)",
         )
     return remapper
 
@@ -1159,20 +1182,30 @@ def _report_remap(survey: Survey, written: WriteResult) -> None:
     remap = written.remap
     top = remap.ambiguous.most_common(5)
     logger.info(
-        "%-22s %9d remapped to tokenscripts/; %d left ambiguous over %d stem(s)%s",
+        "%-22s %9d remapped to tokenscripts/; %d left ambiguous over %d stem(s), "
+        "on written records%s",
         "token keys", remap.remapped, sum(remap.ambiguous.values()),
         len(remap.ambiguous),
         (" — most: " + ", ".join(f"{stem} ({n})" for stem, n in top)) if top else "",
     )
-    if survey.remap.remapped != remap.remapped:
-        # Both passes read the same shards through the same remapper, so the
-        # counts must agree. They part company only if the corpus changed
-        # between the passes -- and then the survey sized the caps for a key
-        # the write pass did not write.
+    # The survey counts every record it read; the write pass counts only the
+    # records it wrote, so its figures are a subset of the survey's. Either one
+    # exceeding the survey's means the two passes did not read the same corpus
+    # -- and then the survey sized the caps for keys the write pass never saw.
+    ambiguous, survey_ambiguous = sum(remap.ambiguous.values()), sum(
+        survey.remap.ambiguous.values()
+    )
+    logger.info(
+        "%-22s %9d remapped; %d left ambiguous — over every record read.",
+        "token keys (survey)", survey.remap.remapped, survey_ambiguous,
+    )
+    if remap.remapped > survey.remap.remapped or ambiguous > survey_ambiguous:
         logger.warning(
-            "The survey remapped %d key(s) and the write pass %d; the passes "
-            "disagree, which means the corpus changed between them.",
-            survey.remap.remapped, remap.remapped,
+            "The survey remapped %d key(s) and left %d ambiguous over every "
+            "record it read, but the write pass counted %d and %d over the "
+            "records it wrote — a subset cannot be larger, so the corpus "
+            "changed between the passes.",
+            survey.remap.remapped, survey_ambiguous, remap.remapped, ambiguous,
         )
 
 
@@ -1201,6 +1234,19 @@ def build(config: BuildCorpusConfig) -> int:
                     len(names), label, ", ".join(names[:5]),
                     ", …" if len(names) > 5 else "",
                 )
+        # Drift stays shard-based, but which Forge token scripts were on disk
+        # decides which old token keys resolved (FR-151), so a dataset built
+        # against another token tree is a different dataset even when every
+        # shard matches.
+        built_against = manifest.forge_tokenscripts
+        if built_against and built_against != str(Path(config.forge_tokenscripts or "")):
+            logger.warning(
+                "This dataset's token keys were remapped against %s, and "
+                "--forge-tokenscripts now names %s. Which token scripts are on "
+                "disk decides which keys resolved, so the two trees build "
+                "different datasets from the same shards.",
+                built_against, config.forge_tokenscripts,
+            )
         if added or removed or resized:
             logger.warning("Rebuild with `python -m effects build-corpus`.")
             return 1

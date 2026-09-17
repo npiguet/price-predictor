@@ -610,8 +610,10 @@ class TrainingLoop:
                     "%d ability scripts the converted corpus does not hold, "
                     "%d lookups so far; those abilities reach the model as no "
                     "text. Most asked: %s. A `_token` stem under cardsfolder/ "
-                    "is a token keyed to the wrong tree; a variant-scripts/ key "
-                    "needs --variant-scripts.",
+                    "is a token keyed to the wrong tree — it is the token's own "
+                    "cast-spell key, which maps to no text either way, while "
+                    "its ability lines are keyed under tokenscripts/ and do "
+                    "resolve; a variant-scripts/ key needs --variant-scripts.",
                     len(sidecars.unresolved),
                     sum(sidecars.unresolved.values()),
                     ", ".join(f"{name} ({hits})" for name, hits in worst),

@@ -33,6 +33,7 @@ default ``--holdout-permille 20``, per the task brief.
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -1359,6 +1360,68 @@ def test_two_builds_agree_about_the_remap(tmp_path, a_corpus):
 
     assert CorpusStore(first).load().digest() == CorpusStore(second).load().digest()
     assert CorpusStore(first).load().token_keys_remapped >= 1
+
+
+def test_a_refused_records_remaps_are_not_counted(tmp_path, a_corpus):
+    """``token_keys_remapped`` counts written records only (review round 2).
+
+    Both passes rewrite every old key they read, junk included; the manifest
+    is the dataset's own inventory, so a record no output holds contributes
+    nothing to it.
+    """
+    from effects.domain.record_quality import EVENT_FLOOD
+
+    corpus = a_corpus.with_extra_records([
+        a_corpus.resolution(
+            "junk-food", game="g-clean-1", ability=(_OLD_FOOD_KEY,),
+            events=tuple(
+                Event(type=EventType.DAMAGE_DEALT, subjects=("P0",), attributed_to="root")
+                for _ in range(65)
+            ),
+        ),
+    ])
+    out = tmp_path / "out"
+    assert build(_remap_config(out, corpus)) == 0
+
+    manifest = CorpusStore(out).load()
+    assert manifest.quality_dropped == {EVENT_FLOOD: 1}
+    # Two records carried the old food key; only g-clean-1.food was written.
+    assert manifest.token_keys_remapped == 1
+
+
+def test_verify_warns_when_the_dataset_was_built_against_another_token_tree(
+    tmp_path, a_corpus, caplog,
+):
+    """Which token scripts were on disk decides which keys resolved (FR-151).
+
+    Drift stays shard-based — this is a warning beside it, not a failure:
+    every shard still matches, and the dataset is still the one the manifest
+    describes.
+    """
+    out = tmp_path / "out"
+    assert build(_remap_config(out, a_corpus)) == 0
+
+    with caplog.at_level(logging.WARNING):
+        assert build(BuildCorpusConfig(
+            records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+            forge_tokenscripts=tmp_path / "another-forge", output=out,
+            workers=1, verify=True,
+        )) == 0
+
+    assert "different datasets" in caplog.text
+    assert str(a_corpus.forge_tokenscripts) in caplog.text
+
+
+def test_verify_is_quiet_when_the_token_tree_is_the_one_it_was_built_against(
+    tmp_path, a_corpus, caplog,
+):
+    out = tmp_path / "out"
+    assert build(_remap_config(out, a_corpus)) == 0
+
+    with caplog.at_level(logging.WARNING):
+        assert build(_remap_config(out, a_corpus, verify=True)) == 0
+
+    assert "different datasets" not in caplog.text
 
 
 def test_the_cli_exposes_the_remap_flags():

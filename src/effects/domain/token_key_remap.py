@@ -6,9 +6,27 @@ printed name -- ``cardsfolder/f/food_token.txt`` -- which no tree holds. The
 collector is fixed (FR-150), but every shard collected before the fix still
 carries those keys. This module turns them back into ``tokenscripts/<stem>.txt``
 where that can be done honestly: by name when one script carries the name,
-else by the entity's colours, types and P/T, else by how many printed keys of
-each trait kind the entity shows against how many lines the script declares.
-Anything still ambiguous stays as it is and is counted, never guessed.
+else by the entity's colours, types, supertypes and P/T. Anything still
+ambiguous stays as it is and is counted, never guessed.
+
+What the corpus actually holds decides how far the narrowing can go. A token
+entity's ``printed`` list carries one key only -- ``(spell, 0)``, the
+permanent's own cast spell -- because the Java snapshot builder walks the
+card's spell abilities alone: a script's ``K:``, ``T:``, ``S:`` and ``R:``
+lines produce no printed key at all. So the snapshot cannot say whether a
+token has haste, and two same-stat scripts that differ only by a keyword or
+an ability are indistinguishable here. Such a name stays ambiguous rather
+than being settled by a count the snapshot never carried.
+
+That one key is also why this is an archival correction rather than a
+recovery: ``(spell, 0)`` maps to no converted line before or after the
+rewrite -- it is a ``dropped_keys`` entry in all but a handful of token
+sidecars -- while the token's *ability* lines were already keyed correctly
+under ``tokenscripts/<stem>.txt`` by the old collector.
+
+Known limitation: step 2 compares the snapshot's **in-game** colours, types
+and P/T, so a token an anthem or a colour-changing effect has altered can
+match a different script of the same name than the one it was created from.
 """
 
 from __future__ import annotations
@@ -22,22 +40,13 @@ from pathlib import Path
 COLOR_WORDS: dict[str, str] = {
     "white": "W", "blue": "U", "black": "B", "red": "R", "green": "G",
 }
-TRAIT_LINES: dict[str, str] = {
-    "A": "spell", "T": "trigger", "S": "static", "R": "replacement", "K": "keyword",
-}
-TRAIT_KINDS: tuple[str, ...] = ("spell", "trigger", "static", "replacement", "keyword")
-#: Core card types; anything else on a ``Types:`` line is a subtype. This
-#: deliberately excludes the supertypes Forge scripts can also put on a
-#: ``Types:`` line (``Legendary``, ``Basic``, ``Snow``) and the pseudo-type
-#: ``Token``: a real corpus entity's ``types`` field carries neither
-#: (supertypes live in a separate field there, and entities carry no ``token``
-#: pseudo-type at all), so bucketing those words as core would make
-#: ``f.core_types == types`` fail for every such script. Bucketing them as
-#: subtypes instead is not exact either -- a legendary token's ``subtypes``
-#: would then carry ``legendary`` while the entity's does not -- but it is
-#: the same, accepted kind of mismatch as any other, and such a script simply
-#: fails the colours/types/P-T narrowing step and falls through to the
-#: trait-count step or stays ambiguous.
+#: The supertypes a Forge ``Types:`` line can carry. A corpus entity keeps
+#: these in a field of their own, so they are bucketed apart from the core
+#: types rather than mixed into either side.
+SUPERTYPE_WORDS: frozenset[str] = frozenset({"legendary", "basic", "snow"})
+#: Core card types; anything else on a ``Types:`` line that is not a supertype
+#: is a subtype. This deliberately excludes the pseudo-type ``Token``, which no
+#: entity carries.
 CORE_TYPES: frozenset[str] = frozenset({
     "artifact", "creature", "enchantment", "instant", "land", "planeswalker",
     "sorcery", "battle", "kindred", "tribal",
@@ -51,9 +60,9 @@ class TokenScriptFacts:
     name: str
     colors: frozenset[str]
     core_types: frozenset[str]
+    supertypes: frozenset[str]
     subtypes: frozenset[str]
     pt: tuple[str, str] | None
-    trait_counts: dict[str, int]
 
 
 def parse_token_script(stem: str, text: str) -> TokenScriptFacts | None:
@@ -61,9 +70,9 @@ def parse_token_script(stem: str, text: str) -> TokenScriptFacts | None:
     name = None
     colors: set[str] = set()
     core: set[str] = set()
+    supers: set[str] = set()
     subs: set[str] = set()
     pt: tuple[str, str] | None = None
-    counts = {kind: 0 for kind in TRAIT_KINDS}
     for raw in text.splitlines():
         key, sep, value = raw.partition(":")
         if not sep:
@@ -77,17 +86,20 @@ def parse_token_script(stem: str, text: str) -> TokenScriptFacts | None:
                     colors.add(COLOR_WORDS[word])
         elif key == "Types":
             for word in value.lower().split():
-                (core if word in CORE_TYPES else subs).add(word)
+                if word in CORE_TYPES:
+                    core.add(word)
+                elif word in SUPERTYPE_WORDS:
+                    supers.add(word)
+                else:
+                    subs.add(word)
         elif key == "PT":
             left, _, right = value.partition("/")
             pt = (left.strip(), right.strip())
-        elif key in TRAIT_LINES:
-            counts[TRAIT_LINES[key]] += 1
     if name is None:
         return None
     return TokenScriptFacts(
         stem=stem, name=name, colors=frozenset(colors), core_types=frozenset(core),
-        subtypes=frozenset(subs), pt=pt, trait_counts=counts,
+        supertypes=frozenset(supers), subtypes=frozenset(subs), pt=pt,
     )
 
 
@@ -151,16 +163,16 @@ class TokenKeyRemapper:
     ) -> str | None:
         """The one stem ``name`` can mean here, or None when ambiguous or unknown.
 
-        Narrows in three steps, stopping at the first that leaves exactly one
+        Narrows in two steps, stopping at the first that leaves exactly one
         candidate: by printed name, then by the carrying ``entity``'s colours,
-        core types, subtypes and P/T, then by how many printed keys of each
-        trait kind the entity shows (``printed_keys``) against how many lines
-        each remaining script declares. The trait-kind counts are compared
-        with the script's own ``spell`` count bumped by one: every token
-        carries one ``spell`` key at index 0 for the permanent's own cast
-        spell regardless of whether its script has an ``A:`` line, so an
-        entity's raw ``printed_keys`` always shows one more ``spell`` than
-        the script text does.
+        core types, supertypes, subtypes and P/T. There is no third step:
+        a snapshot shows a token's spell abilities only, so two same-stat
+        scripts of one name that differ by a keyword (``r_1_1_goblin`` against
+        ``r_1_1_goblin_haste``) or by an ability look identical from here and
+        must refuse rather than pick one.
+
+        ``printed_keys`` is accepted and unused, so a caller that has the
+        entity's keys to hand needs no second call shape.
         """
         candidates = list(self.facts_by_name.get(name, ()))
         resolved = self._settle(candidates)
@@ -171,24 +183,14 @@ class TokenKeyRemapper:
 
         colors = frozenset(c.upper() for c in (entity.get("colors") or ()))
         types = {t.lower() for t in entity.get("types") or ()}
+        supertypes = {t.lower() for t in entity.get("supertypes") or ()}
         subtypes = {t.lower() for t in entity.get("subtypes") or ()}
         pt = entity.get("pt")
         candidates = [
             f for f in candidates
-            if f.colors == colors and f.core_types == types and f.subtypes == subtypes
+            if f.colors == colors and f.core_types == types
+            and f.supertypes == supertypes and f.subtypes == subtypes
             and _pt_matches(f.pt, pt)
-        ]
-        resolved = self._settle(candidates)
-        if resolved is not None:
-            return resolved
-        if not candidates:
-            return None
-
-        seen = Counter(k.get("trait_kind") for k in printed_keys)
-        counts = {kind: seen.get(kind, 0) for kind in TRAIT_KINDS}
-        candidates = [
-            f for f in candidates
-            if {**f.trait_counts, "spell": f.trait_counts["spell"] + 1} == counts
         ]
         return self._settle(candidates)
 
@@ -253,7 +255,7 @@ def remap_record_dict(data: dict, remapper: TokenKeyRemapper, counts: RemapCount
     """Rewrite every old token key in one record's raw JSON, in place.
 
     Each entity resolves *independently* against its own colours, types,
-    P/T and printed-key counts (the contract's steps 2-3) -- never against
+    supertypes and P/T (the contract's step 2) -- never against
     another entity's resolution -- so two entities sharing one old
     ``script_file`` (two token copies with different characteristics on one
     board) are never conflated. Every other key list in the record -- the

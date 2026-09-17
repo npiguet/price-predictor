@@ -19,10 +19,16 @@ GOBLIN = (
     "Name:Goblin Token\nManaCost:no cost\nColors:red\nTypes:Creature Goblin\nPT:1/1\nOracle:\n"
 )
 GOBLIN_HASTE = GOBLIN.replace("PT:1/1\n", "PT:1/1\nK:Haste\n")
+WHITE_GOBLIN = GOBLIN.replace("Colors:red\n", "Colors:white\n")
 FOOD = (
     "Name:Food Token\nManaCost:no cost\nTypes:Artifact Food\n"
     "A:AB$ GainLife | Cost$ 2 T Sac<1/CARDNAME/this token> | LifeAmount$ 3\nOracle:\n"
 )
+SOLDIER_11 = (
+    "Name:Soldier Token\nManaCost:no cost\nColors:white\nTypes:Creature Soldier\n"
+    "PT:1/1\nOracle:\n"
+)
+SOLDIER_22 = SOLDIER_11.replace("PT:1/1\n", "PT:2/2\n")
 SPIRIT_X = (
     "Name:Spirit Token\nManaCost:no cost\nColors:white\nTypes:Creature Spirit\nPT:*/*\nOracle:\n"
 )
@@ -30,9 +36,13 @@ SPIRIT_11 = (
     "Name:Spirit Token\nManaCost:no cost\nColors:white\nTypes:Creature Spirit\n"
     "PT:1/1\nK:Flying\nOracle:\n"
 )
+ANGEL = (
+    "Name:Angel Token\nManaCost:no cost\nColors:white\nTypes:Creature Angel\nPT:4/4\nOracle:\n"
+)
+ANGEL_LEGENDARY = ANGEL.replace("Types:Creature Angel\n", "Types:Legendary Creature Angel\n")
 
 
-def _key(trait_kind: str) -> dict:
+def _key(trait_kind: str = "spell") -> dict:
     """A printed key of the given trait kind, on an arbitrary carrying script."""
     return {
         "script_file": "cardsfolder/s/some_token.txt",
@@ -42,17 +52,22 @@ def _key(trait_kind: str) -> dict:
     }
 
 
-def test_parse_reads_name_colors_types_pt_and_trait_counts():
+def test_parse_reads_name_colors_types_and_pt():
     facts = parse_token_script("r_1_1_goblin_haste", GOBLIN_HASTE)
     assert facts == TokenScriptFacts(
         stem="r_1_1_goblin_haste", name="goblin token", colors=frozenset({"R"}),
-        core_types=frozenset({"creature"}), subtypes=frozenset({"goblin"}), pt=("1", "1"),
-        trait_counts={"spell": 0, "trigger": 0, "static": 0, "replacement": 0, "keyword": 1},
+        core_types=frozenset({"creature"}), supertypes=frozenset(),
+        subtypes=frozenset({"goblin"}), pt=("1", "1"),
     )
     food = parse_token_script("c_a_food_sac", FOOD)
     assert food.colors == frozenset() and food.pt is None
     assert food.core_types == {"artifact"} and food.subtypes == {"food"}
-    assert food.trait_counts["spell"] == 1
+
+
+def test_parse_buckets_a_supertype_apart_from_the_core_types():
+    facts = parse_token_script("w_4_4_angel_legendary", ANGEL_LEGENDARY)
+    assert facts.supertypes == {"legendary"}
+    assert facts.core_types == {"creature"} and facts.subtypes == {"angel"}
 
 
 def test_parse_returns_none_without_a_name():
@@ -70,16 +85,27 @@ def test_load_groups_scripts_by_printed_name(tmp_path: Path):
     assert [f.stem for f in by_name["food token"]] == ["c_a_food_sac"]
 
 
-def _write_scripts(tmp_path: Path) -> None:
-    scripts = (
-        ("r_1_1_goblin", GOBLIN),
-        ("r_1_1_goblin_haste", GOBLIN_HASTE),
-        ("c_a_food_sac", FOOD),
-        ("w_x_x_spirit", SPIRIT_X),
-        ("w_1_1_spirit_flying", SPIRIT_11),
-    )
-    for stem, text in scripts:
+#: The stems every fixture below writes. "Goblin Token" is carried by two
+#: scripts of different colours, so a red goblin entity settles at step 2;
+#: the haste variant is written only by the fixture that tests refusal.
+SCRIPTS = (
+    ("r_1_1_goblin", GOBLIN),
+    ("w_1_1_goblin", WHITE_GOBLIN),
+    ("c_a_food_sac", FOOD),
+    ("w_1_1_soldier", SOLDIER_11),
+    ("w_2_2_soldier", SOLDIER_22),
+    ("w_x_x_spirit", SPIRIT_X),
+    ("w_1_1_spirit_flying", SPIRIT_11),
+    ("w_4_4_angel", ANGEL),
+    ("w_4_4_angel_legendary", ANGEL_LEGENDARY),
+)
+
+
+def _write_scripts(tmp_path: Path, *, haste: bool = False) -> None:
+    for stem, text in SCRIPTS:
         (tmp_path / f"{stem}.txt").write_text(text, encoding="utf-8")
+    if haste:
+        (tmp_path / "r_1_1_goblin_haste.txt").write_text(GOBLIN_HASTE, encoding="utf-8")
 
 
 @pytest.fixture
@@ -88,22 +114,23 @@ def remapper(tmp_path: Path) -> TokenKeyRemapper:
     return TokenKeyRemapper(
         load_token_script_facts(tmp_path),
         converted_card_files=frozenset({"cardsfolder/f/food_chain.txt"}),
-        token_sidecars=frozenset({
-            "r_1_1_goblin", "r_1_1_goblin_haste", "c_a_food_sac", "w_x_x_spirit",
-        }),
+        # Every stem but w_2_2_soldier, which is what
+        # test_a_stem_without_a_converted_sidecar_is_never_chosen turns on.
+        token_sidecars=frozenset(
+            stem for stem, _ in SCRIPTS if stem != "w_2_2_soldier"
+        ),
     )
 
 
 @pytest.fixture
-def remapper_with_flying_spirit(tmp_path: Path) -> TokenKeyRemapper:
-    _write_scripts(tmp_path)
+def remapper_with_hasty_goblin(tmp_path: Path) -> TokenKeyRemapper:
+    _write_scripts(tmp_path, haste=True)
     return TokenKeyRemapper(
         load_token_script_facts(tmp_path),
         converted_card_files=frozenset({"cardsfolder/f/food_chain.txt"}),
-        token_sidecars=frozenset({
-            "r_1_1_goblin", "r_1_1_goblin_haste", "c_a_food_sac",
-            "w_x_x_spirit", "w_1_1_spirit_flying",
-        }),
+        token_sidecars=frozenset(
+            [stem for stem, _ in SCRIPTS] + ["r_1_1_goblin_haste"],
+        ),
     )
 
 
@@ -122,41 +149,58 @@ def test_an_ambiguous_name_needs_the_entity(remapper):
     assert remapper.resolve("goblin token") is None
 
 
-def test_colors_types_and_pt_narrow_the_candidates(remapper_with_flying_spirit):
-    spirit = {
-        "colors": ["W"], "types": ["creature"], "subtypes": ["spirit"], "pt": {"base": [1, 1]},
+def test_colors_types_and_pt_narrow_the_candidates(remapper):
+    """Two white Soldier scripts of different sizes: the entity's P/T picks one."""
+    soldier = {
+        "colors": ["W"], "types": ["creature"], "subtypes": ["soldier"], "pt": {"base": [1, 1]},
     }
-    # 1/1 rules out w_x_x_spirit? No: a * side matches anything, so both survive on P/T
-    # alone… and the keyword count settles it: the entity shows one keyword key, plus the
-    # ever-present spell key for the permanent's own cast (see resolve()'s docstring).
-    keys = [_key("spell"), _key("keyword")]
-    resolved = remapper_with_flying_spirit.resolve("spirit token", entity=spirit, printed_keys=keys)
-    assert resolved == "w_1_1_spirit_flying"
+    resolved = remapper.resolve("soldier token", entity=soldier, printed_keys=[_key()])
+    assert resolved == "w_1_1_soldier"
 
 
-def test_trait_counts_split_same_stat_scripts(remapper):
+def test_a_supertype_the_entity_lacks_rules_a_script_out(remapper):
+    """Legendary is a supertype, not a subtype: the entity's own field decides."""
+    plain = {
+        "colors": ["W"], "types": ["creature"], "subtypes": ["angel"], "pt": {"base": [4, 4]},
+    }
+    legendary = dict(plain, supertypes=["legendary"])
+    assert remapper.resolve("angel token", entity=plain, printed_keys=[_key()]) == "w_4_4_angel"
+    assert remapper.resolve(
+        "angel token", entity=legendary, printed_keys=[_key()],
+    ) == "w_4_4_angel_legendary"
+
+
+def test_same_stat_scripts_differing_by_a_keyword_refuse(remapper_with_hasty_goblin):
+    """A snapshot carries no keyword key at all, so K:Haste is invisible here."""
     goblin = {
         "colors": ["R"], "types": ["creature"], "subtypes": ["goblin"], "pt": {"base": [1, 1]},
     }
-    plain = remapper.resolve("goblin token", entity=goblin, printed_keys=[_key("spell")])
-    hasty = remapper.resolve(
-        "goblin token", entity=goblin, printed_keys=[_key("spell"), _key("keyword")],
+    resolved = remapper_with_hasty_goblin.resolve(
+        "goblin token", entity=goblin, printed_keys=[_key()],
     )
-    assert (plain, hasty) == ("r_1_1_goblin", "r_1_1_goblin_haste")
+    assert resolved is None
 
 
-def test_a_stem_without_a_converted_sidecar_is_never_chosen(remapper):
+def test_a_star_pt_script_matches_any_size_and_keeps_the_name_ambiguous(remapper):
+    """A PT of */* matches whatever the entity shows, so the Spirit pair never splits."""
     spirit = {
         "colors": ["W"], "types": ["creature"], "subtypes": ["spirit"], "pt": {"base": [1, 1]},
     }
-    keys = [_key("spell"), _key("keyword")]
-    # w_1_1_spirit_flying has no sidecar in this fixture, so the one candidate left is unusable.
-    assert remapper.resolve("spirit token", entity=spirit, printed_keys=keys) is None
+    assert remapper.resolve("spirit token", entity=spirit, printed_keys=[_key()]) is None
+
+
+def test_a_stem_without_a_converted_sidecar_is_never_chosen(remapper):
+    soldier = {
+        "colors": ["W"], "types": ["creature"], "subtypes": ["soldier"], "pt": {"base": [2, 2]},
+    }
+    # w_2_2_soldier is the only candidate left, and this fixture holds no
+    # sidecar for it, so the one survivor is unusable.
+    assert remapper.resolve("soldier token", entity=soldier, printed_keys=[_key()]) is None
 
 
 def test_a_mismatching_entity_resolves_nothing(remapper):
     elf = {"colors": ["G"], "types": ["creature"], "subtypes": ["elf"], "pt": {"base": [1, 1]}}
-    assert remapper.resolve("goblin token", entity=elf, printed_keys=[_key("spell")]) is None
+    assert remapper.resolve("goblin token", entity=elf, printed_keys=[_key()]) is None
 
 
 def _prov_key(script_file: str, kind: str = "spell", index: int = 0) -> dict:
@@ -172,14 +216,14 @@ def _record(entities, ability=None, extra=None) -> dict:
 
 
 def _goblin_entity() -> dict:
-    # Every token entity carries a spell key at index 0 for its own cast spell
-    # (Task 1's resolve() expects script spell lines + 1), so a printed list
-    # that only ever shows a keyword key would resolve to nothing.
+    # A token entity's printed list holds exactly one key -- (spell, 0), the
+    # permanent's own cast spell. The snapshot builder walks spell abilities
+    # only, so a K:/T:/S:/R: line produces no printed key at all.
     script_file = "cardsfolder/g/goblin_token.txt"
     return {
         "id": "E1", "name": "Goblin Token", "colors": ["R"], "types": ["creature"],
         "subtypes": ["goblin"], "pt": {"base": [1, 1]},
-        "printed": [_prov_key(script_file, "spell"), _prov_key(script_file, "keyword")],
+        "printed": [_prov_key(script_file, "spell")],
         "granted_attached": [], "granted_temporary": {"abilities": []},
     }
 
@@ -190,17 +234,15 @@ def test_entity_keys_are_rewritten_with_the_entitys_context(remapper):
     remap_record_dict(data, remapper, counts)
     printed = data["state"]["entities"][0]["printed"]
     assert printed[0]["trait_kind"] == "spell"
-    assert printed[0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
-    assert printed[1]["trait_kind"] == "keyword"
-    assert printed[1]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
-    assert counts.remapped == 2 and not counts.ambiguous
+    assert printed[0]["script_file"] == "tokenscripts/r_1_1_goblin.txt"
+    assert counts.remapped == 1 and not counts.ambiguous
 
 
 def test_the_acting_ability_reuses_the_entitys_resolution(remapper):
     ability = [_prov_key("cardsfolder/g/goblin_token.txt", "keyword")]
     data = _record([_goblin_entity()], ability=ability)
     remap_record_dict(data, remapper, RemapCounts())
-    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin.txt"
 
 
 def _elf_entity() -> dict:
@@ -224,15 +266,14 @@ def test_entities_that_disagree_each_resolve_on_their_own_context(remapper):
     remap_record_dict(data, remapper, counts)
     goblin_printed = data["state"]["entities"][0]["printed"]
     elf_printed = data["state"]["entities"][1]["printed"]
-    assert goblin_printed[0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
-    assert goblin_printed[1]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+    assert goblin_printed[0]["script_file"] == "tokenscripts/r_1_1_goblin.txt"
     # The elf never matches any goblin script's colours/subtypes, so its own
     # key -- despite naming the same old file -- stays untouched.
     assert elf_printed[0]["script_file"] == script_file
     # The entities disagreed (one resolved, one didn't), so the acting key
     # is not trusted to follow either of them and stays untouched too.
     assert data["ability"][0]["script_file"] == script_file
-    assert counts.remapped == 2
+    assert counts.remapped == 1
     # The elf's leftover key (final pass) and the acting key (visit_other)
     # are each counted where they were visited.
     assert counts.ambiguous == {"goblin_token": 2}
@@ -248,11 +289,11 @@ def test_entities_that_agree_let_the_acting_key_follow_them(remapper):
     remap_record_dict(data, remapper, counts)
     for entity in data["state"]["entities"]:
         for key in entity["printed"]:
-            assert key["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
+            assert key["script_file"] == "tokenscripts/r_1_1_goblin.txt"
     # By name alone "goblin token" is ambiguous (test_an_ambiguous_name_needs_the_entity);
     # the acting key resolves anyway because both entities agreed.
-    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin_haste.txt"
-    assert counts.remapped == 5 and not counts.ambiguous
+    assert data["ability"][0]["script_file"] == "tokenscripts/r_1_1_goblin.txt"
+    assert counts.remapped == 3 and not counts.ambiguous
 
 
 def test_a_key_with_no_carrying_entity_resolves_by_name_only(remapper):
