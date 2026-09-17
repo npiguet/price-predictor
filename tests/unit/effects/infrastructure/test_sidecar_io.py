@@ -7,7 +7,9 @@ card at all — and only the third may fail.
 
 from __future__ import annotations
 
+import errno
 import json
+from pathlib import Path
 
 import pytest
 
@@ -18,6 +20,7 @@ from effects.domain.provenance import (
     SidecarLine,
     SubAbilityLink,
 )
+from effects.infrastructure import sidecar_io as _sidecar_io
 from effects.infrastructure.sidecar_io import (
     SidecarCache,
     read_sidecar,
@@ -333,3 +336,97 @@ class TestTheVariantTreeHasNoProse:
         cache, key = self._cache(tmp_path)
         assert cache.row_for(key) == 0
         assert cache.line_for(key).script_text == "SP$ DealDamage | NumDmg$ 7"
+
+
+class TestATransientOpenFailureIsRetried:
+    """A two-hour build must not die on one file another process held open.
+
+    A survey worker died fifteen minutes into a corpus rebuild on
+    ``OSError: [Errno 22] Invalid argument`` opening a sidecar that was intact
+    and parsed fine afterwards. Nothing about the file was wrong, so the read
+    is retried. Each test zeroes the backoff, because the waiting is not what
+    is under test -- how many times the file is opened is.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_waiting(self, monkeypatch):
+        monkeypatch.setattr(_sidecar_io, "_SIDECAR_RETRY_DELAY", 0.0)
+
+    def _written(self, tmp_path):
+        path = sidecar_path_for(tmp_path / "ajanis_pridemate.txt")
+        write_sidecar(_sidecar(), path)
+        return path
+
+    def test_a_read_that_succeeds_on_the_third_attempt_still_loads(
+        self, tmp_path, monkeypatch, caplog,
+    ):
+        path = self._written(tmp_path)
+        good = path.read_text(encoding="utf-8")
+        attempts = []
+
+        def flaky(self, *args, **kwargs):
+            attempts.append(1)
+            if len(attempts) <= 2:
+                raise OSError(errno.EINVAL, "Invalid argument")
+            return good
+
+        monkeypatch.setattr(Path, "read_text", flaky)
+
+        with caplog.at_level("WARNING"):
+            loaded = read_sidecar(path)
+
+        assert len(attempts) == 3
+        assert loaded.card == "Ajani's Pridemate"
+        assert str(path) in caplog.text
+
+    def test_a_missing_sidecar_is_not_retried(self, tmp_path, monkeypatch):
+        """Absence is an answer: SidecarCache reports it as an unconverted
+        script, and waiting out the backoff first would slow every ordinary
+        run for nothing."""
+        path = self._written(tmp_path)
+        attempts = []
+
+        def missing(self, *args, **kwargs):
+            attempts.append(1)
+            raise FileNotFoundError(errno.ENOENT, "No such file or directory")
+
+        monkeypatch.setattr(Path, "read_text", missing)
+
+        with pytest.raises(FileNotFoundError):
+            read_sidecar(path)
+
+        assert len(attempts) == 1
+
+    def test_an_errno_that_is_not_transient_propagates_at_once(
+        self, tmp_path, monkeypatch,
+    ):
+        path = self._written(tmp_path)
+        attempts = []
+
+        def broken(self, *args, **kwargs):
+            attempts.append(1)
+            raise OSError(errno.EISDIR, "Is a directory")
+
+        monkeypatch.setattr(Path, "read_text", broken)
+
+        with pytest.raises(OSError, match="Is a directory"):
+            read_sidecar(path)
+
+        assert len(attempts) == 1
+
+    def test_a_lock_that_never_clears_raises_the_last_error(
+        self, tmp_path, monkeypatch,
+    ):
+        path = self._written(tmp_path)
+        attempts = []
+
+        def always_locked(self, *args, **kwargs):
+            attempts.append(1)
+            raise PermissionError(errno.EACCES, "Permission denied")
+
+        monkeypatch.setattr(Path, "read_text", always_locked)
+
+        with pytest.raises(PermissionError):
+            read_sidecar(path)
+
+        assert len(attempts) == _sidecar_io._SIDECAR_READ_ATTEMPTS

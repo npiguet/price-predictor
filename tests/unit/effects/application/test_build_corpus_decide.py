@@ -59,6 +59,11 @@ def _rendered_key(label: str) -> str:
 REPRINT_A = _rendered_key("reprint-a")
 REPRINT_B = _rendered_key("reprint-b")
 UNKNOWN_KEY = _rendered_key("unknown-key")
+#: Same script file as ``reprint-a``, a trait kind that sidecar never names:
+#: the mismatch answer, as opposed to the two no-text ones.
+MISMATCH_KEY = ability_key(SimpleNamespace(ability=(
+    ProvenanceKey("cardsfolder/x/reprint_a.txt", 0, "trigger", 0),
+)))
 #: The one key ``fake_sidecars`` resolves to a text the holdout names.
 HELD_OUT_KEY = _rendered_key("held-out-text")
 HELD_OUT_TEXTS = frozenset({"held-out-text"})
@@ -201,6 +206,24 @@ def test_a_key_no_sidecar_can_read_gets_no_threshold_and_no_rarity(fake_sidecars
                        config=a_config(text_cap=10))
 
     assert UNKNOWN_KEY not in decisions.thresholds
+
+
+def test_a_sidecar_mismatch_propagates_out_of_the_fold(fake_sidecars):
+    """The contract's fail-loudly case, pinned at ``decide``'s own fold.
+
+    ``_text_of_rendered_key`` has no ``except``, on purpose: a key the sidecar
+    exists for and does not describe means the cards were reconverted between
+    collection and training, and every downstream number computed from a
+    silent "no text" would be wrong in a way nothing reports. A ``try`` added
+    there for tidiness would restore exactly the bug the branch removed, so
+    the raise is asserted rather than left to inspection.
+    """
+    survey = a_survey(key_records={MISMATCH_KEY: 5}, heap_cap=100)
+
+    with pytest.raises(KeyError, match="neither the lines nor the dropped_keys"):
+        decide(survey, sidecars=fake_sidecars, surface="script",
+               held_out_texts=HELD_OUT_TEXTS,
+               config=a_config(text_cap=100))
 
 
 def test_a_survey_built_at_a_different_text_cap_raises(fake_sidecars):

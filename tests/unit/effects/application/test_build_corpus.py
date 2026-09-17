@@ -43,6 +43,8 @@ import pytest
 from effects.application.build_corpus import (
     BuildCorpusConfig,
     BuildCorpusError,
+    WriteResult,
+    _check_refusals,
     _check_samples,
     _output_name,
     build,
@@ -1500,3 +1502,33 @@ def test_the_cli_exposes_the_remap_flags():
     defaults = build_parser().parse_args(["build-corpus"])
     assert defaults.remap_token_keys is True
     assert defaults.forge_tokenscripts == "../forge/forge-gui/res/tokenscripts"
+
+
+def test_a_class_lost_to_no_acting_text_is_told_to_reconvert():
+    """The third cause the refusal guard names, beside a degraded checkout and
+    a rule that does not fit: sidecars written before the converter claimed
+    the traits whose text its lines carry. An operator reading only "unpatched
+    checkout" would go looking at Forge, and the corpus is the thing to fix.
+    """
+    written = WriteResult(
+        read=Counter({"resolution-effect": 10}),
+        refused_by_class=Counter({"resolution-effect": 90}),
+        quality_dropped=Counter({"no-acting-text": 88, "no-ability": 2}),
+    )
+
+    with pytest.raises(BuildCorpusError) as raised:
+        _check_refusals(written)
+
+    message = str(raised.value)
+    assert "no-acting-text" in message
+    assert "reconvert" in message
+
+
+def test_a_class_that_keeps_most_of_its_records_raises_nothing():
+    """The guard is for a class lost whole, not for the few percent the rules
+    are there to take."""
+    _check_refusals(WriteResult(
+        read=Counter({"resolution-effect": 95}),
+        refused_by_class=Counter({"resolution-effect": 5}),
+        quality_dropped=Counter({"no-acting-text": 5}),
+    ))

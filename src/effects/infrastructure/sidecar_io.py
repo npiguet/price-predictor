@@ -25,7 +25,10 @@ in one file and lives in the header.
 
 from __future__ import annotations
 
+import errno
 import json
+import logging
+import time
 from pathlib import Path
 
 from effects.domain.provenance import (
@@ -36,6 +39,8 @@ from effects.domain.provenance import (
     SidecarLine,
     SubAbilityLink,
 )
+
+logger = logging.getLogger(__name__)
 
 SIDECAR_SUFFIX = ".provenance.json"
 
@@ -131,15 +136,63 @@ def sidecar_from_dict(data: dict) -> ProvenanceSidecar:
     )
 
 
+#: Errnos a sidecar open can fail with while the file is perfectly good.
+#: ``EINVAL`` is what Windows reports when another process holds the file open
+#: in a mode this one cannot share, which an indexer or a virus scanner does to
+#: files written minutes earlier; ``EACCES`` is the same story with a different
+#: lock. Both come back clean on a retry.
+_TRANSIENT_ERRNOS = frozenset({errno.EINVAL, errno.EACCES})
+
+#: Attempts, and the wait before the second one. The wait doubles, so five
+#: attempts span under a second in total -- long enough to outlast a scanner's
+#: hold, short enough that a genuinely unreadable file still fails promptly.
+_SIDECAR_READ_ATTEMPTS = 5
+_SIDECAR_RETRY_DELAY = 0.05
+
+
 def read_sidecar(path: Path) -> ProvenanceSidecar:
     """Load one sidecar. Raises ``FileNotFoundError`` if it is missing.
 
     A missing sidecar is not tolerated the way a partial shard line is: a record
     that names a card with no sidecar cannot be joined at all, and silently
     skipping it would drop training signal without saying so.
+
+    A *transient* open failure is tolerated, and retried. One survey worker died
+    fifteen minutes into a corpus build on ``OSError: [Errno 22] Invalid
+    argument`` opening a sidecar that was intact and parsed fine seconds later,
+    and re-reading the whole tree from twelve processes produced no error at
+    all: something outside this program had the file open for a moment. A build
+    runs for about two hours and reads tens of thousands of these, so losing it
+    to one such moment costs far more than four retries do.
+
+    ``FileNotFoundError`` is excluded: absence is an answer, not a hiccup. A
+    sidecar that is not there means the converted corpus never held that card,
+    which ``SidecarCache`` reports as :class:`UnconvertedScript` and the
+    trainer tallies per script file. Waiting out the backoff before saying so
+    would slow an ordinary run for nothing.
     """
     path = Path(path)
-    return sidecar_from_dict(json.loads(path.read_text(encoding="utf-8")))
+    for attempt in range(1, _SIDECAR_READ_ATTEMPTS + 1):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            if exc.errno not in _TRANSIENT_ERRNOS and not isinstance(
+                exc, PermissionError
+            ):
+                raise
+            if attempt == _SIDECAR_READ_ATTEMPTS:
+                raise
+            if attempt == 1:
+                logger.warning(
+                    "%s could not be opened (%s); retrying up to %d times",
+                    path, exc, _SIDECAR_READ_ATTEMPTS - 1,
+                )
+            time.sleep(_SIDECAR_RETRY_DELAY * 2 ** (attempt - 1))
+        else:
+            return sidecar_from_dict(json.loads(text))
+    raise AssertionError("unreachable: the last attempt either returns or raises")
 
 
 def write_sidecar(sidecar: ProvenanceSidecar, path: Path) -> None:

@@ -45,7 +45,7 @@ from effects.domain.event_schema import (
     EventType,
     attribution_kind,
 )
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import (
     KINDS_WITHOUT_ACTING_ABILITY,
     REWRITE_RESULTS_RUNNING_AN_ABILITY,
@@ -62,6 +62,7 @@ from effects.domain.records import (
     RewritePayload,
     TriggerPayload,
 )
+from effects.infrastructure.sidecar_io import UnconfiguredTree
 
 #: Envelope fields that differ between two otherwise identical records because
 #: of *when* they were written rather than *what* they say. Blanked before
@@ -425,25 +426,35 @@ def _is_deferred_mana_record(record: EffectRecord) -> bool:
 #: never a mismatch: absence of a tree is not evidence about the corpus.
 _UNCHECKED = object()
 
+#: :func:`_join_result` for a key outside every ``(face, trait_kind)`` range
+#: its sidecar declares. Not a mismatch — Forge attaches such traits to a live
+#: card — but not a join either, and reported on its own so an operator sees
+#: how much of the window resolves that way.
+_RUNTIME_ONLY = object()
+
 
 def _join_result(sidecars, key: ProvenanceKey):
-    """``None`` where ``key`` joins, :data:`_UNCHECKED`, or why it does not.
+    """``None`` where ``key`` joins, a sentinel, or why it does not.
 
-    ``row_for`` already encodes the join rule — a dropped or runtime-only key
-    resolves to no line and is *not* a failure — so this only has to sort its
-    exceptions into "this run cannot say" and "this key is wrong", and turn the
-    second into a line an operator can act on.
+    ``resolution_of`` rather than ``row_for``, because ``row_for`` answers
+    ``None`` to a line the sidecar dropped and to a key outside every range it
+    declared alike, and only the first of those is a join. Sorting the rest is
+    this function's whole job: a tree this run was not given is something it
+    cannot say anything about, and a key inside a declared range that names no
+    line is the one an operator has to act on.
     """
     try:
         sidecars.path_for(key.script_file)
-    except KeyError:
+    except UnconfiguredTree:
         return _UNCHECKED
     try:
-        sidecars.get(key.script_file).row_for(key)
-    except FileNotFoundError:
-        return f"{key.script_file}: no sidecar beside the converted card"
+        resolution = sidecars.resolution_of(key)
     except KeyError as exc:
         return f"{key.script_file} {key.trait_kind}[{key.index_within_kind}]: {exc}"
+    if resolution is KeyResolution.UNCONVERTED:
+        return f"{key.script_file}: no sidecar beside the converted card"
+    if resolution is KeyResolution.RUNTIME_ONLY:
+        return _RUNTIME_ONLY
     return None
 
 
@@ -867,9 +878,18 @@ class _Tally:
         is. Watched *first*: the number is what turns it into a verdict later,
         and failing runs on an uncalibrated check is how an operator learns to
         skip the whole report.
+
+        A third finding counts the keys that resolve outside every range their
+        sidecar declares. Those are not mismatches and must not fail the run,
+        but they are not joins either, and a sidecar that declares no keyword
+        line at all puts *every* keyword key of that face there — the launch
+        blocker wearing the one disguise this check would otherwise read as
+        healthy. Tallied beside the unjoinable count, and named in the keyword
+        finding as well, so the share is visible where the verdict is.
         """
         keyword_title = "keyword provenance keys join their sidecar"
         other_title = "non-keyword provenance keys join their sidecar"
+        outside_title = "provenance keys outside every declared range"
         if sidecars is None:
             unchecked = Finding(
                 name=keyword_title, ok=True, watched=True,
@@ -878,9 +898,14 @@ class _Tally:
                     "tree was readable (pass --cards-folder)"
                 ),
             )
-            return [unchecked, replace(unchecked, name=other_title)]
+            return [
+                unchecked,
+                replace(unchecked, name=other_title),
+                replace(unchecked, name=outside_title),
+            ]
         checked: Counter[str] = Counter()
         unjoinable: Counter[str] = Counter()
+        runtime_only: Counter[str] = Counter()
         unchecked_by_tree: Counter[str] = Counter()
         examples: dict[str, list[str]] = defaultdict(list)
         ordered = sorted(
@@ -893,6 +918,9 @@ class _Tally:
                 unchecked_by_tree[key.tree] += 1
                 continue
             checked[key.trait_kind] += 1
+            if result is _RUNTIME_ONLY:
+                runtime_only[key.trait_kind] += 1
+                continue
             if result is None:
                 continue
             unjoinable[key.trait_kind] += 1
@@ -901,10 +929,14 @@ class _Tally:
                 bucket.append(result)
         keywords = checked.get("keyword", 0)
         broken = unjoinable.get("keyword", 0)
+        keyword_outside = runtime_only.get("keyword", 0)
         skipped = sum(unchecked_by_tree.values())
-        other_checked = sum(checked.values()) - keywords
+        total_checked = sum(checked.values())
+        other_checked = total_checked - keywords
         other_broken = sum(unjoinable.values()) - broken
         other_rate = other_broken / other_checked if other_checked else 0.0
+        outside = sum(runtime_only.values())
+        outside_rate = outside / total_checked if total_checked else 0.0
         trees = tuple(
             f"{count} keys in {tree}, a tree this run was not given"
             for tree, count in sorted(unchecked_by_tree.items())
@@ -915,6 +947,7 @@ class _Tally:
                 ok=broken == 0,
                 measured=(
                     f"{broken}/{keywords} keyword keys fail to join, "
+                    f"{keyword_outside} outside every declared range, "
                     f"{skipped} unchecked"
                 ),
                 detail=trees + tuple(examples["keyword"]),
@@ -932,6 +965,21 @@ class _Tally:
                     for kind, count in sorted(checked.items())
                     if kind != "keyword"
                 ) + tuple(examples["other"]),
+            ),
+            Finding(
+                name=outside_title,
+                ok=True,
+                watched=True,
+                measured=(
+                    f"{outside}/{total_checked} keys resolve outside every "
+                    f"(face, trait_kind) range their sidecar declares "
+                    f"({outside_rate:.1%}, watched, no ceiling)"
+                ),
+                detail=tuple(
+                    f"{kind}: {runtime_only[kind]}/{checked[kind]} outside "
+                    "every declared range"
+                    for kind in sorted(runtime_only)
+                ),
             ),
         ]
 

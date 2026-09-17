@@ -219,9 +219,13 @@ def test_survey_counts_records_classes_and_games(tmp_path):
 
 
 def test_survey_marks_every_game_naming_a_held_out_card(tmp_path):
-    # Both records carry an acting ability: a resolution record without one is
-    # refused by the quality rule (FR-148) before it is routed at all, so a
-    # test written on bare resolutions would assert against an empty survey.
+    # Both records are in fact refused: this config configures no
+    # sidecar_roots, so the acting key reads as an unconverted script and
+    # FR-148's no-acting-text rule takes it. g1 is still marked held out,
+    # which is the stronger property -- a game naming a held-out card is
+    # marked before any of its records is judged, so the held-out set is a
+    # fact about the games the survey read rather than about the records it
+    # kept, and no quality rule can quietly unmark a card's game.
     keys = (ProvenanceKey("cardsfolder/b/bear.txt", 0, "spell", 0),)
     shard = tmp_path / "run.0-a.jsonl.gz"
     write_shard(shard, [

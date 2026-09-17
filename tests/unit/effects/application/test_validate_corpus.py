@@ -862,12 +862,13 @@ class TestAnEmptyAbilitySaysWhy:
         assert not _named(validate_corpus(records), "trigger and rewrite").ok
 
 
-def _write_bears_sidecar(root, keyword_indices, spell_indices=()):
+def _write_bears_sidecar(root, keyword_indices, spell_indices=(), dropped=()):
     """A sidecar for Grizzly Bears declaring exactly these ordinals.
 
     ``spell_indices`` exists so a test can declare a spell *range* with a gap
     in it: outside a declared range a key is runtime-only, so a planted
-    mismatch of another trait kind has nowhere else to live.
+    mismatch of another trait kind has nowhere else to live. ``dropped`` is
+    the contentless set, which resolves to no line and still counts as a join.
     """
     sidecar = ProvenanceSidecar(
         card="Grizzly Bears",
@@ -887,6 +888,7 @@ def _write_bears_sidecar(root, keyword_indices, spell_indices=()):
             )
             for row, index in enumerate(spell_indices)
         ),
+        dropped_keys=tuple(dropped),
     )
     write_sidecar(
         sidecar, root / "cardsfolder" / "g" / "grizzly_bears.provenance.json",
@@ -931,6 +933,66 @@ class TestKeywordKeysJoinTheirSidecar:
         sidecars = _write_bears_sidecar(tmp_path, (0, 1))
         findings = validate_corpus([*_healthy(), self._record(7)], None, sidecars)
         assert _named(findings, "keyword provenance keys").ok
+
+    def test_a_key_outside_every_declared_range_is_counted_not_joined(
+        self, tmp_path,
+    ):
+        """It resolves to no line, so reporting it as a join hides it."""
+        sidecars = _write_bears_sidecar(tmp_path, (0, 1))
+        findings = validate_corpus([*_healthy(), self._record(7)], None, sidecars)
+        keyword = _named(findings, "keyword provenance keys")
+        outside = _named(findings, "outside every declared range")
+        assert "1 outside every declared range" in keyword.measured
+        assert outside.watched and outside.ok
+        assert outside.measured.startswith("1/")
+        assert any("keyword: 1/1" in line for line in outside.detail)
+
+    def test_a_face_declaring_no_keyword_line_leaves_every_keyword_key_outside(
+        self, tmp_path,
+    ):
+        """The launch blocker in the disguise a join check reads as healthy.
+
+        With no keyword line declared for the face, every keyword ordinal is
+        outside the declared range, so nothing is a mismatch and nothing joins
+        either. The run stays green and the count says how much of it did.
+        """
+        sidecars = _write_bears_sidecar(tmp_path, (), spell_indices=(0,))
+        findings = validate_corpus([*_healthy(), self._record(0)], None, sidecars)
+        keyword = _named(findings, "keyword provenance keys")
+        assert keyword.ok, keyword.measured
+        assert "0/1 keyword keys fail to join" in keyword.measured
+        assert "1 outside every declared range" in keyword.measured
+        assert _named(findings, "outside every declared range").measured.startswith("1/")
+
+    def test_a_dropped_key_joins_and_is_not_counted_as_outside(self, tmp_path):
+        """A contentless trait the converter listed is described, so it joins.
+
+        The sidecar answers for it, which is the whole question this check
+        asks; that the answer is "no line" is FR-148's business, not this
+        finding's.
+        """
+        dropped = ProvenanceKey(_BEARS, 0, "keyword", 1)
+        sidecars = _write_bears_sidecar(tmp_path, (0, 2), dropped=(dropped,))
+        findings = validate_corpus([*_healthy(), self._record(1)], None, sidecars)
+        keyword = _named(findings, "keyword provenance keys")
+        assert keyword.ok, keyword.measured
+        assert "0/1 keyword keys fail to join" in keyword.measured
+        assert "0 outside every declared range" in keyword.measured
+        assert _named(findings, "outside every declared range").measured.startswith("0/")
+
+    def test_an_unconverted_script_is_not_read_as_outside_the_range(
+        self, tmp_path,
+    ):
+        """No sidecar at all is a different answer from a sidecar that has
+        nothing for the key, and only the first is an operator's problem."""
+        sidecars = _write_bears_sidecar(tmp_path, (0,))
+        orphan = _trigger(
+            "run.0-L1.901",
+            ability=(ProvenanceKey("cardsfolder/x/nowhere.txt", 0, "keyword", 0),),
+        )
+        findings = validate_corpus([*_healthy(), orphan], None, sidecars)
+        assert not _named(findings, "keyword provenance keys").ok
+        assert _named(findings, "outside every declared range").measured.startswith("0/")
 
     def test_a_card_with_no_sidecar_fails_rather_than_being_skipped(
         self, tmp_path,

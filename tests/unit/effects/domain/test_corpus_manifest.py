@@ -139,3 +139,31 @@ def test_the_digest_changes_when_the_remap_did_something_else():
     """Two datasets whose old token keys resolved differently are different
     datasets: the same raw shards, keyed at different abilities."""
     assert manifest().digest() != manifest(token_keys_remapped=1).digest()
+
+
+def test_the_no_acting_text_tally_stays_out_of_the_digest(manifest_dict):
+    """A tally added after the fact must not invalidate older checkpoints.
+
+    The digest is what FR-147 pins a checkpoint to, and it stands for the
+    split and the contents. ``no_acting_text_scripts`` says which scripts the
+    build refused records through, which an operator reads and no sampling
+    decision depends on, so a manifest written before the field existed has to
+    hash exactly as one that carries it.
+    """
+    manifest_dict.pop("no_acting_text_scripts", None)
+    before = CorpusManifest.from_dict(manifest_dict)
+    after = CorpusManifest.from_dict({
+        **manifest_dict,
+        "no_acting_text_scripts": {"cardsfolder/g/grizzly_bears.txt": 12},
+    })
+
+    assert before.no_acting_text_scripts == {}
+    assert after.no_acting_text_scripts == {"cardsfolder/g/grizzly_bears.txt": 12}
+    assert before.digest() == after.digest()
+
+
+def test_a_different_held_out_text_still_moves_the_digest():
+    """The exclusion is one named field, not a hole in the hash."""
+    assert manifest().digest() != manifest(
+        held_out_texts=("gains 4 life",),
+    ).digest()

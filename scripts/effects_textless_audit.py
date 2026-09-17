@@ -17,6 +17,7 @@ import collections
 import glob
 import itertools
 import random
+import sys
 from pathlib import Path
 
 from effects.domain.provenance import KeyResolution
@@ -40,7 +41,14 @@ def main() -> int:
         roots["variant-scripts"] = args.variant_scripts
     sidecars = SidecarCache(roots)
 
-    files = sorted(glob.glob(str(args.corpus / "training" / "shard-*.jsonl.gz")))
+    training = args.corpus / "training"
+    files = sorted(glob.glob(str(training / "shard-*.jsonl.gz")))
+    if not files:
+        # Zero shards print zero of everything, which reads exactly like a
+        # clean corpus. A wrong --corpus is the likeliest reason to see it,
+        # and this script exists to be compared across runs.
+        print(f"no shards under {training}", file=sys.stderr)
+        return 2
     random.seed(args.seed)
     files = random.sample(files, min(args.shards, len(files)))
 

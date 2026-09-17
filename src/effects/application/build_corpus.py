@@ -1150,12 +1150,16 @@ def _check_refusals(written: WriteResult) -> None:
     """Stop when the quality rules refused most of any one sampling class.
 
     A few percent refused per class is what the rules are for. A majority is
-    one of two things, and the message names both because the counts alone do
-    not separate them: a corpus collected against an unpatched (degraded)
-    Forge, which resolves no attribution and stamps every event
-    ``unresolved``, or a rule that does not fit the kind it is being applied
-    to. Written anyway, the dataset is simply missing a sampling class, and
-    the trainer reports that as a class this corpus happens not to hold.
+    one of three things, and the message names all three because the counts
+    alone do not separate them: a corpus collected against an unpatched
+    (degraded) Forge, which resolves no attribution and stamps every event
+    ``unresolved``; a rule that does not fit the kind it is being applied to;
+    or a corpus rebuilt against sidecars written before the converter claimed
+    the traits whose text its lines carry, which leaves the records acting
+    through keys the sidecar still drops. The third shows itself as
+    ``no-acting-text`` dominating ``quality_dropped``, and a reconversion is
+    the fix. Written anyway, the dataset is simply missing a sampling class,
+    and the trainer reports that as a class this corpus happens not to hold.
     """
     for name in sorted(written.refused_by_class):
         refused = written.refused_by_class[name]
@@ -1167,12 +1171,15 @@ def _check_refusals(written: WriteResult) -> None:
             f"{name}: {refused} of the {total} record(s) read were refused by "
             f"the record-quality rules ({100.0 * refused / total:.1f}%), past "
             f"the {100.0 * MAX_REFUSED_SHARE:.0f}% a class may lose. A whole "
-            "class refused is usually one of two things rather than a dirty "
-            "corpus: an unpatched (degraded) checkout, which resolves no "
-            "attribution and stamps every event `unresolved`, or a quality "
-            "rule that is wrong for this kind of record. Read the "
-            "quality_dropped breakdown and the mode the shards were collected "
-            "in before rebuilding."
+            "class refused is usually one of three things rather than a "
+            "dirty corpus: an unpatched (degraded) checkout, which resolves "
+            "no attribution and stamps every event `unresolved`; a quality "
+            "rule that is wrong for this kind of record; or a corpus rebuilt "
+            "before the converter's claims landed -- `no-acting-text` "
+            "dominating `quality_dropped` means the sidecars still drop the "
+            "keys the records act through, so reconvert and try again. Read "
+            "the quality_dropped breakdown and the mode the shards were "
+            "collected in before rebuilding."
         )
 
 

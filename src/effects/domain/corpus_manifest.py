@@ -136,7 +136,8 @@ class CorpusManifest:
     #: token name whose scripts the entity's colours, types, supertypes and
     #: P/T could not tell apart -- most often two same-stat scripts differing
     #: only by a keyword, which a snapshot does not show at all. The records
-    #: are kept, keyed as they were collected.
+    #: are kept, keyed as they were collected, unless FR-148 refuses them for
+    #: acting through no text.
     token_keys_ambiguous: dict[str, int] = field(default_factory=dict)
     #: Script file -> resolution records refused because every acting key
     #: mapped to no rendered line (FR-148), largest 100 only. The refusal is
@@ -208,13 +209,24 @@ class CorpusManifest:
             forge_tokenscripts=str(data.get("forge_tokenscripts", "")),
         )
 
+    #: Fields the digest leaves out: operator-facing tallies that say nothing
+    #: about which records the dataset holds. The digest is what FR-147 pins a
+    #: checkpoint to, so adding a field to this dataclass must not move it --
+    #: a manifest written before the field existed has to keep hashing the way
+    #: it did, or every checkpoint trained against it stops being evaluable.
+    _OUTSIDE_THE_DIGEST = ("no_acting_text_scripts",)
+
     def digest(self) -> str:
         """A stable hash over every decision, insensitive to listing order.
 
         Sorted keys and a sorted source list, so two builds of the same dataset
         agree whatever order the filesystem enumerated shards in.
+        ``_OUTSIDE_THE_DIGEST`` names the fields that are reported rather than
+        decided, and they are dropped here rather than never recorded.
         """
         payload = self.as_dict()
+        for field_name in self._OUTSIDE_THE_DIGEST:
+            payload.pop(field_name, None)
         payload["sources"] = sorted(payload["sources"], key=lambda s: s["name"])
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.blake2b(canonical.encode("utf-8"), digest_size=16).hexdigest()
