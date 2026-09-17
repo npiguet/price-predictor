@@ -96,7 +96,8 @@ def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
     for key in (
         "quality_dropped", "games_by_source", "held_out_games_by_source",
         "shard_records", "validation_sample", "max_events_per_record",
-        "unattributed_records",
+        "unattributed_records", "token_keys_remapped", "token_keys_ambiguous",
+        "forge_tokenscripts",
     ):
         manifest_dict.pop(key, None)
     loaded = CorpusManifest.from_dict(manifest_dict)
@@ -107,6 +108,9 @@ def test_a_manifest_written_before_the_rework_still_loads(manifest_dict):
     assert loaded.validation_sample == 0
     assert loaded.max_events_per_record == 0
     assert loaded.unattributed_records == 0
+    assert loaded.token_keys_remapped == 0
+    assert loaded.token_keys_ambiguous == {}
+    assert loaded.forge_tokenscripts == ""
 
 
 def test_the_new_fields_round_trip(manifest_dict):
@@ -118,8 +122,20 @@ def test_the_new_fields_round_trip(manifest_dict):
         "validation_sample": 2048,
         "max_events_per_record": 64,
         "unattributed_records": 512,
+        "token_keys_remapped": 17,
+        "token_keys_ambiguous": {"goblin_token": 4},
+        "forge_tokenscripts": "../forge/forge-gui/res/tokenscripts",
     })
     loaded = CorpusManifest.from_dict(manifest_dict)
     assert loaded.as_dict()["quality_dropped"] == {"no-ability": 3}
     assert loaded.unattributed_records == 512
+    assert loaded.token_keys_remapped == 17
+    assert loaded.token_keys_ambiguous == {"goblin_token": 4}
+    assert loaded.forge_tokenscripts == "../forge/forge-gui/res/tokenscripts"
     assert CorpusManifest.from_dict(loaded.as_dict()) == loaded
+
+
+def test_the_digest_changes_when_the_remap_did_something_else():
+    """Two datasets whose old token keys resolved differently are different
+    datasets: the same raw shards, keyed at different abilities."""
+    assert manifest().digest() != manifest(token_keys_remapped=1).digest()

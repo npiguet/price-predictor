@@ -124,6 +124,21 @@ class CorpusManifest:
     #: resolution -- so these records are trained on. A rising share is a
     #: statement about the collector, not about the corpus.
     unattributed_records: int = 0
+    #: Provenance keys the build rewrote from the old collector's
+    #: ``cardsfolder/<name>.txt`` to the token script they meant (FR-151).
+    #: 0 on a manifest built before the remap existed, and on one built with
+    #: ``--no-remap-token-keys``.
+    token_keys_remapped: int = 0
+    #: Old token keys the remap refused to guess at, by the old script's
+    #: filename stem, largest 100 only. A stem here is a token name whose
+    #: scripts the entity's colours, types, P/T and printed-key counts could
+    #: not tell apart -- the records are kept, keyed as they were collected.
+    token_keys_ambiguous: dict[str, int] = field(default_factory=dict)
+    #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
+    #: or "" when the remap was off. Which scripts were on disk decides which
+    #: keys resolved, so two datasets built against different Forge checkouts
+    #: are different datasets.
+    forge_tokenscripts: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -173,6 +188,11 @@ class CorpusManifest:
             validation_sample=int(data.get("validation_sample", 0)),
             max_events_per_record=int(data.get("max_events_per_record", 0)),
             unattributed_records=int(data.get("unattributed_records", 0)),
+            token_keys_remapped=int(data.get("token_keys_remapped", 0)),
+            token_keys_ambiguous={
+                k: int(v) for k, v in data.get("token_keys_ambiguous", {}).items()
+            },
+            forge_tokenscripts=str(data.get("forge_tokenscripts", "")),
         )
 
     def digest(self) -> str:
