@@ -570,11 +570,17 @@ public record ProvenanceKey(
      * script is {@code westvale_abbey_ormendahl_profane_prince.txt} either way.
      *
      * <p>A token is filed under what it <em>is</em>, not what it is called:
-     * {@code c_1_1_eldrazi_scion_sac.txt} is the Eldrazi Scion. And
-     * {@code isToken()} does not mean "came from a token script" — a token copy
-     * of a real permanent is a token by that flag while its abilities are the
-     * printed card's — so the paper card decides the tree: only a
-     * {@link PaperToken} was read from a token script.
+     * {@code c_1_1_eldrazi_scion_sac.txt} is the Eldrazi Scion. The token tree
+     * is tried first, ahead of everything above: a {@link PaperToken}'s image
+     * filename, or failing that a token host's image key ({@code t:<stem>...},
+     * which {@code TokenInfo.toCard} preserves through a {@code GameCopier}
+     * fork), checked against the token database. Only when neither yields a
+     * known stem does the card tree take over — {@code CardRules.getPath()},
+     * then the normalized name, then the printed name. A {@code t:} key that
+     * names a stem the token database does not know falls through the same
+     * way a token copy of a printed card does, landing on a name-derived
+     * {@code cardsfolder} path rather than an unresolved result; that is a
+     * known limitation (see the token-access audit note).
      */
     static String scriptFileOf(Card host) {
         if (VariantRegistry.isVariant(host.getName())) {

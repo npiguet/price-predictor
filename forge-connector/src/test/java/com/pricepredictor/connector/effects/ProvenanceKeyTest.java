@@ -322,6 +322,24 @@ class ProvenanceKeyTest {
     }
 
     /**
+     * A null or empty image key must not throw. {@code ImageKeys.getTokenImageName}
+     * rejects a null key with an NPE that {@code tokenScriptStem} catches
+     * internally, and an empty key never matches the token prefix either way —
+     * both fall through to the same name-derived cardsfolder path as an
+     * unknown token key.
+     */
+    @Test
+    void aNullOrEmptyImageKeyFallsThroughToTheCardTreeWithoutThrowing() {
+        Card withNullKey = TestCards.copiedToken("c_a_food_sac");
+        withNullKey.setImageKey(null);
+        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(withNullKey));
+
+        Card withEmptyKey = TestCards.copiedToken("c_a_food_sac");
+        withEmptyKey.setImageKey("");
+        assertEquals("cardsfolder/f/food_token.txt", ProvenanceKey.scriptFileOf(withEmptyKey));
+    }
+
+    /**
      * A token copy of a printed card: {@code isToken()} is true (the copier
      * sets {@code GamePieceType.TOKEN} on every copy it makes, real permanent
      * or not) but the image key is the printed card's, not a {@code t:} key.

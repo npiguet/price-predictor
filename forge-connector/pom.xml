@@ -18,6 +18,12 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.11.4</junit.version>
         <lombok.version>1.18.42</lombok.version>
+        <!-- This default resolves relative to this module's directory
+             (${project.basedir}), so it is wrong when ${project.basedir} is a
+             git worktree under .worktrees/ rather than the checkout that has
+             a sibling ../../forge. From a worktree, pass
+             -Dforge.dir=<absolute path to the sibling forge checkout> on the
+             Maven command line instead. -->
         <forge.dir>${project.basedir}/../../forge</forge.dir>
         <forge.version>2.0.15-SNAPSHOT</forge.version>
     </properties>
