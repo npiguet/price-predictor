@@ -679,10 +679,10 @@ loss.
 - **FR-152**: The converter MUST claim, on a rendered line, every runtime trait whose text that line
   carries: the synthetic land-mana line claims the runtime mana abilities it stands for, the
   survivor of a deduplicated description claims the duplicate's keys, the primary of a secondary
-  trigger pair claims the secondary's key, a keyword-derived trigger, static or spell is claimed by
-  the keyword's line, and a Class card's level line inherits the attribution of the ability it
-  replaces. `dropped_keys` MUST hold only traits with no text of their own. Claiming MUST NOT change
-  the rendered text.
+  trigger pair claims the secondary's key, a keyword-derived trigger, static, spell or replacement
+  effect is claimed by the keyword's line, and a Class card's level line inherits the attribution of
+  the trait it replaces and of the duplicate trait the converter removes for it. `dropped_keys` MUST
+  hold only traits with no text of their own. Claiming MUST NOT change the rendered text.
 
 #### Training
 

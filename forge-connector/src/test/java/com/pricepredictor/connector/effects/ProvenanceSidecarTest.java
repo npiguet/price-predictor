@@ -52,20 +52,32 @@ class ProvenanceSidecarTest {
     private Converted convert(String relativePath) {
         try {
             Path file = CARDS_FOLDER.resolve(relativePath);
-            List<String> source = Files.readAllLines(file);
-            String scriptFile = SourceTree.CARDSFOLDER + "/" + relativePath;
-            RulesParser.ParsedCard parsed = parser.parseScript(
-                    source, file.getFileName().toString(), scriptFile);
-            List<Ability> owners = new ArrayList<>();
-            List<Integer> faceOfLine = new ArrayList<>();
-            List<String> lines = parsed.card().renderLines(owners, faceOfLine);
-            ProvenanceSidecar sidecar = ProvenanceSidecar.build(
-                    parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
-                    lines, owners, faceOfLine, parsed.recorders());
-            return new Converted(parsed.card(), lines, owners, faceOfLine, sidecar);
+            return convertSource(Files.readAllLines(file),
+                    SourceTree.CARDSFOLDER + "/" + relativePath,
+                    file.getFileName().toString());
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * Convert a script from its lines rather than from the card tree.
+     *
+     * <p>Some trait shapes the converter handles have no shipped card: a Class
+     * level whose text is also registered as a trait of its own is one, and the
+     * removal path it takes is only reachable from a script written for it.
+     */
+    private Converted convertSource(List<String> source, String scriptFile,
+                                    String fileName) {
+        RulesParser.ParsedCard parsed =
+                parser.parseScript(source, fileName, scriptFile);
+        List<Ability> owners = new ArrayList<>();
+        List<Integer> faceOfLine = new ArrayList<>();
+        List<String> lines = parsed.card().renderLines(owners, faceOfLine);
+        ProvenanceSidecar sidecar = ProvenanceSidecar.build(
+                parsed.card().faces().get(0).name(), scriptFile, parsed.card(),
+                lines, owners, faceOfLine, parsed.recorders());
+        return new Converted(parsed.card(), lines, owners, faceOfLine, sidecar);
     }
 
     // ── the text must not change ────────────────────────────────────────
@@ -165,9 +177,11 @@ class ProvenanceSidecarTest {
 
     @Test
     void aTraitThatProducedNoLineLandsInDroppedKeys() {
-        // Forge registers traits the converter merges or deduplicates away.
-        // They are still live at runtime, so a record can still name them, and
-        // the join must resolve them to "no line" rather than failing.
+        // A trait with no text of its own — the implicit spell every permanent
+        // has - produces no line. It is still live at runtime, so a record can
+        // still name it, and the join must resolve it to "no line" rather than
+        // failing. A trait whose text a line does carry is claimed by that
+        // line and never lands here.
         List<ProvenanceKey> allDropped = new ArrayList<>();
         for (String relativePath : SAMPLE) {
             if (!Files.exists(CARDS_FOLDER.resolve(relativePath))) continue;
@@ -286,6 +300,52 @@ class ProvenanceSidecarTest {
             assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_TRIGGER)
                     || dropped.traitKind().equals(ProvenanceKey.KIND_STATIC),
                     dropped + " has text on a level line and must not be dropped");
+        }
+    }
+
+    @Test
+    void aKeywordDerivedReplacementIsClaimedByTheLineItPrints() {
+        // Bard Class prints its level-1 ability from an ETBReplacement keyword.
+        // Forge also registers the replacement effect itself, and that object
+        // is the one a record about the counter names.
+        Converted bard = convert("b/bard_class.txt");
+        List<ProvenanceKey> levelOne = claimedBy(bard, "level", "additional +1/+1 counter");
+        assertTrue(levelOne.stream().anyMatch(
+                        k -> k.traitKind().equals(ProvenanceKey.KIND_REPLACEMENT)),
+                levelOne.toString());
+        for (ProvenanceKey dropped : bard.sidecar().droppedKeys()) {
+            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_REPLACEMENT),
+                    dropped + " prints the level 1 line and must not be dropped");
+        }
+    }
+
+    @Test
+    void aTraitRemovedAsAClassLevelDuplicateKeepsItsKeyOnTheLevelLine() {
+        // The trait and the Class keyword that prints it both reach the parser,
+        // and only the keyword's entry survives. The surviving level line has
+        // to carry the removed trait's key: the trait is what fires at runtime.
+        Converted card = convertSource(List.of(
+                "Name:Test Class Duplicate",
+                "ManaCost:G",
+                "Types:Enchantment Class",
+                "T:Mode$ Attacks | ValidCard$ Creature.YouCtrl | TriggerZones$ Battlefield"
+                        + " | Execute$ TrigDraw | TriggerDescription$ Whenever a creature"
+                        + " you control attacks, draw a card.",
+                "SVar:TrigDraw:DB$ Draw | Defined$ You | NumCards$ 1",
+                "K:Class:2:1 G:AddTrigger$ TriggerAttack",
+                "SVar:TriggerAttack:Mode$ Attacks | ValidCard$ Creature.YouCtrl"
+                        + " | TriggerZones$ Battlefield | Execute$ TrigDraw"
+                        + " | TriggerDescription$ Whenever a creature you control attacks,"
+                        + " draw a card."),
+                SourceTree.CARDSFOLDER + "/t/test_class_duplicate.txt",
+                "test_class_duplicate.txt");
+        List<ProvenanceKey> keys = claimedBy(card, "level", "draw a card");
+        assertTrue(keys.stream().anyMatch(
+                        k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)),
+                card.lines() + " " + keys);
+        for (ProvenanceKey dropped : card.sidecar().droppedKeys()) {
+            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_TRIGGER),
+                    dropped + " has its text on the level line and must not be dropped");
         }
     }
 

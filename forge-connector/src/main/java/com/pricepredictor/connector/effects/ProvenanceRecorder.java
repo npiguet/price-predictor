@@ -130,8 +130,11 @@ public final class ProvenanceRecorder {
      * with no line to join to.
      */
     public void merge(Ability survivor, Ability duplicate) {
+        // Tested before the removal, so a merge that cannot land leaves the
+        // duplicate's attribution where it was rather than discarding it.
+        if (survivor == null || duplicate == null) return;
         Source from = byAbility.remove(duplicate);
-        if (from == null || survivor == null) return;
+        if (from == null) return;
         Source into = byAbility.get(survivor);
         if (into == null) {
             byAbility.put(survivor, from);

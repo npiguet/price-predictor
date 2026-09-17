@@ -400,7 +400,13 @@ public class RulesParser {
             if (recorder != null) recorder.declare(key);
             Ability entry = ReplacementAbilityEntry.of(r);
             addIfNotNull(abilities, entry);
-            if (recorder != null) recorder.attribute(entry, key, r);
+            if (recorder != null) {
+                if (entry == null && r.getKeyword() != null) {
+                    recorder.attributeToKeyword(key, r, r.getKeyword().getOriginal());
+                } else {
+                    recorder.attribute(entry, key, r);
+                }
+            }
         }
 
         // --- Synthetic land mana ---
@@ -556,9 +562,14 @@ public class RulesParser {
         // entry's keys, or a record fired by that trait names no line at all.
         Map<String, Ability> levelByDescription = new HashMap<>();
         for (Ability a : result) {
-            if (a.type() == AbilityType.LEVEL) {
-                levelByDescription.putIfAbsent(a.descriptionText(), a);
-            }
+            if (a.type() != AbilityType.LEVEL) continue;
+            // A Class level prints its level-up cost ahead of its text, so the
+            // description the removal below matches is the level's inner text,
+            // not its printed line. Keyed by the printed line, every lookup
+            // misses and the removed trait's keys are lost.
+            levelByDescription.putIfAbsent(
+                    a instanceof ClassLevelAbility level
+                            ? level.innerDescription() : a.descriptionText(), a);
         }
         Iterator<Ability> it = result.iterator();
         while (it.hasNext()) {
