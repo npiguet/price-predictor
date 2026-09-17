@@ -1,11 +1,14 @@
-"""The two record-quality rules build-corpus applies (FR-148)."""
+"""The three record-quality rules build-corpus applies (FR-148)."""
 
 from __future__ import annotations
 
 from effects.domain.event_schema import Event, EventType
+from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.record_quality import (
     EVENT_FLOOD,
     NO_ABILITY,
+    NO_ACTING_TEXT,
+    acting_text_defect,
     has_unattributed_events,
     quality_defect,
 )
@@ -96,3 +99,48 @@ def test_has_unattributed_events_is_false_for_a_fully_attributed_record(make_rec
         make_record(payload=ResolutionPayload(events=(_event("root"), _event(None))))
     )
     assert not has_unattributed_events(make_record(payload=ResolutionPayload()))
+
+
+# ── the third rule: a resolution record whose acting keys carry no text ──
+
+
+def _resolver(**by_kind):
+    """``trait_kind -> KeyResolution`` stands in for the sidecar cache."""
+    def resolve(key: ProvenanceKey) -> KeyResolution:
+        return by_kind[key.trait_kind]
+    return resolve
+
+
+def test_a_record_acting_through_a_rendered_line_is_kept(make_record):
+    assert acting_text_defect(make_record(), _resolver(spell=KeyResolution.LINE)) is None
+
+
+def test_a_record_acting_only_through_dropped_keys_is_refused(make_record):
+    assert acting_text_defect(
+        make_record(), _resolver(spell=KeyResolution.DROPPED)
+    ) == NO_ACTING_TEXT
+
+
+def test_an_unconverted_script_counts_as_no_text(make_record):
+    assert acting_text_defect(
+        make_record(), _resolver(spell=KeyResolution.UNCONVERTED)
+    ) == NO_ACTING_TEXT
+
+
+def test_a_runtime_only_key_keeps_the_record(make_record):
+    """Level up, bestow and scavenge add a spell the script never declared; its
+    text sits on a keyword line the join does not reach yet, so the record stays."""
+    assert acting_text_defect(
+        make_record(), _resolver(spell=KeyResolution.RUNTIME_ONLY)
+    ) is None
+
+
+def test_one_rendered_key_among_dropped_ones_keeps_the_record(make_record, ability_key):
+    keys = (ability_key, ProvenanceKey(ability_key.script_file, 0, "trigger", 0))
+    resolve = _resolver(spell=KeyResolution.DROPPED, trigger=KeyResolution.LINE)
+    assert acting_text_defect(make_record(ability=keys), resolve) is None
+
+
+def test_only_resolution_records_are_subject_to_the_rule(make_record):
+    record = make_record(kind=RecordKind.COMBAT, payload=CombatPayload())
+    assert acting_text_defect(record, _resolver()) is None

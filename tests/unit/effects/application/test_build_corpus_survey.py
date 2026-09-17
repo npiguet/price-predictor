@@ -28,7 +28,7 @@ from effects.application.build_corpus import (
     survey_shard,
 )
 from effects.domain.event_schema import Event, EventType
-from effects.domain.provenance import ProvenanceKey
+from effects.domain.provenance import ProvenanceKey, ProvenanceSidecar, SidecarLine
 from effects.domain.records import (
     CombatPayload,
     EffectRecord,
@@ -39,6 +39,7 @@ from effects.domain.records import (
 )
 from effects.domain.state_snapshot import EntityState, GlobalState, StateSnapshot
 from effects.infrastructure.record_io import write_shard
+from effects.infrastructure.sidecar_io import sidecar_path_for, write_sidecar
 
 
 def _entity(name: str, **overrides) -> EntityState:
@@ -104,6 +105,42 @@ def a_record(
     if record_id is not None:
         extra["record_id"] = record_id
     return _record(game_id, entities=entities, ability=(ability or None), **extra)
+
+
+def converted_tree(tmp_path, *keys: ProvenanceKey) -> dict[str, str]:
+    """A converted tree whose sidecars render one line for each of ``keys``.
+
+    ``sidecar_roots`` for a survey config. The survey refuses a resolution
+    record whose every acting key maps to no rendered line (FR-148), so a test
+    about what the survey *keys* on has to say that its keys carry text —
+    otherwise it measures the refusal instead of the keying.
+    """
+    root = tmp_path / "converted"
+    by_script: dict[str, list[ProvenanceKey]] = {}
+    for key in keys:
+        by_script.setdefault(key.script_file, []).append(key)
+    for script_file, script_keys in by_script.items():
+        tree, relative = script_file.split("/", 1)
+        path = root / tree / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_sidecar(
+            ProvenanceSidecar(
+                card=path.stem,
+                script_file=script_file,
+                lines=tuple(
+                    SidecarLine(
+                        line_index=index, line_kind="spell", provenance=(key,),
+                        script_text=f"{path.stem} line {index}",
+                    )
+                    for index, key in enumerate(script_keys)
+                ),
+            ),
+            sidecar_path_for(path),
+        )
+    return {
+        tree: str(root / tree)
+        for tree in {key.script_file.split("/", 1)[0] for key in keys}
+    }
 
 
 def a_shard_survey(
@@ -228,7 +265,7 @@ def test_survey_counts_games_not_records_for_rarity(tmp_path):
         config=SurveyConfig(
             records_dir=str(tmp_path), held_out_names=frozenset(),
             held_out_script_files=frozenset(), text_cap=200, seed=42,
-            max_events=64,
+            max_events=64, sidecar_roots=converted_tree(tmp_path, *keys),
         ),
         workers=1,
     )
@@ -302,6 +339,7 @@ def test_a_defective_record_is_counted_and_otherwise_ignored(tmp_path):
     init_survey_worker(SurveyConfig(
         records_dir=str(tmp_path), held_out_names=frozenset(),
         held_out_script_files=frozenset(), text_cap=200, seed=1, max_events=64,
+        sidecar_roots=converted_tree(tmp_path, *bolt),
     ))
     out = survey_shard("run.0-a.jsonl.gz")
     assert out.quality_dropped == {NO_ABILITY: 1}
@@ -401,6 +439,9 @@ def test_the_survey_reads_records_through_the_remap(tmp_path):
     init_survey_worker(SurveyConfig(
         records_dir=str(records), held_out_names=frozenset(),
         held_out_script_files=frozenset(), text_cap=200, seed=1, max_events=64,
+        sidecar_roots=converted_tree(
+            tmp_path, ProvenanceKey("tokenscripts/c_a_food_sac.txt", 0, "spell", 1),
+        ),
         remapper=_food_remapper(tmp_path),
     ))
 
@@ -423,6 +464,9 @@ def test_without_a_remapper_the_survey_keys_the_record_as_collected(tmp_path):
     init_survey_worker(SurveyConfig(
         records_dir=str(records), held_out_names=frozenset(),
         held_out_script_files=frozenset(), text_cap=200, seed=1, max_events=64,
+        sidecar_roots=converted_tree(
+            tmp_path, ProvenanceKey("cardsfolder/f/food_token.txt", 0, "spell", 1),
+        ),
     ))
 
     out = survey_shard("run.0-a.jsonl.gz")

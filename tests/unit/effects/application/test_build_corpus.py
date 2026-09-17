@@ -2,7 +2,7 @@
 fixed training corpus and two fixed validation strata on disk.
 
 ``a_corpus`` is the load-bearing fixture. It builds a small but real raw
-corpus: a converted card tree with sidecars (a held-out card, plus two
+corpus: a converted card tree with sidecars (a held-out card, plus three
 ordinary ones), and two raw shards — one under ``full-strength/`` and one
 under ``depleted/``, the two source directories FR-149 reports against —
 covering four games, no game spanning both —
@@ -75,6 +75,19 @@ _BOLT_TEXT = "deals 3 damage to any target"
 _BOLT_FILE = "cardsfolder/c/common_bolt.txt"
 _BOLT_KEY = ProvenanceKey(_BOLT_FILE, 0, "spell", 0)
 
+#: A vanilla creature: its sidecar declares one rendered spell line at index
+#: 1, and lists index 0 — Forge's implicit permanent spell, the one every
+#: permanent carries — as dropped. That dropped key is what a record acting
+#: through nothing but the creature spell itself names (FR-148).
+_BEAR_FILE = "cardsfolder/g/grizzly_bears.txt"
+_BEAR_CARD = "Grizzly Bears"
+_BEAR_TEXT = "grizzly bears static text"
+_BEAR_KEY = ProvenanceKey(_BEAR_FILE, 0, "spell", 1)
+_BEAR_CAST_KEY = ProvenanceKey(_BEAR_FILE, 0, "spell", 0)
+#: Past every spell index this face declared, which is the shape a level-up
+#: or bestow trait has: runtime-only, and kept.
+_BEAR_LEVEL_UP_KEY = ProvenanceKey(_BEAR_FILE, 0, "spell", 5)
+
 _SHOCK_CARD = "Common Shock"
 _SHOCK_TEXT = "deals 2 damage to any target"
 _SHOCK_FILE = "cardsfolder/c/common_shock.txt"
@@ -104,9 +117,14 @@ _FORGE_FOOD_SCRIPT = (
 
 
 def _write_card(
-    root: Path, script_file: str, card: str, text: str, *, index_within_kind: int = 0,
+    root: Path, script_file: str, card: str, text: str, *,
+    index_within_kind: int = 0, dropped: tuple[ProvenanceKey, ...] = (),
 ) -> None:
     """A minimal converted ``.txt`` plus a sidecar whose one line carries ``text``.
+
+    ``dropped`` fills the sidecar's ``dropped_keys``: traits the converter
+    rendered no line for, which is what a resolution record has to act only
+    through to be refused as ``no-acting-text`` (FR-148).
 
     ``line_index=999`` is deliberately past the converted file's last line, so
     ``prose_for`` always misses and ``text_for_key`` falls back to
@@ -133,6 +151,7 @@ def _write_card(
                     script_text=text,
                 ),
             ),
+            dropped_keys=dropped,
         ),
         sidecar_path_for(txt_path),
     )
@@ -269,6 +288,10 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
     _write_card(root, _BOLT_FILE, _BOLT_CARD, _BOLT_TEXT)
     _write_card(root, _SHOCK_FILE, _SHOCK_CARD, _SHOCK_TEXT)
     _write_card(root, _FOOD_FILE, _FOOD_CARD, _FOOD_TEXT, index_within_kind=1)
+    _write_card(
+        root, _BEAR_FILE, _BEAR_CARD, _BEAR_TEXT,
+        index_within_kind=_BEAR_KEY.index_within_kind, dropped=(_BEAR_CAST_KEY,),
+    )
     forge_tokenscripts = _write_forge_tokenscripts(root)
 
     shard_a = [
@@ -304,6 +327,11 @@ def a_corpus(tmp_path: Path) -> CorpusFixture:
             for n in range(3)
         ),
         _resolution("g-clean-3.1", "g-clean-3", ability=(_BOLT_KEY,)),
+        # The creature spell itself resolving: its key is the implicit permanent
+        # spell, which the sidecar lists as dropped. Refused (FR-148).
+        _resolution("g-clean-3.cast", "g-clean-3", ability=(_BEAR_CAST_KEY,)),
+        # A runtime-only key (past every spell index the face declared): kept.
+        _resolution("g-clean-3.level", "g-clean-3", ability=(_BEAR_LEVEL_UP_KEY,)),
     ]
 
     # Two source directories, the way a real corpus keeps a full-strength
@@ -522,7 +550,7 @@ def test_build_refuses_a_holdout_that_selects_no_card(tmp_path, a_corpus):
             output=tmp_path / "curated", workers=1, holdout_permille=0,
         ))
 
-    assert "3 converted card" in str(raised.value)
+    assert "4 converted card" in str(raised.value)
 
 
 def test_build_refuses_a_corpus_no_game_of_which_names_a_held_out_card(
@@ -1028,7 +1056,7 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
     rather than the unattributed record it used to be: an unattributed event
     is a watch statistic now, not a refusal (FR-148).
     """
-    from effects.domain.record_quality import EVENT_FLOOD, NO_ABILITY
+    from effects.domain.record_quality import EVENT_FLOOD, NO_ABILITY, NO_ACTING_TEXT
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution("junk-train", game="g-clean-1", ability=()),
         a_corpus.resolution(
@@ -1050,7 +1078,36 @@ def test_defective_records_reach_no_output_and_are_counted(tmp_path, a_corpus):
                                   store.game_disjoint_dir, store.gate_one_dir)
            for r in read_records(d)}
     assert "junk-train" not in ids and "junk-held" not in ids
-    assert store.load().quality_dropped == {NO_ABILITY: 1, EVENT_FLOOD: 1}
+    # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``, refused by
+    # the third rule in every build this file runs.
+    assert store.load().quality_dropped == {
+        NO_ABILITY: 1, EVENT_FLOOD: 1, NO_ACTING_TEXT: 1,
+    }
+
+
+def test_a_resolution_record_acting_only_through_a_dropped_key_is_refused(tmp_path, a_corpus):
+    """FR-148's third rule, end to end through both passes.
+
+    ``g-clean-3.cast`` acts through the implicit permanent spell alone — a
+    ``dropped_keys`` entry — so it would reach the head with an empty acting
+    slot. ``g-clean-3.level`` acts through a key past everything the face
+    declared, which is a real ability whose text the join cannot reach yet,
+    and is kept.
+    """
+    out = tmp_path / "curated"
+    assert build(BuildCorpusConfig(
+        records_dir=a_corpus.records, cards_folders=a_corpus.cards,
+        forge_tokenscripts=a_corpus.forge_tokenscripts, output=out,
+        workers=1, game_disjoint_target=1,
+    )) == 0
+    manifest = CorpusStore(out).load()
+    assert manifest.quality_dropped.get("no-acting-text") == 1
+    assert manifest.no_acting_text_scripts == {_BEAR_FILE: 1}
+    written = {r.record_id for r in read_records(CorpusStore(out).training_dir)}
+    written |= {r.record_id for r in read_records(CorpusStore(out).card_disjoint_dir)}
+    written |= {r.record_id for r in read_records(CorpusStore(out).game_disjoint_dir)}
+    assert "g-clean-3.cast" not in written
+    assert "g-clean-3.level" in written
 
 
 def test_the_gate_one_slice_holds_held_out_resolutions_of_card_disjoint_games(tmp_path, a_corpus):
@@ -1325,14 +1382,21 @@ def test_a_remapped_key_resolves_to_the_token_scripts_ability_text(tmp_path, a_c
 
 
 def test_the_remap_can_be_turned_off(tmp_path, a_corpus):
-    """``--no-remap-token-keys``: the corpus is written exactly as collected."""
+    """``--no-remap-token-keys``: no key is rewritten, whatever that costs.
+
+    Left as collected, the food key names a script no converted tree holds, so
+    it resolves to no ability text at all and FR-148's third rule refuses the
+    record outright rather than training on an empty acting slot — which is
+    the shape of the loss the remap exists to undo.
+    """
     out = tmp_path / "out"
     assert build(_remap_config(out, a_corpus, remap_token_keys=False)) == 0
 
-    assert _OLD_FOOD_KEY.script_file in _training_script_files(out)
+    assert _FOOD_FILE not in _training_script_files(out)
     manifest = CorpusStore(out).load()
     assert manifest.token_keys_remapped == 0
     assert manifest.forge_tokenscripts == ""
+    assert manifest.no_acting_text_scripts[_OLD_FOOD_KEY.script_file] == 1
 
 
 def test_a_missing_forge_tokenscripts_dir_is_refused(tmp_path, a_corpus):
@@ -1369,7 +1433,7 @@ def test_a_refused_records_remaps_are_not_counted(tmp_path, a_corpus):
     is the dataset's own inventory, so a record no output holds contributes
     nothing to it.
     """
-    from effects.domain.record_quality import EVENT_FLOOD
+    from effects.domain.record_quality import EVENT_FLOOD, NO_ACTING_TEXT
 
     corpus = a_corpus.with_extra_records([
         a_corpus.resolution(
@@ -1384,7 +1448,8 @@ def test_a_refused_records_remaps_are_not_counted(tmp_path, a_corpus):
     assert build(_remap_config(out, corpus)) == 0
 
     manifest = CorpusStore(out).load()
-    assert manifest.quality_dropped == {EVENT_FLOOD: 1}
+    # ``no-acting-text`` is the fixture's own ``g-clean-3.cast``.
+    assert manifest.quality_dropped == {EVENT_FLOOD: 1, NO_ACTING_TEXT: 1}
     # Two records carried the old food key; only g-clean-1.food was written.
     assert manifest.token_keys_remapped == 1
 

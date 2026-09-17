@@ -17,6 +17,7 @@ therefore names different things on the two sides. Printed provenance is stable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 # The three converted source trees a key can name. They differ in layout as well
 # as in content: ``cardsfolder`` is letter-keyed and ``tokenscripts`` is flat, so
@@ -26,6 +27,25 @@ SOURCE_TREES: tuple[str, ...] = ("cardsfolder", "tokenscripts", "variant-scripts
 
 # Prose role tags spanning the converted text of one line.
 ROLES: tuple[str, ...] = ("cost", "effect", "trigger-condition", "target-spec")
+
+
+class KeyResolution(StrEnum):
+    """What a provenance key resolves to at the join.
+
+    ``LINE`` is text. ``DROPPED`` is a trait the converter rendered no line for
+    — Forge's implicit permanent spell on every permanent, most often — and is
+    no text by design. ``RUNTIME_ONLY`` is a trait Forge adds only to a live
+    card (level up, bestow, scavenge), whose text sits on a keyword line the
+    join does not reach; it is kept apart from ``DROPPED`` because refusing on
+    it would refuse real abilities. ``UNCONVERTED`` is a script no sidecar
+    describes. The fifth outcome, a key in neither list, is not a value: it
+    raises, because the sidecar does not describe the record's card.
+    """
+
+    LINE = "line"
+    DROPPED = "dropped"
+    RUNTIME_ONLY = "runtime-only"
+    UNCONVERTED = "unconverted"
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +216,22 @@ class ProvenanceSidecar:
             return row
         if key in self.dropped_keys or self.is_runtime_only(key):
             return None
+        raise KeyError(self._mismatch_message(key))
+
+    def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
+        """Which of the join's answers this key gets; raises on a mismatch.
+
+        ``row_for`` answers the same question with None for three cases at
+        once, which is enough to read a cache row and not enough to decide
+        whether a record has text: a dropped key never will have, and a
+        runtime-only one has text the join cannot reach yet.
+        """
+        if key in self._row_by_key:
+            return KeyResolution.LINE
+        if key in self.dropped_keys:
+            return KeyResolution.DROPPED
+        if self.is_runtime_only(key):
+            return KeyResolution.RUNTIME_ONLY
         raise KeyError(self._mismatch_message(key))
 
     def line_for(self, key: ProvenanceKey) -> SidecarLine | None:

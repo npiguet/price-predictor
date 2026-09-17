@@ -32,7 +32,12 @@ from typing import TYPE_CHECKING
 from effects.domain.corpus_curation import CapHeap, record_hash
 from effects.domain.corpus_manifest import SourceShard
 from effects.domain.provenance import ProvenanceKey
-from effects.domain.record_quality import has_unattributed_events, quality_defect
+from effects.domain.record_quality import (
+    NO_ACTING_TEXT,
+    acting_text_defect,
+    has_unattributed_events,
+    quality_defect,
+)
 from effects.domain.records import EffectRecord, RecordKind
 from effects.domain.token_key_remap import RemapCounts, TokenKeyRemapper, remap_record_dict
 
@@ -142,6 +147,10 @@ class SurveyConfig:
     #: run under a different rule than the write pass reports availability for
     #: records that are about to be refused.
     max_events: int
+    #: Tree name -> converted root, so a worker can build its own
+    #: SidecarCache: the refusal rule needs the sidecar's answer per key, and
+    #: a cache does not pickle.
+    sidecar_roots: dict[str, str] = field(default_factory=dict)
     #: The old-token-key remap, or None when it is off (FR-151). A plain
     #: object of dicts and frozensets, so it pickles into every worker with
     #: the rest of this config rather than being rebuilt per shard.
@@ -176,6 +185,10 @@ class ShardSurvey:
     #: rather than silently skipped: a corpus that is a third junk should say
     #: so in the manifest rather than in nothing.
     quality_dropped: Counter[str] = field(default_factory=Counter)
+    #: The ``no-acting-text`` refusals alone, by the acting key's script file.
+    #: Per script, so a converter regression that drops a whole card family's
+    #: keys shows up in the build output rather than as one larger number.
+    textless_scripts: Counter[str] = field(default_factory=Counter)
     #: Old token keys this shard's read rewrote, and the ones it refused to
     #: guess at (FR-151).
     remap: RemapCounts = field(default_factory=RemapCounts)
@@ -196,6 +209,9 @@ class Survey:
     held_out_games: frozenset[str]
     games: frozenset[str]
     quality_dropped: Counter[str] = field(default_factory=Counter)
+    #: The survey's ``no-acting-text`` refusals by acting script file. The
+    #: write pass keeps its own, and the manifest records that one.
+    textless_scripts: Counter[str] = field(default_factory=Counter)
     #: Distinct games per top-level source directory, and how many of those
     #: name a held-out card. What FR-149's report is computed from: a
     #: directory of depleted shards whose held-out count is not zero is a leak
@@ -212,11 +228,47 @@ class Survey:
 
 _CONFIG: SurveyConfig | None = None
 
+#: One ``SidecarCache`` per worker process, built on first use. A cache holds
+#: open-ended per-card state and does not pickle, so it cannot ride in the
+#: config; and building one per shard would re-read tens of thousands of
+#: sidecars per shard instead of once per process.
+_SIDECARS: SidecarCache | None = None
+
+
+def _worker_sidecars(roots: dict[str, str]) -> SidecarCache:
+    """One cache per worker process, built on first use from the config's roots."""
+    global _SIDECARS
+    if _SIDECARS is None:
+        from effects.infrastructure.sidecar_io import SidecarCache
+
+        _SIDECARS = SidecarCache({name: Path(root) for name, root in roots.items()})
+    return _SIDECARS
+
+
+def _refusal(record: EffectRecord, *, max_events: int, roots: dict[str, str]) -> str | None:
+    """The one refusal rule both passes apply, so they cannot drift apart.
+
+    ``build()`` warns when the survey and the write pass disagree about which
+    records are refused, which only reads as "the corpus changed between the
+    passes" while the rule itself is the same object in both.
+    """
+    defect = quality_defect(record, max_events=max_events)
+    if defect is not None:
+        return defect
+    return acting_text_defect(record, _worker_sidecars(roots).resolution_of)
+
 
 def init_survey_worker(config: SurveyConfig) -> None:
-    """Pool initializer: hand every worker the config once, not per shard."""
-    global _CONFIG
+    """Pool initializer: hand every worker the config once, not per shard.
+
+    Clears the sidecar cache too: a pool process runs this once, but a
+    ``workers=1`` run calls it in the main process for every build, and a
+    cache held over from a previous build would answer for another corpus's
+    converted tree.
+    """
+    global _CONFIG, _SIDECARS
     _CONFIG = config
+    _SIDECARS = None
 
 
 def survey_shard(relative: str) -> ShardSurvey:
@@ -248,9 +300,13 @@ def survey_shard(relative: str) -> ShardSurvey:
         held = record_names_held_out_card(record, held_out)
         if held:
             out.held_out_games.add(record.game_id)
-        defect = quality_defect(record, max_events=config.max_events)
+        defect = _refusal(
+            record, max_events=config.max_events, roots=config.sidecar_roots,
+        )
         if defect is not None:
             out.quality_dropped[defect] += 1
+            if defect == NO_ACTING_TEXT:
+                out.textless_scripts[record.ability[0].script_file] += 1
             continue
         out.games.add(record.game_id)
         name = sampling_class(record)
@@ -299,6 +355,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
     class_key_records: dict[str, Counter[str]] = defaultdict(Counter)
     held_out_text_games: dict[str, set[str]] = defaultdict(set)
     quality_dropped: Counter[str] = Counter()
+    textless_scripts: Counter[str] = Counter()
     games_by_source: dict[str, set[str]] = defaultdict(set)
     held_by_source: dict[str, set[str]] = defaultdict(set)
     remap = RemapCounts()
@@ -313,6 +370,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         held_out_games |= part.held_out_games
         games |= part.games
         quality_dropped.update(part.quality_dropped)
+        textless_scripts.update(part.textless_scripts)
         remap.merge(part.remap)
         source = source_of(part.name)
         games_by_source[source] |= part.games
@@ -340,6 +398,7 @@ def merge_surveys(parts: Iterable[ShardSurvey]) -> Survey:
         held_out_games=frozenset(held_out_games),
         games=frozenset(games),
         quality_dropped=quality_dropped,
+        textless_scripts=textless_scripts,
         games_by_source={s: len(g) for s, g in games_by_source.items()},
         held_out_games_by_source={s: len(g) for s, g in held_by_source.items()},
         remap=remap,
@@ -807,6 +866,10 @@ class WriteConfig:
     game_disjoint: frozenset[str]
     held_out_games: frozenset[str]
     seed: int
+    #: Tree name -> converted root, so a worker can build its own
+    #: SidecarCache: the refusal rule needs the sidecar's answer per key, and
+    #: a cache does not pickle.
+    sidecar_roots: dict[str, str] = field(default_factory=dict)
     #: The same remapper the survey read through, so both passes see one
     #: corpus (FR-151); None when ``--no-remap-token-keys``.
     remapper: TokenKeyRemapper | None = None
@@ -839,6 +902,11 @@ class WriteResult:
     #: junk overall and still have lost one whole class, and
     #: ``quality_dropped`` cannot tell the two apart.
     refused_by_class: Counter[str] = field(default_factory=Counter)
+    #: The ``no-acting-text`` refusals alone, by the acting key's script file
+    #: (FR-148). Per script, so a converter regression that drops a whole card
+    #: family's keys shows up in the build output rather than as one larger
+    #: number. This is the tally the manifest records.
+    textless_scripts: Counter[str] = field(default_factory=Counter)
     #: Records the pass **kept** whose events name no producing clause
     #: (FR-148). Counted after the quality check, so it is a share of what the
     #: dataset actually holds rather than of what the shards held. Watched
@@ -857,8 +925,14 @@ _WRITE: WriteConfig | None = None
 
 
 def init_write_worker(config: WriteConfig) -> None:
-    global _WRITE
+    """Pool initializer, and the same cache reset ``init_survey_worker`` makes.
+
+    A ``workers=1`` run calls both in the one process, so the write pass would
+    otherwise inherit whatever tree the survey — or an earlier build — read.
+    """
+    global _WRITE, _SIDECARS
     _WRITE = config
+    _SIDECARS = None
 
 
 def _output_name(relative: str) -> str:
@@ -917,10 +991,14 @@ def write_shard_pass(relative: str) -> WriteResult:
             key = ability_key(record)
             # Before the read count, so a refused record is not counted as read
             # against a class whose availability the survey computed without it.
-            defect = quality_defect(record, max_events=config.max_events)
+            defect = _refusal(
+                record, max_events=config.max_events, roots=config.sidecar_roots,
+            )
             if defect is not None:
                 out.quality_dropped[defect] += 1
                 out.refused_by_class[name] += 1
+                if defect == NO_ACTING_TEXT:
+                    out.textless_scripts[record.ability[0].script_file] += 1
                 continue
             out.read[name] += 1
             if has_unattributed_events(record):
@@ -1007,6 +1085,7 @@ def run_write_pass(
         total.stratum.update(part.stratum)
         total.quality_dropped.update(part.quality_dropped)
         total.refused_by_class.update(part.refused_by_class)
+        total.textless_scripts.update(part.textless_scripts)
         total.unattributed += part.unattributed
         total.remap.merge(part.remap)
         for name, keys in part.kept_keys.items():
@@ -1301,6 +1380,7 @@ def build(config: BuildCorpusConfig) -> int:
             text_cap=config.text_cap,
             seed=config.seed,
             max_events=config.max_events,
+            sidecar_roots={name: str(path) for name, path in roots.items()},
             remapper=remapper,
         ),
         workers=config.workers,
@@ -1353,6 +1433,7 @@ def build(config: BuildCorpusConfig) -> int:
             game_disjoint=decisions.game_disjoint,
             held_out_games=survey.held_out_games,
             seed=config.seed,
+            sidecar_roots={name: str(path) for name, path in roots.items()},
             remapper=remapper,
         ),
         workers=config.workers,
@@ -1457,6 +1538,7 @@ def build(config: BuildCorpusConfig) -> int:
         unique_texts=unique_texts,
         shortfall=decisions.shortfall,
         quality_dropped=dict(written.quality_dropped),
+        no_acting_text_scripts=dict(written.textless_scripts),
         games_by_source=survey.games_by_source,
         held_out_games_by_source=survey.held_out_games_by_source,
         shard_records=config.shard_records,
@@ -1497,6 +1579,12 @@ def build(config: BuildCorpusConfig) -> int:
         )
     for reason, count in sorted(written.quality_dropped.items()):
         logger.info("%-22s %9d record(s) refused", reason, count)
+    if written.textless_scripts:
+        worst = sorted(written.textless_scripts.items(), key=lambda kv: -kv[1])[:5]
+        logger.info(
+            "no-acting-text refusals by script, most first: %s",
+            ", ".join(f"{script} ({count})" for script, count in worst),
+        )
     # Requested against delivered, side by side: the mixture in `class_mix` is
     # what the build was asked for, and only this says whether it got it.
     requested = config.mix()

@@ -26,6 +26,7 @@ import json
 from pathlib import Path
 
 from effects.domain.provenance import (
+    KeyResolution,
     ProvenanceKey,
     ProvenanceSidecar,
     RoleSpan,
@@ -294,3 +295,15 @@ class SidecarCache:
     def row_for(self, key: ProvenanceKey) -> int | None:
         """The ability-cache row a record's key names, or None where it was dropped."""
         return self.get(key.script_file).row_for(key)
+
+    def resolution_of(self, key: ProvenanceKey) -> KeyResolution:
+        """The join's answer for a key, with the two no-sidecar cases folded in.
+
+        An unconverted script and an unconfigured tree are both "no text"; the
+        mismatch inside an existing sidecar still raises, because that is the
+        one condition the whole join is designed to fail loudly on.
+        """
+        try:
+            return self.get(key.script_file).resolution_of(key)
+        except (UnconvertedScript, UnconfiguredTree):
+            return KeyResolution.UNCONVERTED

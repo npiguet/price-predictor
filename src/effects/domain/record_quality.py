@@ -1,10 +1,13 @@
-"""Which records a curated corpus refuses on sight (FR-148).
+"""Which records a curated corpus refuses on sight (FR-148): three rules.
 
-Two shapes the first corpus held that no model should learn from. A
-resolution record with no acting ability is an outcome with no cause. And a
-record carrying more events than any single ability resolves is a whole game
-that landed on one record: one such record in the first corpus held 278
-events, 88 card draws and the game's ``player_won``.
+Three shapes the first corpus held that no model should learn from. A
+resolution record with no acting ability is an outcome with no cause. A
+resolution record whose every acting key maps to no rendered line is the same
+thing one step further in: it *has* a key, so the first rule passes it, and
+the key names a trait the converter rendered nothing for. And a record
+carrying more events than any single ability resolves is a whole game that
+landed on one record: one such record in the first corpus held 278 events, 88
+card draws and the game's ``player_won``.
 
 **An unattributed event is watched, not refused.** ``attributed_to`` names
 the sub-ability clause that produced an event, and the collector writes
@@ -25,19 +28,26 @@ and event-flood rules instead. ``has_unattributed_events`` keeps the number
 available, and ``build-corpus`` reports it as ``unattributed_records``: a
 rising share is a statement about the collector, not about the corpus.
 
-Pure over the record, so build-corpus applies it in a worker without a
-sidecar, and a test can state each rule in one line.
+``quality_defect`` is pure over the record, so build-corpus applies it in a
+worker holding nothing else. ``acting_text_defect`` needs the sidecars' answer
+and takes it as a plain callable, which keeps the rule here beside the other
+two while the files it reads stay in infrastructure. Either way a test states
+one rule in one line.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from effects.domain.effect_targets import events_of
 from effects.domain.event_schema import ATTRIBUTION_UNRESOLVED
+from effects.domain.provenance import KeyResolution, ProvenanceKey
 from effects.domain.records import EffectRecord, RecordKind
 
 NO_ABILITY = "no-ability"
 EVENT_FLOOD = "event-flood"
-QUALITY_REASONS: tuple[str, ...] = (NO_ABILITY, EVENT_FLOOD)
+NO_ACTING_TEXT = "no-acting-text"
+QUALITY_REASONS: tuple[str, ...] = (NO_ABILITY, EVENT_FLOOD, NO_ACTING_TEXT)
 
 #: The ``attributed_to`` sentinel the collector writes when the producing
 #: clause was sought and nothing on the chain claimed the event. Aliased from
@@ -73,6 +83,36 @@ def quality_defect(
     if max_events > 0 and len(events) > max_events:
         return EVENT_FLOOD
     return None
+
+
+def acting_text_defect(
+    record: EffectRecord, resolve: Callable[[ProvenanceKey], KeyResolution],
+) -> str | None:
+    """``NO_ACTING_TEXT`` when every acting key maps to no rendered line.
+
+    A resolution record whose acting key is Forge's implicit permanent spell
+    passes ``quality_defect`` — it has a key — and reaches the head with an
+    empty acting slot. Three quarters of the resolution class was that record
+    before this rule, weighted like the rarest text in the corpus.
+
+    A ``RUNTIME_ONLY`` key keeps the record: level up, bestow and scavenge are
+    real abilities whose text the join does not reach yet, and refusing them
+    would be a loss rather than a cleanup. A key in neither of the sidecar's
+    lists raises out of ``resolve``, as the contract requires.
+
+    Separate from ``quality_defect`` rather than another branch of it, because
+    this one needs the join and that one needs nothing: a caller with no
+    sidecars — ``validate-corpus``, a test — still gets the other two rules.
+
+    Args:
+        resolve: ``ProvenanceKey -> KeyResolution``, the sidecar cache's answer.
+    """
+    if record.kind is not RecordKind.RESOLUTION or not record.ability:
+        return None
+    outcomes = {resolve(key) for key in record.ability}
+    if KeyResolution.LINE in outcomes or KeyResolution.RUNTIME_ONLY in outcomes:
+        return None
+    return NO_ACTING_TEXT
 
 
 def has_unattributed_events(record: EffectRecord) -> bool:

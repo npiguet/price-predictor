@@ -138,6 +138,9 @@ class CorpusManifest:
     #: only by a keyword, which a snapshot does not show at all. The records
     #: are kept, keyed as they were collected.
     token_keys_ambiguous: dict[str, int] = field(default_factory=dict)
+    #: Script file -> resolution records refused because every acting key
+    #: mapped to no rendered line (FR-148). Read by an operator, not by code.
+    no_acting_text_scripts: dict[str, int] = field(default_factory=dict)
     #: The raw Forge token scripts the remap read (``--forge-tokenscripts``),
     #: or "" when the remap was off. Which scripts were on disk decides which
     #: keys resolved, so two datasets built against different Forge checkouts
@@ -195,6 +198,9 @@ class CorpusManifest:
             token_keys_remapped=int(data.get("token_keys_remapped", 0)),
             token_keys_ambiguous={
                 k: int(v) for k, v in data.get("token_keys_ambiguous", {}).items()
+            },
+            no_acting_text_scripts={
+                k: int(v) for k, v in data.get("no_acting_text_scripts", {}).items()
             },
             forge_tokenscripts=str(data.get("forge_tokenscripts", "")),
         )
