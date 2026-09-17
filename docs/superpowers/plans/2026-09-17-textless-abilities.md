@@ -1320,7 +1320,7 @@ git commit -m "chore(effects): audit script for textless ability slots and actin
 
 Order matters: the refusal rule (Task 3) reads the sidecars, so the sidecars must already carry the converter's claims (Tasks 4 and 5) before the corpus is rebuilt.
 
-1. Rebuild the connector JAR: `mvn -q -f forge-connector/pom.xml package -DskipTests`
+1. Rebuild the connector JAR: `mvn -q -f forge-connector/pom.xml install -DskipTests` (`install`, not `package`, so dependency resolution against the sibling Forge checkout is current; run `mvn install -DskipTests` in `../forge` first if Forge itself changed)
 2. Reconvert (minutes): `python -m price_predictor convert --output-path ./output/cardsfolder --tokens-output-path ./output/tokenscripts`
 3. Audit the existing corpus against the new sidecars: `python scripts/effects_textless_audit.py --corpus output/effects/corpus --cards-folder output/cardsfolder --cards-folder output/tokenscripts --variant-scripts output/effects/variant-scripts`. Expect basic-land mana activations, deduplicated triggers and Class abilities to have moved from "no text" to "has text", and the remaining "no text" to be permanent spells. A raised `KeyError` here means a card reconverted to a different shape than the record's; investigate before rebuilding.
 4. Rebuild the corpus (about an hour): `python -m effects build-corpus --records-dir output/effects/records/ --output output/effects/corpus/ --variant-scripts output/effects/variant-scripts/ --vocab-path models/effects/vocab-script.txt`. Check the log for the `no-acting-text` count and its top scripts.
