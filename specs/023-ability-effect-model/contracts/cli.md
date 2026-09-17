@@ -291,7 +291,7 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--mlm-weight` / `--mlm-mask-prob` / `--api-weight` | 0.1 / 0.15 / 0.05 |
 | `--curriculum-epoch` | 3 — epoch whose first step enables the sparse field group; validation scores the field set the epoch trained with, and the early stopper resets at the boundary |
 | `--batch-size` / `--grad-accum` | 32 / 1 |
-| `--context-cache` / `--cache-refresh` | off / 500 |
+| `--context-cache` / `--cache-refresh` | off / 500. Not implemented in the trainer: the batcher has no cache, so `--context-cache` is accepted, warns at startup and is otherwise ignored, and context abilities are re-encoded live |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
 | `--shards-per-epoch` | 256 — training shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
 | `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded on the checkpoint, so a run repeats by passing back the seed it logged |

@@ -651,7 +651,9 @@ loss.
   from random initialization.
 - **FR-084**: Batches MUST mix several games, group each game's records together, and encode each
   unique ability text once; `--context-cache` MUST switch context gradient to a stop-gradient momentum
-  cache refreshed every `--cache-refresh` batches.
+  cache refreshed every `--cache-refresh` batches. The cache is specified but not implemented: the
+  trainer's batcher has none, so `--context-cache` is accepted, warned about at startup and otherwise
+  ignored, and context abilities are re-encoded live.
 - **FR-085**: The per-batch sampling mixture MUST default to the root spec's eight-class shares and be
   renormalized over the classes present in the corpus. Fields whose record kinds are absent from the
   corpus MUST contribute no loss, so a three-class corpus trains the same heads without them.
@@ -692,8 +694,12 @@ loss.
   from the checkpoint rather than from a flag, for the same reason it reads the split from there: the
   zero-shot check must measure the model that was trained, not a keyword an operator remembers
   choosing.
-- **FR-091**: `--split-from PATH` MUST make a run inherit another checkpoint's split, vocabulary, and
-  keyword-definition paths, and every variant run MUST inherit from the `full` run it baselines.
+- **FR-091**: A variant run MUST see the same games as the full run it baselines. Training both against
+  the same `--corpus` is how that requirement is met: the manifest enumerates the split, so two runs
+  reading one curated dataset train on the same games by construction (FR-146). `--split-from PATH` is
+  a compatibility spelling accepted on a variant run — it inherits nothing, neither the split nor the
+  vocabulary nor the keyword-definition paths are read from the path, and the trainer MUST warn at
+  startup when it is passed.
 - **FR-092**: Inference commands MUST hash the vocabulary and keyword-definition files they actually
   use and fail fast on a mismatch with the checkpoint's recorded hashes.
 - **FR-093**: Checkpoints MUST be saved under `--model-output`, defaulting to

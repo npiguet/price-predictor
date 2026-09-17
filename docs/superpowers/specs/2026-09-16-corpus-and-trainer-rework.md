@@ -83,9 +83,11 @@ Findings, each verified against the corpus on disk or the code:
 |---|---|
 | FR-081 | unchanged; add: count losses use the full Poisson NLL (Stirling term) so every term is nonnegative at its optimum |
 | FR-082 | `--curriculum-step` becomes `--curriculum-epoch` (default 3); sparse fields enable at the first step of that epoch; validation scores the field set the epoch trained with; the early stopper resets at the boundary |
+| FR-084 | unchanged; add: the context cache is specified but not implemented — the batcher has none, so `--context-cache` is accepted, warned about at startup and otherwise ignored, and context abilities are re-encoded live |
 | FR-086 | rarity weights apply inside a weighted shuffle without replacement over the resident shard; the per-batch class draw is removed |
 | FR-088b | the thin-stratum warning reads `per_stratum["gate-one"]` from the manifest |
 | FR-089 | unchanged; the card-disjoint sample is the build's `validation/samples/card-disjoint.jsonl.gz` |
+| FR-091 | a variant run sees the same games as its full run by training on the same `--corpus`, whose manifest fixes the split; `--split-from` is a compatibility spelling that inherits nothing, and the trainer warns when it is passed |
 | FR-095 | "per-parameter-group gradient clip 1.0" means two groups, `encoder` and `head` (plus `identity` for that variant) |
 | FR-125 | withdrawn: the trainer no longer reserves shards or sweeps; `--corpus` is required |
 | FR-135 | outputs gain `validation/gate-one/` and `validation/samples/{card-disjoint,game-disjoint}.jsonl.gz`; each output shard holds at least `--shard-records` records and closes at the first game boundary after that, so a game is never split and the last shard may be short |

@@ -588,7 +588,9 @@ every other field trains from step zero. Validation scores the field set the epo
 the early stopper resets at that boundary.
 
 On an 8 GB card, `--context-cache` is the documented fallback: it swaps live context re-encoding for a
-stop-gradient momentum cache refreshed every `--cache-refresh` batches.
+stop-gradient momentum cache refreshed every `--cache-refresh` batches. **It is not implemented in the
+trainer today** — the flag is accepted, warns at startup and changes nothing, and context abilities are
+re-encoded live whatever it is set to.
 
 All four baselines are needed, because every reported check runs against one: gate 1 compares against
 `identity`, every record kind reports `state-only` as its floor, the average-effect control is
