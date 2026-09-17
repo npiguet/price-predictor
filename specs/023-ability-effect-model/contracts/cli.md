@@ -216,10 +216,12 @@ card name per line, every card carrying a held-out ability text.
 |---|---|
 | `--out` | required — destination file |
 | `--cards-folder` | `output/cardsfolder/` |
-| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `build-corpus` |
 
 Reports the held-out text count, the card count, and the share of the corpus those cards are. The
-same flags must be used here and at training, or the depleted corpus and the split disagree.
+same flags must be used here and at `build-corpus`, or the depleted corpus and the split disagree.
+`train-effect-model` no longer takes either flag directly: a `--corpus` run reads both values back
+from the manifest `build-corpus` recorded.
 
 ## `python -m effects build-corpus`
 
@@ -234,7 +236,7 @@ differing only in hyperparameters read the same records.
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--vocab-path` | `models/effects/vocab.txt` — `surface_of` reads the encoding surface from it, and the rarity table's text keys are built on that surface |
 | `--variant-scripts` | _(none)_ — the perturbed-script tree. A variant line resolves to no ability text without it, so it gets neither a rarity-table entry nor a per-text cap |
-| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `train-effect-model` and `holdout-cards` |
+| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8, matching `holdout-cards`; `train-effect-model --corpus` reads both back from the manifest this writes |
 | `--text-cap` | 200 — max training records per unique ability text |
 | `--class-mix` | the training mixture — on-disk proportions, `class=share` pairs |
 | `--training-records` | 0 (no ceiling beyond `--text-cap`) |
@@ -275,11 +277,10 @@ The full flag table is the root spec's § Training. Contract highlights:
 
 | Flag | Default |
 |---|---|
-| `--corpus` | none (read `--records-dir`) — a curated dataset; refuses `--records-dir`, `--reserved-shards`, `--split-from` and the two holdout flags, each of which names a decision the manifest records, and a `--vocab-path` whose encoding surface is not the manifest's |
-| `--records-dir` | `output/effects/records/` |
+| `--corpus` | **required** — a curated dataset built by `build-corpus`, and the trainer's only input: its manifest carries the split, both validation strata, the rarity table and the holdout, and a `--vocab-path` whose encoding surface is not the manifest's is refused |
 | `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` |
 | `--variant-scripts` | none (`output/effects/variant-scripts/`) |
-| `--split-from` | none (compute the split); **required for variant runs**. Inherits the source checkpoint's split *and* its vocabulary and keyword-definition paths |
+| `--split-from` | none. A variant run's split-inheritance requirement is satisfied by `--corpus` alone, which is required on every run; `--split-from` is still accepted on a variant run, but only for compatibility with an older invocation, and the split it would compute is never read — the manifest is authoritative |
 | `--vocab-path` | `models/effects/vocab.txt` |
 | `--printings-path` | `resources/AllPrintings.json` — first-printing dates, used only to break gate-1 margins down by recency |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
@@ -288,32 +289,29 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--e-dim` / `--e-noise` | 64 / 0.05 |
 | `--keyword-expand-p` / `--context-dropout` | 0.25 / 0.15 |
 | `--mlm-weight` / `--mlm-mask-prob` / `--api-weight` | 0.1 / 0.15 / 0.05 |
-| `--curriculum-step` | 10000 |
+| `--curriculum-epoch` | 3 — epoch whose first step enables the sparse field group; validation scores the field set the epoch trained with, and the early stopper resets at the boundary |
 | `--batch-size` / `--grad-accum` | 32 / 1 |
-| `--kind-mix` | the eight-class mixture |
 | `--context-cache` / `--cache-refresh` | off / 500 |
 | `--steps-per-epoch` / `--epochs` / `--patience` | 5000 / 40 / 5 |
-| `--shards-per-epoch` | 256 — record shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
-| `--workers` | CPU count — processes the pre-training validation sweep reads shards across. Each worker routes and samples its own shards and returns the digest, so what crosses a process boundary is the few thousand records the mixture keeps rather than the shards |
+| `--shards-per-epoch` | 256 — training shards an epoch reads, one resident at a time, drawn at random across the whole corpus. `--steps-per-epoch` fixes how long an epoch takes; this fixes how many different shards those steps are spread over |
 | `--seed` | drawn from the OS — seeds weight init, batch planning and each epoch's shard draw. Reported at startup and recorded on the checkpoint, so a run repeats by passing back the seed it logged |
-| `--reserved-shards` | 4 — shards held back for the game-disjoint stratum. Every shard holding a held-out card is reserved on top of these, which is how a full-strength collection run's shards become the card-disjoint stratum |
-| `--holdout-permille` / `--holdout-max-carriers` | 20 / 8 — an ability text is held out when at most `--holdout-max-carriers` cards carry it and `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` |
-| `--min-holdout-records` | 2000 — warn below this many unique-text resolution records in the card-disjoint stratum; empty is a hard failure |
 | `--withhold-keyword` | none — withholds one implemented keyword's token from training so the zero-shot check has something to measure; its occurrences are always expanded |
 
-Best checkpoint is selected by card-disjoint validation loss. The split holds out ability texts by a
-stable hash of the text, and a card is held out when any of its lines carries one; it then **excludes from training every game
-holding a record that names a held-out card**, in every shard the run reads; game-disjoint validation
-is the reserved shards' remaining games.
+Best checkpoint is selected by card-disjoint validation loss. The manifest's split holds out ability
+texts by a stable hash of the text, and a card is held out when any of its lines carries one; every
+game holding a record that names a held-out card was already excluded from the training stratum when
+the dataset was built (FR-088).
 
-The corpus is read one shard at a time and never held whole. Validation records are captured once from
-the reserved shards and reused every epoch, so `--patience` compares like with like. Both strata are
-enumerated from the games the run actually read, so a run that stops early records fewer games than a
-full one.
+The corpus is read one training shard at a time and never held whole. Both validation strata are the
+dataset's fixed `validation/samples/{card-disjoint,game-disjoint}.jsonl.gz`, captured once at build
+time and reused every epoch, so `--patience` compares like with like; rarity weighting samples the
+resident training shard by a weighted shuffle without replacement, using the manifest's corpus-wide
+rarity table rather than a per-batch class draw.
 
 Hardcoded, not flags: encoder d_model 256 / 4 layers / 4 heads; trunk d_model 256 / 6 layers / 4 heads;
 `ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup; linear warmup over the first 5% of
-`--epochs` × `--steps-per-epoch`; per-parameter-group gradient clip 1.0; seed 42.
+`--epochs` × `--steps-per-epoch`; per-parameter-group gradient clip 1.0 over two groups, `encoder` and
+`head` (plus `identity` for that variant); seed 42.
 
 ## `python -m effects encode-abilities`
 

@@ -538,11 +538,13 @@ loss.
   deviance MUST be computed over the magnitudes.
 - **FR-081**: Loss MUST be normalized per record over entity count; the affected gate trains on every
   entity — players included, since the per-entity head is mapped over `[PLAYER]` outputs too — and
-  conditional fields only where the gate's target fires.
+  conditional fields only where the gate's target fires. Count losses MUST use the full Poisson
+  negative log-likelihood, Stirling term included, so every loss term is nonnegative at its optimum.
 - **FR-082**: The sparse field group — keywords gained/lost, control change, attached-to, the duration
-  on every delta that carries one, type/color delta, and counters delta by type — MUST enable at
-  `--curriculum-step` steps. Every other field trains from step zero, as do all three heads' remaining
-  outputs.
+  on every delta that carries one, type/color delta, and counters delta by type — MUST enable at the
+  first step of `--curriculum-epoch` (default 3). Every other field trains from step zero, as do all
+  three heads' remaining outputs. Validation MUST score the field set the epoch trained with, and the
+  early stopper MUST reset at the curriculum boundary.
 
 #### Curated corpus
 
@@ -653,9 +655,11 @@ loss.
   corpus MUST contribute no loss, so a three-class corpus trains the same heads without them.
 - **FR-086**: Within a class, records MUST weight ∝ effective_games^(−0.5), capped at 20× the weight of
   the most-observed ability text, where effective games counts distinct games contributing a record of
-  that unique text. Effective games are counted over the resident shard rather than the whole corpus,
-  since FR-125 leaves no point at which the whole corpus is in hand. A `--corpus` run reads the
-  corpus-wide table from the curated manifest instead (FR-141).
+  that unique text. These rarity weights MUST apply inside a weighted shuffle without replacement over
+  the resident shard rather than a per-batch class draw, since the trainer never holds more than one
+  shard at once. Effective games are counted over the resident shard rather than the whole corpus for
+  the same reason; a `--corpus` run reads the corpus-wide table from the curated manifest instead
+  (FR-141).
 - **FR-087**: Records with no acting ability text MUST bypass rarity weighting: `combat` and
   `playability-legality` sample uniformly within their class, and a `decision` record's per-candidate
   examples key on the candidate's text.
@@ -671,8 +675,8 @@ loss.
   salted built-in `hash()` over `str` MUST NOT be used.
 - **FR-088b**: `train-effect-model` MUST report, before its first epoch, the held-out text count, the
   share of `output/cardsfolder/` cards those texts remove, and each stratum's record count. It MUST
-  fail rather than train when the card-disjoint stratum is empty, and MUST warn when that stratum
-  holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text
+  fail rather than train when the card-disjoint stratum is empty, and MUST warn when the curated
+  manifest's `per_stratum["gate-one"]` count is below 2000 resolution records whose acting text
   appears on no training card. The failure message MUST name the depleted and full-strength
   collection runs (FR-130) as the remedy.
 - **FR-088c**: Gate-1 margins MUST additionally be reported split by whether a held-out text's first
@@ -702,6 +706,8 @@ loss.
   hardcode the stated constants (encoder d_model 256 / 4 layers / 4 heads; effect-head trunk d_model
   256 / 6 layers / 4 heads; `ff_dim` 4 × d_model; dropout 0.1; AdamW; lr 1e-4 constant after warmup;
   warmup over the first 5% of scheduled steps; per-parameter-group gradient clip 1.0; seed 42).
+  Per-parameter-group clipping MUST use two groups, `encoder` and `head`, plus `identity` for that
+  variant.
 
 #### CLI surface
 
@@ -820,14 +826,10 @@ loss.
 
 #### Reading the corpus
 
-- **FR-125**: The trainer MUST read the record corpus one shard at a time and MUST NOT hold more than
-  one shard of parsed records at once. Shard discovery MUST recurse: a depleted run and a
-  full-strength one kept in subdirectories of `--effect-records` are one corpus, and a flat glob
-  would read neither while reporting nothing. Every shard holding a record that names a held-out card MUST be
-  reserved, which puts a full-strength collection run's shards (FR-130) in the card-disjoint stratum
-  without a flag naming them. `--reserved-shards` (default 4) further shards, spread evenly across the
-  remaining shard list, are held back for the game-disjoint stratum and never trained on; the rest are
-  training shards.
+- **FR-125 (withdrawn)**: The trainer no longer reserves shards for the game-disjoint stratum or
+  sweeps the raw corpus at startup; `--corpus` naming a curated dataset (FR-135) MUST be required on
+  every run, and the split, both validation strata and the rarity table MUST come from its manifest
+  instead.
 - **FR-126**: An epoch MUST read `--shards-per-epoch` (default 256) training shards, dividing
   `--steps-per-epoch` evenly among them, and MUST draw them at random from the whole training shard
   list rather than as a contiguous run of it. The shard list is in path order, so a contiguous block

@@ -553,16 +553,15 @@ python -m effects train-effect-model \
 ```
 
 **Every flag above matters, and the three paths must match the ones `build-corpus` was given.**
+`--corpus` is required: the trainer reads a curated dataset only, and never a raw shard corpus.
 `--vocab-path` decides the encoding surface; the manifest records the surface it was built on and the
 run refuses a mismatch, because the rarity table's keys are texts on one surface and a table read on
 the other matches nothing while looking entirely valid. `--variant-scripts` is what lets a variant
-record resolve to a text at all. Drop `--corpus` to train against the raw corpus instead, `--vocab-path`
-to stay on prose, and `--variant-scripts` if step 5 was skipped.
+record resolve to a text at all. Drop `--vocab-path` to stay on prose, and `--variant-scripts` if
+step 5 was skipped.
 
-`--corpus` takes the split, both validation strata and the rarity table from the manifest, so it
-refuses `--records-dir`, `--reserved-shards`, `--split-from`, `--holdout-permille` and
-`--holdout-max-carriers` alongside it — each of those names a decision the manifest already records,
-and two spellings of one decision is a disagreement nothing would report.
+The trainer reads `validation/samples/` and never sweeps: `--corpus`'s manifest is the split's, both
+validation strata's and the rarity table's only source.
 
 `--withhold-keyword` holds one implemented keyword's token out of training so the zero-shot check in
 step 8 has something to measure; its occurrences are always expanded instead. Any implemented keyword
@@ -579,9 +578,14 @@ holdout is keyed on the text, not the card: a text is eligible when at most `--h
 cards carry it, and an eligible text is held out on a hash of its own bytes, so functional reprints
 are held out together and a Forge upgrade never reassigns an existing text.
 
-The run fails rather than trains when the card-disjoint stratum is empty, and warns when it holds
-fewer than `--min-holdout-records` unique-text resolution records. Both mean the same thing: step 3b
-was skipped or was too short, so there are no full-strength games to validate on.
+The run fails rather than trains when the card-disjoint stratum is empty, and warns when the
+manifest's gate-one count is below 2000 unique-text resolution records. Both mean the same thing:
+step 3b was skipped or was too short, so there are no full-strength games to validate on.
+
+`--curriculum-epoch` (default 3) is the epoch whose first step enables the sparse field group
+(keywords gained/lost, control change, attached-to, duration, type/color delta, counters delta);
+every other field trains from step zero. Validation scores the field set the epoch trained with, and
+the early stopper resets at that boundary.
 
 On an 8 GB card, `--context-cache` is the documented fallback: it swaps live context re-encoding for a
 stop-gradient momentum cache refreshed every `--cache-refresh` batches.
@@ -604,16 +608,11 @@ done
 Same flags as the shipping run, and `--withhold-keyword` must name the same keyword: the only
 difference between a baseline and the model it is a baseline for is the input its variant masks.
 
-A variant run must inherit the split it is a baseline for, so it fails fast without either `--corpus`
-or `--split-from` rather than silently computing its own. **Against a curated dataset pass `--corpus`
-and not `--split-from`** — the manifest enumerates the split directly, so every run reading that
-dataset trains on the same games by construction. `--split-from models/effects/effect-model/latest.pt`
-is the raw-corpus route, and there it also carries the vocabulary and keyword-definition paths forward.
-
-Without `--corpus`, pass the **same** `--holdout-permille` and `--holdout-max-carriers` as in step 3:
-the corpus was depleted against those values, and a run computing a different holdout would train on
-cards it believes are held out with nothing to say so. With `--corpus` the manifest carries them and
-the flags are refused.
+A variant run must inherit the split it is a baseline for. `--corpus` satisfies that on its own — the
+manifest enumerates the split directly, so every run reading the same curated dataset trains on the
+same games by construction. `--split-from` is still accepted on a variant run, for compatibility with
+an older invocation, but the split it would have computed is never read: the manifest is
+authoritative whenever `--corpus` is given, which is every run.
 
 These write under `models/effects/effect-model/{variant}/`, never over the shipping checkpoint.
 
