@@ -30,6 +30,7 @@ import math
 import random
 from dataclasses import dataclass, field
 from enum import IntEnum
+from functools import lru_cache
 
 from effects.domain.provenance import ProvenanceKey
 from effects.domain.records import (
@@ -92,17 +93,36 @@ THIS_TURN_COUNTERS: tuple[str, ...] = (
 )
 
 
+@lru_cache(maxsize=None)
+def _positions(vocabulary: tuple[str, ...]) -> dict[str, int]:
+    """``normalized member -> its slot``, built once per vocabulary.
+
+    The one-hots used to lower every member of the vocabulary on every call,
+    and the multi-hot lowered them twice — a vocabulary scan per feature,
+    twenty-seven of them for the overlay keywords alone, a million times over
+    a four-shard run. The vocabularies are checked-in constants, so the scan
+    is done once here and every call is a dict lookup per value present.
+
+    First occurrence wins, which is what :func:`_one_hot` did when it returned
+    at its first match; no vocabulary has two members that lower to the same
+    string, and one that did would have meant different things to the two
+    helpers before this as well.
+    """
+    positions: dict[str, int] = {}
+    for index, member in enumerate(vocabulary):
+        positions.setdefault(member.lower(), index)
+    return positions
+
+
 def _one_hot(value: str | None, vocabulary: tuple[str, ...]) -> list[float]:
     """One-hot over ``vocabulary`` plus a trailing "other/absent" slot."""
     out = [0.0] * (len(vocabulary) + 1)
     if value is None:
         return out
-    normalized = value.strip().lower().replace(" ", "_")
-    for index, member in enumerate(vocabulary):
-        if member.lower() == normalized:
-            out[index] = 1.0
-            return out
-    out[-1] = 1.0
+    index = _positions(vocabulary).get(
+        value.strip().lower().replace(" ", "_")
+    )
+    out[-1 if index is None else index] = 1.0
     return out
 
 
@@ -111,17 +131,59 @@ def _scalar(value: float) -> list[float]:
 
     ``log1p`` of a negative value is undefined, so the copy is signed:
     ``sign(v) * log1p(|v|)``, which keeps the transform monotone across zero.
+
+    The feature builders below call :func:`_push_scalar` instead, which is the
+    same two numbers without the throwaway list.
     """
     magnitude = math.log1p(abs(float(value)))
     return [float(value), math.copysign(magnitude, value)]
 
 
-def _multi_hot(present: set[str], vocabulary: tuple[str, ...]) -> list[float]:
-    """Multi-hot over ``vocabulary`` plus a count of everything else."""
-    normalized = {p.strip().lower().replace(" ", "_") for p in present}
-    out = [1.0 if member.lower() in normalized else 0.0 for member in vocabulary]
-    known = {member.lower() for member in vocabulary}
-    out.append(float(len(normalized - known)))
+def _push_scalar(out: list[float], value: float) -> None:
+    """:func:`_scalar` straight onto the caller's list.
+
+    Every caller extends a list it already has, so the two-element list
+    ``_scalar`` returned was built and discarded immediately — twenty-eight
+    times per entity and nearly seven million times over a four-shard run,
+    which made the allocation, not the arithmetic, the cost of a scalar.
+    """
+    raw = float(value)
+    out.append(raw)
+    out.append(math.copysign(math.log1p(abs(raw)), raw))
+
+
+#: Thirteen zeros: the power/toughness block of an entity that has none. Its
+#: own constant because most boards carry non-creatures.
+_NO_PT: tuple[float, ...] = (0.0,) * 13
+#: The counter block of an entity carrying none — one scalar per checked-in
+#: counter type plus the catch-all, and a scalar of zero is two zeros.
+_NO_COUNTERS: tuple[float, ...] = (0.0,) * (2 * (len(COUNTER_TYPES) + 1))
+#: The stack-extras block of an entity that is not on the stack.
+_NO_STACK_EXTRAS: tuple[float, ...] = (0.0,) * 6
+
+
+def _multi_hot(present, vocabulary: tuple[str, ...]) -> list[float]:
+    """Multi-hot over ``vocabulary`` plus a count of everything else.
+
+    One dict lookup per value the entity actually carries, rather than one
+    membership test per vocabulary entry: an entity has a handful of types
+    and keywords, and the vocabularies are ten to twenty-seven long.
+    """
+    positions = _positions(vocabulary)
+    out = [0.0] * (len(vocabulary) + 1)
+    seen: set[str] = set()
+    other = 0
+    for value in present:
+        normalized = value.strip().lower().replace(" ", "_")
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        index = positions.get(normalized)
+        if index is None:
+            other += 1
+        else:
+            out[index] = 1.0
+    out[-1] = float(other)
     return out
 
 
@@ -172,26 +234,33 @@ class EffectHeadInput:
 # ── feature builders ────────────────────────────────────────────────────
 
 
+#: The three enum vocabularies the global slot one-hots over. Built here
+#: rather than per call: they are as fixed as the checked-in tuples above.
+_RECORD_KINDS: tuple[str, ...] = tuple(k.value for k in RecordKind)
+_MOMENTS: tuple[str, ...] = tuple(m.value for m in Moment)
+_PLAYABILITY_SUBKINDS: tuple[str, ...] = tuple(
+    s.value for s in PlayabilitySubkind
+)
+
+
 def global_features(record: EffectRecord) -> tuple[float, ...]:
     """Turn structure, plus the record's own kind flags."""
-    state = record.state
-    g = state.global_
+    g = record.state.global_
     out: list[float] = []
-    out += _scalar(g.turn)
-    out += _scalar(g.stack_size)
+    _push_scalar(out, g.turn)
+    _push_scalar(out, g.stack_size)
     out += _one_hot(g.phase, PHASES)
     out += _one_hot(g.combat_substep, COMBAT_SUBSTEPS)
     out.append(1.0 if g.active == record.actor_player else 0.0)
     out.append(1.0 if g.priority == record.actor_player else 0.0)
-    out += _scalar(len(g.emblems))
-    out += _one_hot(record.kind.value, tuple(k.value for k in RecordKind))
+    _push_scalar(out, len(g.emblems))
+    out += _one_hot(record.kind.value, _RECORD_KINDS)
     out += _one_hot(
-        record.moment.value if record.moment else None,
-        tuple(m.value for m in Moment),
+        record.moment.value if record.moment else None, _MOMENTS,
     )
     out += _one_hot(
         record.subkind.value if record.subkind else None,
-        tuple(s.value for s in PlayabilitySubkind),
+        _PLAYABILITY_SUBKINDS,
     )
     return tuple(out)
 
@@ -207,21 +276,24 @@ def act_features(record: EffectRecord) -> tuple[float, ...]:
         return tuple([0.0] * _ACT_FEATURE_WIDTH)
     refs = record.state.refs
     out: list[float] = [1.0]  # slot is populated
-    out += _scalar(refs.x if refs.x is not None else 0)
+    _push_scalar(out, refs.x if refs.x is not None else 0)
     out.append(1.0 if refs.x is not None else 0.0)
-    out += _scalar(len(refs.modes))
-    out += _scalar(len(refs.targets))
-    out += _scalar(len(refs.choices))
+    _push_scalar(out, len(refs.modes))
+    _push_scalar(out, len(refs.targets))
+    _push_scalar(out, len(refs.choices))
     # The outcome flag comes from the paired cost record; a half with no
     # partner resolved by definition, which is why `resolved` is the default.
     outcome = ResolutionOutcome.RESOLVED
     if record.moment is Moment.ACTIVATION and hasattr(record.payload, "outcome"):
         outcome = record.payload.outcome
-    out += _one_hot(outcome.value, tuple(o.value for o in ResolutionOutcome))
+    out += _one_hot(outcome.value, _RESOLUTION_OUTCOMES)
     return tuple(out)
 
 
 _ACT_FEATURE_WIDTH = 1 + 2 + 1 + 2 + 2 + 2 + (len(ResolutionOutcome) + 1)
+_RESOLUTION_OUTCOMES: tuple[str, ...] = tuple(
+    o.value for o in ResolutionOutcome
+)
 
 
 def _act_is_empty(record: EffectRecord) -> bool:
@@ -239,13 +311,13 @@ def player_features(
     out: list[float] = []
     for value in (player.life, player.hand, player.library, player.graveyard,
                   player.poison, player.energy):
-        out += _scalar(value)
+        _push_scalar(out, value)
     for key in THIS_TURN_COUNTERS:
-        out += _scalar(player.this_turn.get(key, 0))
+        _push_scalar(out, player.this_turn.get(key, 0))
     for color in COLORS:
-        out += _scalar(player.floating_mana.get(color, 0))
+        _push_scalar(out, player.floating_mana.get(color, 0))
     for color in COLORS:
-        out += _scalar(player.untapped_production.get(color, 0))
+        _push_scalar(out, player.untapped_production.get(color, 0))
     out.append(1.0 if player.id == record.actor_player else 0.0)
     out.append(0.0 if player.id == record.actor_player else 1.0)
     out.append(1.0 if player.id in record.state.refs.targets else 0.0)
@@ -269,40 +341,47 @@ def card_features(
     out: list[float] = []
 
     # ── structured characteristics ──
-    out += _multi_hot(set(entity.types), CARD_TYPES)
-    out += _multi_hot(set(entity.supertypes), SUPERTYPES)
-    out += _multi_hot(set(entity.colors), COLORS)
-    out += _scalar(entity.mana_value)
-    if entity.pt is not None:
-        for pair in (entity.pt.base, entity.pt.boosts, entity.pt.counters):
-            out += _scalar(pair[0])
-            out += _scalar(pair[1])
+    out += _multi_hot(entity.types, CARD_TYPES)
+    out += _multi_hot(entity.supertypes, SUPERTYPES)
+    out += _multi_hot(entity.colors, COLORS)
+    _push_scalar(out, entity.mana_value)
+    pt = entity.pt
+    if pt is not None:
+        for pair in (pt.base, pt.boosts, pt.counters):
+            _push_scalar(out, pair[0])
+            _push_scalar(out, pair[1])
         out.append(1.0)
     else:
-        out += [0.0] * 12
-        out.append(0.0)
+        out += _NO_PT
 
     # ── overlay ──
     out += _one_hot(entity.zone, ZONES)
     out.append(1.0 if entity.tapped else 0.0)
     out.append(1.0 if entity.sick else 0.0)
     out.append(1.0 if entity.face_down else 0.0)
-    out += _scalar(entity.damage)
-    for counter in COUNTER_TYPES:
-        out += _scalar(entity.counters.get(counter, 0))
-    out += _scalar(sum(
-        value for name, value in entity.counters.items()
-        if name not in COUNTER_TYPES
-    ))
+    _push_scalar(out, entity.damage)
+    counters = entity.counters
+    if counters:
+        for counter in COUNTER_TYPES:
+            _push_scalar(out, counters.get(counter, 0))
+        _push_scalar(out, sum(
+            value for name, value in counters.items()
+            if name not in COUNTER_TYPES
+        ))
+    else:
+        # The common case by far, and every one of those scalars is zero.
+        out += _NO_COUNTERS
     combat = entity.combat
     out.append(1.0 if combat and combat.attacking else 0.0)
     out.append(1.0 if combat and combat.blocking else 0.0)
     out.append(1.0 if combat and combat.became_blocked else 0.0)
-    out += _scalar(len(combat.blocked_by) if combat else 0)
+    _push_scalar(out, len(combat.blocked_by) if combat else 0)
     out.append(1.0 if entity.attached_to else 0.0)
-    granted = set(entity.granted_temporary.keywords) - set(masked_keywords)
+    granted = entity.granted_temporary.keywords
+    if masked_keywords:
+        granted = set(granted) - set(masked_keywords)
     out += _multi_hot(granted, OVERLAY_KEYWORDS)
-    out += _scalar(len(entity.granted_temporary.abilities))
+    _push_scalar(out, len(entity.granted_temporary.abilities))
     out.append(1.0 if state.controller_tag(
         entity.controller, record.actor_player) == "mine" else 0.0)
     out.append(1.0 if entity.id in state.refs.targets else 0.0)
@@ -310,9 +389,12 @@ def card_features(
 
     # ── stack extras ──
     extras = entity.stack_extras
-    out += _scalar(len(extras.targets) if extras else 0)
-    out += _scalar(sum(extras.per_target_amounts.values()) if extras else 0)
-    out += _scalar(sum(extras.up_to_counts.values()) if extras else 0)
+    if extras is None:
+        out += _NO_STACK_EXTRAS
+    else:
+        _push_scalar(out, len(extras.targets))
+        _push_scalar(out, sum(extras.per_target_amounts.values()))
+        _push_scalar(out, sum(extras.up_to_counts.values()))
 
     # ── per-kind overlays ──
     out += _damage_assignment_features(entity, record)

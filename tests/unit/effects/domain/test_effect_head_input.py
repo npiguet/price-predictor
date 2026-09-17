@@ -14,8 +14,17 @@ import random
 import pytest
 
 from effects.domain.effect_head_input import (
+    CARD_TYPES,
+    COMBAT_SUBSTEPS,
+    COUNTER_TYPES,
     OVERLAY_KEYWORDS,
+    PHASES,
+    SUPERTYPES,
+    THIS_TURN_COUNTERS,
+    ZONES,
     SlotKind,
+    _multi_hot,
+    _one_hot,
     _scalar,
     act_features,
     anchored_attacker,
@@ -45,6 +54,7 @@ from effects.domain.records import (
     TriggerPayload,
 )
 from effects.domain.state_snapshot import (
+    COLORS,
     CombatStatus,
     EntityState,
     GlobalState,
@@ -494,3 +504,246 @@ class TestKeysWithNoLine:
             _entity("E1", printed=(self._PHANTOM,)),
         )))
         assert [slot.e for slot in _build(record).of_kind(SlotKind.ABILITY)] == [_ZERO]
+
+
+class TestFeatureEquivalence:
+    """The per-entity features against the implementation they replaced.
+
+    The feature vector is a layout, not a computation: a value that moves one
+    position changes what every checkpoint's weights mean while every number
+    the run reports still looks fine. So the slower implementation is pasted
+    here and the two are compared element by element over a generated board
+    that reaches every branch — a known value and an unknown one in each
+    vocabulary, present and absent power/toughness, counters on and off the
+    checked-in list, and both combat payloads.
+    """
+
+    @staticmethod
+    def _ref_one_hot(value, vocabulary):
+        out = [0.0] * (len(vocabulary) + 1)
+        if value is None:
+            return out
+        normalized = value.strip().lower().replace(" ", "_")
+        for index, member in enumerate(vocabulary):
+            if member.lower() == normalized:
+                out[index] = 1.0
+                return out
+        out[-1] = 1.0
+        return out
+
+    @staticmethod
+    def _ref_scalar(value):
+        magnitude = math.log1p(abs(float(value)))
+        return [float(value), math.copysign(magnitude, value)]
+
+    @staticmethod
+    def _ref_multi_hot(present, vocabulary):
+        normalized = {p.strip().lower().replace(" ", "_") for p in present}
+        out = [
+            1.0 if member.lower() in normalized else 0.0
+            for member in vocabulary
+        ]
+        known = {member.lower() for member in vocabulary}
+        out.append(float(len(normalized - known)))
+        return out
+
+    @classmethod
+    def _ref_card_features(cls, entity, record, *, masked_keywords=frozenset()):
+        from effects.domain.effect_head_input import (
+            _damage_assignment_features,
+            _pending_event_features,
+        )
+
+        one_hot, scalar, multi_hot = (
+            cls._ref_one_hot, cls._ref_scalar, cls._ref_multi_hot,
+        )
+        state = record.state
+        out: list[float] = []
+        out += multi_hot(set(entity.types), CARD_TYPES)
+        out += multi_hot(set(entity.supertypes), SUPERTYPES)
+        out += multi_hot(set(entity.colors), COLORS)
+        out += scalar(entity.mana_value)
+        if entity.pt is not None:
+            for pair in (entity.pt.base, entity.pt.boosts, entity.pt.counters):
+                out += scalar(pair[0])
+                out += scalar(pair[1])
+            out.append(1.0)
+        else:
+            out += [0.0] * 12
+            out.append(0.0)
+        out += one_hot(entity.zone, ZONES)
+        out.append(1.0 if entity.tapped else 0.0)
+        out.append(1.0 if entity.sick else 0.0)
+        out.append(1.0 if entity.face_down else 0.0)
+        out += scalar(entity.damage)
+        for counter in COUNTER_TYPES:
+            out += scalar(entity.counters.get(counter, 0))
+        out += scalar(sum(
+            value for name, value in entity.counters.items()
+            if name not in COUNTER_TYPES
+        ))
+        combat = entity.combat
+        out.append(1.0 if combat and combat.attacking else 0.0)
+        out.append(1.0 if combat and combat.blocking else 0.0)
+        out.append(1.0 if combat and combat.became_blocked else 0.0)
+        out += scalar(len(combat.blocked_by) if combat else 0)
+        out.append(1.0 if entity.attached_to else 0.0)
+        granted = set(entity.granted_temporary.keywords) - set(masked_keywords)
+        out += multi_hot(granted, OVERLAY_KEYWORDS)
+        out += scalar(len(entity.granted_temporary.abilities))
+        out.append(1.0 if state.controller_tag(
+            entity.controller, record.actor_player) == "mine" else 0.0)
+        out.append(1.0 if entity.id in state.refs.targets else 0.0)
+        out.append(1.0 if entity.id == state.refs.source else 0.0)
+        extras = entity.stack_extras
+        out += scalar(len(extras.targets) if extras else 0)
+        out += scalar(sum(extras.per_target_amounts.values()) if extras else 0)
+        out += scalar(sum(extras.up_to_counts.values()) if extras else 0)
+        out += _damage_assignment_features(entity, record)
+        out += _pending_event_features(entity, record)
+        return tuple(out)
+
+    @classmethod
+    def _ref_player_features(cls, player, record):
+        scalar = cls._ref_scalar
+        out: list[float] = []
+        for value in (player.life, player.hand, player.library,
+                      player.graveyard, player.poison, player.energy):
+            out += scalar(value)
+        for key in THIS_TURN_COUNTERS:
+            out += scalar(player.this_turn.get(key, 0))
+        for color in COLORS:
+            out += scalar(player.floating_mana.get(color, 0))
+        for color in COLORS:
+            out += scalar(player.untapped_production.get(color, 0))
+        out.append(1.0 if player.id == record.actor_player else 0.0)
+        out.append(0.0 if player.id == record.actor_player else 1.0)
+        out.append(1.0 if player.id in record.state.refs.targets else 0.0)
+        return tuple(out)
+
+    @classmethod
+    def _ref_global_features(cls, record):
+        one_hot, scalar = cls._ref_one_hot, cls._ref_scalar
+        g = record.state.global_
+        out: list[float] = []
+        out += scalar(g.turn)
+        out += scalar(g.stack_size)
+        out += one_hot(g.phase, PHASES)
+        out += one_hot(g.combat_substep, COMBAT_SUBSTEPS)
+        out.append(1.0 if g.active == record.actor_player else 0.0)
+        out.append(1.0 if g.priority == record.actor_player else 0.0)
+        out += scalar(len(g.emblems))
+        out += one_hot(record.kind.value, tuple(k.value for k in RecordKind))
+        out += one_hot(
+            record.moment.value if record.moment else None,
+            tuple(m.value for m in Moment),
+        )
+        out += one_hot(
+            record.subkind.value if record.subkind else None,
+            tuple(s.value for s in PlayabilitySubkind),
+        )
+        return tuple(out)
+
+    @staticmethod
+    def _boards(seed: int):
+        """Records whose entities between them reach every feature branch."""
+        rng = random.Random(seed)
+        zones = (*ZONES, "Battle Field", "nowhere")
+        types = (*CARD_TYPES, "Kindred", "Conspiracy")
+        counters = (*COUNTER_TYPES, "MUSTER", "GROWTH")
+        keywords = (*OVERLAY_KEYWORDS, "First Strike", "Riot")
+        records = []
+        for index in range(60):
+            entities = []
+            for slot in range(rng.randrange(1, 8)):
+                pt = None if rng.random() < 0.25 else PowerToughness(
+                    base=(rng.randrange(-2, 9), rng.randrange(-2, 9)),
+                    boosts=(rng.randrange(-4, 5), rng.randrange(-4, 5)),
+                    counters=(rng.randrange(0, 5), rng.randrange(0, 5)),
+                )
+                entities.append(_entity(
+                    f"E{slot}",
+                    zone=rng.choice(zones),
+                    types=tuple(rng.sample(types, rng.randrange(0, 3))),
+                    supertypes=tuple(
+                        rng.sample(SUPERTYPES, rng.randrange(0, 2))
+                    ),
+                    colors=tuple(rng.sample(COLORS, rng.randrange(0, 3))),
+                    mana_value=rng.randrange(0, 13),
+                    pt=pt,
+                    tapped=rng.random() < 0.5,
+                    sick=rng.random() < 0.5,
+                    face_down=rng.random() < 0.2,
+                    damage=rng.randrange(0, 7),
+                    counters={
+                        name: rng.randrange(1, 4)
+                        for name in rng.sample(counters, rng.randrange(0, 4))
+                    },
+                    combat=None if rng.random() < 0.4 else CombatStatus(
+                        attacking=rng.random() < 0.5,
+                        blocking=rng.random() < 0.5,
+                        became_blocked=rng.random() < 0.5,
+                        blocked_by=tuple(
+                            f"E{i}" for i in range(rng.randrange(0, 3))
+                        ),
+                    ),
+                    controller=rng.choice(("P0", "P1")),
+                    granted_temporary=GrantedTemporary(
+                        keywords=tuple(
+                            rng.sample(keywords, rng.randrange(0, 4))
+                        ),
+                        abilities=tuple(range(rng.randrange(0, 3))),
+                    ),
+                ))
+            kind = RecordKind.COMBAT if index % 5 == 0 else RecordKind.RESOLUTION
+            overrides: dict = {
+                "kind": kind,
+                "state": _snapshot(
+                    entities=tuple(entities),
+                    refs=Refs(targets=("E0", "P1"), source="E1"),
+                ),
+            }
+            if kind is RecordKind.COMBAT:
+                overrides["payload"] = CombatPayload(
+                    attackers=("E0",),
+                    assignment_choices={"E0": {"E1": 2}},
+                )
+            records.append(_record(**overrides))
+        return records
+
+    def test_every_entity_builds_the_same_card_features(self):
+        seen = 0
+        for record in self._boards(3):
+            for entity in record.state.entities:
+                masked = frozenset(entity.granted_temporary.keywords[:1])
+                assert card_features(
+                    entity, record, masked_keywords=masked,
+                ) == self._ref_card_features(
+                    entity, record, masked_keywords=masked,
+                )
+                seen += 1
+        assert seen > 150
+
+    def test_the_global_and_player_features_are_unchanged(self):
+        for record in self._boards(5):
+            assert global_features(record) == self._ref_global_features(record)
+            for player in record.state.players:
+                assert player_features(player, record) == (
+                    self._ref_player_features(player, record)
+                )
+
+    def test_the_helpers_themselves_agree_on_every_vocabulary(self):
+        for vocabulary in (PHASES, COMBAT_SUBSTEPS, ZONES, CARD_TYPES,
+                           SUPERTYPES, COUNTER_TYPES, OVERLAY_KEYWORDS, COLORS):
+            values = (None, *vocabulary, " First Strike ", "nope", "")
+            for value in values:
+                assert _one_hot(value, vocabulary) == self._ref_one_hot(
+                    value, vocabulary
+                )
+            for size in range(4):
+                present = set(random.Random(size).sample(values[1:], size))
+                assert _multi_hot(present, vocabulary) == self._ref_multi_hot(
+                    present, vocabulary
+                )
+        for value in (0, -0.0, 3, -3, 2.5, -2.5, 1e6, -1e6):
+            assert _scalar(value) == self._ref_scalar(value)
