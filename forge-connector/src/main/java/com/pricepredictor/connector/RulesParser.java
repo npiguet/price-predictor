@@ -43,7 +43,9 @@ import forge.game.Match;
 import forge.item.PaperCard;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -285,7 +287,14 @@ public class RulesParser {
             ProvenanceKey spellKey = recorder == null ? null : new ProvenanceKey(
                     scriptFile, faceIndex, ProvenanceKey.KIND_SPELL, spellIndex);
             if (recorder != null) recorder.declare(spellKey);
-            if (sa.getKeyword() != null) continue;
+            if (sa.getKeyword() != null) {
+                // A keyword's own spell renders as the keyword line, so that
+                // line claims this trait's key rather than dropping it.
+                if (recorder != null) {
+                    recorder.attributeToKeyword(spellKey, sa, sa.getKeyword().getOriginal());
+                }
+                continue;
+            }
             // Adventure/Omen SAs belong to the Secondary state; skip them when processing the main face.
             // We check both sa.isAdventure()/isOmen() (which tests the SA's own CardStateName) and
             // the state-name mismatch (fallback in case getCardStateName() cannot resolve the type).
@@ -335,6 +344,9 @@ public class RulesParser {
         // When a secondary trigger re-uses the same Execute SVar, it is the "blocks" half of an
         // "attacks or blocks" pair — the primary already covers both, so skip the secondary.
         Set<String> primaryExecuteSVars = new HashSet<>();
+        // The ability each Execute SVar's primary rendered, so the secondary
+        // half can be attributed to the one line both halves share.
+        Map<String, Ability> primaryByExecute = new HashMap<>();
         int triggerIndex = -1;
         for (Trigger t : card.getTriggers()) {
             triggerIndex++;
@@ -344,6 +356,9 @@ public class RulesParser {
             String exec = t.getParam("Execute");
             if ("True".equalsIgnoreCase(t.getParam("Secondary"))
                     && exec != null && primaryExecuteSVars.contains(exec)) {
+                // The "dies" or "blocks" half of a pair the primary already
+                // renders: one line, two runtime objects, both keys on it.
+                if (recorder != null) recorder.attribute(primaryByExecute.get(exec), key, t);
                 continue; // secondary of an "attacks or blocks" pair — skip duplicate
             }
             if (exec != null && !"True".equalsIgnoreCase(t.getParam("Secondary"))) {
@@ -351,7 +366,14 @@ public class RulesParser {
             }
             Ability triggered = TriggeredAbilityEntry.of(t);
             addIfNotNull(abilities, triggered);
-            if (recorder != null) recorder.attribute(triggered, key, t);
+            if (recorder != null) {
+                if (triggered == null && t.getKeyword() != null) {
+                    recorder.attributeToKeyword(key, t, t.getKeyword().getOriginal());
+                } else {
+                    recorder.attribute(triggered, key, t);
+                }
+            }
+            if (triggered != null && exec != null) primaryByExecute.put(exec, triggered);
         }
         int staticIndex = -1;
         for (StaticAbility s : card.getStaticAbilities()) {
@@ -361,7 +383,13 @@ public class RulesParser {
             if (recorder != null) recorder.declare(key);
             Ability entry = StaticAbilityEntry.of(s);
             addIfNotNull(abilities, entry);
-            if (recorder != null) recorder.attribute(entry, key, s);
+            if (recorder != null) {
+                if (entry == null && s.getKeyword() != null) {
+                    recorder.attributeToKeyword(key, s, s.getKeyword().getOriginal());
+                } else {
+                    recorder.attribute(entry, key, s);
+                }
+            }
         }
         int replacementIndex = -1;
         for (ReplacementEffect r : card.getReplacementEffects()) {
@@ -389,12 +417,13 @@ public class RulesParser {
 
         // --- Post-processing ---
         if (isClass) {
-            abilities = applyClassPostProcessing(abilities, classLevelDescriptions);
+            abilities = applyClassPostProcessing(abilities, classLevelDescriptions,
+                    recorder);
         }
         // Remove abilities whose description duplicates an earlier one.
         // This eliminates the spurious second trigger that Forge registers for
         // the "enters or attacks" pattern (two T: lines, identical TriggerDescription).
-        abilities = deduplicateByDescription(abilities);
+        abilities = deduplicateByDescription(abilities, recorder);
         abilities = sortCostsFirst(abilities);
 
         // --- Build CardFace ---
@@ -517,18 +546,42 @@ public class RulesParser {
     // --- Post-processing ---
 
     private List<Ability> applyClassPostProcessing(List<Ability> abilities,
-                                                   Set<String> classLevelDescriptions) {
+                                                   Set<String> classLevelDescriptions,
+                                                   ProvenanceRecorder recorder) {
         List<Ability> result = new ArrayList<>(abilities);
 
-        result.removeIf(a ->
-                a.type() != AbilityType.LEVEL
-                        && classLevelDescriptions.contains(a.descriptionText()));
+        // A level's effect reaches the parser twice — once through the Class
+        // keyword that prints the level, once as the trait itself — and only
+        // the keyword's entry survives. It therefore takes over the removed
+        // entry's keys, or a record fired by that trait names no line at all.
+        Map<String, Ability> levelByDescription = new HashMap<>();
+        for (Ability a : result) {
+            if (a.type() == AbilityType.LEVEL) {
+                levelByDescription.putIfAbsent(a.descriptionText(), a);
+            }
+        }
+        Iterator<Ability> it = result.iterator();
+        while (it.hasNext()) {
+            Ability a = it.next();
+            if (a.type() != AbilityType.LEVEL
+                    && classLevelDescriptions.contains(a.descriptionText())) {
+                if (recorder != null) {
+                    recorder.merge(levelByDescription.get(a.descriptionText()), a);
+                }
+                it.remove();
+            }
+        }
 
         for (int i = 0; i < result.size(); i++) {
             Ability a = result.get(i);
             if (a.type() == AbilityType.STATIC || a.type() == AbilityType.TRIGGERED
                     || a.type() == AbilityType.REPLACEMENT) {
-                result.set(i, new TextAbility(AbilityType.LEVEL, a.descriptionText(), 1));
+                // The level-one ability is re-typed as a fresh object, and the
+                // recorder keys by identity, so its attribution moves with it.
+                TextAbility level =
+                        new TextAbility(AbilityType.LEVEL, a.descriptionText(), 1);
+                if (recorder != null) recorder.transfer(a, level);
+                result.set(i, level);
             }
         }
 
@@ -669,14 +722,28 @@ public class RulesParser {
         return List.of();
     }
 
-    /** Remove abilities whose descriptionText duplicates an earlier entry. */
-    private static List<Ability> deduplicateByDescription(List<Ability> abilities) {
-        Set<String> seen = new HashSet<>();
+    /**
+     * Remove abilities whose descriptionText duplicates an earlier entry.
+     *
+     * <p>The survivor inherits the discarded duplicate's provenance: one line
+     * now carries the text of both traits, and both stay live at runtime, so a
+     * record fired by either has to join to that line.
+     */
+    private static List<Ability> deduplicateByDescription(List<Ability> abilities,
+                                                          ProvenanceRecorder recorder) {
+        Map<String, Ability> survivors = new HashMap<>();
         List<Ability> result = new ArrayList<>();
         for (Ability a : abilities) {
             String desc = a.descriptionText();
-            if (desc == null || seen.add(desc)) {
+            if (desc == null) {
                 result.add(a);
+                continue;
+            }
+            Ability survivor = survivors.putIfAbsent(desc, a);
+            if (survivor == null) {
+                result.add(a);
+            } else if (recorder != null) {
+                recorder.merge(survivor, a);
             }
         }
         return result;

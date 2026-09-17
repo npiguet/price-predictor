@@ -5,6 +5,7 @@ import forge.game.CardTraitBase;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -22,10 +23,11 @@ import java.util.Set;
  * the sidecar has to report.
  *
  * <p>A recorder is per face. Keys declared but attached to no surviving ability
- * end up in the sidecar's {@code dropped_keys} — the converter merged or
- * deduplicated that trait away, but it is still live at runtime and still
- * produces a key, so a record naming it must be kept rather than failing the
- * join.
+ * end up in the sidecar's {@code dropped_keys}, which holds only traits with no
+ * text of their own — a permanent's implicit cast spell, say. A trait the
+ * converter deduplicated, merged or derived from a keyword keeps its
+ * attribution on the line that carries its text, because it is still live at
+ * runtime and a record naming it must reach the words it produced.
  */
 public final class ProvenanceRecorder {
 
@@ -35,6 +37,12 @@ public final class ProvenanceRecorder {
 
     private final Map<Ability, Source> byAbility = new IdentityHashMap<>();
     private final Set<ProvenanceKey> declared = new LinkedHashSet<>();
+    /**
+     * The abilities each keyword rendered, kept so a trait Forge derived from
+     * that keyword can be claimed by the keyword's own line: the derived trait
+     * is walked long after the keyword loop has moved on.
+     */
+    private final Map<String, List<Ability>> byKeyword = new LinkedHashMap<>();
 
     /**
      * Note that a trait exists on this face, whether or not it produced a line.
@@ -77,6 +85,10 @@ public final class ProvenanceRecorder {
                                  String original) {
         if (key == null) return;
         declare(key);
+        for (Ability ability : abilities) {
+            if (ability == null) continue;
+            byKeyword.computeIfAbsent(original, k -> new ArrayList<>()).add(ability);
+        }
         TraitScript script = TraitScript.ofKeyword(original);
         for (Ability ability : abilities) {
             if (ability == null) continue;
@@ -89,6 +101,58 @@ public final class ProvenanceRecorder {
                 existing.keys().add(key);
             }
         }
+    }
+
+    /**
+     * Attribute a runtime trait to the abilities its keyword rendered.
+     *
+     * <p>A keyword-derived trigger, static or spell returns no entry of its own
+     * — its text is the keyword line — but Forge gives it a trait index, and a
+     * record fired by it names that key. Claiming the key on the keyword's
+     * abilities is what keeps such a record joinable instead of leaving it
+     * pointing at a dropped key with nothing to say about the ability.
+     */
+    public void attributeToKeyword(ProvenanceKey key, CardTraitBase trait,
+                                   String original) {
+        if (key == null) return;
+        declare(key);
+        List<Ability> abilities = byKeyword.get(original);
+        if (abilities == null || abilities.isEmpty()) return;
+        attribute(abilities, key, trait);
+    }
+
+    /**
+     * Fold a discarded duplicate's attribution into the ability that stays.
+     *
+     * <p>The converter deduplicates two traits that render one description. The
+     * survivor carries the text of both, so it has to carry both keys: dropping
+     * the duplicate's key would leave every record fired by that live trait
+     * with no line to join to.
+     */
+    public void merge(Ability survivor, Ability duplicate) {
+        Source from = byAbility.remove(duplicate);
+        if (from == null || survivor == null) return;
+        Source into = byAbility.get(survivor);
+        if (into == null) {
+            byAbility.put(survivor, from);
+            return;
+        }
+        for (ProvenanceKey key : from.keys()) {
+            if (!into.keys().contains(key)) into.keys().add(key);
+        }
+    }
+
+    /**
+     * Move an ability's attribution to the object that replaces it.
+     *
+     * <p>Post-processing rebuilds some abilities as fresh objects — a Class
+     * card's level lines, for one — and the recorder keys by identity, so
+     * without this the replacement would be textless to the model and the
+     * original's key would look dropped.
+     */
+    public void transfer(Ability from, Ability to) {
+        Source source = byAbility.remove(from);
+        if (source != null && to != null) byAbility.put(to, source);
     }
 
     /** What produced this ability, or null if it came from no runtime trait. */

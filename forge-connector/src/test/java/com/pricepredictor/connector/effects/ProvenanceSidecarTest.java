@@ -223,6 +223,72 @@ class ProvenanceSidecarTest {
         assertEquals(2, mana.get(0).provenance().size(), mana.get(0).provenance().toString());
     }
 
+    // ── every trait whose text a line carries is claimed by that line ────
+
+    private static List<ProvenanceKey> claimedBy(Converted converted, String kind, String needle) {
+        return converted.sidecar().lines().stream()
+                .filter(line -> line.lineKind().equals(kind))
+                .filter(line -> converted.lines().get(line.lineIndex()).contains(needle))
+                .flatMap(line -> line.provenance().stream())
+                .toList();
+    }
+
+    @Test
+    void theSecondaryOfAnEntersOrDiesPairIsClaimedByTheRenderedLine() {
+        // Forge registers "enters or dies" as two triggers with one
+        // description; the converter renders one line. The second object is
+        // still live and a record fired by it names its key.
+        Converted marshal = convert("m/mogg_war_marshal.txt");
+        List<ProvenanceKey> keys = claimedBy(marshal, "triggered", "enters or dies");
+        assertTrue(keys.stream().anyMatch(k -> k.indexWithinKind() == 0), keys.toString());
+        assertTrue(keys.stream().anyMatch(k -> k.indexWithinKind() == 1), keys.toString());
+    }
+
+    @Test
+    void aKeywordDerivedTriggerIsClaimedByTheKeywordLine() {
+        // Echo's upkeep trigger is a runtime Trigger object with a key of its
+        // own; its text is the keyword line.
+        Converted marshal = convert("m/mogg_war_marshal.txt");
+        List<ProvenanceKey> keys = claimedBy(marshal, "triggered", "echo");
+        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_KEYWORD)), keys.toString());
+        assertTrue(keys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)), keys.toString());
+    }
+
+    @Test
+    void onlyTheImplicitPermanentSpellIsDroppedOnMoggWarMarshal() {
+        Converted marshal = convert("m/mogg_war_marshal.txt");
+        List<ProvenanceKey> dropped = marshal.sidecar().droppedKeys();
+        assertEquals(1, dropped.size(), dropped.toString());
+        assertEquals(ProvenanceKey.KIND_SPELL, dropped.get(0).traitKind());
+        assertEquals(0, dropped.get(0).indexWithinKind());
+    }
+
+    @Test
+    void anEntersOrAttacksPairIsClaimedByTheRenderedLine() {
+        Converted tidalmage = convert("s/stadium_tidalmage.txt");
+        List<ProvenanceKey> keys = claimedBy(tidalmage, "triggered", "enters or attacks");
+        assertEquals(2, keys.stream().filter(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)).count(), keys.toString());
+    }
+
+    @Test
+    void aClassCardsLevelLinesCarryTheirTraitsKeys() {
+        // Class post-processing rebuilds level lines as fresh objects; the
+        // attribution has to move with them or every ability on the card is
+        // textless to the model.
+        Converted talent = convert("h/hunters_talent.txt");
+        List<ProvenanceKey> levelKeys = talent.sidecar().lines().stream()
+                .filter(line -> line.lineKind().equals("level"))
+                .flatMap(line -> line.provenance().stream())
+                .toList();
+        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_TRIGGER)), levelKeys.toString());
+        assertTrue(levelKeys.stream().anyMatch(k -> k.traitKind().equals(ProvenanceKey.KIND_STATIC)), levelKeys.toString());
+        for (ProvenanceKey dropped : talent.sidecar().droppedKeys()) {
+            assertFalse(dropped.traitKind().equals(ProvenanceKey.KIND_TRIGGER)
+                    || dropped.traitKind().equals(ProvenanceKey.KIND_STATIC),
+                    dropped + " has text on a level line and must not be dropped");
+        }
+    }
+
     // ── the script surface and role spans ───────────────────────────────
 
     @Test
