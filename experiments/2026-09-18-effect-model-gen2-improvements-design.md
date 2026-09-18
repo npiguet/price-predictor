@@ -7,6 +7,16 @@ records one gap found while gen-1 trained, the evidence for it, and the change g
 design rationale the gaps sit against is
 [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md).
 
+Each baseline trains on the identical pipeline and differs from gen-1 in one input, so each answers
+one question. `identity` gives every distinct ability text a free vector in place of the encoder's
+output, and asks whether the encoder reads text at all. `taxonomy` replaces that vector with a hash
+of the script's API type and parameter keys, and measures what reading a script's parameters adds
+over knowing its effect category. `state-only` zeroes every ability vector and gives each record
+kind its floor: a kind the full model scores at that floor is one where the text changed nothing
+the model could find. `no-state` removes the board as well, so the model can only learn each text's
+average effect, and it is compared on the embeddings rather than on the predictions.
+
+
 ## The encoder reads only the first script line of an ability, so a trigger's effect never reaches it
 
 On the script surface the encoder is fed one Forge script line per ability: the parameters of the
@@ -169,6 +179,41 @@ share of useful records per game is lower than under Forge's play and the run ha
 cover the interesting cases. And the state distribution stays Forge-shaped, because what gets cast
 still follows Forge's mana and hand on both seats; that is the right distribution for a model whose
 every consumer runs inside Forge.
+
+## Only the identity baseline is retrained with the model; the other three are trained once
+
+Training the four baselines costs about two days of GPU time against the gen-1 corpus, and only one
+of them has to be repeated. The gates are what a shipped checkpoint must pass, and only gate 1 reads
+a baseline. The other three baselines test claims about the design, and a claim once established
+holds until the thing it is about changes.
+
+`identity` is retrained on every corpus rebuild. A rebuild moves the split, and the evaluator refuses
+a baseline that records a different split or vocabulary from the model it is compared with. It is
+not retrained for a change confined to the encoder, because the baseline has no encoder: the existing
+checkpoint remains a valid gate 1 opponent for a run that changes the encoder's depth, width or
+learning rate. A change to the effect head or to the training schedule calls for a matched identity
+run, because the design defines the baseline as the model with everything but its input unchanged,
+and a deeper head could gain on board state alone.
+
+`taxonomy`, `state-only` and `no-state` are trained once and repeated only when a change is aimed at
+what each measures. Two planned gen-2 changes are aimed that way. Encoding the whole script chain
+puts the parameters of every sub-ability in front of the encoder, and the taxonomy comparison
+measures what reading parameters adds, so taxonomy is retrained once after that change. Off-policy
+games are meant to make an outcome depend on the target's state rather than on the ability alone.
+The state-only floor per record kind is the direct reading of whether that worked, so state-only is
+retrained once after those games enter the corpus. A hyperparameter sweep repeats none of the three.
+
+| Baseline | What it measures | Retrain when |
+|---|---|---|
+| `identity` | gate 1: whether the encoder reads text at all | every corpus rebuild; a change to the head or the schedule |
+| `taxonomy` | what reading a script's parameters adds over knowing its effect category | once; again after the chain encoding |
+| `state-only` | each record kind's floor, what the board alone predicts | once; again after off-policy games enter the corpus |
+| `no-state` | whether state-conditioning produces a better embedding | once |
+
+The recurring cost is therefore one identity run per corpus rebuild. At gen-1 pace that is about
+half a day, and it can share the card with another head-only run, as identity and taxonomy did on
+2026-09-18. The driver script that queued all four after the gen-1 run queues identity alone from the
+next cycle.
 
 ## Outcome
 

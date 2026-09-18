@@ -606,10 +606,21 @@ stop-gradient momentum cache refreshed every `--cache-refresh` batches. **It is 
 trainer today** — the flag is accepted, warns at startup and changes nothing, and context abilities are
 re-encoded live whatever it is set to.
 
-All four baselines are needed, because every reported check runs against one: gate 1 compares against
-`identity`, every record kind reports `state-only` as its floor, the average-effect control is
-`no-state`, and the taxonomy comparison is `taxonomy`. Each inherits the split and holds out the same
-keyword, so the only difference from the shipping model is the input its variant masks:
+Every reported check runs against one of the four baselines: gate 1 compares against `identity`,
+every record kind reports `state-only` as its floor, the average-effect control is `no-state`, and
+the taxonomy comparison is `taxonomy`. Each inherits the split and holds out the same keyword, so
+the only difference from the shipping model is the input its variant masks. Only `identity` is on
+the recurring path; the other three are trained once per design and repeated only when a change
+targets what they measure:
+
+| Baseline | Retrain when |
+|---|---|
+| `identity` | Every corpus rebuild: the split moves, and the evaluator refuses a baseline recording another split. Also a change to the effect head or the training schedule. Not a change confined to the encoder, which this baseline does not have. |
+| `taxonomy` | Once. Again when the encoder's script surface changes (for example the chain encoding). |
+| `state-only` | Once. Again when the corpus composition changes what the board alone predicts (for example off-policy games). |
+| `no-state` | Once. |
+
+An encoder hyperparameter sweep retrains none of them. First cycle, all four:
 
 ```bash
 for V in identity state-only no-state taxonomy; do
@@ -621,8 +632,9 @@ for V in identity state-only no-state taxonomy; do
 done
 ```
 
-Same flags as the shipping run, and `--withhold-keyword` must name the same keyword: the only
-difference between a baseline and the model it is a baseline for is the input its variant masks.
+Later cycles, the same loop over `identity` alone. Same flags as the shipping run, and
+`--withhold-keyword` must name the same keyword: the only difference between a baseline and the model
+it is a baseline for is the input its variant masks.
 
 A variant run must inherit the split it is a baseline for. `--corpus` satisfies that on its own — the
 manifest enumerates the split directly, so every run reading the same curated dataset trains on the
