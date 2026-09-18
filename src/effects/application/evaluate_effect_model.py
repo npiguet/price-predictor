@@ -26,12 +26,14 @@ import math
 import random
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from itertools import chain, islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from effects.application.gate_one import GateOneMetrics
+from effects.application.gate_two import KeywordScore
 from effects.domain.damage_step_keywords import (
     DAMAGE_STEP_KEYWORDS,
     MIN_DIRECTION_AGREEMENT,
@@ -51,6 +53,11 @@ GATE1_MIN_DEVIANCE_REDUCTION = 0.05
 GATE3_MAX_MEAN_COSINE = 0.5
 GATE3_COSINE_PAIRS = 10_000
 GATE3_MAX_TOP_COMPONENT = 0.30
+
+#: Records read eagerly before gate 2 loads its checkpoint. The loader measures
+#: each slot kind's width from real records, and every combat record on a board
+#: with a creature and a player answers that identically.
+SLOT_WIDTH_SAMPLE = 8
 
 
 class Stratum(StrEnum):
@@ -210,8 +217,8 @@ def with_recency_breakdown(result: CheckResult, halves: dict) -> CheckResult:
         return result
     return replace(
         result,
-        message=(
-            result.message
+        detail=(
+            result.detail
             + "\n  by first printing — "
             + "; ".join(lines)
         ),
@@ -321,22 +328,30 @@ def evaluate_keyword(
     *,
     qualifying_records: int,
     agreeing_records: int,
+    per_field: dict[str, tuple[int, int]] | None = None,
 ) -> KeywordVerdict:
     """Route one keyword: pass, or send it to a stage-three probe (FR-119).
 
     Under-sampled routes the same way as wrong. A keyword with 40 qualifying
     records has not been tested, and treating "untested" as "passed" is how a
     canary stops being one.
+
+    ``per_field`` is reported but never routes: a row's verdict is "did every
+    field move", and the breakdown says *which* one did not — a keyword whose
+    magnitude moves and whose consequence does not is a different problem from
+    one the model ignores entirely, and the combined percentage cannot tell them
+    apart.
     """
     agreement = (
         agreeing_records / qualifying_records if qualifying_records else 0.0
     )
+    breakdown = _render_per_field(per_field)
     if qualifying_records < MIN_QUALIFYING_RECORDS:
         return KeywordVerdict(
             row.keyword, qualifying_records, agreement, routed_to_probe=True,
             reason=(
                 f"under-sampled: {qualifying_records} qualifying records < "
-                f"{MIN_QUALIFYING_RECORDS}"
+                f"{MIN_QUALIFYING_RECORDS}" + breakdown
             ),
         )
     if agreement < MIN_DIRECTION_AGREEMENT:
@@ -345,12 +360,24 @@ def evaluate_keyword(
             reason=(
                 f"direction agreement {agreement:.1%} < "
                 f"{MIN_DIRECTION_AGREEMENT:.0%} on {', '.join(row.fields)}"
+                + breakdown
             ),
         )
     return KeywordVerdict(
         row.keyword, qualifying_records, agreement, routed_to_probe=False,
-        reason=f"direction agreement {agreement:.1%}",
+        reason=f"direction agreement {agreement:.1%}" + breakdown,
     )
+
+
+def _render_per_field(per_field: dict[str, tuple[int, int]] | None) -> str:
+    """The per-effect tail of a keyword's report line, or nothing."""
+    if not per_field:
+        return ""
+    parts = [
+        f"{label} {agreeing / scored:.0%}"
+        for label, (agreeing, scored) in per_field.items() if scored
+    ]
+    return f" ({', '.join(parts)})" if parts else ""
 
 
 def evaluate_gate_two(verdicts: list[KeywordVerdict]) -> CheckResult:
@@ -757,17 +784,6 @@ def resolve_corpus_path(
     return Path(provenance.corpus_path)
 
 
-def scored_records(records, provenance) -> list:
-    """Only the games the checkpoint recorded (FR-108).
-
-    The corpus grows between the training run and the evaluation, and a record
-    from a game the model never saw is neither training nor validation — it is
-    unclassified, and scoring it would quietly change what the split means.
-    """
-    allowed = provenance.validation_games
-    return [record for record in records if record.game_id in allowed]
-
-
 def keyword_rows() -> tuple[DamageStepKeyword, ...]:
     """Gate 2's table, so the evaluator and the report read one source."""
     return DAMAGE_STEP_KEYWORDS
@@ -850,7 +866,6 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         check_ward,
         load_cache,
     )
-    from effects.infrastructure.record_io import read_records
 
     report = EvaluationReport()
     cards_root = next(
@@ -884,20 +899,9 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         ))
 
     # ── gate 2: per keyword, routing only ──
-    from effects.infrastructure.model_runner import build_sidecars
-
-    scored = scored_records(read_records(config.records_dir), main.provenance)
-    counts = count_qualifying_all(
-        scored, keyword_rows(), build_sidecars(config),
+    verdicts = run_gate_two(
+        config, main, vocab_path=vocab_path, keyword_path=keyword_path,
     )
-    verdicts = [
-        evaluate_keyword(
-            row,
-            qualifying_records=counts[row.keyword],
-            agreeing_records=0,
-        )
-        for row in keyword_rows()
-    ]
     report.keyword_verdicts = verdicts
     report.add(evaluate_gate_two(verdicts))
 
@@ -949,97 +953,83 @@ NEIGHBOUR_QUERIES: tuple[str, ...] = (
 #: are an operator's training data, not a repository artifact.
 DEFAULT_WIN_RATES = Path("output/sealed/cards-win-rates.txt")
 
-
-def keyword_of_line(line) -> str | None:
-    """The keyword a sidecar line *is*, or None if the line is not one.
-
-    A printed keyword converts to a ``static`` line whose script text is the
-    keyword's display name — White Knight's is exactly ``First Strike``. Read
-    in the gate's spelling, so ``first_strike`` matches.
-    """
-    script = getattr(line, "script_text", None)
-    if not script or "$" in script or "|" in script:
-        return None
-    return script.strip().lower().replace(" ", "_")
+# ── gate 2: the damage-step keyword canary ──────────────────────────────
+#
+# The scoring itself lives in `effects.application.gate_two`, the way gate 1's
+# does in `gate_one`; what is left here is the selection, the routing and the
+# report line.
 
 
-class KeywordResolver:
-    """An entity's keywords, from both channels, memoized by provenance key.
+def _gate_two_records(config, provenance):
+    """The combat records of the checkpoint's **game-disjoint** games (FR-120).
 
-    Both channels have to be looked at. An entity's printed and
-    attachment-granted keywords reach the model as ability tokens, and only a
-    keyword granted until end of turn appears as a bare string in the overlay —
-    so reading the overlay alone sees the rare case and misses every creature
-    that printed the keyword, which is the common one.
+    Game-disjoint rather than card-disjoint: the gate asks whether the model
+    uses a keyword it has seen, not whether it generalizes to text it has not,
+    and holding out the carriers as well would empty six of the eight
+    populations to answer a question gate 1 already answers.
 
-    The memo is what makes that affordable: a corpus repeats the same few
-    thousand cards across millions of combat records, and resolving each key
-    once turns the walk into a dict hit.
-    """
-
-    def __init__(self, sidecars=None) -> None:
-        self._sidecars = sidecars
-        self._by_key: dict[object, str | None] = {}
-
-    def _keyword_for(self, key) -> str | None:
-        if key not in self._by_key:
-            keyword = None
-            try:
-                line = self._sidecars.line_for(key)
-            except (KeyError, FileNotFoundError):
-                line = None
-            if line is not None:
-                keyword = keyword_of_line(line)
-            self._by_key[key] = keyword
-        return self._by_key[key]
-
-    def keywords_of(self, entity) -> set[str]:
-        found = set(entity.granted_temporary.keywords)
-        if self._sidecars is None:
-            return found
-        for key in (*entity.printed, *entity.granted_attached):
-            keyword = self._keyword_for(key)
-            if keyword is not None:
-                found.add(keyword)
-        return found
-
-
-def count_qualifying_all(
-    records: list, rows: tuple[DamageStepKeyword, ...], sidecars=None,
-) -> dict[str, int]:
-    """Every row's qualifying count, in one pass over the corpus.
-
-    One pass rather than one per keyword: each entity's keyword set is resolved
-    once and checked against all eight, which is the difference between an
-    evaluation that finishes and one that does not.
+    An iterator, not a list. The split is a thousand games and a parsed record
+    costs about 45 KB, so the scorer reads it a chunk at a time.
     """
     from effects.domain.records import RecordKind
+    from effects.infrastructure.record_io import read_records
 
-    resolver = KeywordResolver(sidecars)
-    counts = {row.keyword: 0 for row in rows}
-    wanted = set(counts)
-    for record in records:
-        if record.kind is not RecordKind.COMBAT:
-            continue
-        seen: set[str] = set()
-        for entity in record.state.entities:
-            if entity.combat is None:
-                continue
-            seen |= resolver.keywords_of(entity) & wanted
-        for keyword in seen:
-            counts[keyword] += 1
-    return counts
+    games = frozenset(provenance.game_disjoint_games)
+    if not games:
+        return iter(())
+    return (
+        record for record in read_records(Path(config.records_dir))
+        if record.kind is RecordKind.COMBAT and record.game_id in games
+    )
 
 
-def count_qualifying(records: list, row: DamageStepKeyword, sidecars=None) -> int:
-    """Combat records in which the keyword's carrier is actually in combat.
+def _gate_two_runnable(config, checkpoint, *, vocab_path, keyword_path, records):
+    """The checkpoint, ready to run over ``records``. Loaded exactly once."""
+    from effects.infrastructure.model_runner import load_runnable
 
-    A first approximation of ``row.qualifies_when``: the full predicate needs
-    the model's perturbed prediction, which the caller supplies. Counting here
-    is what lets the under-sampled verdict fire before any model has run.
+    return load_runnable(
+        config, checkpoint,
+        vocab_path=vocab_path, keyword_path=keyword_path, records=records,
+    )
 
-    Without ``sidecars`` only the overlay channel is visible, and the count then
-    describes a different population than the gate's table does — printed first
-    strike is most first strike.
+
+def run_gate_two(
+    config, main, *, vocab_path: Path, keyword_path: Path,
+) -> list[KeywordVerdict]:
+    """Score the eight keywords and route each one (FR-119 – FR-122).
+
+    Nothing is loaded when the split holds no combat record to score: every
+    keyword is then under-sampled at n=0, which is the same verdict a corpus
+    with forty records gets and for the same reason.
     """
-    return count_qualifying_all(records, (row,), sidecars)[row.keyword]
+    from effects.application.gate_two import score_keywords
+
+    rows = keyword_rows()
+    records = iter(_gate_two_records(config, main.provenance))
+    # A handful of records up front, because the loader measures the slot
+    # widths from real ones; the rest stays a stream the scorer reads in chunks.
+    head = list(islice(records, SLOT_WIDTH_SAMPLE))
+    if not head:
+        scores = {row.keyword: KeywordScore() for row in rows}
+    else:
+        encoder, model, batcher, fields = _gate_two_runnable(
+            config, main,
+            vocab_path=vocab_path, keyword_path=keyword_path, records=head,
+        )
+        # The batcher's own cache, not a second one built from the config: the
+        # resolver decides which entity carries a keyword and the surface
+        # builder decides which slot to drop for it, and the two reading
+        # different joins is exactly how a perturbation strips nothing.
+        scores = score_keywords(
+            chain(head, records), rows, encoder, model, batcher,
+            batcher.sidecars, fields=fields,
+        )
+    return [
+        evaluate_keyword(
+            row,
+            qualifying_records=scores[row.keyword].qualifying,
+            agreeing_records=scores[row.keyword].agreeing,
+            per_field=scores[row.keyword].per_field,
+        )
+        for row in rows
+    ]

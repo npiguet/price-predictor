@@ -31,6 +31,7 @@ from effects.domain.ability_encoder import (
     prepare_line,
 )
 from effects.domain.ability_tokenizer import AbilityTokenizer
+from effects.domain.damage_step_keywords import keyword_of_line
 from effects.domain.effect_head_input import (
     SlotKind,
     build_effect_head_input,
@@ -249,8 +250,28 @@ class SurfaceBatcher:
 
     # ── the surface ─────────────────────────────────────────────────────
 
-    def surface_for(self, record, rows: dict[str, int]):
-        """One record's token surface, with the variant's masks applied."""
+    def keyword_of_key(self, key) -> str | None:
+        """Which damage-step keyword one ability key's line *is*, if any.
+
+        Memoised through ``_resolve`` like every other answer about a key, so
+        gate 2 asking it once per entity per build costs a dict hit.
+        """
+        return keyword_of_line(self._resolve(key)[1])
+
+    def surface_for(
+        self,
+        record,
+        rows: dict[str, int],
+        strip_keywords: dict[str, frozenset[str]] | None = None,
+    ):
+        """One record's token surface, with the variant's masks applied.
+
+        ``strip_keywords`` is gate 2's perturbation: per entity, the keywords to
+        remove from that entity's input through **both** channels. It is a
+        per-build argument rather than batcher state because the gate compares
+        the same record with and without the keyword, and the two builds have to
+        be able to share everything else.
+        """
 
         def e_for(key):
             if self.masks.zero_e:
@@ -271,12 +292,25 @@ class SurfaceBatcher:
             context_dropout=self.context_dropout,
             rng=self.rng,
             masked_keywords=continuous_masked_keywords(record),
+            stripped_keywords=strip_keywords,
+            keyword_of=self.keyword_of_key,
         )
 
-    def build(self, records, encoder: AbilityEncoder):
-        """``(model_kwargs, surfaces)`` for one batch of records."""
+    def build(self, records, encoder: AbilityEncoder, strip_per_record=None):
+        """``(model_kwargs, surfaces)`` for one batch of records.
+
+        ``strip_per_record`` is a list as long as ``records``, each entry the
+        ``strip_keywords`` map for that record or None. A list rather than one
+        map for the batch because gate 2 puts a record and its perturbed twin in
+        the same batch: they share every encoded ability text, and one map would
+        strip both.
+        """
         rows, matrix = self.encode_texts(self.batch_texts(records), encoder)
-        surfaces = [self.surface_for(record, rows) for record in records]
+        strips = strip_per_record or [None] * len(records)
+        surfaces = [
+            self.surface_for(record, rows, strip)
+            for record, strip in zip(records, strips)
+        ]
         batch = collate_surfaces(
             surfaces, e_dim=self.e_dim, widths=self.widths,
         )

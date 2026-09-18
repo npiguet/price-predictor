@@ -444,6 +444,8 @@ def build_effect_head_input(
     context_dropout: float = 0.0,
     rng: random.Random | None = None,
     masked_keywords: dict[str, frozenset[str]] | None = None,
+    stripped_keywords: dict[str, frozenset[str]] | None = None,
+    keyword_of=None,
 ) -> EffectHeadInput:
     """Lay one record out as the token surface.
 
@@ -471,9 +473,22 @@ def build_effect_head_input(
             dropping the ability under study would make the record unanswerable.
         masked_keywords: per-entity keywords to hide from the temporary-grant
             channel.
+        stripped_keywords: per-entity keywords to remove from the entity's model
+            input **entirely** — gate 2's perturbation. It hides the keyword
+            from the overlay the way ``masked_keywords`` does *and* drops the
+            ability slot whose line is that keyword, because a keyword the card
+            prints reaches the model as an ability token and clearing only the
+            overlay would leave it in. The two parameters stay separate because
+            a ``continuous`` record masks what its own static contributed, which
+            is a grant, and must not also silence a printed line that happens to
+            name the same keyword.
+        keyword_of: ``ProvenanceKey -> str | None``, which keyword a line *is*.
+            Required for ``stripped_keywords`` to reach the ability channel;
+            without it only the overlay is stripped.
     """
     rng = rng or random.Random()
     masked = masked_keywords or {}
+    stripped = stripped_keywords or {}
     zero = tuple([0.0] * e_dim)
     slots: list[Slot] = []
     position = 0
@@ -506,12 +521,13 @@ def build_effect_head_input(
         # Position ids restart here: an entity plus its abilities is one block,
         # read the same way wherever the entity sits on the board.
         position = 0
+        gone = stripped.get(entity.id, frozenset())
         entity_slots.append(len(slots))
         slots.append(Slot(
             kind=SlotKind.CARD, position=position,
             features=card_features(
                 entity, record,
-                masked_keywords=masked.get(entity.id, frozenset()),
+                masked_keywords=masked.get(entity.id, frozenset()) | gone,
             ),
             subtype_tokens=(
                 subtype_tokens_for(entity) if subtype_tokens_for else ()
@@ -522,6 +538,11 @@ def build_effect_head_input(
         is_context = entity.id != source_id
         for key in _ability_keys(entity):
             if has_line is not None and not has_line(key):
+                continue
+            if gone and keyword_of is not None and keyword_of(key) in gone:
+                # Dropped rather than zeroed: a zero token would still tell the
+                # head this creature has an ability here, and gate 2 is asking
+                # what the board looks like without the keyword at all.
                 continue
             if (
                 is_context
