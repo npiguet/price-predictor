@@ -8,7 +8,9 @@ card-disjoint loss down per output field) and renders:
 
   1  losses-by-stratum -- train / card-disjoint / game-disjoint loss per
      epoch, one small-multiple panel per model variant (full, identity,
-     taxonomy), sharing a y-axis so the panels compare directly.
+     taxonomy, state-only), sharing a y-axis so the panels compare directly.
+     The no-state run is left out: its loss sits near 9-10 throughout, and a
+     shared axis stretched to fit it would flatten every other panel.
   2  per-field -- explained-% per epoch for the full model's largest-floor
      fields, one small-multiple panel per field (a shared panel would need
      ten colours, which the categorical palette does not have to give).
@@ -69,6 +71,7 @@ VARIANTS = (
     ("full-textless-corpus", "full model", BLUE),
     ("identity", "identity baseline", ORANGE),
     ("taxonomy", "taxonomy baseline", AQUA),
+    ("state-only", "state-only baseline", MUTED),
 )
 STRATA = (("train", "train", BLUE), ("cd", "card-disjoint", ORANGE), ("gd", "game-disjoint", AQUA))
 CURRICULUM_EPOCH = 2.5  # sparse fields turn on at the first step of epoch 3
@@ -151,7 +154,9 @@ def style_axis(ax) -> None:
 
 def chart_losses(runs: dict[str, list[Epoch]], out_stub: Path) -> None:
     """Chart 1: train / card-disjoint / game-disjoint loss, one panel per variant."""
-    fig, axes = plt.subplots(1, 3, figsize=(11.6, 4.4), sharey=True, facecolor=BG)
+    fig, axes = plt.subplots(
+        1, len(VARIANTS), figsize=(15.2, 4.4), sharey=True, facecolor=BG,
+    )
     fig.subplots_adjust(top=0.74, bottom=0.20, left=0.06, right=0.985, wspace=0.08)
     all_vals = [
         getattr(r, s)

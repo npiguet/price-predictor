@@ -501,15 +501,17 @@ The subsystems stage so that the first `e` vectors exist and pass canaries as ea
 
 The effect model does not ship, and gate 3 is what stops it. The model reads ability text: on unseen texts it clears each of gate 1's margins against the identity baseline, the narrowest at nearly twice its threshold. Its embeddings are spread out, but one direction holds too large a share of their variance, and that is one of gate 3's two canaries. Gate 2 blocks nothing; it passes two keywords and routes the other six to a probe because the evaluation population holds too few of their combats.
 
-Three models are compared below. Each trained on the curated corpus under `output/effects/corpus/`, on the script surface, with the same split and seed. An epoch is one pass of the training schedule. A run keeps the checkpoint of its best epoch, the one with the lowest card-disjoint validation loss.
+Five models are compared below. Each trained on the curated corpus under `output/effects/corpus/`, on the script surface, with the same split and seed. An epoch is one pass of the training schedule. A run keeps the checkpoint of its best epoch, the one with the lowest card-disjoint validation loss.
 
 | Model | What gives each ability its vector `e` | Epochs run | Best epoch |
 |---|---|---|---|
 | full | the ability encoder, reading the script | 40 | 39 |
 | identity | a free learned vector per ability text, so it can only recall texts it trained on | 36 | 34 |
 | taxonomy | a hash of the script's API type and parameter keys, with no parameter values | 26, stopped early | 21 |
+| state-only | nothing: every ability vector is zeroed, so it predicts from the board state alone | 28, stopped early | 23 |
+| no-state | nothing: the board state and every ability vector are zeroed, leaving only the record kind | 28, stopped early | 23 |
 
-Gate 1 compares full against identity. The taxonomy baseline is trained but not part of the gate evaluation. The `state-only` and `no-state` baselines are not evaluated.
+Gate 1 compares full against identity. The taxonomy and state-only baselines are compared with full on validation loss and per field, and neither feeds a gate. The no-state baseline was meant to read the acting ability's text without the board, and it read neither.
 
 ### Gate 3 blocks shipping on its concentration canary, and every other blocking figure passes
 
@@ -913,7 +915,7 @@ Each of the six is missing an input: a baseline cache, a label file, a withheld 
 
 | Check | Why it reports nothing |
 |---|---|
-| no-state geometry comparison | That variant's cache has not been encoded. |
+| no-state geometry comparison | The no-state run never trained its encoder, so its cache would hold the output of random weights. |
 | decodability battery | It reads `output/sealed/cards-win-rates.txt`, which is not present locally. |
 | zero-shot keyword check | The checkpoint withheld no keyword, so there is nothing to measure. |
 | matched real-vs-fork, probe diff, role polarity | They need fork, probe and mana records, which the corpus does not have yet. |
@@ -935,10 +937,35 @@ The full model has the lowest loss on both validation strata. Its card-disjoint 
 | full | 39 of 40 | 3.4287 | 2.9146 | 2.6287 |
 | identity | 34 of 36 | 3.8045 | 4.0831 | 3.4496 |
 | taxonomy | 21 of 26 | 3.9906 | 3.7567 | 3.4415 |
+| state-only | 23 of 28 | 4.2424 | 4.3604 | 4.0629 |
+| no-state | 23 of 28 | 10.2220 | 9.0418 | 8.9852 |
 
-Only the identity baseline does worse on held-out text than on its own training stream. For full and taxonomy, training loss sits above both validation losses. Training loss is measured with the anti-memorization noise on `e` and the dropout of context abilities switched on, averaged over an epoch while the weights change. Validation is measured at the end of the epoch with both off. The validation samples are drawn in the same class mixture as training batches, so the mixture does not explain the ordering. Identity's card-disjoint loss sits above its training loss anyway. The card-disjoint sample holds texts it never trained on, and for those it has only an untrained vector.
+The ranking does not come from the runs' unequal lengths. At epoch 21 the full model's card-disjoint loss is 3.12, already below every baseline's best.
+
+The state-only baseline sets the floor for a model that reads no text, and reading the text lowers the card-disjoint loss by about a third from that floor. The taxonomy baseline recovers about two fifths of the full model's gain, and the identity baseline about a fifth. Identity holds only untrained vectors for held-out texts, so its gain on this sample comes from the texts it did train on: the other abilities on the board, and the acting abilities of records in these games that are not held out.
+
+Identity and state-only do worse on the card-disjoint sample than on their own training stream. For full and taxonomy, training loss sits above both validation losses. Training loss is measured with the anti-memorization noise on `e` and the dropout of context abilities switched on, averaged over an epoch while the weights change. Validation is measured at the end of the epoch with both off. The validation samples are drawn in the same class mixture as training batches, so the mixture does not explain the ordering. Identity's card-disjoint loss sits above its training loss anyway. The card-disjoint sample holds texts it never trained on, and for those it has only an untrained vector. State-only reads no text, so its smaller excess comes from the sample's boards, which the gap comparison below shows are harder to predict than the game-disjoint sample's.
 
 The validation curves are smooth and the training curve is jagged because validation scores the same fixed 2,048-record sample per stratum every epoch. Those samples are not the gate-one slice, so these losses and gate 1 describe different populations. Every loss jumps between epochs 2 and 3, when the sparse fields join the loss, and values on either side of that line are not comparable. The full model's card-disjoint loss first comes within 5% of its best at epoch 28 and stays there, apart from small rises at epochs 31 and 32.
+
+### The full model loses no more on unseen text than the state-only baseline does
+
+The full model's card-disjoint loss exceeds its game-disjoint loss by the same amount as the state-only baseline's. State-only reads no text, so its gap between the two samples measures only how much harder the card-disjoint games' boards are to predict. A model that lost anything on held-out text would show a larger gap than that. The full model's gap is no larger, and the taxonomy baseline's is larger by only a few hundredths. The identity baseline's gap is about twice as large, and the excess is what it had memorized for the texts it trained on.
+
+| Model | Card-disjoint | Game-disjoint | Gap |
+|---|---:|---:|---:|
+| full | 2.9146 | 2.6287 | 0.29 |
+| taxonomy | 3.7567 | 3.4415 | 0.32 |
+| identity | 4.0831 | 3.4496 | 0.63 |
+| state-only | 4.3604 | 4.0629 | 0.30 |
+
+The card-disjoint sample mixes records whose acting text is held out with records of the same games whose acting text is not. The comparison is therefore weaker than one on the gate-one slice alone, which holds only held-out acting texts.
+
+### The no-state baseline read no ability text, so it cannot test whether the board improves `e`
+
+The no-state run zeroes the acting ability's vector along with the board state and the board's ability vectors. The design called for keeping the acting ability's vector, so that the baseline reads the text and never the board. With every vector zeroed, no gradient reaches the encoder: its gradient norm reads zero at every one of the 7,168 shards whose last step the log reports it for. The effect head learned one average effect per record kind, and the encoder kept its random initial weights.
+
+Its loss is therefore the floor for a model given no input at all, and it tells nothing about the claim the baseline was built to test: that conditioning on the board yields a better `e`. Retraining it with the acting vector restored costs about ten hours of training for a comparison expected to say little, so that claim stays untested.
 
 ### Life, damage and the affected gate flatten within ten epochs, keyword and zone predictions improve until about epoch 30, and the blocker fields stop moving after epoch 3
 
@@ -974,3 +1001,31 @@ The full model's advantage over identity is largest for keywords gained, zone ou
 | min_blockers | 76% | 76% | 0 |
 
 Keywords gained is where memorization fails worst. The card-disjoint sample contains texts the identity baseline never trained on, and for those it has no way to know which keyword a "gains …" ability grants. The encoder reads the keyword off the script.
+
+### The board alone decides damage, life and blocking, and the text decides keywords, counters, tapping and library events
+
+The state-only baseline shows how much of each field the board predicts with no text at all. Against it, the text adds almost nothing to damage taken, life change, whether an entity is affected, and the two blocker fields. It adds the most to the fields whose value an ability's text states: which keyword it grants, how many +1/+1 counters it places, whether it taps or untaps, and what it does to a library. The table below adds the taxonomy and state-only baselines and the fields the previous table left out, all at each run's best epoch on the card-disjoint sample.
+
+| Field | Full | Taxonomy | Identity | State-only | Full − state-only (points) |
+|---|---:|---:|---:|---:|---:|
+| keywords_gained | 92% | 45% | 56% | 36% | +56 |
+| library_events | 90% | 63% | 58% | 51% | +39 |
+| counters_delta_p1p1 | 83% | 73% | 46% | 46% | +37 |
+| tap_state | 93% | 59% | 55% | 58% | +35 |
+| toughness_delta | 82% | 77% | 69% | 59% | +23 |
+| poison_delta | 64% | 53% | 69% | 42% | +22 |
+| power_delta | 80% | 75% | 68% | 59% | +21 |
+| zone_outcome | 91% | 80% | 76% | 73% | +18 |
+| cards_discarded | 74% | 57% | 62% | 67% | +7 |
+| gate | 79% | 75% | 74% | 73% | +6 |
+| cards_milled | 61% | 61% | 47% | 56% | +5 |
+| cards_drawn | 72% | 66% | 67% | 67% | +5 |
+| life_delta | 86% | 83% | 81% | 82% | +4 |
+| damage_taken | 75% | 75% | 74% | 74% | +1 |
+| blocker_legal | 63% | 64% | 63% | 63% | 0 |
+| min_blockers | 76% | 76% | 76% | 76% | 0 |
+
+The taxonomy baseline recovers most of the text's gain on +1/+1 counters, power and toughness, and little of it on keywords gained. Its hash records which parameters a script sets and none of their values. That is enough to know an ability pumps or places counters, and not enough to know which keyword it grants, because the keyword is a parameter value.
+
+The identity baseline does worse than state-only on cards milled, cards discarded and tapped state. For a held-out text it feeds the effect head an untrained vector, an input unlike anything the head saw in training, and the head predicts worse from it than from the zero vector state-only gives it. Gate 1 measures the full model against identity, so its margins slightly overstate what reading the text adds over predicting from the board alone.
+
