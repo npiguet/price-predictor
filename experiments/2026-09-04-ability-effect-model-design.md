@@ -695,7 +695,66 @@ Double strike passes on its second hit and not on its first strike. With double 
 
 Infect shows a narrower gap of the same kind. Its −1/−1 counter field agrees almost every time, and its damage-taken field sits at chance. The model has learned that infect puts counters on a creature and not that the counters replace the damage. Wither, on its eleven records, moves both fields the rules' way far more often than chance.
 
-The six routings are verdicts on the size of the game-disjoint stratum, not on the model. Most of those keywords agree at high rates on the records they have.
+The six routings say that the evaluation population holds too few of those combats, not that the model fails them. Most of those keywords agree at high rates on the records they have.
+
+### Deathtouch and indestructible combats are scarce because few creatures carry the keywords and Forge's combat AI avoids the combats deathtouch decides
+
+Two causes keep deathtouch and indestructible short of gate 2's 200 qualifying records. Few creatures in these games carry either keyword, so their combats are rare to begin with. And Forge's combat AI declines the attacks and blocks in which deathtouch would decide the outcome, so the combats gate 2 counts are rarer than the keyword's presence on the board implies. The decision records hold too few indestructible cases to show whether the AI avoids indestructible as well.
+
+Deathtouch and indestructible fall short of 200 qualifying records on a 1,000-game stratum, and so does first strike. The rates are gate 2's qualifying records on the 1,000 game-disjoint games, and the games needed are 200 divided by that rate.
+
+| Keyword | Qualifying records per game | Games for 200 |
+|---|---:|---:|
+| first strike | 0.047 | ~4,300 |
+| deathtouch | 0.069 | ~2,900 |
+| indestructible | 0.019 | ~10,500 |
+
+The shortage starts on the board, before qualification. Deathtouch and indestructible creatures fight far less often than creatures without a damage-step keyword. The table counts every time a creature attacked or blocked in a combat record of the 1,000 game-disjoint games.
+
+| Creature | Times it attacked or blocked |
+|---|---:|
+| no damage-step keyword | 17,437 |
+| deathtouch | 403 |
+| indestructible | 112 |
+
+The raw corpus holds 120,242 games, so the 10,500 games indestructible needs are available without collecting more. The [gen-2 design](2026-09-18-effect-model-gen2-improvements-design.md) takes that up.
+
+The avoidance cause cannot be read off combat records. A combat record exists only when Forge attacked, so an attack Forge declined leaves no combat record at all. The playability decision points show the declined options instead. An `attackers` record lists the creatures the rules let the active player attack with, and a `blockers` record lists the creatures that may legally block one attacker. `scripts/analyze_keyword_combat_avoidance.py` reads both over the two validation strata, 6,848 games kept whole, and joins each to the same turn's combat record to see what Forge chose.
+
+The script keeps only the records taken at the real decision:
+
+- For attacking, an `attackers` record whose snapshot phase is `combat_declare_attackers` and whose actor is the active player. Each legal attacker is classed by the worst block it faces from the defender's untapped creatures, and counts as attacked if the combat record shows it attacking.
+- For blocking, a `blockers` record whose phase is `combat_declare_blockers` and whose anchor attacker is attacking. Each legal (attacker, blocker) pair is classed by what the block would do, and counts as blocked if the combat record shows that block.
+- Only two-player games are read. Creatures with first strike or double strike are left out on both sides, because they change who kills whom before damage is compared. On the attacking side, a flyer's possible blockers are approximated as the creatures with flying or reach; the blocking side reads Forge's own legal-blocker lists.
+
+The intervals are 95% Wilson score intervals, which treat each decision as independent. Attackers declared in the same turn are not, so the true intervals are somewhat wider.
+
+An attacker that only a deathtouch creature can kill attacks about as rarely as one facing an ordinary blocker that kills it and survives, and far less often than one facing only blockers it survives. Forge treats a deathtouch blocker as lethal. The first deathtouch row is the one that isolates the keyword. Without deathtouch, those attackers would face only blockers they survive, a class that attacks about half the time. With it, they attack at well under half that rate, and less often than attackers facing an ordinary trade.
+
+| Attacker's worst possible block | Decisions | Attacked | 95% interval |
+|---|---:|---:|---|
+| no blocker | 2,769 | 88.4% | 87.2–89.5% |
+| only blockers it survives | 2,652 | 51.5% | 49.6–53.4% |
+| an ordinary blocker trades with it | 2,345 | 35.9% | 34.0–37.9% |
+| a deathtouch blocker kills it, and it would survive that blocker without deathtouch | 97 | 19.6% | 12.9–28.6% |
+| a deathtouch blocker kills it, and it would die anyway | 48 | 18.8% | 10.2–31.9% |
+| an ordinary blocker kills it and survives | 5,028 | 14.1% | 13.2–15.1% |
+| an indestructible blocker kills it | 4 | 50.0% | 15.0–85.0% |
+
+A block that would kill the attacker but lose the blocker only because the attacker has deathtouch is made less than half as often as an ordinary trade. The intervals of the two rows do not overlap. The blocks that only deathtouch turns into chump blocks are too few to separate from ordinary chump blocks, and the two indestructible rows hold fourteen pairs between them.
+
+| What the block would do | Pairs | Blocked | 95% interval |
+|---|---:|---:|---|
+| ordinary, nobody dies | 568 | 31.9% | 28.2–35.8% |
+| ordinary, the blocker kills the attacker and survives | 1,258 | 28.2% | 25.8–30.8% |
+| ordinary chump block | 3,563 | 25.8% | 24.4–27.3% |
+| chump block, only because the attacker has deathtouch | 23 | 26.1% | 12.5–46.5% |
+| ordinary trade | 1,755 | 24.6% | 22.7–26.7% |
+| trade, only because the attacker has deathtouch | 57 | 10.5% | 4.9–21.1% |
+| the blocker dies, and indestructible saves the attacker | 11 | 18.2% | 5.1–47.7% |
+| nobody dies, and indestructible saves the attacker | 3 | 33.3% | 6.1–79.2% |
+
+The combats that gate 2 counts for deathtouch are those where the keyword changes who dies. Those are the attacks and blocks Forge declines most often, so on-policy games reach them far more rarely than the keyword's presence on the board would. The random seat of the gen-2 design ([`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md)) declares attacks and blocks without this avoidance.
 
 ### Ward sits nearer every longhand twin than the median bare keyword, but deathtouch is nearer still
 
