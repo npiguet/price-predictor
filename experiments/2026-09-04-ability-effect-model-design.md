@@ -266,7 +266,7 @@ A card leaves the depleted pool when any one of its lines is held out, so holdin
 
 Byte-identical scripts merge and paraphrases do not, so `ValidTgts$ Creature,Player` and `ValidTgts$ Any` hash apart. The unique-text filter covers that residue at the yield cost it always carried. Vanilla reprints need no handling, because a card with no ability lines produces no ability record.
 
-Recency survives as a reported breakdown rather than a second holdout. Novel mechanics are harder to predict than old effects with unusual wording, and a text hash does not prefer them, so gate 1 reports its margins split by whether the held-out text's first printing is recent.
+Recency is neither a holdout nor a reported breakdown. Gate 1 asks whether the encoder reads a text it has never seen. A held-out text is unseen whatever its first printing, so the printing date adds nothing to that question.
 
 The hash has to be stable across processes and machines, which rules out Python's salted `hash()` over strings. A CRC or a truncated digest of the normalized text is enough.
 
@@ -499,64 +499,263 @@ The subsystems stage so that the first `e` vectors exist and pass canaries as ea
 
 ## Outcome / Result
 
-The first run at corpus scale trained on a twentieth of the corpus and on none of the data the corpus was built to supply, so it settles no gate. The cause is how an epoch chooses its shards, and it is independent of everything this document argues for. The run was made on 2026-09-15 against the curated dataset, on the script surface, withholding `cascade`.
+The effect model does not ship, and gate 3 is what stops it. The model reads ability text: on unseen texts it clears each of gate 1's margins against the identity baseline, the narrowest at nearly twice its threshold. Its embeddings are spread out, but one direction holds too large a share of their variance, and that is one of gate 3's two canaries. Gate 2 blocks nothing; it passes two keywords and routes the other six to a probe because the evaluation population holds too few of their combats.
 
-### An epoch's contiguous shard block never left the corpus's opening family
+Three models are compared below. Each trained on the curated corpus under `output/effects/corpus/`, on the script surface, with the same split and seed. An epoch is one pass of the training schedule. A run keeps the checkpoint of its best epoch, the one with the lowest card-disjoint validation loss.
 
-`build-corpus` writes its three source families into one directory and the trainer reads that directory in path order, so each family occupies a contiguous stretch of the shard list.
+| Model | What gives each ability its vector `e` | Epochs run | Best epoch |
+|---|---|---|---|
+| full | the ability encoder, reading the script | 40 | 39 |
+| identity | a free learned vector per ability text, so it can only recall texts it trained on | 36 | 34 |
+| taxonomy | a hash of the script's API type and parameter keys, with no parameter values | 26, stopped early | 21 |
 
-| Family | Shard indices | Shards |
+Gate 1 compares full against identity. The taxonomy baseline is trained but not part of the gate evaluation. The `state-only` and `no-state` baselines are not evaluated.
+
+### Gate 3 blocks shipping on its concentration canary, and every other blocking figure passes
+
+Gates 1 and 3 block shipping and gate 2 never does. Of the five blocking figures, only the share of variance on the top principal component misses its threshold.
+
+| Gate | Figure | Threshold | Value | Result |
+|---|---|---|---|---|
+| 1 | affected-gate F1 gain over identity | ≥ 0.05 | +0.2023 | pass |
+| 1 | zone-outcome accuracy gain over identity | ≥ 0.05 | +0.0910 | pass |
+| 1 | Poisson deviance reduction against identity | ≥ 5% | 58.1% | pass |
+| 3 | mean pairwise cosine | ≤ 0.5 | 0.136 | pass |
+| 3 | top principal component's share of variance | ≤ 30% | 40.2% | fail |
+
+### The encoder predicts unseen ability texts far better than a model that can only memorize them (gate 1)
+
+All three of gate 1's margins pass. The deviance reduction clears its threshold by the widest factor, the F1 gain by the next widest, and the zone-outcome gain by the least, at nearly twice its threshold.
+
+Gate 1 is scored on the gate-one slice: 17,764 resolution records from card-disjoint games whose acting ability text is held out, covering 342 unique texts. None of those texts appears anywhere in the 781,612 training records. The identity baseline therefore holds only an untrained vector for every one of them, and predicts from the board state alone. The gap between the two models on this slice is what reading the text is worth.
+
+Each figure measures a different part of the prediction:
+
+- The affected gate is the per-entity yes/no prediction of whether the ability changed that entity at all. F1 is the harmonic mean of its precision (the share of predicted "affected" that were affected) and its recall (the share of affected entities it flagged).
+- Zone-outcome accuracy is the share of correct predictions of where an entity ended up: stayed, died, exiled, returned to hand, and so on.
+- Poisson deviance is the error measure for the count fields (damage, counters, cards drawn, life), playing the role squared error plays for continuous values. The figure is the relative reduction of the full model's deviance against identity's.
+
+### The embeddings are spread out, but three directions hold four fifths of their variance (gate 3)
+
+The vectors are not collapsed onto a point. Two random ability vectors are nearly orthogonal on average, far inside the cosine canary's threshold. The spread is concentrated in a few directions instead. Principal components are the orthogonal directions of the 64-dimensional space ordered by how much of the vectors' spread each one holds. The first carries 40%, and the first three together carry 80%.
+
+| Principal component | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| Share of variance | 40.2% | 25% | 15% | 6% | 5% |
+
+Gate 3 is measured over the 55,591 distinct vectors in the embedding cache under `output/effects/abilities/`. That set includes the perturbed-variant texts. It also counts a text printed on several cards once per card whose vector differs from the others in the fifth decimal place. Over one vector per unique script text the shares move by less than a third of a point. The second component alone holds a quarter of the variance, so the space is concentrated along more than one direction rather than along a single stray one.
+
+### Nine directions hold all the variance the encoder uses
+
+The 64-dimensional vector varies along nine directions, and the other 55 hold about a thousandth of its variance between them. The spread along the tenth direction is a twenty-fifth of the spread along the first. The participation ratio, the number of equally-weighted directions that would give the same concentration, is 3.9. The full tables, the texts at the ends of each direction and every probe below are in `output/effects/reports/embedding-probes-20260919/`, produced by the scripts in `scripts/effect_embedding_probes/`.
+
+| Principal component | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10–64 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Share of variance | 40.0% | 25.0% | 15.3% | 6.3% | 4.7% | 3.5% | 2.5% | 1.7% | 0.8% | 0.1% |
+| Standard deviation along it | 30.6 | 24.3 | 19.0 | 12.1 | 10.5 | 9.0 | 7.7 | 6.4 | 4.4 | ≤ 1.2 |
+
+Every figure from here to the gate-2 section is measured over one vector per unique script text: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because they have no card to describe.
+
+The encoder's training noise does not limit the space. Training adds Gaussian noise with a standard deviation of 0.05 to each coordinate of `e`. The vectors average a length of 52, so the noise moves a vector by about a thousandth of its length.
+
+### Each direction separates two kinds of observed outcome, and the API types are spread along it
+
+Every one of the nine directions contrasts two kinds of outcome that the effect head predicts. The evidence is each ability text's effect profile: its training-corpus resolutions summarized as the share that drew a card, dealt damage, removed a creature and so on, plus the share of affected entities that belong to the opponent. The table gives, for each direction, the texts at its two ends and the profile statistics most correlated with it. Each correlation weights a text by n/(n+5), where n is its number of resolutions, so a text seen once counts for little.
+
+| Direction (share) | Texts at one end | Texts at the other end | Most correlated observed statistics |
+|---|---|---|---|
+| 1 (40%) | mana abilities, draw, scry, discard | myriad and haste grants, threaten effects, token and copy triggers | card drawn +0.51; token created −0.32 |
+| 2 (25%) | lifelink grants, life gain, damage | lands put onto the battlefield, returns from the graveyard, modal spells | life changed +0.47; any zone change −0.45 |
+| 3 (15%) | destroy and sacrifice | temporary keyword and ability grants, animation | token created −0.42; permanent to graveyard −0.32; power or toughness changed +0.27 |
+| 4 (6%) | mana doubling, granted mana abilities | "target opponent discards" | card discarded +0.35; mana produced −0.22 |
+| 5 (5%) | tutors, card draw, static power boosts | counterspells, edicts | share of affected entities on the opponent's side +0.52 |
+| 6 (3.5%) | shroud grants, alternative costs | static +N/+N from auras, equipment and thresholds | static toughness boost +0.49 |
+| 7 (2.5%) | "each player" wheels and mass bounce | saga chapters, counter triggers | counters changed +0.42; life changed −0.31 |
+| 8 (1.7%) | damage to each creature | counters other than +1/+1 | damage dealt −0.47; counters changed +0.40 |
+| 9 (0.8%) | combat keywords, mana abilities | assorted triggers | mana produced −0.30 |
+
+The script API type places texts along these directions without defining them. The API type is the first word of the script and names the Forge effect the line runs. On its own it explains 47% of the first direction's variance and between 29% and 55% of each of the other eight. Subtracting each API type's mean vector leaves 53% of the variance. The principal directions of that residual are the full space's own: each lies within 23 degrees of its counterpart. The differences between two `Pump` texts therefore run along the same axes as the difference between `Pump` and `Draw`.
+
+The API types' positions along the first direction order them by outcome. `Mana` and `Draw` sit furthest toward the card-flow end, and `Untap`, `CopyPermanent` and `Token` furthest toward the other. The target does not move a text along it: `DealDamage` aimed at a creature and at any target differ by a fifth of a standard deviation.
+
+| Script API type | Unique texts | Mean position on direction 1 (SD units) |
+|---|---:|---:|
+| `Mana` | 822 | +2.05 |
+| `Draw` | 1,712 | +1.67 |
+| `Scry` | 171 | +1.58 |
+| `Discard` | 453 | +1.04 |
+| `GainLife` | 648 | +0.82 |
+| `PutCounter` | 1,915 | +0.70 |
+| `DealDamage` | 1,667 | +0.20 |
+| `ChangeZone` | 3,521 | 0.00 |
+| `Pump` | 3,108 | −0.66 |
+| `Token` | 2,341 | −0.89 |
+| `CopyPermanent` | 208 | −1.10 |
+| `Untap` | 283 | −1.20 |
+
+No direction follows a property unrelated to what the ability does. The acting card's mana value, colours and types, the text's length and how often it acts in the training corpus each explain at most 6% of any direction's variance. Whether the text is held out explains none.
+
+### The API type explains under half of the space, and the words of the text explain four fifths
+
+The embedding holds much more than the API type, and almost all of it is carried by which words the text contains. Each row of the table is a ridge regression from a set of features to the vector. R² is the share of variance it predicts out of fold, with the texts split into five folds by carrying card so one card's texts never sit on both sides. The parsed script features are what a parser reads off the script: API type, line kind, trigger or static mode, target type, parameter-key presence, cost, stated amounts, who is named, duration and length.
+
+| Features | R² of the whole space |
+|---|---:|
+| API type | 0.46 |
+| + line kind | 0.47 |
+| + every parsed script feature | 0.59 |
+| + the acting card's types, mana value and colours | 0.60 |
+| + held-out status and corpus frequency | 0.60 |
+| which words appear, anywhere in the text | 0.82 |
+| which words appear, description parameters removed | 0.72 |
+| which words appear, description parameters only | 0.67 |
+
+The three word rows predict the scores on the nine directions, which hold 99.9% of the variance. A description parameter (`SpellDescription$`, `TriggerDescription$`, `Description$`) carries the card's rules text inside the script. That English alone predicts two thirds of the embedding. A trigger line names the ability it runs only by an SVar label such as `Execute$ TrigDraw`, so for a trigger the description is the only place the effect is spelled out.
+
+The encoder cannot recover what the script line does not show. A modal spell's line lists its modes by SVar label only (`Choices$ DBDmgC,DBDmgP | SP$ Charm`), and 26 such charms share one vector.
+
+### The encoder keeps what changes the outcome and drops engine bookkeeping, costs and amounts
+
+The encoder keeps the parameters that change what happens and discards the ones that only steer Forge. The table compares linear probes from the full model's vectors with the same probes from the taxonomy baseline's. The taxonomy vector is a hash of the API type and the set of parameter keys, so it holds every key's presence and no value. AUC is the probability that a text with the property scores above one without it, and 0.5 is chance. Every text is used, and a text lacking the property is labelled as lacking it.
+
+| Property | Metric | full | taxonomy |
+|---|---|---:|---:|
+| API type (113 classes, largest 9%) | accuracy | 0.64 | 0.96 |
+| line kind (largest class 36%) | accuracy | 0.68 | 0.93 |
+| outcome keys: `AddPower`, `Produced`, `NumDmg`, `TokenScript`, `KW` | AUC | 0.98–1.00 | 1.00 |
+| engine keys: `AILogic`, `Planeswalker`, `SorcerySpeed`, `OptionalDecider`, `StackDescription` | AUC | 0.67–0.74 | 1.00 |
+| cost includes `{T}` | AUC | 0.78 | 0.96 |
+| cost includes a sacrifice | AUC | 0.74 | 0.92 |
+| lasts until end of turn | AUC | 0.97 | 0.92 |
+| names the opponent | AUC | 0.82 | 0.81 |
+| text is held out | AUC | 0.49 | 0.52 |
+| damage amount | R² | 0.34 | 0.55 |
+| mana in the activation cost | R² | 0.06 | 0.33 |
+
+The API types the full model's probe confuses are the ones that do the same thing. A mass version is read as its single-target version, a copy as a token, and a steal as a pump.
+
+| API type | Read by the full model's probe as | Share of its texts |
 |---|---|---:|
-| `depleted` | 0 – 2,425 | 2,426 |
-| `full-strength` | 2,426 – 3,124 | 699 |
-| `variants` | 3,125 – 3,193 | 69 |
+| `ChangeZoneAll` | `ChangeZone` | 81% |
+| `DestroyAll` | `Destroy` | 74% |
+| `CopyPermanent` | `Token` | 63% |
+| `GainControl` | `Pump` | 45% |
+| `PumpAll` | `Pump` | 37% |
 
-An epoch read eighteen consecutive shards and the next epoch started where the last one stopped. Nine epochs reached index 161. Every shard read came from one collection run's first two workers, and the model saw no full-strength record and no synthetic variant at all — the corpus built to supply the anti-memorization lever was never asked for one.
+The nearest neighbours of well-known lines group the same way. The keyword line *Vigilance* sits beside the static abilities that grant vigilance, which have a different API type. *Annihilator* sits beside Murder.
 
-The epoch bound would not have rescued it. Forty epochs of eighteen shards reach index 720, which is still inside the depleted block, so no run with these defaults can reach a variant shard whatever its patience.
+Amounts are the clearest loss. Lightning Bolt's nearest neighbours are the same sentence with 1, 2, 4, 5, 6, 7, 10 and X damage, all at a cosine similarity of at least 0.997. Within one API type, the full model predicts the damage amount less well than the taxonomy baseline, which sees only which keys are present. Power and toughness changes are the only amounts it reads as well as the key set gives them.
 
-The eighteen was sized correctly against the corpus it was written for: a 701-shard raw corpus, which forty epochs cover exactly once. Curation multiplied the shard count by four and a half, and a default expressed in shards rather than in fractions of a corpus silently stopped meaning what it said.
+### A non-linear read of the embedding predicts observed effects better than the parsed script does
 
-### The thin-stratum warning described the sample rather than the stratum
+The embedding predicts what an ability was observed to do better than any feature set a parser reads off the script, once the probe may be non-linear. The effect head reads `e` through a transformer, so a linear probe understates what the head can use. The table gives the median, over 90 profile statistics, of each probe's out-of-fold R², weighted by n/(n+5).
 
-The run warned that the card-disjoint stratum held sixteen resolution records on texts absent from training, against a floor of two thousand, and advised collecting more full-strength games. The stratum holds roughly seventeen thousand.
+| Input | Linear ridge | Boosted trees | 20 nearest neighbours |
+|---|---:|---:|---:|
+| full model's `e` | 0.21 | 0.57 | 0.55 |
+| taxonomy baseline's `e` | 0.21 | 0.40 | 0.35 |
+| API type alone | 0.28 | — | — |
+| every parsed script feature | 0.45 | 0.51 | — |
 
-The check sizes itself on the validation records the trainer keeps, not on the stratum on disk. Those records are the first two thousand the reader meets, the reader takes the strata in path order, and the depleted shards sort first — so the sample came entirely from the games that slipped past depletion, which are the games least likely to carry a held-out card.
+With boosted trees the full model's vector beats the taxonomy vector on four statistics in five, and the parsed script features on two in three. Its largest margins are on outcomes the text states in words but no parameter key records.
 
-| Slice | Resolution records | On a held-out text |
-|---|---|---:|
-| The seven depleted shards the trainer sampled | 905 | 26 |
-| Twelve full-strength shards | 7,294 | 312 |
-| All 655 full-strength shards, extrapolated | — | ~17,000 |
+| Observed statistic | full `e`, boosted trees | parsed features, boosted trees |
+|---|---:|---:|
+| share of resolutions that looked at library cards | 0.81 | 0.56 |
+| share that discarded a card | 0.79 | 0.53 |
+| share that returned a permanent to hand | 0.64 | 0.25 |
+| share that tapped the controller's own permanent | 0.62 | 0.25 |
+| entities a static ability touched | 0.64 | 0.13 |
+| share of activations that sacrificed as a cost | 0.20 | 0.94 |
+| share of activations that tapped as a cost | 0.19 | 0.94 |
+| share of resolutions that countered a spell | 0.54 | 0.92 |
 
-Gate 1 reads the stratum from disk rather than the trainer's sample, so the gate itself was never at risk. What the warning measured was the sample.
+The embedding loses on costs and on counterspells. A parser reads an activation's cost directly from `Cost$` and a counterspell from its API type, and the embedding keeps too little of either to recover them. The space therefore encodes what an ability does when it resolves: which cards move where, whose life and resources change, and which permanents gain or lose what. The API type is the largest single clue to that, and the encoder groups the types by outcome rather than by name.
 
-### Validation carried no trend because consecutive epochs trained on unrelated slices
+### Gate 2 passes lifelink and double strike, and the model has learned the second hit of double strike but not the first strike
 
-Training loss fell across the run, with one rise at epoch 8, while both validation strata moved without direction.
+Lifelink passes with near-perfect agreement and double strike passes above the threshold. The six other keywords are routed to a probe as under-sampled. No keyword is routed for disagreeing.
 
-| Epoch | Train | Card-disjoint | Game-disjoint |
-|---:|---:|---:|---:|
-| 1 | 10.4105 | 2.9826 | 3.1530 |
-| 2 | 1.5322 | 84.8214 | 84.8832 |
-| 3 | 1.2031 | 3.2118 | 3.2737 |
-| 4 | 0.8719 | 2.0089 | 2.4743 |
-| 5 | 0.5600 | 3.7575 | 3.9252 |
-| 6 | 0.5015 | 3.0404 | 3.2044 |
-| 7 | 0.4332 | 4.6186 | 4.2299 |
-| 8 | 0.5468 | 2.1045 | 2.3176 |
-| 9 | 0.3287 | 2.7160 | 2.7626 |
+Gate 2 checks whether the model uses a keyword, not whether it generalizes to unseen text, so it runs on the combat records of the 1,000 game-disjoint games. A record qualifies for a keyword when that keyword's carrier is in a combat where the rules make the keyword change the outcome, for example a lifelinker dealing damage. The evaluator builds each qualifying record twice in one batch: once as collected, once with the keyword removed from the carrier's model input. For each field the rules say the keyword moves, it checks whether the prediction moves in the rules' direction. A record agrees only when every field scored on it moves correctly. A keyword passes with at least 200 qualifying records and at least 70% of them agreeing, and fewer than 200 routes it to a probe whatever its agreement.
 
-The gap between the two columns is not memorization: a shard is read once and never revisited, so no record is seen twice and there is nothing to memorize. Each epoch fine-tuned on eighteen fresh shards from one worker's consecutive JVM lifetimes, which share pools and a deck-building pass and are about as correlated as two games in the corpus get. Validation then measured wherever that slice left the model. Early stopping selected epoch 4 on that signal.
+The per-field percentages are the share of records scoring that field where the prediction moved the rules' way. Removing a keyword's token always perturbs the prediction a little, so a field the model ignores moves either way about equally often. Half is the level that means no knowledge.
 
-Epoch 2 is a separate failure. Both strata rose by a factor of twenty-eight together and returned the next epoch, which is a few records hitting an unbounded term rather than a state the model was in. Nothing in the run's output names the term, because the loss was reported only as a total.
+| Keyword | Verdict | Qualifying records | Agreement, overall and per field |
+|---|---|---:|---|
+| lifelink | pass | 432 | 98.1% overall; controller life_delta 98% |
+| double strike | pass | 244 | 71.7% overall; carrier damage_taken 52%, carrier died 64%, defending player life_delta 76%, opponent damage_taken 69%, opponent died 100% |
+| first strike | probe, under-sampled | 47 | carrier damage_taken 66%, carrier died 60% |
+| deathtouch | probe, under-sampled | 69 | opponent died 88% |
+| trample | probe, under-sampled | 179 | defending player life_delta 83% |
+| indestructible | probe, under-sampled | 19 | carrier died 100% |
+| wither | probe, under-sampled | 11 | opponent −1/−1 counters 100%, opponent damage_taken 82% |
+| infect | probe, under-sampled | 73 | defending player poison 91%, life_delta 93%, opponent −1/−1 counters 97%, opponent damage_taken 53% |
 
-### What the run does establish
+Double strike passes on its second hit and not on its first strike. With double strike, the creature it fights dies more often and the defending player loses more life, and the model predicts both. The first-strike half says the carrier kills its blocker before the blocker strikes back, so the carrier takes less damage and dies less often. The model gets the carrier's damage taken right barely more often than chance and its death only somewhat more often. First strike on its own records shows the same weakness. Killing before being struck back is the damage-step mechanism the model has learned least.
 
-The pipeline runs end to end at corpus scale. All eight sampling classes were present, so the batch mixture ran unrenormalized. An epoch of five thousand steps costs about forty-five minutes on the 8 GB budget with live context re-encoding, so the stop-gradient cache is not needed at this size.
+Infect shows a narrower gap of the same kind. Its −1/−1 counter field agrees almost every time, and its damage-taken field sits at chance. The model has learned that infect puts counters on a creature and not that the counters replace the damage. Wither, on its eleven records, moves both fields the rules' way far more often than chance.
 
-Three gates still decide whether the design works, and all three remain open. Gate 1 is the three margins against the identity baseline on the unique-text stratum. Gate 3 is the collapse canaries over the cache. Gate 2 is the per-keyword verdict on the eight damage-step keywords, which is what says whether probe machinery is worth building. Fill them in here after a run that reads the whole corpus.
+The six routings are verdicts on the size of the game-disjoint stratum, not on the model. Most of those keywords agree at high rates on the records they have.
 
-Three gates decide whether the design works, and each needs that run. Gate 1 is the three margins against the identity baseline on the unique-text stratum. Gate 3 is the collapse canaries over the cache. Gate 2 is the per-keyword verdict on the eight damage-step keywords, which is what says whether stage three has to build probe machinery at all. Fill them in here.
+### Nine checks report nothing, and none of them because of the model
 
-The run also settles the corpus questions the design left open: how many records each of the three stage-one sampling classes actually yields, what fraction of the converted corpus sealed self-play never reaches, and whether the 8 GB budget holds with live context re-encoding or forces the stop-gradient cache.
+| Check | Why it reports nothing |
+|---|---|
+| ward canary, nearest-neighbour check | Their checked-in texts, in `src/effects/domain/ward_twins.py` and `NEIGHBOUR_QUERIES` in `evaluate_effect_model.py`, are spelled differently from the cache keys. The keys are lowercase converted prose without reminder text: `ward {2}`, `CARDNAME` where the checked-in texts say "this creature", and a trailing period (`destroy target creature.`). The texts are in the cache under those spellings. |
+| no-state and taxonomy geometry comparisons | Those variants' caches have not been encoded. |
+| decodability battery | It reads `output/sealed/cards-win-rates.txt`, which is not present locally. |
+| zero-shot keyword check | The checkpoint withheld no keyword, so there is nothing to measure. |
+| matched real-vs-fork, probe diff, role polarity | They need fork, probe and mana records, which the corpus does not have yet. |
+
+### The full model predicts unseen text better than the identity baseline predicts text it has memorized
+
+The full model has the lowest loss on both validation strata. Its card-disjoint loss is below even the identity baseline's game-disjoint loss. Game-disjoint games draw on texts both models trained on, so that figure is what pure memorization achieves: reading the text does better on unseen abilities than recall does on seen ones. The taxonomy baseline sits between the two on card-disjoint loss. Knowing an ability's API type and which parameters it sets, without their values, recovers part of what the encoder gains over identity.
+
+![Train, card-disjoint and game-disjoint loss per epoch, one panel per model](images/2026-09-19-effect-model-losses-by-stratum.png)
+
+*Source: `scripts/plot_effect_model_training.py`.*
+
+| Model | Best epoch | Train | Card-disjoint | Game-disjoint |
+|---|---:|---:|---:|---:|
+| full | 39 of 40 | 3.4287 | 2.9146 | 2.6287 |
+| identity | 34 of 36 | 3.8045 | 4.0831 | 3.4496 |
+| taxonomy | 21 of 26 | 3.9906 | 3.7567 | 3.4415 |
+
+Only the identity baseline does worse on held-out text than on its own training stream. For full and taxonomy, training loss sits above both validation losses. Training loss is measured with the anti-memorization noise on `e` and the dropout of context abilities switched on, averaged over an epoch while the weights change. Validation is measured at the end of the epoch with both off. The validation samples are drawn in the same class mixture as training batches, so the mixture does not explain the ordering. Identity's card-disjoint loss sits above its training loss anyway. The card-disjoint sample holds texts it never trained on, and for those it has only an untrained vector.
+
+The validation curves are smooth and the training curve is jagged because validation scores the same fixed 2,048-record sample per stratum every epoch. Those samples are not the gate-one slice, so these losses and gate 1 describe different populations. Every loss jumps between epochs 2 and 3, when the sparse fields join the loss, and values on either side of that line are not comparable. The full model's card-disjoint loss first comes within 5% of its best at epoch 28 and stays there, apart from small rises at epochs 31 and 32.
+
+### Life, damage and the affected gate flatten within ten epochs, keyword and zone predictions improve until about epoch 30, and the blocker fields stop moving after epoch 3
+
+Explained % measures how much of a field's loss the model removes compared with the best constant prediction. It is `1 − loss / floor`, where the floor is the loss of the best constant predictor for that field on the card-disjoint sample, so 0% means predicting the base rate.
+
+![Full model, explained % per field per epoch on the card-disjoint sample](images/2026-09-19-effect-model-per-field.png)
+
+*Source: `scripts/plot_effect_model_training.py`. End labels are epoch-40 values.*
+
+Life change, damage taken and the affected gate are learned first: each is within a few points of its final level by epoch 10. Power and toughness change level off soon after. Keywords gained starts lowest, when the sparse fields switch on at epoch 3, and climbs until about epoch 30. Zone outcome follows the same slow rise. Cards drawn keeps creeping up until the end of the run.
+
+The two blocker fields are the exception. `min_blockers` reaches 76% by epoch 3 and does not move after, and `blocker_legal` stays near 63% throughout. Both are combat and playability fields decided by the board rather than by the ability text, and the model finds what the board tells it within the first few epochs.
+
+### Reading the text helps most on the fields whose value the text states
+
+The full model's advantage over identity is largest for keywords gained, zone outcome, and power and toughness change. Those are the fields whose value an ability's text writes down: which keyword it grants, how much it pumps, where it sends a creature. It is smallest for damage taken, and zero for the two blocker fields, which the board decides.
+
+![Full model and identity baseline, explained % per field at each run's best epoch](images/2026-09-19-effect-model-per-field-paired.png)
+
+*Source: `scripts/plot_effect_model_training.py`. Full at epoch 39, identity at epoch 34, both on the card-disjoint sample.*
+
+| Field | Full | Identity | Gap (points) |
+|---|---:|---:|---:|
+| keywords_gained | 92% | 56% | +36 |
+| zone_outcome | 91% | 76% | +15 |
+| toughness_delta | 82% | 69% | +13 |
+| power_delta | 80% | 68% | +12 |
+| gate | 79% | 74% | +5 |
+| life_delta | 86% | 81% | +5 |
+| cards_drawn | 72% | 67% | +5 |
+| damage_taken | 75% | 74% | +1 |
+| blocker_legal | 63% | 63% | 0 |
+| min_blockers | 76% | 76% | 0 |
+
+Keywords gained is where memorization fails worst. The card-disjoint sample contains texts the identity baseline never trained on, and for those it has no way to know which keyword a "gains …" ability grants. The encoder reads the keyword off the script.
