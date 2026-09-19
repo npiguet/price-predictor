@@ -543,7 +543,7 @@ The vectors are not collapsed onto a point. Two random ability vectors are nearl
 |---|---|---|---|---|---|
 | Share of variance | 40.0% | 25.0% | 15.3% | 6.3% | 4.7% |
 
-Gate 3 is measured over one vector per unique script text in the embedding cache under `output/effects/abilities/`: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because the shipping cache serves only real card and token lines. The second component alone holds a quarter of the variance, so the space is concentrated along more than one direction rather than along a single stray one.
+Gate 3 is measured over one vector per unique script text in the embedding cache under `output/effects/abilities/`: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because the shipping cache serves only real card and token lines. The cache is built with every known keyword replaced by its definition, so a keyword line here is measured as its definition's encoding, not as the keyword token the effect head mostly trained on and gates 1 and 2 score. The [gen-2 design](2026-09-18-effect-model-gen2-improvements-design.md) measures how far that moves the vectors. The second component alone holds a quarter of the variance, so the space is concentrated along more than one direction rather than along a single stray one.
 
 ### Nine directions hold all the variance the encoder uses
 
@@ -554,7 +554,7 @@ The 64-dimensional vector varies along nine directions, and the other 55 hold ab
 | Share of variance | 40.0% | 25.0% | 15.3% | 6.3% | 4.7% | 3.5% | 2.5% | 1.7% | 0.8% | 0.1% |
 | Standard deviation along it | 30.6 | 24.3 | 19.0 | 12.1 | 10.5 | 9.0 | 7.7 | 6.4 | 4.4 | ≤ 1.2 |
 
-Every figure from here to the gate-2 section is measured over one vector per unique script text: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because they have no card to describe.
+Every figure from here to the gate-2 section is measured over one vector per unique script text: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because they have no card to describe. These vectors come from the same cache as gate 3's, so each keyword line among them is its definition's encoding.
 
 The encoder's training noise does not limit the space. Training adds Gaussian noise with a standard deviation of 0.05 to each coordinate of `e`. Over 64 coordinates the noise has an expected length of about 0.40. The vectors average a length of about 53, so the noise moves a vector by under a hundredth of its length, about 0.75%.
 
@@ -642,7 +642,7 @@ The API types the full model's probe confuses are the ones that do the same thin
 | `GainControl` | `Pump` | 45% |
 | `PumpAll` | `Pump` | 37% |
 
-The nearest neighbours of well-known lines group the same way. The keyword line *Vigilance* sits beside the static abilities that grant vigilance, which have a different API type. *Annihilator* sits beside Murder.
+The nearest neighbours of well-known lines group the same way. The keyword line *Vigilance* sits beside the static abilities that grant vigilance, which have a different API type. *Annihilator* sits beside Murder. Both keyword lines are read off the cache, where each is encoded as its reminder text. *Vigilance* there is "Attacking doesn't cause this creature to tap."
 
 Amounts are the clearest loss. Lightning Bolt's nearest neighbours are the same sentence with 1, 2, 4, 5, 6, 7, 10 and X damage, all at a cosine similarity of at least 0.997. Within one API type, the full model predicts the damage amount less well than the taxonomy baseline, which sees only which keys are present. Power and toughness changes are the only amounts it reads as well as the key set gives them.
 
@@ -772,6 +772,8 @@ The ward canary reports a pass. Ward's vector is closer to each of its four func
 
 Measured against the nearest bare keywords instead of the median, the two twins that restate ward {2} exactly would fail. Deathtouch is closer to ward than Frost Titan's line, which is ward {2} written out in full, and than Diffusion Sliver's line. Double strike and flash are about as close as Diffusion Sliver's line. The cost-increase twin sits nearest the median, so the encoder links ward with the counter-unless-paid trigger far more than with a tax paid up front.
 
+The canary reads the shipping cache, which encodes `ward {2}` and every bare keyword as its reminder text rather than as the keyword token. The ward token itself sits further from Diffusion Sliver's line than the cached vector does, at a cosine distance of 0.549 against 0.392, and within 0.08 of the cached distance from the other three twins.
+
 ### The nearest neighbours of a line are the same effect with a different amount, target or cost
 
 Each query's three nearest lines do the same thing as the query. Every neighbour has a cosine similarity of at least 0.99 to its query. Each query is pinned to one card, because the same prose line compiles to different scripts on different cards.
@@ -784,6 +786,126 @@ Each query's three nearest lines do the same thing as the query. Every neighbour
 | target creature gets +2/+2 until end of turn. (Artful Maneuver) | the same line with a soulbond clause; target creature gets +1/+3 until end of turn.; target blocking creature gets +3/+1 until end of turn. |
 
 The neighbours differ from their query in the details the linear probes in the section on what the encoder keeps show it dropping. Lightning Bolt's neighbours change only the damage amount. Two of the draw neighbours add activation costs, {6}{U} and {2}{B} with 2 life. The third is the same prose on another card, compiled to a different script. Murder's second neighbour is a sweeper, so a single-target and a mass version of destroy sit together, as the API-type probe's confusions predict.
+
+### A keyword token encodes only loosely like its own definition, and most closely for the common keywords
+
+A bare keyword token and the definition it stands for land near each other only loosely. Given the encoding of a keyword token, its own definition is the nearest of the 203 definitions one time in ten. A random ordering would put it first one time in 203. Expansion dropout, in "New keywords are handled by expansion dropout over their definitions" above, was meant to teach the encoder that the two are the same thing.
+
+The test encodes every keyword line of the corpus twice with the shipping checkpoint. A keyword line's script text is the keyword's display name, with its parameter where it has one: `Flying`, `Ward:2`, `First Strike`. The bare encoding reads the keyword token, as training does three times in four and gates 1 and 2 always do. The expanded encoding reads the definition in the token's place, which is the reminder text Forge prints for the keyword. Expansion fires on 203 of the 255 keyword names in the corpus. For each keyword, the 203 definitions are ranked by the cosine similarity of their encoding to the bare one, where 1 is the same direction and 0 is orthogonal. Mean reciprocal rank (MRR) is the average of one over the rank of the right definition: 1 when it always comes first, 0.029 under a random ordering of 203. The last column ranks the definition among all 37,106 unique script texts of the corpus instead, where a random ordering gives a median near 18,550. The script and its full outputs are `scripts/effect_embedding_probes/keyword_expansion.py` and `output/effects/reports/keyword-expansion-20260919/`.
+
+| Keywords | Count | Median cosine to own definition | Median cosine to other definitions | Own definition first | Own definition in top 5 | MRR | Median rank of own definition among corpus texts |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| all | 203 | 0.76 | 0.60 | 9.9% | 21.7% | 0.16 | 4,130 |
+| on 300 or more lines | 14 | 0.74 | 0.27 | 28.6% | 35.7% | 0.36 | 1,054 |
+| on 50 to 299 lines | 24 | 0.82 | 0.43 | 20.8% | 45.8% | 0.33 | 906 |
+| on 10 to 49 lines | 137 | 0.75 | 0.61 | 8.0% | 19.0% | 0.14 | 4,149 |
+| on fewer than 10 lines | 28 | 0.74 | 0.63 | 0.0% | 7.1% | 0.05 | 5,839 |
+| alternative cost or activated | 50 | 0.91 | 0.62 | 22.0% | 52.0% | 0.34 | 438 |
+| combat damage | 14 | 0.65 | 0.45 | 14.3% | 21.4% | 0.21 | 6,332 |
+| cost-modifying | 20 | 0.69 | 0.64 | 5.0% | 5.0% | 0.08 | 7,529 |
+| evasion | 10 | 0.69 | 0.61 | 10.0% | 10.0% | 0.14 | 4,325 |
+| triggered | 51 | 0.37 | 0.54 | 3.9% | 13.7% | 0.10 | 5,740 |
+| other | 58 | 0.76 | 0.60 | 5.2% | 10.3% | 0.09 | 4,614 |
+| with a parameter | 103 | 0.87 | 0.64 | 14.6% | 33.0% | 0.23 | 1,820 |
+| without a parameter | 100 | 0.63 | 0.51 | 5.0% | 10.0% | 0.09 | 6,130 |
+| random ordering | | | | 0.5% | 2.5% | 0.029 | about 18,550 |
+
+Common keywords find their definitions most often, and rare ones almost never. No keyword carried by fewer than ten lines ranks its own definition first. Triggered keywords such as prowess and exalted sit furthest from their definitions. Their token is less similar to its own definition than to the median other keyword's. Cost-modifying keywords such as convoke and kicker rank their own definitions lowest by MRR. Alternative costs and activated keywords such as cycling and equip do best of the kinds on every column.
+
+The keywords with a parameter are flattered by how expansion works. Expansion replaces only the keyword word and leaves the parameter behind, so `Ward:2` and its expansion both end in the tokens `: 2`. Part of their similarity is that shared tail.
+
+Well-known keywords split into two groups. Flying, equip, lifelink, cycling and ward rank their own definition first. Flash, menace, hexproof, prowess and exalted rank it far down, and for hexproof and prowess the cosine is negative.
+
+| Keyword line | Lines carrying it | Cosine to own definition | Rank of own definition among 203 |
+|---|---:|---:|---:|
+| `Flying` | 3,443 | 0.91 | 1 |
+| `Equip:2` | 655 | 1.00 | 1 |
+| `Lifelink` | 406 | 0.88 | 1 |
+| `Cycling:2` | 306 | 0.95 | 1 |
+| `Ward:2` | 216 | 0.80 | 1 |
+| `Flash` | 628 | 0.20 | 116 |
+| `Menace` | 431 | 0.22 | 51 |
+| `Hexproof` | 116 | −0.14 | 84 |
+| `Prowess` | 97 | −0.30 | 87 |
+| `Exalted` | 35 | 0.27 | 140 |
+
+Real cards that spell out a keyword's effect without naming it sit next to the keyword's definition, not next to its token. These longhand twins were chosen by hand and include the ward canary's. For each twin line, the 203 keywords are ranked by cosine similarity to it twice: once by their token encodings and once by their definitions. Black Bolt's "whenever you cast a noncreature spell, +2/+2" ranks prowess 194th of 203 by the token and first by the definition. The two exalted twins rank exalted between 136th and 160th by the token and second or third by the definition. Lifelink's twins rank the token first and the definition third. Ward's twins are split: the token ranks ward higher for three of them and the definition for two. Canopy Cover's two static lines find neither flying nor hexproof.
+
+| Twin line spells out | Card | Keyword | Rank of the keyword by its token | Rank by its definition |
+|---|---|---|---:|---:|
+| noncreature spell, +2/+2 | Black Bolt | prowess | 194 | 1 |
+| attacks alone, +1/+1 | Strategic Intervention | exalted | 160 | 2 |
+| Samurai or Warrior attacks alone, +1/+1 | Eiganjo Exemplar | exalted | 136 | 3 |
+| becomes blocked, defender loses 4 life | Vedalken Ghoul | afflict | 37 | 2 |
+| blocks or becomes blocked, +1/+1 | Jukai Trainee | bushido | 22 | 2 |
+| can attack as though it had haste | Instill Energy | haste | 50 | 1 |
+| damage to a creature, destroy it | Lowland Basilisk | deathtouch | 97 | 13 |
+| damage to a player, poison counter | Pit Scorpion | toxic | 108 | 71 |
+| deals damage, you gain that much life | Doubtless One, Horned Cheetah | lifelink | 1 | 3 |
+| you or a permanent you control becomes the target, counter unless pays {1} | Unsettled Mariner | ward | 3 | 2 |
+| becomes the target, counter unless pays {2} | Frost Titan | ward | 20 | 33 |
+| you become the target, counter unless pays {1} | Amulet of Safekeeping | ward | 6 | 24 |
+| a Sliver becomes the target, counter unless pays {2} | Diffusion Sliver | ward | 122 | 89 |
+| spells that target it cost {2} more | Boreal Elemental | ward | 148 | 157 |
+| can't be blocked except by flying or reach | Canopy Cover | flying | 186 | 181 |
+| can't be targeted by opponents | Canopy Cover | hexproof | 201 | 68 |
+
+The encoder has learned a keyword token as a symbol of its own rather than as an abbreviation of its definition. The token and the definition agree best for the keywords the corpus shows most often.
+
+### An unknown keyword expands only when its name is one word, and its definition lands far from the trained keyword's vector
+
+A keyword the vocabulary does not know is meant to be read through its definition, and that works only for keywords whose name is a single word. The vocabulary is the fixed list of 5,000 tokens the encoder has an embedding for, and a token outside it reads as the unknown token `[UNK]`. Expansion looks a definition up by the token the tokenizer produced for the keyword. A multi-word name such as `First Strike` becomes one token, `first_strike`, only when the vocabulary holds that merged entry, and the vocabulary holds it only for a keyword it already knows. An unknown one-word keyword still produces a token spelled like the keyword, so its definition is found and always expanded. Reflect and Transfigure read this way. An unknown multi-word keyword stays separate words, none of which names a definition. A hyphenated keyword never expands, known or not. The tokenizer cuts `Jump-start` at the hyphen, while the definition is looked up under `jump-start`, a token the tokenizer can never produce.
+
+Four keywords in the corpus have a definition and never expand, on 44 lines between them. Of the 202 definitions, five have no vocabulary token: the three multi-word or hyphenated keywords in the table, and Reflect and Transfigure, which expand anyway. Every other multi-word keyword has its merged token.
+
+| Keyword | Lines carrying it | What the encoder reads | Why it does not expand |
+|---|---:|---|---|
+| Starting intensity | 20 | `starting_intensity : 0` | its definition has no reminder text |
+| Jump-start | 13 | `jump - start` | cut at the hyphen |
+| Web-slinging | 10 | `web - slinging : 2 w` | cut at the hyphen |
+| Beam me up | 1 | `beam me up : 2 u` | no merged token, because the vocabulary does not know the keyword |
+
+Where the definition does expand, a new keyword lands nearer the cards that spell out its effect than the trained keyword does, and far from the trained keyword's vector. The simulation deletes each of the 203 keywords from the vocabulary in turn and encodes its line with the definition forced in, as a new keyword would be encoded. That encoding is compared with the trained keyword's token encoding, the vector the effect head learned the keyword from. The `[UNK]` columns encode the same line with no definitions available, so the keyword reads as a bare unknown token.
+
+| Keywords | Count | Median cosine, simulated to trained | Trained keyword first among 203 | In top 5 | MRR | Median rank of trained keyword among corpus texts | `[UNK]`: trained keyword first | `[UNK]`: MRR |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| all | 203 | 0.75 | 9.9% | 20.2% | 0.15 | 5,216 | 3.9% | 0.08 |
+| on 300 or more lines | 14 | 0.64 | 28.6% | 35.7% | 0.31 | 3,986 | 0.0% | 0.02 |
+| on 50 to 299 lines | 24 | 0.79 | 20.8% | 37.5% | 0.27 | 3,152 | 0.0% | 0.03 |
+| on 10 to 49 lines | 137 | 0.74 | 6.6% | 17.5% | 0.13 | 5,036 | 3.6% | 0.08 |
+| on fewer than 10 lines | 28 | 0.76 | 7.1% | 10.7% | 0.11 | 5,373 | 10.7% | 0.18 |
+| alternative cost or activated | 50 | 0.90 | 14.0% | 28.0% | 0.22 | 1,029 | 2.0% | 0.05 |
+| combat damage | 14 | 0.58 | 21.4% | 28.6% | 0.25 | 8,766 | 0.0% | 0.04 |
+| cost-modifying | 20 | 0.67 | 0.0% | 15.0% | 0.06 | 4,870 | 5.0% | 0.09 |
+| evasion | 10 | 0.69 | 20.0% | 30.0% | 0.24 | 8,885 | 0.0% | 0.01 |
+| triggered | 51 | 0.37 | 9.8% | 19.6% | 0.14 | 6,865 | 0.0% | 0.05 |
+| other | 58 | 0.73 | 5.2% | 12.1% | 0.10 | 5,801 | 10.3% | 0.16 |
+| random ordering | | | 0.5% | 2.5% | 0.029 | about 18,550 | 0.5% | 0.029 |
+
+The simulated keyword finds the trained keyword first about as often as the trained keyword finds its definition in the section above. For the median keyword, thousands of corpus texts sit closer to the simulated keyword than the trained keyword does. A bare `[UNK]` finds the trained keyword less often overall. It does better only for the keywords on fewer than ten lines, the cost-modifying ones and the unclassified ones.
+
+The simulated keyword sits nearer the longhand twins than the trained keyword does, except for lifelink's twins and four of ward's five. The table ranks each twin line among all 37,106 corpus texts by cosine similarity, once from the simulated keyword and once from the trained one.
+
+| Twin line's card | Keyword | Twin's rank from the simulated keyword | Twin's rank from the trained keyword |
+|---|---|---:|---:|
+| Black Bolt | prowess | 148 | 23,178 |
+| Strategic Intervention | exalted | 522 | 29,556 |
+| Eiganjo Exemplar | exalted | 57 | 25,642 |
+| Vedalken Ghoul | afflict | 260 | 23,134 |
+| Jukai Trainee | bushido | 27 | 21,318 |
+| Instill Energy | haste | 9 | 487 |
+| Lowland Basilisk | deathtouch | 106 | 5,222 |
+| Pit Scorpion | toxic | 11,185 | 20,885 |
+| Canopy Cover | flying | 17,818 | 19,763 |
+| Canopy Cover | hexproof | 2,756 | 35,470 |
+| Doubtless One, Horned Cheetah | lifelink | 1,148 | 806 |
+| Unsettled Mariner | ward | 119 | 108 |
+| Frost Titan | ward | 1,026 | 275 |
+| Amulet of Safekeeping | ward | 1,059 | 279 |
+| Diffusion Sliver | ward | 1,368 | 2,331 |
+| Boreal Elemental | ward | 13,059 | 7,929 |
+
+A new keyword therefore reaches the effect head as a vector far from where a trained keyword with the same meaning sits. Whether the head reads it correctly is not measured. The zero-shot keyword check needs a checkpoint trained with a keyword withheld, and this one withheld none. Everything in this section is on the script surface, because no prose-surface checkpoint exists to compare with.
 
 ### Six checks report nothing, and none of them because of the model
 
