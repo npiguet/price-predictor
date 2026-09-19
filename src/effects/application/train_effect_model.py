@@ -754,9 +754,6 @@ class TrainEffectModelConfig:
     variant_scripts: Path | None = None
     split_from: Path | None = None
     vocab_path: Path = field(default_factory=lambda: Path("models/effects/vocab.txt"))
-    printings_path: Path = field(
-        default_factory=lambda: Path("resources/AllPrintings.json"),
-    )
     #: Seeds weight init, batch planning and each epoch's shard draw.
     #:
     #: ``None`` draws one from the OS and logs it, because these runs are not

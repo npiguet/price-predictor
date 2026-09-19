@@ -158,7 +158,8 @@ def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
     except ImportError:
         logger.warning("umap-learn is not installed; skipping the projection")
         return None
-    reducer = umap.UMAP(n_components=2, random_state=seed)
+    # A seed forces UMAP single-threaded; saying so keeps it from warning.
+    reducer = umap.UMAP(n_components=2, random_state=seed, n_jobs=1)
     return reducer.fit_transform(matrix)
 
 

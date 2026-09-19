@@ -70,7 +70,6 @@ class TestTrainEffectModel:
         args = parse(*TRAIN)
         assert args.corpus == "output/effects/corpus"
         assert args.vocab_path == "models/effects/vocab.txt"
-        assert args.printings_path == "resources/AllPrintings.json"
         assert args.keyword_definitions == "output/effects/keyword-definitions.json"
         assert args.model_output is None  # resolved from --variant
         assert args.split_from is None

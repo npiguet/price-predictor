@@ -112,46 +112,6 @@ class TestGateOne:
         assert evaluate_gate_one(model, identity).status is CheckStatus.PASS
 
 
-class TestRecencyBreakdown:
-    """The breakdown is appended to the gate line and never changes its verdict."""
-
-    def test_both_halves_are_named_beside_the_verdict(self):
-        from effects.application.evaluate_effect_model import (
-            with_recency_breakdown,
-        )
-
-        result = evaluate_gate_one(
-            GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
-        )
-        halves = {
-            "model": {
-                "recent": GateOneMetrics(0.71, 0.61, 0.90),
-                "older": GateOneMetrics(0.69, 0.59, 0.90),
-            },
-            "identity": {
-                "recent": GateOneMetrics(0.60, 0.50, 1.00),
-                "older": GateOneMetrics(0.60, 0.50, 1.00),
-            },
-        }
-
-        annotated = with_recency_breakdown(result, halves)
-
-        assert annotated.status is result.status
-        assert result.detail in annotated.detail
-        assert "recent" in annotated.detail
-        assert "older" in annotated.detail
-
-    def test_nothing_measured_leaves_the_result_alone(self):
-        from effects.application.evaluate_effect_model import (
-            with_recency_breakdown,
-        )
-
-        result = evaluate_gate_one(
-            GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
-        )
-        assert with_recency_breakdown(result, {}) is result
-
-
 class TestGateOneMetrics:
     def test_f1_is_one_for_a_perfect_gate(self):
         observed = np.array([1, 0, 1, 1])
@@ -476,6 +436,24 @@ class TestReport:
         rendered = report.render()
         assert "gate-3" in rendered
         assert "BLOCKED" in rendered
+
+    def test_a_passing_gate_still_prints_every_figure_it_measured(self):
+        """The design record needs all three gate-1 margins, pass or fail."""
+        report = EvaluationReport()
+        report.add(evaluate_gate_one(
+            GateOneMetrics(0.70, 0.60, 0.90), GateOneMetrics(0.60, 0.50, 1.00),
+        ))
+        rendered = report.render()
+        assert "affected_gate_f1_gain=+0.1000" in rendered
+        assert "zone_outcome_accuracy_gain=+0.1000" in rendered
+        assert "poisson_deviance_reduction=+0.1000" in rendered
+
+    def test_a_failing_gate_prints_the_figure_that_held_too(self):
+        report = EvaluationReport()
+        report.add(evaluate_gate_three(np.ones((50, 8))))
+        rendered = report.render()
+        assert "mean_pairwise_cosine=" in rendered
+        assert "top_component_share=" in rendered
 
     def test_the_four_strata_are_named(self):
         assert {s.value for s in Stratum} == {

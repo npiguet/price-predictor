@@ -369,7 +369,7 @@ change. Until it is taken, `result` is corpus content the validator judges and t
 - **Rarity weighting.** Within a class, records weight ∝ effective_games^(−0.5), capped at 20× the weight of the most-observed ability text. Effective games is the count of distinct games contributing a record of that unique ability text — games, not raw records. A `--corpus` run reads the count from the manifest, over the whole corpus; otherwise it counts the resident shard, which under-weights a text that is rare corpus-wide and common in one shard.
 - **Records with no acting text.** `combat` and `playability-legality` sample uniformly within their class; a `decision` record's per-candidate examples key on the candidate's text.
 - **Splits.** The held-out unit is the ability text, not the card. A text is eligible for holdout when at most `--holdout-max-carriers` (default 8) cards carry it, and an eligible text is held out when `crc32` of its normalized script text modulo 1000 is below `--holdout-permille` (default 20). Membership depends on the text's own bytes alone, so a Forge upgrade never reassigns an existing text. A card is a held-out card when any of its lines carries a held-out text; token scripts and variant scripts are not in the denominator. Every game with a record naming a held-out card is excluded from training and forms the card-disjoint stratum, which in a depleted corpus is the full-strength validation run (§ Depleted collection). Game-disjoint validation: the games of the reserved shards that name no held-out card. A `--corpus` run takes both strata from the manifest as built directories rather than reserving shards. Best checkpoint by card-disjoint validation loss.
-- **Holdout reporting.** `train-effect-model` reports, before its first epoch, the held-out text count, the share of cards under `output/cardsfolder/` those texts remove, and the three strata's record counts. It also reports gate-1 margins split by whether a held-out text's first printing falls in the newest sets, so recency is a breakdown of one stratum rather than a second holdout.
+- **Holdout reporting.** `train-effect-model` reports, before its first epoch, the held-out text count, the share of cards under `output/cardsfolder/` those texts remove, and the three strata's record counts.
 - **Split guard.** `train-effect-model` fails before its first epoch when the card-disjoint stratum is empty, and warns when the stratum holds fewer than `--min-holdout-records` (default 2000) resolution records whose acting text appears on no training card. The message names the depleted and full-strength collection runs as the fix.
 - **Split provenance.** The checkpoint records the split it trained against — the holdout flags, the held-out card list they produced, and the `game_id` set enumerating every held-out game across both strata — and `evaluate-effect-model` reads the split from the checkpoint instead of recomputing it. The corpus is append-only and grows between runs, so a recomputed split would not be the trained-against one and the gates would score partly on trained-on games. For the same reason `--split-from PATH` makes a run inherit another checkpoint's split, vocabulary, and keyword-definition paths: every variant run inherits from the `full` run it is a baseline for, and `evaluate-effect-model` fails fast when a `--variant-checkpoint` records a different split than `--checkpoint`.
 - **Corpus provenance.** A `--corpus` checkpoint records the manifest's digest and path alongside its split, and `evaluate-effect-model` fails fast when the dataset it is given hashes differently — the same guard the vocabulary already has, for the same reason: a rebuilt dataset scores the gates on records the model may have trained on.
@@ -388,7 +388,6 @@ Flags:
 | `--variant-scripts` | _(none; `output/effects/variant-scripts/` once variants are collected)_ | the perturbed-script tree and its sidecars |
 | `--split-from` | _(none; compute the split)_ | inherit another checkpoint's split, vocabulary, and keyword-definition paths |
 | `--vocab-path` | `models/effects/vocab.txt` | tokenizer vocabulary; a script-surface run points it at `models/effects/vocab-script.txt` |
-| `--printings-path` | `resources/AllPrintings.json` | first-printing order for the card-disjoint split |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` | keyword definitions for expansion dropout |
 | `--model-output` | per variant (above) | checkpoint directory |
 | `--variant` | `full` | `full` \| `identity` \| `state-only` \| `no-state` \| `taxonomy` |
@@ -559,7 +558,6 @@ python -m effects collect-variants
 
 python -m effects train-effect-model
     [--corpus DIR]               a curated dataset; refuses --records-dir and the split flags
-    [--printings-path PATH]      default resources/AllPrintings.json
     [--split-from PATH]          inherit a checkpoint's split; required for variant runs
     [other flags]                § Training
 

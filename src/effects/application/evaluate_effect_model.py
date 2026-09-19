@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import math
 import random
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import StrEnum
 from itertools import chain, islice
 from pathlib import Path
@@ -125,7 +125,6 @@ def run_gate_one(
         return CheckResult("gate-1", CheckStatus.SKIPPED, message)
 
     scores = {}
-    halves: dict[str, dict[str, GateOneMetrics]] = {}
     for name, checkpoint in (("model", main), ("identity", identity)):
         encoder, model, batcher, fields = load_runnable(
             config, checkpoint,
@@ -146,83 +145,8 @@ def run_gate_one(
         scores[name] = measure(
             stratum, encoder, model, batcher, fields=fields,
         )
-        halves[name] = {
-            half: measure(part, encoder, model, batcher, fields=fields)
-            for half, part in recency_halves(config, stratum, batcher).items()
-            if part
-        }
 
-    result = evaluate_gate_one(scores["model"], scores["identity"])
-    return with_recency_breakdown(result, halves)
-
-
-def recency_halves(config, stratum, batcher) -> dict[str, list]:
-    """Split the stratum into recently-printed acting cards and the rest.
-
-    A text hash does not prefer novel mechanics, which are the harder
-    generalization, so the margins are reported on both halves (FR-088c). This
-    is a column of one stratum, not a second holdout: no separate split, no
-    separate depleted corpus.
-    """
-    from effects.application.gate_one import partition_by_recency, recency_cutoff
-    from effects.application.train_effect_model import (
-        load_card_files,
-        load_first_printings,
-    )
-
-    printings_path = Path(config.printings_path)
-    if not printings_path.exists():
-        return {}
-    first_printing = load_first_printings(printings_path)
-    cutoff = recency_cutoff(first_printing)
-    if cutoff is None:
-        return {}
-
-    cards_folder = next(
-        (Path(f) for f in config.cards_folders if Path(f).name == "cardsfolder"),
-        Path(config.cards_folders[0]),
-    )
-    name_of_script = {
-        script: name for name, script in load_card_files(cards_folder).items()
-    }
-
-    def _card_of(record):
-        for key in record.ability or ():
-            name = name_of_script.get(key.script_file)
-            if name:
-                return name
-        return None
-
-    recent, older = partition_by_recency(
-        stratum, first_printing, card_of=_card_of, since=cutoff,
-    )
-    return {"recent": recent, "older": older}
-
-
-def with_recency_breakdown(result: CheckResult, halves: dict) -> CheckResult:
-    """Attach the two halves' margins to the gate's message. Never gating."""
-    lines = []
-    for half in ("recent", "older"):
-        model = halves.get("model", {}).get(half)
-        baseline = halves.get("identity", {}).get(half)
-        if model is None or baseline is None:
-            continue
-        lines.append(
-            f"{half}: gate-F1 gain "
-            f"{model.affected_gate_f1 - baseline.affected_gate_f1:+.3f}, "
-            f"zone gain "
-            f"{model.zone_outcome_accuracy - baseline.zone_outcome_accuracy:+.3f}"
-        )
-    if not lines:
-        return result
-    return replace(
-        result,
-        detail=(
-            result.detail
-            + "\n  by first printing — "
-            + "; ".join(lines)
-        ),
-    )
+    return evaluate_gate_one(scores["model"], scores["identity"])
 
 
 def poisson_deviance(predicted: np.ndarray, observed: np.ndarray) -> float:
@@ -683,6 +607,14 @@ class EvaluationReport:
                 CheckStatus.REPORTED: "----",
             }[check.status]
             lines.append(f"[{marker}] {check.name}: {check.detail}")
+            # Every figure a check measured, whatever its verdict: the design
+            # record's Outcome section needs a passing margin as much as a
+            # failing one.
+            if check.values:
+                lines.append("       " + "  ".join(
+                    f"{name}={value:+.4f}"
+                    for name, value in check.values.items()
+                ))
         for verdict in self.keyword_verdicts:
             state = "pass" if verdict.passed else "→ probe"
             lines.append(

@@ -728,9 +728,9 @@ loss.
   manifest's `per_stratum["gate-one"]` count is below 2000 resolution records whose acting text
   appears on no training card. The failure message MUST name the depleted and full-strength
   collection runs (FR-130) as the remedy.
-- **FR-088c**: Gate-1 margins MUST additionally be reported split by whether a held-out text's first
-  printing falls in the newest sets, so recency is a breakdown of the card-disjoint stratum rather
-  than a second holdout.
+- **FR-088c (withdrawn)**: Gate-1 margins are not broken down by a held-out text's first printing.
+  Recency is neither a holdout nor a reported breakdown, and no effects command reads
+  `resources/AllPrintings.json` for it.
 - **FR-089**: The best checkpoint MUST be selected by card-disjoint validation loss.
 - **FR-090**: A checkpoint MUST record the split it trained against — the holdout flags (FR-134), the
   held-out card list they produced, and the `game_id` set across both strata — plus the vocabulary and keyword-definition paths, their content

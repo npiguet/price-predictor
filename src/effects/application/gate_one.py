@@ -22,7 +22,6 @@ they must describe the same records: the gate F1 says whether the model knows
 from __future__ import annotations
 
 import logging
-import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -92,54 +91,6 @@ def unique_text_records(records, batcher: SurfaceBatcher, *, seen) -> list:
         if text is not None and text not in seen:
             stratum.append(record)
     return stratum
-
-
-def recency_cutoff(
-    first_printing: dict[str, str], *, fraction: float = 0.08,
-) -> str | None:
-    """The first-printing date that separates "newest sets" from the rest.
-
-    A date rather than a set list, and derived the way a recency-ordered holdout
-    would have chosen its cards: take them newest-first until they cover
-    ``fraction`` of the corpus, and the last one's date is the boundary. The
-    breakdown then reports on the same population that holdout would have
-    tested, without anyone maintaining a second holdout.
-
-    A card with no printing date sorts as oldest and never sets the boundary.
-    """
-    dated = sorted(
-        (date for date in first_printing.values() if date), reverse=True,
-    )
-    if not dated:
-        return None
-    target = max(1, math.ceil(len(first_printing) * fraction))
-    return dated[min(target, len(dated)) - 1]
-
-
-def partition_by_recency(
-    items,
-    first_printing: dict[str, str],
-    *,
-    card_of,
-    since: str,
-) -> tuple[list, list]:
-    """Split a stratum into recently-printed and older, by first printing.
-
-    A text hash does not prefer novel mechanics, and novel mechanics are the
-    harder generalization: new keywords, new templating, parameter combinations
-    nothing older uses. Reporting the gate-1 margins on both halves recovers
-    what a recency-ordered holdout tested, at the cost of one column rather than
-    a second holdout and a second depleted corpus (FR-088c).
-
-    A card with no printing date counts as older. Dates are ISO 8601, so the
-    comparison is a string comparison.
-    """
-    recent, older = [], []
-    for item in items:
-        card = card_of(item)
-        printed = first_printing.get(card) if card else None
-        (recent if printed and printed >= since else older).append(item)
-    return recent, older
 
 
 def measure(

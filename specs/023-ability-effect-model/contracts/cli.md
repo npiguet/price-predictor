@@ -284,7 +284,6 @@ The full flag table is the root spec's § Training. Contract highlights:
 | `--variant-scripts` | none (`output/effects/variant-scripts/`) |
 | `--split-from` | none. A variant run's split-inheritance requirement is satisfied by `--corpus` alone, which is required on every run; `--split-from` is still accepted on a variant run, but only for compatibility with an older invocation, and the split it would compute is never read — the manifest is authoritative |
 | `--vocab-path` | `models/effects/vocab.txt` |
-| `--printings-path` | `resources/AllPrintings.json` — first-printing dates, used only to break gate-1 margins down by recency |
 | `--keyword-definitions` | `output/effects/keyword-definitions.json` |
 | `--model-output` | `models/effects/effect-model/` for `--variant full`, `models/effects/effect-model/{variant}/` otherwise |
 | `--variant` | `full` (\| `identity` \| `state-only` \| `no-state` \| `taxonomy`) |

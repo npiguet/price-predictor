@@ -357,6 +357,7 @@ held-out set is built by depleting the pools* and *The holdout unit is ability t
 - [X] T171 [P] Test in `tests/unit/effects/application/test_coverage.py` that `load_exclusions` reads and folds the depletion list, returns empty with neither source, and refuses both at once
 - [X] T172 `--exclude-cards` on `collect-coverage` and `collect-variants`, so neither waits on a training run that follows it; `--split-from` stays for adding coverage to an existing checkpoint's corpus (FR-045, FR-133)
 - [X] T173 [P] Test in `tests/unit/effects/infrastructure/test_record_io.py` that `iter_shards` recurses: nested shards of both spellings are found, a nested `.gz` is not claimed twice, and the order is stable — then make it recurse (FR-125)
+- [X] T174 Retire the gate-1 recency breakdown and the `--printings-path` flag it alone read, from both `train-effect-model` and `evaluate-effect-model`; supersedes T161 (FR-088c withdrawn)
 
 ---
 

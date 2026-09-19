@@ -1203,7 +1203,6 @@ def _train_effect_model_parser(subparsers) -> None:
         ),
     )
     parser.add_argument("--vocab-path", type=str, default=DEFAULT_VOCAB_PATH)
-    parser.add_argument("--printings-path", type=str, default=DEFAULT_PRINTINGS)
     parser.add_argument(
         "--keyword-definitions", type=str, default=DEFAULT_KEYWORD_DEFINITIONS,
     )
@@ -1320,7 +1319,6 @@ def train_config_from(args: argparse.Namespace):
         ),
         split_from=Path(args.split_from) if args.split_from else None,
         vocab_path=Path(args.vocab_path),
-        printings_path=Path(args.printings_path),
         keyword_definitions=Path(args.keyword_definitions),
         model_output=Path(args.model_output) if args.model_output else None,
         variant=args.variant,
@@ -1530,7 +1528,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def write_output_as_utf8(*streams) -> None:
+    """Make each stream encode UTF-8, whatever the console's code page.
+
+    Reports carry card texts and arrows, and a redirected stdout on Windows
+    defaults to cp1252, which cannot encode them. A stream that cannot be
+    reconfigured, such as a test's ``StringIO``, is left as it is.
+    """
+    for stream in streams:
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
+
 def main() -> None:
+    write_output_as_utf8(sys.stdout, sys.stderr)
     # Every line is stamped, because every command here is one an operator
     # leaves running for hours: a progress line without a clock answers "is it
     # alive" and not "when did it last move", which is the question actually
