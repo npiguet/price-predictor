@@ -246,20 +246,20 @@ the collectors installed, so a record target moves under you while a game target
 
 | Keyword | Games for 200 qualifying records |
 |---|---|
-| trample | ~380 |
-| first strike | ~410 |
-| deathtouch | ~820 |
-| lifelink | ~960 |
-| double strike | ~1,300 |
-| indestructible | ~2,500 |
-| infect | ~3,900 |
-| wither | ~7,000 |
+| lifelink | ~400 |
+| trample | ~1,000 |
+| double strike | ~1,100 |
+| deathtouch | ~2,600 |
+| first strike | ~4,300 |
+| indestructible | ~5,900 |
+| infect | ~6,300 |
+| wither | ~9,300 |
 
-**About 4,000 games clears seven of the eight, and about 7,000 clears all eight.** Rates measured
-against a real corpus are in the design record's feasibility section; a corpus large enough for gate 2
+**About 6,300 games clears seven of the eight, and about 9,300 clears all eight.** The per-keyword
+rates are in the design record's section on the rarest damage-step keywords; a corpus large enough for gate 2
 is comfortably large enough for gate 1 and for the split.
 
-A patched run writes roughly 410 records and 90 KB per game, so 7,000 games is under a gigabyte.
+A patched run writes roughly 410 records and 90 KB per game, so 9,300 games is under a gigabyte.
 Shards are gzip-compressed, which is where the room comes from — the same corpus uncompressed is
 tens of gigabytes.
 

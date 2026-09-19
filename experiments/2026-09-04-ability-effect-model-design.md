@@ -442,24 +442,24 @@ The split is benign for the zero-shot goal. New-set variation keywords are the s
 
 ## The rarest damage-step keywords set the corpus size
 
-Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes almost twenty times apart. A 351-game sample of ordinary patched sealed self-play produced the rates below — random sealed-legal sets, no coverage decking.
+Gate 2 needs 200 qualifying combat records per keyword, and the eight reach that at corpus sizes more than twenty times apart. The rates below are gate 2's own qualifying records, counted with its rule over the corpus's two validation strata: the 1,000 game-disjoint games and the 5,848 card-disjoint games. The games needed are 200 divided by the pooled rate.
 
-| Keyword | Qualifying per game | Games for 200 |
-|---|---|---|
-| trample | 0.53 | 380 |
-| first strike | 0.49 | 410 |
-| deathtouch | 0.25 | 820 |
-| lifelink | 0.21 | 960 |
-| double strike | 0.15 | 1,300 |
-| indestructible | 0.08 | 2,500 |
-| infect | 0.05 | 3,900 |
-| wither | 0.03 | 7,000 |
+| Keyword | Qualifying per game, game-disjoint | Qualifying per game, card-disjoint | Qualifying per game, pooled | Games for 200 |
+|---|---:|---:|---:|---:|
+| lifelink | 0.432 | 0.514 | 0.502 | 400 |
+| trample | 0.179 | 0.200 | 0.197 | 1,000 |
+| double strike | 0.244 | 0.171 | 0.182 | 1,100 |
+| deathtouch | 0.069 | 0.078 | 0.077 | 2,600 |
+| first strike | 0.047 | 0.047 | 0.047 | 4,300 |
+| indestructible | 0.019 | 0.037 | 0.034 | 5,900 |
+| infect | 0.073 | 0.025 | 0.032 | 6,300 |
+| wither | 0.011 | 0.023 | 0.022 | 9,300 |
 
-Games are the unit to size a run in, because they are the unit an operator sets and the only one that holds still. Records per game move with the collectors installed and with their caps — a patched run writes about 410 a game against a degraded run's 54, and the extra is mostly playability records, which gate 2 never counts. Four thousand games clears seven of the eight keywords and seven thousand clears all of them, wither included.
+Games are the unit to size a run in, because they are the unit an operator sets and the only one that holds still. Records per game move with the collectors installed and with their caps. A patched run writes about 410 a game against a degraded run's 54, and the extra is mostly playability records, which gate 2 never counts. About 2,600 games clears four of the eight keywords, about 6,300 clears seven, and about 9,300 clears all of them, wither included.
 
-Wither is only reachable at all because the patched collectors see more of each game; a degraded sample of comparable size observed none. It is still the rarest by a wide margin, because almost no sealed-legal set prints it, and a set restriction or the coverage collector reaches it far faster than volume does.
+Wither is only reachable at all because the patched collectors see more of each game. A degraded sample of comparable size observed none. It is still the rarest, because almost no sealed-legal set prints it, and a set restriction or the coverage collector reaches it far faster than volume does.
 
-The corpus is the run's real cost on disk, and compression is what makes an overnight run fit. A game's records are several megabytes of JSON and around 90 KB gzipped — a ratio near 50×, because the records are the same keys and the same board described over and over. Seven thousand games is under a gigabyte compressed and tens of gigabytes without.
+The corpus is the run's real cost on disk, and compression is what makes an overnight run fit. A game's records are several megabytes of JSON and around 90 KB gzipped — a ratio near 50×, because the records are the same keys and the same board described over and over. The 9,300 games that clear all eight keywords are under a gigabyte compressed and tens of gigabytes without.
 
 Three collectors repeat themselves, and all three are capped by identity rather than by sampling. Continuous effects reapply on every recompute; the AI re-asks who may block while it evaluates a combat; a Mountain taps a dozen times for the same R. In each case the repeats describe a board that did not move, so one of them carries the observation and the rest are duplication — legality records were four fifths of the corpus before coalescing and are under a third after, and mana records fell from 33 a game to under 5.
 
@@ -469,7 +469,7 @@ Which activation a game keeps is drawn uniformly rather than taken first, becaus
 
 A subtler version of the same bias nearly survived. Games are seeded consecutively, and a linear congruential generator's first output is close to a linear function of its seed, so consecutive games were taking nearly the same first sampling decision — correlating the mana reservoir and the playability sample across a whole run, invisibly to any test of a single game. The seed passes through SplitMix64's finalizer before it reaches the generator.
 
-The table extrapolates linearly from one sample, so it sizes a run rather than predicting one. The four rarest keywords carry the fewest observations here, so their figures are the least stable.
+The table extrapolates linearly, so it sizes a run rather than predicting one. The rarest keywords' rates differ between the two strata by up to a factor of three, so their figures are the least stable.
 
 ## Build order — first embeddings before full machinery
 
