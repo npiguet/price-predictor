@@ -726,15 +726,18 @@ Each query's three nearest lines do the same thing as the query. Every neighbour
 
 The neighbours differ from their query in the details the linear probes in the section on what the encoder keeps show it dropping. Lightning Bolt's neighbours change only the damage amount. Two of the draw neighbours add activation costs, {6}{U} and {2}{B} with 2 life. The third is the same prose on another card, compiled to a different script. Murder's second neighbour is a sweeper, so a single-target and a mass version of destroy sit together, as the API-type probe's confusions predict.
 
-### Seven checks report nothing, and none of them because of the model
+### Six checks report nothing, and none of them because of the model
+
+Each of the six is missing an input: a baseline cache, a label file, a withheld keyword, or a record kind the corpus does not collect yet.
 
 | Check | Why it reports nothing |
 |---|---|
 | no-state geometry comparison | That variant's cache has not been encoded. |
-| UMAP projection | `umap-learn` is not installed in the evaluation environment. |
 | decodability battery | It reads `output/sealed/cards-win-rates.txt`, which is not present locally. |
 | zero-shot keyword check | The checkpoint withheld no keyword, so there is nothing to measure. |
 | matched real-vs-fork, probe diff, role polarity | They need fork, probe and mana records, which the corpus does not have yet. |
+
+The UMAP projection runs over the same 39,260 unique texts gate 3 measures. It reports only that count and saves no picture, so it adds nothing to read here.
 
 The taxonomy geometry comparison does report. The taxonomy baseline's vectors have a slightly higher mean pairwise cosine than the full model's, 0.173 against 0.152, and half its concentration on the top principal component, 20.1% against 40.0%.
 
