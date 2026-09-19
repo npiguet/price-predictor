@@ -28,14 +28,11 @@ from effects.domain.effect_model import (
 )
 from effects.domain.event_schema import Event, EventType
 from effects.domain.records import (
-    CombatPayload,
     EffectRecord,
     PlayabilityAttackersPayload,
     PlayabilityBlockersPayload,
     PlayabilityDecisionPayload,
-    ResolutionPayload,
-    RewritePayload,
-    TriggerPayload,
+    events_of,
 )
 from effects.domain.state_snapshot import COLORS
 
@@ -93,23 +90,6 @@ class EntityTargets:
             self.fields[name] = vector
         if 0 <= index < width:
             vector[index] = 1.0
-
-
-def events_of(record: EffectRecord) -> tuple[Event, ...]:
-    """Every event a record's payload carries, whatever its kind."""
-    payload = record.payload
-    if isinstance(payload, (ResolutionPayload, CombatPayload)):
-        return payload.events
-    if isinstance(payload, RewritePayload):
-        # A rewrite with no outgoing event was carried out by running another
-        # ability rather than by editing this one, which is how Forge implements
-        # most replacements — so the record carries no outcome event of its own.
-        # The incoming event is what was proposed, not what happened, and
-        # returning it here would train the head on the replaced event.
-        return (payload.outgoing,) if payload.outgoing is not None else ()
-    if isinstance(payload, TriggerPayload):
-        return (payload.event,) if payload.fired else ()
-    return ()
 
 
 def derive_targets(record: EffectRecord) -> dict[str, EntityTargets]:

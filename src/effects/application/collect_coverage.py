@@ -124,7 +124,7 @@ def qualifying_cards(record) -> set[str]:
     that card, and counting it would let a popular card satisfy every card
     beside it.
     """
-    from effects.domain.effect_targets import events_of
+    from effects.domain.records import events_of
 
     by_id: dict[str, str] = {
         entity.id: entity.name for entity in record.state.entities
@@ -160,7 +160,7 @@ def count_shard(shard: Path) -> Counter[str]:
     comes from converted card text (lowercase) while a record's entity name is
     Forge's own (printed case), and an unfolded key matches nothing.
     """
-    from effects.application.train_effect_model import fold_card_name
+    from effects.domain.card_names import fold_card_name
     from effects.infrastructure.record_io import read_shard
 
     counts: Counter[str] = Counter()
@@ -439,7 +439,7 @@ def load_exclusions(
     precisely the failure this feature has already had once, and a merge would
     hide a disagreement instead of reporting it.
     """
-    from effects.application.train_effect_model import fold_card_name
+    from effects.domain.card_names import fold_card_name
 
     if split_from is not None and exclude_cards is not None:
         raise ValueError(

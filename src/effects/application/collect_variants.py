@@ -225,7 +225,7 @@ def generate_variants(
     edit nothing downstream can detect. Generation is the only point where the
     rule can be enforced.
     """
-    from effects.application.train_effect_model import fold_card_name
+    from effects.domain.card_names import fold_card_name
 
     held_out = frozenset(fold_card_name(name) for name in held_out)
     rng = random.Random(seed)

@@ -908,6 +908,28 @@ class TestCountingReportsProgress:
 
         assert not [r for r in caplog.messages if "shard" in r and "of 3" in r]
 
+    def test_a_counting_worker_never_loads_torch(self, tmp_path) -> None:
+        """One pool worker per core, each loading torch's CUDA DLLs, exhausts
+        the Windows paging file beside a training job — and counting a shard
+        needs nothing from torch."""
+        import subprocess
+        import sys
+
+        self._shards(tmp_path, 1)
+        shard = next(tmp_path.iterdir())
+        probe = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            "from effects.application.collect_coverage import count_shard\n"
+            f"count_shard(Path({str(shard)!r}))\n"
+            "print('torch' in sys.modules)\n"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True, text=True, check=True,
+        )
+        assert result.stdout.strip() == "False"
+
 
 class TestParallelCounting:
     """Counting is CPU-bound per shard and the shards are independent.

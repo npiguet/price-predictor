@@ -579,3 +579,24 @@ class EffectRecord:
             "state": self.state,
             "payload": self.payload,
         }
+
+
+def events_of(record: EffectRecord) -> tuple[Event, ...]:
+    """Every event a record's payload carries, whatever its kind.
+
+    Here rather than beside target derivation because the coverage counter's
+    pool workers read it per record, and target derivation imports torch.
+    """
+    payload = record.payload
+    if isinstance(payload, (ResolutionPayload, CombatPayload)):
+        return payload.events
+    if isinstance(payload, RewritePayload):
+        # A rewrite with no outgoing event was carried out by running another
+        # ability rather than by editing this one, which is how Forge implements
+        # most replacements — so the record carries no outcome event of its own.
+        # The incoming event is what was proposed, not what happened, and
+        # returning it here would train the head on the replaced event.
+        return (payload.outgoing,) if payload.outgoing is not None else ()
+    if isinstance(payload, TriggerPayload):
+        return (payload.event,) if payload.fired else ()
+    return ()
