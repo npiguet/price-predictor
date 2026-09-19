@@ -188,6 +188,148 @@ also cut where a lowercase letter is followed by an uppercase one, so `nonDragon
    unknown-token rate on the parameters and the number of distinct compound parts, so the rebuild
    shows whether the unknown compounds went away.
 
+## Keyword expansion builds the cache from definitions gates 1 and 2 never score, and skips every keyword whose name is not one word
+
+Keyword expansion replaces a keyword token with its definition, the reminder text Forge prints for
+the keyword ("New keywords are handled by expansion dropout over their definitions" in the design
+doc). It has four defects. The cache and the gates read different encodings of every keyword line.
+Multi-word and hyphenated keywords never find their definition. The definition inserted is a
+damaged template. And the script surface expands to the same reminder text as the prose surface,
+though three documents say it expands to Forge's generated script. The evidence comes from
+`scripts/effect_embedding_probes/keyword_expansion.py`, with its outputs in
+`output/effects/reports/keyword-expansion-20260919/`. What the analysis found about the encoder
+itself is in the design doc's Outcome, in "A keyword token encodes only loosely like its own
+definition" and "An unknown keyword expands only when its name is one word".
+
+The shipping cache encodes every known keyword as its definition, while the effect head trained on
+the keyword token three times in four and gates 1 and 2 score the token every time. The expansion
+probability is the chance that a known keyword is replaced, and each caller sets its own. Training
+uses 0.25. Validation and gates 1 and 2 go through `SurfaceBatcher` with 0. `encode-abilities`,
+which builds the cache, uses 1.0, so that two runs of the command write the same file. An unknown
+keyword is expanded at every probability. Gate 3, the ward canary, the embedding probes and the
+deployed head all read the cache. For a keyword line, each of them therefore reads an input the head
+saw only a quarter of the time in training, and never the input gates 1 and 2 scored.
+
+Expansion also fires on a keyword word inside other lines, such as a grant's description, so the
+cache moves more than the keyword lines. Keyword lines move furthest. Cosine similarity below is
+between a text's unexpanded and fully expanded encodings, 1 for the same direction.
+
+| unique script texts in the corpus | 37,106 |
+|---|---:|
+| changed by full expansion | 7,658 (20.6%) |
+| of which keyword lines | 1,925 |
+| of which other lines naming a keyword | 5,733 |
+| cosine over changed texts, median / 10th percentile / minimum | 0.968 / 0.748 / −0.662 |
+| cosine over changed keyword lines, median / 10th percentile | 0.893 / 0.371 |
+| cosine over changed other lines, median / 10th percentile | 0.979 / 0.868 |
+| share of a text's 10 nearest neighbours that the other encoding keeps, 500 changed texts | 0.33 |
+
+The cache is the fully expanded one. Forty keyword rows of the shipping cache match the full
+expansion at a mean cosine of 1.0000 and the unexpanded encoding at 0.77.
+
+Expansion finds a definition through the token the tokenizer produced, so a keyword whose name is
+not a single word expands only if the vocabulary already knows it. A multi-word name becomes one
+token, `first_strike`, only by matching a merged vocabulary entry, which exists only for known
+keywords. A hyphenated name never expands: the tokenizer cuts `Jump-start` at the hyphen and the
+definition is filed under `jump-start`. Jump-start, web-slinging and beam me up never expand, on 24
+lines. Starting intensity, on 20 more, has no reminder text to expand to. The same mismatch between
+a display name and its token disables `HOST_BODIED_KEYWORDS`, the list of keywords whose body is
+printed on the host card and which are never to expand. It spells `level up` and `read ahead` with a
+space, the tokens are `level_up` and `read_ahead`, and both expand, on 26 and 10 lines.
+
+The definition inserted is damaged in four ways.
+
+- `_instantiate` strips only `%s`. The 38 templates written with `%d` or `%1$s` keep the specifier
+  as tokens: toxic's reads "also get % d poison counters".
+- No caller passes the line's own values. `expand_keywords` accepts `instance_values` and nothing
+  supplies them, so a template loses its value and the line's parameter is left dangling after the
+  sentence.
+- 16 definitions contain `[UNK]`. `build-vocab` scans the definitions but keeps only the 5,000
+  most frequent tokens, and 21 words of reminder text fall below that cut:
+  `encoded`, `promise`, `specified` and `teammate` among them.
+- Five templates (enlist, increment, read ahead, station, web-slinging) use the typographic
+  apostrophe `’`, which becomes a token of its own rather than the `'` every other text uses.
+
+| keyword line | what the encoder reads under expansion |
+|---|---|
+| `Toxic:1` | players dealt combat damage by this creature also get % d poison counters . : 1 |
+| `Ward:2` | whenever this permanent becomes the target of a spell or ability an opponent controls , counter it unless that player . : 2 |
+| `Enchant:Creature` | target a % 1 $ s as you cast this . this card enters attached to that % 1 $ s . : creature |
+| `Start your engines` | if you have no speed , it [UNK] at 1 . it [UNK] once on each of your turns when an opponent loses life . max speed is 4 . |
+
+Both surfaces expand to the reminder template. The design doc plans expansion to Forge's generated
+script on the script surface, and `src/effects/CLAUDE.md` and the `build_vocab` docstring describe it
+as built. `_definition_text` returns the template, and the script-surface override its docstring
+anticipates was never written. `generated_script` is loaded and scanned into the script
+vocabulary, and nothing else reads it.
+
+### Gen-2 builds the cache with known keywords left as tokens
+
+`encode-abilities` expands at probability 0, the setting validation and gates 1 and 2 use. The
+choice keeps what 1.0 was chosen for: an unknown keyword still expands at every probability, so the
+cache stays deterministic and a new set still reads through its definitions. It also makes the
+cache the input the head saw three times in four in training and the one gates 1 and 2 score.
+Expanding at 1.0 in training as well would make the two agree the other way, but it removes the
+keyword token the design keeps, and the design doc's Outcome shows the encoder has learned that token
+as a symbol of its own rather than as its definition.
+
+1. **One setting, read by both callers.** The probability for scoring and for the cache is one
+   constant that `SurfaceBatcher`'s scoring path and `AbilityEncoderRunner` both read, as
+   `SurfaceBatcher.text_of` is the one definition of the encoding text. Each caller setting its
+   own value is how the cache and the gates came to read different inputs.
+2. **The geometry is measured again.** Gate 3, the ward canary and the embedding probes are re-run
+   on the new cache. Their keyword lines then describe the keyword token, which is what the head
+   reads.
+
+### Gen-2 recognises a keyword line by its display name, not by a vocabulary token
+
+The definition is looked up by the display name, the part of a keyword line's script text before
+its first colon, matched case-insensitively against the definitions table. The whole name is
+replaced, however many tokens it split into, and the text after the colon becomes the line's
+instance values. A keyword word inside another line keeps the token path it has now.
+
+1. **The match is checked against the sidecar.** The batcher sees only the encoding text, so the
+   match is made on the text. The corpus build asserts that every text it matches belongs to sidecar
+   lines whose `script_api_type` is `Keyword`. The sidecar's `line_kind` is not the key: it is the
+   converter's category, `alternate cost` for jump-start.
+2. **The host-bodied list is checked on the same path.** It compares display names, so level up and
+   read ahead are excluded as the list intends.
+3. **The corpus's never-expanding keywords are the test.** Jump-start, web-slinging and beam me up
+   expand, each with the vocabulary token deleted and restored.
+
+### Gen-2 fills each template with its line's values, strips every format specifier and reserves the definition words
+
+1. **Instance values are filled.** The values after the colon fill the placeholders in order, and
+   `%1$s` repeats its value at each use. Forge formats some values before filling them: ward's `%s`
+   stands for a clause such as "pays {2}", not the bare `2`. Those formatted strings come from Forge,
+   recorded per keyword by `extract-keyword-definitions`, rather than being rebuilt in Python.
+2. **Every specifier is stripped where no value fills it.** The pattern covers `%s`, `%d` and the
+   positional forms, and no expansion leaves a `%` token.
+3. **The apostrophe is normalised.** `’` becomes `'` when the definitions are loaded.
+4. **The definition words are reserved in the vocabulary.** `build-vocab` seeds every word of every
+   template after stripping, as it already seeds `[PAD]` and `[CLS]`, so `--target-size` cannot cut
+   them. The reservation lands with the script-vocabulary rebuild the chain encoding and the
+   camel-case split already require, in the two sections above, so it costs no rebuild of its own.
+   The build asserts that no definition expands to `[UNK]`.
+
+### Gen-2 keeps the reminder template on both surfaces and corrects the documents
+
+The generated script is not yet worth expanding to. It is the root line of the keyword's trait
+alone. Prowess's is its `SpellCast` trigger condition without the +1/+1 it grants, and no trigger
+among the 75 scripts carries the effect it executes: the same first-line gap as the first section
+of this record. Its description parameter holds the reminder text anyway. And only 75 of the 202
+keywords have one, so expanding to it would read three keywords in five in one language and the rest
+in another.
+
+1. **The template stays the definition on both surfaces.** The generated script is revisited once
+   `extract-keyword-definitions` renders the whole chain, as the converter will for card lines.
+2. **`build-vocab` stops scanning generated scripts**, so the capped vocabulary counts only text the
+   encoder reads.
+3. **The documents say what the code does.** `src/effects/CLAUDE.md` is corrected with this record.
+   The `_keyword_corpus_text` docstring in `build_vocab.py` and the `_definition_text` docstring in
+   `ability_tokenizer.py` still describe the script-surface override and are corrected in gen-2's
+   code change.
+
 ## Every outcome in the corpus is one Forge chose, so the model can learn abilities without learning targets
 
 The corpus is observational under one policy. A resolution record exists because Forge decided to
