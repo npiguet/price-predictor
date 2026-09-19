@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import math
 import random
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from itertools import chain, islice
@@ -40,6 +41,7 @@ from effects.domain.damage_step_keywords import (
     MIN_QUALIFYING_RECORDS,
     DamageStepKeyword,
 )
+from effects.domain.line_query import LineQuery
 
 if TYPE_CHECKING:
     from effects.infrastructure.effect_model_store import SplitProvenance
@@ -404,6 +406,8 @@ def evaluate_ward_canary(
     ward: np.ndarray,
     twins: list[np.ndarray],
     bare_keywords: list[np.ndarray],
+    *,
+    unresolved: Sequence[str] = (),
 ) -> CheckResult:
     """Is ward nearer its meaning than it is to keyword-shaped text in general?
 
@@ -411,30 +415,38 @@ def evaluate_ward_canary(
     its distances to all bare single-keyword vectors. A median rather than a
     fixed threshold, so the criterion stays meaningful whatever scale the
     embedding settles at.
+
+    ``unresolved`` names the checked-in lines the cache had no vector for. They
+    are carried into the detail, and the counts compared into the values, so a
+    verdict over fewer twins than the table lists says so.
     """
+    tail = f"; unresolved: {'; '.join(unresolved)}" if unresolved else ""
     if not twins or not bare_keywords:
         return CheckResult(
             "ward-canary", CheckStatus.SKIPPED,
-            "no ward, twin, or bare-keyword vectors in the cache",
+            "no ward, twin, or bare-keyword vectors in the cache" + tail,
         )
     reference = float(np.median([cosine_distance(ward, k) for k in bare_keywords]))
     distances = [cosine_distance(ward, twin) for twin in twins]
     farther = [d for d in distances if not (d < reference)]
     values = {
         "median_bare_keyword_distance": reference,
+        "min_twin_distance": min(distances),
         "max_twin_distance": max(distances),
+        "twins_compared": float(len(twins)),
+        "bare_keywords_compared": float(len(bare_keywords)),
     }
     if farther:
         return CheckResult(
             "ward-canary", CheckStatus.REPORTED,
             f"{len(farther)} of {len(twins)} functional twins sit farther from "
-            f"ward than the median bare keyword ({reference:.3f})",
+            f"ward than the median bare keyword ({reference:.3f})" + tail,
             values,
         )
     return CheckResult(
         "ward-canary", CheckStatus.REPORTED,
         f"every functional twin is nearer than the median bare keyword "
-        f"({reference:.3f})",
+        f"({reference:.3f})" + tail,
         values,
     )
 
@@ -721,32 +733,25 @@ def keyword_rows() -> tuple[DamageStepKeyword, ...]:
     return DAMAGE_STEP_KEYWORDS
 
 
-def unique_ability_vectors(abilities_root: Path, variant: str) -> np.ndarray:
-    """One vector per unique ability text, for gate 3 (FR-123).
+def load_shipping_cache(
+    config: EvaluateEffectModelConfig, *, surface: str, variant: str = "full",
+):
+    """The cache the evaluator reads: the card and token trees, on ``surface``.
 
-    Deduplicated by value: the corpus has ~38k unique texts across 66k lines,
-    and counting a reprinted line twice would make the space look more populated
-    than it is.
+    One vector per unique ability text on the checkpoint's encoding surface —
+    the population gate 3 is defined over (FR-123) and the one every other
+    geometry check reads. Keyed on the text rather than on the vector's bytes,
+    because one text encoded in two batches differs in float noise, and a
+    byte key counts those copies as distinct points. The variant-script tree
+    is left out: its perturbed scripts are synthetic collection input, and the
+    shipping cache serves the real card and token lines.
     """
-    from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+    from effects.application.geometry_checks import load_cache
 
-    root = Path(abilities_root)
-    if not root.is_dir():
-        return np.zeros((0, 0), dtype=np.float32)
-    pattern = (
-        f"*{CACHE_SUFFIX}" if variant == "full" else f"*.{variant}{CACHE_SUFFIX}"
+    return load_cache(
+        config.abilities_root, config.cards_folders,
+        surface=surface, variant=variant,
     )
-    seen: dict[bytes, np.ndarray] = {}
-    for path in sorted(root.rglob(pattern)):
-        if variant == "full" and path.name.count(".") != 1:
-            continue
-        with np.load(path) as data:
-            matrix = data[ARRAY_KEY]
-        for row in matrix:
-            seen.setdefault(row.tobytes(), row)
-    if not seen:
-        return np.zeros((0, 0), dtype=np.float32)
-    return np.stack(list(seen.values()))
 
 
 def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
@@ -796,18 +801,17 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
         check_umap,
         check_variant_geometry,
         check_ward,
-        load_cache,
     )
+    from effects.domain.ability_encoder import surface_of
 
     report = EvaluationReport()
-    cards_root = next(
-        (Path(f) for f in config.cards_folders if Path(f).name == "cardsfolder"),
-        Path(config.cards_folders[0]),
-    )
-    cached = load_cache(config.abilities_root, cards_root, variant="full")
+    # The surface the checkpoint encoded from, so every geometry check keys
+    # the cache on the texts its vectors actually encode.
+    surface = surface_of(vocab_path)
+    cached = load_shipping_cache(config, surface=surface)
 
     # ── gate 3: geometry, read off the cache ──
-    vectors = unique_ability_vectors(config.abilities_root, "full")
+    vectors = cached.matrix()
     if vectors.shape[0] < 2:
         report.add(CheckResult(
             "gate-3", CheckStatus.SKIPPED,
@@ -848,7 +852,7 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     for name in ("no-state", "taxonomy"):
         report.add(check_variant_geometry(
             cached,
-            load_cache(config.abilities_root, cards_root, variant=name),
+            load_shipping_cache(config, surface=surface, variant=name),
             name,
         ))
 
@@ -870,14 +874,18 @@ def run(config: EvaluateEffectModelConfig) -> EvaluationReport:
     return report
 
 
-#: Texts whose neighbours a reader can judge at a glance. Reported rather than
+#: Lines whose neighbours a reader can judge at a glance. Reported rather than
 #: scored: the point is for a person to see whether the neighbours of a removal
-#: spell are removal spells, which no metric asks.
-NEIGHBOUR_QUERIES: tuple[str, ...] = (
-    "destroy target creature",
-    "draw a card",
-    "deal 3 damage to any target",
-    "target creature gets +2/+2 until end of turn",
+#: spell are removal spells, which no metric asks. Each prose line is printed
+#: with several scripts across the corpus, so each pins the card whose script
+#: the query stands for (see :mod:`effects.domain.line_query`).
+NEIGHBOUR_QUERIES: tuple[LineQuery, ...] = (
+    LineQuery("destroy target creature.", card="murder"),
+    LineQuery("draw a card.", card="think twice"),
+    LineQuery("CARDNAME deals 3 damage to any target.", card="lightning bolt"),
+    LineQuery(
+        "target creature gets +2/+2 until end of turn.", card="artful maneuver",
+    ),
 )
 
 #: Where the sealed pipeline's per-card winnability labels live. The

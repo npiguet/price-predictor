@@ -451,7 +451,7 @@ Prediction checks run the loaded checkpoints against records from `--records-dir
 **Reported checks:**
 
 - nearest-neighbor inspection and UMAP colored by effect category
-- ward canary: ward's `e` closer in cosine distance to each functional twin's `e` than the median of ward's distances to all bare single-keyword `e` vectors; the twins are a checked-in list of ability texts that spell out ward's behavior without the keyword (`src/effects/domain/ward_twins.py`)
+- ward canary: ward's `e` closer in cosine distance to each functional twin's `e` than the median of ward's distances to all bare single-keyword `e` vectors; the twins are a checked-in list of corpus lines that spell out ward's behavior without the keyword (`src/effects/domain/ward_twins.py`), each named by its converted prose and pinned to a card where that prose compiles to more than one script; an entry that resolves to no line is named in the report
 - zero-shot keyword: one implemented keyword withheld from training, its occurrences always expanded
 - role-polarity probe: predicted mana-pool sign for `{R}` in cost vs effect position (the effect-position half needs mana records, so the probe needs the engine patch)
 - scaling calibration: predicted sweeper deaths as a function of board size
@@ -474,7 +474,7 @@ The damage-step canary covers the damage-step family only; evasion keywords are 
    - Pass: the affected fields move in the keyword's rules direction in ≥ 70% of qualifying records.
    - The qualifying predicate and the rules direction are one row per keyword in a checked-in table (`src/effects/domain/damage_step_keywords.py`), alongside the fields each keyword affects.
    - A keyword that fails the threshold, or has fewer than 200 qualifying records, gets the probe.
-3. **Collapse canaries** — over the full cache, one vector per unique ability text: mean pairwise cosine similarity over 10,000 random pairs ≤ 0.5, and the top principal component explains ≤ 30% of total variance.
+3. **Collapse canaries** — over the `full` cache's card and token trees (variant scripts excluded), one vector per unique ability text on the checkpoint's encoding surface: mean pairwise cosine similarity over 10,000 random pairs ≤ 0.5, and the top principal component explains ≤ 30% of total variance.
 
 Run results land in the design record's Outcome section, never in this spec.
 

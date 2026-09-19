@@ -520,8 +520,8 @@ Gates 1 and 3 block shipping and gate 2 never does. Of the five blocking figures
 | 1 | affected-gate F1 gain over identity | ≥ 0.05 | +0.2023 | pass |
 | 1 | zone-outcome accuracy gain over identity | ≥ 0.05 | +0.0910 | pass |
 | 1 | Poisson deviance reduction against identity | ≥ 5% | 58.1% | pass |
-| 3 | mean pairwise cosine | ≤ 0.5 | 0.136 | pass |
-| 3 | top principal component's share of variance | ≤ 30% | 40.2% | fail |
+| 3 | mean pairwise cosine | ≤ 0.5 | 0.152 | pass |
+| 3 | top principal component's share of variance | ≤ 30% | 40.0% | fail |
 
 ### The encoder predicts unseen ability texts far better than a model that can only memorize them (gate 1)
 
@@ -541,9 +541,9 @@ The vectors are not collapsed onto a point. Two random ability vectors are nearl
 
 | Principal component | 1 | 2 | 3 | 4 | 5 |
 |---|---|---|---|---|---|
-| Share of variance | 40.2% | 25% | 15% | 6% | 5% |
+| Share of variance | 40.0% | 25.0% | 15.3% | 6.3% | 4.7% |
 
-Gate 3 is measured over the 55,591 distinct vectors in the embedding cache under `output/effects/abilities/`. That set includes the perturbed-variant texts. It also counts a text printed on several cards once per card whose vector differs from the others in the fifth decimal place. Over one vector per unique script text the shares move by less than a third of a point. The second component alone holds a quarter of the variance, so the space is concentrated along more than one direction rather than along a single stray one.
+Gate 3 is measured over one vector per unique script text in the embedding cache under `output/effects/abilities/`: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because the shipping cache serves only real card and token lines. The second component alone holds a quarter of the variance, so the space is concentrated along more than one direction rather than along a single stray one.
 
 ### Nine directions hold all the variance the encoder uses
 
@@ -556,7 +556,7 @@ The 64-dimensional vector varies along nine directions, and the other 55 hold ab
 
 Every figure from here to the gate-2 section is measured over one vector per unique script text: 39,260 texts from the converted cards and token scripts. The perturbed-variant texts are left out because they have no card to describe.
 
-The encoder's training noise does not limit the space. Training adds Gaussian noise with a standard deviation of 0.05 to each coordinate of `e`. The vectors average a length of 52, so the noise moves a vector by about a thousandth of its length.
+The encoder's training noise does not limit the space. Training adds Gaussian noise with a standard deviation of 0.05 to each coordinate of `e`. Over 64 coordinates the noise has an expected length of about 0.40. The vectors average a length of about 53, so the noise moves a vector by under a hundredth of its length, about 0.75%.
 
 ### Each direction separates two kinds of observed outcome, and the API types are spread along it
 
@@ -697,15 +697,46 @@ Infect shows a narrower gap of the same kind. Its −1/−1 counter field agrees
 
 The six routings are verdicts on the size of the game-disjoint stratum, not on the model. Most of those keywords agree at high rates on the records they have.
 
-### Nine checks report nothing, and none of them because of the model
+### Ward sits nearer every longhand twin than the median bare keyword, but deathtouch is nearer still
+
+The ward canary reports a pass. Ward's vector is closer to each of its four functional twins than to the median bare keyword. A functional twin is a real card line that spells out ward's effect without the keyword: an opponent's spell or ability that targets the permanent is countered unless its controller pays, or costs more to cast. Distances are cosine distances, one minus the cosine similarity, so 0 is the same direction and 1 is orthogonal.
+
+| Line compared with `ward {2}` | Card | Cosine distance |
+|---|---|---:|
+| "…you or a permanent you control becomes the target…, counter that spell or ability unless its controller pays {1}." | Unsettled Mariner | 0.202 |
+| "…CARDNAME becomes the target…, counter that spell or ability unless its controller pays {2}." | Frost Titan | 0.366 |
+| "…a sliver creature you control becomes the target…, counter that spell or ability unless its controller pays {2}." | Diffusion Sliver | 0.392 |
+| "spells your opponents cast that target CARDNAME cost {2} more to cast." | Boreal Elemental | 0.688 |
+| nearest bare keyword (deathtouch) | | 0.314 |
+| median over 20 bare keywords | | 0.769 |
+| farthest bare keyword (flying) | | 1.316 |
+
+Measured against the nearest bare keywords instead of the median, the two twins that restate ward {2} exactly would fail. Deathtouch is closer to ward than Frost Titan's line, which is ward {2} written out in full, and than Diffusion Sliver's line. Double strike and flash are about as close as Diffusion Sliver's line. The cost-increase twin sits nearest the median, so the encoder links ward with the counter-unless-paid trigger far more than with a tax paid up front.
+
+### The nearest neighbours of a line are the same effect with a different amount, target or cost
+
+Each query's three nearest lines do the same thing as the query. Every neighbour has a cosine similarity of at least 0.99 to its query. Each query is pinned to one card, because the same prose line compiles to different scripts on different cards.
+
+| Query (card) | Three nearest lines, nearest first |
+|---|---|
+| destroy target creature. (Murder) | destroy target creature or vehicle.; destroy all creatures with no counters on them.; destroy target blocking creature. |
+| draw a card. (Think Twice) | {6}{U}: draw a card.; draw a card.; {2}{B}, pay 2 life: draw a card. |
+| CARDNAME deals 3 damage to any target. (Lightning Bolt) | CARDNAME deals 4 damage to any target.; CARDNAME deals 5 damage to any target.; CARDNAME deals 2 damage to any target. |
+| target creature gets +2/+2 until end of turn. (Artful Maneuver) | the same line with a soulbond clause; target creature gets +1/+3 until end of turn.; target blocking creature gets +3/+1 until end of turn. |
+
+The neighbours differ from their query in the details the linear probes in the section on what the encoder keeps show it dropping. Lightning Bolt's neighbours change only the damage amount. Two of the draw neighbours add activation costs, {6}{U} and {2}{B} with 2 life. The third is the same prose on another card, compiled to a different script. Murder's second neighbour is a sweeper, so a single-target and a mass version of destroy sit together, as the API-type probe's confusions predict.
+
+### Seven checks report nothing, and none of them because of the model
 
 | Check | Why it reports nothing |
 |---|---|
-| ward canary, nearest-neighbour check | Their checked-in texts, in `src/effects/domain/ward_twins.py` and `NEIGHBOUR_QUERIES` in `evaluate_effect_model.py`, are spelled differently from the cache keys. The keys are lowercase converted prose without reminder text: `ward {2}`, `CARDNAME` where the checked-in texts say "this creature", and a trailing period (`destroy target creature.`). The texts are in the cache under those spellings. |
-| no-state and taxonomy geometry comparisons | Those variants' caches have not been encoded. |
+| no-state geometry comparison | That variant's cache has not been encoded. |
+| UMAP projection | `umap-learn` is not installed in the evaluation environment. |
 | decodability battery | It reads `output/sealed/cards-win-rates.txt`, which is not present locally. |
 | zero-shot keyword check | The checkpoint withheld no keyword, so there is nothing to measure. |
 | matched real-vs-fork, probe diff, role polarity | They need fork, probe and mana records, which the corpus does not have yet. |
+
+The taxonomy geometry comparison does report. The taxonomy baseline's vectors have a slightly higher mean pairwise cosine than the full model's, 0.173 against 0.152, and half its concentration on the top principal component, 20.1% against 40.0%.
 
 ### The full model predicts unseen text better than the identity baseline predicts text it has memorized
 

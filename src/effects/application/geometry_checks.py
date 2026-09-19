@@ -15,6 +15,7 @@ next.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,8 +23,17 @@ import numpy as np
 
 from effects.application.evaluate_effect_model import CheckResult, CheckStatus
 from effects.domain.ability_cache_layout import ARRAY_KEY, CACHE_SUFFIX
+from effects.domain.line_query import LineQuery, normalize_prose
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class Resolution:
+    """Where a :class:`LineQuery` landed: a cache key, or why it did not."""
+
+    key: str | None
+    problem: str = ""
 
 
 @dataclass
@@ -33,11 +43,22 @@ class CachedVectors:
     Indexed by *text* rather than by provenance key because every geometry
     check asks about unique texts: a line reprinted on forty cards is one point
     in the space, and counting it forty times would make the space look more
-    populated than it is.
+    populated than it is. The text is the one on the checkpoint's encoding
+    surface — what the model read — so two lines sharing prose but compiling to
+    different scripts are two points on a script checkpoint, and one reprint
+    encoded in two batches, whose vectors differ in float noise, is one.
+
+    ``display`` and ``by_prose`` exist for the checks a person reads. A script
+    key is unreadable in a report, and a query written as script would break on
+    the first reconversion, so queries name lines in prose and results print in
+    prose; ``by_prose`` maps each normalized prose line to the keys it encodes
+    to, with the cards printing each.
     """
 
     by_text: dict[str, np.ndarray] = field(default_factory=dict)
     by_card: dict[str, np.ndarray] = field(default_factory=dict)
+    display: dict[str, str] = field(default_factory=dict)
+    by_prose: dict[str, dict[str, set[str]]] = field(default_factory=dict)
 
     def matrix(self) -> np.ndarray:
         if not self.by_text:
@@ -47,25 +68,58 @@ class CachedVectors:
     def texts(self) -> list[str]:
         return list(self.by_text)
 
+    def label(self, key: str) -> str:
+        """``key`` as a person reads it: its prose, where it has any."""
+        return self.display.get(key, key)
+
+    def resolve(self, query: LineQuery) -> Resolution:
+        """The cache key ``query`` names, or the reason it names none.
+
+        Several keys under one prose is ambiguity rather than a choice to make
+        here: picking the first would compare against whichever card happened
+        to load first, so the query has to pin its card instead.
+        """
+        keys = self.by_prose.get(normalize_prose(query.prose), {})
+        if query.card is not None:
+            card = normalize_prose(query.card)
+            keys = {key: cards for key, cards in keys.items() if card in cards}
+            if not keys:
+                return Resolution(
+                    None, f"no line {query.prose!r} on {query.card!r}",
+                )
+        if not keys:
+            return Resolution(None, f"no line {query.prose!r} in the cache")
+        if len(keys) > 1:
+            return Resolution(
+                None,
+                f"{query.prose!r} is printed with {len(keys)} scripts; "
+                "pin its card",
+            )
+        return Resolution(next(iter(keys)))
+
     def __len__(self) -> int:
         return len(self.by_text)
 
 
 def load_cache(
     abilities_root: Path,
-    sidecars_root: Path,
+    sidecar_roots: Path | Iterable[Path],
     *,
+    surface: str,
     variant: str = "full",
-    surface: str = "prose",
 ) -> CachedVectors:
     """Load a variant's cache, keyed by the ability text each row encodes.
 
-    ``sidecars_root`` supplies the texts: the cache is row-aligned with each
+    ``sidecar_roots`` supplies the texts: the cache is row-aligned with each
     source's sidecar, so the pairing is positional and needs no index. The key
-    is the text on the surface the checkpoint encoded from — prose through
-    stage three, script from stage four — because a check that keyed on the
-    other surface would be comparing the vectors against texts they do not
-    encode.
+    is the text on ``surface``, which the caller takes from the checkpoint the
+    cache was encoded with, and which has no default: a check keyed on the
+    other surface compares the vectors against texts they do not encode, and
+    on a script checkpoint silently merges every pair of scripts sharing a
+    prose line.
+
+    Only a ``cardsfolder`` source contributes a pooled per-card vector: a token
+    is not a card the sealed pipeline scores.
     """
     from effects.domain.ability_encoder import encoding_text
     from effects.infrastructure.sidecar_io import (
@@ -76,33 +130,46 @@ def load_cache(
         read_sidecar,
     )
 
+    roots = (
+        (Path(sidecar_roots),) if isinstance(sidecar_roots, (str, Path))
+        else tuple(Path(r) for r in sidecar_roots)
+    )
     suffix = CACHE_SUFFIX if variant == "full" else f".{variant}{CACHE_SUFFIX}"
     cached = CachedVectors()
     root = Path(abilities_root)
     if not root.is_dir():
         return cached
 
-    for sidecar_path in sorted(Path(sidecars_root).rglob(f"*{SIDECAR_SUFFIX}")):
-        sidecar = read_sidecar(sidecar_path)
-        relative = Path(sidecar.script_file)
-        cache_path = root / relative.parent / f"{relative.stem}{suffix}"
-        if not cache_path.exists():
-            continue
-        with np.load(cache_path) as data:
-            matrix = data[ARRAY_KEY]
-        if matrix.shape[0] != len(sidecar.lines):
-            logger.warning(
-                "skipping %s: %d cache rows for %d sidecar lines",
-                cache_path, matrix.shape[0], len(sidecar.lines),
-            )
-            continue
-        rendered = prose_lines(converted_text_path(sidecar_path))
-        for row, line in zip(matrix, sidecar.lines):
-            text = encoding_text(line, prose_for(line, rendered), surface)
-            if text:
+    for sidecar_root in roots:
+        for sidecar_path in sorted(sidecar_root.rglob(f"*{SIDECAR_SUFFIX}")):
+            sidecar = read_sidecar(sidecar_path)
+            relative = Path(sidecar.script_file)
+            cache_path = root / relative.parent / f"{relative.stem}{suffix}"
+            if not cache_path.exists():
+                continue
+            with np.load(cache_path) as data:
+                matrix = data[ARRAY_KEY]
+            if matrix.shape[0] != len(sidecar.lines):
+                logger.warning(
+                    "skipping %s: %d cache rows for %d sidecar lines",
+                    cache_path, matrix.shape[0], len(sidecar.lines),
+                )
+                continue
+            rendered = prose_lines(converted_text_path(sidecar_path))
+            card = normalize_prose(sidecar.card)
+            for row, line in zip(matrix, sidecar.lines):
+                prose = prose_for(line, rendered)
+                text = encoding_text(line, prose, surface)
+                if not text:
+                    continue
                 cached.by_text.setdefault(text, row)
-        if matrix.size:
-            cached.by_card[sidecar.card] = pooled(matrix)
+                cached.display.setdefault(text, prose or text)
+                if prose:
+                    cached.by_prose.setdefault(
+                        normalize_prose(prose), {},
+                    ).setdefault(text, set()).add(card)
+            if matrix.size and relative.parts[:1] == ("cardsfolder",):
+                cached.by_card[sidecar.card] = pooled(matrix)
     return cached
 
 
@@ -164,22 +231,35 @@ def umap_projection(matrix: np.ndarray, *, seed: int = 42) -> np.ndarray | None:
 
 
 def check_nearest_neighbours(
-    cached: CachedVectors, queries: tuple[str, ...],
+    cached: CachedVectors, queries: tuple[LineQuery, ...],
 ) -> CheckResult:
+    """Each query's three nearest lines, printed in prose for a person to judge.
+
+    A query that resolves to no line is listed as unresolved rather than left
+    out, so a list shorter than the query table says why.
+    """
     if len(cached) < 2:
         return CheckResult(
             "nearest-neighbour", CheckStatus.SKIPPED,
             "the ability cache is empty; run encode-abilities first",
         )
     lines = []
+    unresolved = 0
     for query in queries:
-        neighbours = nearest_neighbours(cached, query, k=3)
-        if neighbours:
-            rendered = ", ".join(f"{t[:40]!r} ({s:.2f})" for t, s in neighbours)
-            lines.append(f"{query[:40]!r} → {rendered}")
+        resolution = cached.resolve(query)
+        if resolution.key is None:
+            unresolved += 1
+            lines.append(f"{query.label()!r} → unresolved: {resolution.problem}")
+            continue
+        neighbours = nearest_neighbours(cached, resolution.key, k=3)
+        rendered = ", ".join(
+            f"{cached.label(text)[:70]!r} ({score:.2f})"
+            for text, score in neighbours
+        )
+        lines.append(f"{query.label()!r} → {rendered}")
     return CheckResult(
-        "nearest-neighbour", CheckStatus.REPORTED,
-        "; ".join(lines) if lines else "none of the query texts are in the cache",
+        "nearest-neighbour", CheckStatus.REPORTED, "; ".join(lines),
+        {"unresolved_queries": float(unresolved)},
     )
 
 
@@ -200,45 +280,38 @@ def check_umap(cached: CachedVectors) -> CheckResult:
 
 
 def check_ward(cached: CachedVectors) -> CheckResult:
-    """Is ward's ``e`` nearer its longhand twins than a bare keyword generally?"""
-    from effects.application.evaluate_effect_model import evaluate_ward_canary
-    from effects.domain.ward_twins import BARE_KEYWORDS, WARD_TEXT, WARD_TWINS
+    """Is ward's ``e`` nearer its longhand twins than a bare keyword generally?
 
-    ward = _nearest_by_prefix(cached, WARD_TEXT)
-    if ward is None:
+    Every line resolves through its prose to the key the checkpoint encoded. A
+    twin or keyword that resolves to nothing is named in the result rather
+    than dropped: a canary quietly comparing against fewer twins than it lists
+    is weaker than it claims to be.
+    """
+    from effects.application.evaluate_effect_model import evaluate_ward_canary
+    from effects.domain.ward_twins import BARE_KEYWORDS, WARD, WARD_TWINS
+
+    ward = cached.resolve(WARD)
+    if ward.key is None:
         return CheckResult(
             "ward-canary", CheckStatus.SKIPPED,
-            "no ward line in the cache",
+            f"ward is not in the cache: {ward.problem}",
         )
-    twins = [v for v in (_nearest_by_prefix(cached, t) for t in WARD_TWINS) if v is not None]
-    bare = [
-        v for v in (_nearest_by_prefix(cached, k) for k in BARE_KEYWORDS)
-        if v is not None
-    ]
-    return evaluate_ward_canary(ward, twins, bare)
+    unresolved: list[str] = []
 
+    def vectors(queries: tuple[LineQuery, ...]) -> list[np.ndarray]:
+        found = []
+        for query in queries:
+            resolution = cached.resolve(query)
+            if resolution.key is None:
+                unresolved.append(resolution.problem)
+            else:
+                found.append(cached.by_text[resolution.key])
+        return found
 
-def _nearest_by_prefix(cached: CachedVectors, text: str) -> np.ndarray | None:
-    """The cached vector for ``text``, matched loosely.
-
-    Converted text differs from the checked-in twin wording in whitespace and
-    punctuation, so an exact lookup would find nothing on a real corpus. The
-    match is on a normalized prefix, which is specific enough for these texts.
-    """
-    exact = cached.by_text.get(text)
-    if exact is not None:
-        return exact
-    needle = _normalize(text)[:60]
-    if not needle:
-        return None
-    for candidate, vector in cached.by_text.items():
-        if _normalize(candidate).startswith(needle):
-            return vector
-    return None
-
-
-def _normalize(text: str) -> str:
-    return " ".join(text.lower().split())
+    return evaluate_ward_canary(
+        cached.by_text[ward.key], vectors(WARD_TWINS), vectors(BARE_KEYWORDS),
+        unresolved=unresolved,
+    )
 
 
 # ── the decodability battery (FR-114) ───────────────────────────────────

@@ -834,8 +834,15 @@ loss.
   role-polarity probe needs mana records and so the engine patch. Every other check runs against any
   corpus.
 - **FR-112**: The ward canary MUST compare ward's `e` against a checked-in list of functional-twin
-  ability texts in `src/effects/domain/ward_twins.py`, passing when ward is closer in cosine distance
+  ability lines in `src/effects/domain/ward_twins.py`, passing when ward is closer in cosine distance
   to each twin than the median of ward's cosine distances to all bare single-keyword `e` vectors.
+  Ward, each twin and each bare keyword MUST be a line the converted corpus prints, named by its
+  converted prose (lowercase, `CARDNAME` for the card's own name, no reminder text) and pinned to a
+  card where that prose compiles to more than one script; each twin spells out ward's effect — a
+  spell or ability an opponent aims at the permanent is countered unless its controller pays, or
+  costs more to cast — without the keyword. Every entry MUST resolve to the key on the checkpoint's
+  encoding surface, and an entry that resolves to no line MUST be named in the report rather than
+  dropped. The nearest-neighbour queries follow the same rules.
 - **FR-113**: Checks over `e` geometry (gate 3, the decodability battery, the ward canary, the scorer
   smoke test) read the `output/effects/abilities/` caches, so `encode-abilities` MUST have run for
   every variant those checks cover before `evaluate-effect-model` runs.
@@ -874,7 +881,10 @@ loss.
   row per keyword in a checked-in table (`src/effects/domain/damage_step_keywords.py`).
 - **FR-123**: Gate 3 (collapse canaries) MUST require mean pairwise cosine similarity ≤ 0.5 over 10,000
   random pairs and a top principal component explaining ≤ 30% of total variance, over one vector per
-  unique ability text. It MUST block shipping the model or cache.
+  unique ability text. Uniqueness MUST be decided by the text on the checkpoint's encoding surface
+  (`surface_of` of its recorded vocabulary), never by the vector's value, and the population MUST be
+  the shipping cache's card and token trees; synthetic variant-script lines are excluded. Gate 3
+  MUST block shipping the model or cache. Every other geometry check MUST key the cache the same way.
 - **FR-124**: Run results MUST be recorded in the design record's Outcome section, never in the root
   spec.
 
