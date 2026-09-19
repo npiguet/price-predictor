@@ -329,10 +329,10 @@ class AbilityTokenizer:
 
     @staticmethod
     def _definition_text(definition) -> str | None:
-        """The text a keyword expands to on the prose surface.
+        """The text a keyword expands to, on both surfaces: its reminder template.
 
-        Stage four overrides this with the captured implementation script on
-        the script surface, falling back here where no script exists.
+        The captured implementation script is not used. It holds only the
+        keyword's root lines, never the effect they execute.
         """
         return getattr(definition, "reminder_template", None)
 

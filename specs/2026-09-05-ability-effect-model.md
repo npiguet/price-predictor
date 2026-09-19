@@ -278,7 +278,7 @@ Two transformers trained jointly; training-only auxiliaries are filtered out of 
 - **Number tokens.** A monotone numeric embedding: a shared learned base vector plus log1p(n) times a learned direction.
 - **Prose tokens.** Each token adds a role embedding (`cost` \| `effect` \| `trigger-condition` \| `target-spec`) looked up from the sidecar's role spans.
 - **Keyword-expansion dropout.**
-  - With probability `--keyword-expand-p` a keyword token is replaced by its definition text; keywords unknown to the vocabulary are always expanded. On the script surface the definition is the captured script and the reminder template on the prose surface, falling back to the template where no script exists.
+  - With probability `--keyword-expand-p` a keyword token is replaced by its definition text; keywords unknown to the vocabulary are always expanded. On both surfaces the definition is the reminder template. The captured script is recorded in the definitions file but is not a definition.
   - Parameterized keywords instantiate the template with the instance's own values; a keyword referenced without an instance (inside another definition) expands with the template's generic wording.
   - Keywords whose body lives on the host card (saga chapters, class levels) never expand.
   - Keywords inside an expansion stay tokens, themselves subject to dropout on other samples.

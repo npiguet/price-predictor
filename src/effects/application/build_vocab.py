@@ -93,13 +93,11 @@ def _keyword_corpus_text(path: Path, surface: str = SURFACE_PROSE) -> str:
     them has to be in the vocabulary — otherwise expanding a keyword would
     replace one known token with a sentence of ``[UNK]``.
 
-    **Which field, though, follows the surface.** ``expand_keywords``
-    substitutes the reminder template on the prose surface and the captured
-    script from stage four (FR-060, FR-062); scanning both put Forge script
-    syntax — ``activezones``, ``9999``, bare ``$`` and ``%`` — into a prose
-    vocabulary that can never encode it. On the script surface the template is
-    still scanned, because the engine-coded keywords generate no script and
-    keep their template, and the encoder falls back to it for exactly those.
+    ``expand_keywords`` substitutes the reminder template on both surfaces, so
+    the template is scanned on both. The captured script is scanned on the
+    script surface only: it is Forge script syntax (``activezones``, ``9999``,
+    bare ``$`` and ``%``) that a prose vocabulary can never encode, and no
+    expansion substitutes it today.
     """
     from effects.application.extract_keyword_definitions import (
         load_keyword_definitions,
