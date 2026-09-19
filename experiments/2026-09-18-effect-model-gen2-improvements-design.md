@@ -221,6 +221,11 @@ correct record when it resolves. The records that appear are the ones the corpus
 - "Tap target creature" on a creature that is already tapped. A resolution that changes nothing,
   which the corpus has never recorded.
 
+The combat case is measured for deathtouch. Forge declines the attacks and blocks in which
+deathtouch would decide who dies, which is part of why gate 2 lacks deathtouch records; the tables
+are in the design record's section
+[on why deathtouch and indestructible combats are scarce](2026-09-04-ability-effect-model-design.md#deathtouch-and-indestructible-combats-are-scarce-because-few-creatures-carry-the-keywords-and-forges-combat-ai-avoids-the-combats-deathtouch-decides).
+
 ### Gen-2 collects from games where one seat plays legal but random actions against a normal Forge seat
 
 One seat stays the standard Forge AI, so the game keeps a shape Forge would produce and ends. The
@@ -355,6 +360,138 @@ already in the envelope for evaluation; the cap reads it as well. A capped text 
 cap from flagged records first and the rest from the remainder, so a text with few off-policy
 records keeps every one and a text with many keeps a balanced set. The manifest records the
 on-policy and off-policy record counts per class beside the existing per-class counts.
+
+## Two build settings leave gate 2 and the trainer short of rare-keyword combats, and neither needs new games
+
+Gate 2 routes six of its eight keywords to a probe for want of records, and two `build-corpus`
+settings decide how many it and the trainer get. The game-disjoint stratum that gate 2 reads is
+1,000 games by default. Curation keeps a combat record for training at one rate whatever the
+fight, so a deathtouch combat is kept no more often than a fight between two vanilla creatures.
+The design record's section
+[on why deathtouch and indestructible combats are scarce](2026-09-04-ability-effect-model-design.md#deathtouch-and-indestructible-combats-are-scarce-because-few-creatures-carry-the-keywords-and-forges-combat-ai-avoids-the-combats-deathtouch-decides)
+gives two causes: few creatures carry the keywords, and Forge avoids the combats deathtouch decides.
+Both settings act on the first cause only. The random seat acts on the second.
+
+### Gen-2 builds the game-disjoint stratum from 10,000 games
+
+Ten times the games gives each keyword ten times its qualifying records, and four of the six
+under-sampled keywords then clear gate 2's floor of 200. Indestructible lands just short of it and
+wither far short. The counts below are gate 2's on the 1,000-game stratum, scaled linearly.
+
+| Keyword | Qualifying records, 1,000 games | Expected at 10,000 games |
+|---|---:|---:|
+| first strike | 47 | 470 |
+| deathtouch | 69 | 690 |
+| trample | 179 | 1,790 |
+| indestructible | 19 | 190 |
+| wither | 11 | 110 |
+| infect | 73 | 730 |
+
+The cost is the games themselves. A game in the stratum is never trained on. The raw corpus holds
+120,242 games, of which 13,993 name a held-out card and are withheld from training already, so
+moving 9,000 more games to the stratum takes about 9% of the games training can draw on. The flag is
+`build-corpus --game-disjoint-games 10000`, and the evaluator reads the stratum from the checkpoint,
+so nothing else changes.
+
+### Gen-2 keeps every combat record in which a rare damage-step keyword fights
+
+Curation keeps 158,348 of the 1,066,917 combat records it reads, 15%, and chooses them by a hash of
+the record id, so the choice is uniform over fights. The count read includes the validation strata
+and the withheld held-out games. Training can draw on about 920,000 combat records, estimating the
+withheld games' combats at the card-disjoint stratum's rate per game, so the kept share of those is
+about one in six. The per-text cap and the rarity weight never see a combat record, because a
+combat record carries no acting ability text. Nothing in curation can therefore favour a deathtouch
+combat over an ordinary one.
+
+Gen-2 keeps every combat record in which a creature with deathtouch, double strike,
+indestructible, infect or wither attacks or blocks, and fills the rest of the combat share
+uniformly as now. Training then sees about six times as many of those combats. The rule leaves out
+first strike, trample and lifelink because keeping every combat with any of the eight keywords
+would take more than the whole combat share. On the 1,000 game-disjoint games, a damage-step
+keyword appears in about a quarter of combat records, and the five rare ones in about one in twelve.
+
+| Combat records, 1,000 game-disjoint games | Records | Share |
+|---|---:|---:|
+| all | 8,762 | 100% |
+| with any of the eight damage-step keywords | 2,051 | 23.4% |
+| with deathtouch, double strike, indestructible, infect or wither | 740 | 8.4% |
+
+At about one in twelve of the 920,000 available, the kept rare-keyword combats number about 78,000,
+half the current combat share. The manifest records the count kept by the rule beside the per-class
+counts, so the share left for ordinary combats is visible.
+
+## Most `blockers` records are the AI's what-if queries, and nothing in a record says which kind it is
+
+The collector writes a legality record every time Forge's AI computes a legal attacker or blocker
+set, not only when a player declares. Forge computes those sets while planning in its main phases, at
+upkeep, and while the attacking AI simulates how the defender would block each candidate attacker.
+Only one `blockers` record in twenty-two is taken at a real blocking decision. Two in three
+`attackers` records are.
+
+A record counts as a real decision here by the same test as the design record's avoidance analysis.
+An `attackers` record is real when its snapshot phase is `combat_declare_attackers` and its actor is
+the active player. A `blockers` record is real when its phase is `combat_declare_blockers` and its
+anchor attacker is attacking. The counts are over both validation strata, 6,848 whole games.
+
+| Snapshot phase | `attackers` records | `blockers` records |
+|---|---:|---:|
+| upkeep | 267 | 9,017 |
+| draw | 26 | 1,819 |
+| main 1 | 987 | 15,231 |
+| beginning of combat | 1,250 | 31,040 |
+| declare attackers | 4,813 | 55,317 |
+| declare blockers | 0 | 6,050 |
+| combat damage, first-strike damage, end of combat | 0 | 810 |
+| main 2 | 0 | 7,977 |
+| end of turn, untap | 0 | 761 |
+| total | 7,343 | 128,022 |
+| real decisions | 4,813 (65.5%) | 5,895 (4.6%) |
+
+The legality answer in a what-if record is still a rules fact about the board in its snapshot. The
+query that produced it is hypothetical, but the verdict of which creatures may attack or block is
+not. No `attackers` record in either stratum lists a tapped or summoning-sick creature as a legal
+attacker, and no `blockers` record lists a tapped creature as a legal blocker. The legality head
+therefore learns nothing false from them. What it learns from is a class dominated by planning
+queries about combats Forge was only considering, and a record gives no way to tell the two kinds
+apart.
+
+Two further collector rules shrink the real decisions the corpus holds.
+
+- De-duplication keys on the subkind and the payload, the list of legal ids, and ignores the board.
+  The collector's comment says only byte-identical records collapse, but a record from a later turn
+  with the same legal creatures on a different board is dropped as a duplicate. A what-if query
+  earlier in the same turn can consume the key, so the real decision that follows it is dropped too.
+- After de-duplication, `--legality-rate` keeps one record in ten. The two validation strata hold
+  4,813 real declare-attackers decisions over 6,848 games, fewer than one a game.
+
+### Gen-2 marks each legality record as a real decision or a what-if, as collection metadata
+
+The collector applies the test above as it writes each record. It knows the phase, the active
+player and whether the anchor attacker is attacking in the game's combat, and it writes an envelope
+flag naming a what-if query. The flag is collection metadata in the sense `mode`, `fork` and
+`synthetic` already are, and it never reaches the model. It is an additive field, so the
+frozen-schema contract test gains one line. The records already collected are classified by the
+snapshot-phase test above, which the build step can apply on read.
+
+### Gen-2 includes the board in the legality de-duplication key
+
+The key becomes the subkind, the payload and the snapshot, the same three parts
+`allowDistinctRecord` already hashes for the other record kinds. The repeats the de-duplication was
+written for, the AI re-asking during one combat evaluation, share a board and still collapse. A
+later turn with the same creatures on a different board is kept.
+
+### Gen-2 records every real decision and fills the legality class from them first
+
+The real decisions are exempt from `--legality-rate`, and the rate applies to what-if queries only.
+Real decisions happen only at the two declare steps of each turn, so exempting them adds little
+volume. They are also the only legality records that join to the combat that follows, which is
+what a measurement of Forge's attack and block choices needs.
+
+Curation keeps what-if records rather than dropping them, because their verdicts are true and they
+show the legality rules on boards and phases the real decisions never reach. It fills the legality
+class from real decisions first, up to half its share, and the remainder from what-ifs, the same rule
+the per-text cap applies to the random seat's off-policy records. The manifest records the real and what-if counts per subkind, and the evaluation reports the legality
+fields on real decisions separately.
 
 ## The training noise on the ability vector is under 1% of its length, so the small-noisy-`e` lever does nothing
 
