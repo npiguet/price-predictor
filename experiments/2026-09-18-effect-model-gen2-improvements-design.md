@@ -45,6 +45,14 @@ excluding keyword lines.
 | median ratio of full-chain text to root text, chained lines only | 1.4× |
 | 90th percentile of that ratio | 2.1× |
 
+Modal abilities lose every mode. A charm's root line names its modes only by label, as in
+`Choices$ DBDmgC,DBDmgP`, and where it has a description, the description ends in the placeholder
+`ABILITY` that Forge fills from the modes at runtime. The encoder sees that the ability offers a
+choice and not what any choice does.
+
+| charm lines in the converted card corpus | 783, on 781 cards |
+| charm lines whose encoded text names no mode | 742, on 740 cards |
+
 The mechanism is in the converter. `TraitScript.of` renders `script_text` from the trait's own
 parameter map, and a trait's map holds only the line the trait was parsed from. For a trigger that
 is the `T:` line. The effect the trigger executes is a separate `SpellAbility` reachable through
@@ -71,7 +79,8 @@ in the text. The variant records then teach the model that one text has two outc
 
 `script_text` becomes the concatenation of every script line the ability owns: the root line, then
 for a trigger its executed ability, then each sub-ability in chain order, including a
-`RepeatSubAbility` where one exists. Segments are separated by a dedicated token and each segment
+`RepeatSubAbility` where one exists, and for a charm each mode its `Choices$` names, since a charm
+reaches its modes through that list rather than through `Execute$` or `SubAbility$`. Segments are separated by a dedicated token and each segment
 keeps the SVar label the parent referenced it by, so `SubAbility$ DBChange` in one segment and
 `DBChange:` opening a later one give the model the link. Replacement effects get the same treatment
 through `ReplaceWith$`.
