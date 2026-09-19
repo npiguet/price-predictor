@@ -110,6 +110,84 @@ fallback above. Whether to build the pairing loss is a separate gen-2 decision; 
 because the chain change above is what makes the script surface carry the mechanism the pairing
 was meant to anchor prose to, and the two should be weighed together.
 
+## The script tokenizer is never called, and the prose grammar that runs in its place splits selectors better
+
+`AbilityTokenizer.tokenize_script` is the tokenizer written for the script surface, and no code calls
+it. Encoding for the cache (`ability_encoder_runner.py`) and encoding during training
+(`surface_batching.py`) both pass the script text to `tokenize`, the prose grammar. The vocabulary
+is built with the prose grammar too. `build-vocab --surface script` hands the script lines to the
+shared price-predictor vocabulary builder, which splits them with `MtgTokenizer`. The design doc
+counts a script tokenizer that splits compound selectors such as `Creature.nonDragon+OppCtrl` among
+the costs of the script surface, in "The script is the primary surface; prose is the paired
+secondary" of [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md).
+
+The prose grammar already makes that split. It ends a word at every character that is not a letter or
+an underscore, so `.` and `+` end a word and are kept as tokens of their own. `tokenize_script` makes the same cut
+at `.` and `+` but drops the separators, and before cutting it keeps letters, digits and `-`
+together in one run. A sign then either vanishes, so `NumAtt$ +1` reads as `1`, or fuses with its
+number into `-1`. A threshold fuses with its digit, so `powerGE4` becomes one token and the 4 never
+reaches the numeric embedding. The vocabulary was built with the prose grammar, so every fused token
+is unknown to it. Unknown tokens (`[UNK]`) are the placeholder the encoder reads for any word
+missing from the vocabulary.
+
+| script text | `tokenize` (runs) | `tokenize_script` (never called) |
+|---|---|---|
+| `ValidTgts$ Creature.nonDragon+OppCtrl` | validtgts $ creature . nondragon + oppctrl | validtgts $ creature nondragon oppctrl |
+| `NumAtt$ +1` | numatt $ + 1 | numatt $ 1 |
+| `NumDef$ -1` | numdef $ - 1 | numdef $ -1 [UNK] |
+| `CounterType$ P1P1` | countertype $ p 1 p 1 | countertype $ p1p1 [UNK] |
+| `ValidTgts$ Creature.powerGE4` | validtgts $ creature . powerge 4 | validtgts $ creature powerge4 [UNK] |
+
+Measured against the shipping vocabulary `models/effects/vocab-script.txt`, the unused tokenizer
+produces more than twice the unknown tokens of the one that runs. The sample is 5,000 script lines
+from randomly drawn cards. "Parameters only" is the same lines with the text of every
+`*Description$` parameter removed, which leaves the part of a line the script tokenizer was written
+for.
+
+| on 5,000 script lines | `tokenize` | `tokenize_script` |
+|---|---|---|
+| unknown-token rate, whole line | 0.34% | 0.85% |
+| unknown-token rate, parameters only | 0.47% | 1.12% |
+| lines with at least one unknown token | 413 (8%) | 824 (16%) |
+| tokens per line, mean (median), whole line | 32.5 (34) | 30.4 (31) |
+| tokens per line, mean (median), parameters only | 18.4 (20) | 17.6 (19) |
+
+Neither grammar splits compound words, and compound words are where the unknown tokens come from.
+Forge writes restrictions and SVar labels in camel case: `nonDragon`, `YouCtrl`,
+`TrigDestroyYourLand`. Both grammars cut only at characters that are not letters, so each compound
+is one token. `YouCtrl` and `OppCtrl` share nothing, and `nonDragon` shares nothing with the
+`dragon` token the prose surface knows. In the parameters-only sample, camel-case compounds are
+about one token in six and three quarters of the unknown tokens. For nearly two thirds of those
+unknown compounds, every part is already in the vocabulary.
+
+| parameters only, `tokenize`, 5,000 script lines | |
+|---|---|
+| tokens | 92,191 |
+| tokens from a camel-case compound | 15,612 |
+| distinct compound tokens | 1,174 |
+| unknown tokens | 433 |
+| unknown tokens that are compounds | 327 |
+| unknown compounds whose parts are all in the vocabulary | 205 |
+
+### Gen-2 deletes the script tokenizer and splits camel-case compounds on the script surface
+
+`tokenize_script` is removed rather than wired in, because the grammar that runs keeps the signs,
+separators and digits it loses. The prose grammar gains one rule on the script surface: a word is
+also cut where a lowercase letter is followed by an uppercase one, so `nonDragon` reads as
+`non dragon` and `YouCtrl` as `you ctrl`.
+
+1. **The vocabulary scan and the tokenizer apply the same rule.** `build-vocab --surface script`
+   already stages the script lines as a text file for the shared builder, so it applies the split to
+   that staged text. The price predictor's `MtgTokenizer` does not change. `tokenize` applies the
+   rule when the loaded vocabulary is a script vocabulary, which `surface_of` already determines
+   from the vocabulary path.
+2. **The rule lands with the chain encoding's vocabulary rebuild.** The chain change rebuilds the
+   script vocabulary anyway. The holdout hash reads the normalised script text rather than its
+   tokens, so this rule does not move the held-out set.
+3. **The measurement above is repeated on the rebuilt vocabulary.** The build log reports the
+   unknown-token rate on the parameters and the number of distinct compound parts, so the rebuild
+   shows whether the unknown compounds went away.
+
 ## Every outcome in the corpus is one Forge chose, so the model can learn abilities without learning targets
 
 The corpus is observational under one policy. A resolution record exists because Forge decided to
@@ -277,6 +355,93 @@ already in the envelope for evaluation; the cap reads it as well. A capped text 
 cap from flagged records first and the rest from the remainder, so a text with few off-policy
 records keeps every one and a text with many keeps a balanced set. The manifest records the
 on-policy and off-policy record counts per class beside the existing per-class counts.
+
+## The training noise on the ability vector is under 1% of its length, so the small-noisy-`e` lever does nothing
+
+The design doc's first memorization lever keeps the ability vector `e` small and noisy in training,
+so that the effect head cannot use `e` as a precise per-text lookup key. It is set out in "Coverage
+and memorization are separate tail problems, and both get levers" of
+[`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md). The
+encoder implements the noise half with a fixed Gaussian standard deviation of 0.05 on each of the
+64 coordinates (`e_noise` in `ability_encoder.py`). Nothing implements the small half. `e` is a
+linear projection of the encoder's output. The only restraint on that projection is the optimizer's
+weight decay, a pull of every weight toward zero by a factor of 0.01 of the learning rate per step.
+A larger `e` makes the same absolute noise relatively smaller. The effect head reads `e` through a
+linear layer, which absorbs any scale.
+
+In the trained gen-1 encoder the vectors are large enough that the noise no longer matters. The figures are over every row of the
+shipping cache under `output/effects/abilities/cardsfolder/`, with the taxonomy baseline's files
+left out. The noise moves a vector by less than a hundredth of its length. Along the ninth principal
+direction, the weakest the encoder uses, the spread of the vectors is almost ninety times the noise.
+
+| shipping ability cache | |
+|---|---|
+| vectors | 66,142 |
+| length, mean | 53.4 |
+| length, 10th / 50th / 90th percentile | 40.5 / 54.3 / 64.4 |
+| length, shortest | 23.6 |
+| standard deviation of one coordinate, over all vectors | 6.8 |
+| standard deviation along the ninth principal direction (design doc Outcome) | 4.4 |
+| noise, standard deviation per coordinate | 0.05 |
+| noise, expected length in 64 dimensions | 0.40 |
+
+The effect head can therefore tell texts apart at a precision far finer than the typical distance
+between two of them, which is the lookup the lever was meant to make expensive. In gen-1 only the other four levers
+acted against memorization.
+
+The pairing-loss argument in the design doc rests on the same noise. A symmetric pull between a
+line's script and prose vectors adds pressure to collapse `e`, and the doc expects the noisy-`e`
+lever to amplify that pressure. With negligible noise that interaction is absent today. It appears
+once the noise is fixed, so the pairing decision left open in "Also noted: the paired-prose loss the design
+doc describes is not built" has to be made against the fixed noise.
+
+The baselines receive no noise at all. The noise is added inside the encoder's forward pass, and
+the `identity` and `taxonomy` vectors never pass through the encoder. Today the difference is
+immaterial. Once the noise has an effect, the baselines differ from the model in their noise as
+well as in their input.
+
+### Gen-2 scales the noise to the spread of `e` within the batch
+
+Three fixes are open.
+
+- **Normalizing each `e` to a fixed length before the noise.** The fixed noise then has a scale it
+  cannot escape. It also discards length, which ranges over a factor of nearly three in the shipping
+  cache and may carry information. It changes the vectors the cache stores, so every consumer reads
+  a different `e`.
+- **A penalty on the length of `e` in the loss.** It adds a second weight, and the balance between
+  that weight and the noise is what sets the noise's effective size. It is the same control as the
+  one below, reached through two parameters instead of one.
+- **Noise proportional to the spread of `e`.** The noise's standard deviation is `e_noise` times
+  the spread of the batch's `e` vectors. The ratio of noise to spread is then fixed, and scaling `e`
+  changes nothing.
+
+Gen-2 takes the third. Four details settle it.
+
+1. **The spread is measured around the batch mean.** It is the standard deviation of each coordinate
+   across the ability texts encoded in the batch, averaged over the coordinates. The root mean square
+   of `e` would not do, because a common offset added to every vector would inflate it without
+   separating any two texts.
+2. **The spread is read with the gradient stopped.** The noise is then only noise, and not a path
+   through which the loss changes `e`.
+3. **The noise moves from the encoder to the batcher.** It is applied to whatever vectors the batch
+   carries, the encoder's, `identity`'s or `taxonomy`'s, so a baseline differs from the model only in
+   its input, as the design defines it.
+4. **`e_noise` becomes a ratio, and its value comes from a short sweep.** Gen-1's effective ratio
+   per coordinate was under a hundredth. The sweep covers 0.05, 0.1 and 0.2 of the spread and
+   picks by card-disjoint validation loss beside gate 1's margins.
+
+The cache and its consumers do not change. The noise is applied in training only, and the encoded
+`e` keeps its form and its unconstrained scale.
+
+Gate 3 is where the change should show. Gate 3 caps the share of the embedding's variance on its top
+principal component, and that share is a ratio of variances, so a pure rescale of `e` leaves it
+exactly where it is. Relative noise changes what the encoder is rewarded for. Noise of the same
+size in every direction hides any difference along a direction whose spread is below it. With the
+total spread fixed relative to the noise, the encoder separates the most texts by spreading them
+over several directions rather than stretching one. This is the standard result for sending a signal
+through several independent noisy channels under a total power budget: the budget buys the most
+information when it is shared across every channel that clears the noise. Relative noise is
+therefore expected to lower the top component's share, and gate 3 reports whether it does.
 
 ## Gate 1 scores fewer than half of the held-out texts, and a third of those have a numeric twin in training
 
