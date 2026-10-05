@@ -2,11 +2,11 @@
 
 Design record for a suite of probes on the ability effect model described in the model design record, [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md). An ability encoder turns each ability line into one vector `e`. An effect head then predicts what an ability does to the board. The effect head has two parts. The first part, the trunk, is a stack of transformer layers. Each layer recomputes every slot's vector from the vectors of all the slots in a sequence. The sequence holds one slot for the game, one per player, an `[ACT]` slot holding the acting ability's `e`, and, for each object on the board, a `[CARD]` slot followed by that object's ability vectors. The second part, the output heads, is a set of small layers. They read the trunk's output at those slots and predict each output field, such as whether an entity dies or how much damage it takes.
 
-Gen-1 is the checkpoint of run `09.17f`, whose results the model design record's Outcome section reports. Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and the size of the encoder, described in [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md). The suite runs on gen-1 and on every arm. Each corpus withholds two validation strata from training. The game-disjoint stratum holds whole games whose ability texts the model trained on. The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never saw.
+Gen-1 is the checkpoint of run `09.17f`, whose results the model design record's Outcome section reports. Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and the size of the encoder, described in the gen-2 record, [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md). The suite runs on gen-1 and on every arm. Each corpus withholds two validation strata from training. The game-disjoint stratum holds whole games whose ability texts the model trained on. The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never saw.
 
 A probe is a small model fitted to predict a known label from a model's internal vector. How well it predicts measures how readably the vector holds that label. The existing embedding probes in `scripts/effect_embedding_probes/` read `e` alone. They label each text from its script or from its effect profile: the shares of its resolutions in which affected entities died, changed zone, took damage and so on. The probes designed here also read the trunk, and they compare the two.
 
-The suite has three methods and the board sweeps, which edit the input. Method A, the read-out ladder, fits probes to inputs taken from progressively deeper in the model. Method B, an ablation, replaces `e` in the frozen model, whose weights stay as trained and are not updated, and measures how much the loss rises. Method C trains a shallow trunk on frozen `e`. Board sweeps edit one input of a real record and read the full model's prediction.
+The suite has three methods and a set of board sweeps. Method A, the read-out ladder, fits probes to inputs taken from progressively deeper in the model. Method B, an ablation, replaces `e` in the frozen model, whose weights stay as trained and are not updated, and measures how much the loss rises. Method C trains a shallow trunk on frozen `e`. Board sweeps edit one input of a real record and read the full model's prediction.
 
 ## The probes measure what game knowledge each model holds, and how much of it lives in `e` rather than in the trunk
 
@@ -18,7 +18,7 @@ One vector per ability is also easier to interpret. It can be inspected, compare
 
 ## The probes cover what an ability does to the board, in ten families, and leave strategic value to the game agent
 
-The encoder's job is an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job. Gen-2's run plan checks strategic value separately, with the decodability battery. The battery is a set of probes that read the sealed pipeline's per-card win rates from each card's pooled `e`, which is the mean and the maximum of the card's ability vectors placed side by side.
+The encoder's job is an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job. The gen-2 record's run plan checks strategic value separately, with the decodability battery. The battery is a set of probes that read the sealed pipeline's per-card win rates from each card's pooled `e`, which is the mean and the maximum of the card's ability vectors placed side by side.
 
 The ten families below are what the probes target. Each label comes from a source that exists without the model: the parsed script, or an outcome observed in the effect-record corpus.
 
@@ -35,7 +35,7 @@ The ten families below are what the probes target. Each label comes from a sourc
 | Duration and repeatability | whether a change lasts until end of turn, stays, or comes as a counter; whether the ability can be used again | the events' duration field; the line kind and whether the cost taps or sacrifices |
 | State dependence | how much a text's outcome varies across the boards it resolved on | the spread of each text's observed outcomes across its resolution records |
 
-The embedding probes already show that the encoder keeps outcome parameters and loses amounts and costs. The first five families extend that to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
+The embedding probes already show that the encoder keeps the script parameters that change what an ability does, and loses its amounts and costs. The first five families extend that to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
 
 The last five families each target a property the first five leave out.
 
@@ -43,7 +43,7 @@ The last five families each target a property the first five leave out.
 - **Evasion and blocking** is where gen-1 learned least. The state-only baseline is the gen-1 model trained with every ability vector zeroed, so it predicts from the board alone. Gen-1's two blocker fields score exactly at the state-only baseline's level, so the text taught the model nothing about who may block whom.
 - **Target legality** decides whether a removal spell can be aimed at all.
 - **Duration and repeatability** separate abilities whose immediate effect is identical: a +1/+1 counter and a pump until end of turn, or a repeatable activation and a one-shot spell.
-- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was built to test that claim by reading the acting ability's text without the board. It zeroed every ability vector as well, so its encoder never trained.
+- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was built to test that claim by reading the acting ability's text without the board. It zeroed every ability vector as well, so its encoder never trained and the claim remains untested.
 
 ## The read-out ladder measures the vector's share of what the model knows, and is the headline for gen-3 (method A)
 
@@ -58,11 +58,13 @@ The ladder reads one target from inputs of increasing depth, and each input is a
 | 2 | the trunk's output at the relevant slot: `[ACT]` for a target about the ability, the target's `[CARD]` slot for a target about one entity |
 | 3 | the model's own head prediction, with no probe |
 
+Rung 1 includes the target entity's own ability vectors because an outcome such as "this creature dies" can turn on that creature's abilities, indestructible for one.
+
 Every rung is scored so that higher is better: AUC for a yes/no target, which is the probability that a random positive item scores above a random negative one, and R² for an amount. Rung 0 is what the board alone tells a probe. Rung 3 is what the whole model knows.
 
-A property of a line that does not depend on the board, such as the damage it deals or its mana cost by colour, gets a short ladder: `e` alone, its width control, and the trunk's output at `[ACT]`. A line property the trunk decodes much better than `e` is one the trunk re-derives from context, and one `e` could have held.
+The headline for gen-3 is the vector's share, (rung 1 − rung 0) / (rung 3 − rung 0), reported with a bootstrap confidence interval. It is the fraction of the gap between the board alone and the whole model that the ability vectors close without any trunk. A share near 1 means `e` carries the knowledge, and a share near 0 means the trunk supplies it.
 
-The headline for gen-3 is the vector's share, (rung 1 − rung 0) / (rung 3 − rung 0), reported with a bootstrap confidence interval. It is the fraction of the gap between the board alone and the whole model that the ability vectors close without any trunk. A share near 1 means `e` carries the knowledge, and a share near 0 means the trunk supplies it. For a target about one entity, rung 1 includes that entity's own ability vectors beside the acting ability's, because an outcome such as "this creature dies" can turn on the target's abilities, indestructible for one.
+A property of a line that does not depend on the board, such as the damage it deals or its mana cost by colour, gets a short ladder: `e` alone, its width control, and the trunk's output at `[ACT]`. A line property a probe reads much better from the trunk's output than from `e` is one the trunk re-derives from context, and one `e` could have held.
 
 An optional per-layer view probes the output of each trunk layer in turn. It shows at what depth a fact appears, which feeds the sizing of gen-3's trunk.
 
@@ -72,7 +74,7 @@ The cross-validation folds never put one text on both sides. Every probe is fitt
 
 ### The share is reported only where the model knows more than the board
 
-The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. Gen-1 has fields on which reading the text barely improves on the state-only baseline: the two blocker fields gain nothing, and damage taken gains one percentage point. On those the denominator is near zero and the ratio means nothing. The raw rungs are printed for every target either way.
+The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. The state-only baseline is the trained-model counterpart of rung 0. On some gen-1 fields reading the text barely improves on it: the two blocker fields gain nothing, and damage taken gains one percentage point. On those the denominator is near zero and the ratio means nothing. The raw rungs are printed for every target either way.
 
 A share above 1 is possible. The probe is fitted to this one target alone, while the model's heads are trained on every output field together. The probe can therefore extract the target from `e` better than the heads do. A share above 1 says that `e` holds the target at least as readably as the model applies it.
 
@@ -92,7 +94,7 @@ Rungs 0 to 2 use a fixed pair of probes: a linear probe and a two-layer MLP of f
 
 ## Replacing `e` in the frozen trunk measures how much the trunk relies on it, and supports the ladder (method B)
 
-An ablation replaces part of a model's input with something uninformative and measures how much the loss rises. Method B runs each frozen model over the validation samples and reports each output field's loss increase when `e` is replaced by one of three substitutes.
+Method B runs each frozen model over the validation samples and reports each output field's loss increase when `e` is replaced by one of three substitutes.
 
 | Replacement for `e` | What the loss increase measures |
 |---|---|
@@ -106,10 +108,10 @@ Ablation measures reliance, not location. A trunk can lean on `e` and still do t
 
 ## The share and the ablation together say which families gen-3 must move into `e`
 
-No cut-off for a low or a high share exists yet, so the first runs' figures are read by direction.
+No cut-off for a low or a high share exists yet, so the first runs' shares are compared family against family rather than against a fixed threshold.
 
 - A family with a low share and high reliance is one where the trunk does work `e` could carry. Gen-3 then adds training signal that only `e` can satisfy: auxiliary heads, extra output layers that predict the family's labels from `e` alone, or a thinner trunk that cannot re-derive the knowledge itself.
-- A family that no rung decodes is knowledge the model lacks altogether. That is a corpus problem, not an architecture problem, and the fix is records that show the effect.
+- A family that no rung predicts well is knowledge the model lacks altogether. That is a corpus problem, not an architecture problem, and the fix is records that show the effect.
 - A family whose oracle rung stays below rung 3 needs a stronger probe before its share says anything.
 
 ## Board sweeps edit one input of a real record and read where the full model's prediction steps
@@ -161,7 +163,7 @@ A text's state-dependence label is how much its observed outcome varies across i
 
 Every probe item is keyed by its provenance, `(script_file, face, trait_kind, index_within_kind)`, never by its text. Gen-2's whole-chain encoding changes every line's text. A probe item keyed by text in gen-1 would match nothing in gen-2, while its provenance key still names the same trait.
 
-Four pieces let the suite compare checkpoints from its first build.
+Four pieces, part of the suite from the start, let it compare checkpoints.
 
 - **A model adapter.** One loader takes any checkpoint and resolves its vocabulary, its cache and its width of `e`, so no probe assumes gen-1's paths or its 64 dimensions.
 - **A frozen probe set with a digest.** The probe items, their labels and the games they come from are enumerated once per corpus and hashed. Every checkpoint trained on that corpus is probed on the same set, and the scorecard records the digest.
@@ -190,7 +192,7 @@ The suite runs once per checkpoint, after the checkpoint's cache exists. Gen-1 i
 
 ### Before the first run on a corpus
 
-1. **Freeze the probe set.** Enumerate the probe items by provenance key, their labels, the probe games of both strata and the board-sweep records, and write the digest. Gen-1's set is built over gen-1's corpus, against gen-1's sidecars, as the gen-2 record's stage 0 describes. Gen-2's set is built once over gen-2's final corpus and serves every arm.
+1. **Freeze the probe set.** Enumerate the probe items by provenance key, their labels, the probe games of both strata and the board-sweep records, and write the digest. Gen-1's set is built over gen-1's corpus, against gen-1's provenance sidecars, as the gen-2 record's stage 0 describes. A provenance sidecar is the file `convert` writes beside each converted card, mapping each provenance key to its rendered line. Gen-2's set is built once over gen-2's final corpus and serves every arm.
 2. **Measure the interaction join rate.** It is a property of the corpus, not of a checkpoint, so it is measured once per probe set.
 
 ### For each checkpoint, in order
@@ -199,10 +201,10 @@ The order puts the probes that read only the cache first. A broken cache or a wr
 
 1. **Probes that read `e` alone.** Every line property from the cache, with its width control. No GPU is needed.
 2. **The state-dependence probe**, also from the cache.
-3. **The probes that run the trunk.** The trunk's `[ACT]` state for every line property, then rungs 0, 1, 1w, 1o, 2 and 3 for every board-dependent target, on both strata.
+3. **The probes that run the trunk.** The trunk's output at `[ACT]` for every line property, then rungs 0, 1, 1w, 1o, 2 and 3 for every board-dependent target, on both strata.
 4. **The four board sweeps**: toughness, affordability, board size and damage.
 5. **Method B**, the ablation, over the validation samples.
-6. **The per-layer view**, where a family's share is low enough for gen-3 to need it.
+6. **The per-layer view**, on the families with a low share, where gen-3's trunk sizing needs the depth at which the fact appears.
 
 Method C stays off unless a family's results call for it.
 

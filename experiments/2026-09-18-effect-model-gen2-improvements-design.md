@@ -29,13 +29,15 @@ average effect, and is compared on the embeddings. Gen-1's run of it answered no
 baselines).
 
 Each of the first ten sections records one gap found while gen-1 trained, the evidence for it, and
-the change gen-2 makes. The three after them set how gen-2 is collected, evaluated and trained.
-Gen-2 collects its corpus anew. It trains no baselines and is judged instead by the knowledge probes
+the change gen-2 makes. The three after them set how gen-2 is collected, evaluated and trained, and
+the run plan at the end orders the work.
+
+Gen-2 collects its corpus anew and trains no baselines. It is judged instead by the knowledge probes
 of [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md),
 called the probes record below. A probe is a small model fitted to read a known property from a
 model's internal vectors. Gen-2 trains several models, the arms of a sweep, each at a different
 width of `e` or size of encoder. Gen-2's gate figures are not compared with gen-1's, because the
-corpus, the split and the encoding all change. The run plan at the end orders the work.
+corpus, the split and the encoding all change.
 
 ## The encoder reads only the first script line of an ability, so a trigger's effect never reaches it
 
@@ -53,9 +55,7 @@ The `DB$ PutCounter | CounterType$ P1P1 | CounterNum$ 1` line that does the work
 text. The model knows that this is a life-gain trigger which does something the description calls
 "put a +1/+1 counter"; it does not see the counter type or the count as parameters.
 
-The omission is near-universal for triggers and common for the rest. The counts
-below are over every sidecar line in the converted card corpus that carries a script surface,
-excluding keyword lines.
+The omission is near-universal for triggers and common for the rest.
 
 | converted card corpus, excluding keyword lines | count |
 |---|---:|
@@ -102,13 +102,17 @@ in the text. The variant records then teach the model that one text has two outc
 
 ### Gen-2 encodes the whole chain in resolution order
 
-`script_text` becomes the concatenation of every script line the ability owns: the root line, then
-for a trigger its executed ability, then each sub-ability in chain order, including a
-`RepeatSubAbility` where one exists, and for a charm each mode its `Choices$` names, since a charm
-reaches its modes through that list rather than through `Execute$` or `SubAbility$`. Segments are separated by a dedicated token and each segment
-keeps the SVar label the parent referenced it by, so `SubAbility$ DBChange` in one segment and
-`DBChange:` opening a later one give the model the link. Replacement effects get the same treatment
-through `ReplaceWith$`.
+`script_text` becomes the concatenation of every script line the ability owns, in this order:
+
+- the root line;
+- for a trigger, the ability it executes through `Execute$`;
+- each sub-ability in chain order, including a `RepeatSubAbility` where one exists;
+- for a charm, each mode its `Choices$` names, since a charm reaches its modes through that list
+  rather than through `Execute$` or `SubAbility$`.
+
+Replacement effects get the same treatment through `ReplaceWith$`. A dedicated token separates the
+segments. Each segment keeps the SVar label its parent referenced it by, so `SubAbility$ DBChange`
+in one segment and `DBChange:` opening a later one give the model the link.
 
 Four things follow from the change, and the third is the one that decides the order of work.
 
@@ -124,22 +128,13 @@ Four things follow from the change, and the third is the one that decides the or
    `script_text` changes every key. The holdout is therefore computed on the chained text before
    the new corpus is collected, which is the only point at which changing it costs no training
    games (section on collecting from scratch).
-4. **Sequence length grows but stays well under the cap.** The encoder truncates at 512 tokens. The median
-   chained line grows by less than half and the 90th percentile roughly doubles; the longest chains
-   run past a dozen segments. The distribution of chain lengths in tokens should be measured after the rebuild,
-   and a chain that exceeds the cap should be logged rather than silently cut from the tail, because
-   the tail of a chain is its last effect.
+4. **Sequence length grows, and most chains stay well under the cap.** The encoder truncates at
+   512 tokens, and the table above gives the growth on chained lines. The distribution of chain
+   lengths in tokens is measured after the rebuild. A chain that exceeds the cap is logged rather
+   than silently cut from the tail, because the tail of a chain is its last effect.
 
 Prose stays as it is: the fallback for a line with no script, which is a keyword-derived line or a
 synthetic land mana line, and nothing else.
-
-### The paired-prose loss the design doc describes is not built, and gen-2 decides on it with the noise
-
-The trainer has no term pairing a line's script and prose encodings, though the design doc specifies
-one: an asymmetric loss pulling the two `e` vectors of a line together. Prose reaches the encoder
-only inside the root line's description parameter, or as the fallback for a line with no script.
-Whether gen-2 builds the pairing loss depends on the noise fix, for the reason the noise section
-gives.
 
 ## Every outcome in the corpus is one Forge chose, so the model can learn abilities without learning targets
 
@@ -150,9 +145,9 @@ the records, "Lightning Bolt targets a creature" and "that creature dies" are th
 same event, and "Murder targets a creature" is never paired with an indestructible target. A model
 reaches a good loss on that corpus by learning that Bolt means death. It never has to learn that the
 target's toughness decides it, because no record shows Bolt on a creature that survived. Combat
-records do show damage that failed to kill, and the shared per-entity head carries some of that
-over, but the ability-conditioned half of the mapping is learned only on the support the policy
-chose.
+records do show damage that failed to kill, and the effect head carries some of what it learns
+there across record kinds. The part of its mapping that depends on the ability is still learned
+only on the boards and targets Forge chose.
 
 A corpus like this understates any measure of whether the encoder reads text. A lookup table learns
 "Bolt means death" as well as the encoder does, so the encoder's margin over gen-1's identity
@@ -206,20 +201,22 @@ Four details are fixed in this design rather than left to the collection run.
    decision records a Forge seat does. Nothing in that class needs the flag.
 3. **One game in eight has a random seat.** The random seat produces rare outcomes for common
    texts, and on-policy games supply everything else, so the two share one corpus.
-4. **Random-seat games are played in both collections.** They appear in the depleted training
-   collection and in the full-strength card-disjoint collection, so the off-policy records of
-   training have held-out counterparts to be scored on.
+4. **Random-seat games are played in both collections.** They appear in the training collection,
+   played from pools depleted of every card that carries a held-out text, and in the full-strength
+   collection, played from complete pools, that supplies the card-disjoint stratum. The off-policy
+   records of training therefore have held-out counterparts to be scored on.
 
 Two limits are accepted. Random targets on a wide board mostly produce uninformative no-ops, so the
 share of useful records per game is lower than under Forge's play. And random attacks and blocks
 cost the random seat life and creatures, so its games run shorter and its boards are thinner than
 Forge's. The probability of acting at random sets how far both go. The pilot measures how many
-unusual outcomes it yields per family, and the probability is raised only if the corpus falls short
-of the outcomes curation balances on.
+minority outcomes it yields per family, and the probability is raised only if the corpus falls short
+of the outcomes the corpus build balances on.
 
-## The rarity weight is flat for 97% of texts, so a text seen once trains no harder than one seen in two hundred games
+## The rarity weight is flat for 97% of texts and nothing balances rule families, so rare texts and rare rules train least
 
 The rarity weight the trainer applies within a class does nothing for the tail of the curated corpus.
+Curation is the `build-corpus` step that selects which collected records enter the training corpus.
 A record is weighted by the inverse square root of the games its text was seen in, capped at twenty
 times the weight of the most-observed text. The most-observed texts are the five basic-land mana
 abilities, each seen in about ninety thousand games. Measured against that reference, the ceiling
@@ -242,8 +239,7 @@ common one. A curated shard holds 2,000 records. An epoch, one pass of the train
 256 shards in 5,000 training steps of 32 records each, so it consumes about a third of each shard it
 visits. The weighted shuffle decides which third, heaviest first. With a flat table that draw is
 uniform, so a text's share of an epoch is its share of the records that survived the per-text cap.
-The cap is 200 records, and a text seen in one game contributes one to three. The square root in the
-weight therefore has no effect, because the ceiling overrides it for 97% of texts.
+The cap is 200 records, and a text seen in one game contributes one to three.
 
 The per-text cap is the only setting that changes the mix of texts in the curated corpus, and it
 acts only on the most common texts. The cap drops about three of every five resolution-effect
@@ -348,7 +344,7 @@ which creature an opponent sacrifices, and that choice is Forge's policy rather 
 
 The minority outcomes come mostly from the random seat, so this balance is what turns the random
 seat's games into training signal. The random-seat flag is not itself a curation key: the signature
-selects the unusual outcomes directly, from whichever seat produced them. The manifest records the
+selects the minority outcomes directly, from whichever seat produced them. The manifest records the
 on-policy and off-policy record counts per class beside the existing per-class counts.
 
 ## The training noise on the ability vector is under 1% of its length, so the small-noisy-`e` lever does nothing
@@ -384,8 +380,9 @@ The effect head can therefore tell texts apart at a precision far finer than the
 between two of them, which is the lookup the lever was meant to make expensive. In gen-1 only the
 design doc's other four levers acted against memorization.
 
-The pairing loss has to be decided against the fixed noise. The design doc makes the loss
-asymmetric because a symmetric pull between a line's script and prose vectors adds pressure to
+The paired-prose loss the design doc specifies is not built, and whether gen-2 builds it depends on
+the noise fix. The design doc pairs a line's script and prose encodings with a loss that pulls their
+two `e` vectors together. It makes that loss asymmetric because a symmetric pull adds pressure to
 collapse `e`, and the noisy-`e` lever amplifies that pressure. Gen-1's noise was too small for that
 interaction to arise. Once the noise is fixed, it arises.
 
@@ -461,11 +458,11 @@ holds every parameter key's presence and no value.
 Lightning Bolt's nearest neighbours show the same loss. They are the same sentence with 1, 2, 4, 5,
 6, 7, 10 and X damage, all at a cosine similarity of at least 0.997.
 
-The loss rarely depends on the number. Forge casts Bolt mostly at creatures it kills, so on the
-records the corpus holds, three damage and four have the same outcome. Costs are supervised only
-through the cost halves of resolutions and the playability verdicts, which few fields score. The
-outcome balancing above makes the amount matter more often, but nothing in the loss asks `e` for a
-cost at all.
+The effect head's loss rarely depends on the number. Forge casts Bolt mostly at creatures it
+kills, so on the records the corpus holds, three damage and four have the same outcome. Costs are
+supervised only through the cost halves of resolution records and the playability verdicts, and
+few of the effect head's output fields score either. The outcome balancing above makes the amount
+matter more often, but nothing in the loss asks `e` for a cost at all.
 
 ### Gen-2 adds an auxiliary head, used in training only, that reads from `e` the values the script states
 
@@ -489,13 +486,13 @@ card against another. The knowledge probes that read amounts and costs from `e` 
 the head did its job. The probes that ask whether the model uses an amount against a toughness stay
 independent of it.
 
-## Gate 1 scores fewer than half of the held-out texts, and a third of those have a numeric twin in training
+## Gate 1 scores fewer than half of the held-out texts, and a third of the recorded ones have a numeric twin in training
 
 Held-out texts are chosen by hash over the converted texts, not over the recorded ones, and nearly
 half of them were never recorded. Sealed self-play never cast the cards that carry them, and
 `collect-coverage` keeps held-out cards out of its decks by design, so nothing fills the gap. Of
-the texts that were recorded, a third were seen in four games or fewer. The eligibility rule of at
-most eight carriers excludes almost nothing, because nine texts in ten are on exactly one card.
+the texts that were recorded, a third were seen in four games or fewer. The eligibility rule, which
+holds out a text only if at most eight cards carry it, excludes almost nothing, because nine texts in ten are on exactly one card.
 
 | held-out texts, gen-1 | count |
 |---|---:|
@@ -514,16 +511,17 @@ holds about eighteen thousand records over its 342 texts. The resolution slots o
 sample therefore go to the texts with the most records, and a text seen in one game holds a few at
 most. Gate 1 itself averages over entities and records, not over texts, so the same texts decide
 all three of its margins over the identity baseline: in affected-entity F1, in zone-outcome
-accuracy and in count deviance. The number gate 1 reports is a well-recorded-holdout number. How the model reads a text it
+accuracy and in count deviance. Gate 1 therefore measures how the model reads the well-recorded
+held-out texts. How the model reads a text it
 was shown in one game is measured nowhere.
 
-A third of the recorded held-out texts have a near-twin in training. A twin is a training text that
+A third of the recorded held-out texts have a twin in training. A twin is a training text that
 is identical once numbers, `CARDNAME` and the description parameters are masked, such as
 `NumDmg$ 2` held out beside `NumDmg$ 3` in training. This masked form is the text's template.
 Corpus-wide, two recorded texts in five share a template with another. The identity baseline cannot
 exploit a twin, because it keys on the exact text. The encoder can, and reading `NumDmg$` is what it
 should do. A gate averaged over held-out texts of which a third are one number away from a training
-text measures interpolation between siblings more than reading. The design doc's four-way
+text measures interpolation between twins more than reading. The design doc's four-way
 stratified report does not isolate these twins: its numeric-extrapolation and novel-combination
 strata are different cases.
 
@@ -555,9 +553,9 @@ coverage round that gives the held-out texts enough records to score.
    itself is not computed, because gen-2 trains no identity baseline (section on baselines).
 3. **The holdout key is the masked template.** A text is held out when the hash of its template
    falls below the holdout fraction, a number of templates per thousand (`--holdout-permille`), so
-   a text's numeric siblings go with it and every held-out text is unseen in training, numbers
+   a text's numeric twins go with it and every held-out text is unseen in training, numbers
    included. The template is taken from the chained script text, and the new corpus is depleted
-   against it (section on collecting from scratch). The eligibility cap counts the cards that carry
+   against it (section on collecting from scratch). The eligibility rule counts the cards that carry
    any text of the template, not the cards of one text: a template such as
    `Pump +N/+N until end of turn` spans thousands of cards, and holding it out would deplete them
    all. The holdout fraction is set against the share of cards the holdout depletes, which
@@ -570,12 +568,13 @@ coverage round that gives the held-out texts enough records to score.
    on its own. The round runs until every held-out text with a castable carrier reaches the floor,
    and the residue it reports is the list of held-out texts no result can ever cover.
 
-## Keyword expansion builds the cache from definitions gates 1 and 2 never score, and skips every keyword whose name is not one word
+## Keyword expansion builds the cache from definitions gates 1 and 2 never score, and misses every keyword whose name is not a single token
 
 Keyword expansion replaces a keyword token with its definition, the reminder text Forge prints for
 the keyword ("New keywords are handled by expansion dropout over their definitions" in the design
 doc). It has four defects. The cache and the gates read different encodings of every keyword line.
-Multi-word and hyphenated keywords never find their definition. The definition inserted is a
+A keyword whose name does not become a single token never finds its definition: every hyphenated
+keyword, and every multi-word keyword the vocabulary does not already know. The definition inserted is a
 damaged template. And `build-vocab` scans Forge's generated keyword scripts into the script
 vocabulary, though no expansion reads them. The evidence comes from
 `scripts/effect_embedding_probes/keyword_expansion.py`, with its outputs in
@@ -627,7 +626,8 @@ The definition inserted is damaged in four ways.
 - No caller passes the line's own values. `expand_keywords` accepts `instance_values` and nothing
   supplies them, so a template loses its value and the line's parameter is left dangling after the
   sentence.
-- 16 definitions contain `[UNK]`. `build-vocab` scans the definitions but keeps only the 5,000
+- 16 definitions contain `[UNK]`, the placeholder token the encoder reads for any word missing from
+  the vocabulary. `build-vocab` scans the definitions but keeps only the 5,000
   most frequent tokens, and 21 words of reminder text fall below that cut:
   `encoded`, `promise`, `specified` and `teammate` among them.
 - Five templates (enlist, increment, read ahead, station, web-slinging) use the typographic
@@ -640,9 +640,9 @@ The definition inserted is damaged in four ways.
 | `Enchant:Creature` | target a % 1 $ s as you cast this . this card enters attached to that % 1 $ s . : creature |
 | `Start your engines` | if you have no speed , it [UNK] at 1 . it [UNK] once on each of your turns when an opponent loses life . max speed is 4 . |
 
-Both surfaces expand to the reminder template: `_definition_text` returns it, and no code
-substitutes the generated script. `generated_script` is still loaded and scanned into the script
-vocabulary, and nothing else reads it.
+No expansion reads Forge's generated keyword scripts, yet `build-vocab` scans them into the script
+vocabulary. Both surfaces expand to the reminder template: `_definition_text` returns it, and no
+code substitutes the generated script.
 
 ### Gen-2 builds the cache with known keywords left as tokens
 
@@ -689,10 +689,9 @@ instance values. A keyword word inside another line keeps the token path it has 
 3. **The apostrophe is normalised.** `’` becomes `'` when the definitions are loaded.
 4. **The definition words are reserved in the vocabulary.** `build-vocab` seeds every word of every
    template after stripping, as it already seeds `[PAD]` and `[CLS]`, so `--target-size` cannot cut
-   them. The reservation lands with the script-vocabulary rebuild the chain encoding and the
-   camel-case split already require, in the chain and tokenizer sections, so it costs no rebuild of
-   its own.
-   The build asserts that no definition expands to `[UNK]`.
+   them. The build asserts that no definition expands to `[UNK]`. The reservation lands in the
+   script-vocabulary rebuild that the chain encoding and the camel-case split (tokenizer section)
+   already require, so it costs no rebuild of its own.
 
 ### Gen-2 keeps the reminder template on both surfaces and stops scanning generated scripts
 
@@ -740,9 +739,8 @@ an underscore, so `.` and `+` end a word and are kept as tokens of their own. `t
 at `.` and `+` but drops the separators, and before cutting it keeps letters, digits and `-`
 together in one run. A sign then either vanishes, so `NumAtt$ +1` reads as `1`, or fuses with its
 number into `-1`. A threshold fuses with its digit, so `powerGE4` becomes one token and the 4 never
-reaches the numeric embedding, the encoder's separate input path that reads a number's value. The vocabulary was built with the prose grammar, so every fused token
-is unknown to it. Unknown tokens (`[UNK]`) are the placeholder the encoder reads for any word
-missing from the vocabulary.
+reaches the numeric embedding, the encoder's separate input path that reads a number's value. The
+vocabulary was built with the prose grammar, so every fused token is unknown to it.
 
 | script text | `tokenize` (runs) | `tokenize_script` (never called) |
 |---|---|---|
@@ -848,8 +846,8 @@ placed in the stratum and only adds new ones. The seeded sample `build-corpus` d
 the whole stratum whenever the corpus grows. That would move the games the knowledge probes read
 into training, and the probes would score later models on boards they trained on.
 
-The stratum is not a typical sample of games, and it is not meant to be one. Its results are
-reported per rule family and averaged over families, the balance training is built to. The
+The stratum over-represents rare-keyword games, so its results are reported per rule family and
+averaged over families, the balance training is built to. The
 manifest records which games entered for a keyword, so a figure over the stratum can also be read
 without them.
 
@@ -933,8 +931,8 @@ later turn with the same creatures on a different board is kept.
 
 That the re-asks share a board is an assumption, and the pilot collection tests it before the full
 run. If the snapshot carries the attack declarations the AI is simulating, each re-ask has a board
-of its own. The legality class then grows back toward the four fifths of the corpus it held before the collector began
-merging repeated records of an unchanged board.
+of its own. The legality class then grows back toward the four fifths of the corpus it held before
+the collector de-duplicated legality records.
 
 ### Gen-2 records every real decision and fills the legality class from them first
 
@@ -962,7 +960,7 @@ The off-policy random seat also needs games played with it.
 
 Everything collection fixes is therefore settled before the first game:
 
-- the holdout: masked templates of the chained script text, with the eligibility cap counted per
+- the holdout: masked templates of the chained script text, with the eligibility rule counted per
   template (section on gate 1);
 - the two new envelope fields, the random-seat flag and the what-if legality flag. Each is
   collection metadata, like `mode`, `fork` and `synthetic`, and never reaches the model. Each is
@@ -1012,8 +1010,7 @@ the runs, and no selection rule is fixed in advance.
 Three things keep the arms comparable.
 
 - **One corpus and one split.** Every arm trains on the same `build-corpus` output, so a difference
-  between arms is a difference between models. The build step exists to make this possible, as the
-  design doc's section on built training sets says.
+  between arms is a difference between models.
 - **The same settings outside the swept axis.** The noise ratio and its ramp, the auxiliary head's
   weight, the withheld keyword and the curriculum, the schedule on which the sparse output fields
   join the loss, are the same in every arm. The running-average covariance keeps the noise level
@@ -1073,7 +1070,8 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
 3. `python -m effects build-corpus` over the pilot shards into a scratch directory. Its manifest
    answers three questions:
    - Does each family hold enough records of the minority outcomes to balance on?
-   - Does the legality class stay near its size with repeats merged, under the board-keyed de-duplication?
+   - Does the legality class stay near its gen-1 size under the board-keyed de-duplication, or grow
+     back toward four fifths of the corpus?
    - Do the on-policy and off-policy counts and the real and what-if counts look as intended?
 4. The random seat's probability is raised only if the minority outcomes are too few.
 
