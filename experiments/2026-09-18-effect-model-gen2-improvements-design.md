@@ -43,11 +43,11 @@ the run plan at the end orders the work.
 
 ## The encoder reads only the first script line of an ability, so a trigger's effect never reaches it
 
-On the script surface the encoder is fed one Forge script line per ability: the parameters of the
-runtime trait the sidecar keys the line by. An ability that Forge writes across several lines loses
-every line but the first. For a triggered ability the first line is the trigger condition, and the
-effect is a separate `SVar` line the trigger names through `Execute$`. Ajani's Pridemate encodes as
-the trigger line alone:
+On the script surface the encoder is fed one Forge script line per ability: the line the ability's
+runtime trait was parsed from. An ability that Forge writes across several lines loses every line
+but the first. For a triggered ability the first line is the trigger condition, and the effect is a
+separate `SVar` line the trigger names through `Execute$`. Ajani's Pridemate encodes as the trigger
+line alone:
 
 ```
 Execute$ TrigPutCounter | Mode$ LifeGained | TriggerDescription$ Whenever you gain life, put a +1/+1 counter on CARDNAME. | TriggerZones$ Battlefield | ValidPlayer$ You
@@ -126,10 +126,11 @@ Four things follow from the change, and the third is the one that decides the or
    parameter keys already appear on root lines, so the vocabulary grows by the segment labels and
    the rarer sub-ability parameters.
 3. **The holdout is chosen on the chained text.** A text is held out by the hash of its masked
-   template, which is taken from the normalised script text (section on gate 1), and the corpus's
-   rarity table is keyed on the script text. Changing `script_text` changes every key. The holdout
-   is therefore computed on the chained text before the new corpus is collected, which is the only
-   point at which changing it costs no training games (section on collecting from scratch).
+   template, the normalised script text with its numbers, `CARDNAME` and descriptions masked
+   (section on gate 1), and the corpus's rarity table is keyed on the script text. Changing
+   `script_text` changes every key. The holdout is therefore computed on the chained text before the
+   new corpus is collected, which is the only point at which changing it costs no training games
+   (section on collecting from scratch).
 4. **Sequence length grows, and most chains stay well under the cap.** The encoder truncates at 512
    tokens, and the table above gives the growth on chained lines. The distribution of chain lengths
    in tokens is measured after the rebuild. A chain that exceeds the cap is logged rather than
@@ -279,9 +280,10 @@ Equalising texts does not equalise mechanisms. Every "deal N damage to target X"
 text, so the damage mechanism reaches the encoder once for each of its variants, and a keyword
 written on a handful of cards reaches it a handful of times however heavily each of its texts is
 weighted. The weight fix above removes the bias between texts and leaves this one untouched. The
-table groups the rarity table's texts by their Forge API type, trigger mode or keyword.
+table groups the rarity table's texts into rule families: by Forge API type, trigger mode or
+keyword.
 
-| mechanism family | distinct texts | games |
+| rule family | distinct texts | games |
 |---|---|---|
 | ChangesZone triggers | 5,393 | 312,514 |
 | Pump | 1,989 | 73,949 |
@@ -384,11 +386,12 @@ The effect head can therefore tell texts apart at a precision far finer than the
 between two of them, which is the lookup the lever was meant to make expensive. In gen-1 only the
 design doc's other four levers acted against memorization.
 
-The paired-prose loss the design doc specifies is not built, and if gen-2 builds it, the noise fix
-makes its asymmetric form necessary. The design doc pairs a line's script and prose encodings with a
-loss that pulls their two `e` vectors together. A symmetric pull adds pressure to collapse `e`, and
-noisy `e` amplifies that pressure, so the design doc makes the pull asymmetric. Gen-1's noise was
-too small for the two to interact. Gen-2's noise is not.
+If gen-2 builds the design doc's paired-prose loss, which gen-1 left unbuilt, the loss must keep its
+asymmetric form. That loss pulls a line's script encoding and its prose encoding toward each other.
+A symmetric pull also rewards collapse, in which the `e` vectors of all texts drift toward one
+shared vector, and noise on `e` strengthens that reward. The design doc makes the pull asymmetric
+for that reason. Gen-1's noise was too small for the pull and the noise to interact, and gen-2's
+noise is not.
 
 ### Gen-2 draws the noise with the covariance of the `e` vectors, estimated as a running average
 
@@ -407,7 +410,7 @@ Five fixes are open, and they differ in whether the encoder can still escape the
   gate 3's concentration check flags.
 - **Noise in each coordinate proportional to that coordinate's spread.** Widening one coordinate no
   longer helps. The coordinates are arbitrary axes, however. A signal laid along a diagonal across
-  many coordinates meets noise up to √d times smaller relative to its spread, where d is the width
+  many coordinates meets noise smaller relative to its spread by up to the square root of the width
   of `e`.
 - **Noise with the covariance of the `e` vectors.** The noise is wide along the directions in which
   the vectors spread widely and narrow along the others, diagonals included. The ratio of noise to
@@ -446,7 +449,7 @@ along every direction, so widening one direction separates no more texts. The en
 most texts by spreading them over as many directions as it can. The change is therefore expected to
 lower the top component's share, and gate 3 reports whether it does.
 
-## The ability vector keeps too little of an ability's amounts and costs, so gen-2 trains a head that reads them from `e`
+## The ability vector keeps less of an ability's amounts and costs than a hash of its parameter keys
 
 Gen-1's `e` holds less about amounts and costs than a hash that records only which parameters a
 script sets. The figures are linear probes from the design doc's Outcome. The taxonomy hash holds
@@ -457,8 +460,8 @@ every parameter key's presence and no value.
 | damage amount | R² | 0.34 | 0.55 |
 | mana in the activation cost | R² | 0.06 | 0.33 |
 
-Lightning Bolt's nearest neighbours show the same loss. They are the same sentence with 1, 2, 4, 5,
-6, 7, 10 and X damage, all at a cosine similarity of at least 0.997.
+Lightning Bolt's nearest neighbours show that the amount is lost. They are the same sentence with 1,
+2, 4, 5, 6, 7, 10 and X damage, all at a cosine similarity of at least 0.997.
 
 The effect head's loss rarely depends on the number. Forge casts Bolt mostly at creatures it kills,
 so on the records the corpus holds, three damage and four have the same outcome. Costs are
@@ -812,9 +815,8 @@ dragon` and `YouCtrl` as `you ctrl`.
 
 Gate 2 cannot score six of its eight keywords for want of records, and two `build-corpus` settings
 decide how many records it and the trainer get. The game-disjoint stratum that gate 2 reads is 1,000
-games drawn uniformly. Curation keeps a combat record for training at one rate whatever the fight,
-so a deathtouch combat is kept no more often than a fight between two vanilla creatures. The design
-doc's section [on why deathtouch and indestructible combats are
+games drawn uniformly. Curation keeps combat records for training at one rate whatever the fight.
+The design doc's section [on why deathtouch and indestructible combats are
 scarce](2026-09-04-ability-effect-model-design.md#deathtouch-and-indestructible-combats-are-scarce-because-few-creatures-carry-the-keywords-and-forges-combat-ai-avoids-the-combats-deathtouch-decides)
 gives two causes: few creatures carry the keywords, and Forge avoids the combats deathtouch decides.
 Both settings act on the first cause only. The random seat acts on the second.
@@ -994,11 +996,12 @@ arm.
 
 The `no-state` question was never answered. Gen-1's `no-state` run zeroed the acting ability's
 vector along with the board, so no gradient reached its encoder. The state-dependence probe is the
-first measurement of the claim the design rests on.
+first measurement of the claim the design rests on: that training `e` against the board yields a
+better `e`.
 
 Without an identity checkpoint, `evaluate-effect-model` reports gate 1 as skipped and runs gates 2
-and 3 and the reported checks. It already behaves that way when no `--variant-checkpoint identity`
-is given.
+and 3 and the checks it reports without a threshold, such as the ward canary and the decodability
+battery. It already behaves that way when no `--variant-checkpoint identity` is given.
 
 ## Gen-2 is a sweep over the width of `e` and the size of the encoder, compared by hand
 
