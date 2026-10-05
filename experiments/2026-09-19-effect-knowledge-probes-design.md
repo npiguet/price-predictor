@@ -2,7 +2,7 @@
 
 Design record for a suite of probes on the ability effect model described in the model design record, [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md). An ability encoder turns each ability line into one vector `e`. `e` depends only on the line's text, so lines that read the same, on whatever card, share one `e`. An effect head then predicts what an ability does to the board. The effect head has two parts. The first part, the trunk, is a stack of transformer layers. Each layer recomputes every slot's vector from the vectors of all the slots in a sequence. The sequence holds one slot for the game, one per player, an `[ACT]` slot holding the acting ability's `e`, and, for each object on the board, a `[CARD]` slot followed by that object's ability vectors. The second part, the output heads, is a set of small layers. They read the trunk's output at those slots and predict each output field, such as whether an entity dies or how much damage it takes.
 
-Gen-1 is the checkpoint of run `09.17f`, whose results the model design record's Outcome section reports. Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and the size of the encoder, described in the gen-2 record, [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md). The suite runs on gen-1 and on every arm. Each corpus withholds two validation strata from training. The game-disjoint stratum holds whole games whose ability texts the model trained on. The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never saw.
+Gen-1 is the checkpoint of run `09.17f`, meaning the model weights that run saved, whose results the model design record's Outcome section reports. Gen-2 is a sweep: a set of training runs, called arms, that differ in the width of `e` and the size of the encoder, described in the gen-2 record, [`2026-09-18-effect-model-gen2-improvements-design.md`](2026-09-18-effect-model-gen2-improvements-design.md). The suite runs on gen-1 and on every arm. Each corpus withholds two validation strata from training. The game-disjoint stratum holds whole games whose ability texts the model trained on. The card-disjoint stratum holds games that contain a held-out card, whose ability texts the model never saw.
 
 A probe is a small model fitted to predict a known label from a model's internal vector. How well it predicts measures how readably the vector holds that label. The existing embedding probes in `scripts/effect_embedding_probes/` read `e` alone. They label each text from its script or from its effect profile: the shares of its resolutions in which affected entities died, changed zone, took damage and so on. The probes designed here also read the trunk, and they compare the two.
 
@@ -18,7 +18,7 @@ One vector per ability is also easier to interpret. It can be inspected, compare
 
 ## The probes cover what an ability does to the board, in ten families, and leave strategic value to the game agent
 
-The encoder's job is an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job. The gen-2 record's run plan checks strategic value separately, with the decodability battery. The battery is a set of probes that read the sealed pipeline's per-card win rates from each card's pooled `e`, which is the mean and the maximum of the card's ability vectors placed side by side.
+The encoder's job is to capture an ability's immediate effect on the board. Strategic value, such as a card's win rate or its price, is out of scope for two reasons. The training corpus does not contain it, so the model has no signal to learn it from. Learning it is the game agent's job. The gen-2 record's run plan checks strategic value separately, with the decodability battery. The battery is a set of probes that read the sealed pipeline's per-card win rates from each card's pooled `e`, which is the mean and the maximum of the card's ability vectors placed side by side.
 
 The ten families below are what the probes target. Each label comes from a source that exists without the model: the parsed script, or an outcome observed in the effect-record corpus.
 
@@ -35,7 +35,7 @@ The ten families below are what the probes target. Each label comes from a sourc
 | Duration and repeatability | whether a change lasts until end of turn, stays, or comes as a counter; whether the ability can be used again | the events' duration field; the line kind and whether the cost taps or sacrifices |
 | State dependence | how much a text's outcome varies across the boards it resolved on | the spread of each text's observed outcomes across its resolution records |
 
-The embedding probes already show that the encoder keeps the script parameters that change what an ability does, and loses its amounts and costs. The first five families extend that to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
+The embedding probes already show that the encoder keeps which kind of outcome an ability produces and loses its amounts and costs. The first five families extend that to thresholds, to mana and to pairs of abilities, and they ask the same questions of the trunk.
 
 The last five families each target a property the first five leave out.
 
@@ -43,7 +43,7 @@ The last five families each target a property the first five leave out.
 - **Evasion and blocking** is where gen-1 learned least. Gen-1's two blocker fields score exactly at the level of the state-only baseline, the gen-1 model trained with every ability vector zeroed so that it predicts from the board alone. The text taught the model nothing about who may block whom.
 - **Target legality** decides whether a removal spell can be aimed at all.
 - **Duration and repeatability** separate abilities whose immediate effect is identical: a +1/+1 counter and a pump until end of turn, or a repeatable activation and a one-shot spell.
-- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was built to test that claim by reading the acting ability's text without the board. It zeroed every ability vector as well, so its encoder never trained and the claim remains untested.
+- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was meant to test that claim. Unlike the state-only baseline, it was to remove the board and keep the acting ability's text. It zeroed every ability vector as well, so its encoder never trained and the claim remains untested.
 
 ## The read-out ladder measures the vector's share of what the model knows, and is the headline for gen-3 (method A)
 
@@ -74,7 +74,7 @@ The cross-validation folds never put one text on both sides. Every probe is fitt
 
 ### The share is reported only where the model knows more than the board
 
-The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. The state-only baseline is the trained-model counterpart of rung 0. On some gen-1 fields reading the text barely improves on it: the two blocker fields gain nothing, and damage taken gains one percentage point. On those the denominator is near zero and the ratio means nothing. The raw rungs are printed for every target either way.
+The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. Below that gap the denominator is near zero and the ratio means nothing. Gen-1 already has such fields. The state-only baseline is the trained-model counterpart of rung 0, and reading the text gains nothing over it on the two blocker fields and one percentage point on damage taken. The raw rungs are printed for every target either way.
 
 A share above 1 is possible. The probe is fitted to this one target alone, while the model's heads are trained on every output field together. The probe can therefore extract the target from `e` better than the heads do. A share above 1 says that `e` holds the target at least as readably as the model applies it.
 
@@ -145,7 +145,7 @@ No trigger record names the ability that caused its event. About half the record
 | naming a `cause` entity and fired | 4,380 |
 | setting `attributed_to` | 0 |
 
-The interaction label is therefore built by a join. A fired trigger record carries its pending event. The resolution record in the same game whose events contain that event names the ability that produced it. That ability and the trigger's line form a positive pair.
+The interaction label is therefore built by a join. A fired trigger record carries its pending event. The resolution record in the same game whose events contain that event names the ability that produced it. That ability and the trigger's line form a positive pair. The join rate is the share of fired trigger records whose pending event the join finds in a resolution record.
 
 Pairs the join cannot reach are mined from the scripts. A death trigger paired with a sacrifice outlet, or a lifegain trigger paired with a lifegain ability, is a positive pair by construction.
 
@@ -163,9 +163,9 @@ A text's state-dependence label is how much its observed outcome varies across i
 
 ## Probe items are keyed by provenance, so one frozen probe set serves every checkpoint trained on a corpus
 
-Every probe item is keyed by its provenance, `(script_file, face, trait_kind, index_within_kind)`, never by its text. Gen-2's whole-chain encoding changes every line's text. A probe item keyed by text in gen-1 would match nothing in gen-2, while its provenance key still names the same trait.
+Every probe item is keyed by its provenance, never by its text. The provenance key `(script_file, face, trait_kind, index_within_kind)` names the Forge script, the card face, the kind of trait and the trait's position among its kind that a line was rendered from. A provenance sidecar is the file `convert` writes beside each converted card, mapping each provenance key to its rendered line. Gen-2's whole-chain encoding changes every line's text. A probe item keyed by text in gen-1 would match nothing in gen-2, while its provenance key still names the same trait.
 
-Four pieces, part of the suite from the start, let it compare checkpoints.
+Four parts of the suite let it compare checkpoints.
 
 - **A model adapter.** One loader takes any checkpoint and resolves its vocabulary, its cache and its width of `e`, so no probe assumes gen-1's paths or its 64 dimensions.
 - **A frozen probe set with a digest.** The probe items, their labels and the games they come from are enumerated once per corpus and hashed. Every checkpoint trained on that corpus is probed on the same set, and the scorecard records the digest.
@@ -194,7 +194,7 @@ The suite runs once per checkpoint, after the checkpoint's cache exists. Gen-1 i
 
 ### Before the first run on a corpus
 
-1. **Freeze the probe set.** Enumerate the probe items by provenance key, their labels, the probe games of both strata and the board-sweep records, and write the digest. Gen-1's set is built over gen-1's corpus, against gen-1's provenance sidecars, as the gen-2 record's stage 0 describes. A provenance sidecar is the file `convert` writes beside each converted card, mapping each provenance key to its rendered line. Gen-2's set is built once over gen-2's final corpus and serves every arm.
+1. **Freeze the probe set.** Enumerate the probe items by provenance key, their labels, the probe games of both strata and the board-sweep records, and write the digest. Gen-1's set is built over gen-1's corpus, against gen-1's provenance sidecars, as the gen-2 record's stage 0 describes. Gen-2's set is built once over gen-2's final corpus and serves every arm.
 2. **Measure the interaction join rate.** It is a property of the corpus, not of a checkpoint, so it is measured once per probe set.
 
 ### For each checkpoint, in order
