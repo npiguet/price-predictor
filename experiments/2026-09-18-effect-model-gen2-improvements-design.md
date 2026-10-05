@@ -13,7 +13,8 @@ the design doc below.
 
 Gen-1 is validated on two strata of games kept out of training. The game-disjoint stratum holds
 whole games whose ability texts also occur in training games. The card-disjoint stratum holds games
-that contain a held-out card, whose texts never trained. Three gates judge a checkpoint. Gate 1
+that contain a held-out card, whose texts never trained. Three gates judge a checkpoint, a saved copy of a trained model's
+weights. Gate 1
 compares the encoder with the `identity` baseline on texts the model never trained on. Gate 2 checks
 that predictions move the way the rules say when a damage-step keyword is removed from a creature.
 Gate 3 checks that the variance of the embeddings is not concentrated in a few directions.
@@ -28,16 +29,16 @@ the model could find. `no-state` also removes the board, so the model can learn 
 average effect, and is compared on the embeddings. Gen-1's run of it answered nothing (section on
 baselines).
 
+Gen-2 collects its corpus anew, trains no baselines, and trains several models, the arms of a
+sweep, each at a different width of `e` or size of encoder. The arms are judged by the knowledge
+probes of [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md),
+called the probes record below. A probe is a small model fitted to read a known property from a
+model's internal vectors. Gen-2's gate figures are not compared with gen-1's, because the corpus,
+the split and the encoding all change.
+
 Each of the first ten sections records one gap found while gen-1 trained, the evidence for it, and
 the change gen-2 makes. The three after them set how gen-2 is collected, evaluated and trained, and
 the run plan at the end orders the work.
-
-Gen-2 collects its corpus anew and trains no baselines. It is judged instead by the knowledge probes
-of [`2026-09-19-effect-knowledge-probes-design.md`](2026-09-19-effect-knowledge-probes-design.md),
-called the probes record below. A probe is a small model fitted to read a known property from a
-model's internal vectors. Gen-2 trains several models, the arms of a sweep, each at a different
-width of `e` or size of encoder. Gen-2's gate figures are not compared with gen-1's, because the
-corpus, the split and the encoding all change.
 
 ## The encoder reads only the first script line of an ability, so a trigger's effect never reaches it
 
@@ -217,7 +218,8 @@ of the outcomes the corpus build balances on.
 
 The rarity weight the trainer applies within a class does nothing for the tail of the curated corpus.
 Curation is the `build-corpus` step that selects which collected records enter the training corpus.
-A record is weighted by the inverse square root of the games its text was seen in, capped at twenty
+It fills each class, a record category such as the effect halves of resolution records or the
+legality records, to a fixed share of the corpus. A record is weighted by the inverse square root of the games its text was seen in, capped at twenty
 times the weight of the most-observed text. The most-observed texts are the five basic-land mana
 abilities, each seen in about ninety thousand games. Measured against that reference, the ceiling
 binds for every text seen in fewer than about 228 games, which is 97% of the rarity table. A text
@@ -380,11 +382,11 @@ The effect head can therefore tell texts apart at a precision far finer than the
 between two of them, which is the lookup the lever was meant to make expensive. In gen-1 only the
 design doc's other four levers acted against memorization.
 
-The paired-prose loss the design doc specifies is not built, and whether gen-2 builds it depends on
-the noise fix. The design doc pairs a line's script and prose encodings with a loss that pulls their
-two `e` vectors together. It makes that loss asymmetric because a symmetric pull adds pressure to
-collapse `e`, and the noisy-`e` lever amplifies that pressure. Gen-1's noise was too small for that
-interaction to arise. Once the noise is fixed, it arises.
+The paired-prose loss the design doc specifies is not built, and if gen-2 builds it, the noise fix
+makes its asymmetric form necessary. The design doc pairs a line's script and prose encodings with
+a loss that pulls their two `e` vectors together. A symmetric pull adds pressure to collapse `e`,
+and noisy `e` amplifies that pressure, so the design doc makes the pull asymmetric. Gen-1's noise
+was too small for the two to interact. Gen-2's noise is not.
 
 ### Gen-2 draws the noise with the covariance of the `e` vectors, estimated as a running average
 
@@ -435,14 +437,11 @@ Gen-2 takes the last. Five details settle it.
 The cache and its consumers do not change. The noise is applied in training only, and the encoded
 `e` keeps its form and its unconstrained scale.
 
-Gate 3 is where the change should show. Gate 3 caps the share of the embedding's variance on its top
-principal component, and that share is a ratio of variances, so a pure rescale of `e` leaves it
-exactly where it is. Noise with the covariance of the `e` vectors changes what the encoder is
-rewarded for. Every
-direction the encoder uses has the same ratio of spread to noise, so each further direction adds
-the same amount of separation between texts. Widening one direction adds none. The encoder
-therefore separates the most texts by spreading them over as many directions as it can. The change
-is expected to lower the top component's share, and gate 3 reports whether it does.
+Gate 3 is where the change should show. Gate 3 caps the share of the embedding's variance on its
+top principal component. Under noise with the covariance of the `e` vectors, the noise ratio is the
+same along every direction, so widening one direction separates no more texts. The encoder
+separates the most texts by spreading them over as many directions as it can. The change is
+therefore expected to lower the top component's share, and gate 3 reports whether it does.
 
 ## The ability vector keeps too little of an ability's amounts and costs, so gen-2 trains a head that reads them from `e`
 
@@ -473,9 +472,9 @@ The auxiliary head reads `e` alone and predicts numbers parsed from the script:
 - whether the cost taps or sacrifices.
 
 The labels come from the sidecar's script parameters, for every segment of the chain, at no cost.
-A label is masked where the script states no fixed number, as with X. The head follows the
-script-API head's pattern: a small loss weight, used in training only, and filtered out at save
-time.
+A label is masked where the script states no fixed number, as with X. The head follows the pattern
+of the script-API head, gen-1's training-only head that predicts each script's API type from `e`: a
+small loss weight, used in training only, and filtered out at save time.
 
 The weight is the one setting to watch. Gen-1's `e` predicted observed outcomes better than the
 parsed script features did, because it groups abilities by what they do rather than by how their
@@ -512,8 +511,7 @@ sample therefore go to the texts with the most records, and a text seen in one g
 most. Gate 1 itself averages over entities and records, not over texts, so the same texts decide
 all three of its margins over the identity baseline: in affected-entity F1, in zone-outcome
 accuracy and in count deviance. Gate 1 therefore measures how the model reads the well-recorded
-held-out texts. How the model reads a text it
-was shown in one game is measured nowhere.
+held-out texts. How it reads a held-out text recorded in a single game is measured nowhere.
 
 A third of the recorded held-out texts have a twin in training. A twin is a training text that
 is identical once numbers, `CARDNAME` and the description parameters are masked, such as
@@ -565,8 +563,8 @@ coverage round that gives the held-out texts enough records to score.
 4. **A coverage round over the held-out cards alone.** `collect-coverage` gains the inverse of
    `--exclude-cards`: a run restricted to the held-out cards, writing full-strength records. Every
    game it produces names a held-out card, so the split rule routes it to the card-disjoint stratum
-   on its own. The round runs until every held-out text with a castable carrier reaches the floor,
-   and the residue it reports is the list of held-out texts no result can ever cover.
+   on its own. The round runs until every held-out text with a castable carrier reaches the floor.
+   The held-out texts it reports as still under the floor are the ones no game can cover.
 
 ## Keyword expansion builds the cache from definitions gates 1 and 2 never score, and misses every keyword whose name is not a single token
 
@@ -576,14 +574,18 @@ doc). It has four defects. The cache and the gates read different encodings of e
 A keyword whose name does not become a single token never finds its definition: every hyphenated
 keyword, and every multi-word keyword the vocabulary does not already know. The definition inserted is a
 damaged template. And `build-vocab` scans Forge's generated keyword scripts into the script
-vocabulary, though no expansion reads them. The evidence comes from
+vocabulary, though no expansion reads them. A fifth gap is in the evaluation: gen-1 withheld no
+keyword, so the check that a keyword is read through its definition measured nothing. The evidence
+comes from
 `scripts/effect_embedding_probes/keyword_expansion.py`, with its outputs in
 `output/effects/reports/keyword-expansion-20260919/`. What the analysis found about the encoder
 itself is in the design doc's Outcome, in "A keyword token encodes only loosely like its own
 definition" and "An unknown keyword expands only when its name is one word".
 
 The shipping cache encodes every known keyword as its definition, while the effect head trained on
-the keyword token three times in four and gates 1 and 2 score the token every time. The expansion
+the keyword token three times in four and gates 1 and 2 score the token every time. Forty keyword
+rows of the shipping cache match the full expansion at a mean cosine of 1.0000 and the unexpanded
+encoding at 0.77. The expansion
 probability is the chance that a known keyword is replaced, and each caller sets its own. Training
 uses 0.25. Validation and gates 1 and 2 go through `SurfaceBatcher` with 0. `encode-abilities`,
 which builds the cache, uses 1.0, so that two runs of the command write the same file. An unknown
@@ -605,9 +607,6 @@ between a text's unexpanded and fully expanded encodings, 1 for the same directi
 | cosine over changed keyword lines, median / 10th percentile | 0.893 / 0.371 |
 | cosine over changed other lines, median / 10th percentile | 0.979 / 0.868 |
 | share of a text's 10 nearest neighbours that the other encoding keeps, 500 changed texts | 0.33 |
-
-The cache is the fully expanded one. Forty keyword rows of the shipping cache match the full
-expansion at a mean cosine of 1.0000 and the unexpanded encoding at 0.77.
 
 Expansion finds a definition through the token the tokenizer produced, so a keyword whose name is
 not a single word expands only if the vocabulary already knows it. A multi-word name becomes one
@@ -731,8 +730,8 @@ it. Encoding for the cache (`ability_encoder_runner.py`) and encoding during tra
 is built with the prose grammar too. `build-vocab --surface script` hands the script lines to the
 shared price-predictor vocabulary builder, which splits them with `MtgTokenizer`. The design doc
 counts a script tokenizer that splits compound selectors such as `Creature.nonDragon+OppCtrl` among
-the costs of the script surface, in "The script is the primary surface; prose is the paired
-secondary" of [`2026-09-04-ability-effect-model-design.md`](2026-09-04-ability-effect-model-design.md).
+the costs of the script surface, in the design doc's section "The script is the primary surface;
+prose is the paired secondary".
 
 The prose grammar already makes that split. It ends a word at every character that is not a letter or
 an underscore, so `.` and `+` end a word and are kept as tokens of their own. `tokenize_script` makes the same cut
@@ -988,7 +987,7 @@ sweep arm.
 
 | Baseline | What it measured | Gen-2 stand-in |
 |---|---|---|
-| `identity` | whether the encoder reads text rather than recalling it | the gap between each family's game-disjoint and card-disjoint results |
+| `identity` | whether the encoder reads text rather than recalling it | the memorization gap, per rule family |
 | `taxonomy` | what reading a script's parameters adds over its effect category | probes from `e` to the API type and the parsed parameters, beside the same probes from the parsed features themselves |
 | `state-only` | what the board alone predicts | the probes record's board-only probe, which reads the board features with every `e` zeroed |
 | `no-state` | whether conditioning on the board yields a better `e` | the state-dependence probe, which asks whether `e` predicts how much a text's outcome varies across boards |
@@ -1012,8 +1011,8 @@ Three things keep the arms comparable.
 - **One corpus and one split.** Every arm trains on the same `build-corpus` output, so a difference
   between arms is a difference between models.
 - **The same settings outside the swept axis.** The noise ratio and its ramp, the auxiliary head's
-  weight, the withheld keyword and the curriculum, the schedule on which the sparse output fields
-  join the loss, are the same in every arm. The running-average covariance keeps the noise level
+  weight, the withheld keyword and the curriculum are the same in every arm. The curriculum is the
+  schedule on which the sparse output fields join the loss. The running-average covariance keeps the noise level
   independent of the batch size an arm needs to fit 8 GB.
 - **Measures that do not grow with the width of `e`.** A probe that reads a wider vector has more
   inputs and scores higher for that alone, so every probe on `e` is reported against a control of
@@ -1027,9 +1026,10 @@ is read beside every gain it shows. The comparison draws on:
 - each arm's knowledge-probe scorecard;
 - the card-disjoint results per rule family, and the memorization gap;
 - gates 2 and 3, the ward canary and the zero-shot keyword check;
-- the two downstream checks of the design doc: the decodability battery against the sealed
-  pipeline's per-card win rates, and the pooled-`e` scorer smoke test, which adds the mean and the
-  maximum of each card's `e` vectors to the sealed scorer's input.
+- the two downstream checks of the design doc: the decodability battery, linear probes that read
+  the sealed pipeline's per-card win rates from each card's pooled `e`, and the pooled-`e` scorer
+  smoke test, which adds the mean and the maximum of each card's `e` vectors to the sealed scorer's
+  input and retrains Phase A of `train-scorer`.
 
 ## Run plan: a pilot before the full collection, and the gen-1 work while collection runs
 
