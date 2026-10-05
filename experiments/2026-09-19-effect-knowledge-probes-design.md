@@ -45,11 +45,11 @@ The last five families each target a property the first five leave out.
 - **Evasion and blocking** is where gen-1 learned least. Gen-1's two blocker fields score exactly at the level of the state-only baseline, the gen-1 model trained with every ability vector zeroed so that it predicts from the board alone. The text taught the model nothing about who may block whom.
 - **Target legality** decides whether a removal spell can be aimed at all.
 - **Duration and repeatability** separate abilities whose immediate effect is identical: a +1/+1 counter and a pump until end of turn, or a repeatable activation and a one-shot spell.
-- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was meant to test that claim by reading the acting ability's text without the board. It zeroed every ability vector as well, the acting one included, so its encoder never trained, and the claim remains untested.
+- **State dependence** tests the claim the model design rests on: that training the encoder against the board yields a better `e` than training it on text alone. The model design record's `no-state` baseline was meant to test that claim by reading the acting ability's text without the board. It zeroed the board and every ability vector, the acting one included. Its encoder therefore never trained, and the claim remains untested.
 
 ## The read-out ladder measures the vector's share of what the model knows, and is the headline for gen-3 (method A)
 
-The ladder reads one target from inputs of increasing depth, and each input is a rung. Rungs 0 to 2 fit the same two probes to their input, a linear probe and a small MLP, fixed as the probe-architecture subsection below describes. Rung 3 is the model's own prediction. Two further rungs are controls on rung 1. For a target that depends on the board, the rungs are:
+The ladder reads one target from inputs of increasing depth, and each input is a rung. Rungs 0 to 2 fit the same two probes to their input: a linear probe, and a small MLP (multi-layer perceptron), a network of linear layers with a non-linear function between them, which can read a relationship a linear probe misses. Both are fixed as the probe-architecture subsection below describes. Rung 3 is the model's own prediction. Two further rungs are controls on rung 1. For a target that depends on the board, the rungs are:
 
 | Rung | Input to the probe |
 |---|---|
@@ -76,7 +76,7 @@ The cross-validation folds never put one text on both sides. Every probe is fitt
 
 ### The share is reported only where the model knows more than the board
 
-The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. Below that gap the denominator is near zero and the ratio means nothing. Gen-1 already has such fields. The state-only baseline is the trained-model counterpart of rung 0, and reading the text gains nothing over it on the two blocker fields and one percentage point on damage taken. The raw rungs are printed for every target either way.
+The share is computed only where rung 3 exceeds rung 0 by a minimum gap, fixed before the first run. Below that gap the denominator is near zero and the ratio means nothing. Gen-1 already has such fields. The state-only baseline is the trained-model counterpart of rung 0. Reading the text gains nothing over it on the two blocker fields, and one percentage point on damage taken. The raw rungs are printed for every target either way.
 
 A share above 1 is possible. The probe is fitted to this one target alone, while the model's heads are trained on every output field together. The probe can therefore extract the target from `e` better than the heads do. A share above 1 says that `e` holds the target at least as readably as the model applies it.
 
@@ -92,7 +92,7 @@ The arms of gen-2's sweep are compared on rung 1 minus rung 1w, not on the share
 
 ### The probe architecture is fixed across every checkpoint
 
-Rungs 0 to 2 use a fixed pair of probes: a linear probe and a two-layer MLP of fixed width. An MLP, a multi-layer perceptron, is a small network of linear layers with a non-linear function between them, so it can read a relationship a linear probe misses. Its hyperparameters, the settings chosen before fitting such as its width, learning rate and regularisation strength, are fixed once for every checkpoint. A difference in a rung between two checkpoints then reflects the models and not the probe.
+Rungs 0 to 2 use a fixed pair of probes: a linear probe and a two-layer MLP of fixed width. Its hyperparameters, the settings chosen before fitting such as its width, learning rate and regularisation strength, are fixed once for every checkpoint. A difference in a rung between two checkpoints then reflects the models and not the probe.
 
 ## Replacing `e` in the frozen trunk measures how much the trunk relies on it, and supports the ladder (method B)
 
@@ -110,7 +110,7 @@ Ablation measures reliance, not location. A trunk can lean on `e` and still do t
 
 ## The share and the ablation together say which families gen-3 must move into `e`
 
-Each pattern of share, reliance and oracle rung points to one change for gen-3.
+Each pattern of share, reliance and oracle rung points to one next step: a change to gen-3's architecture, more corpus records, or a stronger probe.
 
 - A family with a low share and high reliance is one where the trunk does work `e` could carry. Gen-3 then moves that work into `e` in one of two ways. It can add auxiliary heads, extra output layers that predict the family's labels from `e` alone, so that only `e` can satisfy their training signal. Or it can use a thinner trunk that cannot re-derive the knowledge itself.
 - A family that no rung predicts well is knowledge the model lacks altogether. That is a corpus problem, not an architecture problem, and the fix is records that show the effect.
