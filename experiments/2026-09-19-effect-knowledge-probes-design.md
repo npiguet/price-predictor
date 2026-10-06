@@ -28,7 +28,7 @@ The ten families below are what the probes target. Each label comes from a sourc
 |---|---|---|
 | Magnitudes and thresholds | damage, power and toughness change, counter and life amounts; whether the effect kills a creature of toughness *t*; each amount per mana of cost | parsed script parameters; observed outcomes in resolution records |
 | Mana production | colours produced, amount, any colour, spending restrictions, conditional production | the script's mana parameters; the `mana_produced` events of mana resolution records |
-| Mana usage | the ability's own mana cost; cost reducers and taxes on other spells; whether it is affordable on a given board | the script's cost; playability decision records |
+| Mana usage | the ability's own mana cost; cost reducers and taxes on other spells; whether it is affordable on a given board | the line's `Cost$`, which labels no spell line, because a spell's mana cost belongs to its card; playability decision records |
 | Timing and non-mana costs | instant speed, a tap cost, a sacrifice or life cost | the script |
 | Interactions | whether ability A's event fires ability B's trigger, over pairs of lines | trigger records joined to resolution records |
 | Side | whose permanents and resources the effect changes: its controller's, the opponents', or both | the side of each affected entity in resolution records; the script's target and player restrictions |

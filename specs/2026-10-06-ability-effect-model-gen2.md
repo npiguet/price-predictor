@@ -34,8 +34,8 @@ probe set, and the arms are compared by hand.
 In scope
 
 - The encoding text and its tokenization (§ 4), and keyword expansion (§ 5).
-- The random seat, legality-record handling, two envelope fields, and the held-out
-  coverage round (§ 6).
+- The random seat, legality-record handling, two envelope fields, the held-out coverage
+  round, and per-mode modal records (§ 6).
 - The masked-template holdout (§ 7).
 - Curation: the game-disjoint stratum, rule-family and outcome balancing, and the manifest
   (§ 8).
@@ -49,10 +49,10 @@ Reused unchanged
 
 - The record schema beyond the two fields of § 6.3, the state snapshot, events and
   per-kind payloads.
-- The collectors, caps and budgets beyond § 6, the provenance join, synthetic variants and
-  depleted collection.
-- The effect head, its output heads and losses, the class mixture, and the embedding-cache
-  layout.
+- The collectors, caps and budgets beyond § 6, the provenance join beyond option lines (§
+  4.1, § 6.5), synthetic variants and depleted collection.
+- The effect head's input beyond the option-kind embedding (§ 9), its output heads and
+  losses, the class mixture, and the embedding-cache layout.
 - Gates 2 and 3, and the baseline variants, which stay available.
 
 Out of scope
@@ -65,13 +65,15 @@ Base-spec sections this spec amends
 
 | Base spec section | Amended by |
 |---|---|
-| Record envelope | § 6.3 |
-| Collectors | § 6.1, § 6.2 |
+| Record envelope | § 6.3, § 6.5 |
+| Collectors | § 6.1, § 6.2, § 6.5 |
+| Provenance sidecar | § 4.1 |
 | Coverage collector | § 6.4 |
 | Ability identity | § 4.1 |
 | Ability encoder | § 4, § 5, § 9 |
 | Curated corpus | § 7, § 8 |
 | Training | § 9 |
+| Effect model input | § 9 |
 | Embedding cache | § 5 |
 | Evaluation | § 10 |
 | Keyword definitions | § 5 |
@@ -118,12 +120,27 @@ Base-spec sections this spec amends
   1. the root line;
   2. for a trigger, the ability its `Execute$` names;
   3. each sub-ability in chain order, including a `RepeatSubAbility` where one exists;
-  4. for a charm, each mode its `Choices$` names, in list order;
-  5. for a replacement effect, the ability its `ReplaceWith$` names, followed by that
+  4. for a replacement effect, the ability its `ReplaceWith$` names, followed by that
      ability's own chain.
+- Each SVar appears at most once in a chain, at its first reach. A referenced SVar the
+  script does not define is reported by `convert` and left out of the chain.
 - Segments are separated by the special token `[SEG]`, seeded in the script vocabulary
   beside `[PAD]` and `[CLS]`. Every segment after the root opens with the SVar label its
-  parent referenced it by (`DBChange:`).
+  parent referenced it by, followed by a colon (`SV2:`).
+- Chain labels are renamed by position. Within one line's `script_text`, the values of
+  `Execute$`, `SubAbility$`, `RepeatSubAbility$` and `ReplaceWith$`, each item of
+  `Choices$`, and the label opening each segment become `SV1`, `SV2`, … in order of first
+  appearance. A label keeps its number at every occurrence in the line, so a reference and
+  the segment it names match. Numbering restarts on every line. Amount SVars (`NumDmg$ X`)
+  and their `Count$` definitions keep their names.
+- A charm is a set of separate abilities:
+  - its root line's `script_text` is its own script line alone: its `Choices$`, the number
+    of modes to choose, and whether modes may repeat;
+  - each `option` line `convert` emits for a mode carries the mode trait's provenance key
+    and a `script_text` holding that mode's chain, opened by its label (`SV1:`), then its
+    sub-abilities in the order above;
+  - option lines follow their root line in the sidecar, in `Choices$` order, and the root's
+    `Choices$` reads `SV1,SV2,…`.
 - The rendered prose and the converted `.txt` files do not change.
 - The prose surface is the encoding text only for a line with no script: a keyword-derived
   line or a synthetic land mana line.
@@ -138,9 +155,9 @@ Base-spec sections this spec amends
 - On the script surface the grammar also ends a word where a lowercase letter is followed
   by an uppercase one: `nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`.
 - These stay whole, each one lowercased token:
-  - the values of `Execute$`, `SubAbility$`, `ReplaceWith$`, and each comma-separated item
-    of `Choices$`;
-  - the SVar label that opens a segment;
+  - the values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, and
+    each comma-separated item of `Choices$`, in their renamed form (`sv2`);
+  - the SVar label that opens a segment, renamed likewise;
   - the value of `CounterType$` (`p1p1`, `m1m1`).
 - `tokenize` applies the script-surface rules when the loaded vocabulary is a script
   vocabulary, as `surface_of` determines from its path. `MtgTokenizer` in
@@ -148,7 +165,8 @@ Base-spec sections this spec amends
 - `build-vocab --surface script` applies the same rules to the script lines it stages for
   the shared builder, and reports the unknown-token rate over script parameters with every
   `*Description$` value removed and the number of distinct parts the camel-case split
-  produces.
+  produces. It seeds the renamed labels, `sv1` up to the longest chain's label count, as
+  it seeds the special tokens, so `--target-size` cannot drop them.
 
 # 5. Keyword expansion
 
@@ -189,10 +207,22 @@ Base-spec sections this spec amends
   decision point.
 - The random seat overrides four decision points: the spell or ability to play, its
   targets, the attackers to declare, and the blocks to assign. At each, with probability
-  `P`, it draws uniformly from the legal options; otherwise it takes the Forge AI's
-  choice. Land drops, mana payment and mulligans are always the Forge AI's.
+  `P`, it draws from the legal options as below; otherwise it takes the Forge AI's choice.
+  Land drops, mana payment and mulligans are always the Forge AI's.
+- How each random draw is made:
+
+  | Decision | Random draw |
+  |---|---|
+  | spell or ability | uniform over the playable spells and abilities, mana abilities excluded; it never passes while one is playable, whatever the Forge AI would do, and passes when only mana abilities or nothing is playable |
+  | attackers | each creature that can attack attacks independently with probability ½ |
+  | blockers | each creature that can block picks uniformly from no block plus the attackers it may legally block |
+  | targets | a target count drawn uniformly between the ability's minimum and maximum, then that many distinct legal targets picked uniformly |
+
+  A declaration or target set Forge rejects as illegal is redrawn. After a retry limit set
+  in code, the seat takes the Forge AI's choice for that decision.
 - The random seat is a `PlayerControllerAi` subclass the match worker installs on one
-  seat. No engine hook is involved.
+  seat. No engine hook is added or changed, and the `effect-record-hooks` branch is
+  unchanged.
 - A match with a random seat writes effect records only, never `match-outcomes.txt` or
   `cards-played.txt`.
 
@@ -214,6 +244,8 @@ Base-spec sections this spec amends
 
 Both are collection metadata: like `mode`, `interventional`, `fork` and `synthetic`, they
 never reach the model. Both are additive under the base spec's schema-compatibility rules.
+Every gen-2 record carries `random_seat`, and every gen-2 legality record carries
+`what_if`. The gen-2 corpus holds no shard without them, so readers define no default.
 
 ## 6.4 Held-out coverage round
 
@@ -225,17 +257,39 @@ never reach the model. Both are additive under the base spec's schema-compatibil
 - The run ends when every held-out text with a castable carrier is satisfied or retired,
   and reports the texts left under the floor.
 
+## 6.5 Modal resolutions
+
+- A patched worker records a modal resolution, a charm or a Pawprint charm, as one cost
+  record acting through the root line plus one effect half per chosen mode, acting through
+  that mode's `option` line. Forge chains the chosen modes as cloned sub-abilities and
+  resolves them in turn. The collector maps each clone to its mode through the spell's
+  chosen list and attributes to it its own clause's events, through the per-clause hook.
+- Each mode's effect half carries a snapshot taken just before that mode resolves, so a
+  later mode's snapshot shows the earlier modes' effects.
+- A mode chosen more than once produces one effect half per resolution. A mode that
+  fizzles or is declined follows the base spec's outcome rules on its own effect half.
+- The cost record and every effect half of one modal resolution share one `link_id`.
+  `link_id` therefore joins a cost record with its effect halves, not only a pair, and
+  readers that pair halves accept several effect halves per cost record.
+- A degraded worker writes one effect half acting through the root line, carrying every
+  chosen mode's events.
+- Interventional forks that choose modes write their effect halves per mode by the same
+  rule.
+
 # 7. Holdout
 
 - The holdout unit is the masked template: the normalised `script_text` with every number,
-  `CARDNAME` and every `*Description$` value replaced by a fixed placeholder.
+  `CARDNAME` and every `*Description$` value replaced by a fixed placeholder. Mana symbols'
+  colours stay unmasked. Chain labels need no mask, because § 4.1 has already renamed them
+  by position.
 - A template is eligible when at most `--holdout-max-carriers` cards carry a text with
   that template. An eligible template is held out when `crc32` of the template modulo 1000
   is below `--holdout-permille`. Every text with a held-out template is a held-out text,
   and every card carrying one is a held-out card.
 - `holdout-cards`, `build-corpus` and `train-effect-model` share the rule through
   `--holdout-unit template|text`, default `template`. `text` is the base spec's rule, kept
-  for corpora collected under it. Manifests and checkpoints record the unit.
+  for corpora collected under it. Manifests and checkpoints record the unit, and one that
+  records none is read as `text`.
 - `holdout-cards` reports the held-out templates, texts and cards, and the share of
   converted cards the list depletes.
 
@@ -263,30 +317,46 @@ Every record belongs to one rule family:
 | `continuous` | the static mode |
 | `rewrite` | the replacement type |
 | `combat` | the set of damage-step keywords carried by the combat's participants, or none |
-| `playability` | the restriction or rejection reason the verdict turns on, or none |
+| `playability` | the restriction or rejection reason the verdict turns on, as below |
 
 A record whose acting line is a keyword line belongs to the family of that keyword,
 whatever its kind.
 
+Playability families are read from payload fields:
+
+- `decision`, per candidate: the `Mode$` of the candidate's `responsible_static` when it
+  names one; otherwise the first false verdict bit in the order `can_play`, `affordable`,
+  `has_legal_target`, as `cannot-play`, `unaffordable` or `no-legal-target`; otherwise
+  `none`.
+- `attackers` and `blockers`: the sorted set of distinct `Mode$` values of the
+  `responsible_static` keys across `forbidden`, or `none` when `forbidden` names no static.
+- A static's `Mode$` is read through its provenance key from the sidecar, the lookup that
+  gives `continuous` records their family.
+
 ## 8.3 Selection order
 
 Training records are selected per class, from the class budget the class mixture sets as
-in the base spec, in four steps.
+in the base spec, in four steps. A text with `n` distinct records in a cell supplies at
+most `min(--reuse-cap × n, --text-cap)` written records there, repeats included, and a
+cell's capacity is the sum of that over its texts.
 
-1. Families. The class budget is split equally across the class's families. A family with
-   fewer records than its share is written whole, and its records are repeated up to
-   `--reuse-cap` times each towards the share. The budget a short family leaves unused is
-   split equally across the families that still have records, until every family is full
-   or exhausted.
+1. Families. The class budget is split equally across the class's families. A family whose
+   capacity is below its share is written at capacity: its records are repeated up to
+   `--reuse-cap` times each towards the share, and no text passes `--text-cap` copies. The
+   budget a short family leaves unused is split equally across the families that still
+   have capacity, until every family is full or exhausted.
 2. Outcome signatures. In the classes whose records carry per-entity outcomes
    (`resolution-effect`, `rewrite`, `combat`, `continuous`), each family's share is split
-   the same way across outcome signatures. A record's outcome signature is the multiset of
-   (zone outcome, changed or not) over its affected entities.
+   the same way across outcome signatures. A record's outcome signature is the set of
+   distinct (zone outcome, changed or not) pairs over its affected entities. How many
+   entities share a pair does not enter it.
 3. Real decisions. In the `playability-legality` class, real decisions fill up to half the
    class budget before what-if records fill the rest. Family balancing applies within each
    half.
-4. Texts. Within each cell the steps above define, `--text-cap` bounds the records per
-   ability text, and records beyond it are dropped at random under `--seed`.
+4. Texts. Within each cell the steps above define, `--text-cap` bounds the written
+   records per ability text, repeats included. A text with more distinct records than the
+   cap contributes a random cap's worth under `--seed`, unrepeated. A text whose repeats
+   would pass the cap spreads the cap evenly over its records.
 
 `random_seat` is not a selection key.
 
@@ -305,6 +375,7 @@ the text, until the class quota is met.
 | `--game-disjoint-keyword-share` | 0.15 | threshold for a game with a qualifying combat for a listed keyword |
 | `--game-disjoint-keywords` | first strike, deathtouch, trample, indestructible, wither, infect | keywords whose qualifying combats raise the threshold |
 | `--reuse-cap` | 4 | maximum repeats of one record when a family or signature is short |
+| `--text-cap` | 200 | maximum written records per ability text in a cell, repeats included |
 
 # 9. Training
 
@@ -326,10 +397,20 @@ the text, until the class quota is met.
   whether the cost taps and whether it sacrifices, as binary targets. A target is masked
   where the script states no fixed value. The head is filtered out at save time, like the
   MLM and script-API heads.
+- Cost targets. The value head reads cost targets from the line's `Cost$` only. A card's
+  mana cost covers the whole card, so no line's encoding text gains the face's
+  `ManaCost`, and a spell line's mana-cost targets are masked even where its `Cost$`
+  carries mana (`Cost$ B Sac<1/Creature>`). A spell line's tap and sacrifice targets still
+  read from its `Cost$`. A charm's root line states no amounts, so its amount targets are
+  empty.
 - No pairing term. The encoder has no paired-encoding loss and no pairing head.
 - Encoder size. `--encoder-layers` and `--encoder-d-model` replace the hardcoded encoder
   constants. The checkpoint records both, and every command that loads a checkpoint builds
-  the encoder from them.
+  the encoder from them. A checkpoint that records neither loads at 4 layers and width 256.
+- Option-kind embedding. The effect model adds a learned option-kind embedding to every
+  ability row from an `option` line. Option rows follow their root row within the card's
+  block, and the flag plus adjacency links a mode to its root. No other positional scheme
+  is added.
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -440,7 +521,8 @@ train-scorer` Phase A against that directory as a subprocess. It never writes un
 ```
 python -m sealed match-outcomes
     [--random-seat-share F]              default 0
-    [--random-seat-probability P]        required when --random-seat-share > 0
+    [--random-seat-probability P]        required when --random-seat-share > 0,
+                                         as is --effect-records
 
 python -m effects holdout-cards
     [--holdout-unit template|text]       default template
@@ -456,6 +538,7 @@ python -m effects build-corpus
     [--game-disjoint-keywords LIST]      default first strike, deathtouch, trample,
                                          indestructible, wither, infect
     [--reuse-cap N]                      default 4
+    [--text-cap N]                       default 200; counts repeats
 
 python -m effects train-effect-model
     [--e-noise R]                        default 0.1; noise ratio
@@ -481,7 +564,8 @@ python scripts/effect_knowledge_probes/compare.py SCORECARD ...
 Startup validation, before any game, build or training step:
 
 - `match-outcomes` refuses a `--random-seat-share` above 0 without
-  `--random-seat-probability`, and either value outside 0 to 1;
+  `--random-seat-probability` or without `--effect-records`, and either value outside 0
+  to 1;
 - `collect-coverage` refuses `--only-cards` beside `--exclude-cards`, `--training-corpus`
   or `--split-from`;
 - `train-effect-model` refuses an `--encoder-d-model` not divisible by the encoder's head
@@ -489,7 +573,9 @@ Startup validation, before any game, build or training step:
 
 # 13. Records and artifacts
 
-- Effect-record shards carry the two envelope fields of § 6.3.
+- Effect-record shards carry the two envelope fields of § 6.3, and a modal resolution's
+  `link_id` joins its cost record with every effect half (§ 6.5).
+- Sidecars carry each `option` line's provenance key and chain (§ 4.1).
 - The curated-corpus manifest adds:
   - per class and family: available records, share, records written, repeats and
     shortfall;

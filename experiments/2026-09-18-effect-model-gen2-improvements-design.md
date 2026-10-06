@@ -109,13 +109,14 @@ in the text. The variant records then teach the model that one text has two outc
 
 - the root line;
 - for a trigger, the ability it executes through `Execute$`;
-- each sub-ability in chain order, including a `RepeatSubAbility` where one exists;
-- for a charm, each mode its `Choices$` names, since a charm reaches its modes through that list
-  rather than through `Execute$` or `SubAbility$`.
+- each sub-ability in chain order, including a `RepeatSubAbility` where one exists.
 
 Replacement effects get the same treatment through `ReplaceWith$`. A dedicated token separates the
-segments. Each segment keeps the SVar label its parent referenced it by, so `SubAbility$ DBChange`
-in one segment and `DBChange:` opening a later one give the model the link.
+segments. Each segment after the root opens with the label its parent referenced it by, so
+`SubAbility$ SV2` in one segment and `SV2:` opening a later one give the model the link. The labels
+are renumbered by position within the line, so the link survives and the author's name for the SVar
+does not (next subsection). A charm's modes are not inlined into its root line. Each mode is encoded
+on a line of its own (subsection on charms).
 
 Four things follow from the change, and the third is the one that decides the order of work.
 
@@ -125,8 +126,8 @@ Four things follow from the change, and the third is the one that decides the or
    byte-identity guarantee the sidecar contract makes holds.
 2. **The script vocabulary is rebuilt.** `build-vocab --surface script` scans the sidecars' script
    lines; after the change those lines carry the chained segments and the separator token. Most
-   parameter keys already appear on root lines, so the vocabulary grows by the segment labels and
-   the rarer sub-ability parameters.
+   parameter keys already appear on root lines, so the vocabulary grows by the numbered labels,
+   one per position in the longest chain, and the rarer sub-ability parameters.
 3. **The holdout is chosen on the chained text.** A text is held out by the hash of its masked
    template, the normalised script text with its numbers, `CARDNAME` and descriptions masked
    (section on gate 1), and the corpus's rarity table is keyed on the script text. Changing
@@ -144,6 +145,63 @@ synthetic land mana line, and nothing else.
 Gen-2 does not build the design doc's paired-prose loss. That loss would pull a line's prose
 encoding toward its script encoding, so that a card with prose but no Forge script would still get a
 usable `e`. Gen-2 serves cards implemented in Forge, and every one of them has a script.
+
+### Gen-2 renumbers SVar labels by position, because the names authors give them carry no mechanism
+
+Forge's card scripts name their SVars freely, and most names are used once. The table counts the
+labels that `Execute$`, `SubAbility$` and `ReplaceWith$` reference across Forge's card scripts.
+
+| SVar labels referenced in Forge's card scripts | count |
+|---|---:|
+| distinct labels | 3,488 |
+| references | 36,501 |
+| labels referenced once | 2,355 |
+| labels referenced fewer than five times | 3,009 |
+
+Labels kept as written damage the vocabulary. A label is one whole token, so a name used once
+either takes a vocabulary slot of its own or reads as `[UNK]`. A label read as `[UNK]` no longer
+links a reference to the segment it names, which is the only reason the label is in the text.
+
+Labels kept as written also damage the holdout. Two texts that do the same thing under different
+names, `SubAbility$ DBDraw` and `SubAbility$ DBDrawCard`, are different texts. The rarity table
+counts them apart, and the holdout hashes them apart, so one twin can train while the other sits in
+the card-disjoint stratum as an unseen text.
+
+Gen-2 renames every chain label in a line's `script_text` to `SV1`, `SV2`, … in order of first
+appearance. A label keeps its number everywhere in the line, so a reference and the segment it names
+still match. Numbering restarts on every line. The rename covers the values of `Execute$`,
+`SubAbility$`, `RepeatSubAbility$` and `ReplaceWith$`, each item of `Choices$`, and the label that
+opens each segment. Amount SVars, such as the `X` of `NumDmg$ X`, are not chain links and keep their
+names. What a label loses is redundant: `DBDraw` says "draw", and the segment it opens says
+`DB$ Draw`.
+
+### Gen-2 encodes and records each mode of a charm as its own ability
+
+A charm's outcome depends on which modes its caster chose, and no single text can show that choice.
+The converter already emits one `option` line per mode beside the charm's root line. Gen-1's
+sidecars give those lines no provenance key and no script text, and the provenance join resolves
+every chosen mode to the root line. A charm resolution therefore acts through one text whose
+outcome is damage on one record and a drawn card on another, depending on a choice the model never
+sees.
+
+Gen-2 makes each mode a separate ability, in four steps.
+
+1. **Each `option` line carries its mode's chain.** Its sidecar entry holds the mode's provenance
+   key and a `script_text` holding the mode's script line, opened by its label, followed by its
+   sub-abilities. The root line keeps only its own script line: the choices, how many modes to
+   choose, and whether a mode may repeat.
+2. **Each mode gets its own `e`.** The effect model adds a learned option-kind embedding to every
+   ability row that comes from an `option` line. Option rows follow their root row within the
+   card's block, so the flag and the order link a mode to its charm.
+3. **A patched worker records each chosen mode as its own effect.** A modal resolution becomes one
+   cost record acting through the root line and one effect half per chosen mode, acting through
+   that mode's `option` line. Each effect half carries only its mode's events and a snapshot taken
+   just before that mode resolved. All of them share one `link_id`, which therefore joins a cost
+   record with its effect halves rather than only a pair. A mode chosen twice, as a Pawprint charm
+   allows, produces two effect halves.
+4. **A degraded worker keeps the root line.** Without the engine hooks the collector cannot tell
+   where one mode's events end and the next begin. A degraded worker writes one effect half
+   through the root line carrying every chosen mode's events.
 
 ## Every outcome in the corpus is one Forge chose, so the model can learn abilities without learning targets
 
@@ -186,7 +244,7 @@ off-policy play adds are the ones the corpus lacks:
 The random seat is Forge's AI with its choices overridden at the decision points that matter: the
 spell or ability to play, its targets, the attackers to declare, and the blocks to assign. At each
 of those points it acts at random with one probability, the same at every point, and then draws
-uniformly from the legal options. Otherwise it takes Forge's ranked choice. Land drops, mana payment
+from the legal options. Otherwise it takes Forge's ranked choice. Land drops, mana payment
 and mulligans stay with Forge, because a random land drop produces no record the corpus lacks and
 only makes the board less like one the model will be asked about. The other seat stays the standard
 Forge AI, so the game keeps a shape Forge would produce and ends. Two random seats never play each
@@ -196,6 +254,22 @@ The override lives in the connector, not in Forge. The match worker already buil
 `LobbyPlayerAi` in `GamePlayer`, and Forge routes spell choice, target choice and combat
 declarations through `PlayerControllerAi`, so the random seat is a controller subclass the worker
 installs on one seat. Nothing on the `effect-record-hooks` branch changes.
+
+A random draw picks one element at a time, because the legal attacks, blocks and target sets are
+combinations too numerous to list and draw from.
+
+| Decision | Random draw |
+|---|---|
+| spell or ability | uniform over the playable spells and abilities other than mana abilities |
+| attackers | each creature that can attack does so with probability ½ |
+| blockers | each creature that can block picks uniformly from no block and the attackers it may legally block |
+| targets | a count uniform between the ability's minimum and maximum, then that many distinct legal targets |
+
+A declaration Forge rejects as illegal is redrawn. After a fixed number of failed draws the seat
+takes Forge's choice for that decision. The play draw never passes while something is playable,
+because a pass produces no resolution record, and resolutions Forge would not choose are what the
+random seat is for. Mana abilities are left out of the play draw because mana payment stays with
+Forge. A mana ability drawn at random would tap a land for mana that nothing spends.
 
 Four details are fixed in this design rather than left to the collection run.
 
@@ -316,7 +390,12 @@ record kind.
 | continuous | the static mode |
 | rewrite | the replacement type |
 | combat | the damage-step keywords present in the fight, or none |
-| playability | the restriction or rejection reason the verdict turns on |
+| playability | the mode of the static that forbids it, or else the verdict that failed |
+
+A playability verdict that fails on mana has no static behind it, and neither does one that fails
+for want of a target. Where no static is responsible, the first verdict that failed names the
+family: cannot be played, unaffordable, or no legal target. Without that rule, every unaffordable
+and every untargetable candidate would share one family with the candidates that pass.
 
 `build-corpus` gives every family within a class the same target number of records. A family with
 more records than the target is cut down to it. A family with fewer is written whole, and each of
@@ -327,6 +406,11 @@ The reuse cap is what stops uniformity from turning into memorization, in which 
 from the identity of a text rather than from what the text says. Dredge has seven texts in about six
 hundred games. A budget equal to that of the ChangesZone triggers would replay those few cards and
 boards hundreds of times, and the model would learn the cards rather than the rule.
+
+The per-text cap counts copies as well as distinct records. A record repeated four times counts four
+against its text's cap of two hundred, so no text is replayed past the cap. A family made of a few
+texts therefore stays short rather than filling its target with them, and its shortfall goes on the
+list below.
 
 A family short of its target is a collection problem rather than a sampling one. Cypher has no
 record at all, and no weight reaches it. The manifest reports each family's available records, its
@@ -340,9 +424,15 @@ the rules the way training does.
 
 ### Within a family, curation balances the outcomes as well as the texts
 
-A family's records are balanced over a coarse outcome signature: for each affected entity, its zone
-outcome and whether anything about it changed. Lightning Bolt killing its target and Lightning Bolt
-leaving it standing then appear in comparable numbers. On-policy play records almost only the first.
+A family's records are balanced over a coarse outcome signature: which pairs of zone outcome and
+changed-or-not occur among the affected entities. Lightning Bolt killing its target and Lightning
+Bolt leaving it standing then appear in comparable numbers. On-policy play records almost only the
+first.
+
+The signature ignores how many entities share a pair, so that a mass effect is not split by board
+size. A wrath that kills three creatures and one that kills seven produce the same outcome on boards
+of different sizes. If counts entered the signature, each board size would become a cell with its
+own share, and the rare large boards would be repeated to fill it.
 
 Balancing the outcomes changes which boards the model sees and not the right answer on any of them,
 because most outcomes follow from the board under the rules: Bolt on a creature with three toughness
@@ -477,6 +567,12 @@ label is masked where the script states no fixed number, as with X. The head fol
 the script-API head, gen-1's training-only head that predicts each script's API type from `e`: a
 small loss weight, used in training only, and filtered out at save time.
 
+Costs come from the line's `Cost$` alone. A spell's mana cost is printed on the card rather than on
+any line, and it pays for the whole card, so no line is labelled with it. A spell line's mana-cost
+labels are masked even when an additional cost puts mana in its `Cost$`, as in Bone Splinters'
+`Cost$ B Sac<1/Creature>`. The effect head reads the card's mana value and colours from the board
+snapshot and relates them to the card's abilities itself.
+
 The weight is the one setting to watch. Gen-1's `e` predicted observed outcomes better than the
 parsed script features did, because it groups abilities by what they do rather than by how their
 scripts are written. A large weight would pull `e` back toward the parser's grouping.
@@ -555,11 +651,12 @@ round that gives the held-out texts enough records to score.
    falls below the holdout fraction, a number of templates per thousand (`--holdout-permille`), so a
    text's numeric twins go with it and every held-out text is unseen in training, numbers included.
    The template is taken from the chained script text, and the new corpus is depleted against it
-   (section on collecting from scratch). The eligibility rule counts the cards that carry any text
-   of the template, not the cards of one text: a template such as `Pump +N/+N until end of turn`
-   spans thousands of cards, and holding it out would deplete them all. The holdout fraction is set
-   against the share of cards the holdout depletes, which `holdout-cards` reports before collection
-   starts. The build lists the held-out texts with no gate-one record and those under a floor of
+   (section on collecting from scratch). Chain labels need no mask, because the encoding text has
+   already renumbered them (subsection on SVar labels). The eligibility rule counts the cards that
+   carry any text of the template, not the cards of one text: a template such as `Pump +N/+N until
+   end of turn` spans thousands of cards, and holding it out would deplete them all. The holdout
+   fraction is set against the share of cards the holdout depletes, which `holdout-cards` reports
+   before collection starts. The build lists the held-out texts with no gate-one record and those under a floor of
    five games, which is the target list for the next point.
 4. **A coverage round over the held-out cards alone.** `collect-coverage` gains the inverse of
    `--exclude-cards`: a run restricted to the held-out cards, writing full-strength records. Every
@@ -798,10 +895,12 @@ dragon` and `YouCtrl` as `you ctrl`.
 3. **The measurement above is repeated on the rebuilt vocabulary.** The build log reports the
    unknown-token rate on the parameters and the number of distinct compound parts, so the rebuild
    shows whether the unknown compounds went away.
-4. **SVar labels stay whole.** The chain encoding links a segment to its parent by SVar label (chain
-   section). Split, `DBChange` becomes `db change`, which recurs across the segments of one card and
-   no longer names one of them. The split therefore skips the values of `Execute$`, `SubAbility$`,
-   `Choices$` and `ReplaceWith$`, and the label that opens each segment.
+4. **Chain labels stay whole.** The chain encoding links a segment to its parent by its numbered
+   label (subsection on SVar labels). Read by the prose grammar, `SV2` becomes `sv 2`, and the digit
+   reaches the numeric embedding as if it were an amount. The tokenizer therefore keeps whole the
+   values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `Choices$` and `ReplaceWith$`, and the
+   label that opens each segment. `build-vocab` reserves `sv1` up to the longest chain's label
+   count, so the vocabulary size setting cannot drop one.
 5. **A counter type is one token.** The prose grammar reads `CounterType$ P1P1` as `p 1 p 1`, so the
    digits of a counter type reach the numeric embedding as if they were amounts. On the script
    surface a counter type's value stays whole, `p1p1` or `m1m1`, in the tokenizer and in the
@@ -957,8 +1056,10 @@ The off-policy random seat also needs games played with it.
 
 Everything collection fixes is therefore settled before the first game:
 
-- the holdout: masked templates of the chained script text, with the eligibility rule counted per
-  template (section on gate 1);
+- the holdout: masked templates of the chained script text with its labels renumbered, with the
+  eligibility rule counted per template (section on gate 1);
+- per-mode modal records: each chosen mode of a charm recorded through its own `option` line
+  (subsection on charms);
 - the two new envelope fields, the random-seat flag and the what-if legality flag. Each is
   collection metadata, like `mode`, `fork` and `synthetic`, and never reaches the model. Each is
   additive, so the frozen-schema contract test gains one line per field, and both are in the schema
@@ -1054,7 +1155,8 @@ run against gen-1's sidecars: before `convert` is re-run in stage 1, or against 
 
 1. `python -m effects extract-keyword-definitions`, recording Forge's formatted value strings per
    keyword.
-2. `python -m price_predictor convert`, writing sidecars whose `script_text` is the whole chain.
+2. `python -m price_predictor convert`, writing sidecars whose `script_text` is the whole chain
+   with its labels renumbered, and whose `option` lines carry their modes.
 3. `python -m effects build-vocab --surface script`. The build log's unknown-token rate on the
    parameters is the check on the camel-case split, and the build asserts that no definition expands
    to `[UNK]`.

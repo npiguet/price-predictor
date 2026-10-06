@@ -573,7 +573,7 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-029**: `--legality-rate` MUST sample what-if records only. Every real decision MUST be
   written.
 
-#### Modal resolutions
+#### Modal resolutions (root spec § 6.5)
 
 - **FR-029a**: A patched worker MUST record a modal resolution, a charm or a Pawprint charm, as one
   cost record acting through the root line plus one effect half per chosen mode, each acting
