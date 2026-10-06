@@ -47,12 +47,13 @@ In scope
 
 Reused unchanged
 
-- The record schema beyond the two fields of § 6.3, the state snapshot, events and
-  per-kind payloads.
+- The record schema beyond the two fields and the redefined `actor_player` of § 6.3, the
+  `option` key component of § 4.1, the state snapshot, events and per-kind payloads.
 - The collectors, caps and budgets beyond § 6, the provenance join beyond option lines (§
   4.1, § 6.5), synthetic variants and depleted collection.
-- The effect head's input beyond the option-kind embedding (§ 9), its output heads and
-  losses, the class mixture, and the embedding-cache layout.
+- The effect head's input beyond the option-kind embedding (§ 9), its output heads, its
+  losses beyond wiring the verdict, created-objects, MLM and script-API heads (§ 9), the
+  class mixture, and the embedding-cache layout.
 - Gates 2 and 3, and the baseline variants, which stay available.
 
 Out of scope
@@ -140,7 +141,16 @@ Base-spec sections this spec amends
     and a `script_text` holding that mode's chain, opened by its label (`SV1:`), then its
     sub-abilities in the order above;
   - option lines follow their root line in the sidecar, in `Choices$` order, and the root's
-    `Choices$` reads `SV1,SV2,…`.
+    `Choices$` reads `SV1,SV2,…`;
+  - a mode's provenance key is the root key extended by an `option` component, the mode's
+    0-based position in `Choices$`. A key without the component names the root. The
+    component is additive in sidecars and in records' `ability` keys;
+  - a mode's `option` line carries the mode's own `script_api_type`, the API type of its
+    opening segment.
+- An `option` line that is not a charm mode, such as a die-roll outcome, keeps the base
+  spec's empty provenance and `script_text`.
+- A charm with no description renders no root line. Its root key maps to no line and is
+  listed in `dropped_keys`.
 - The rendered prose and the converted `.txt` files do not change.
 - The prose surface is the encoding text only for a line with no script: a keyword-derived
   line or a synthetic land mana line.
@@ -250,12 +260,16 @@ Base-spec sections this spec amends
   decides and its hooks write records as for a Forge seat. When it succeeds, the AI's
   decision code does not run, and the random seat writes the records that code's hooks
   would have written, through the same emitters, from the lists it draws from:
-  - a `decision` record over the candidates it evaluated;
+  - a `decision` record per candidate it evaluated, sampled at `--playability-rate` as the
+    hook path samples them;
   - an `attackers` record per defender;
   - a `blockers` record per attacker.
 
   It stamps its own `attackers` and `blockers` records `what_if = false` and writes no
   what-if records.
+- While the seat still has a land drop this turn and a land is playable, it makes no `P`
+  draw at a play decision point. The Forge AI decides that priority, so the land drop stays
+  the AI's. Random plays begin once the drop is used or no land is playable.
 - The random seat is a `PlayerControllerAi` subclass the match worker installs on one
   seat. No engine hook is added or changed, and the `effect-record-hooks` branch is
   unchanged.
@@ -281,7 +295,25 @@ Base-spec sections this spec amends
 Both are collection metadata: like `mode`, `interventional`, `fork` and `synthetic`, they
 never reach the model. Both are additive under the base spec's schema-compatibility rules.
 Every gen-2 record carries `random_seat`, and every gen-2 legality record carries
-`what_if`. The gen-2 corpus holds no shard without them, so readers define no default.
+`what_if`.
+
+- Readers still load gen-1 shards, which stage 0 trains and probes on. An absent
+  `random_seat` reads as `false`. An absent `what_if` reads as unknown and never counts as a
+  real decision.
+- `validate-corpus` fails a shard in which some records carry a field and others of the
+  kinds that must carry it do not.
+- On `playability` records, `actor_player` names the deciding player:
+
+  | Subkind | `actor_player` |
+  |---|---|
+  | `attackers` | the controller of the candidate attackers |
+  | `blockers` | the controller of the candidate blockers |
+  | `decision` | the controller of the candidate ability |
+
+  This redefines the field for those subkinds. The base spec wrote the active player for
+  `attackers` and `decision` and the attacking player for `blockers`, and gen-1 shards keep
+  that meaning. The schema-compatibility tests carry the redefinition as a named
+  exception. § 6.2's real-decision test reads the redefined field.
 
 ## 6.4 Held-out coverage round
 
@@ -444,13 +476,25 @@ the text, until the class quota is met.
   read from its `Cost$`. A charm's root line states no amounts, so its amount targets are
   empty.
 - No pairing term. The encoder has no paired-encoding loss and no pairing head.
+- Verdict and created-objects heads. Training applies both heads' losses as the base spec
+  defines them, beside the per-entity loss: the verdict bits on `decision` records, the cost
+  paid on cost halves, the trigger-fired bit on `trigger` records, and the created-objects
+  slots on effect halves and `rewrite` records. A `decision` record's `[ACT]` reads the `e`
+  of its candidate's acting line.
+- MLM and script-API heads. Training applies the base spec's MLM loss (`--mlm-weight`,
+  `--mlm-mask-prob`) and script-API loss (`--api-weight`). The script-API head predicts the
+  line's `script_api_type` and the parameter keys of every segment of its `script_text`. The
+  MLM head is sized from `--encoder-d-model`. Both are training-only and filtered at save
+  time.
 - Encoder size. `--encoder-layers` and `--encoder-d-model` replace the hardcoded encoder
   constants. The checkpoint records both, and every command that loads a checkpoint builds
   the encoder from them. A checkpoint that records neither loads at 4 layers and width 256.
+  A checkpoint that records the removed `e_noise` field loads with it ignored.
 - Option-kind embedding. The effect model adds a learned option-kind embedding to every
   ability row from an `option` line. Option rows follow their root row within the card's
-  block, and the flag plus adjacency links a mode to its root. No other positional scheme
-  is added.
+  block, and the flag plus adjacency links a mode to its root. A snapshot names abilities by
+  root key, so the input adds one row per `option` line after the root row it follows. No
+  other positional scheme is added.
 
 | Flag | Default | Meaning |
 |---|---|---|

@@ -44,6 +44,11 @@ Generations:
 - Q: Which digits does the holdout's masked template mask: standalone numbers only, or also digits inside identifiers (`GE3`, `P1P1`, `w_1_1_soldier`, `Main1`, `SV2`)? → A: Every run of digits wherever it sits, so `GE3` and `GE4` share a template, except in the chain labels FR-002a renames, which keep their numbers (FR-039). The mask keys the holdout only; the encoder reads the unmasked text.
 - Q: Underscore is a word character in the prose grammar, so `TokenScript$ w_1_1_soldier` tokenizes to `w_`, `1`, `_`, `1`, `_soldier`. How are token script names tokenized on the script surface? → A: The value of `TokenScript$` also splits on `_`, giving `w 1 1 soldier` (FR-009a); `_` stays a word character everywhere else.
 - Q: Should the camel-case split apply to script parameter keys and to the `$`-prefixes inside values, turning `ConditionCompare$` into `condition compare $` and `Count$Valid` into `count $ valid`? → A: Yes (FR-008, FR-009b): keys are built from a small set of shared parts (`Condition`, `Defined`, `Present`, `Compare`), so they split like values and `$` stays its own token; `build-vocab --surface script` seeds every part a key or prefix splits into, so no key tokenizes to `[UNK]`.
+- Q: Feature 023 never trains its verdict head (`verdict_loss` has no caller, and a `decision` record's `[ACT]` reads a zero `e` because the batcher never passes `candidate_index`), so the verdict bits, cost paid and trigger-fired bit are unlearned. Fix in this feature? → A: Yes (FR-060a): training wires the verdict head as the base spec defines it, and a `decision` record's `[ACT]` reads its candidate's `e`. The created-objects head, unwired the same way (`created_objects_loss` has no caller), is wired by the same requirement.
+- Q: Legality and decision records do not name the deciding player as `actor_player` (a `blockers` record names the attacking player; `attackers` and `decision` records name the active player whoever evaluates), so `random_seat` would miss the random seat's own blocks and off-turn candidates. Which rule applies? → A: `actor_player` is redefined on `playability` records to name the deciding player (FR-030a), and `random_seat` keeps following `actor_player`; gen-1 shards keep feature 023's meaning.
+- Q: Forge decides the land drop inside the same play choice the `P` draw would skip. How do land drops survive a random draw? → A: Land first (FR-022d): while the seat still has a land drop this turn and a land is playable, no `P` draw is made at that priority and the Forge AI decides it; random plays begin once the drop is used or no land is playable.
+- Q: Stage 0 reads gen-1 shards, which carry neither new field. What do readers do with an absent field? → A: Default it (FR-033): an absent `random_seat` reads as `false`, an absent `what_if` reads as unknown and never counts as a real decision; `validate-corpus` requires each field on every record of a shard where any record carries it.
+- Q: Feature 023's MLM and script-API heads are unwired as well (`mlm_loss` and `api_loss` have no caller, `n_api_types` is never set, and `--mlm-weight`, `--mlm-mask-prob` and `--api-weight` do nothing). What does gen-2 do with them? → A: Wire them (FR-060b), as feature 023's FR-063 specifies, with their existing flags and defaults.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -231,6 +236,14 @@ half per chosen mode, each acting through an `option` line.
     from the legal attackers it drew from, stamped `what_if = false` and written whatever
     `--legality-rate` is. **When** the draw fails, **Then** the Forge AI declares, and its hook
     writes the record as for a Forge seat.
+17. **Given** a random seat declaring blockers, **When** its `blockers` records are written by
+    either path, **Then** their `actor_player` is the random seat and they carry
+    `random_seat = true`; the attacking Forge seat's `attackers` records name the Forge seat and
+    carry `random_seat = false`.
+18. **Given** a random seat in its first main phase holding a playable land and an unused land
+    drop, **When** it receives priority, **Then** no `P` draw is made and the Forge AI decides;
+    **Given** the land drop is used, **When** it next receives priority, **Then** the `P` draw is
+    made.
 
 ---
 
@@ -326,8 +339,15 @@ arm at a non-default `--encoder-layers` and `--encoder-d-model`, and load the ch
    `--encoder-layers`, `--encoder-d-model`, `--e-noise` and `--value-weight`.
 7. **Given** an `--encoder-d-model` not divisible by the encoder's head count, **When**
    `train-effect-model` starts, **Then** it refuses before training.
-8. **Given** the gen-1 checkpoint, which records no encoder size, **When** any command loads it,
-   **Then** it builds the encoder at 4 layers and width 256.
+8. **Given** the gen-1 checkpoint, which records its encoder size and the removed `e_noise`
+   field, **When** any command loads it, **Then** it builds the encoder at its recorded 4 layers
+   and width 256 and ignores `e_noise`.
+9. **Given** a training batch holding a `decision` record, a cost half, a `trigger` record and an
+   effect half that creates a token, **When** the loss is computed, **Then** it includes the
+   verdict bits read at an `[ACT]` that carries the candidate's `e`, the cost paid, the
+   trigger-fired bit and the created-objects slots. **When** `--mlm-weight` and `--api-weight` are
+   above 0, **Then** the loss also includes the MLM and script-API terms, and **When** the
+   checkpoint is saved, **Then** neither head is in it.
 
 ---
 
@@ -431,6 +451,16 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   own `option` line (FR-029a).
 - Two modes of one charm name the same sub-ability. Each mode's chain carries it, because chains
   are built per line and an SVar is de-duplicated only within one chain.
+- A charm with no description renders no root line, so its `option` lines are the card's only
+  lines (Doomsday Confluence, the one such card in the converted tree). The root key maps to no
+  line and is listed in `dropped_keys`, so its cost record acts only through a dropped key and
+  `build-corpus` refuses it, as feature 023 does for any such record; its option lines carry their
+  mode keys as usual.
+- An `option` line that is not a charm mode, such as a die-roll outcome, gets no key and no chain
+  (FR-005a); no record acts through it.
+- A gen-1 shard is read for stage 0. Its records carry neither new field; they read as
+  `random_seat = false` and `what_if` unknown (FR-033), and its `actor_player` keeps feature 023's
+  meaning.
 - A card carries two modal abilities, such as a modal spell and a modal triggered ability. Each
   root row is followed by its own `option` rows, so the option flag plus adjacency still names
   each option's root.
@@ -510,7 +540,13 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   mode's script line opened by its label, then its sub-abilities by the FR-001 order. Option lines
   follow their root line in the sidecar, in `Choices$` order, as the converter already emits them.
   The root line states no amounts, so its value-head amount targets are empty by construction
-  (FR-058).
+  (FR-058). A mode's provenance key MUST be its charm's root key extended by an `option` component,
+  the mode's 0-based position in the root's `Choices$`; a key without the component names the root.
+  The component is additive in the sidecar's provenance lists and in a record's `ability` keys, and
+  every key reader MUST treat a key carrying it as distinct from the root key. A mode's `option`
+  line MUST carry the mode's own `script_api_type`, the API type of its opening segment. An `option`
+  line that is not a charm mode (a die-roll outcome, for example) keeps feature 023's empty
+  provenance and `script_text`.
 - **FR-006**: The encoder MUST truncate at 512 tokens. `build-vocab --surface script` MUST report
   the distribution of script-line lengths in tokens. Every command that encodes MUST report each
   line it truncates, by provenance key.
@@ -615,16 +651,21 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   When it fails, the Forge AI decides and its hooks write records as for a Forge seat. When it
   succeeds, the Forge AI's decision code does not run, and the random seat MUST write the records
   that code's hooks would have written, through the same emitters, from the lists it draws from:
-  - the play decision: one `decision` record over the candidates it evaluated, each with the
-    verdict bits and payload fields the `onCandidate` path writes;
+  - the play decision: a `decision` record per candidate it evaluated, each with the verdict bits
+    and payload fields the `onCandidate` path writes, sampled at `--playability-rate` and
+    de-duplicated as that path does;
   - the attack declaration: an `attackers` record per defender, from the creatures that could attack
     and those legal against it;
   - the block declaration: a `blockers` record per attacker, from the creatures that could block and
     those legal against it, with its minimum blocker count.
   The random seat MUST stamp its own `attackers` and `blockers` records `what_if = false`
-  explicitly. It writes no what-if records. These records pass through the de-duplication of
-  FR-028 and are exempt from `--legality-rate` like every real decision (FR-029).
-- **FR-023**: Land drops, mana payment and mulligans MUST always be the Forge AI's.
+  explicitly. It writes no what-if records. Its `attackers` and `blockers` records pass through the
+  de-duplication of FR-028 and are exempt from `--legality-rate` like every real decision (FR-029).
+  While the seat still has a land drop this turn and a land is playable, it MUST make no `P` draw
+  at a play decision point: the Forge AI decides that priority, playing the land first if it
+  chooses to. Random plays begin once the land drop is used or no land is playable.
+- **FR-023**: Land drops, mana payment and mulligans MUST always be the Forge AI's (FR-022d keeps
+  land drops with the Forge AI at the play decision).
 - **FR-024**: The random seat MUST be a `PlayerControllerAi` subclass the match worker installs on
   one seat, in `forge-connector`. No engine hook may be added or changed, and the
   `effect-record-hooks` branch MUST NOT change.
@@ -669,18 +710,28 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 
 - **FR-030**: Every record MUST carry `random_seat`: `true` when its `actor_player` is the random
   seat, `false` otherwise.
+- **FR-030a**: On `playability` records `actor_player` MUST name the deciding player: for an
+  `attackers` record the controller of the candidate attackers, for a `blockers` record the
+  controller of the candidate blockers, for a `decision` record the controller of the candidate
+  ability. This redefines the field for those three subkinds: feature 023 wrote the active player
+  for `attackers` and `decision` and the attacking player for `blockers`, and gen-1 shards keep that
+  meaning. FR-027's real-decision test reads the redefined field.
 - **FR-031**: Every `playability` record of subkind `attackers` or `blockers` MUST carry `what_if`:
   `true` for a what-if, `false` for a real decision, classed by FR-027 except on the records a
   random seat writes for itself, which FR-022d stamps `false`. No other record carries it.
 - **FR-032**: `random_seat` and `what_if` MUST NOT reach the model, like `mode`, `interventional`,
   `fork` and `synthetic`.
-- **FR-033**: Both fields MUST be additive under feature 023's schema-compatibility contract tests:
-  no existing field is redefined. Every gen-2 record MUST carry `random_seat`, and every gen-2
-  legality record MUST carry `what_if`. The gen-2 corpus is collected from scratch and holds no
-  shard written without them, so readers define no default for an absent field.
+- **FR-033**: Both fields MUST be additive under feature 023's schema-compatibility contract tests,
+  and no existing field is redefined except `actor_player` on `playability` records (FR-030a),
+  which the contract tests carry as a named exception. Every gen-2 record MUST carry `random_seat`,
+  and every gen-2 legality record MUST carry `what_if`. Readers MUST still load gen-1 shards, which
+  stage 0 trains and probes on: an absent `random_seat` reads as `false`, and an absent `what_if`
+  reads as unknown, which never counts as a real decision. `validate-corpus` MUST fail a shard in
+  which some records carry a field and others of the kinds that must carry it do not.
 - **FR-034**: `CLAUDE.md`'s effect-record shard format paragraph and
-  `specs/023-ability-effect-model/contracts/record-schema.md` MUST list both fields, and the
-  widened `link_id` of FR-029d.
+  `specs/023-ability-effect-model/contracts/record-schema.md` MUST list both fields, the widened
+  `link_id` of FR-029d, the `option` key component of FR-005a and the redefined `actor_player` of
+  FR-030a.
 
 #### Held-out coverage round (root spec § 6.4)
 
@@ -807,18 +858,31 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   and sacrifice targets of a spell line still read from its `Cost$`.
 - **FR-059**: The value head MUST be filtered out at save time, like the MLM and script-API heads.
 - **FR-060**: The encoder MUST have no paired-encoding loss and no pairing head.
+- **FR-060a**: Training MUST apply the verdict-head and created-objects-head losses the base spec
+  defines, beside the per-entity loss: the verdict bits on `decision` records, the cost paid on
+  cost halves, the trigger-fired bit on `trigger` records, and the created-objects slots on effect
+  halves and `rewrite` records. A `decision` record's `[ACT]` MUST read the `e` of its candidate's
+  acting line; Java writes one candidate per record, so the candidate is the payload's first. The
+  `decision` record's verdict bits are its targets, beside its per-entity target-legality bits.
+- **FR-060b**: Training MUST apply the MLM loss over masked tokens (`--mlm-weight`, default 0.1;
+  `--mlm-mask-prob`, default 0.15) and the script-API loss from `e` (`--api-weight`, default 0.05),
+  as feature 023's FR-063 defines them: the script-API head predicts the line's `script_api_type`
+  and its parameter-key set, the keys of every segment of its `script_text`. The MLM head MUST be
+  sized from `--encoder-d-model`. Both heads stay training-only and are filtered at save time.
 - **FR-061**: `--encoder-layers` (default 4) and `--encoder-d-model` (default 256) MUST replace the
   hardcoded encoder constants. The checkpoint MUST record both, and every command that loads a
   checkpoint MUST build the encoder from them. A checkpoint that records neither MUST load at 4
-  layers and width 256.
+  layers and width 256. A checkpoint that records the removed `e_noise` field (FR-057), gen-1's
+  among them, MUST load with that field ignored.
 - **FR-062**: `train-effect-model` MUST refuse an `--encoder-d-model` not divisible by the encoder's
   head count, before training.
 - **FR-063**: Checkpoints MUST record the holdout unit, `--encoder-layers`, `--encoder-d-model`,
   `--e-noise` and `--value-weight`.
 - **FR-063a**: The effect model's input MUST add a learned option-kind embedding to every ability
   row that comes from an `option` line. Option rows follow their root row within the card's
-  block, and the flag plus adjacency is the link between a mode and its root. No other positional
-  scheme is added.
+  block, and the flag plus adjacency is the link between a mode and its root. A snapshot names an
+  entity's abilities by root key, so the input MUST add, after each root row whose sidecar line is
+  followed by `option` lines, one row per such line. No other positional scheme is added.
 
 #### Evaluation (root spec § 10)
 
@@ -917,11 +981,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   The knowledge-probe and embedding-probe scripts sit outside `src/` and may import from `effects`.
 - **FR-091**: Gates 2 and 3 and the baseline variants MUST stay available and unchanged. Gen-2's
   evaluation does not train the baselines.
-- **FR-092**: The record schema beyond `random_seat` and `what_if`, the state snapshot, events,
-  per-kind payloads, collectors, caps and budgets beyond FR-021 to FR-038, the provenance join
-  beyond FR-005a and FR-029a, synthetic variants, depleted collection, the effect head and its
-  output heads and losses, its input beyond FR-063a, the class mixture, and the embedding-cache
-  layout MUST stay as feature 023 built them.
+- **FR-092**: The record schema beyond `random_seat`, `what_if` and the `actor_player` of FR-030a,
+  the state snapshot, events, per-kind payloads, collectors, caps and budgets beyond FR-021 to
+  FR-038, the provenance join beyond FR-005a and FR-029a, synthetic variants, depleted collection,
+  the effect head and its output heads, its losses beyond FR-060a and FR-060b, its input beyond
+  FR-063a, the class mixture, and the embedding-cache layout MUST stay as feature 023 built them.
 
 ### Key Entities
 
