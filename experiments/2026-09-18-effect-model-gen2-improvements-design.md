@@ -141,6 +141,10 @@ Four things follow from the change, and the third is the one that decides the or
 Prose stays as it is: the fallback for a line with no script, which is a keyword-derived line or a
 synthetic land mana line, and nothing else.
 
+Gen-2 does not build the design doc's paired-prose loss. That loss would pull a line's prose
+encoding toward its script encoding, so that a card with prose but no Forge script would still get a
+usable `e`. Gen-2 serves cards implemented in Forge, and every one of them has a script.
+
 ## Every outcome in the corpus is one Forge chose, so the model can learn abilities without learning targets
 
 Every record comes from games in which both seats follow Forge's AI. The corpus is therefore
@@ -433,13 +437,6 @@ Gen-2 takes the last. Five details settle it.
 
 The cache and its consumers do not change. The noise is applied in training only, and the encoded
 `e` keeps its form and its unconstrained scale.
-
-If gen-2 builds the design doc's paired-prose loss, which gen-1 left unbuilt, the loss must keep its
-asymmetric form. That loss pulls a line's script encoding and its prose encoding toward each other.
-A symmetric pull also rewards collapse, in which the `e` vectors of all texts drift toward one
-shared vector, and noise on `e` strengthens that reward. The design doc makes the pull asymmetric
-for that reason. Gen-1's noise was too small for the pull and the noise to interact, and gen-2's
-noise is not.
 
 Gate 3 is where the change should show. Gate 3 caps the share of the embedding's variance on its top
 principal component. Under noise with the covariance of the `e` vectors, the noise ratio is the same
