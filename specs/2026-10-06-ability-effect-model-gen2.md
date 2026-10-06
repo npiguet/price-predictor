@@ -153,12 +153,19 @@ Base-spec sections this spec amends
 - The script surface uses the prose grammar, `tokenize`.
   `AbilityTokenizer.tokenize_script` does not exist.
 - On the script surface the grammar also ends a word where a lowercase letter is followed
-  by an uppercase one: `nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`.
+  by an uppercase one: `nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`. The split
+  applies to parameter values only.
 - These stay whole, each one lowercased token:
+  - every parameter key with its `$` (`ConditionCompare$` → `conditioncompare$`); a key
+    the vocabulary lacks falls to `[UNK]` through the ordinary `--target-size` cut;
   - the values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, and
     each comma-separated item of `Choices$`, in their renamed form (`sv2`);
   - the SVar label that opens a segment, renamed likewise;
   - the value of `CounterType$` (`p1p1`, `m1m1`).
+- The value of `TokenScript$` also splits at every `_`, which is dropped:
+  `w_1_1_soldier` → `w 1 1 soldier`. Everywhere else `_` stays a word character.
+- Letters and digits are separate tokens under the grammar, so a comparison threshold is
+  operator then operand: `GE3` → `ge 3`. Only the values above stay whole.
 - `tokenize` applies the script-surface rules when the loaded vocabulary is a script
   vocabulary, as `surface_of` determines from its path. `MtgTokenizer` in
   `price_predictor` is unchanged.
@@ -209,6 +216,8 @@ Base-spec sections this spec amends
   targets, the attackers to declare, and the blocks to assign. At each, with probability
   `P`, it draws from the legal options as below; otherwise it takes the Forge AI's choice.
   Land drops, mana payment and mulligans are always the Forge AI's.
+- Every priority the seat receives is a play decision point with its own `P` draw. No
+  per-step or per-turn cap applies.
 - How each random draw is made:
 
   | Decision | Random draw |
@@ -220,6 +229,30 @@ Base-spec sections this spec amends
 
   A declaration or target set Forge rejects as illegal is redrawn. After a retry limit set
   in code, the seat takes the Forge AI's choice for that decision.
+- A play the random draw picked has every choice made while it is cast or activated drawn
+  at random, with no `P` gate. Only its mana payment is the Forge AI's.
+
+  | Choice | Random draw |
+  |---|---|
+  | targets | as above |
+  | modes | a count uniform between the charm's minimum and maximum, then that many modes uniform among those Forge allows, repeating only where the charm permits; a Pawprint charm draws one mode at a time among those whose pawprint cost still fits, until the budget is spent |
+  | X | uniform from the smallest legal X to the largest the seat's available mana can pay |
+  | additional-cost choices (sacrifice, discard, exile, tap) | that many distinct legal objects, uniform |
+
+  A draw Forge rejects as illegal or unpayable is redrawn. After the retry limit, the play
+  is abandoned and the play draw repeats over the remaining candidates. The seat passes
+  when none remains. Choices made while the play resolves stay the Forge AI's. A play the
+  Forge AI chose keeps its own choices, with only its targets under the `P` draw.
+- The `P` draw comes before the Forge AI's computation. When it fails, the Forge AI
+  decides and its hooks write records as for a Forge seat. When it succeeds, the AI's
+  decision code does not run, and the random seat writes the records that code's hooks
+  would have written, through the same emitters, from the lists it draws from:
+  - a `decision` record over the candidates it evaluated;
+  - an `attackers` record per defender;
+  - a `blockers` record per attacker.
+
+  It stamps its own `attackers` and `blockers` records `what_if = false` and writes no
+  what-if records.
 - The random seat is a `PlayerControllerAi` subclass the match worker installs on one
   seat. No engine hook is added or changed, and the `effect-record-hooks` branch is
   unchanged.
@@ -240,7 +273,7 @@ Base-spec sections this spec amends
 | Field | Contents |
 |---|---|
 | `random_seat` | `true` when the record's `actor_player` is the random seat; `false` otherwise |
-| `what_if` | `playability` `attackers` and `blockers` records only: `true` for a what-if, `false` for a real decision |
+| `what_if` | `playability` `attackers` and `blockers` records only: `true` for a what-if, `false` for a real decision; classed by § 6.2, except that a random seat stamps its own records `false` (§ 6.1) |
 
 Both are collection metadata: like `mode`, `interventional`, `fork` and `synthetic`, they
 never reach the model. Both are additive under the base spec's schema-compatibility rules.
@@ -278,10 +311,14 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
 
 # 7. Holdout
 
-- The holdout unit is the masked template: the normalised `script_text` with every number,
-  `CARDNAME` and every `*Description$` value replaced by a fixed placeholder. Mana symbols'
-  colours stay unmasked. Chain labels need no mask, because § 4.1 has already renamed them
-  by position.
+- The holdout unit is the masked template: the normalised `script_text` with every run of
+  digits, `CARDNAME` and every `*Description$` value replaced by a fixed placeholder.
+  - A run of digits is masked wherever it sits, inside an identifier too: `GE3` → `GE#`,
+    `P1P0` → `P#P#`, `w_1_1_soldier` → `w_#_#_soldier`, `Main1` → `Main#`.
+  - The chain labels § 4.1 renames keep their numbers, so a reference still names its
+    segment. They need no mask, because the renaming already makes label names irrelevant.
+  - Mana symbols' colours and every letter stay unmasked.
+  - The masked template keys the holdout only. No encoding reads it.
 - A template is eligible when at most `--holdout-max-carriers` cards carry a text with
   that template. An eligible template is held out when `crc32` of the template modulo 1000
   is below `--holdout-permille`. Every text with a held-out template is a held-out text,

@@ -38,6 +38,12 @@ Generations:
 - Q: Is an outcome signature a multiset (counts matter) or a set? → A: A set (FR-049 step 2): the distinct (zone outcome, changed or not) pairs over the affected entities, so mass effects are not split into thin cells by board size.
 - Q: Are mana abilities candidates for the random seat's uniform play draw? → A: No (FR-022a): mana abilities are excluded, and a seat whose only playable abilities are mana abilities counts as having nothing playable and passes.
 - Q: What happens with `--random-seat-share` above 0 but no `--effect-records`, where a random-seat match would write nothing? → A: `match-outcomes` refuses before any game (FR-026).
+- Q: A randomly drawn play may be one the Forge AI declined, so the AI may have no targets, X, modes or cost choices for it. How are its choices made? → A: All at random (FR-022c): every choice made while the play is cast or activated (targets, modes, X, additional-cost choices) is drawn uniformly from the legal options with no `P` gate, and only mana payment stays with the Forge AI; a play whose draws keep failing is abandoned and the play draw repeats over the remaining candidates, passing when none remains.
+- Q: The `attackers`, `blockers` and `decision` records are written from hooks inside the Forge AI's decision code, so a random draw that skips the AI writes none. How does a random seat's decision get its records? → A: The `P` draw comes first; on success the random seat writes the records itself, from the legal-option lists it draws from, through the same emitters the hooks call, and stamps its attack and block declarations `what_if = false` explicitly; on failure the Forge AI runs and its hooks fire as for a Forge seat (FR-022d).
+- Q: The seat receives priority many times per turn. Is every priority a play decision point with its own `P` draw? → A: Yes (FR-022a): every priority the seat receives is a play decision point with its own `P` draw, and the pilot tunes `P` knowing the per-turn rate of random plays is well above `P`; most priorities have nothing legal to play anyway.
+- Q: Which digits does the holdout's masked template mask: standalone numbers only, or also digits inside identifiers (`GE3`, `P1P1`, `w_1_1_soldier`, `Main1`, `SV2`)? → A: Every run of digits wherever it sits, so `GE3` and `GE4` share a template, except in the chain labels FR-002a renames, which keep their numbers (FR-039). The mask keys the holdout only; the encoder reads the unmasked text.
+- Q: Underscore is a word character in the prose grammar, so `TokenScript$ w_1_1_soldier` tokenizes to `w_`, `1`, `_`, `1`, `_soldier`. How are token script names tokenized on the script surface? → A: The value of `TokenScript$` also splits on `_`, giving `w 1 1 soldier` (FR-009a); `_` stays a word character everywhere else.
+- Q: Should the camel-case split apply to script parameter keys, turning `ConditionCompare$` into `condition compare $`? → A: No (FR-009): a parameter key and its `$` stay one lowercased token (`conditioncompare$`); the camel-case split applies to values only. Keys outside the vocabulary fall to `[UNK]` through the ordinary `--target-size` cut, unseeded.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -81,9 +87,11 @@ camel-case count. Expand every definition and check that none contains `%` or `[
    **When** `convert` runs, **Then** the `DBDraw` segment and then its sub-ability's segment
    follow the root.
 4. **Given** the script vocabulary is loaded, **When** `ValidTgts$ Creature.nonDragon+YouCtrl` is
-   tokenized, **Then** `nonDragon` yields `non` and `dragon` and `YouCtrl` yields `you` and `ctrl`,
-   while the value of `SubAbility$ SV2` stays one token `sv2` and `CounterType$ P1P1` stays one
-   token `p1p1`.
+   tokenized, **Then** the key yields one token `validtgts$`, `nonDragon` yields `non` and
+   `dragon` and `YouCtrl` yields `you` and `ctrl`, while the value of `SubAbility$ SV2` stays one
+   token `sv2` and `CounterType$ P1P1` stays one token `p1p1`. **When** `ConditionCompare$ GE3` is
+   tokenized, **Then** it yields `conditioncompare$`, `ge` and `3`. **When** `TokenScript$ w_1_1_soldier` is tokenized, **Then** its value yields `w`,
+   `1`, `1` and `soldier`, with no token holding `_`.
 5. **Given** the prose vocabulary is loaded, **When** the same text is tokenized, **Then** no
    camel-case split is applied.
 6. **Given** a keyword line `Ward:2`, **When** it expands, **Then** the whole display name `Ward`
@@ -127,8 +135,10 @@ for a short session and read its report of texts under the floor.
 
 **Acceptance Scenarios**:
 
-1. **Given** two texts that differ only in `NumDmg$ 2` versus `NumDmg$ 3`, **When** the holdout is
-   computed, **Then** both have the same masked template and are both held out or both kept.
+1. **Given** two texts that differ only in `NumDmg$ 2` versus `NumDmg$ 3`, or only in
+   `ConditionCompare$ GE3` versus `GE4`, **When** the holdout is computed, **Then** both have the
+   same masked template and are both held out or both kept. **Given** two texts whose chains differ
+   only in which segment a reference names (`SV1` versus `SV2`), **Then** their templates differ.
 2. **Given** a template carried by more cards than `--holdout-max-carriers`, **When** the holdout
    is computed, **Then** it is never held out, whatever its hash.
 3. **Given** `holdout-cards`, `build-corpus` and `train-effect-model` all run with
@@ -207,6 +217,18 @@ half per chosen mode, each acting through an `option` line.
     resolution of the mode.
 14. **Given** a degraded worker and the same charm, **When** it resolves, **Then** one effect half
     acts through the charm's root line and carries the events of every chosen mode.
+15. **Given** a play the random draw picked, **When** it is cast, **Then** its targets, modes, X
+    and additional-cost choices are each drawn at random whatever the outcome of a `P` draw, and
+    only its mana payment is the Forge AI's. **Given** a randomly drawn spell with X in its cost and
+    five mana available, **When** X is drawn, **Then** it falls uniformly between the smallest legal
+    X and the largest those five mana can pay. **Given** a randomly drawn play whose draws Forge
+    rejects up to the retry limit, **When** the limit is reached, **Then** the play is abandoned and
+    another playable candidate is drawn, or the seat passes when none remains.
+16. **Given** a random seat at its attack declaration, **When** the `P` draw succeeds, **Then** the
+    Forge AI's attack code does not run, and the seat writes an `attackers` record per defender
+    from the legal attackers it drew from, stamped `what_if = false` and written whatever
+    `--legality-rate` is. **When** the draw fails, **Then** the Forge AI declares, and its hook
+    writes the record as for a Forge seat.
 
 ---
 
@@ -431,6 +453,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - A game names a held-out card. It is card-disjoint and never enters the game-disjoint stratum,
   whatever its hash.
 - A random seat faces a decision with one legal option. It takes that option.
+- A randomly drawn play cannot be completed, for example a sacrifice cost with no legal object
+  left once its other draws are made. Its draws are retried, then the play is abandoned and the
+  play draw repeats over the rest (FR-022c), so the seat never stalls on a play it cannot finish.
+- A randomly drawn play's resolution asks its controller a question, such as which card to search
+  for or whether to use a "you may". The Forge AI answers it: only casting choices are random.
 - A random-seat match's JVM crashes mid-game. Its shard follows the existing crash-tolerance rules,
   and there is no match-outcome row to clean up.
 - Gen-1 sidecars carry the root line only. The noise pilot's value head reads root-line labels
@@ -491,10 +518,17 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-007**: The script surface MUST use the prose grammar, `tokenize`.
   `AbilityTokenizer.tokenize_script` MUST be removed, with its tests.
 - **FR-008**: On the script surface, the grammar MUST also end a word where a lowercase letter is
-  followed by an uppercase one (`nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`).
-- **FR-009**: On the script surface, each of these MUST stay one lowercased token: the values of
+  followed by an uppercase one (`nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`). The split
+  applies to parameter values, never to a parameter key (FR-009).
+- **FR-009**: On the script surface, each of these MUST stay one lowercased token: every parameter
+  key together with its `$` (`ConditionCompare$` → `conditioncompare$`, `SP$`, `Count$`), with no
+  camel-case split and no separate `$` token; the values of
   `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, and each comma-separated item of `Choices$`; the SVar
   label that opens a segment, all in their FR-002a form (`sv2`); the value of `CounterType$`.
+- **FR-009a**: On the script surface, the value of `TokenScript$` MUST also split at every `_`, which
+  is dropped (`w_1_1_soldier` → `w 1 1 soldier`). Everywhere else `_` stays a word character. A
+  letter run followed by a digit run is already two tokens under the grammar (`GE3` → `ge 3`), and
+  only the FR-009 values stay whole.
 - **FR-010**: `tokenize` MUST apply the script-surface rules exactly when the loaded vocabulary is a
   script vocabulary, as `surface_of` determines from its path. `MtgTokenizer` in `price_predictor`
   MUST NOT change.
@@ -536,8 +570,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   MUST be a random seat. The other seat MUST be the standard Forge AI.
 - **FR-022**: The random seat MUST override four decision points: the spell or ability to play, its
   targets, the attackers to declare, and the blocks to assign. At each, with probability `P`, it
-  MUST draw uniformly from the legal options; otherwise it MUST take the Forge AI's choice.
-- **FR-022a**: At the spell-or-ability decision the random draw MUST never pass. When the Forge AI
+  MUST draw uniformly from the legal options; otherwise it MUST take the Forge AI's choice. The
+  targets of a play the random draw picked are drawn without the `P` gate (FR-022c).
+- **FR-022a**: Every priority the random seat receives MUST be a spell-or-ability decision point
+  with its own `P` draw; no per-step or per-turn cap applies. At that decision the random draw MUST
+  never pass. When the Forge AI
   would play something, the random draw picks uniformly among the playable spells and abilities
   instead. When the Forge AI would pass and at least one spell or ability is playable, the random
   draw plays one picked uniformly among them. When nothing is playable, the seat passes. Mana
@@ -553,6 +590,34 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   - a declaration or target set Forge rejects as illegal (attack or block requirements and
     restrictions, target constraints across slots) MUST be redrawn, and after a retry limit set in
     code the seat MUST take the Forge AI's choice for that decision.
+- **FR-022c**: Every choice made while a play the random draw picked is cast or activated MUST be
+  drawn at random, with no `P` gate. Mana payment MUST stay the Forge AI's. The draws:
+  - targets: by FR-022b;
+  - modes of a modal spell or ability: a mode count drawn uniformly between the charm's minimum and
+    maximum, then that many modes picked uniformly from those Forge allows, repeating a mode only
+    where the charm permits it; a Pawprint charm draws one mode at a time, uniformly among the
+    modes whose pawprint cost still fits, until the budget is spent;
+  - X: an integer drawn uniformly from the smallest legal X to the largest the seat's available
+    mana can pay;
+  - additional-cost choices, such as what to sacrifice, discard, exile or tap: that many distinct
+    legal objects picked uniformly.
+  A draw Forge rejects as illegal or unpayable MUST be redrawn. After the retry limit of FR-022b the
+  play MUST be abandoned and the play draw repeated over the remaining candidates; the seat passes
+  when none remains. Choices made while the play resolves stay the Forge AI's. A play the Forge AI
+  chose keeps its own choices, with only its targets under the `P` gate of FR-022.
+- **FR-022d**: At each decision point the `P` draw MUST come before the Forge AI's computation.
+  When it fails, the Forge AI decides and its hooks write records as for a Forge seat. When it
+  succeeds, the Forge AI's decision code does not run, and the random seat MUST write the records
+  that code's hooks would have written, through the same emitters, from the lists it draws from:
+  - the play decision: one `decision` record over the candidates it evaluated, each with the
+    verdict bits and payload fields the `onCandidate` path writes;
+  - the attack declaration: an `attackers` record per defender, from the creatures that could attack
+    and those legal against it;
+  - the block declaration: a `blockers` record per attacker, from the creatures that could block and
+    those legal against it, with its minimum blocker count.
+  The random seat MUST stamp its own `attackers` and `blockers` records `what_if = false`
+  explicitly. It writes no what-if records. These records pass through the de-duplication of
+  FR-028 and are exempt from `--legality-rate` like every real decision (FR-029).
 - **FR-023**: Land drops, mana payment and mulligans MUST always be the Forge AI's.
 - **FR-024**: The random seat MUST be a `PlayerControllerAi` subclass the match worker installs on
   one seat, in `forge-connector`. No engine hook may be added or changed, and the
@@ -599,7 +664,8 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 - **FR-030**: Every record MUST carry `random_seat`: `true` when its `actor_player` is the random
   seat, `false` otherwise.
 - **FR-031**: Every `playability` record of subkind `attackers` or `blockers` MUST carry `what_if`:
-  `true` for a what-if, `false` for a real decision. No other record carries it.
+  `true` for a what-if, `false` for a real decision, classed by FR-027 except on the records a
+  random seat writes for itself, which FR-022d stamps `false`. No other record carries it.
 - **FR-032**: `random_seat` and `what_if` MUST NOT reach the model, like `mode`, `interventional`,
   `fork` and `synthetic`.
 - **FR-033**: Both fields MUST be additive under feature 023's schema-compatibility contract tests:
@@ -625,11 +691,16 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
 
 #### Holdout (root spec § 7)
 
-- **FR-039**: The masked template of a text MUST be its normalised `script_text` with every number,
-  `CARDNAME` and every `*Description$` value replaced by a fixed placeholder. Mana symbols' colours
-  MUST stay unmasked, so colour variants of one effect are different templates. Chain labels need no
-  mask: FR-002a has already renamed them by position, so texts differing only in label names are one
-  text and one template.
+- **FR-039**: The masked template of a text MUST be its normalised `script_text` with every run of
+  digits, `CARDNAME` and every `*Description$` value replaced by a fixed placeholder. A run of digits
+  MUST be masked wherever it sits, inside an identifier as much as standing alone: a comparison
+  threshold (`GE3` → `GE#`), a counter type (`P1P0` → `P#P#`), a token script name
+  (`w_1_1_soldier` → `w_#_#_soldier`), a phase name (`Main1`), a generic mana amount. The one
+  exception is the chain labels FR-002a renames, which keep their numbers, so a reference still
+  names its segment. Mana symbols' colours and every letter MUST stay unmasked, so colour variants
+  of one effect are different templates and `P1P1` and `M1M1` stay apart. Chain labels need no
+  mask: FR-002a has already renamed them by position, so texts differing only in label names are
+  one text and one template. The masked template keys the holdout only; no encoding reads it.
 - **FR-040**: A template MUST be eligible when at most `--holdout-max-carriers` cards carry a text
   with that template. An eligible template MUST be held out when `crc32` of the template modulo
   1000 is below `--holdout-permille`. Every text with a held-out template is a held-out text, and
@@ -852,11 +923,12 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `[SEG]`, each after the root opened by its SVar label, every chain label renamed by position
   (`SV1`, `SV2`, …). Prose stands in only for lines with no
   script. It keys the rarity table and the holdout.
-- **Masked template**: a text's normalised `script_text` with numbers, `CARDNAME` and descriptions
-  masked. The gen-2 holdout unit: texts sharing a template are held out together.
+- **Masked template**: a text's normalised `script_text` with every run of digits (chain labels
+  excepted), `CARDNAME` and descriptions masked. The gen-2 holdout unit: texts sharing a template are held out together.
 - **Random seat**: a Forge AI seat whose play, target, attack and block choices are replaced by a
   uniform legal draw with probability `P`, a draw that never passes priority while something other
-  than a mana ability is playable. Present in a share `F` of matches. Its records carry `random_seat = true`.
+  than a mana ability is playable. A play it draws at random has every casting choice drawn at
+  random too, and on a random draw the seat writes its own legality and `decision` records. Present in a share `F` of matches. Its records carry `random_seat = true`.
 - **Option line**: a sidecar line for one mode of a modal ability, following its root line. It
   carries the mode's provenance key and chain, encodes to its own `e` row with the option-kind
   flag, and is the acting line of that mode's effect half.
@@ -891,8 +963,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `option` line, and no modal resolution's effect half acts through a root line.
 - **SC-002**: No keyword expansion, over every definition and every keyword line in the corpus,
   contains a `%` or `[UNK]` token.
-- **SC-003**: Every pair of texts that differ only in numbers, `CARDNAME`, description values or
-  chain-label names falls on the same side of the holdout.
+- **SC-003**: Every pair of texts that differ only in digits outside chain labels (identifiers
+  included), `CARDNAME`, description values or chain-label names falls on the same side of the
+  holdout.
 - **SC-004**: After the held-out coverage round, every held-out text with a castable carrier is
   recorded in at least five distinct games or reported as retired, and every text below that floor
   is named in the report.
