@@ -70,6 +70,7 @@ each applied to every slot, to `[ACT]` only, and to card slots only.
 
 ## Budget
 
-Fits 8 GB of GPU memory; at most two GPU hours per checkpoint (SC-011). Features for rungs 0–2 are
+Fits 8 GB of GPU memory; at most two GPU hours per checkpoint (SC-011). Each scorecard records the
+run's wall time and peak GPU memory so the budget is checked, not assumed. Features for rungs 0–2 are
 extracted in one batched forward pass per stratum and held on the host; probes then fit on the
 cached features.

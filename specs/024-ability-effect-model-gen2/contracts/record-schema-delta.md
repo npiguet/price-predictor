@@ -30,6 +30,15 @@ Both new fields join `COLLECTION_METADATA_FIELDS`; compatibility rule 4 applies.
 Envelope key order in `EffectRecord.toJson`: `random_seat` after `synthetic`; `what_if` after
 `random_seat`, written only on the two subkinds.
 
+## Shard generation
+
+| Shard | Marker | `actor_player` on `playability` |
+|---|---|---|
+| gen-2 | every record carries `random_seat` | the deciding player |
+| gen-1 | no record carries `random_seat` | feature 023's meaning |
+
+Readers of a records set refuse one holding both.
+
 ## Real decision (`what_if = false`)
 
 | Subkind | Real when |

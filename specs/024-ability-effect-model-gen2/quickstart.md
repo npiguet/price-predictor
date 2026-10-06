@@ -41,10 +41,15 @@ heads on, one-segment chains):
 ```bash
 for r in 0.05 0.1 0.2; do
   python -m effects train-effect-model --corpus output/effects/corpus/ \
+      --cards-folder output/gen1-cardsfolder --cards-folder output/gen1-tokenscripts \
       --e-noise $r --value-weight 0.05 --epochs 3 \
       --model-output models/effects/runs/2026-10-noise-pilot-$r/
 done
 ```
+
+The gen-1 corpus records the `text` holdout unit, which the trainer takes as its default. Pass the
+same `--cards-folder` pair to `encode-abilities` and `evaluate-effect-model` when running them on a
+pilot checkpoint.
 
 Read the epoch lines: rarity-bucket and family shares, and each loss term. Pick the ratio for the
 sweep and record it in the gen-2 record.

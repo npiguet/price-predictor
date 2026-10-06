@@ -300,6 +300,10 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
 - Readers still load gen-1 shards, which stage 0 trains and probes on. An absent
   `random_seat` reads as `false`. An absent `what_if` reads as unknown and never counts as a
   real decision.
+- Shard generation. A shard whose records carry `random_seat` is a gen-2 shard; one without
+  it is a gen-1 shard, whose `actor_player` keeps the base spec's meaning. `build-corpus`,
+  `train-effect-model`, `evaluate-effect-model` and the knowledge probes refuse a records
+  set holding both, before reading records.
 - `validate-corpus` fails a shard in which some records carry a field and others of the
   kinds that must carry it do not.
 - On `playability` records, `actor_player` names the deciding player:
@@ -324,6 +328,9 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   acts in records from at least `--min-text-games` distinct games, default 5.
 - The run ends when every held-out text with a castable carrier is satisfied or retired,
   and reports the texts left under the floor.
+- A text has a castable carrier when the base spec's castability consult judges at least
+  one card carrying it castable. A text with none is reported as uncastable, never as
+  satisfied.
 
 ## 6.5 Modal resolutions
 
@@ -359,9 +366,13 @@ Every gen-2 record carries `random_seat`, and every gen-2 legality record carrie
   is below `--holdout-permille`. Every text with a held-out template is a held-out text,
   and every card carrying one is a held-out card.
 - `holdout-cards`, `build-corpus` and `train-effect-model` share the rule through
-  `--holdout-unit template|text`, default `template`. `text` is the base spec's rule, kept
-  for corpora collected under it. Manifests and checkpoints record the unit, and one that
-  records none is read as `text`.
+  `--holdout-unit template|text`. `text` is the base spec's rule, kept for corpora
+  collected under it. Manifests and checkpoints record the unit, and one that records none
+  is read as `text`.
+  - `holdout-cards` and `build-corpus` default to `template`.
+  - `train-effect-model` defaults to the manifest's unit and refuses a given unit that
+    differs. It recomputes the holdout under that unit and refuses to train when its
+    held-out texts differ from the manifest's.
 - `holdout-cards` reports the held-out templates, texts and cards, and the share of
   converted cards the list depletes.
 
@@ -625,13 +636,19 @@ python -m effects build-corpus
     [--text-cap N]                       default 200; counts repeats
 
 python -m effects train-effect-model
+    [--holdout-unit template|text]       default the manifest's unit
+    [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
     [--e-noise R]                        default 0.1; noise ratio
     [--value-weight W]                   default 0.05
     [--encoder-layers N]                 default 4
     [--encoder-d-model N]                default 256
 
+python -m effects encode-abilities
+    [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
+
 python -m effects evaluate-effect-model
     [--win-rates PATH]                   default output/sealed/cards-win-rates.txt
+    [--cards-folder DIR ...]             default output/cardsfolder/, output/tokenscripts/
 
 python -m effects scorer-smoke-test
     [--checkpoint PATH]                  default models/effects/effect-model/latest.pt
@@ -653,7 +670,10 @@ Startup validation, before any game, build or training step:
 - `collect-coverage` refuses `--only-cards` beside `--exclude-cards`, `--training-corpus`
   or `--split-from`;
 - `train-effect-model` refuses an `--encoder-d-model` not divisible by the encoder's head
-  count.
+  count, a `--holdout-unit` that differs from the manifest's, and a recomputed holdout that
+  differs from the manifest's;
+- `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge probes
+  refuse a records set mixing gen-1 and gen-2 shards (§ 6.3).
 
 # 13. Records and artifacts
 

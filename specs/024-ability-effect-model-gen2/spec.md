@@ -727,7 +727,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   and every gen-2 legality record MUST carry `what_if`. Readers MUST still load gen-1 shards, which
   stage 0 trains and probes on: an absent `random_seat` reads as `false`, and an absent `what_if`
   reads as unknown, which never counts as a real decision. `validate-corpus` MUST fail a shard in
-  which some records carry a field and others of the kinds that must carry it do not.
+  which some records carry a field and others of the kinds that must carry it do not. A shard whose
+  records carry `random_seat` is a gen-2 shard, and its `playability` records' `actor_player` has
+  the FR-030a meaning; a shard without it is a gen-1 shard. `build-corpus`, `train-effect-model`,
+  `evaluate-effect-model` and the knowledge probes MUST refuse, before reading records, a records
+  set that holds both gen-1 and gen-2 shards.
 - **FR-034**: `CLAUDE.md`'s effect-record shard format paragraph and
   `specs/023-ability-effect-model/contracts/record-schema.md` MUST list both fields, the widened
   `link_id` of FR-029d, the `option` key component of FR-005a and the redefined `actor_player` of
@@ -742,7 +746,9 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   MUST count as satisfied once it acts in records from at least `--min-text-games` distinct games
   (default 5).
 - **FR-037**: The run MUST end when every held-out text with a castable carrier is satisfied or
-  retired, and MUST report the texts left under the floor.
+  retired, and MUST report the texts left under the floor. A held-out text has a castable carrier
+  when feature 023's castability consult judges at least one card carrying it castable; a text with
+  none is reported as uncastable, never as satisfied.
 - **FR-038**: `collect-coverage` MUST refuse `--only-cards` beside `--exclude-cards`,
   `--training-corpus` or `--split-from`, before any game.
 
@@ -763,8 +769,11 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   1000 is below `--holdout-permille`. Every text with a held-out template is a held-out text, and
   every card carrying one is a held-out card.
 - **FR-041**: `holdout-cards`, `build-corpus` and `train-effect-model` MUST share the rule through
-  one implementation, selected by `--holdout-unit template|text`, default `template`. `text` MUST
-  reproduce feature 023's rule exactly.
+  one implementation, selected by `--holdout-unit template|text`. The default is `template` for
+  `holdout-cards` and `build-corpus`, and the manifest's recorded unit for `train-effect-model`,
+  which MUST refuse a given unit that differs from the manifest's. `train-effect-model` MUST
+  recompute the holdout under that unit and refuse to train when its held-out texts differ from the
+  manifest's. `text` MUST reproduce feature 023's rule exactly.
 - **FR-042**: Manifests and checkpoints MUST record the holdout unit. A manifest or checkpoint that
   records none MUST be read as `text`.
 - **FR-043**: `holdout-cards` MUST report the held-out templates, texts and cards, and the share of
@@ -883,6 +892,10 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   block, and the flag plus adjacency is the link between a mode and its root. A snapshot names an
   entity's abilities by root key, so the input MUST add, after each root row whose sidecar line is
   followed by `option` lines, one row per such line. No other positional scheme is added.
+- **FR-063b**: `train-effect-model`, `encode-abilities` and `evaluate-effect-model` MUST accept
+  `--cards-folder` (repeatable; default `output/cardsfolder/`, `output/tokenscripts/`) as the sidecar
+  roots they read, so stage 0 runs against gen-1's kept-aside sidecars after stage 1 reconverts.
+  The checkpoint MUST record the roots it trained against.
 
 #### Evaluation (root spec § 10)
 

@@ -42,6 +42,11 @@ No new flag. Under `--surface script`:
 
 Report adds: held-out templates, held-out texts, held-out cards, share of converted cards depleted.
 
+## Records-set generation (every command that reads a records set)
+
+`build-corpus`, `train-effect-model`, `evaluate-effect-model` and `run.py` refuse, before reading
+records, a records set holding both gen-1 shards (no `random_seat`) and gen-2 shards.
+
 ## `python -m sealed match-outcomes` (existing)
 
 | Flag | Default | Meaning |
@@ -63,8 +68,8 @@ A random-seat match writes effect records and the progress line only.
 | `--min-text-games` | 5 | distinct games a held-out text must act in |
 
 Refuses `--only-cards` beside `--exclude-cards`, `--training-corpus` or `--split-from`. Ends when
-every held-out text with a castable carrier is satisfied or retired; reports the texts under the
-floor.
+every held-out text with a castable carrier (by feature 023's castability consult) is satisfied or
+retired; reports the texts under the floor and, separately, the texts with no castable carrier.
 
 ## `python -m effects build-corpus` (existing)
 
@@ -85,6 +90,8 @@ Fails when a display-name keyword expansion lands on a line whose `script_api_ty
 
 | Flag | Default | Meaning |
 |---|---|---|
+| `--holdout-unit` | the manifest's unit | refused when it differs from the manifest's; the holdout is recomputed and must match the manifest's |
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; sidecar roots, recorded in the checkpoint |
 | `--e-noise` | 0.1 | noise ratio `r` relative to the running covariance of `e` (meaning changed: no longer a fixed σ) |
 | `--value-weight` | 0.05 | value-head loss weight |
 | `--encoder-layers` | 4 | encoder layers |
@@ -97,14 +104,19 @@ created-objects, MLM and API loss terms.
 
 ## `python -m effects encode-abilities` (existing)
 
-No new flag. Builds the encoder from the checkpoint's recorded size; keyword expansion probability
-is the shared constant (0). Reports each truncated line by provenance key.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; sidecar roots |
+
+Builds the encoder from the checkpoint's recorded size; keyword expansion probability is the shared
+constant (0). Reports each truncated line by provenance key.
 
 ## `python -m effects evaluate-effect-model` (existing)
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `--win-rates` | `output/sealed/cards-win-rates.txt` | read by the decodability battery |
+| `--cards-folder` | `output/cardsfolder/`, `output/tokenscripts/` | repeatable; sidecar roots |
 
 Report adds: per-text card-disjoint results by rarity bucket and family (also averaged over
 families); per-family memorization gap; random-seat slice; real-decision legality slice; withheld

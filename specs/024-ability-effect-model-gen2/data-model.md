@@ -69,6 +69,9 @@ table and, through `MaskedTemplate`, the holdout.
 Both new fields are collection metadata: listed in `COLLECTION_METADATA_FIELDS`, never in
 `model_input_fields()`.
 
+**Shard generation**: a shard whose records carry `random_seat` is gen-2; one without it is gen-1.
+Readers that consume a records set refuse one that mixes the two (FR-033).
+
 Validation (`validate-corpus`):
 
 - A shard where any record carries `random_seat` carries it on every record.
@@ -175,6 +178,7 @@ A charm root line has no amounts, so its amount targets are all masked.
 
 | Field | Rule |
 |---|---|
+| `cards_folders` | the sidecar roots trained against (FR-063b) |
 | `encoder_config` | already records `d_model`, `n_layers`, `n_heads`, `ff_dim`; `e_noise` is dropped on load if present; `ff_dim` follows `d_model × 4` |
 | `split.holdout_unit` | `"template"` \| `"text"`, absent → `"text"` |
 | `e_noise`, `value_weight`, `mlm_weight`, `mlm_mask_prob`, `api_weight` | the training flags as run |
@@ -228,5 +232,6 @@ Written to `output/effects/reports/knowledge-probes-set-<corpus digest[:12]>.jso
 | `families[f].targets[t].share` | `{linear, mlp}` with 95% CI, or `null` under the minimum gap |
 | `sweeps[s]` | `[{value, prediction}]` |
 | `ablation[field][replacement][scope]` | loss increase |
+| `runtime` | `{wall_seconds, peak_gpu_bytes}` for the run, checked against SC-011 |
 | `per_layer` | optional, `--per-layer` |
 | `method_c` | optional, `--method-c` |

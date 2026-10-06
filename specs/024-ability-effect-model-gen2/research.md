@@ -29,7 +29,7 @@ Constitution Principle VII. Every bullet cites a concrete file or symbol.
 | `TraitScript` | `FC/effects/TraitScript.java:57-141` | **Extend.** Renders the chain (FR-001), renames labels (FR-002a), keeps the `TreeMap` parameter order per segment (`:62`), which is the order FR-002a's "first appearance" reads. |
 | `EffectRecord` (Java) / `EffectRecord` (Python) | `FC/effects/EffectRecord.java:59-227`; `E/domain/records.py:419-449`, `COLLECTION_METADATA_FIELDS` `:141-143` | **Extend** with `random_seat` and `what_if`, both collection metadata. |
 | `CollectionCaps` | `E/domain/collection_caps.py:125` (`as_system_properties`); Java `CollectionCaps.legalityRate` (`PatchedCollectors.java:111-143`) | **Extend** with the random-seat share and probability, so both supervisors' `-D` spellings stay pinned by `tests/unit/effects/domain/test_collection_caps.py`. |
-| `HeldOutCards`, `text_keyed_holdout`, `select_holdout` | `E/application/train_effect_model.py:229-310`; `E/domain/text_holdout.py:29-76` | **Extend.** `select_holdout` gains a `unit` parameter and a `masked_template` key function; `text_keyed_holdout` stays the single entry point for `holdout-cards` and `build-corpus`. `train-effect-model` keeps reading the holdout from the manifest (`train_effect_model.py:1089-1097`), which is how FR-041's "shares the rule" is met: one computation, inherited. |
+| `HeldOutCards`, `text_keyed_holdout`, `select_holdout` | `E/application/train_effect_model.py:229-310`; `E/domain/text_holdout.py:29-76` | **Extend.** `select_holdout` gains a `unit` parameter and a `masked_template` key function; `text_keyed_holdout` stays the single entry point for all three commands. `train-effect-model`, which today only reads the holdout from the manifest (`train_effect_model.py:1089-1097`), recomputes it with the same function under the manifest's unit and refuses a disagreement (FR-041). |
 | `CorpusManifest`, `SplitProvenance` | `E/domain/corpus_manifest.py:46-232`; `E/infrastructure/effect_model_store.py:87-138` | **Extend.** New fields serialize only when they differ from the gen-1 value, so gen-1 manifests keep their digest (`corpus_manifest.py:219-232`) and gen-1 checkpoints keep passing `check_corpus` (`evaluate_effect_model.py:684-699`). |
 | `sampling_class`, `DEFAULT_KIND_MIX`, `class_targets` | `E/application/train_effect_model.py:57-131`; `E/domain/corpus_curation.py:99-139` | **Reuse** the eight classes and the class mixture unchanged (FR-092). Selection *within* a class is replaced (FR-049). |
 | `CapHeap` and threshold admission | `E/domain/corpus_curation.py:25-96`; `E/application/build_corpus.py:322-325, 755-774, 1033-1041` | **Replace.** A threshold admits each record at most once; FR-049 needs per-record copy counts. The survey pass already gathers per-key heaps; it now also gathers family and outcome signature per record, and `decide` returns a copy count per record hash. |
@@ -40,11 +40,13 @@ Constitution Principle VII. Every bullet cites a concrete file or symbol.
 | MLM head, script-API heads | `E/domain/effect_model.py:256-257, 316-334, 751-765` | **Wire** (FR-060b). `mlm_head` is built from the `ENCODER_D_MODEL` constant (`:38, :317`) and must follow `--encoder-d-model`. |
 | `pairing_proj`, `pairing_loss` | `E/domain/effect_model.py:329, 923`; test `tests/unit/effects/domain/test_effect_model.py:477` | **Remove** (FR-060). |
 | `AbilityEncoderConfig.e_noise` | `E/domain/ability_encoder.py:64, 82, 177-181` | **Remove** (FR-057), with a load shim that drops the key (`effect_model_store.py:257`). |
-| `RandomSeatController` | — | **New, no prior concept.** The nearest relative is `ForkCollector`'s random choosers (see adjacent prior art). |
+| `RandomSeatController` | — | **New, no prior concept.** The nearest relatives are `ForkCollector`'s random choosers (see adjacent prior art) and its live-game test (`belongsToLiveGame`), used here inverted. |
+| `keyword_formatting` | — | **New.** Mirrors Forge's per-keyword-class reminder formatting (`KeywordWithCost.java:30-35`, `KeywordWithCostAndAmount.java:55-60`, `KeywordWithAmount`); no Python equivalent exists, and `_instantiate` (`ability_tokenizer.py:339-359`) fills `%s` with raw text today. |
 | `RuleFamily`, `OutcomeSignature`, `MaskedTemplate`, `ProbeSet`, `Scorecard` | — | **New.** No existing concept shares the name or the responsibility. `price_predictor/domain/price_buckets.py` is the nearest pattern for rarity buckets but buckets prices, not game counts; the names do not collide. |
 
 Nine concepts extended, two reused, one moved, one replaced, two wired, two removed, and six new
-(the random seat controller plus five domain concepts); zero renames required.
+(the random seat controller, `keyword_formatting`, and four curation/training concepts); zero
+renames required.
 
 ### Adjacent prior art
 
@@ -190,11 +192,25 @@ writes the progress line for every match and skips the match-outcome and cards-p
 random-seat match. Which matches get a random seat is drawn per match from the worker's seeded
 `Random` with probability `--random-seat-share`, and the seat (A or B) with probability ½.
 
-### Readers default the two fields for gen-1 shards
+### Readers default the two fields for gen-1 shards, and never mix generations
 
 **Decision**: `record_from_dict` reads an absent `random_seat` as `False` and an absent `what_if` as
 `None` (unknown). `validate-corpus` adds a per-shard presence check: a shard in which any record
-carries a field must carry it on every record of the kinds that must (FR-033).
+carries a field must carry it on every record of the kinds that must (FR-033). `shard_generation(path)`
+in `record_io.py` reads a shard's first complete record and names it gen-1 or gen-2 by the presence
+of `random_seat`; `build-corpus`, `train-effect-model`, `evaluate-effect-model` and the knowledge
+probes refuse a mixed set before reading records.
+
+**Rationale**: Principle III asks for a versioned schema change. The redefined `actor_player` has no
+version field, so the generation marker is what tells a reader which meaning a shard carries.
+
+### Sidecar roots are a flag on every command that reads them
+
+**Decision**: `train-effect-model`, `encode-abilities` and `evaluate-effect-model` take `--cards-folder`
+(FR-063b), replacing the roots hardcoded at `train_effect_model.py:736`. The checkpoint records them.
+
+**Rationale**: stage 0 trains and evaluates on gen-1 while stage 1 reconverts `output/cardsfolder/`.
+Without the flag the noise pilot would resolve gen-1 records against gen-2 chained sidecars.
 
 ### Script chain rendering lives in Java; the converted text is untouched
 

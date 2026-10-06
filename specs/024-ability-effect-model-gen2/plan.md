@@ -38,9 +38,8 @@ checkpoints, curated corpus directories with a JSON manifest, probe-set and scor
 `forge-connector`; JVM-dependent Python tests carry the `integration` marker
 **Target Platform**: local Windows 11 workstation, one CUDA GPU with 8 GB VRAM
 **Project Type**: CLI-driven ML pipeline (`src/effects/`) with Java worker mains (`forge-connector/`)
-**Performance Goals**: knowledge-probe run ≤ 2 GPU hours per checkpoint (SC-011); the random seat
-adds no measurable time per game beyond the extra legality records it writes; `build-corpus` keeps
-its two-pass shape (one parallel survey, one parallel write)
+**Performance Goals**: knowledge-probe run ≤ 2 GPU hours per checkpoint (SC-011), recorded in each
+scorecard; `build-corpus` keeps its two-pass shape (one parallel survey, one parallel write)
 **Constraints**: no engine hook added or changed (FR-024); `.txt` conversion byte-identical (FR-004);
 gen-1 checkpoints, manifests and shards stay loadable for stage 0 (FR-033, FR-061); 8 GB VRAM bounds
 the encoder sweep, with batch size reduced by hand where an arm does not fit
@@ -56,7 +55,7 @@ sweep arm
 |---|---|
 | I. Fast Automated Tests | **Pass.** Every new rule is a pure function testable without a JVM or GPU: chain-label renaming and masked templates (string → string), script tokenization, family assignment, the allocator, copy counts, stratum placement, value targets, breakdowns, the share and its minimum-gap rule, fold assignment. The random seat's draw rules are unit-tested in JUnit against a scripted Forge game, as feature 023's collector tests are. The knowledge probes are tested on fixtures cut from real records (FR-089). |
 | II. Simplicity First | **Pass.** One allocator serves three levels of FR-049. One random-choices class serves the random seat and `ForkCollector`. No configuration point is added that the spec does not name. The copy-count model replaces the threshold model rather than sitting beside it. |
-| III. Data Integrity | **Pass, with one deliberate redefinition.** Both envelope fields are additive. `actor_player` on playability records is redefined for gen-2 shards (FR-030a): a named exception in the schema-compatibility tests and both contracts, decided in clarification rather than slipped in. Gen-1 shards keep their meaning and stay readable. Manifest and checkpoint additions are omitted at their gen-1 value, so existing digests and `check_corpus` keep passing. Stratum placement and selection are deterministic functions of record and game hashes. |
+| III. Data Integrity | **Pass.** Both envelope fields are additive. `actor_player` on playability records is redefined for gen-2 shards (FR-030a), and the redefinition is versioned by shard generation (FR-033): the presence of `random_seat` marks a gen-2 shard, and every reader refuses a records set mixing the two. It is also a named exception in the schema-compatibility tests and both contracts. Gen-1 shards keep their meaning and stay readable. Manifest and checkpoint additions are omitted at their gen-1 value, so existing digests and `check_corpus` keep passing. Stratum placement and selection are deterministic functions of record and game hashes. |
 | IV. DDD & Separation of Concerns | **Pass.** New rules live in `effects/domain` (families, allocation, value targets, rarity, masked templates, stratum placement). Orchestration stays in `application`, and IO and the CLI in `infrastructure`. The model-architecture exception covers only `effect_model.py` and `ability_encoder.py`, as before. `effects` still imports nothing from `sealed.application`: the smoke test runs Phase A as a subprocess. |
 | V. Forge Interoperability | **N/A.** The stub library and remote API are untouched. The random seat is a worker-side controller in `forge-connector`'s established second role. |
 | VI. Documentation | **Tracked as tasks.** `CLAUDE.md`'s shard and sidecar paragraphs, both base contracts (FR-034), `src/effects/CLAUDE.md` (new commands and flags), and the README's effects workflow, each in the change that alters the behaviour. |
@@ -177,6 +176,7 @@ src/effects/
 │   ├── corpus_manifest.py            # new fields, omitted at gen-1 values
 │   ├── damage_step_keywords.py       # + KeywordResolver, qualifying_observations (moved)
 │   ├── collection_caps.py            # random-seat share and probability
+│   ├── keyword_formatting.py         # NEW: value formatting per Keyword.type
 │   ├── rule_families.py              # NEW
 │   ├── budget_allocation.py          # NEW: equal split with redistribution
 │   ├── value_targets.py              # NEW
@@ -214,9 +214,11 @@ src/price_predictor/infrastructure/cli.py   # convert: report missing SVars
 
 scripts/effect_embedding_probes/      # --checkpoint/--abilities-root; taxonomy optional; PR
 scripts/effect_knowledge_probes/      # NEW suite (common, labels, ladder, sweeps, ablation, compare, run)
+scripts/make_fixture_records.py       # NEW: real-record test fixture
 
 tests/unit/effects/                   # mirrors the modules above
 tests/unit/scripts/                   # knowledge-probe tests, loaded by path
+tests/fixtures/effects/               # gen-1 records and their sidecars, cut from real shards
 forge-connector/src/test/java/...     # RandomChoices, RandomSeatController, emitters, modal halves, TraitScript chains
 ```
 
@@ -252,13 +254,13 @@ Every spec section and its FR range, with its owner. `tasks.md` follows this map
 | Random seat (FR-021…026) | `RandomSeatLobbyPlayer`, `RandomSeatController`, `RandomSpellPlayer`, `RandomChoices`, `GamePlayer`, `MatchWorkerMain`; flags and FR-026 in `sealed/infrastructure/cli.py` |
 | Legality records (FR-027…029) | `PatchedCollectors` emitters |
 | Modal resolutions (FR-029a…029f) | `PatchedCollectors.clauseHandler`, `BusBracketCollector`, `ProvenanceKey.resolve`, `ForkCollector`; `validate_corpus.py` (FR-029d readers) |
-| Envelope fields (FR-030…034) | `EffectRecord.java`, `records.py`, `record_io.py`, `validate_corpus.py`; schema-compatibility tests; `CLAUDE.md` and both base contracts |
+| Envelope fields (FR-030…034) | `EffectRecord.java`, `records.py`, `record_io.py` (incl. `shard_generation`), `validate_corpus.py`; schema-compatibility tests; `CLAUDE.md` and both base contracts |
 | Held-out coverage round (FR-035…038) | `collect_coverage.py`, `effects/infrastructure/cli.py` |
 | Holdout (FR-039…043) | `text_holdout.py`, `train_effect_model.text_keyed_holdout`, `holdout_cards.py`, `corpus_manifest.py`, `effect_model_store.SplitProvenance` |
 | Game-disjoint stratum (FR-044…046) | `corpus_curation.in_game_disjoint_stratum`, `build_corpus.py`, `damage_step_keywords.py` (moved predicate) |
 | Rule families and selection (FR-047…052) | `rule_families.py`, `budget_allocation.py`, `corpus_curation.py`, `build_corpus.py`, `validation_samples.py` |
 | Manifest (FR-053) | `corpus_manifest.py`, `build_corpus.py` |
-| Training (FR-054…063a) | `train_effect_model.py` (rarity), `training_loop.py` (epoch line, noise state, loss terms), `surface_batching.py` (noise, candidate `e`, value targets), `value_targets.py`, `effect_model.py`, `ability_encoder.py`, `effect_head_input.py`, `effect_model_store.py` |
+| Training (FR-054…063b) | `train_effect_model.py` (rarity), `training_loop.py` (epoch line, noise state, loss terms), `surface_batching.py` (noise, candidate `e`, value targets), `value_targets.py`, `effect_model.py`, `ability_encoder.py`, `effect_head_input.py`, `effect_model_store.py` |
 | Evaluation (FR-064…071) | `evaluate_effect_model.py`, `breakdowns.py`, `gate_one.py`, `scorer_smoke_test.py`, `geometry_checks.py`, `cli.py` |
 | Embedding probes (FR-072…073) | `scripts/effect_embedding_probes/common.py` and each script |
 | Knowledge probes (FR-074…089) | `scripts/effect_knowledge_probes/*`; tests in `tests/unit/scripts/` |
