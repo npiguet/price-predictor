@@ -43,7 +43,7 @@ Generations:
 - Q: The seat receives priority many times per turn. Is every priority a play decision point with its own `P` draw? → A: Yes (FR-022a): every priority the seat receives is a play decision point with its own `P` draw, and the pilot tunes `P` knowing the per-turn rate of random plays is well above `P`; most priorities have nothing legal to play anyway.
 - Q: Which digits does the holdout's masked template mask: standalone numbers only, or also digits inside identifiers (`GE3`, `P1P1`, `w_1_1_soldier`, `Main1`, `SV2`)? → A: Every run of digits wherever it sits, so `GE3` and `GE4` share a template, except in the chain labels FR-002a renames, which keep their numbers (FR-039). The mask keys the holdout only; the encoder reads the unmasked text.
 - Q: Underscore is a word character in the prose grammar, so `TokenScript$ w_1_1_soldier` tokenizes to `w_`, `1`, `_`, `1`, `_soldier`. How are token script names tokenized on the script surface? → A: The value of `TokenScript$` also splits on `_`, giving `w 1 1 soldier` (FR-009a); `_` stays a word character everywhere else.
-- Q: Should the camel-case split apply to script parameter keys, turning `ConditionCompare$` into `condition compare $`? → A: No (FR-009): a parameter key and its `$` stay one lowercased token (`conditioncompare$`); the camel-case split applies to values only. Keys outside the vocabulary fall to `[UNK]` through the ordinary `--target-size` cut, unseeded.
+- Q: Should the camel-case split apply to script parameter keys and to the `$`-prefixes inside values, turning `ConditionCompare$` into `condition compare $` and `Count$Valid` into `count $ valid`? → A: Yes (FR-008, FR-009b): keys are built from a small set of shared parts (`Condition`, `Defined`, `Present`, `Compare`), so they split like values and `$` stays its own token; `build-vocab --surface script` seeds every part a key or prefix splits into, so no key tokenizes to `[UNK]`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -87,10 +87,12 @@ camel-case count. Expand every definition and check that none contains `%` or `[
    **When** `convert` runs, **Then** the `DBDraw` segment and then its sub-ability's segment
    follow the root.
 4. **Given** the script vocabulary is loaded, **When** `ValidTgts$ Creature.nonDragon+YouCtrl` is
-   tokenized, **Then** the key yields one token `validtgts$`, `nonDragon` yields `non` and
+   tokenized, **Then** the key yields `valid`, `tgts` and `$`, `nonDragon` yields `non` and
    `dragon` and `YouCtrl` yields `you` and `ctrl`, while the value of `SubAbility$ SV2` stays one
    token `sv2` and `CounterType$ P1P1` stays one token `p1p1`. **When** `ConditionCompare$ GE3` is
-   tokenized, **Then** it yields `conditioncompare$`, `ge` and `3`. **When** `TokenScript$ w_1_1_soldier` is tokenized, **Then** its value yields `w`,
+   tokenized, **Then** it yields `condition`, `compare`, `$`, `ge` and `3`. **Given** a key that
+   occurs once in the staged script lines and a small `--target-size`, **When** the vocabulary is
+   built, **Then** every part that key splits into is in it. **When** `TokenScript$ w_1_1_soldier` is tokenized, **Then** its value yields `w`,
    `1`, `1` and `soldier`, with no token holding `_`.
 5. **Given** the prose vocabulary is loaded, **When** the same text is tokenized, **Then** no
    camel-case split is applied.
@@ -519,16 +521,20 @@ the sweeps, the ablation, and the recorded digest. Run `compare.py` over two sco
   `AbilityTokenizer.tokenize_script` MUST be removed, with its tests.
 - **FR-008**: On the script surface, the grammar MUST also end a word where a lowercase letter is
   followed by an uppercase one (`nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`). The split
-  applies to parameter values, never to a parameter key (FR-009).
-- **FR-009**: On the script surface, each of these MUST stay one lowercased token: every parameter
-  key together with its `$` (`ConditionCompare$` → `conditioncompare$`, `SP$`, `Count$`), with no
-  camel-case split and no separate `$` token; the values of
+  applies to parameter keys and values alike (`ConditionCompare$` → `condition compare $`). `$`
+  MUST always be its own token, split from the words on both sides, including a `$`-prefix glued
+  to its value (`Count$Valid` → `count $ valid`).
+- **FR-009**: On the script surface, each of these MUST stay one lowercased token: the values of
   `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, and each comma-separated item of `Choices$`; the SVar
   label that opens a segment, all in their FR-002a form (`sv2`); the value of `CounterType$`.
 - **FR-009a**: On the script surface, the value of `TokenScript$` MUST also split at every `_`, which
   is dropped (`w_1_1_soldier` → `w 1 1 soldier`). Everywhere else `_` stays a word character. A
   letter run followed by a digit run is already two tokens under the grammar (`GE3` → `ge 3`), and
   only the FR-009 values stay whole.
+- **FR-009b**: `build-vocab --surface script` MUST seed every part that a parameter key, or a
+  `$`-prefix inside a value (`Count$Valid`, `TriggerCount$DamageAmount`), splits into in the script
+  lines it stages, as it seeds the special tokens, so `--target-size` cannot drop a rare key's part
+  to `[UNK]`.
 - **FR-010**: `tokenize` MUST apply the script-surface rules exactly when the loaded vocabulary is a
   script vocabulary, as `surface_of` determines from its path. `MtgTokenizer` in `price_predictor`
   MUST NOT change.

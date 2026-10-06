@@ -154,10 +154,13 @@ Base-spec sections this spec amends
   `AbilityTokenizer.tokenize_script` does not exist.
 - On the script surface the grammar also ends a word where a lowercase letter is followed
   by an uppercase one: `nonDragon` → `non dragon`, `YouCtrl` → `you ctrl`. The split
-  applies to parameter values only.
+  applies to parameter keys and values alike (`ConditionCompare$` → `condition compare $`).
+  `$` is always its own token, split from the words on both sides, including a `$`-prefix
+  glued to its value: `Count$Valid` → `count $ valid`.
+- `build-vocab --surface script` seeds every part a parameter key, or a `$`-prefix inside a
+  value (`Count$Valid`), splits into, as it seeds the special tokens, so `--target-size`
+  cannot drop a rare key's part.
 - These stay whole, each one lowercased token:
-  - every parameter key with its `$` (`ConditionCompare$` → `conditioncompare$`); a key
-    the vocabulary lacks falls to `[UNK]` through the ordinary `--target-size` cut;
   - the values of `Execute$`, `SubAbility$`, `RepeatSubAbility$`, `ReplaceWith$`, and
     each comma-separated item of `Choices$`, in their renamed form (`sv2`);
   - the SVar label that opens a segment, renamed likewise;
